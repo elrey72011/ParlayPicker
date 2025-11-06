@@ -966,7 +966,7 @@ except NameError:
 # ---------------------------------------------------------
     
 st.markdown("---")
-    st.markdown("""
+st.markdown("""
     ### 🤖 AI Features Explained:
 
     **Sentiment Analysis** 🎭
