@@ -64,7 +64,8 @@ class HistoricalDataManager:
     def __init__(self, api_key: str):
         self.api_key = api_key
         self.base_url = "https://api.the-odds-api.com/v4"
-        self.cache_dir = "/home/claude/historical_cache"
+        # Use current directory for cache (works on any system)
+        self.cache_dir = os.path.join(os.getcwd(), "historical_cache")
         os.makedirs(self.cache_dir, exist_ok=True)
         
     def fetch_historical_odds(self, sport: str, date: str) -> List[Dict]:
@@ -666,19 +667,29 @@ st.set_page_config(page_title=APP_CFG["title"], page_icon="🎯", layout="wide")
 st.title("🎯 " + APP_CFG["title"])
 st.caption("Advanced AI predictions powered by historical data and machine learning")
 
-# Initialize session state
-if 'historical_manager' not in st.session_state:
-    st.session_state['historical_manager'] = None
-if 'ml_predictor' not in st.session_state:
-    st.session_state['ml_predictor'] = AdvancedMLPredictor()
-if 'sentiment_analyzer' not in st.session_state:
-    st.session_state['sentiment_analyzer'] = SentimentAnalyzer()
-if 'ai_optimizer' not in st.session_state:
-    st.session_state['ai_optimizer'] = None
-if 'prizepicks_analyzer' not in st.session_state:
-    st.session_state['prizepicks_analyzer'] = PrizePicksAnalyzer()
-if 'historical_data_loaded' not in st.session_state:
-    st.session_state['historical_data_loaded'] = False
+# Check ML libraries
+if not ML_AVAILABLE:
+    st.error("❌ **Machine Learning libraries not installed!**")
+    st.code("pip install scikit-learn", language="bash")
+    st.info("The app will work in basic mode without ML features.")
+
+# Initialize session state with error handling
+try:
+    if 'historical_manager' not in st.session_state:
+        st.session_state['historical_manager'] = None
+    if 'ml_predictor' not in st.session_state:
+        st.session_state['ml_predictor'] = AdvancedMLPredictor() if ML_AVAILABLE else None
+    if 'sentiment_analyzer' not in st.session_state:
+        st.session_state['sentiment_analyzer'] = SentimentAnalyzer()
+    if 'ai_optimizer' not in st.session_state:
+        st.session_state['ai_optimizer'] = None
+    if 'prizepicks_analyzer' not in st.session_state:
+        st.session_state['prizepicks_analyzer'] = PrizePicksAnalyzer()
+    if 'historical_data_loaded' not in st.session_state:
+        st.session_state['historical_data_loaded'] = False
+except Exception as e:
+    st.error(f"⚠️ Initialization error: {e}")
+    st.stop()
 
 # Sidebar configuration
 st.sidebar.title("⚙️ Configuration")
@@ -686,12 +697,19 @@ st.sidebar.title("⚙️ Configuration")
 api_key = st.sidebar.text_input("🔑 The Odds API Key", type="password", 
                                 help="Enter your Odds API key with historical access")
 
-if api_key and st.session_state['historical_manager'] is None:
-    st.session_state['historical_manager'] = HistoricalDataManager(api_key)
-    st.session_state['ai_optimizer'] = AIOptimizer(
-        st.session_state['sentiment_analyzer'],
-        st.session_state['ml_predictor']
-    )
+if api_key:
+    try:
+        if st.session_state['historical_manager'] is None:
+            st.session_state['historical_manager'] = HistoricalDataManager(api_key)
+        if st.session_state['ai_optimizer'] is None and ML_AVAILABLE:
+            st.session_state['ai_optimizer'] = AIOptimizer(
+                st.session_state['sentiment_analyzer'],
+                st.session_state['ml_predictor']
+            )
+        elif not ML_AVAILABLE:
+            st.sidebar.warning("⚠️ ML features disabled - install scikit-learn")
+    except Exception as e:
+        st.sidebar.error(f"⚠️ Setup error: {e}")
 
 # Historical Data Training Section
 st.sidebar.markdown("---")
