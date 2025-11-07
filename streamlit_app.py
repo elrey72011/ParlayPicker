@@ -454,6 +454,42 @@ def fetch_oddsapi_snapshot(api_key: str, sport_key: str) -> Dict[str, Any]:
 def calculate_profit(decimal_odds: float, stake: float = 100) -> float:
     return (decimal_odds - 1.0) * stake
 
+def match_theover_to_leg(leg, theover_data):
+    """
+    Match a parlay leg with theover.ai data
+    Returns theover projection or None if no match
+    """
+    if theover_data is None or theover_data.empty:
+        return None
+    
+    try:
+        # Normalize column names
+        theover_df = theover_data.copy()
+        theover_df.columns = [c.strip().lower() for c in theover_df.columns]
+        
+        # Extract team name from leg
+        team = leg.get('team', '').lower()
+        market_type = leg.get('type', '').lower()
+        
+        # Try to find matching projection
+        for idx, row in theover_df.iterrows():
+            row_team = str(row.get('team', row.get('player', ''))).lower()
+            row_market = str(row.get('stat', row.get('market', ''))).lower()
+            
+            # Check for team match
+            if team in row_team or row_team in team:
+                # Check for market type match
+                if ('moneyline' in market_type and ('ml' in row_market or 'win' in row_market)) or \
+                   ('spread' in market_type and 'spread' in row_market) or \
+                   ('total' in market_type and ('total' in row_market or 'points' in row_market)):
+                    projection = row.get('projection', None)
+                    if projection is not None:
+                        return float(projection)
+        
+        return None
+    except Exception:
+        return None
+
 def build_combos_ai(legs, k, allow_sgp, optimizer):
     """Build parlay combinations with AI scoring - deduplicates and keeps best odds"""
     parlay_map = {}  # Maps parlay_key -> best parlay so far
@@ -512,7 +548,7 @@ def build_combos_ai(legs, k, allow_sgp, optimizer):
     out.sort(key=lambda x: (x["p_ai"], x["ai_score"]), reverse=True)
     return out
 
-def render_parlay_section_ai(title, rows):
+def render_parlay_section_ai(title, rows, theover_data=None):
     """Render parlays with AI insights"""
     st.markdown(f"### {title}")
     if not rows:
@@ -566,21 +602,36 @@ def render_parlay_section_ai(title, rows):
                 st.write(f"AI EV: {ai_ev_pct:.2f}%")
                 st.write(f"AI Edge: {row['ai_edge']*100:.2f}%")
             
-            # Legs breakdown
+            # Legs breakdown with theover.ai integration
             st.markdown("**🎯 Parlay Legs:**")
             legs_data = []
+            has_theover = False
+            
             for j, leg in enumerate(row["legs"], start=1):
-                legs_data.append({
+                # Try to match with theover.ai data
+                theover_proj = match_theover_to_leg(leg, theover_data)
+                if theover_proj is not None:
+                    has_theover = True
+                    theover_display = f"🎯 {theover_proj:.2f}"
+                else:
+                    theover_display = "—"
+                
+                leg_entry = {
                     "Leg": j,
                     "Type": leg["market"],
                     "Selection": leg["label"],
                     "Odds": f"{leg['d']:.3f}",
                     "Market %": f"{leg['p']*100:.1f}%",
                     "AI %": f"{leg.get('ai_prob', leg['p'])*100:.1f}%",
-                    "Sentiment": leg.get('sentiment_trend', 'N/A')
-                })
+                    "Sentiment": leg.get('sentiment_trend', 'N/A'),
+                    "theover.ai": theover_display
+                }
+                legs_data.append(leg_entry)
             
             st.dataframe(pd.DataFrame(legs_data), use_container_width=True, hide_index=True)
+            
+            if has_theover:
+                st.caption("🎯 = theover.ai projection available")
             
             # Betting scenarios
             st.markdown("**💵 Betting Scenarios:**")
@@ -669,6 +720,84 @@ with main_tab1:
                 if st.button("Change key"):
                     st.session_state['show_api_section'] = True
                     st.rerun()
+
+    # theover.ai Integration Section
+    st.markdown("---")
+    st.markdown("### 📊 theover.ai Integration (Optional)")
+    
+    theover_method = st.radio(
+        "Add theover.ai projections for enhanced analysis?",
+        ["🚫 Skip", "📁 Upload CSV", "📋 Paste Data"],
+        horizontal=True,
+        help="theover.ai projections will be matched with parlay legs to show additional analysis"
+    )
+    
+    theover_parlay_data = None
+    
+    if theover_method == "📁 Upload CSV":
+        st.info("""
+        **Expected CSV Format:**
+        - Columns: Team/Player, Stat/Market, Projection
+        - Example: "Lakers, Points Total, 112.5" or "Bucks ML, Win Probability, 0.65"
+        """)
+        
+        uploaded_file = st.file_uploader(
+            "Upload theover.ai CSV export",
+            type=['csv'],
+            help="Export your theover.ai projections as CSV",
+            key="theover_parlay_upload"
+        )
+        
+        if uploaded_file:
+            try:
+                theover_parlay_data = pd.read_csv(uploaded_file)
+                st.success(f"✅ Loaded {len(theover_parlay_data)} projections from theover.ai")
+                
+                with st.expander("📋 Preview theover.ai Data"):
+                    st.dataframe(theover_parlay_data.head(10), use_container_width=True)
+                    
+            except Exception as e:
+                st.error(f"Error loading CSV: {e}")
+                
+    elif theover_method == "📋 Paste Data":
+        st.info("""
+        **Paste Format (comma or tab-separated):**
+        ```
+        Team/Player,Stat/Market,Projection
+        Lakers,Points Total,112.5
+        Bucks,Win Probability,0.68
+        ```
+        """)
+        
+        pasted_data = st.text_area(
+            "Paste theover.ai data here",
+            height=150,
+            placeholder="Lakers,Points Total,112.5\nBucks,Win Probability,0.68",
+            key="theover_parlay_paste"
+        )
+        
+        if pasted_data.strip():
+            try:
+                # Try comma-separated first
+                if ',' in pasted_data:
+                    from io import StringIO
+                    theover_parlay_data = pd.read_csv(StringIO(pasted_data))
+                # Try tab-separated (from Excel)
+                elif '\t' in pasted_data:
+                    from io import StringIO
+                    theover_parlay_data = pd.read_csv(StringIO(pasted_data), sep='\t')
+                else:
+                    st.warning("Data format not recognized. Use comma or tab-separated values.")
+                
+                if theover_parlay_data is not None:
+                    st.success(f"✅ Loaded {len(theover_parlay_data)} projections from theover.ai")
+                    with st.expander("📋 Preview Pasted Data"):
+                        st.dataframe(theover_parlay_data.head(10), use_container_width=True)
+                        
+            except Exception as e:
+                st.error(f"Error parsing data: {e}")
+    
+    st.markdown("---")
 
     col1, col2 = st.columns(2)
     with col1:
@@ -948,25 +1077,25 @@ with main_tab1:
                     st.subheader("Best 2-Leg AI-Optimized Parlays")
                     with st.spinner("Calculating optimal 2-leg combinations..."):
                         combos_2 = build_combos_ai(all_legs, 2, allow_sgp, ai_optimizer)[:show_top]
-                        render_parlay_section_ai("2-Leg AI Parlays", combos_2)
+                        render_parlay_section_ai("2-Leg AI Parlays", combos_2, theover_parlay_data)
                 
                 with tab_3:
                     st.subheader("Best 3-Leg AI-Optimized Parlays")
                     with st.spinner("Calculating optimal 3-leg combinations..."):
                         combos_3 = build_combos_ai(all_legs, 3, allow_sgp, ai_optimizer)[:show_top]
-                        render_parlay_section_ai("3-Leg AI Parlays", combos_3)
+                        render_parlay_section_ai("3-Leg AI Parlays", combos_3, theover_parlay_data)
                 
                 with tab_4:
                     st.subheader("Best 4-Leg AI-Optimized Parlays")
                     with st.spinner("Calculating optimal 4-leg combinations..."):
                         combos_4 = build_combos_ai(all_legs, 4, allow_sgp, ai_optimizer)[:show_top]
-                        render_parlay_section_ai("4-Leg AI Parlays", combos_4)
+                        render_parlay_section_ai("4-Leg AI Parlays", combos_4, theover_parlay_data)
                 
                 with tab_5:
                     st.subheader("Best 5-Leg AI-Optimized Parlays")
                     with st.spinner("Calculating optimal 5-leg combinations..."):
                         combos_5 = build_combos_ai(all_legs, 5, allow_sgp, ai_optimizer)[:show_top]
-                        render_parlay_section_ai("5-Leg AI Parlays", combos_5)
+                        render_parlay_section_ai("5-Leg AI Parlays", combos_5, theover_parlay_data)
         
         except KeyError as e:
             st.error(f"Configuration error: Missing key {str(e)}. Please refresh the page.")
@@ -1001,7 +1130,7 @@ except NameError:
 # ---------------------------------------------------------
     
 st.markdown("---")
-st.markdown("""
+    st.markdown("""
     ### 🤖 AI Features Explained:
 
     **Sentiment Analysis** 🎭
@@ -1030,7 +1159,7 @@ st.markdown("""
     - Accounts for correlation in same-game parlays
     """)
     
-st.caption("🟢 High Confidence | 💰 High +EV | 📈 Positive EV | 📉 Negative EV | Powered by AI & ML")
+    st.caption("🟢 High Confidence | 💰 High +EV | 📈 Positive EV | 📉 Negative EV | Powered by AI & ML")
 
 # ===== TAB 2: PRIZEPICKS =====
 with main_tab2:
