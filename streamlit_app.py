@@ -458,6 +458,9 @@ def match_theover_to_leg(leg, theover_data):
     """
     Match a parlay leg with theover.ai data
     Returns theover projection or None if no match
+    Handles both formats:
+    1. Standard: Team, Market, Projection
+    2. theover.ai: League, Matchup, AwayTeam, HomeTeam, Pick, Line
     """
     if theover_data is None or theover_data.empty:
         return None
@@ -467,27 +470,56 @@ def match_theover_to_leg(leg, theover_data):
         theover_df = theover_data.copy()
         theover_df.columns = [c.strip().lower() for c in theover_df.columns]
         
-        # Extract team name from leg
+        # Extract info from leg
+        leg_label = leg.get('label', '').lower()
         team = leg.get('team', '').lower()
         market_type = leg.get('type', '').lower()
         
-        # Try to find matching projection
-        for idx, row in theover_df.iterrows():
-            row_team = str(row.get('team', row.get('player', ''))).lower()
-            row_market = str(row.get('stat', row.get('market', ''))).lower()
-            
-            # Check for team match
-            if team in row_team or row_team in team:
-                # Check for market type match
-                if ('moneyline' in market_type and ('ml' in row_market or 'win' in row_market)) or \
-                   ('spread' in market_type and 'spread' in row_market) or \
-                   ('total' in market_type and ('total' in row_market or 'points' in row_market)):
-                    projection = row.get('projection', None)
-                    if projection is not None:
-                        return float(projection)
+        # Check if this is theover.ai format (has awayteam, hometeam, pick columns)
+        if 'awayteam' in theover_df.columns and 'hometeam' in theover_df.columns and 'pick' in theover_df.columns:
+            # theover.ai format - match by teams and pick type
+            for idx, row in theover_df.iterrows():
+                away_team = str(row.get('awayteam', '')).lower()
+                home_team = str(row.get('hometeam', '')).lower()
+                pick = str(row.get('pick', '')).lower()
+                
+                # Check if both teams match the leg (for totals)
+                if market_type == 'total':
+                    # Check if the matchup matches
+                    if (away_team in leg_label or team in away_team) and \
+                       (home_team in leg_label or team in home_team):
+                        # Return the pick (Over/Under)
+                        if pick in ['over', 'under']:
+                            return pick.capitalize()
+                
+                # Check for moneyline or spread picks on specific teams
+                elif team:
+                    team_matches = team in away_team or away_team in team or \
+                                 team in home_team or home_team in team
+                    
+                    if team_matches:
+                        # For ML or spread, return the pick if available
+                        if pick and pick != 'nan':
+                            return pick.capitalize()
+        
+        else:
+            # Standard format - original matching logic
+            for idx, row in theover_df.iterrows():
+                row_team = str(row.get('team', row.get('player', ''))).lower()
+                row_market = str(row.get('stat', row.get('market', ''))).lower()
+                
+                # Check for team match
+                if team in row_team or row_team in team:
+                    # Check for market type match
+                    if ('moneyline' in market_type and ('ml' in row_market or 'win' in row_market)) or \
+                       ('spread' in market_type and 'spread' in row_market) or \
+                       ('total' in market_type and ('total' in row_market or 'points' in row_market)):
+                        projection = row.get('projection', None)
+                        if projection is not None:
+                            return float(projection)
         
         return None
-    except Exception:
+    except Exception as e:
         return None
 
 def build_combos_ai(legs, k, allow_sgp, optimizer):
@@ -612,7 +644,11 @@ def render_parlay_section_ai(title, rows, theover_data=None):
                 theover_proj = match_theover_to_leg(leg, theover_data)
                 if theover_proj is not None:
                     has_theover = True
-                    theover_display = f"🎯 {theover_proj:.2f}"
+                    # Handle both numeric and text values
+                    if isinstance(theover_proj, (int, float)):
+                        theover_display = f"🎯 {theover_proj:.2f}"
+                    else:
+                        theover_display = f"🎯 {theover_proj}"
                 else:
                     theover_display = "—"
                 
@@ -1130,7 +1166,7 @@ except NameError:
 # ---------------------------------------------------------
     
 st.markdown("---")
-st.markdown("""
+    st.markdown("""
     ### 🤖 AI Features Explained:
 
     **Sentiment Analysis** 🎭
@@ -1159,7 +1195,7 @@ st.markdown("""
     - Accounts for correlation in same-game parlays
     """)
     
-st.caption("🟢 High Confidence | 💰 High +EV | 📈 Positive EV | 📉 Negative EV | Powered by AI & ML")
+    st.caption("🟢 High Confidence | 💰 High +EV | 📈 Positive EV | 📉 Negative EV | Powered by AI & ML")
 
 # ===== TAB 2: PRIZEPICKS =====
 with main_tab2:
