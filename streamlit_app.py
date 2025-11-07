@@ -1289,8 +1289,8 @@ with main_tab1:
                                 base_prob = implied_p_from_american(pr)
                                 sentiment = home_sentiment if nm == home else away_sentiment
                                 
-                                # Simple sentiment adjustment for spreads
-                                ai_prob = base_prob * (1 + sentiment['score'] * sentiment_weight)
+                                # Simple sentiment adjustment for spreads (40% weight)
+                                ai_prob = base_prob * (1 + sentiment['score'] * 0.40)
                                 ai_prob = max(0.1, min(0.9, ai_prob))  # Clamp
                                 
                                 all_legs.append({
@@ -1318,9 +1318,9 @@ with main_tab1:
                                 
                                 base_prob = implied_p_from_american(pr)
                                 
-                                # For totals, combine both teams' offensive sentiment
+                                # For totals, combine both teams' offensive sentiment (40% weight)
                                 combined_sentiment = (home_sentiment['score'] + away_sentiment['score']) / 2
-                                ai_prob = base_prob * (1 + combined_sentiment * sentiment_weight * 0.5)
+                                ai_prob = base_prob * (1 + combined_sentiment * 0.40 * 0.5)
                                 ai_prob = max(0.1, min(0.9, ai_prob))
                                 
                                 all_legs.append({
@@ -1431,7 +1431,7 @@ except NameError:
 # ---------------------------------------------------------
     
 st.markdown("---")
-st.markdown("""
+    st.markdown("""
     ### 🤖 AI Features Explained:
 
     **Sentiment Analysis** 🎭
@@ -1460,7 +1460,7 @@ st.markdown("""
     - Accounts for correlation in same-game parlays
     """)
     
-st.caption("🟢 High Confidence | 💰 High +EV | 📈 Positive EV | 📉 Negative EV | Powered by AI & ML")
+    st.caption("🟢 High Confidence | 💰 High +EV | 📈 Positive EV | 📉 Negative EV | Powered by AI & ML")
 
 # ===== TAB 2: PRIZEPICKS =====
 with main_tab2:
