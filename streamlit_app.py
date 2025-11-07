@@ -223,9 +223,9 @@ class MLPredictor:
         }
         
         # ML Adjustment (in production, this would use trained XGBoost/LightGBM)
-        # For now, we use a weighted ensemble approach
-        sentiment_weight = 0.15
-        market_weight = 0.85
+        # UPDATED: Sentiment now has real impact (40% vs 15% before)
+        sentiment_weight = 0.40  # Increased from 0.15 to 0.40
+        market_weight = 0.60     # Decreased from 0.85 to 0.60
         
         # Adjust probabilities based on sentiment
         sentiment_adjustment = (sentiment_home - sentiment_away) * sentiment_weight
@@ -311,14 +311,16 @@ class AIOptimizer:
         unique_games = len(set(leg['event_id'] for leg in legs))
         correlation_factor = unique_games / len(legs)
         
-        # Final score components
+        # Final score components - UPDATED for better balance
+        # Prioritize edge (where AI sees value) over raw EV
         ev_score = ai_ev * 100  # EV contribution
         confidence_score = combined_confidence * 50  # Confidence contribution
-        edge_score = total_edge * 100  # Edge contribution
+        edge_score = total_edge * 150  # INCREASED: Edge is now most important
         
-        final_score = (ev_score * 0.4 + 
-                      confidence_score * 0.3 + 
-                      edge_score * 0.3) * correlation_factor
+        # UPDATED: Edge gets highest weight (shows where AI disagrees with market)
+        final_score = (edge_score * 0.45 +      # 45% edge (was 30%)
+                      ev_score * 0.30 +          # 30% EV (was 40%)
+                      confidence_score * 0.25) * correlation_factor  # 25% confidence (was 30%)
         
         return {
             'score': final_score,
@@ -718,8 +720,10 @@ def build_combos_ai(legs, k, allow_sgp, optimizer, theover_data=None):
     # Convert back to list
     out = list(parlay_map.values())
     
-    # Sort by boosted AI score (includes theover.ai bonus), then by AI probability
-    out.sort(key=lambda x: (x["ai_score"], x["p_ai"]), reverse=True)
+    # UPDATED: Sort by VALUE not just probability
+    # Priority: 1) AI Score (includes theover.ai + value), 2) AI Edge, 3) AI Probability
+    # This shows bets where AI sees VALUE, not just favorites
+    out.sort(key=lambda x: (x["ai_score"], x["ai_edge"], x["p_ai"]), reverse=True)
     return out
 
 def render_parlay_section_ai(title, rows, theover_data=None):
@@ -794,6 +798,14 @@ def render_parlay_section_ai(title, rows, theover_data=None):
             with comp_col2:
                 st.write(f"AI EV: {ai_ev_pct:.2f}%")
                 st.write(f"AI Edge: {row['ai_edge']*100:.2f}%")
+                
+                # Show sentiment impact
+                prob_diff = (row['p_ai'] - row['p']) * 100
+                if abs(prob_diff) > 1:
+                    if prob_diff > 0:
+                        st.success(f"↗️ Sentiment boosted by {prob_diff:.1f}%")
+                    else:
+                        st.warning(f"↘️ Sentiment reduced by {abs(prob_diff):.1f}%")
             
             # Legs breakdown with theover.ai integration
             st.markdown("**🎯 Parlay Legs:**")
@@ -1108,6 +1120,16 @@ with main_tab1:
     # AI Settings
     with st.expander("⚙️ AI Settings", expanded=False):
         st.markdown("### Machine Learning Configuration")
+        
+        st.info("""
+        **✨ SENTIMENT NOW MATTERS!**
+        
+        Sentiment weight increased: 15% → **40%**  
+        Ranking prioritizes: **Value & Edge** (not just favorites)
+        
+        Your AI analysis now has real impact! 🎯
+        """)
+        
         col_ai1, col_ai2 = st.columns(2)
         with col_ai1:
             use_sentiment = st.checkbox("Enable Sentiment Analysis", value=True, 
@@ -1117,8 +1139,10 @@ with main_tab1:
         with col_ai2:
             min_ai_confidence = st.slider("Minimum AI Confidence", 0.0, 1.0, 0.4, 0.05,
                                           help="Filter out low-confidence predictions")
-            sentiment_weight = st.slider("Sentiment Weight", 0.0, 0.5, 0.15, 0.05,
-                                         help="How much to weight sentiment in predictions")
+            
+            # Show current weights
+            st.metric("Sentiment Weight", "40%", delta="+25% from before", delta_color="normal")
+            st.caption("Sentiment now has real impact on rankings!")
 
     col3, col4, col5 = st.columns(3)
     with col3:
@@ -1407,7 +1431,7 @@ except NameError:
 # ---------------------------------------------------------
     
 st.markdown("---")
-st.markdown("""
+    st.markdown("""
     ### 🤖 AI Features Explained:
 
     **Sentiment Analysis** 🎭
@@ -1436,7 +1460,7 @@ st.markdown("""
     - Accounts for correlation in same-game parlays
     """)
     
-st.caption("🟢 High Confidence | 💰 High +EV | 📈 Positive EV | 📉 Negative EV | Powered by AI & ML")
+    st.caption("🟢 High Confidence | 💰 High +EV | 📈 Positive EV | 📉 Negative EV | Powered by AI & ML")
 
 # ===== TAB 2: PRIZEPICKS =====
 with main_tab2:
