@@ -1460,7 +1460,7 @@ st.markdown("""
     - Accounts for correlation in same-game parlays
     """)
     
-    st.caption("🟢 High Confidence | 💰 High +EV | 📈 Positive EV | 📉 Negative EV | Powered by AI & ML")
+st.caption("🟢 High Confidence | 💰 High +EV | 📈 Positive EV | 📉 Negative EV | Powered by AI & ML")
 
 # ===== TAB 2: PRIZEPICKS =====
 with main_tab2:
