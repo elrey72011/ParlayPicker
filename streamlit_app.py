@@ -455,11 +455,19 @@ def calculate_profit(decimal_odds: float, stake: float = 100) -> float:
     return (decimal_odds - 1.0) * stake
 
 def build_combos_ai(legs, k, allow_sgp, optimizer):
-    """Build parlay combinations with AI scoring"""
-    out = []
+    """Build parlay combinations with AI scoring - deduplicates and keeps best odds"""
+    parlay_map = {}  # Maps parlay_key -> best parlay so far
+    
     for combo in itertools.combinations(legs, k):
         if not allow_sgp and len({c["event_id"] for c in combo}) < k:
             continue
+        
+        # Create a unique key for this parlay based on the actual bets (not odds)
+        # This deduplicates parlays where only the odds differ
+        parlay_key = tuple(sorted([
+            f"{c['event_id']}_{c['type']}_{c['team']}_{c.get('side', '')}_{c.get('point', '')}"
+            for c in combo
+        ]))
         
         d = 1.0
         p_market = 1.0
@@ -476,7 +484,7 @@ def build_combos_ai(legs, k, allow_sgp, optimizer):
         profit = calculate_profit(d, 100)
         market_ev = ev_rate(p_market, d)
         
-        out.append({
+        parlay_data = {
             "legs": combo,
             "d": d,
             "p": p_market,
@@ -487,7 +495,14 @@ def build_combos_ai(legs, k, allow_sgp, optimizer):
             "ai_score": ai_metrics['score'],
             "ai_confidence": ai_metrics['confidence'],
             "ai_edge": ai_metrics['edge']
-        })
+        }
+        
+        # Keep only the version with best combined odds (highest decimal odds = best payout)
+        if parlay_key not in parlay_map or d > parlay_map[parlay_key]["d"]:
+            parlay_map[parlay_key] = parlay_data
+    
+    # Convert back to list
+    out = list(parlay_map.values())
     
     # Sort by AI probability (highest to lowest), then by AI score
     out.sort(key=lambda x: (x["p_ai"], x["ai_score"]), reverse=True)
@@ -702,6 +717,8 @@ with main_tab1:
         show_top = st.slider("Show top N combos", 1, 50, 15, 1)
     with col5:
         allow_sgp = st.checkbox("Allow same-game legs", value=False)
+    
+    st.info("💡 **Duplicate Removal:** Identical bets from different bookmakers are automatically deduplicated, keeping only the best odds.")
 
     # Bet type filters
     st.subheader("Include Bet Types")
@@ -966,7 +983,7 @@ except NameError:
 # ---------------------------------------------------------
     
 st.markdown("---")
-st.markdown("""
+    st.markdown("""
     ### 🤖 AI Features Explained:
 
     **Sentiment Analysis** 🎭
@@ -995,7 +1012,7 @@ st.markdown("""
     - Accounts for correlation in same-game parlays
     """)
     
-st.caption("🟢 High Confidence | 💰 High +EV | 📈 Positive EV | 📉 Negative EV | Powered by AI & ML")
+    st.caption("🟢 High Confidence | 💰 High +EV | 📈 Positive EV | 📉 Negative EV | Powered by AI & ML")
 
 # ===== TAB 2: PRIZEPICKS =====
 with main_tab2:
