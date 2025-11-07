@@ -462,21 +462,25 @@ def build_combos_ai(legs, k, allow_sgp, optimizer):
         if not allow_sgp and len({c["event_id"] for c in combo}) < k:
             continue
         
-        # Create a unique key for this parlay based on the actual bets (not odds)
-        # This deduplicates parlays where only the odds differ
-        parlay_key = tuple(sorted([
-            f"{c['event_id']}_{c['type']}_{c['team']}_{c.get('side', '')}_{c.get('point', '')}"
-            for c in combo
-        ]))
+        # Skip combos with missing required fields
+        try:
+            # Create a unique key for this parlay based on the actual bets (not odds)
+            # This deduplicates parlays where only the odds differ
+            parlay_key = tuple(sorted([
+                f"{c.get('event_id', '')}_{c.get('type', '')}_{c.get('team', '')}_{c.get('side', '')}_{c.get('point', '')}"
+                for c in combo
+            ]))
+        except Exception:
+            continue  # Skip this combo if we can't create a key
         
         d = 1.0
         p_market = 1.0
         p_ai = 1.0
         
         for c in combo:
-            d *= c["d"]
-            p_market *= c["p"]
-            p_ai *= c.get("ai_prob", c["p"])
+            d *= c.get("d", 1.0)
+            p_market *= c.get("p", 0.5)
+            p_ai *= c.get("ai_prob", c.get("p", 0.5))
         
         # Get AI score for this parlay
         ai_metrics = optimizer.score_parlay(list(combo))
@@ -800,6 +804,9 @@ with main_tab1:
                                 if ai_confidence >= min_ai_confidence:
                                     all_legs.append({
                                         "event_id": eid,
+                                        "type": "Moneyline",
+                                        "team": home,
+                                        "side": "home",
                                         "market": "ML",
                                         "label": f"{away} @ {home} — {home} ML @{hp}",
                                         "p": base_prob,
@@ -829,6 +836,9 @@ with main_tab1:
                                 if ai_confidence >= min_ai_confidence:
                                     all_legs.append({
                                         "event_id": eid,
+                                        "type": "Moneyline",
+                                        "team": away,
+                                        "side": "away",
                                         "market": "ML",
                                         "label": f"{away} @ {home} — {away} ML @{ap}",
                                         "p": base_prob,
@@ -855,6 +865,10 @@ with main_tab1:
                                 
                                 all_legs.append({
                                     "event_id": eid,
+                                    "type": "Spread",
+                                    "team": nm,
+                                    "side": "home" if nm == home else "away",
+                                    "point": pt,
                                     "market": "Spread",
                                     "label": f"{away} @ {home} — {nm} {pt:+.1f} @{pr}",
                                     "p": base_prob,
@@ -881,6 +895,10 @@ with main_tab1:
                                 
                                 all_legs.append({
                                     "event_id": eid,
+                                    "type": "Total",
+                                    "team": f"{home} vs {away}",
+                                    "side": nm,  # Over or Under
+                                    "point": pt,
                                     "market": "Total",
                                     "label": f"{away} @ {home} — {nm} {pt} @{pr}",
                                     "p": base_prob,
@@ -983,7 +1001,7 @@ except NameError:
 # ---------------------------------------------------------
     
 st.markdown("---")
-st.markdown("""
+    st.markdown("""
     ### 🤖 AI Features Explained:
 
     **Sentiment Analysis** 🎭
@@ -1012,12 +1030,89 @@ st.markdown("""
     - Accounts for correlation in same-game parlays
     """)
     
-st.caption("🟢 High Confidence | 💰 High +EV | 📈 Positive EV | 📉 Negative EV | Powered by AI & ML")
+    st.caption("🟢 High Confidence | 💰 High +EV | 📈 Positive EV | 📉 Negative EV | Powered by AI & ML")
 
 # ===== TAB 2: PRIZEPICKS =====
 with main_tab2:
     st.subheader("🏆 PrizePicks Player Props Analyzer")
     st.caption("AI-powered player prop analysis for NFL & NBA (2-4 pick entries)")
+    
+    # theover.ai Integration Section
+    st.markdown("---")
+    st.markdown("### 📊 theover.ai Integration")
+    
+    theover_method = st.radio(
+        "How do you want to add theover.ai data?",
+        ["🚫 Skip (use sample data)", "📁 Upload CSV", "📋 Paste Data"],
+        horizontal=True
+    )
+    
+    theover_data = None
+    
+    if theover_method == "📁 Upload CSV":
+        st.info("""
+        **CSV Format Expected:**
+        - Columns: Player, Stat, Projection, Line (optional)
+        - Example: "LeBron James, Points, 31.2, 28.5"
+        """)
+        
+        uploaded_file = st.file_uploader(
+            "Upload theover.ai CSV export",
+            type=['csv'],
+            help="Export your theover.ai projections as CSV and upload here"
+        )
+        
+        if uploaded_file:
+            try:
+                theover_data = pd.read_csv(uploaded_file)
+                st.success(f"✅ Loaded {len(theover_data)} projections from theover.ai")
+                
+                with st.expander("📋 Preview theover.ai Data"):
+                    st.dataframe(theover_data.head(10), use_container_width=True)
+                    
+            except Exception as e:
+                st.error(f"Error loading CSV: {e}")
+                
+    elif theover_method == "📋 Paste Data":
+        st.info("""
+        **Paste Format:**
+        ```
+        Player,Stat,Projection
+        LeBron James,Points,31.2
+        Steph Curry,3PT Made,4.8
+        ...
+        ```
+        Or tab-separated from Excel.
+        """)
+        
+        pasted_data = st.text_area(
+            "Paste theover.ai data here",
+            height=200,
+            placeholder="LeBron James,Points,31.2\nSteph Curry,3PT Made,4.8"
+        )
+        
+        if pasted_data.strip():
+            try:
+                # Try comma-separated first
+                if ',' in pasted_data:
+                    from io import StringIO
+                    theover_data = pd.read_csv(StringIO(pasted_data))
+                # Try tab-separated (from Excel)
+                elif '\t' in pasted_data:
+                    from io import StringIO
+                    theover_data = pd.read_csv(StringIO(pasted_data), sep='\t')
+                else:
+                    st.warning("Data format not recognized. Use comma or tab-separated values.")
+                
+                if theover_data is not None:
+                    st.success(f"✅ Loaded {len(theover_data)} projections from theover.ai")
+                    with st.expander("📋 Preview Pasted Data"):
+                        st.dataframe(theover_data.head(10), use_container_width=True)
+                        
+            except Exception as e:
+                st.error(f"Error parsing data: {e}")
+    
+    st.markdown("---")
     
     pp_analyzer = st.session_state['prizepicks_analyzer']
     
@@ -1044,11 +1139,47 @@ with main_tab2:
                 st.warning("No props available for analysis")
                 st.stop()
             
+            # Enhance props with theover.ai data if available
+            if theover_data is not None and not theover_data.empty:
+                st.info("🎯 Enhancing analysis with theover.ai projections...")
+                
+                # Normalize column names
+                theover_df = theover_data.copy()
+                theover_df.columns = [c.strip().lower() for c in theover_df.columns]
+                
+                # Try to match props with theover.ai data
+                for prop in props:
+                    player_name = prop['player'].lower()
+                    stat_type = prop['stat'].lower()
+                    
+                    # Find matching projection
+                    match = theover_df[
+                        (theover_df.get('player', '').str.lower().str.contains(player_name.split()[0], na=False)) &
+                        (theover_df.get('stat', '').str.lower().str.contains(stat_type.split()[0], na=False))
+                    ]
+                    
+                    if not match.empty:
+                        theover_proj = match.iloc[0].get('projection', prop['projection'])
+                        try:
+                            theover_proj = float(theover_proj)
+                            prop['theover_projection'] = theover_proj
+                            prop['projection'] = theover_proj  # Use theover projection
+                            prop['edge'] = ((theover_proj - prop['line']) / prop['line'] * 100)
+                            prop['source'] = 'theover.ai'
+                        except:
+                            prop['source'] = 'sample'
+                    else:
+                        prop['source'] = 'sample'
+            
             # Find best entries
             best_entries = pp_analyzer.find_best_picks(props, pp_min_picks, pp_max_picks)[:show_pp_entries]
             
             # Display summary
-            st.success(f"✅ Analyzed {len(props)} player props for {pp_sport}")
+            theover_count = sum(1 for p in props if p.get('source') == 'theover.ai')
+            if theover_count > 0:
+                st.success(f"✅ Analyzed {len(props)} player props for {pp_sport} ({theover_count} from theover.ai 🎯)")
+            else:
+                st.success(f"✅ Analyzed {len(props)} player props for {pp_sport}")
             
             with st.expander("📊 Props Overview", expanded=False):
                 props_df = pd.DataFrame([{
@@ -1057,7 +1188,8 @@ with main_tab2:
                     "Stat": p["stat"],
                     "Line": p["line"],
                     "Projection": p["projection"],
-                    "Edge %": f"{((p['projection'] - p['line']) / p['line'] * 100):.1f}%"
+                    "Edge %": f"{((p['projection'] - p['line']) / p['line'] * 100):.1f}%",
+                    "Source": "🎯 theover.ai" if p.get('source') == 'theover.ai' else "📊 Sample"
                 } for p in props])
                 st.dataframe(props_df, use_container_width=True, hide_index=True)
             
