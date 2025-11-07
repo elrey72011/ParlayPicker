@@ -456,11 +456,11 @@ def calculate_profit(decimal_odds: float, stake: float = 100) -> float:
 
 def match_theover_to_leg(leg, theover_data):
     """
-    Match a parlay leg with theover.ai data
-    Returns theover projection or None if no match
-    Handles both formats:
-    1. Standard: Team, Market, Projection
-    2. theover.ai: League, Matchup, AwayTeam, HomeTeam, Pick, Line
+    Match a parlay leg with theover.ai data and validate direction
+    Returns dict with: {'pick': str, 'matches': bool, 'signal': str} or None
+    - pick: theover.ai recommendation (Over/Under)
+    - matches: True if leg direction matches theover.ai pick
+    - signal: Visual indicator (✅/⚠️/—)
     """
     if theover_data is None or theover_data.empty:
         return None
@@ -488,9 +488,22 @@ def match_theover_to_leg(leg, theover_data):
                     # Check if the matchup matches
                     if (away_team in leg_label or team in away_team) and \
                        (home_team in leg_label or team in home_team):
-                        # Return the pick (Over/Under)
+                        # Return the pick (Over/Under) with match validation
                         if pick in ['over', 'under']:
-                            return pick.capitalize()
+                            # Check if the leg direction matches theover.ai pick
+                            leg_direction = None
+                            if 'over' in leg_label:
+                                leg_direction = 'over'
+                            elif 'under' in leg_label:
+                                leg_direction = 'under'
+                            
+                            matches = (leg_direction == pick) if leg_direction else None
+                            
+                            return {
+                                'pick': pick.capitalize(),
+                                'matches': matches,
+                                'signal': '✅' if matches else ('⚠️' if matches == False else '❓')
+                            }
                 
                 # Check for moneyline or spread picks on specific teams
                 elif team:
@@ -500,7 +513,11 @@ def match_theover_to_leg(leg, theover_data):
                     if team_matches:
                         # For ML or spread, return the pick if available
                         if pick and pick != 'nan':
-                            return pick.capitalize()
+                            return {
+                                'pick': pick.capitalize(),
+                                'matches': None,  # Can't validate ML/spread direction yet
+                                'signal': '🎯'
+                            }
         
         else:
             # Standard format - original matching logic
@@ -516,14 +533,19 @@ def match_theover_to_leg(leg, theover_data):
                        ('total' in market_type and ('total' in row_market or 'points' in row_market)):
                         projection = row.get('projection', None)
                         if projection is not None:
-                            return float(projection)
+                            return {
+                                'pick': float(projection),
+                                'matches': None,
+                                'signal': '🎯'
+                            }
         
         return None
     except Exception as e:
         return None
 
-def build_combos_ai(legs, k, allow_sgp, optimizer):
-    """Build parlay combinations with AI scoring - deduplicates and keeps best odds"""
+def build_combos_ai(legs, k, allow_sgp, optimizer, theover_data=None):
+    """Build parlay combinations with AI scoring - deduplicates and keeps best odds
+    Now includes theover.ai validation bonus"""
     parlay_map = {}  # Maps parlay_key -> best parlay so far
     
     for combo in itertools.combinations(legs, k):
@@ -553,8 +575,29 @@ def build_combos_ai(legs, k, allow_sgp, optimizer):
         # Get AI score for this parlay
         ai_metrics = optimizer.score_parlay(list(combo))
         
+        # Calculate theover.ai validation bonus
+        theover_bonus = 0.0
+        theover_matches = 0
+        theover_conflicts = 0
+        
+        if theover_data is not None:
+            for leg in combo:
+                result = match_theover_to_leg(leg, theover_data)
+                if result and isinstance(result, dict):
+                    matches = result.get('matches')
+                    if matches == True:
+                        theover_matches += 1
+                        theover_bonus += 0.15  # 15% bonus per matching leg
+                    elif matches == False:
+                        theover_conflicts += 1
+                        theover_bonus -= 0.10  # 10% penalty per conflicting leg
+        
         profit = calculate_profit(d, 100)
         market_ev = ev_rate(p_market, d)
+        
+        # Apply theover.ai bonus to AI score
+        base_ai_score = ai_metrics['score']
+        boosted_ai_score = base_ai_score * (1.0 + theover_bonus)
         
         parlay_data = {
             "legs": combo,
@@ -564,7 +607,11 @@ def build_combos_ai(legs, k, allow_sgp, optimizer):
             "ev_market": market_ev,
             "ev_ai": ai_metrics['ai_ev'],
             "profit": profit,
-            "ai_score": ai_metrics['score'],
+            "ai_score": boosted_ai_score,  # Boosted score with theover.ai
+            "base_ai_score": base_ai_score,  # Original score
+            "theover_bonus": theover_bonus,
+            "theover_matches": theover_matches,
+            "theover_conflicts": theover_conflicts,
             "ai_confidence": ai_metrics['confidence'],
             "ai_edge": ai_metrics['edge']
         }
@@ -576,8 +623,8 @@ def build_combos_ai(legs, k, allow_sgp, optimizer):
     # Convert back to list
     out = list(parlay_map.values())
     
-    # Sort by AI probability (highest to lowest), then by AI score
-    out.sort(key=lambda x: (x["p_ai"], x["ai_score"]), reverse=True)
+    # Sort by boosted AI score (includes theover.ai bonus), then by AI probability
+    out.sort(key=lambda x: (x["ai_score"], x["p_ai"]), reverse=True)
     return out
 
 def render_parlay_section_ai(title, rows, theover_data=None):
@@ -606,9 +653,20 @@ def render_parlay_section_ai(title, rows, theover_data=None):
         else:
             ev_icon = "📉"
         
+        # theover.ai boost indicator
+        theover_boost = ""
+        if row.get('theover_matches', 0) > 0:
+            theover_boost = f" | 🎯 {row['theover_matches']} match"
+            if row['theover_matches'] > 1:
+                theover_boost += "es"
+        elif row.get('theover_conflicts', 0) > 0:
+            theover_boost = f" | ⚠️ {row['theover_conflicts']} conflict"
+            if row['theover_conflicts'] > 1:
+                theover_boost += "s"
+        
         prob_pct = row['p_ai'] * 100
         with st.expander(
-            f"{conf_icon}{ev_icon} #{i} - AI Score: {row['ai_score']:.1f} | Odds: {row['d']:.2f} | AI Prob: {prob_pct:.1f}% | Profit: ${row['profit']:.2f}"
+            f"{conf_icon}{ev_icon} #{i} - AI Score: {row['ai_score']:.1f}{theover_boost} | Odds: {row['d']:.2f} | AI Prob: {prob_pct:.1f}% | Profit: ${row['profit']:.2f}"
         ):
             # Metrics
             col_a, col_b, col_c, col_d, col_e = st.columns(5)
@@ -624,6 +682,14 @@ def render_parlay_section_ai(title, rows, theover_data=None):
                 delta_color = "normal" if row['ev_ai'] > 0 else "inverse"
                 st.metric("AI Expected Value", f"{ai_ev_pct:.2f}%")
             
+            # theover.ai boost info if available
+            if row.get('theover_bonus', 0) != 0:
+                theover_bonus_pct = row['theover_bonus'] * 100
+                if theover_bonus_pct > 0:
+                    st.success(f"🎯 **theover.ai Boost:** +{theover_bonus_pct:.0f}% to AI score ({row.get('theover_matches', 0)} matching picks)")
+                else:
+                    st.warning(f"⚠️ **theover.ai Conflict:** {theover_bonus_pct:.0f}% penalty ({row.get('theover_conflicts', 0)} conflicting picks)")
+            
             # Market vs AI comparison
             st.markdown("**📊 Market vs AI Analysis:**")
             comp_col1, comp_col2 = st.columns(2)
@@ -638,17 +704,37 @@ def render_parlay_section_ai(title, rows, theover_data=None):
             st.markdown("**🎯 Parlay Legs:**")
             legs_data = []
             has_theover = False
+            theover_matches = 0
+            theover_conflicts = 0
             
             for j, leg in enumerate(row["legs"], start=1):
                 # Try to match with theover.ai data
-                theover_proj = match_theover_to_leg(leg, theover_data)
-                if theover_proj is not None:
+                theover_result = match_theover_to_leg(leg, theover_data)
+                
+                if theover_result is not None:
                     has_theover = True
-                    # Handle both numeric and text values
-                    if isinstance(theover_proj, (int, float)):
-                        theover_display = f"🎯 {theover_proj:.2f}"
+                    
+                    # Handle dict result (new format with validation)
+                    if isinstance(theover_result, dict):
+                        pick = theover_result.get('pick', '')
+                        matches = theover_result.get('matches')
+                        signal = theover_result.get('signal', '🎯')
+                        
+                        # Count matches and conflicts for summary
+                        if matches == True:
+                            theover_matches += 1
+                            theover_display = f"{signal} {pick}"
+                        elif matches == False:
+                            theover_conflicts += 1
+                            theover_display = f"{signal} {pick}"
+                        else:
+                            theover_display = f"{signal} {pick}"
                     else:
-                        theover_display = f"🎯 {theover_proj}"
+                        # Handle numeric or simple string values (backward compatibility)
+                        if isinstance(theover_result, (int, float)):
+                            theover_display = f"🎯 {theover_result:.2f}"
+                        else:
+                            theover_display = f"🎯 {theover_result}"
                 else:
                     theover_display = "—"
                 
@@ -666,8 +752,16 @@ def render_parlay_section_ai(title, rows, theover_data=None):
             
             st.dataframe(pd.DataFrame(legs_data), use_container_width=True, hide_index=True)
             
+            # Show legend and summary
             if has_theover:
-                st.caption("🎯 = theover.ai projection available")
+                col_legend1, col_legend2 = st.columns(2)
+                with col_legend1:
+                    st.caption("✅ = Matches theover.ai pick | ⚠️ = Conflicts with theover.ai | 🎯 = theover.ai data available")
+                with col_legend2:
+                    if theover_matches > 0:
+                        st.success(f"✅ {theover_matches} leg(s) match theover.ai recommendations")
+                    if theover_conflicts > 0:
+                        st.warning(f"⚠️ {theover_conflicts} leg(s) conflict with theover.ai recommendations")
             
             # Betting scenarios
             st.markdown("**💵 Betting Scenarios:**")
@@ -1112,25 +1206,25 @@ with main_tab1:
                 with tab_2:
                     st.subheader("Best 2-Leg AI-Optimized Parlays")
                     with st.spinner("Calculating optimal 2-leg combinations..."):
-                        combos_2 = build_combos_ai(all_legs, 2, allow_sgp, ai_optimizer)[:show_top]
+                        combos_2 = build_combos_ai(all_legs, 2, allow_sgp, ai_optimizer, theover_parlay_data)[:show_top]
                         render_parlay_section_ai("2-Leg AI Parlays", combos_2, theover_parlay_data)
                 
                 with tab_3:
                     st.subheader("Best 3-Leg AI-Optimized Parlays")
                     with st.spinner("Calculating optimal 3-leg combinations..."):
-                        combos_3 = build_combos_ai(all_legs, 3, allow_sgp, ai_optimizer)[:show_top]
+                        combos_3 = build_combos_ai(all_legs, 3, allow_sgp, ai_optimizer, theover_parlay_data)[:show_top]
                         render_parlay_section_ai("3-Leg AI Parlays", combos_3, theover_parlay_data)
                 
                 with tab_4:
                     st.subheader("Best 4-Leg AI-Optimized Parlays")
                     with st.spinner("Calculating optimal 4-leg combinations..."):
-                        combos_4 = build_combos_ai(all_legs, 4, allow_sgp, ai_optimizer)[:show_top]
+                        combos_4 = build_combos_ai(all_legs, 4, allow_sgp, ai_optimizer, theover_parlay_data)[:show_top]
                         render_parlay_section_ai("4-Leg AI Parlays", combos_4, theover_parlay_data)
                 
                 with tab_5:
                     st.subheader("Best 5-Leg AI-Optimized Parlays")
                     with st.spinner("Calculating optimal 5-leg combinations..."):
-                        combos_5 = build_combos_ai(all_legs, 5, allow_sgp, ai_optimizer)[:show_top]
+                        combos_5 = build_combos_ai(all_legs, 5, allow_sgp, ai_optimizer, theover_parlay_data)[:show_top]
                         render_parlay_section_ai("5-Leg AI Parlays", combos_5, theover_parlay_data)
         
         except KeyError as e:
@@ -1166,7 +1260,7 @@ except NameError:
 # ---------------------------------------------------------
     
 st.markdown("---")
-st.markdown("""
+    st.markdown("""
     ### 🤖 AI Features Explained:
 
     **Sentiment Analysis** 🎭
@@ -1195,7 +1289,7 @@ st.markdown("""
     - Accounts for correlation in same-game parlays
     """)
     
-st.caption("🟢 High Confidence | 💰 High +EV | 📈 Positive EV | 📉 Negative EV | Powered by AI & ML")
+    st.caption("🟢 High Confidence | 💰 High +EV | 📈 Positive EV | 📉 Negative EV | Powered by AI & ML")
 
 # ===== TAB 2: PRIZEPICKS =====
 with main_tab2:
