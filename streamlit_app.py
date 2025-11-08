@@ -727,8 +727,11 @@ def build_combos_ai(legs, k, allow_sgp, optimizer, theover_data=None, min_probab
     # SIMPLE & EFFECTIVE: Sort by AI Expected Value
     # This finds bets where AI thinks you have an edge
     # Positive EV = long-term profitable
-    out.sort(key=lambda x: (x["ev_ai"], x["p_ai"]), reverse=True)
-    return out
+    # Filter low probability first
+    out = [p for p in out if p["p_ai"] >= 0.30]  # Only show 30%+ probability
+    # Then sort by EV
+    out.sort(key=lambda x: x["ev_ai"], reverse=True)
+        return out
 
 def render_parlay_section_ai(title, rows, theover_data=None):
     """Render parlays with AI insights"""
