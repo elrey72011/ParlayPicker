@@ -731,7 +731,7 @@ def build_combos_ai(legs, k, allow_sgp, optimizer, theover_data=None, min_probab
     out = [p for p in out if p["p_ai"] >= 0.30]  # Only show 30%+ probability
     # Then sort by EV
     out.sort(key=lambda x: x["ev_ai"], reverse=True)
-        return out
+    return out
 
 def render_parlay_section_ai(title, rows, theover_data=None):
     """Render parlays with AI insights"""
