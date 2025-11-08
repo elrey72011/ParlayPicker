@@ -640,9 +640,9 @@ def match_theover_to_leg(leg, theover_data):
     except Exception as e:
         return None
 
-def build_combos_ai(legs, k, allow_sgp, optimizer, theover_data=None):
+def build_combos_ai(legs, k, allow_sgp, optimizer, theover_data=None, min_probability=0.15):
     """Build parlay combinations with AI scoring - deduplicates and keeps best odds
-    Now includes theover.ai validation bonus"""
+    Now includes theover.ai validation bonus and filters out unrealistic longshots"""
     parlay_map = {}  # Maps parlay_key -> best parlay so far
     
     for combo in itertools.combinations(legs, k):
@@ -720,10 +720,35 @@ def build_combos_ai(legs, k, allow_sgp, optimizer, theover_data=None):
     # Convert back to list
     out = list(parlay_map.values())
     
-    # UPDATED: Sort by VALUE not just probability
-    # Priority: 1) AI Score (includes theover.ai + value), 2) AI Edge, 3) AI Probability
-    # This shows bets where AI sees VALUE, not just favorites
-    out.sort(key=lambda x: (x["ai_score"], x["ai_edge"], x["p_ai"]), reverse=True)
+    # FILTER: Remove parlays with unrealistic probability (avoid pure longshots)
+    # User can adjust this threshold in settings
+    out = [p for p in out if p["p_ai"] >= min_probability]
+    
+    # UPDATED: Sort by REALISTIC VALUE not just longshot odds
+    # Priority: 
+    # 1) Reasonable probability (30%+) with good EV
+    # 2) AI Edge (where AI sees value) 
+    # 3) AI Score (overall quality)
+    
+    # Calculate a "quality score" that penalizes longshots
+    for parlay in out:
+        prob = parlay["p_ai"]
+        
+        # Probability bonus (prefer 30-70% range)
+        if 0.30 <= prob <= 0.70:
+            prob_bonus = 1.5  # Strong bonus for realistic bets
+        elif 0.20 <= prob <= 0.80:
+            prob_bonus = 1.2  # Moderate bonus
+        elif 0.15 <= prob <= 0.85:
+            prob_bonus = 1.0  # Neutral
+        else:
+            prob_bonus = 0.5  # Penalty for extreme probabilities
+        
+        # Quality score = AI score × probability bonus
+        parlay["quality_score"] = parlay["ai_score"] * prob_bonus
+    
+    # Sort by quality score (realistic value), then AI edge, then probability
+    out.sort(key=lambda x: (x["quality_score"], x["ai_edge"], x["p_ai"]), reverse=True)
     return out
 
 def render_parlay_section_ai(title, rows, theover_data=None):
@@ -1139,6 +1164,11 @@ with main_tab1:
         with col_ai2:
             min_ai_confidence = st.slider("Minimum AI Confidence", 0.0, 1.0, 0.4, 0.05,
                                           help="Filter out low-confidence predictions")
+            min_parlay_probability = st.slider(
+                "Minimum Parlay Probability", 
+                0.05, 0.50, 0.15, 0.05,
+                help="Filter out longshot parlays (0.15 = 15% min chance)"
+            )
             
             # Show current weights
             st.metric("Sentiment Weight", "40%", delta="+25% from before", delta_color="normal")
@@ -1377,25 +1407,25 @@ with main_tab1:
                 with tab_2:
                     st.subheader("Best 2-Leg AI-Optimized Parlays")
                     with st.spinner("Calculating optimal 2-leg combinations..."):
-                        combos_2 = build_combos_ai(all_legs, 2, allow_sgp, ai_optimizer, theover_parlay_data)[:show_top]
+                        combos_2 = build_combos_ai(all_legs, 2, allow_sgp, ai_optimizer, theover_parlay_data, min_parlay_probability)[:show_top]
                         render_parlay_section_ai("2-Leg AI Parlays", combos_2, theover_parlay_data)
                 
                 with tab_3:
                     st.subheader("Best 3-Leg AI-Optimized Parlays")
                     with st.spinner("Calculating optimal 3-leg combinations..."):
-                        combos_3 = build_combos_ai(all_legs, 3, allow_sgp, ai_optimizer, theover_parlay_data)[:show_top]
+                        combos_3 = build_combos_ai(all_legs, 3, allow_sgp, ai_optimizer, theover_parlay_data, min_parlay_probability)[:show_top]
                         render_parlay_section_ai("3-Leg AI Parlays", combos_3, theover_parlay_data)
                 
                 with tab_4:
                     st.subheader("Best 4-Leg AI-Optimized Parlays")
                     with st.spinner("Calculating optimal 4-leg combinations..."):
-                        combos_4 = build_combos_ai(all_legs, 4, allow_sgp, ai_optimizer, theover_parlay_data)[:show_top]
+                        combos_4 = build_combos_ai(all_legs, 4, allow_sgp, ai_optimizer, theover_parlay_data, min_parlay_probability)[:show_top]
                         render_parlay_section_ai("4-Leg AI Parlays", combos_4, theover_parlay_data)
                 
                 with tab_5:
                     st.subheader("Best 5-Leg AI-Optimized Parlays")
                     with st.spinner("Calculating optimal 5-leg combinations..."):
-                        combos_5 = build_combos_ai(all_legs, 5, allow_sgp, ai_optimizer, theover_parlay_data)[:show_top]
+                        combos_5 = build_combos_ai(all_legs, 5, allow_sgp, ai_optimizer, theover_parlay_data, min_parlay_probability)[:show_top]
                         render_parlay_section_ai("5-Leg AI Parlays", combos_5, theover_parlay_data)
         
         except KeyError as e:
@@ -1431,7 +1461,7 @@ except NameError:
 # ---------------------------------------------------------
     
 st.markdown("---")
-st.markdown("""
+    st.markdown("""
     ### 🤖 AI Features Explained:
 
     **Sentiment Analysis** 🎭
@@ -1460,7 +1490,7 @@ st.markdown("""
     - Accounts for correlation in same-game parlays
     """)
     
-st.caption("🟢 High Confidence | 💰 High +EV | 📈 Positive EV | 📉 Negative EV | Powered by AI & ML")
+    st.caption("🟢 High Confidence | 💰 High +EV | 📈 Positive EV | 📉 Negative EV | Powered by AI & ML")
 
 # ===== TAB 2: PRIZEPICKS =====
 with main_tab2:
