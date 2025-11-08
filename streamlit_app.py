@@ -1,4 +1,3 @@
-
 import os, math, json, time, requests
 from typing import Optional, Tuple, Dict, Any, List
 import streamlit as st
@@ -24,6 +23,7 @@ def american_to_prob(odds: float) -> float:
     return -odds / (-odds + 100.0)
 
 def fair_probs_from_two_prices(a_odds: Optional[float], b_odds: Optional[float]) -> Tuple[Optional[float], Optional[float]]:
+    \"\"\"
     Returns de-juiced probabilities (p_a, p_b) that sum to 1.0 when both sides exist.
     If one side is missing, returns a single-sided approximation for that side and None for the other.
     \"\"\"
@@ -244,8 +244,13 @@ with st.sidebar:
     )
     min_mkt_prob = st.slider(
         "Minimum Market (No‑Vig) % for legs",
-        min_value=0.50, max_value=0.90, value=0.60, step=0.01,
-        help="Only include legs the market prices as at least this probability (de‑juiced)."
+        min_value=0.25, max_value=0.60, value=0.35, step=0.01,
+        help="Only include legs the market prices as at least this probability (de‑juiced). Lower = more upside."
+    )
+    max_mkt_prob = st.slider(
+        "Maximum Market (No‑Vig) % for legs",
+        min_value=0.40, max_value=0.70, value=0.55, step=0.01,
+        help="Exclude heavy favorites above this threshold. Keeps realistic value bets."
     )
     max_legs = st.number_input("Max legs to show", min_value=2, max_value=20, value=10, step=1)
     target_parlay_legs = st.number_input("Target legs to build", min_value=2, max_value=12, value=2, step=1)
@@ -268,13 +273,23 @@ all_legs = []
 for ev in events:
     all_legs.extend(build_candidates(ev))
 
-# Filter to keep 'high' market% legs
-filtered = [leg for leg in all_legs if leg.get("market_prob") is not None and leg["market_prob"] >= float(min_mkt_prob)]
-# Sort by market_prob desc, then by decimal odds (safer legs first)
-filtered.sort(key=lambda x: (x["market_prob"], american_to_decimal(x["price"])), reverse=True)
+# Filter to keep 'realistic value' legs - not too safe, not too risky
+filtered = [
+    leg for leg in all_legs 
+    if leg.get("market_prob") is not None 
+    and float(min_mkt_prob) <= leg["market_prob"] <= float(max_mkt_prob)
+]
+
+# Calculate EV for each leg (simple: expected return minus stake)
+for leg in filtered:
+    dec = american_to_decimal(leg["price"])
+    leg["ev"] = leg["market_prob"] * (dec - 1.0) - (1.0 - leg["market_prob"])
+
+# Sort by EV descending (best value first), then by market prob
+filtered.sort(key=lambda x: (x["ev"], x["market_prob"]), reverse=True)
 filtered = filtered[: int(max_legs)]
 
-st.markdown(f"**Found {len(filtered)} high‑confidence legs (Market (No‑Vig) ≥ {int(min_mkt_prob*100)}%).**")
+st.markdown(f"**Found {len(filtered)} value legs (Market probability: {int(min_mkt_prob*100)}%–{int(max_mkt_prob*100)}%).**")
 
 if not filtered:
     st.warning("No legs met the threshold. Try lowering the slider or switching sports.")
@@ -295,7 +310,8 @@ for i, leg in enumerate(chosen, 1):
         "Type": leg["type"],
         "Selection": leg["selection"],
         "Odds": odds_str,
-        "Market (No‑Vig) %": f"{leg['market_prob']*100:.1f}%"
+        "Market %": f"{leg['market_prob']*100:.1f}%",
+        "EV": f"{leg['ev']*100:+.1f}%"
     })
 
 parlay_prob_naive = 1.0
