@@ -507,6 +507,7 @@ def fetch_oddsapi_snapshot(api_key: str, sport_key: str) -> Dict[str, Any]:
         return {"events": []}
     except requests.exceptions.RequestException as e:
         st.error(f"API request failed for {sport_key}: {str(e)}")
+        out = [p for p in out if p["p_ai"] >= 0.50]
         return {"events": []}
     except Exception as e:
         st.error(f"Unexpected error fetching {sport_key}: {str(e)}")
