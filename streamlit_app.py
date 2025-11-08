@@ -640,9 +640,9 @@ def match_theover_to_leg(leg, theover_data):
     except Exception as e:
         return None
 
-def build_combos_ai(legs, k, allow_sgp, optimizer, theover_data=None, min_probability=0.15):
+def build_combos_ai(legs, k, allow_sgp, optimizer, theover_data=None, min_probability=0.25):
     """Build parlay combinations with AI scoring - deduplicates and keeps best odds
-    Now includes theover.ai validation bonus and filters out unrealistic longshots"""
+    Now filters out unrealistic longshots (default: 25% minimum probability)"""
     parlay_map = {}  # Maps parlay_key -> best parlay so far
     
     for combo in itertools.combinations(legs, k):
@@ -720,35 +720,14 @@ def build_combos_ai(legs, k, allow_sgp, optimizer, theover_data=None, min_probab
     # Convert back to list
     out = list(parlay_map.values())
     
-    # FILTER: Remove parlays with unrealistic probability (avoid pure longshots)
-    # User can adjust this threshold in settings
+    # FILTER: Remove unrealistic parlays
+    # Require at least 25% probability (1 in 4 chance minimum)
     out = [p for p in out if p["p_ai"] >= min_probability]
     
-    # UPDATED: Sort by REALISTIC VALUE not just longshot odds
-    # Priority: 
-    # 1) Reasonable probability (30%+) with good EV
-    # 2) AI Edge (where AI sees value) 
-    # 3) AI Score (overall quality)
-    
-    # Calculate a "quality score" that penalizes longshots
-    for parlay in out:
-        prob = parlay["p_ai"]
-        
-        # Probability bonus (prefer 30-70% range)
-        if 0.30 <= prob <= 0.70:
-            prob_bonus = 1.5  # Strong bonus for realistic bets
-        elif 0.20 <= prob <= 0.80:
-            prob_bonus = 1.2  # Moderate bonus
-        elif 0.15 <= prob <= 0.85:
-            prob_bonus = 1.0  # Neutral
-        else:
-            prob_bonus = 0.5  # Penalty for extreme probabilities
-        
-        # Quality score = AI score × probability bonus
-        parlay["quality_score"] = parlay["ai_score"] * prob_bonus
-    
-    # Sort by quality score (realistic value), then AI edge, then probability
-    out.sort(key=lambda x: (x["quality_score"], x["ai_edge"], x["p_ai"]), reverse=True)
+    # SIMPLE & EFFECTIVE: Sort by AI Expected Value
+    # This finds bets where AI thinks you have an edge
+    # Positive EV = long-term profitable
+    out.sort(key=lambda x: (x["ev_ai"], x["p_ai"]), reverse=True)
     return out
 
 def render_parlay_section_ai(title, rows, theover_data=None):
@@ -777,6 +756,15 @@ def render_parlay_section_ai(title, rows, theover_data=None):
         else:
             ev_icon = "📉"
         
+        # Probability warning
+        prob = row['p_ai']
+        if prob < 0.25:
+            prob_warning = "⚠️"  # Warning for low probability
+        elif prob < 0.35:
+            prob_warning = "⚡"  # Caution
+        else:
+            prob_warning = ""  # Good probability
+        
         # theover.ai boost indicator
         theover_boost = ""
         if row.get('theover_matches', 0) > 0:
@@ -790,7 +778,7 @@ def render_parlay_section_ai(title, rows, theover_data=None):
         
         prob_pct = row['p_ai'] * 100
         with st.expander(
-            f"{conf_icon}{ev_icon} #{i} - AI Score: {row['ai_score']:.1f}{theover_boost} | Odds: {row['d']:.2f} | AI Prob: {prob_pct:.1f}% | Profit: ${row['profit']:.2f}"
+            f"{conf_icon}{ev_icon}{prob_warning} #{i} - AI Score: {row['ai_score']:.1f}{theover_boost} | Odds: {row['d']:.2f} | AI Prob: {prob_pct:.1f}% | Profit: ${row['profit']:.2f}"
         ):
             # Metrics
             col_a, col_b, col_c, col_d, col_e = st.columns(5)
@@ -1147,12 +1135,13 @@ with main_tab1:
         st.markdown("### Machine Learning Configuration")
         
         st.info("""
-        **✨ SENTIMENT NOW MATTERS!**
+        **✨ FOCUS ON REALISTIC BETS**
         
-        Sentiment weight increased: 15% → **40%**  
-        Ranking prioritizes: **Value & Edge** (not just favorites)
+        - Minimum probability: **25%** (1 in 4 chance)
+        - Ranked by: **Expected Value** (AI edge over market)
+        - Sentiment weight: **40%** (actually matters!)
         
-        Your AI analysis now has real impact! 🎯
+        **Good bet = 30%+ probability with positive EV** 🎯
         """)
         
         col_ai1, col_ai2 = st.columns(2)
@@ -1166,13 +1155,11 @@ with main_tab1:
                                           help="Filter out low-confidence predictions")
             min_parlay_probability = st.slider(
                 "Minimum Parlay Probability", 
-                0.05, 0.50, 0.15, 0.05,
-                help="Filter out longshot parlays (0.15 = 15% min chance)"
+                0.15, 0.60, 0.25, 0.05,
+                help="Filter out longshot parlays (0.25 = 25% min chance, recommended)"
             )
             
-            # Show current weights
-            st.metric("Sentiment Weight", "40%", delta="+25% from before", delta_color="normal")
-            st.caption("Sentiment now has real impact on rankings!")
+        st.caption("⚠️ = Low probability (<25%) | ⚡ = Caution (<35%) | No icon = Good probability (35%+)")
 
     col3, col4, col5 = st.columns(3)
     with col3:
@@ -1461,7 +1448,7 @@ except NameError:
 # ---------------------------------------------------------
     
 st.markdown("---")
-st.markdown("""
+    st.markdown("""
     ### 🤖 AI Features Explained:
 
     **Sentiment Analysis** 🎭
@@ -1490,7 +1477,7 @@ st.markdown("""
     - Accounts for correlation in same-game parlays
     """)
     
-st.caption("🟢 High Confidence | 💰 High +EV | 📈 Positive EV | 📉 Negative EV | Powered by AI & ML")
+    st.caption("🟢 High Confidence | 💰 High +EV | 📈 Positive EV | 📉 Negative EV | Powered by AI & ML")
 
 # ===== TAB 2: PRIZEPICKS =====
 with main_tab2:
