@@ -664,10 +664,19 @@ def build_combos_ai(legs, k, allow_sgp, optimizer, theover_data=None, min_probab
         p_market = 1.0
         p_ai = 1.0
         
+        # Safety check: Skip if any leg has invalid decimal odds
+        skip_combo = False
         for c in combo:
-            d *= c.get("d", 1.0)
+            leg_d = c.get("d")
+            if leg_d is None or leg_d <= 0:
+                skip_combo = True
+                break
+            d *= leg_d
             p_market *= c.get("p", 0.5)
             p_ai *= c.get("ai_prob", c.get("p", 0.5))
+        
+        if skip_combo or d <= 0:
+            continue  # Skip this combo if odds are invalid
         
         # Get AI score for this parlay
         ai_metrics = optimizer.score_parlay(list(combo))
@@ -1135,13 +1144,14 @@ with main_tab1:
         st.markdown("### Machine Learning Configuration")
         
         st.info("""
-        **✨ FOCUS ON REALISTIC BETS**
+        **✨ HIGH CONFIDENCE BETS MODE**
         
-        - Minimum probability: **25%** (1 in 4 chance)
+        - Minimum AI confidence: **60%** (high confidence only)
+        - Probability range: **30-65%** (value zone, not chalk)
         - Ranked by: **Expected Value** (AI edge over market)
-        - Sentiment weight: **40%** (actually matters!)
+        - Sentiment weight: **40%** (significant factor)
         
-        **Good bet = 30%+ probability with positive EV** 🎯
+        **Strategy: Only bet on high-confidence value picks** 🎯
         """)
         
         col_ai1, col_ai2 = st.columns(2)
@@ -1151,20 +1161,20 @@ with main_tab1:
             use_ml_predictions = st.checkbox("Enable ML Predictions", value=True,
                                             help="Use machine learning for probability adjustments")
         with col_ai2:
-            min_ai_confidence = st.slider("Minimum AI Confidence", 0.0, 1.0, 0.4, 0.05,
-                                          help="Filter out low-confidence predictions")
+            min_ai_confidence = st.slider("Minimum AI Confidence", 0.0, 1.0, 0.60, 0.05,
+                                          help="Filter out low-confidence predictions (0.60 = 60% confidence minimum)")
             min_parlay_probability = st.slider(
                 "Minimum Parlay Probability", 
-                0.15, 0.60, 0.25, 0.05,
-                help="Filter out longshot parlays (0.25 = 25% min chance, recommended)"
+                0.20, 0.60, 0.30, 0.05,
+                help="Filter out longshot parlays (0.30 = 30% min chance for high confidence)"
             )
             max_parlay_probability = st.slider(
                 "Maximum Parlay Probability",
-                0.40, 0.95, 0.70, 0.05,
-                help="Exclude heavy favorite parlays (0.70 = 70% max, filters out chalk parlays)"
+                0.45, 0.85, 0.65, 0.05,
+                help="Exclude heavy favorites (0.65 = 65% max, keeps value plays only)"
             )
             
-        st.caption("⚠️ = Low probability (<25%) | ⚡ = Caution (<35%) | 🎯 = Good value (35-70%) | ❌ = Heavy favorites (>70%)")
+        st.caption("🔴 = Too risky (<30%) | 🟡 = Moderate (30-50%) | 🟢 = High confidence value (50-65%) | ❌ = Too safe (>65%)")
 
     col3, col4, col5 = st.columns(3)
     with col3:
@@ -1254,20 +1264,22 @@ with main_tab1:
                                     ai_edge = 0
                                 
                                 if ai_confidence >= min_ai_confidence:
-                                    all_legs.append({
-                                        "event_id": eid,
-                                        "type": "Moneyline",
-                                        "team": home,
-                                        "side": "home",
-                                        "market": "ML",
-                                        "label": f"{away} @ {home} — {home} ML @{hp}",
-                                        "p": base_prob,
-                                        "ai_prob": ai_prob,
-                                        "ai_confidence": ai_confidence,
-                                        "ai_edge": ai_edge,
-                                        "d": american_to_decimal_safe(hp),
-                                        "sentiment_trend": home_sentiment['trend']
-                                    })
+                                    decimal_odds = american_to_decimal_safe(hp)
+                                    if decimal_odds is not None:  # Safety check
+                                        all_legs.append({
+                                            "event_id": eid,
+                                            "type": "Moneyline",
+                                            "team": home,
+                                            "side": "home",
+                                            "market": "ML",
+                                            "label": f"{away} @ {home} — {home} ML @{hp}",
+                                            "p": base_prob,
+                                            "ai_prob": ai_prob,
+                                            "ai_confidence": ai_confidence,
+                                            "ai_edge": ai_edge,
+                                            "d": decimal_odds,
+                                            "sentiment_trend": home_sentiment['trend']
+                                        })
                             
                             if ap is not None and -750 <= ap <= 750:
                                 base_prob = implied_p_from_american(ap)
@@ -1286,20 +1298,22 @@ with main_tab1:
                                     ai_edge = 0
                                 
                                 if ai_confidence >= min_ai_confidence:
-                                    all_legs.append({
-                                        "event_id": eid,
-                                        "type": "Moneyline",
-                                        "team": away,
-                                        "side": "away",
-                                        "market": "ML",
-                                        "label": f"{away} @ {home} — {away} ML @{ap}",
-                                        "p": base_prob,
-                                        "ai_prob": ai_prob,
-                                        "ai_confidence": ai_confidence,
-                                        "ai_edge": ai_edge,
-                                        "d": american_to_decimal_safe(ap),
-                                        "sentiment_trend": away_sentiment['trend']
-                                    })
+                                    decimal_odds = american_to_decimal_safe(ap)
+                                    if decimal_odds is not None:  # Safety check
+                                        all_legs.append({
+                                            "event_id": eid,
+                                            "type": "Moneyline",
+                                            "team": away,
+                                            "side": "away",
+                                            "market": "ML",
+                                            "label": f"{away} @ {home} — {away} ML @{ap}",
+                                            "p": base_prob,
+                                            "ai_prob": ai_prob,
+                                            "ai_confidence": ai_confidence,
+                                            "ai_edge": ai_edge,
+                                            "d": decimal_odds,
+                                            "sentiment_trend": away_sentiment['trend']
+                                        })
                         
                         # Spreads
                         if inc_spread and "spreads" in mkts:
@@ -1315,21 +1329,26 @@ with main_tab1:
                                 ai_prob = base_prob * (1 + sentiment['score'] * 0.40)
                                 ai_prob = max(0.1, min(0.9, ai_prob))  # Clamp
                                 
-                                all_legs.append({
-                                    "event_id": eid,
-                                    "type": "Spread",
-                                    "team": nm,
-                                    "side": "home" if nm == home else "away",
-                                    "point": pt,
-                                    "market": "Spread",
-                                    "label": f"{away} @ {home} — {nm} {pt:+.1f} @{pr}",
-                                    "p": base_prob,
-                                    "ai_prob": ai_prob,
-                                    "ai_confidence": 0.6,
-                                    "ai_edge": abs(ai_prob - base_prob),
-                                    "d": american_to_decimal_safe(pr),
-                                    "sentiment_trend": sentiment['trend']
-                                })
+                                # Higher confidence for spread bets (adjusted from 0.6 to 0.65)
+                                ai_confidence = 0.65
+                                
+                                decimal_odds = american_to_decimal_safe(pr)
+                                if decimal_odds is not None and ai_confidence >= min_ai_confidence:  # Safety check
+                                    all_legs.append({
+                                        "event_id": eid,
+                                        "type": "Spread",
+                                        "team": nm,
+                                        "side": "home" if nm == home else "away",
+                                        "point": pt,
+                                        "market": "Spread",
+                                        "label": f"{away} @ {home} — {nm} {pt:+.1f} @{pr}",
+                                        "p": base_prob,
+                                        "ai_prob": ai_prob,
+                                        "ai_confidence": ai_confidence,
+                                        "ai_edge": abs(ai_prob - base_prob),
+                                        "d": decimal_odds,
+                                        "sentiment_trend": sentiment['trend']
+                                    })
                         
                         # Totals
                         if inc_total and "totals" in mkts:
@@ -1345,21 +1364,26 @@ with main_tab1:
                                 ai_prob = base_prob * (1 + combined_sentiment * 0.40 * 0.5)
                                 ai_prob = max(0.1, min(0.9, ai_prob))
                                 
-                                all_legs.append({
-                                    "event_id": eid,
-                                    "type": "Total",
-                                    "team": f"{home} vs {away}",
-                                    "side": nm,  # Over or Under
-                                    "point": pt,
-                                    "market": "Total",
-                                    "label": f"{away} @ {home} — {nm} {pt} @{pr}",
-                                    "p": base_prob,
-                                    "ai_prob": ai_prob,
-                                    "ai_confidence": 0.55,
-                                    "ai_edge": abs(ai_prob - base_prob),
-                                    "d": american_to_decimal_safe(pr),
-                                    "sentiment_trend": "neutral"
-                                })
+                                # Higher confidence for totals (adjusted from 0.55 to 0.60)
+                                ai_confidence = 0.60
+                                
+                                decimal_odds = american_to_decimal_safe(pr)
+                                if decimal_odds is not None and ai_confidence >= min_ai_confidence:  # Safety check
+                                    all_legs.append({
+                                        "event_id": eid,
+                                        "type": "Total",
+                                        "team": f"{home} vs {away}",
+                                        "side": nm,  # Over or Under
+                                        "point": pt,
+                                        "market": "Total",
+                                        "label": f"{away} @ {home} — {nm} {pt} @{pr}",
+                                        "p": base_prob,
+                                        "ai_prob": ai_prob,
+                                        "ai_confidence": ai_confidence,
+                                        "ai_edge": abs(ai_prob - base_prob),
+                                        "d": decimal_odds,
+                                        "sentiment_trend": "neutral"
+                                    })
                 
                 progress_bar.progress(1.0)
                 
