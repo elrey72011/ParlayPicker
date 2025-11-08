@@ -24,7 +24,6 @@ def american_to_prob(odds: float) -> float:
     return -odds / (-odds + 100.0)
 
 def fair_probs_from_two_prices(a_odds: Optional[float], b_odds: Optional[float]) -> Tuple[Optional[float], Optional[float]]:
-    \"\"\"
     Returns de-juiced probabilities (p_a, p_b) that sum to 1.0 when both sides exist.
     If one side is missing, returns a single-sided approximation for that side and None for the other.
     \"\"\"
