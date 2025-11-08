@@ -505,13 +505,10 @@ def fetch_oddsapi_snapshot(api_key: str, sport_key: str) -> Dict[str, Any]:
     except requests.exceptions.Timeout:
         st.warning(f"Request timeout for {sport_key} - skipping")
         return {"events": []}
-    except requests.exceptions.RequestException as e:
-        st.error(f"API request failed for {sport_key}: {str(e)}")
-        out = [p for p in out if p["p_ai"] >= 0.50]
-        return {"events": []}
-    except Exception as e:
-        st.error(f"Unexpected error fetching {sport_key}: {str(e)}")
-        return {"events": []}
+    out = list(parlay_map.values())
+    out = [p for p in out if p["p_ai"] >= 0.50]  # ← ADD THIS LINE
+    out.sort(key=lambda x: (x["p_ai"], x["ai_score"]), reverse=True)
+    return out
     
     events = []
     for ev in (data or []):
@@ -728,10 +725,7 @@ def build_combos_ai(legs, k, allow_sgp, optimizer, theover_data=None, min_probab
     # SIMPLE & EFFECTIVE: Sort by AI Expected Value
     # This finds bets where AI thinks you have an edge
     # Positive EV = long-term profitable
-    # Filter low probability first
-    out = [p for p in out if p["p_ai"] >= 0.30]  # Only show 30%+ probability
-    # Then sort by EV
-    out.sort(key=lambda x: x["ev_ai"], reverse=True)
+    out.sort(key=lambda x: (x["ev_ai"], x["p_ai"]), reverse=True)
     return out
 
 def render_parlay_section_ai(title, rows, theover_data=None):
