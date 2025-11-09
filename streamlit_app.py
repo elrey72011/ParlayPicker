@@ -1258,9 +1258,18 @@ with main_tab1:
             st.stop()
         
         try:
-            sentiment_analyzer = st.session_state['sentiment_analyzer']
-            ml_predictor = st.session_state['ml_predictor']
-            ai_optimizer = st.session_state['ai_optimizer']
+            # Safely get AI components
+            try:
+                sentiment_analyzer = st.session_state.get('sentiment_analyzer')
+                ml_predictor = st.session_state.get('ml_predictor')
+                ai_optimizer = st.session_state.get('ai_optimizer')
+                
+                if not sentiment_analyzer or not ml_predictor or not ai_optimizer:
+                    st.error("AI components not initialized. Please refresh the page.")
+                    st.stop()
+            except Exception as e:
+                st.error(f"Error accessing AI components: {str(e)}")
+                st.stop()
         
             with st.spinner("🧠 Analyzing markets with AI..."):
                 progress_bar = st.progress(0)
@@ -1268,21 +1277,33 @@ with main_tab1:
                 total_sports = len(sports or APP_CFG["sports_common"])
                 
                 for sport_idx, skey in enumerate(sports or APP_CFG["sports_common"]):
-                    progress_bar.progress((sport_idx) / total_sports)
-                    snap = fetch_oddsapi_snapshot(api_key, skey)
-                    
-                    for ev in (snap.get("events") or [])[:per_sport_events]:
-                        if not is_same_day(ev.get("commence_time")): 
-                            continue
+                    try:
+                        progress_bar.progress((sport_idx) / total_sports)
+                        snap = fetch_oddsapi_snapshot(api_key, skey)
                         
-                        eid = ev.get("id")
-                        home = ev.get("home_team", "?")
-                        away = ev.get("away_team", "?")
-                        mkts = ev.get("markets") or {}
+                        if not snap or not snap.get("events"):
+                            continue  # Skip if no events
                         
-                        # Get sentiment for both teams
-                        home_sentiment = sentiment_analyzer.get_team_sentiment(home, skey) if use_sentiment else {'score': 0, 'trend': 'neutral'}
-                        away_sentiment = sentiment_analyzer.get_team_sentiment(away, skey) if use_sentiment else {'score': 0, 'trend': 'neutral'}
+                        for ev in (snap.get("events") or [])[:per_sport_events]:
+                            try:
+                                if not is_same_day(ev.get("commence_time")): 
+                                    continue
+                                
+                                eid = ev.get("id")
+                                home = ev.get("home_team", "?")
+                                away = ev.get("away_team", "?")
+                                mkts = ev.get("markets") or {}
+                                
+                                if not eid or not home or not away:
+                                    continue  # Skip invalid events
+                                
+                                # Get sentiment for both teams
+                                try:
+                                    home_sentiment = sentiment_analyzer.get_team_sentiment(home, skey) if use_sentiment else {'score': 0, 'trend': 'neutral'}
+                                    away_sentiment = sentiment_analyzer.get_team_sentiment(away, skey) if use_sentiment else {'score': 0, 'trend': 'neutral'}
+                                except Exception:
+                                    home_sentiment = {'score': 0, 'trend': 'neutral'}
+                                    away_sentiment = {'score': 0, 'trend': 'neutral'}
                         
                         # Moneyline with AI
                         if inc_ml and "h2h" in mkts:
@@ -1426,6 +1447,15 @@ with main_tab1:
                                         "d": decimal_odds,
                                         "sentiment_trend": "neutral"
                                     })
+                            
+                            except Exception as e:
+                                # Skip this event if there's an error processing it
+                                continue
+                    
+                    except Exception as e:
+                        # Skip this sport if there's an error
+                        st.warning(f"Error processing {skey}: {str(e)[:100]}")
+                        continue
                 
                 progress_bar.progress(1.0)
                 
@@ -1464,34 +1494,58 @@ with main_tab1:
                 
                 with tab_2:
                     st.subheader("Best 2-Leg AI-Optimized Parlays")
-                    with st.spinner("Calculating optimal 2-leg combinations..."):
-                        combos_2 = build_combos_ai(all_legs, 2, allow_sgp, ai_optimizer, theover_parlay_data, min_parlay_probability, max_parlay_probability)[:show_top]
-                        render_parlay_section_ai("2-Leg AI Parlays", combos_2, theover_parlay_data)
+                    try:
+                        with st.spinner("Calculating optimal 2-leg combinations..."):
+                            combos_2 = build_combos_ai(all_legs, 2, allow_sgp, ai_optimizer, theover_parlay_data, min_parlay_probability, max_parlay_probability)[:show_top]
+                            render_parlay_section_ai("2-Leg AI Parlays", combos_2, theover_parlay_data)
+                    except Exception as e:
+                        st.error(f"Error building 2-leg parlays: {str(e)}")
                 
                 with tab_3:
                     st.subheader("Best 3-Leg AI-Optimized Parlays")
-                    with st.spinner("Calculating optimal 3-leg combinations..."):
-                        combos_3 = build_combos_ai(all_legs, 3, allow_sgp, ai_optimizer, theover_parlay_data, min_parlay_probability, max_parlay_probability)[:show_top]
-                        render_parlay_section_ai("3-Leg AI Parlays", combos_3, theover_parlay_data)
+                    try:
+                        with st.spinner("Calculating optimal 3-leg combinations..."):
+                            combos_3 = build_combos_ai(all_legs, 3, allow_sgp, ai_optimizer, theover_parlay_data, min_parlay_probability, max_parlay_probability)[:show_top]
+                            render_parlay_section_ai("3-Leg AI Parlays", combos_3, theover_parlay_data)
+                    except Exception as e:
+                        st.error(f"Error building 3-leg parlays: {str(e)}")
                 
                 with tab_4:
                     st.subheader("Best 4-Leg AI-Optimized Parlays")
-                    with st.spinner("Calculating optimal 4-leg combinations..."):
-                        combos_4 = build_combos_ai(all_legs, 4, allow_sgp, ai_optimizer, theover_parlay_data, min_parlay_probability, max_parlay_probability)[:show_top]
-                        render_parlay_section_ai("4-Leg AI Parlays", combos_4, theover_parlay_data)
+                    try:
+                        with st.spinner("Calculating optimal 4-leg combinations..."):
+                            combos_4 = build_combos_ai(all_legs, 4, allow_sgp, ai_optimizer, theover_parlay_data, min_parlay_probability, max_parlay_probability)[:show_top]
+                            render_parlay_section_ai("4-Leg AI Parlays", combos_4, theover_parlay_data)
+                    except Exception as e:
+                        st.error(f"Error building 4-leg parlays: {str(e)}")
                 
                 with tab_5:
                     st.subheader("Best 5-Leg AI-Optimized Parlays")
-                    with st.spinner("Calculating optimal 5-leg combinations..."):
-                        combos_5 = build_combos_ai(all_legs, 5, allow_sgp, ai_optimizer, theover_parlay_data, min_parlay_probability, max_parlay_probability)[:show_top]
-                        render_parlay_section_ai("5-Leg AI Parlays", combos_5, theover_parlay_data)
+                    try:
+                        with st.spinner("Calculating optimal 5-leg combinations..."):
+                            combos_5 = build_combos_ai(all_legs, 5, allow_sgp, ai_optimizer, theover_parlay_data, min_parlay_probability, max_parlay_probability)[:show_top]
+                            render_parlay_section_ai("5-Leg AI Parlays", combos_5, theover_parlay_data)
+                    except Exception as e:
+                        st.error(f"Error building 5-leg parlays: {str(e)}")
         
         except KeyError as e:
             st.error(f"Configuration error: Missing key {str(e)}. Please refresh the page.")
+            import traceback
+            with st.expander("Error Details"):
+                st.code(traceback.format_exc())
         except Exception as e:
             st.error(f"An error occurred: {str(e)}")
-            st.error("Please try again or contact support if the issue persists.")
             import traceback
+            with st.expander("Full Error Details (for debugging)"):
+                st.code(traceback.format_exc())
+            st.info("Please try:")
+            st.markdown("""
+            1. Refresh the page
+            2. Check your API key is valid
+            3. Try selecting fewer sports
+            4. Try a different date
+            5. Disable sentiment analysis if enabled
+            """)
 # ---- Global safe odds helper (always available) ------------------------------
 def american_to_decimal_safe(odds) -> float | None:
     """
