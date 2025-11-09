@@ -1912,10 +1912,15 @@ def render_parlay_section_ai(title, rows, theover_data=None):
                 delta_color = "normal" if row['ev_ai'] > 0 else "inverse"
                 st.metric("AI Expected Value", f"{ai_ev_pct:.2f}%")
             
-            # Kalshi Influence Display (if Kalshi data present)
-            if row.get('kalshi_legs', 0) > 0:
-                st.markdown("---")
-                st.markdown("**📊 Kalshi Prediction Market Influence:**")
+            # KALSHI STATUS - ALWAYS SHOW (whether data exists or not)
+            st.markdown("---")
+            kalshi_legs_with_data = row.get('kalshi_legs', 0)
+            total_legs = len(row.get('legs', []))
+            
+            if kalshi_legs_with_data > 0:
+                # HAS KALSHI DATA - Show influence
+                st.markdown("### 📊 Kalshi Prediction Market Influence:")
+
                 
                 col_k1, col_k2, col_k3, col_k4 = st.columns(4)
                 
@@ -1961,6 +1966,30 @@ def render_parlay_section_ai(title, rows, theover_data=None):
                     st.warning(f"🟠 **Kalshi REDUCED this parlay by {(1-kalshi_factor_val)*100:.0f}%** - Prediction markets skeptical of AI picks.")
                 else:
                     st.info("🟡 **Kalshi NEUTRAL** - Prediction markets neither strongly confirm nor contradict AI.")
+            else:
+                # NO KALSHI DATA - Explain why
+                st.markdown("### 📊 Kalshi Prediction Market Status:")
+                st.warning(f"""
+                **⚠️ No Kalshi Data Available for this Parlay** ({kalshi_legs_with_data}/{total_legs} legs)
+                
+                **This means:**
+                - ✅ Analysis still uses AI + Sentiment (2 of 3 sources)
+                - ⚠️ Missing prediction market validation
+                - 🔄 Kalshi Factor = 1.0x (neutral, no impact)
+                - 📊 AI Score unchanged by Kalshi
+                
+                **Why no data?**
+                - Kalshi doesn't have markets for these specific games
+                - Kalshi focuses on season-long outcomes (playoffs, championships)
+                - Individual game spreads/totals rarely have Kalshi markets
+                
+                **What this means:**
+                - Bet based on AI + Sentiment confidence
+                - Higher risk without 3rd source validation
+                - Consider checking Tab 4 for available Kalshi markets
+                
+                💡 **Tip:** For Kalshi validation, focus on season futures, playoff odds, or major championships.
+                """)
             
             # theover.ai boost info if available
             if row.get('theover_bonus', 0) != 0:
