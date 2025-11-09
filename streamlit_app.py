@@ -458,6 +458,557 @@ class PrizePicksAnalyzer:
         best_entries.sort(key=lambda x: x["score"], reverse=True)
         return best_entries
 
+
+# ============ ADVANCED AI MODULES ============
+
+# 1. SHARP MONEY DETECTOR
+class SharpMoneyDetector:
+    """Detects sharp money movement and line steam"""
+    
+    def __init__(self):
+        self.line_history = {}  # Track line movements
+        self.steam_threshold = 0.5  # Half point move = steam
+    
+    def analyze_line_movement(self, game_id: str, current_line: float, 
+                              opening_line: float, public_bet_pct: float = None) -> Dict:
+        """
+        Analyze if line movement suggests sharp money
+        
+        Returns:
+            'movement': Points line moved
+            'direction': 'with_public' or 'reverse' or 'neutral'
+            'is_steam': True if sharp action detected
+            'confidence': How confident we are (0-1)
+        """
+        movement = current_line - opening_line
+        
+        # Reverse line movement = sharp money indicator
+        # (Line moves opposite to where public is betting)
+        is_reverse = False
+        if public_bet_pct:
+            if public_bet_pct > 65 and movement < -0.3:  # Public on favorite, line moves away
+                is_reverse = True
+            elif public_bet_pct < 35 and movement > 0.3:  # Public on underdog, line moves other way
+                is_reverse = True
+        
+        # Steam = sudden sharp move (0.5+ points)
+        is_steam = abs(movement) >= self.steam_threshold
+        
+        # Confidence based on movement size and reverse nature
+        confidence = min(abs(movement) / 3.0, 0.95)  # Max 95% confidence
+        if is_reverse:
+            confidence = min(confidence + 0.2, 0.95)  # Boost confidence for reverse moves
+        
+        direction = 'reverse' if is_reverse else ('with_public' if public_bet_pct else 'neutral')
+        
+        return {
+            'movement': movement,
+            'direction': direction,
+            'is_steam': is_steam,
+            'is_reverse': is_reverse,
+            'confidence': confidence,
+            'recommendation': self._get_recommendation(movement, is_reverse, is_steam)
+        }
+    
+    def _get_recommendation(self, movement: float, is_reverse: bool, is_steam: bool) -> str:
+        """Generate betting recommendation based on sharp action"""
+        if is_reverse and abs(movement) > 1.0:
+            return "🟢 STRONG SHARP ACTION - Follow the line movement"
+        elif is_steam and abs(movement) > 0.75:
+            return "🟡 STEAM DETECTED - Sharp bettors moving line"
+        elif is_reverse:
+            return "🟢 REVERSE LINE MOVEMENT - Fade the public"
+        elif abs(movement) < 0.3:
+            return "⚪ NO SIGNIFICANT MOVEMENT"
+        else:
+            return "🟡 MODERATE MOVEMENT - Monitor closely"
+
+# 2. PLAYER IMPACT ANALYZER
+class PlayerImpactAnalyzer:
+    """Analyzes impact of injuries and player absence"""
+    
+    def __init__(self):
+        # Historical impact data (simplified - in production, use real database)
+        self.position_weights = {
+            'QB': 0.35,   # Quarterback most important in NFL
+            'RB': 0.12,
+            'WR': 0.10,
+            'TE': 0.08,
+            'OL': 0.08,
+            'DL': 0.10,
+            'LB': 0.08,
+            'DB': 0.09,
+            # NBA
+            'PG': 0.25,
+            'SG': 0.20,
+            'SF': 0.20,
+            'PF': 0.18,
+            'C': 0.17
+        }
+    
+    def analyze_injury_impact(self, team: str, injured_players: List[Dict], 
+                              team_odds_before: float) -> Dict:
+        """
+        Calculate how injuries should affect team performance
+        
+        Args:
+            injured_players: [{'name': 'Patrick Mahomes', 'position': 'QB', 'status': 'OUT'}]
+        
+        Returns:
+            'total_impact': -0.15 means team is 15% worse
+            'adjusted_odds': What odds should be
+            'confidence': How sure we are
+        """
+        total_impact = 0.0
+        key_players_out = []
+        
+        for player in injured_players:
+            position = player.get('position', '').upper()
+            status = player.get('status', '').upper()
+            
+            # Weight impact by position and injury severity
+            if status == 'OUT':
+                impact = self.position_weights.get(position, 0.05)
+                total_impact += impact
+                key_players_out.append(player['name'])
+            elif status == 'DOUBTFUL':
+                impact = self.position_weights.get(position, 0.05) * 0.75
+                total_impact += impact
+            elif status == 'QUESTIONABLE':
+                impact = self.position_weights.get(position, 0.05) * 0.30
+                total_impact += impact
+        
+        # Adjust odds based on impact
+        # Negative impact = odds get worse (more positive/less negative)
+        if team_odds_before:
+            prob_before = implied_p_from_american(team_odds_before)
+            prob_adjusted = prob_before * (1 - total_impact)
+            
+            # Convert back to American odds
+            if prob_adjusted > 0.5:
+                adjusted_odds = -100 * (prob_adjusted / (1 - prob_adjusted))
+            else:
+                adjusted_odds = 100 * ((1 - prob_adjusted) / prob_adjusted)
+        else:
+            adjusted_odds = None
+        
+        confidence = min(total_impact * 2, 0.9)  # More injuries = more confident
+        
+        recommendation = self._get_injury_recommendation(total_impact, key_players_out)
+        
+        return {
+            'total_impact': total_impact,
+            'adjusted_odds': adjusted_odds,
+            'key_players_out': key_players_out,
+            'confidence': confidence,
+            'recommendation': recommendation
+        }
+    
+    def _get_injury_recommendation(self, impact: float, key_players: List[str]) -> str:
+        """Generate recommendation based on injury impact"""
+        if impact > 0.25:
+            return f"🔴 MAJOR IMPACT - Key players out: {', '.join(key_players[:2])}"
+        elif impact > 0.15:
+            return f"🟠 SIGNIFICANT IMPACT - Important players questionable"
+        elif impact > 0.08:
+            return f"🟡 MODERATE IMPACT - Monitor injury reports"
+        else:
+            return "🟢 MINIMAL IMPACT - Team at full strength"
+
+# 3. WEATHER ANALYZER
+class WeatherAnalyzer:
+    """Analyzes weather impact on outdoor games"""
+    
+    def __init__(self, weather_api_key: str = None):
+        self.api_key = weather_api_key or os.environ.get("WEATHER_API_KEY")
+        self.outdoor_venues = {
+            # NFL outdoor stadiums (simplified)
+            'Green Bay Packers': True,
+            'Chicago Bears': True,
+            'Buffalo Bills': True,
+            'Cleveland Browns': True,
+            'Pittsburgh Steelers': True,
+            'Kansas City Chiefs': True,
+            'Denver Broncos': True,
+            'New England Patriots': True,
+            'Philadelphia Eagles': True,
+            'Washington Commanders': True,
+            'Baltimore Ravens': True,
+            'Cincinnati Bengals': True,
+            'Tennessee Titans': True,
+            'Jacksonville Jaguars': True,
+            'Miami Dolphins': True,
+            'Carolina Panthers': True,
+            'Tampa Bay Buccaneers': True,
+            'Seattle Seahawks': True,
+            'San Francisco 49ers': True,
+            # MLB - all outdoor except dome stadiums
+        }
+    
+    def analyze_weather_impact(self, home_team: str, sport: str, 
+                               weather_data: Dict = None) -> Dict:
+        """
+        Analyze how weather affects the game
+        
+        weather_data: {
+            'temp': 35,  # Fahrenheit
+            'wind_speed': 20,  # MPH
+            'precipitation': 0.5,  # inches
+            'condition': 'snow'
+        }
+        """
+        if not self._is_outdoor(home_team):
+            return {
+                'is_outdoor': False,
+                'impact': 0.0,
+                'total_adjustment': 0.0,
+                'recommendation': '🏟️ INDOOR - Weather not a factor'
+            }
+        
+        if not weather_data:
+            # Try to fetch real weather if API configured
+            weather_data = self._fetch_weather(home_team) if self.api_key else {}
+        
+        if not weather_data:
+            return {
+                'is_outdoor': True,
+                'impact': 0.0,
+                'total_adjustment': 0.0,
+                'recommendation': '⚪ Weather data unavailable'
+            }
+        
+        temp = weather_data.get('temp', 70)
+        wind = weather_data.get('wind_speed', 0)
+        precip = weather_data.get('precipitation', 0)
+        
+        # Calculate impact on scoring (for totals)
+        impact = 0.0
+        factors = []
+        
+        # Temperature impact (NFL)
+        if sport in ['americanfootball_nfl', 'americanfootball_ncaaf']:
+            if temp < 32:
+                impact -= 0.15  # Cold reduces scoring by ~15%
+                factors.append(f"❄️ Freezing ({temp}°F)")
+            elif temp < 45:
+                impact -= 0.08
+                factors.append(f"🥶 Cold ({temp}°F)")
+            elif temp > 95:
+                impact -= 0.05  # Extreme heat also reduces scoring
+                factors.append(f"🔥 Hot ({temp}°F)")
+        
+        # Wind impact (huge for passing/kicking)
+        if wind > 20:
+            impact -= 0.20  # Strong wind kills passing game
+            factors.append(f"💨 Strong Wind ({wind} MPH)")
+        elif wind > 15:
+            impact -= 0.12
+            factors.append(f"🌬️ Windy ({wind} MPH)")
+        elif wind > 10:
+            impact -= 0.05
+            factors.append(f"🍃 Breezy ({wind} MPH)")
+        
+        # Precipitation impact
+        if precip > 0.5:
+            impact -= 0.15  # Heavy rain/snow significantly reduces scoring
+            factors.append(f"🌧️ Heavy Precipitation")
+        elif precip > 0.1:
+            impact -= 0.08
+            factors.append(f"☔ Light Precipitation")
+        
+        # Total adjustment (can be significant)
+        total_adjustment = impact
+        
+        recommendation = self._get_weather_recommendation(total_adjustment, factors)
+        
+        return {
+            'is_outdoor': True,
+            'impact': impact,
+            'total_adjustment': total_adjustment,
+            'factors': factors,
+            'recommendation': recommendation,
+            'suggested_play': 'UNDER' if total_adjustment < -0.10 else ('OVER' if total_adjustment > 0.05 else 'NEUTRAL')
+        }
+    
+    def _is_outdoor(self, team: str) -> bool:
+        """Check if team plays in outdoor venue"""
+        return self.outdoor_venues.get(team, False)
+    
+    def _fetch_weather(self, team: str) -> Dict:
+        """Fetch real weather data (placeholder for API call)"""
+        # In production, use OpenWeatherMap or similar
+        # For now, return empty to use manual input
+        return {}
+    
+    def _get_weather_recommendation(self, adjustment: float, factors: List[str]) -> str:
+        """Generate weather-based recommendation"""
+        if adjustment < -0.20:
+            return f"🔴 EXTREME CONDITIONS - Strong UNDER play. {', '.join(factors)}"
+        elif adjustment < -0.10:
+            return f"🟠 ADVERSE CONDITIONS - Lean UNDER. {', '.join(factors)}"
+        elif adjustment < -0.05:
+            return f"🟡 MINOR IMPACT - Slight UNDER lean. {', '.join(factors)}"
+        elif adjustment > 0.05:
+            return f"🟢 FAVORABLE CONDITIONS - Possible OVER. {', '.join(factors)}"
+        else:
+            return "⚪ NEUTRAL - Weather not a major factor"
+
+# 4. KELLY CRITERION CALCULATOR
+class KellyCalculator:
+    """Calculates optimal bet sizing using Kelly Criterion"""
+    
+    def calculate_kelly(self, win_probability: float, decimal_odds: float, 
+                       bankroll: float = 1000, conservative: bool = True) -> Dict:
+        """
+        Calculate Kelly Criterion bet size
+        
+        Args:
+            win_probability: Your estimated probability of winning (0-1)
+            decimal_odds: Payout odds in decimal format
+            bankroll: Total bankroll
+            conservative: Use fractional Kelly (recommended)
+        
+        Returns:
+            'kelly_percentage': % of bankroll to bet
+            'recommended_stake': Dollar amount to bet
+            'expected_value': Expected profit per $1 bet
+            'risk_level': 'Low', 'Medium', 'High'
+        """
+        # Kelly formula: f = (bp - q) / b
+        # where f = fraction to bet, b = odds-1, p = win prob, q = lose prob
+        
+        b = decimal_odds - 1  # Net odds
+        p = win_probability
+        q = 1 - p
+        
+        # Calculate edge
+        edge = (p * decimal_odds) - 1
+        
+        if edge <= 0:
+            # No edge, don't bet
+            return {
+                'kelly_percentage': 0.0,
+                'recommended_stake': 0.0,
+                'expected_value': edge,
+                'risk_level': 'NONE',
+                'recommendation': '🔴 NO EDGE - Do not bet (negative EV)'
+            }
+        
+        # Full Kelly
+        kelly_fraction = (b * p - q) / b
+        
+        # Clamp to reasonable range
+        kelly_fraction = max(0, min(kelly_fraction, 0.25))  # Never bet more than 25%
+        
+        # Conservative Kelly (recommended: 0.25x to 0.5x Kelly)
+        if conservative:
+            kelly_fraction *= 0.25  # Quarter Kelly
+        
+        kelly_percentage = kelly_fraction * 100
+        recommended_stake = bankroll * kelly_fraction
+        
+        # Risk level based on Kelly %
+        if kelly_percentage < 1:
+            risk_level = 'Low'
+        elif kelly_percentage < 3:
+            risk_level = 'Medium'
+        elif kelly_percentage < 5:
+            risk_level = 'High'
+        else:
+            risk_level = 'Very High'
+        
+        recommendation = self._get_kelly_recommendation(kelly_percentage, edge, risk_level)
+        
+        return {
+            'kelly_percentage': kelly_percentage,
+            'recommended_stake': recommended_stake,
+            'expected_value': edge,
+            'edge_percentage': edge * 100,
+            'risk_level': risk_level,
+            'recommendation': recommendation
+        }
+    
+    def _get_kelly_recommendation(self, kelly_pct: float, edge: float, risk: str) -> str:
+        """Generate Kelly-based recommendation"""
+        if kelly_pct == 0:
+            return "🔴 NO BET - Negative expected value"
+        elif kelly_pct < 1:
+            return f"🟢 SMALL BET - {kelly_pct:.1f}% of bankroll | {risk} risk | Edge: {edge*100:+.1f}%"
+        elif kelly_pct < 3:
+            return f"🟡 MEDIUM BET - {kelly_pct:.1f}% of bankroll | {risk} risk | Edge: {edge*100:+.1f}%"
+        elif kelly_pct < 5:
+            return f"🟠 LARGE BET - {kelly_pct:.1f}% of bankroll | {risk} risk | Edge: {edge*100:+.1f}%"
+        else:
+            return f"🔴 REDUCE SIZE - {kelly_pct:.1f}% too high, cap at 5% | Edge: {edge*100:+.1f}%"
+
+# 5. MATCHUP ANALYZER
+class MatchupAnalyzer:
+    """Analyzes historical head-to-head matchups"""
+    
+    def __init__(self):
+        # In production, fetch from real database
+        # This is simplified for demonstration
+        self.matchup_history = {}
+    
+    def analyze_matchup(self, home_team: str, away_team: str, 
+                       recent_games: int = 10) -> Dict:
+        """
+        Analyze historical matchup between teams
+        
+        Returns patterns like:
+        - Home team dominance
+        - Scoring trends
+        - ATS records
+        - Over/under trends
+        """
+        # Simplified analysis (in production, query actual database)
+        matchup_key = f"{home_team}_vs_{away_team}"
+        
+        # Placeholder data structure
+        analysis = {
+            'games_analyzed': 0,
+            'home_wins': 0,
+            'away_wins': 0,
+            'avg_total': 0,
+            'home_ats': 0,
+            'over_record': 0,
+            'trend': 'neutral',
+            'confidence': 0.3,
+            'recommendation': '⚪ Insufficient historical data'
+        }
+        
+        # In production, calculate from real data:
+        # - Win percentages
+        # - Scoring averages
+        # - Recent trends
+        # - Home/away splits
+        
+        return analysis
+    
+    def get_recommendation(self, analysis: Dict) -> str:
+        """Generate matchup-based recommendation"""
+        if analysis['games_analyzed'] < 3:
+            return "⚪ Limited history - rely on other factors"
+        
+        home_win_pct = analysis['home_wins'] / analysis['games_analyzed']
+        
+        if home_win_pct > 0.7:
+            return "🟢 HOME TEAM DOMINATES - Strong historical advantage"
+        elif home_win_pct < 0.3:
+            return "🔴 AWAY TEAM OWNS MATCHUP - Fade home team"
+        else:
+            return "🟡 COMPETITIVE MATCHUP - No clear historical edge"
+
+# 6. ADVANCED STATS INTEGRATOR
+class AdvancedStatsIntegrator:
+    """Integrates advanced metrics like EPA, DVOA, etc."""
+    
+    def __init__(self):
+        # Weights for different advanced metrics
+        self.metric_weights = {
+            'epa': 0.30,      # Expected Points Added
+            'dvoa': 0.25,     # Defense-adjusted Value Over Average  
+            'success_rate': 0.20,
+            'explosive_play_rate': 0.15,
+            'turnover_rate': 0.10
+        }
+    
+    def calculate_team_strength(self, team: str, sport: str, 
+                               advanced_metrics: Dict = None) -> Dict:
+        """
+        Calculate overall team strength using advanced metrics
+        
+        advanced_metrics: {
+            'offensive_epa': 0.15,
+            'defensive_epa': -0.10,
+            'offensive_dvoa': 12.5,
+            'defensive_dvoa': -8.2,
+            ...
+        }
+        """
+        if not advanced_metrics:
+            # Return baseline
+            return {
+                'overall_rating': 0.0,
+                'offensive_rating': 0.0,
+                'defensive_rating': 0.0,
+                'confidence': 0.2,
+                'recommendation': '⚪ Advanced stats unavailable'
+            }
+        
+        # Combine metrics using weights
+        offensive_score = 0.0
+        defensive_score = 0.0
+        
+        # EPA (Expected Points Added)
+        if 'offensive_epa' in advanced_metrics:
+            offensive_score += advanced_metrics['offensive_epa'] * self.metric_weights['epa']
+        if 'defensive_epa' in advanced_metrics:
+            defensive_score += advanced_metrics['defensive_epa'] * self.metric_weights['epa']
+        
+        overall_rating = offensive_score + defensive_score
+        
+        recommendation = self._get_advanced_stats_recommendation(overall_rating)
+        
+        return {
+            'overall_rating': overall_rating,
+            'offensive_rating': offensive_score,
+            'defensive_rating': defensive_score,
+            'confidence': 0.75,
+            'recommendation': recommendation
+        }
+    
+    def _get_advanced_stats_recommendation(self, rating: float) -> str:
+        """Generate recommendation from advanced stats"""
+        if rating > 0.20:
+            return "🟢 ELITE TEAM - Advanced metrics very strong"
+        elif rating > 0.10:
+            return "🟡 ABOVE AVERAGE - Good underlying metrics"
+        elif rating > -0.10:
+            return "⚪ AVERAGE - Neutral metrics"
+        elif rating > -0.20:
+            return "🟠 BELOW AVERAGE - Concerning metrics"
+        else:
+            return "🔴 POOR TEAM - Weak underlying metrics"
+
+# 7. SOCIAL MEDIA ANALYZER (Simplified)
+class SocialMediaAnalyzer:
+    """Analyzes Twitter/Reddit for real-time sentiment"""
+    
+    def __init__(self, twitter_api_key: str = None):
+        self.twitter_key = twitter_api_key or os.environ.get("TWITTER_API_KEY")
+        self.keywords = {
+            'positive': ['win', 'great', 'amazing', 'clutch', 'dominant', 'beast'],
+            'negative': ['lose', 'bad', 'terrible', 'bench', 'cut', 'injured']
+        }
+    
+    def analyze_social_sentiment(self, team: str, player: str = None) -> Dict:
+        """
+        Analyze social media sentiment
+        
+        Note: This is a simplified placeholder. Full implementation requires:
+        - Twitter API v2 access
+        - Reddit API (PRAW) integration
+        - Real-time data scraping
+        """
+        # Placeholder return
+        return {
+            'sentiment_score': 0.0,
+            'tweet_volume': 0,
+            'trending': False,
+            'confidence': 0.2,
+            'recommendation': '⚪ Social media analysis unavailable (API key needed)'
+        }
+    
+    def detect_breaking_news(self, team: str) -> Dict:
+        """Detect breaking news that might not be priced in yet"""
+        # Placeholder - would monitor Twitter for breaking news keywords
+        return {
+            'has_breaking_news': False,
+            'news_type': None,
+            'urgency': 'low'
+        }
+
 # ============ UTILITY FUNCTIONS ============
 def american_to_decimal(odds) -> float:
     odds = float(odds)
@@ -975,6 +1526,24 @@ if 'prizepicks_analyzer' not in st.session_state:
     st.session_state['prizepicks_analyzer'] = PrizePicksAnalyzer()
 if 'news_api_key' not in st.session_state:
     st.session_state['news_api_key'] = os.environ.get("NEWS_API_KEY", "")
+
+# Initialize advanced analyzers
+if 'sharp_detector' not in st.session_state:
+    st.session_state['sharp_detector'] = SharpMoneyDetector()
+if 'player_impact' not in st.session_state:
+    st.session_state['player_impact'] = PlayerImpactAnalyzer()
+if 'weather_analyzer' not in st.session_state:
+    weather_key = os.environ.get("WEATHER_API_KEY", "")
+    st.session_state['weather_analyzer'] = WeatherAnalyzer(weather_key)
+if 'kelly_calculator' not in st.session_state:
+    st.session_state['kelly_calculator'] = KellyCalculator()
+if 'matchup_analyzer' not in st.session_state:
+    st.session_state['matchup_analyzer'] = MatchupAnalyzer()
+if 'advanced_stats' not in st.session_state:
+    st.session_state['advanced_stats'] = AdvancedStatsIntegrator()
+if 'social_analyzer' not in st.session_state:
+    twitter_key = os.environ.get("TWITTER_API_KEY", "")
+    st.session_state['social_analyzer'] = SocialMediaAnalyzer(twitter_key)
 
 # Main navigation tabs
 main_tab1, main_tab2, main_tab3 = st.tabs([
