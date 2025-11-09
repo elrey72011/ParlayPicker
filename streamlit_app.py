@@ -1304,149 +1304,149 @@ with main_tab1:
                                 except Exception:
                                     home_sentiment = {'score': 0, 'trend': 'neutral'}
                                     away_sentiment = {'score': 0, 'trend': 'neutral'}
-                        
-                        # Moneyline with AI
-                        if inc_ml and "h2h" in mkts:
-                            hp = _dig(mkts["h2h"], "home.price")
-                            ap = _dig(mkts["h2h"], "away.price")
+                                
+                                # Moneyline with AI
+                                if inc_ml and "h2h" in mkts:
+                                    hp = _dig(mkts["h2h"], "home.price")
+                                    ap = _dig(mkts["h2h"], "away.price")
+                                    
+                                    if hp is not None and -750 <= hp <= 750:
+                                        base_prob = implied_p_from_american(hp)
+                                        ai_prob = base_prob
+                                        
+                                        if use_ml_predictions and ap is not None:
+                                            ml_prediction = ml_predictor.predict_game_outcome(
+                                                home, away, hp, ap,
+                                                home_sentiment['score'], away_sentiment['score']
+                                            )
+                                            ai_prob = ml_prediction['home_prob']
+                                            ai_confidence = ml_prediction['confidence']
+                                            ai_edge = ml_prediction['edge']
+                                        else:
+                                            ai_confidence = 0.5
+                                            ai_edge = 0
+                                        
+                                        if ai_confidence >= min_ai_confidence:
+                                            decimal_odds = american_to_decimal_safe(hp)
+                                            if decimal_odds is not None:  # Safety check
+                                                all_legs.append({
+                                                    "event_id": eid,
+                                                    "type": "Moneyline",
+                                                    "team": home,
+                                                    "side": "home",
+                                                    "market": "ML",
+                                                    "label": f"{away} @ {home} — {home} ML @{hp}",
+                                                    "p": base_prob,
+                                                    "ai_prob": ai_prob,
+                                                    "ai_confidence": ai_confidence,
+                                                    "ai_edge": ai_edge,
+                                                    "d": decimal_odds,
+                                                    "sentiment_trend": home_sentiment['trend']
+                                                })
                             
-                            if hp is not None and -750 <= hp <= 750:
-                                base_prob = implied_p_from_american(hp)
-                                ai_prob = base_prob
+                                    if ap is not None and -750 <= ap <= 750:
+                                        base_prob = implied_p_from_american(ap)
+                                        ai_prob = base_prob
+                                        
+                                        if use_ml_predictions and hp is not None:
+                                            ml_prediction = ml_predictor.predict_game_outcome(
+                                                home, away, hp, ap,
+                                                home_sentiment['score'], away_sentiment['score']
+                                            )
+                                            ai_prob = ml_prediction['away_prob']
+                                            ai_confidence = ml_prediction['confidence']
+                                            ai_edge = ml_prediction['edge']
+                                        else:
+                                            ai_confidence = 0.5
+                                            ai_edge = 0
+                                        
+                                        if ai_confidence >= min_ai_confidence:
+                                            decimal_odds = american_to_decimal_safe(ap)
+                                            if decimal_odds is not None:  # Safety check
+                                                all_legs.append({
+                                                    "event_id": eid,
+                                                    "type": "Moneyline",
+                                                    "team": away,
+                                                    "side": "away",
+                                                    "market": "ML",
+                                                    "label": f"{away} @ {home} — {away} ML @{ap}",
+                                                    "p": base_prob,
+                                                    "ai_prob": ai_prob,
+                                                    "ai_confidence": ai_confidence,
+                                                    "ai_edge": ai_edge,
+                                                    "d": decimal_odds,
+                                                    "sentiment_trend": away_sentiment['trend']
+                                                })
                                 
-                                if use_ml_predictions and ap is not None:
-                                    ml_prediction = ml_predictor.predict_game_outcome(
-                                        home, away, hp, ap,
-                                        home_sentiment['score'], away_sentiment['score']
-                                    )
-                                    ai_prob = ml_prediction['home_prob']
-                                    ai_confidence = ml_prediction['confidence']
-                                    ai_edge = ml_prediction['edge']
-                                else:
-                                    ai_confidence = 0.5
-                                    ai_edge = 0
+                                # Spreads
+                                if inc_spread and "spreads" in mkts:
+                                    for o in mkts["spreads"][:4]:
+                                        nm, pt, pr = o.get("name"), o.get("point"), o.get("price")
+                                        if nm is None or pt is None or pr is None: 
+                                            continue
+                                        
+                                        base_prob = implied_p_from_american(pr)
+                                        sentiment = home_sentiment if nm == home else away_sentiment
+                                        
+                                        # Simple sentiment adjustment for spreads (40% weight)
+                                        ai_prob = base_prob * (1 + sentiment['score'] * 0.40)
+                                        ai_prob = max(0.1, min(0.9, ai_prob))  # Clamp
+                                        
+                                        # Higher confidence for spread bets (adjusted from 0.6 to 0.65)
+                                        ai_confidence = 0.65
+                                        
+                                        decimal_odds = american_to_decimal_safe(pr)
+                                        if decimal_odds is not None and ai_confidence >= min_ai_confidence:  # Safety check
+                                            all_legs.append({
+                                                "event_id": eid,
+                                                "type": "Spread",
+                                                "team": nm,
+                                                "side": "home" if nm == home else "away",
+                                                "point": pt,
+                                                "market": "Spread",
+                                                "label": f"{away} @ {home} — {nm} {pt:+.1f} @{pr}",
+                                                "p": base_prob,
+                                                "ai_prob": ai_prob,
+                                                "ai_confidence": ai_confidence,
+                                                "ai_edge": abs(ai_prob - base_prob),
+                                                "d": decimal_odds,
+                                                "sentiment_trend": sentiment['trend']
+                                            })
                                 
-                                if ai_confidence >= min_ai_confidence:
-                                    decimal_odds = american_to_decimal_safe(hp)
-                                    if decimal_odds is not None:  # Safety check
-                                        all_legs.append({
-                                            "event_id": eid,
-                                            "type": "Moneyline",
-                                            "team": home,
-                                            "side": "home",
-                                            "market": "ML",
-                                            "label": f"{away} @ {home} — {home} ML @{hp}",
-                                            "p": base_prob,
-                                            "ai_prob": ai_prob,
-                                            "ai_confidence": ai_confidence,
-                                            "ai_edge": ai_edge,
-                                            "d": decimal_odds,
-                                            "sentiment_trend": home_sentiment['trend']
-                                        })
-                            
-                            if ap is not None and -750 <= ap <= 750:
-                                base_prob = implied_p_from_american(ap)
-                                ai_prob = base_prob
-                                
-                                if use_ml_predictions and hp is not None:
-                                    ml_prediction = ml_predictor.predict_game_outcome(
-                                        home, away, hp, ap,
-                                        home_sentiment['score'], away_sentiment['score']
-                                    )
-                                    ai_prob = ml_prediction['away_prob']
-                                    ai_confidence = ml_prediction['confidence']
-                                    ai_edge = ml_prediction['edge']
-                                else:
-                                    ai_confidence = 0.5
-                                    ai_edge = 0
-                                
-                                if ai_confidence >= min_ai_confidence:
-                                    decimal_odds = american_to_decimal_safe(ap)
-                                    if decimal_odds is not None:  # Safety check
-                                        all_legs.append({
-                                            "event_id": eid,
-                                            "type": "Moneyline",
-                                            "team": away,
-                                            "side": "away",
-                                            "market": "ML",
-                                            "label": f"{away} @ {home} — {away} ML @{ap}",
-                                            "p": base_prob,
-                                            "ai_prob": ai_prob,
-                                            "ai_confidence": ai_confidence,
-                                            "ai_edge": ai_edge,
-                                            "d": decimal_odds,
-                                            "sentiment_trend": away_sentiment['trend']
-                                        })
-                        
-                        # Spreads
-                        if inc_spread and "spreads" in mkts:
-                            for o in mkts["spreads"][:4]:
-                                nm, pt, pr = o.get("name"), o.get("point"), o.get("price")
-                                if nm is None or pt is None or pr is None: 
-                                    continue
-                                
-                                base_prob = implied_p_from_american(pr)
-                                sentiment = home_sentiment if nm == home else away_sentiment
-                                
-                                # Simple sentiment adjustment for spreads (40% weight)
-                                ai_prob = base_prob * (1 + sentiment['score'] * 0.40)
-                                ai_prob = max(0.1, min(0.9, ai_prob))  # Clamp
-                                
-                                # Higher confidence for spread bets (adjusted from 0.6 to 0.65)
-                                ai_confidence = 0.65
-                                
-                                decimal_odds = american_to_decimal_safe(pr)
-                                if decimal_odds is not None and ai_confidence >= min_ai_confidence:  # Safety check
-                                    all_legs.append({
-                                        "event_id": eid,
-                                        "type": "Spread",
-                                        "team": nm,
-                                        "side": "home" if nm == home else "away",
-                                        "point": pt,
-                                        "market": "Spread",
-                                        "label": f"{away} @ {home} — {nm} {pt:+.1f} @{pr}",
-                                        "p": base_prob,
-                                        "ai_prob": ai_prob,
-                                        "ai_confidence": ai_confidence,
-                                        "ai_edge": abs(ai_prob - base_prob),
-                                        "d": decimal_odds,
-                                        "sentiment_trend": sentiment['trend']
-                                    })
-                        
-                        # Totals
-                        if inc_total and "totals" in mkts:
-                            for o in mkts["totals"][:4]:
-                                nm, pt, pr = o.get("name"), o.get("point"), o.get("price")
-                                if nm is None or pt is None or pr is None: 
-                                    continue
-                                
-                                base_prob = implied_p_from_american(pr)
-                                
-                                # For totals, combine both teams' offensive sentiment (40% weight)
-                                combined_sentiment = (home_sentiment['score'] + away_sentiment['score']) / 2
-                                ai_prob = base_prob * (1 + combined_sentiment * 0.40 * 0.5)
-                                ai_prob = max(0.1, min(0.9, ai_prob))
-                                
-                                # Higher confidence for totals (adjusted from 0.55 to 0.60)
-                                ai_confidence = 0.60
-                                
-                                decimal_odds = american_to_decimal_safe(pr)
-                                if decimal_odds is not None and ai_confidence >= min_ai_confidence:  # Safety check
-                                    all_legs.append({
-                                        "event_id": eid,
-                                        "type": "Total",
-                                        "team": f"{home} vs {away}",
-                                        "side": nm,  # Over or Under
-                                        "point": pt,
-                                        "market": "Total",
-                                        "label": f"{away} @ {home} — {nm} {pt} @{pr}",
-                                        "p": base_prob,
-                                        "ai_prob": ai_prob,
-                                        "ai_confidence": ai_confidence,
-                                        "ai_edge": abs(ai_prob - base_prob),
-                                        "d": decimal_odds,
-                                        "sentiment_trend": "neutral"
-                                    })
+                                # Totals
+                                if inc_total and "totals" in mkts:
+                                    for o in mkts["totals"][:4]:
+                                        nm, pt, pr = o.get("name"), o.get("point"), o.get("price")
+                                        if nm is None or pt is None or pr is None: 
+                                            continue
+                                        
+                                        base_prob = implied_p_from_american(pr)
+                                        
+                                        # For totals, combine both teams' offensive sentiment (40% weight)
+                                        combined_sentiment = (home_sentiment['score'] + away_sentiment['score']) / 2
+                                        ai_prob = base_prob * (1 + combined_sentiment * 0.40 * 0.5)
+                                        ai_prob = max(0.1, min(0.9, ai_prob))
+                                        
+                                        # Higher confidence for totals (adjusted from 0.55 to 0.60)
+                                        ai_confidence = 0.60
+                                        
+                                        decimal_odds = american_to_decimal_safe(pr)
+                                        if decimal_odds is not None and ai_confidence >= min_ai_confidence:  # Safety check
+                                            all_legs.append({
+                                                "event_id": eid,
+                                                "type": "Total",
+                                                "team": f"{home} vs {away}",
+                                                "side": nm,  # Over or Under
+                                                "point": pt,
+                                                "market": "Total",
+                                                "label": f"{away} @ {home} — {nm} {pt} @{pr}",
+                                                "p": base_prob,
+                                                "ai_prob": ai_prob,
+                                                "ai_confidence": ai_confidence,
+                                                "ai_edge": abs(ai_prob - base_prob),
+                                                "d": decimal_odds,
+                                                "sentiment_trend": "neutral"
+                                            })
                             
                             except Exception as e:
                                 # Skip this event if there's an error processing it
