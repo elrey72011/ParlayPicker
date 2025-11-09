@@ -459,6 +459,365 @@ class PrizePicksAnalyzer:
         return best_entries
 
 
+# ============ KALSHI INTEGRATION ============
+
+class KalshiIntegrator:
+    """Integrates Kalshi prediction market odds and analysis"""
+    
+    def __init__(self, api_key: str = None, api_secret: str = None):
+        self.api_key = api_key or os.environ.get("KALSHI_API_KEY")
+        self.api_secret = api_secret or os.environ.get("KALSHI_API_SECRET")
+        self.base_url = "https://api.elections.kalshi.com/trade-api/v2"
+        self.demo_url = "https://demo-api.elections.kalshi.com/trade-api/v2"
+        
+        # Use demo for testing, production for live
+        self.api_url = self.base_url if self.api_key else self.demo_url
+        
+        self.headers = {
+            "Content-Type": "application/json"
+        }
+        
+        if self.api_key:
+            self.headers["Authorization"] = f"Bearer {self.api_key}"
+    
+    def get_markets(self, category: str = "sports", status: str = "open") -> List[Dict]:
+        """
+        Fetch available Kalshi markets
+        
+        Args:
+            category: 'sports', 'politics', 'economics', etc.
+            status: 'open', 'closed', 'settled'
+        
+        Returns:
+            List of market dictionaries
+        """
+        try:
+            endpoint = f"{self.api_url}/markets"
+            params = {
+                "limit": 100,
+                "status": status
+            }
+            
+            if category:
+                params["series_ticker"] = category.upper()
+            
+            response = requests.get(endpoint, headers=self.headers, params=params, timeout=10)
+            
+            if response.status_code == 200:
+                data = response.json()
+                return data.get("markets", [])
+            else:
+                return []
+        
+        except Exception as e:
+            st.warning(f"Error fetching Kalshi markets: {str(e)}")
+            return []
+    
+    def get_sports_markets(self) -> List[Dict]:
+        """Get all active sports betting markets"""
+        all_markets = self.get_markets()
+        
+        # Filter for sports-related markets
+        sports_keywords = ['NFL', 'NBA', 'MLB', 'NHL', 'UFC', 'SOCCER', 'TENNIS', 
+                          'GOLF', 'FOOTBALL', 'BASKETBALL', 'BASEBALL', 'HOCKEY']
+        
+        sports_markets = []
+        for market in all_markets:
+            title = market.get('title', '').upper()
+            ticker = market.get('ticker', '').upper()
+            
+            if any(keyword in title or keyword in ticker for keyword in sports_keywords):
+                sports_markets.append(market)
+        
+        return sports_markets
+    
+    def get_market_details(self, market_ticker: str) -> Dict:
+        """Get detailed information about a specific market"""
+        try:
+            endpoint = f"{self.api_url}/markets/{market_ticker}"
+            response = requests.get(endpoint, headers=self.headers, timeout=10)
+            
+            if response.status_code == 200:
+                return response.json().get("market", {})
+            else:
+                return {}
+        
+        except Exception as e:
+            st.warning(f"Error fetching market details: {str(e)}")
+            return {}
+    
+    def get_orderbook(self, market_ticker: str) -> Dict:
+        """Get current orderbook (bids/asks) for a market"""
+        try:
+            endpoint = f"{self.api_url}/markets/{market_ticker}/orderbook"
+            response = requests.get(endpoint, headers=self.headers, timeout=10)
+            
+            if response.status_code == 200:
+                return response.json().get("orderbook", {})
+            else:
+                return {}
+        
+        except Exception as e:
+            st.warning(f"Error fetching orderbook: {str(e)}")
+            return {}
+    
+    def compare_with_sportsbook(self, kalshi_market: Dict, sportsbook_odds: Dict) -> Dict:
+        """
+        Compare Kalshi prediction market with traditional sportsbook
+        
+        This finds arbitrage and value opportunities
+        """
+        kalshi_yes_price = kalshi_market.get('yes_bid', 0) / 100  # Convert cents to probability
+        kalshi_no_price = kalshi_market.get('no_bid', 0) / 100
+        
+        # Get implied probability from sportsbook
+        sb_odds = sportsbook_odds.get('price')
+        if sb_odds:
+            sb_prob = implied_p_from_american(sb_odds)
+        else:
+            sb_prob = None
+        
+        # Calculate discrepancy
+        if sb_prob and kalshi_yes_price:
+            discrepancy = abs(kalshi_yes_price - sb_prob)
+            
+            # Determine which side is better value
+            if kalshi_yes_price < sb_prob - 0.05:  # Kalshi underpricing by 5%+
+                recommendation = "🟢 BUY YES on Kalshi (underpriced vs sportsbook)"
+                edge = sb_prob - kalshi_yes_price
+            elif kalshi_yes_price > sb_prob + 0.05:  # Kalshi overpricing by 5%+
+                recommendation = "🟢 BUY NO on Kalshi (or take sportsbook)"
+                edge = kalshi_yes_price - sb_prob
+            else:
+                recommendation = "🟡 Prices aligned (no significant edge)"
+                edge = discrepancy
+            
+            return {
+                'kalshi_prob': kalshi_yes_price,
+                'sportsbook_prob': sb_prob,
+                'discrepancy': discrepancy,
+                'edge': edge,
+                'recommendation': recommendation,
+                'has_arbitrage': discrepancy > 0.10  # 10%+ difference
+            }
+        
+        return {
+            'kalshi_prob': kalshi_yes_price,
+            'sportsbook_prob': sb_prob,
+            'discrepancy': 0,
+            'edge': 0,
+            'recommendation': '⚪ Insufficient data for comparison',
+            'has_arbitrage': False
+        }
+    
+    def find_arbitrage_opportunities(self, kalshi_markets: List[Dict], 
+                                     sportsbook_events: List[Dict]) -> List[Dict]:
+        """
+        Find arbitrage opportunities between Kalshi and traditional sportsbooks
+        
+        Returns list of arbitrage opportunities with expected profit
+        """
+        arbitrage_opps = []
+        
+        for kalshi_market in kalshi_markets:
+            title = kalshi_market.get('title', '')
+            
+            # Try to match with sportsbook events
+            for sb_event in sportsbook_events:
+                # Simple matching logic (can be enhanced)
+                home_team = sb_event.get('home_team', '')
+                away_team = sb_event.get('away_team', '')
+                
+                if home_team in title or away_team in title:
+                    comparison = self.compare_with_sportsbook(kalshi_market, sb_event)
+                    
+                    if comparison['has_arbitrage']:
+                        arbitrage_opps.append({
+                            'kalshi_market': title,
+                            'kalshi_ticker': kalshi_market.get('ticker'),
+                            'sportsbook_game': f"{away_team} @ {home_team}",
+                            'comparison': comparison
+                        })
+        
+        return arbitrage_opps
+    
+    def analyze_kalshi_market(self, market: Dict, sentiment_score: float = 0, 
+                             ml_probability: float = None) -> Dict:
+        """
+        Comprehensive analysis of a Kalshi market
+        
+        Combines:
+        - Kalshi orderbook data
+        - Sentiment analysis
+        - ML predictions
+        - Value assessment
+        """
+        yes_bid = market.get('yes_bid', 0) / 100
+        yes_ask = market.get('yes_ask', 100) / 100
+        no_bid = market.get('no_bid', 0) / 100
+        no_ask = market.get('no_ask', 100) / 100
+        
+        volume = market.get('volume', 0)
+        open_interest = market.get('open_interest', 0)
+        
+        # Market efficiency (tight spread = efficient)
+        yes_spread = yes_ask - yes_bid
+        no_spread = no_ask - no_bid
+        avg_spread = (yes_spread + no_spread) / 2
+        
+        efficiency = 1 - avg_spread  # Higher = more efficient
+        
+        # Compare with AI prediction
+        kalshi_implied = yes_bid  # Using bid as market consensus
+        
+        if ml_probability:
+            ai_edge = ml_probability - kalshi_implied
+            
+            if ai_edge > 0.10:
+                ai_recommendation = f"🟢 STRONG BUY YES - AI sees {ai_edge*100:.1f}% edge"
+            elif ai_edge < -0.10:
+                ai_recommendation = f"🟢 STRONG BUY NO - AI sees {abs(ai_edge)*100:.1f}% edge"
+            elif abs(ai_edge) < 0.05:
+                ai_recommendation = "🟡 FAIR PRICE - AI agrees with market"
+            else:
+                ai_recommendation = f"🟡 SLIGHT EDGE - AI sees {ai_edge*100:.1f}% edge"
+        else:
+            ai_edge = 0
+            ai_recommendation = "⚪ No AI prediction available"
+        
+        # Sentiment alignment
+        if sentiment_score > 0.3 and kalshi_implied < 0.6:
+            sentiment_signal = "🟢 Positive sentiment + underpriced = BUY YES"
+        elif sentiment_score < -0.3 and kalshi_implied > 0.4:
+            sentiment_signal = "🟢 Negative sentiment + overpriced = BUY NO"
+        else:
+            sentiment_signal = "🟡 Sentiment neutral or priced in"
+        
+        # Liquidity assessment
+        if volume > 1000 and open_interest > 500:
+            liquidity = "🟢 High liquidity - easy to enter/exit"
+        elif volume > 100 and open_interest > 50:
+            liquidity = "🟡 Moderate liquidity - tradeable"
+        else:
+            liquidity = "🔴 Low liquidity - be cautious"
+        
+        return {
+            'kalshi_probability': kalshi_implied,
+            'yes_bid': yes_bid,
+            'yes_ask': yes_ask,
+            'spread': avg_spread,
+            'efficiency': efficiency,
+            'volume': volume,
+            'open_interest': open_interest,
+            'liquidity': liquidity,
+            'ai_edge': ai_edge,
+            'ai_recommendation': ai_recommendation,
+            'sentiment_score': sentiment_score,
+            'sentiment_signal': sentiment_signal,
+            'overall_score': self._calculate_overall_score(
+                ai_edge, sentiment_score, efficiency, volume
+            )
+        }
+    
+    def _calculate_overall_score(self, ai_edge: float, sentiment: float, 
+                                 efficiency: float, volume: int) -> float:
+        """Calculate overall opportunity score 0-100"""
+        # Weight different factors
+        edge_score = min(abs(ai_edge) * 200, 50)  # Max 50 points
+        sentiment_score = min(abs(sentiment) * 50, 20)  # Max 20 points
+        efficiency_score = efficiency * 15  # Max 15 points
+        liquidity_score = min(volume / 100, 15)  # Max 15 points
+        
+        total = edge_score + sentiment_score + efficiency_score + liquidity_score
+        return min(total, 100)
+    
+    def get_best_opportunities(self, min_score: float = 60) -> List[Dict]:
+        """
+        Find the best Kalshi betting opportunities
+        
+        Returns markets with high overall scores
+        """
+        markets = self.get_sports_markets()
+        opportunities = []
+        
+        for market in markets:
+            # Get orderbook
+            ticker = market.get('ticker')
+            orderbook = self.get_orderbook(ticker)
+            
+            if orderbook:
+                # Enhance market data with orderbook
+                market['yes_bid'] = orderbook.get('yes', [{}])[0].get('price', 0)
+                market['yes_ask'] = orderbook.get('yes', [{}])[-1].get('price', 100)
+                market['no_bid'] = orderbook.get('no', [{}])[0].get('price', 0)
+                market['no_ask'] = orderbook.get('no', [{}])[-1].get('price', 100)
+                
+                # Analyze
+                analysis = self.analyze_kalshi_market(market)
+                
+                if analysis['overall_score'] >= min_score:
+                    opportunities.append({
+                        'market': market,
+                        'analysis': analysis
+                    })
+        
+        # Sort by score
+        opportunities.sort(key=lambda x: x['analysis']['overall_score'], reverse=True)
+        
+        return opportunities
+    
+    def calculate_kelly_for_kalshi(self, kalshi_prob: float, ai_prob: float, 
+                                   bankroll: float = 1000) -> Dict:
+        """
+        Calculate Kelly Criterion for Kalshi market
+        
+        Kalshi uses probability pricing (0-100 cents), not traditional odds
+        """
+        if ai_prob <= kalshi_prob:
+            return {
+                'kelly_percentage': 0,
+                'recommended_stake': 0,
+                'expected_value': 0,
+                'recommendation': '🔴 NO EDGE - AI probability not better than Kalshi price'
+            }
+        
+        # Edge calculation for binary market
+        edge = ai_prob - kalshi_prob
+        
+        # Kelly formula for binary outcome: f = edge / (1 - kalshi_prob)
+        if kalshi_prob < 0.95:  # Avoid division issues
+            kelly_fraction = edge / (1 - kalshi_prob)
+        else:
+            kelly_fraction = 0
+        
+        # Conservative Kelly (0.25x)
+        kelly_fraction = kelly_fraction * 0.25
+        kelly_fraction = max(0, min(kelly_fraction, 0.10))  # Cap at 10%
+        
+        kelly_percentage = kelly_fraction * 100
+        recommended_stake = bankroll * kelly_fraction
+        
+        # Expected value
+        expected_payout = ai_prob * (1 / kalshi_prob)
+        expected_value = expected_payout - 1
+        
+        if kelly_percentage > 3:
+            risk = "High"
+        elif kelly_percentage > 1:
+            risk = "Medium"
+        else:
+            risk = "Low"
+        
+        return {
+            'kelly_percentage': kelly_percentage,
+            'recommended_stake': recommended_stake,
+            'expected_value': expected_value,
+            'edge_percentage': edge * 100,
+            'risk_level': risk,
+            'recommendation': f"🟢 BET {kelly_percentage:.1f}% (${recommended_stake:.0f}) | Edge: {edge*100:+.1f}%"
+        }
+
+
 # ============ ADVANCED AI MODULES ============
 
 # 1. SHARP MONEY DETECTOR
@@ -1544,12 +1903,17 @@ if 'advanced_stats' not in st.session_state:
 if 'social_analyzer' not in st.session_state:
     twitter_key = os.environ.get("TWITTER_API_KEY", "")
     st.session_state['social_analyzer'] = SocialMediaAnalyzer(twitter_key)
+if 'kalshi_integrator' not in st.session_state:
+    kalshi_key = os.environ.get("KALSHI_API_KEY", "")
+    kalshi_secret = os.environ.get("KALSHI_API_SECRET", "")
+    st.session_state['kalshi_integrator'] = KalshiIntegrator(kalshi_key, kalshi_secret)
 
 # Main navigation tabs
-main_tab1, main_tab2, main_tab3 = st.tabs([
+main_tab1, main_tab2, main_tab3, main_tab4 = st.tabs([
     "🎯 Sports Betting Parlays", 
     "🔍 Sentiment & AI Analysis",
-    "🎨 Custom Parlay Builder"
+    "🎨 Custom Parlay Builder",
+    "📊 Kalshi Prediction Markets"
 ])
 
 # ===== TAB 1: SPORTS BETTING PARLAYS =====
@@ -3105,4 +3469,431 @@ with main_tab3:
     - ✅ Target: Positive AI EV + High Confidence + Good Sentiment
     - ⚠️ Caution: Negative AI EV or Low Confidence
     - 🔴 Avoid: Multiple red flags (negative EV, low confidence, bad sentiment)
+    """)
+
+# ===== TAB 4: KALSHI PREDICTION MARKETS =====
+with main_tab4:
+    st.header("📊 Kalshi Prediction Markets")
+    st.markdown("**Compare prediction market odds with traditional sportsbooks and AI analysis**")
+    st.caption("Find arbitrage opportunities and value bets by comparing Kalshi's wisdom-of-crowds pricing with sportsbook odds")
+    
+    # API Configuration
+    st.markdown("---")
+    st.subheader("⚙️ Kalshi Configuration")
+    
+    col_kalshi1, col_kalshi2 = st.columns(2)
+    with col_kalshi1:
+        kalshi_key = st.text_input(
+            "Kalshi API Key",
+            value=st.session_state.get('kalshi_api_key', os.environ.get("KALSHI_API_KEY", "")),
+            type="password",
+            help="Get your API key from https://kalshi.com/account/api"
+        )
+        if kalshi_key != st.session_state.get('kalshi_api_key', ''):
+            st.session_state['kalshi_api_key'] = kalshi_key
+            st.session_state['kalshi_integrator'] = KalshiIntegrator(
+                kalshi_key, 
+                st.session_state.get('kalshi_api_secret', '')
+            )
+    
+    with col_kalshi2:
+        kalshi_secret = st.text_input(
+            "Kalshi API Secret (optional)",
+            value=st.session_state.get('kalshi_api_secret', os.environ.get("KALSHI_API_SECRET", "")),
+            type="password",
+            help="API secret for authenticated requests"
+        )
+        if kalshi_secret != st.session_state.get('kalshi_api_secret', ''):
+            st.session_state['kalshi_api_secret'] = kalshi_secret
+            st.session_state['kalshi_integrator'] = KalshiIntegrator(
+                st.session_state.get('kalshi_api_key', ''),
+                kalshi_secret
+            )
+    
+    if not kalshi_key:
+        st.info("💡 **Demo Mode:** You can explore Kalshi without API keys. For live trading, get your API key at [kalshi.com](https://kalshi.com)")
+    
+    st.markdown("---")
+    
+    # Main Analysis Sections
+    analysis_mode = st.radio(
+        "Select Analysis Mode:",
+        ["🔍 Browse Kalshi Sports Markets", "⚖️ Compare with Sportsbooks", "💎 Find Arbitrage Opportunities"],
+        horizontal=True
+    )
+    
+    kalshi = st.session_state.get('kalshi_integrator')
+    
+    if analysis_mode == "🔍 Browse Kalshi Sports Markets":
+        st.subheader("🏈 Available Sports Betting Markets")
+        
+        if st.button("🔄 Load Kalshi Markets", type="primary"):
+            with st.spinner("Fetching Kalshi markets..."):
+                try:
+                    markets = kalshi.get_sports_markets()
+                    st.session_state['kalshi_markets'] = markets
+                    st.success(f"✅ Loaded {len(markets)} sports markets")
+                except Exception as e:
+                    st.error(f"Error loading markets: {str(e)}")
+                    st.info("💡 Try demo mode without API keys to explore sample markets")
+        
+        if 'kalshi_markets' in st.session_state and st.session_state['kalshi_markets']:
+            markets = st.session_state['kalshi_markets']
+            
+            st.markdown(f"### 📋 {len(markets)} Markets Available")
+            
+            # Filter options
+            col_filter1, col_filter2 = st.columns(2)
+            with col_filter1:
+                sport_filter = st.selectbox(
+                    "Filter by Sport",
+                    options=["All"] + ["NFL", "NBA", "MLB", "NHL", "UFC", "Soccer"],
+                    key="kalshi_sport_filter"
+                )
+            
+            with col_filter2:
+                sort_by = st.selectbox(
+                    "Sort by",
+                    options=["Volume (High to Low)", "Close Date (Soonest)", "Title (A-Z)"],
+                    key="kalshi_sort"
+                )
+            
+            # Filter markets
+            filtered_markets = markets
+            if sport_filter != "All":
+                filtered_markets = [m for m in markets if sport_filter.upper() in m.get('title', '').upper()]
+            
+            # Sort markets
+            if sort_by == "Volume (High to Low)":
+                filtered_markets.sort(key=lambda x: x.get('volume', 0), reverse=True)
+            elif sort_by == "Close Date (Soonest)":
+                filtered_markets.sort(key=lambda x: x.get('close_time', ''))
+            else:
+                filtered_markets.sort(key=lambda x: x.get('title', ''))
+            
+            # Display markets
+            for i, market in enumerate(filtered_markets[:20]):  # Show top 20
+                title = market.get('title', 'Unknown Market')
+                ticker = market.get('ticker', '')
+                volume = market.get('volume', 0)
+                
+                with st.expander(f"**{i+1}. {title}**"):
+                    col_m1, col_m2 = st.columns(2)
+                    
+                    with col_m1:
+                        st.write(f"**Ticker:** {ticker}")
+                        st.write(f"**Volume:** {volume:,} contracts")
+                        st.write(f"**Status:** {market.get('status', 'unknown')}")
+                    
+                    with col_m2:
+                        # Get orderbook for this market
+                        if st.button(f"📊 Analyze {ticker[:15]}...", key=f"analyze_{ticker}"):
+                            with st.spinner("Fetching market details..."):
+                                try:
+                                    orderbook = kalshi.get_orderbook(ticker)
+                                    
+                                    if orderbook:
+                                        yes_bids = orderbook.get('yes', [])
+                                        no_bids = orderbook.get('no', [])
+                                        
+                                        if yes_bids:
+                                            best_yes_bid = yes_bids[0].get('price', 0) / 100
+                                            st.success(f"**YES Price:** {best_yes_bid*100:.1f}¢ ({best_yes_bid*100:.1f}% probability)")
+                                        
+                                        if no_bids:
+                                            best_no_bid = no_bids[0].get('price', 0) / 100
+                                            st.info(f"**NO Price:** {best_no_bid*100:.1f}¢ ({best_no_bid*100:.1f}% probability)")
+                                        
+                                        # Kelly recommendation
+                                        if yes_bids:
+                                            st.markdown("**💰 Kelly Sizing:**")
+                                            # Assume user has 55% confidence (can be adjusted)
+                                            user_prob = 0.55
+                                            kelly_result = kalshi.calculate_kelly_for_kalshi(
+                                                best_yes_bid, user_prob, 1000
+                                            )
+                                            st.write(kelly_result['recommendation'])
+                                    else:
+                                        st.warning("No orderbook data available")
+                                
+                                except Exception as e:
+                                    st.error(f"Error: {str(e)}")
+            
+            if len(filtered_markets) > 20:
+                st.info(f"Showing top 20 of {len(filtered_markets)} markets. Adjust filters to see others.")
+        
+        else:
+            st.info("👆 Click 'Load Kalshi Markets' to see available betting opportunities")
+    
+    elif analysis_mode == "⚖️ Compare with Sportsbooks":
+        st.subheader("⚖️ Kalshi vs Sportsbook Odds Comparison")
+        st.markdown("Compare prediction market pricing with traditional sportsbook odds to find value")
+        
+        col_comp1, col_comp2 = st.columns(2)
+        
+        with col_comp1:
+            st.markdown("#### Kalshi Market")
+            kalshi_market_title = st.text_input(
+                "Market Title",
+                placeholder="e.g., Will Chiefs win Super Bowl?",
+                key="kalshi_market_compare"
+            )
+            kalshi_yes_price = st.number_input(
+                "YES Price (cents)",
+                min_value=0.0,
+                max_value=100.0,
+                value=65.0,
+                step=0.1,
+                help="Price in cents (e.g., 65 = 65% probability)"
+            ) / 100
+        
+        with col_comp2:
+            st.markdown("#### Sportsbook")
+            sb_selection = st.text_input(
+                "Corresponding Bet",
+                placeholder="e.g., Chiefs Super Bowl Winner",
+                key="sb_compare"
+            )
+            sb_odds = st.number_input(
+                "Sportsbook Odds (American)",
+                min_value=-10000,
+                max_value=10000,
+                value=-150,
+                step=5,
+                help="American odds (e.g., -150, +200)"
+            )
+        
+        if st.button("🔍 Compare Markets", type="primary"):
+            # Calculate sportsbook implied probability
+            sb_prob = implied_p_from_american(sb_odds)
+            
+            # Comparison
+            discrepancy = abs(kalshi_yes_price - sb_prob)
+            edge = kalshi_yes_price - sb_prob
+            
+            st.markdown("---")
+            st.markdown("### 📊 Comparison Results")
+            
+            col_r1, col_r2, col_r3 = st.columns(3)
+            
+            with col_r1:
+                st.metric("Kalshi Probability", f"{kalshi_yes_price*100:.1f}%")
+            with col_r2:
+                st.metric("Sportsbook Probability", f"{sb_prob*100:.1f}%")
+            with col_r3:
+                st.metric("Discrepancy", f"{discrepancy*100:.1f}%", 
+                         delta=f"{edge*100:+.1f}% edge" if edge != 0 else None)
+            
+            # Recommendation
+            st.markdown("### 💡 Recommendation")
+            
+            if discrepancy > 0.10:  # 10%+ difference
+                if kalshi_yes_price < sb_prob:
+                    st.success(f"🟢 **STRONG VALUE on Kalshi YES**")
+                    st.write(f"- Kalshi is pricing YES at {kalshi_yes_price*100:.1f}%")
+                    st.write(f"- Sportsbook implies {sb_prob*100:.1f}%")
+                    st.write(f"- **Edge: {(sb_prob - kalshi_yes_price)*100:.1f}% in your favor**")
+                    st.write(f"- **Action:** Buy YES on Kalshi")
+                else:
+                    st.success(f"🟢 **STRONG VALUE on Sportsbook**")
+                    st.write(f"- Kalshi is overpricing at {kalshi_yes_price*100:.1f}%")
+                    st.write(f"- Sportsbook implies {sb_prob*100:.1f}%")
+                    st.write(f"- **Edge: {(kalshi_yes_price - sb_prob)*100:.1f}%**")
+                    st.write(f"- **Action:** Take sportsbook bet OR buy NO on Kalshi")
+            
+            elif discrepancy > 0.05:  # 5-10% difference
+                if kalshi_yes_price < sb_prob:
+                    st.info(f"🟡 **MODERATE VALUE on Kalshi YES**")
+                    st.write(f"- Small edge of {(sb_prob - kalshi_yes_price)*100:.1f}%")
+                    st.write(f"- Consider Kalshi YES if you agree with sportsbook assessment")
+                else:
+                    st.info(f"🟡 **MODERATE VALUE on Sportsbook**")
+                    st.write(f"- Small edge of {(kalshi_yes_price - sb_prob)*100:.1f}%")
+                    st.write(f"- Consider sportsbook if you agree with that probability")
+            
+            else:
+                st.success("✅ **MARKETS IN AGREEMENT**")
+                st.write(f"- Both markets pricing very similarly")
+                st.write(f"- Difference of only {discrepancy*100:.1f}%")
+                st.write(f"- No significant arbitrage or value opportunity")
+                st.write(f"- Bet on either if you have additional information/analysis")
+            
+            # Kelly calculation for Kalshi
+            st.markdown("### 💰 Optimal Bet Sizing (Kalshi)")
+            
+            user_confidence = st.slider(
+                "Your Confidence Level",
+                min_value=0.0,
+                max_value=1.0,
+                value=sb_prob,
+                step=0.01,
+                format="%.1f%%",
+                help="Your personal assessment of the probability"
+            )
+            
+            bankroll = st.number_input(
+                "Your Bankroll",
+                min_value=100,
+                max_value=1000000,
+                value=1000,
+                step=100
+            )
+            
+            kelly = kalshi.calculate_kelly_for_kalshi(kalshi_yes_price, user_confidence, bankroll)
+            
+            col_k1, col_k2, col_k3 = st.columns(3)
+            with col_k1:
+                st.metric("Kelly %", f"{kelly['kelly_percentage']:.2f}%")
+            with col_k2:
+                st.metric("Recommended Stake", f"${kelly['recommended_stake']:.0f}")
+            with col_k3:
+                st.metric("Expected Value", f"{kelly['expected_value']*100:+.1f}%")
+            
+            st.write(kelly['recommendation'])
+    
+    elif analysis_mode == "💎 Find Arbitrage Opportunities":
+        st.subheader("💎 Arbitrage Opportunity Scanner")
+        st.markdown("Automatically find discrepancies between Kalshi and traditional sportsbooks")
+        
+        st.info("🔧 **Coming Soon:** This feature will automatically scan all markets and identify arbitrage opportunities where you can profit regardless of outcome by betting both sides.")
+        
+        st.markdown("""
+        **How Arbitrage Works:**
+        
+        1. **Find Discrepancy:** Kalshi prices YES at 40% but sportsbook implies 50%
+        2. **Bet Both Sides:** 
+           - Bet YES on Kalshi (40¢)
+           - Bet NO equivalent on sportsbook
+        3. **Lock Profit:** Guaranteed profit regardless of outcome
+        
+        **Requirements:**
+        - Discrepancy must be > 10% (to cover fees)
+        - Sufficient liquidity on both sides
+        - Fast execution (prices move quickly)
+        
+        **Manual Search:**
+        Use the "Compare with Sportsbooks" tab above to manually check for arbitrage opportunities.
+        """)
+    
+    # Educational Section
+    st.markdown("---")
+    st.markdown("### 📚 Understanding Kalshi Prediction Markets")
+    
+    with st.expander("🤔 What is Kalshi?"):
+        st.markdown("""
+        **Kalshi** is a CFTC-regulated prediction market where you can trade on real-world events:
+        
+        - **Legal & Regulated:** First CFTC-regulated event contract exchange in the US
+        - **Binary Outcomes:** Markets settle to either 0¢ or 100¢
+        - **Pricing:** Prices represent probability (65¢ = 65% chance)
+        - **Liquidity:** Limit orderbook like stocks
+        
+        **Example:**
+        - Market: "Will Chiefs win their next game?"
+        - YES trading at 70¢ = Market thinks 70% chance
+        - If you buy YES at 70¢ and Chiefs win, you get 100¢ (30¢ profit)
+        - If they lose, you get 0¢ (lose your 70¢)
+        """)
+    
+    with st.expander("💡 Why Compare with Sportsbooks?"):
+        st.markdown("""
+        **Different Pricing Mechanisms:**
+        
+        **Kalshi (Prediction Market):**
+        - Wisdom of crowds pricing
+        - Real money at stake
+        - Efficient market hypothesis
+        - Can be slower to react to news
+        
+        **Sportsbooks:**
+        - Built-in vig (~5-10%)
+        - Designed to balance book
+        - React quickly to sharp money
+        - Public bias can skew lines
+        
+        **Opportunities:**
+        - ✅ Kalshi often has better prices (lower vig)
+        - ✅ Arbitrage when markets disagree significantly
+        - ✅ Value bets when you trust one pricing over the other
+        - ✅ Hedge existing positions
+        """)
+    
+    with st.expander("🎯 How to Use This Tool"):
+        st.markdown("""
+        **Step 1: Browse Markets**
+        - Load Kalshi sports markets
+        - Find events you're interested in
+        - Check current pricing
+        
+        **Step 2: Compare Prices**
+        - Find the same event on a sportsbook
+        - Use "Compare with Sportsbooks" tab
+        - Look for 5%+ discrepancies
+        
+        **Step 3: Make Decision**
+        - If Kalshi < Sportsbook: Buy YES on Kalshi
+        - If Kalshi > Sportsbook: Take sportsbook OR buy NO on Kalshi
+        - If similar: Use your own analysis to decide
+        
+        **Step 4: Size Optimally**
+        - Use Kelly Calculator
+        - Input your confidence level
+        - Bet recommended amount
+        
+        **Step 5: Track & Learn**
+        - Monitor your positions
+        - See which market was more accurate
+        - Refine your strategy
+        """)
+    
+    with st.expander("⚠️ Important Considerations"):
+        st.markdown("""
+        **Advantages of Kalshi:**
+        - ✅ Lower fees than sportsbooks
+        - ✅ Can exit position early (sell before event)
+        - ✅ Legal in most US states
+        - ✅ No betting limits (unlike sportsbooks)
+        
+        **Disadvantages:**
+        - ⚠️ Lower liquidity than sportsbooks
+        - ⚠️ Spreads can be wide on low-volume markets
+        - ⚠️ Fewer markets available
+        - ⚠️ Funds take time to withdraw
+        
+        **Best Practices:**
+        - Only trade on high-volume markets
+        - Check the spread before entering
+        - Start small to learn the platform
+        - Compare fees with sportsbook vig
+        - Consider exit liquidity
+        """)
+    
+    # Tips section
+    st.markdown("---")
+    st.markdown("""
+    ### 💡 Kalshi Trading Tips:
+    
+    **Finding Value:**
+    - ✅ Look for 5%+ discrepancies with sportsbooks
+    - ✅ Check multiple sportsbooks for best comparison
+    - ✅ Use AI analysis from other tabs to inform your view
+    - ✅ Focus on high-volume markets (easier exit)
+    
+    **Risk Management:**
+    - ✅ Use Kelly Criterion for position sizing
+    - ✅ Don't tie up too much capital (lower liquidity)
+    - ✅ Set maximum position sizes
+    - ✅ Consider exit strategy before entering
+    
+    **Advanced Strategies:**
+    - 📈 Arbitrage between Kalshi and sportsbooks
+    - 📈 Hedge existing sportsbook bets on Kalshi
+    - 📈 Take early profits by selling before event
+    - 📈 Buy when news breaks before market adjusts
+    
+    **Combining with AI:**
+    - Use Tab 2 sentiment analysis to validate Kalshi prices
+    - Use Tab 3 custom builder to calculate fair value
+    - Compare AI probability with Kalshi pricing
+    - Bet when AI and Kalshi agree on value
     """)
