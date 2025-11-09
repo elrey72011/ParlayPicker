@@ -1972,6 +1972,19 @@ def render_parlay_section_ai(title, rows, theover_data=None):
             # Kalshi validation legend and detailed influence
             kalshi_available = sum(1 for leg in row.get("legs", []) if leg.get('kalshi_validation', {}).get('kalshi_available', False))
             
+            # Show info if Kalshi enabled but no data found
+            if 'kalshi_validation' in row.get("legs", [{}])[0] and kalshi_available == 0:
+                st.info("""
+                **📊 Kalshi Validation Enabled** but no matching markets found for these games.
+                
+                **This is normal because:**
+                - Kalshi may not have markets for all games
+                - Markets might be for season-long outcomes (playoffs, championships) rather than individual games
+                - Try checking Tab 4 to see what Kalshi markets are actually available
+                
+                **Note:** Parlay analysis still uses AI + Sentiment, just without Kalshi cross-validation.
+                """)
+            
             if kalshi_available > 0:
                 kalshi_confirmed = sum(1 for leg in row.get("legs", []) if leg.get('kalshi_validation', {}).get('validation') == 'confirms')
                 kalshi_higher = sum(1 for leg in row.get("legs", []) if 'higher' in leg.get('kalshi_validation', {}).get('validation', ''))
@@ -2463,8 +2476,50 @@ with main_tab1:
         - 💎 Identifies arbitrage opportunities
         - 🔍 Shows additional edge from market discrepancies
         
-        **How it works:** For each parlay leg, we check if a matching Kalshi market exists and compare probabilities.
+        **Important Note:** Kalshi typically has markets for:
+        - Season-long outcomes (playoffs, championships, win totals)
+        - Major events and marquee matchups
+        - NOT every individual regular season game
+        
+        If you see "—" in the Kalshi column, it means no matching market was found for that specific game.
+        This is normal and expected. The parlay analysis will still work using AI + Sentiment.
+        
+        **Tip:** Check Tab 4 to see what Kalshi markets are actually available right now.
         """)
+        
+        with st.expander("ℹ️ Understanding Kalshi Market Coverage"):
+            st.markdown("""
+            **What Kalshi Markets Are Available:**
+            
+            ✅ **Common Kalshi Markets:**
+            - "Will [Team] make the playoffs?"
+            - "Will [Team] win the Super Bowl/Championship?"
+            - "Will [Team] win more than X games?"
+            - "Will [Player] win MVP?"
+            - Major rivalry games or primetime matchups
+            
+            ❌ **NOT Usually Available:**
+            - Individual regular season game outcomes
+            - Week-to-week game spreads
+            - Game totals (over/under)
+            - Every team's games
+            
+            **Why This Matters:**
+            - Your parlay might have 0 Kalshi matches → That's OK!
+            - Kalshi is a bonus validation source, not required
+            - AI + Sentiment still provide strong analysis
+            
+            **When Kalshi DOES Match:**
+            - You get extra confidence boost
+            - Can spot market inefficiencies
+            - Valuable cross-validation
+            
+            **Recommendation:**
+            - Leave Kalshi validation ON (no harm if no matches)
+            - When it finds matches, that's a bonus!
+            - Don't expect matches for every game
+            """)
+
 
     def is_same_day(iso_str) -> bool:
         try:
