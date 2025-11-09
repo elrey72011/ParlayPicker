@@ -977,7 +977,11 @@ if 'news_api_key' not in st.session_state:
     st.session_state['news_api_key'] = os.environ.get("NEWS_API_KEY", "")
 
 # Main navigation tabs
-main_tab1, main_tab2 = st.tabs(["🎯 Sports Betting Parlays", "🏆 PrizePicks Props"])
+main_tab1, main_tab2, main_tab3 = st.tabs([
+    "🎯 Sports Betting Parlays", 
+    "🏆 PrizePicks Props",
+    "🎨 Custom Parlay Builder"
+])
 
 # ===== TAB 1: SPORTS BETTING PARLAYS =====
 with main_tab1:
@@ -1844,4 +1848,531 @@ with main_tab2:
     - Diversify across different stat categories
     - Avoid stacking too many players from same game
     - Target props where your projection differs significantly from the line
+    """)
+
+# ===== TAB 3: CUSTOM PARLAY BUILDER =====
+with main_tab3:
+    st.header("🎨 Custom Parlay Builder")
+    st.markdown("**Build your own parlay and get AI-powered analysis**")
+    st.caption("Select 2-4 legs, then get comprehensive AI/ML analysis with sentiment, probability, and edge calculations")
+    
+    # API key check
+    api_key = st.session_state.get('api_key', "") or os.environ.get("ODDS_API_KEY", "")
+    
+    if not api_key:
+        st.warning("⚠️ Please enter your Odds API key in the 'Sports Betting Parlays' tab first")
+        st.stop()
+    
+    # Initialize session state for custom parlay legs
+    if 'custom_legs' not in st.session_state:
+        st.session_state['custom_legs'] = []
+    
+    st.markdown("---")
+    
+    # Step 1: Fetch Available Games
+    st.subheader("📋 Step 1: Select Sport & Date")
+    
+    col_sport, col_date = st.columns(2)
+    with col_sport:
+        custom_sport = st.selectbox(
+            "Sport",
+            options=APP_CFG["sports_common"],
+            key="custom_sport"
+        )
+    with col_date:
+        custom_date = st.date_input(
+            "Game Date",
+            value=pd.Timestamp.now().date(),
+            key="custom_date"
+        )
+    
+    if st.button("🔄 Load Games", type="primary"):
+        with st.spinner(f"Loading {custom_sport} games..."):
+            try:
+                snap = fetch_oddsapi_snapshot(api_key, custom_sport)
+                st.session_state['available_games'] = snap.get("events", [])
+                st.success(f"✅ Loaded {len(st.session_state.get('available_games', []))} games")
+            except Exception as e:
+                st.error(f"Error loading games: {str(e)}")
+    
+    # Step 2: Add Legs to Custom Parlay
+    if 'available_games' in st.session_state and st.session_state['available_games']:
+        st.markdown("---")
+        st.subheader("⚡ Step 2: Build Your Parlay")
+        
+        games = st.session_state['available_games']
+        
+        # Game selector
+        game_options = [f"{g['away_team']} @ {g['home_team']}" for g in games]
+        selected_game_idx = st.selectbox(
+            "Select Game",
+            options=range(len(game_options)),
+            format_func=lambda x: game_options[x],
+            key="game_selector"
+        )
+        
+        if selected_game_idx is not None:
+            selected_game = games[selected_game_idx]
+            home_team = selected_game['home_team']
+            away_team = selected_game['away_team']
+            markets = selected_game.get('markets', {})
+            
+            # Bet type selector
+            col_bet1, col_bet2 = st.columns(2)
+            with col_bet1:
+                bet_type = st.selectbox(
+                    "Bet Type",
+                    options=["Moneyline", "Spread", "Total"],
+                    key="bet_type_selector"
+                )
+            
+            with col_bet2:
+                if bet_type == "Moneyline":
+                    h2h = markets.get('h2h', {})
+                    home_price = _dig(h2h, 'home.price')
+                    away_price = _dig(h2h, 'away.price')
+                    
+                    if home_price and away_price:
+                        selection = st.selectbox(
+                            "Selection",
+                            options=[
+                                f"{home_team} ML @{home_price:+.0f}",
+                                f"{away_team} ML @{away_price:+.0f}"
+                            ],
+                            key="ml_selector"
+                        )
+                        
+                        # Parse selection
+                        if home_team in selection:
+                            pick_team = home_team
+                            pick_price = home_price
+                            pick_side = "home"
+                        else:
+                            pick_team = away_team
+                            pick_price = away_price
+                            pick_side = "away"
+                    else:
+                        st.warning("Moneyline odds not available for this game")
+                        selection = None
+                
+                elif bet_type == "Spread":
+                    spreads = markets.get('spreads', [])
+                    if spreads:
+                        spread_options = []
+                        for s in spreads[:8]:  # Show up to 8 spread options
+                            team = s.get('name')
+                            point = s.get('point')
+                            price = s.get('price')
+                            if team and point is not None and price:
+                                spread_options.append({
+                                    'label': f"{team} {point:+.1f} @{price:+.0f}",
+                                    'team': team,
+                                    'point': point,
+                                    'price': price,
+                                    'side': 'home' if team == home_team else 'away'
+                                })
+                        
+                        if spread_options:
+                            selection = st.selectbox(
+                                "Selection",
+                                options=range(len(spread_options)),
+                                format_func=lambda x: spread_options[x]['label'],
+                                key="spread_selector"
+                            )
+                            
+                            if selection is not None:
+                                pick_data = spread_options[selection]
+                                pick_team = pick_data['team']
+                                pick_price = pick_data['price']
+                                pick_side = pick_data['side']
+                                pick_point = pick_data['point']
+                        else:
+                            st.warning("Spread odds not available")
+                            selection = None
+                    else:
+                        st.warning("Spread odds not available")
+                        selection = None
+                
+                elif bet_type == "Total":
+                    totals = markets.get('totals', [])
+                    if totals:
+                        total_options = []
+                        for t in totals[:8]:  # Show up to 8 total options
+                            name = t.get('name', '')
+                            point = t.get('point')
+                            price = t.get('price')
+                            if point is not None and price:
+                                total_options.append({
+                                    'label': f"{name} {point} @{price:+.0f}",
+                                    'name': name,
+                                    'point': point,
+                                    'price': price
+                                })
+                        
+                        if total_options:
+                            selection = st.selectbox(
+                                "Selection",
+                                options=range(len(total_options)),
+                                format_func=lambda x: total_options[x]['label'],
+                                key="total_selector"
+                            )
+                            
+                            if selection is not None:
+                                pick_data = total_options[selection]
+                                pick_team = f"{home_team} vs {away_team}"
+                                pick_price = pick_data['price']
+                                pick_side = pick_data['name']
+                                pick_point = pick_data['point']
+                        else:
+                            st.warning("Total odds not available")
+                            selection = None
+                    else:
+                        st.warning("Total odds not available")
+                        selection = None
+            
+            # Add leg button
+            if selection is not None and st.button("➕ Add to Parlay", type="secondary"):
+                # Create leg data
+                leg = {
+                    'event_id': selected_game['id'],
+                    'game': f"{away_team} @ {home_team}",
+                    'home_team': home_team,
+                    'away_team': away_team,
+                    'type': bet_type,
+                    'team': pick_team,
+                    'side': pick_side,
+                    'price': pick_price,
+                    'd': american_to_decimal_safe(pick_price)
+                }
+                
+                if bet_type in ['Spread', 'Total']:
+                    leg['point'] = pick_point
+                
+                # Check if already at max legs
+                if len(st.session_state['custom_legs']) >= 4:
+                    st.warning("⚠️ Maximum 4 legs allowed. Remove a leg to add another.")
+                else:
+                    # Check for duplicates (same game + same bet type)
+                    duplicate = False
+                    for existing_leg in st.session_state['custom_legs']:
+                        if (existing_leg['event_id'] == leg['event_id'] and 
+                            existing_leg['type'] == leg['type'] and
+                            existing_leg['team'] == leg['team']):
+                            duplicate = True
+                            break
+                    
+                    if duplicate:
+                        st.warning("⚠️ This leg is already in your parlay")
+                    else:
+                        st.session_state['custom_legs'].append(leg)
+                        st.success(f"✅ Added to parlay!")
+                        st.rerun()
+    
+    # Step 3: Show Current Parlay
+    if st.session_state['custom_legs']:
+        st.markdown("---")
+        st.subheader("🎯 Your Custom Parlay")
+        
+        for i, leg in enumerate(st.session_state['custom_legs'], 1):
+            col_leg, col_remove = st.columns([5, 1])
+            with col_leg:
+                label = f"{leg['game']} — {leg['team']}"
+                if leg['type'] == 'Spread':
+                    label += f" {leg['point']:+.1f}"
+                elif leg['type'] == 'Total':
+                    label += f" {leg['side']} {leg['point']}"
+                label += f" @{leg['price']:+.0f}"
+                
+                st.write(f"**Leg {i}:** {label}")
+            
+            with col_remove:
+                if st.button("🗑️", key=f"remove_{i}"):
+                    st.session_state['custom_legs'].pop(i-1)
+                    st.rerun()
+        
+        # Step 4: Analyze Parlay
+        if len(st.session_state['custom_legs']) >= 2:
+            st.markdown("---")
+            st.subheader("🤖 AI Analysis")
+            
+            if st.button("🔍 Analyze My Parlay", type="primary"):
+                with st.spinner("🧠 Running AI/ML analysis..."):
+                    try:
+                        sentiment_analyzer = st.session_state.get('sentiment_analyzer')
+                        ml_predictor = st.session_state.get('ml_predictor')
+                        ai_optimizer = st.session_state.get('ai_optimizer')
+                        
+                        # Enhance legs with AI analysis
+                        analyzed_legs = []
+                        for leg in st.session_state['custom_legs']:
+                            # Get sentiment for teams
+                            try:
+                                home_sentiment = sentiment_analyzer.get_team_sentiment(
+                                    leg['home_team'], custom_sport
+                                ) if sentiment_analyzer else {'score': 0, 'trend': 'neutral'}
+                                away_sentiment = sentiment_analyzer.get_team_sentiment(
+                                    leg['away_team'], custom_sport
+                                ) if sentiment_analyzer else {'score': 0, 'trend': 'neutral'}
+                            except Exception:
+                                home_sentiment = {'score': 0, 'trend': 'neutral'}
+                                away_sentiment = {'score': 0, 'trend': 'neutral'}
+                            
+                            # Calculate probabilities
+                            base_prob = implied_p_from_american(leg['price'])
+                            
+                            # Get AI probability
+                            if leg['type'] == 'Moneyline' and ml_predictor:
+                                # Get opponent price for ML prediction
+                                opp_price = None
+                                for g in st.session_state['available_games']:
+                                    if g['id'] == leg['event_id']:
+                                        h2h = g.get('markets', {}).get('h2h', {})
+                                        if leg['side'] == 'home':
+                                            opp_price = _dig(h2h, 'away.price')
+                                        else:
+                                            opp_price = _dig(h2h, 'home.price')
+                                        break
+                                
+                                if opp_price:
+                                    ml_prediction = ml_predictor.predict_game_outcome(
+                                        leg['home_team'], leg['away_team'],
+                                        _dig(h2h, 'home.price'), _dig(h2h, 'away.price'),
+                                        home_sentiment['score'], away_sentiment['score']
+                                    )
+                                    ai_prob = ml_prediction[f"{leg['side']}_prob"]
+                                    ai_confidence = ml_prediction['confidence']
+                                    ai_edge = ml_prediction['edge']
+                                else:
+                                    ai_prob = base_prob
+                                    ai_confidence = 0.5
+                                    ai_edge = 0
+                            else:
+                                # For spreads/totals, use sentiment adjustment
+                                sentiment = home_sentiment if leg['team'] == leg['home_team'] else away_sentiment
+                                if leg['type'] == 'Total':
+                                    sentiment = {'score': (home_sentiment['score'] + away_sentiment['score']) / 2}
+                                
+                                ai_prob = base_prob * (1 + sentiment['score'] * 0.40)
+                                ai_prob = max(0.1, min(0.9, ai_prob))
+                                ai_confidence = 0.65 if leg['type'] == 'Spread' else 0.60
+                                ai_edge = abs(ai_prob - base_prob)
+                            
+                            # Add analysis to leg
+                            analyzed_leg = leg.copy()
+                            analyzed_leg.update({
+                                'p': base_prob,
+                                'ai_prob': ai_prob,
+                                'ai_confidence': ai_confidence,
+                                'ai_edge': ai_edge,
+                                'sentiment_trend': home_sentiment['trend'] if leg['side'] == 'home' else away_sentiment['trend'],
+                                'home_sentiment': home_sentiment,
+                                'away_sentiment': away_sentiment
+                            })
+                            analyzed_legs.append(analyzed_leg)
+                        
+                        # Calculate parlay metrics
+                        combined_odds = 1.0
+                        market_prob = 1.0
+                        ai_prob = 1.0
+                        
+                        for leg in analyzed_legs:
+                            combined_odds *= leg['d']
+                            market_prob *= leg['p']
+                            ai_prob *= leg['ai_prob']
+                        
+                        # Get AI optimizer score
+                        if ai_optimizer:
+                            ai_metrics = ai_optimizer.score_parlay(analyzed_legs)
+                        else:
+                            ai_metrics = {
+                                'score': 50,
+                                'ai_ev': (ai_prob * combined_odds) - 1.0,
+                                'confidence': sum(l['ai_confidence'] for l in analyzed_legs) / len(analyzed_legs),
+                                'edge': sum(l['ai_edge'] for l in analyzed_legs)
+                            }
+                        
+                        # Calculate payouts
+                        stake = 100
+                        potential_payout = stake * combined_odds
+                        potential_profit = potential_payout - stake
+                        
+                        # Market EV
+                        market_ev = (market_prob * combined_odds) - 1.0
+                        market_expected_return = stake * market_ev
+                        
+                        # AI EV
+                        ai_expected_return = stake * ai_metrics['ai_ev']
+                        
+                        # Display Results
+                        st.markdown("### 📊 Analysis Results")
+                        
+                        # Main metrics
+                        col1, col2, col3, col4 = st.columns(4)
+                        with col1:
+                            st.metric("Combined Odds", f"{combined_odds:.2f}x")
+                        with col2:
+                            st.metric("Market Probability", f"{market_prob*100:.1f}%")
+                        with col3:
+                            st.metric("AI Probability", f"{ai_prob*100:.1f}%")
+                        with col4:
+                            confidence_color = "🟢" if ai_metrics['confidence'] > 0.7 else ("🟡" if ai_metrics['confidence'] > 0.5 else "🟠")
+                            st.metric("AI Confidence", f"{confidence_color} {ai_metrics['confidence']*100:.0f}%")
+                        
+                        # EV metrics
+                        col5, col6, col7 = st.columns(3)
+                        with col5:
+                            st.metric(
+                                "Market EV",
+                                f"${market_expected_return:+.2f}",
+                                help="Expected value based on market (no-vig) probabilities"
+                            )
+                        with col6:
+                            ev_delta = ai_expected_return - market_expected_return
+                            st.metric(
+                                "AI EV",
+                                f"${ai_expected_return:+.2f}",
+                                delta=f"${ev_delta:+.2f} vs market",
+                                help="Expected value based on AI-adjusted probabilities"
+                            )
+                        with col7:
+                            st.metric("AI Score", f"{ai_metrics['score']:.1f}")
+                        
+                        # Sentiment Analysis
+                        st.markdown("### 🎭 Sentiment Analysis")
+                        for i, leg in enumerate(analyzed_legs, 1):
+                            with st.expander(f"Leg {i}: {leg['game']}"):
+                                col_sent1, col_sent2 = st.columns(2)
+                                with col_sent1:
+                                    st.write(f"**{leg['home_team']}**")
+                                    st.write(f"Sentiment: {leg['home_sentiment']['trend'].upper()}")
+                                    st.write(f"Score: {leg['home_sentiment']['score']:+.2f}")
+                                with col_sent2:
+                                    st.write(f"**{leg['away_team']}**")
+                                    st.write(f"Sentiment: {leg['away_sentiment']['trend'].upper()}")
+                                    st.write(f"Score: {leg['away_sentiment']['score']:+.2f}")
+                        
+                        # Detailed Leg Analysis
+                        st.markdown("### 📋 Leg-by-Leg Breakdown")
+                        leg_data = []
+                        for i, leg in enumerate(analyzed_legs, 1):
+                            leg_data.append({
+                                "Leg": i,
+                                "Game": leg['game'],
+                                "Pick": f"{leg['team']} {leg['type']}",
+                                "Odds": f"{leg['price']:+.0f}",
+                                "Market %": f"{leg['p']*100:.1f}%",
+                                "AI %": f"{leg['ai_prob']*100:.1f}%",
+                                "AI Confidence": f"{leg['ai_confidence']*100:.0f}%",
+                                "Edge": f"{leg['ai_edge']*100:+.1f}%",
+                                "Sentiment": leg['sentiment_trend']
+                            })
+                        
+                        st.dataframe(pd.DataFrame(leg_data), use_container_width=True, hide_index=True)
+                        
+                        # Payout Scenarios
+                        st.markdown("### 💰 Payout Scenarios")
+                        st.write(f"**On a $100 bet:**")
+                        st.write(f"- Total Payout: **${potential_payout:.2f}**")
+                        st.write(f"- Profit: **${potential_profit:.2f}**")
+                        st.write(f"- ROI: **{(potential_profit/stake)*100:.1f}%**")
+                        
+                        st.markdown("**Other Stakes:**")
+                        for bet_amount in [25, 50, 100, 250, 500]:
+                            payout = bet_amount * combined_odds
+                            profit = payout - bet_amount
+                            st.write(f"${bet_amount} → ${payout:.2f} (${profit:+.2f} profit)")
+                        
+                        # Recommendation
+                        st.markdown("### 💡 AI Recommendation")
+                        
+                        # Decision logic
+                        if ai_expected_return > 5 and ai_metrics['confidence'] > 0.65:
+                            st.success("🟢 **STRONG PLAY** - Positive AI EV with high confidence")
+                        elif ai_expected_return > 0 and ai_metrics['confidence'] > 0.55:
+                            st.info("🟡 **CONSIDER** - Slight positive AI EV with moderate confidence")
+                        elif market_expected_return > 0:
+                            st.warning("🟠 **CAUTION** - Market EV positive but AI less confident")
+                        else:
+                            st.error("🔴 **AVOID** - Negative expected value")
+                        
+                        # Key insights
+                        st.markdown("**Key Insights:**")
+                        insights = []
+                        
+                        if ai_prob > market_prob * 1.1:
+                            insights.append(f"✅ AI sees {((ai_prob/market_prob-1)*100):.0f}% better chance than market")
+                        elif ai_prob < market_prob * 0.9:
+                            insights.append(f"⚠️ AI sees {((1-ai_prob/market_prob)*100):.0f}% worse chance than market")
+                        
+                        if ai_metrics['confidence'] > 0.7:
+                            insights.append("✅ High AI confidence across all legs")
+                        elif ai_metrics['confidence'] < 0.5:
+                            insights.append("⚠️ Low AI confidence - consider alternative picks")
+                        
+                        positive_sentiment = sum(1 for leg in analyzed_legs if leg['sentiment_trend'] == 'positive')
+                        if positive_sentiment == len(analyzed_legs):
+                            insights.append("✅ All picks have positive sentiment")
+                        elif positive_sentiment == 0:
+                            insights.append("⚠️ No picks have positive sentiment")
+                        
+                        for insight in insights:
+                            st.write(insight)
+                        
+                        # Download option
+                        st.markdown("---")
+                        analysis_data = {
+                            "Parlay": [f"Custom {len(analyzed_legs)}-Leg"],
+                            "Combined Odds": [f"{combined_odds:.2f}"],
+                            "Market Probability": [f"{market_prob*100:.1f}%"],
+                            "AI Probability": [f"{ai_prob*100:.1f}%"],
+                            "AI Confidence": [f"{ai_metrics['confidence']*100:.0f}%"],
+                            "Market EV": [f"${market_expected_return:+.2f}"],
+                            "AI EV": [f"${ai_expected_return:+.2f}"],
+                            "AI Score": [f"{ai_metrics['score']:.1f}"]
+                        }
+                        
+                        csv_buf = io.StringIO()
+                        pd.DataFrame(analysis_data).to_csv(csv_buf, index=False)
+                        st.download_button(
+                            "💾 Download Analysis",
+                            data=csv_buf.getvalue(),
+                            file_name="custom_parlay_analysis.csv",
+                            mime="text/csv"
+                        )
+                        
+                    except Exception as e:
+                        st.error(f"Error analyzing parlay: {str(e)}")
+                        with st.expander("Error Details"):
+                            import traceback
+                            st.code(traceback.format_exc())
+        else:
+            st.info("ℹ️ Add at least 2 legs to analyze your parlay")
+        
+        # Clear parlay button
+        if st.button("🗑️ Clear All Legs", type="secondary"):
+            st.session_state['custom_legs'] = []
+            st.rerun()
+    else:
+        st.info("👆 Load games and start building your parlay above")
+    
+    # Tips section
+    st.markdown("---")
+    st.markdown("""
+    ### 💡 Custom Parlay Tips:
+    
+    **Building Your Parlay:**
+    - Start with 2-3 legs for better win probability
+    - Mix different bet types (ML, Spread, Total) for variety
+    - Avoid same-game parlays unless you have strong correlation thesis
+    
+    **Using AI Analysis:**
+    - **Positive AI EV** = AI thinks you have an edge
+    - **High Confidence (70%+)** = AI very sure about probabilities
+    - **Positive Sentiment** = Recent news favors this pick
+    - **Green AI Score** = Strong overall recommendation
+    
+    **Making Decisions:**
+    - ✅ Target: Positive AI EV + High Confidence + Good Sentiment
+    - ⚠️ Caution: Negative AI EV or Low Confidence
+    - 🔴 Avoid: Multiple red flags (negative EV, low confidence, bad sentiment)
     """)
