@@ -1368,6 +1368,105 @@ class SocialMediaAnalyzer:
             'urgency': 'low'
         }
 
+# ============ KALSHI VALIDATION HELPER ============
+def validate_with_kalshi(kalshi_integrator, home_team: str, away_team: str, 
+                        side: str, sportsbook_prob: float, sport: str) -> Dict:
+    """
+    Validate sportsbook odds with Kalshi prediction market
+    
+    Returns:
+        'kalshi_prob': Kalshi market probability
+        'discrepancy': Difference between markets
+        'validation': 'confirms', 'contradicts', or 'unavailable'
+        'edge': Additional edge from Kalshi vs sportsbook
+        'confidence_boost': How much to boost confidence (0-0.20)
+    """
+    try:
+        # Try to find matching Kalshi market
+        markets = kalshi_integrator.get_sports_markets()
+        
+        # Search for matching market
+        team_to_check = home_team if side == 'home' else away_team
+        
+        for market in markets:
+            title = market.get('title', '').upper()
+            ticker = market.get('ticker', '').upper()
+            
+            # Check if this market matches our game
+            if (home_team.upper() in title or away_team.upper() in title or
+                home_team.upper() in ticker or away_team.upper() in ticker):
+                
+                # Get orderbook
+                orderbook = kalshi_integrator.get_orderbook(market.get('ticker', ''))
+                
+                if orderbook:
+                    yes_bids = orderbook.get('yes', [])
+                    if yes_bids:
+                        kalshi_prob = yes_bids[0].get('price', 0) / 100
+                        
+                        # Calculate discrepancy
+                        discrepancy = abs(kalshi_prob - sportsbook_prob)
+                        
+                        # Determine validation
+                        if discrepancy < 0.05:  # Within 5%
+                            validation = 'confirms'
+                            confidence_boost = 0.10  # Boost 10% confidence
+                            edge = 0
+                        elif discrepancy < 0.10:  # 5-10% difference
+                            if kalshi_prob > sportsbook_prob:
+                                validation = 'kalshi_higher'
+                                confidence_boost = 0.05
+                                edge = kalshi_prob - sportsbook_prob
+                            else:
+                                validation = 'kalshi_lower'
+                                confidence_boost = -0.05  # Reduce confidence
+                                edge = sportsbook_prob - kalshi_prob
+                        else:  # >10% difference
+                            if kalshi_prob > sportsbook_prob:
+                                validation = 'strong_kalshi_higher'
+                                confidence_boost = 0.15
+                                edge = kalshi_prob - sportsbook_prob
+                            else:
+                                validation = 'strong_contradiction'
+                                confidence_boost = -0.10
+                                edge = 0
+                        
+                        return {
+                            'kalshi_prob': kalshi_prob,
+                            'kalshi_available': True,
+                            'discrepancy': discrepancy,
+                            'validation': validation,
+                            'edge': edge,
+                            'confidence_boost': confidence_boost,
+                            'market_ticker': market.get('ticker', ''),
+                            'market_title': market.get('title', '')
+                        }
+        
+        # No matching market found
+        return {
+            'kalshi_prob': None,
+            'kalshi_available': False,
+            'discrepancy': 0,
+            'validation': 'unavailable',
+            'edge': 0,
+            'confidence_boost': 0,
+            'market_ticker': None,
+            'market_title': None
+        }
+    
+    except Exception as e:
+        # Error fetching Kalshi data
+        return {
+            'kalshi_prob': None,
+            'kalshi_available': False,
+            'discrepancy': 0,
+            'validation': 'error',
+            'edge': 0,
+            'confidence_boost': 0,
+            'market_ticker': None,
+            'market_title': None
+        }
+
 # ============ UTILITY FUNCTIONS ============
 def american_to_decimal(odds) -> float:
     odds = float(odds)
@@ -1737,9 +1836,15 @@ def render_parlay_section_ai(title, rows, theover_data=None):
             if row['theover_conflicts'] > 1:
                 theover_boost += "s"
         
+        # Kalshi validation indicator
+        kalshi_boost = ""
+        kalshi_legs = sum(1 for leg in row.get('legs', []) if leg.get('kalshi_validation', {}).get('kalshi_available', False))
+        if kalshi_legs > 0:
+            kalshi_boost = f" | 📊 {kalshi_legs} Kalshi✓"
+        
         prob_pct = row['p_ai'] * 100
         with st.expander(
-            f"{conf_icon}{ev_icon}{prob_warning} #{i} - AI Score: {row['ai_score']:.1f}{theover_boost} | Odds: {row['d']:.2f} | AI Prob: {prob_pct:.1f}% | Profit: ${row['profit']:.2f}"
+            f"{conf_icon}{ev_icon}{prob_warning} #{i} - AI Score: {row['ai_score']:.1f}{theover_boost}{kalshi_boost} | Odds: {row['d']:.2f} | AI Prob: {prob_pct:.1f}% | Profit: ${row['profit']:.2f}"
         ):
             # Metrics
             col_a, col_b, col_c, col_d, col_e = st.columns(5)
@@ -1819,6 +1924,25 @@ def render_parlay_section_ai(title, rows, theover_data=None):
                 else:
                     theover_display = "—"
                 
+                # Kalshi validation display
+                kalshi_display = "—"
+                if 'kalshi_validation' in leg:
+                    kv = leg['kalshi_validation']
+                    if kv.get('kalshi_available'):
+                        kalshi_prob = kv.get('kalshi_prob', 0) * 100
+                        validation = kv.get('validation', 'unavailable')
+                        
+                        if validation == 'confirms':
+                            kalshi_display = f"✅ {kalshi_prob:.1f}%"
+                        elif validation == 'kalshi_higher':
+                            kalshi_display = f"📈 {kalshi_prob:.1f}%"
+                        elif validation == 'strong_kalshi_higher':
+                            kalshi_display = f"🟢 {kalshi_prob:.1f}%"
+                        elif validation == 'kalshi_lower':
+                            kalshi_display = f"📉 {kalshi_prob:.1f}%"
+                        elif validation == 'strong_contradiction':
+                            kalshi_display = f"⚠️ {kalshi_prob:.1f}%"
+                
                 leg_entry = {
                     "Leg": j,
                     "Type": leg["market"],
@@ -1826,6 +1950,7 @@ def render_parlay_section_ai(title, rows, theover_data=None):
                     "Odds": f"{leg['d']:.3f}",
                     "Market %": f"{leg['p']*100:.1f}%",
                     "AI %": f"{leg.get('ai_prob', leg['p'])*100:.1f}%",
+                    "Kalshi": kalshi_display,
                     "Sentiment": leg.get('sentiment_trend', 'N/A'),
                     "theover.ai": theover_display
                 }
@@ -1843,6 +1968,21 @@ def render_parlay_section_ai(title, rows, theover_data=None):
                         st.success(f"✅ {theover_matches} leg(s) match theover.ai recommendations")
                     if theover_conflicts > 0:
                         st.warning(f"⚠️ {theover_conflicts} leg(s) conflict with theover.ai recommendations")
+            
+            # Kalshi validation legend
+            kalshi_confirmed = sum(1 for leg in row["legs"] if leg.get('kalshi_validation', {}).get('validation') == 'confirms')
+            kalshi_contradicts = sum(1 for leg in row["legs"] if 'contradiction' in leg.get('kalshi_validation', {}).get('validation', ''))
+            
+            if kalshi_confirmed > 0 or kalshi_contradicts > 0:
+                st.markdown("**📊 Kalshi Prediction Market Validation:**")
+                col_k1, col_k2 = st.columns(2)
+                with col_k1:
+                    st.caption("✅ = Kalshi confirms | 📈 = Kalshi higher | 📉 = Kalshi lower | 🟢 = Strong Kalshi value | ⚠️ = Contradiction")
+                with col_k2:
+                    if kalshi_confirmed > 0:
+                        st.success(f"✅ {kalshi_confirmed} leg(s) confirmed by Kalshi prediction market")
+                    if kalshi_contradicts > 0:
+                        st.warning(f"⚠️ {kalshi_contradicts} leg(s) contradicted by Kalshi market")
             
             # Betting scenarios
             st.markdown("**💵 Betting Scenarios:**")
@@ -2175,6 +2315,27 @@ with main_tab1:
     with col_bet3:
         inc_total = st.checkbox("Totals (O/U)", value=True)
 
+    # Kalshi Validation Option
+    st.markdown("---")
+    st.subheader("📊 Kalshi Prediction Market Validation")
+    use_kalshi = st.checkbox(
+        "✅ Validate with Kalshi (Prediction Market Cross-Check)",
+        value=False,
+        help="Compare sportsbook odds with Kalshi prediction markets to find discrepancies and boost confidence"
+    )
+    
+    if use_kalshi:
+        st.info("""
+        **Kalshi Validation Benefits:**
+        - 🎯 Cross-validates odds with prediction markets
+        - 📈 Boosts confidence when markets agree (up to +15%)
+        - ⚠️ Flags contradictions when markets disagree
+        - 💎 Identifies arbitrage opportunities
+        - 🔍 Shows additional edge from market discrepancies
+        
+        **How it works:** For each parlay leg, we check if a matching Kalshi market exists and compare probabilities.
+        """)
+
     def is_same_day(iso_str) -> bool:
         try:
             ts_local = pd.to_datetime(iso_str, utc=True).tz_convert(tz)
@@ -2266,7 +2427,7 @@ with main_tab1:
                                         if ai_confidence >= min_ai_confidence:
                                             decimal_odds = american_to_decimal_safe(hp)
                                             if decimal_odds is not None:  # Safety check
-                                                all_legs.append({
+                                                leg_data = {
                                                     "event_id": eid,
                                                     "type": "Moneyline",
                                                     "team": home,
@@ -2279,7 +2440,29 @@ with main_tab1:
                                                     "ai_edge": ai_edge,
                                                     "d": decimal_odds,
                                                     "sentiment_trend": home_sentiment['trend']
-                                                })
+                                                }
+                                                
+                                                # Kalshi Validation
+                                                if use_kalshi:
+                                                    try:
+                                                        kalshi = st.session_state.get('kalshi_integrator')
+                                                        if kalshi:
+                                                            kalshi_data = validate_with_kalshi(
+                                                                kalshi, home, away, 'home', base_prob, skey
+                                                            )
+                                                            leg_data['kalshi_validation'] = kalshi_data
+                                                            
+                                                            # Boost confidence if Kalshi confirms
+                                                            if kalshi_data['kalshi_available']:
+                                                                leg_data['ai_confidence'] = min(
+                                                                    ai_confidence + kalshi_data['confidence_boost'],
+                                                                    0.95
+                                                                )
+                                                                leg_data['kalshi_edge'] = kalshi_data['edge']
+                                                    except Exception:
+                                                        leg_data['kalshi_validation'] = {'kalshi_available': False}
+                                                
+                                                all_legs.append(leg_data)
                             
                                     if ap is not None and -750 <= ap <= 750:
                                         base_prob = implied_p_from_american(ap)
@@ -2300,7 +2483,7 @@ with main_tab1:
                                         if ai_confidence >= min_ai_confidence:
                                             decimal_odds = american_to_decimal_safe(ap)
                                             if decimal_odds is not None:  # Safety check
-                                                all_legs.append({
+                                                leg_data = {
                                                     "event_id": eid,
                                                     "type": "Moneyline",
                                                     "team": away,
@@ -2313,7 +2496,29 @@ with main_tab1:
                                                     "ai_edge": ai_edge,
                                                     "d": decimal_odds,
                                                     "sentiment_trend": away_sentiment['trend']
-                                                })
+                                                }
+                                                
+                                                # Kalshi Validation
+                                                if use_kalshi:
+                                                    try:
+                                                        kalshi = st.session_state.get('kalshi_integrator')
+                                                        if kalshi:
+                                                            kalshi_data = validate_with_kalshi(
+                                                                kalshi, home, away, 'away', base_prob, skey
+                                                            )
+                                                            leg_data['kalshi_validation'] = kalshi_data
+                                                            
+                                                            # Boost confidence if Kalshi confirms
+                                                            if kalshi_data['kalshi_available']:
+                                                                leg_data['ai_confidence'] = min(
+                                                                    ai_confidence + kalshi_data['confidence_boost'],
+                                                                    0.95
+                                                                )
+                                                                leg_data['kalshi_edge'] = kalshi_data['edge']
+                                                    except Exception:
+                                                        leg_data['kalshi_validation'] = {'kalshi_available': False}
+                                                
+                                                all_legs.append(leg_data)
                                 
                                 # Spreads
                                 if inc_spread and "spreads" in mkts:
