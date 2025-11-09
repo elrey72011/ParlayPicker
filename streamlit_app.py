@@ -285,6 +285,7 @@ class AIOptimizer:
         """
         Score a parlay combination using AI
         Higher scores = better opportunity
+        NOW INCLUDES KALSHI VALIDATION
         """
         if not legs:
             return {'score': 0, 'confidence': 0}
@@ -293,11 +294,42 @@ class AIOptimizer:
         combined_prob = 1.0
         combined_confidence = 1.0
         total_edge = 0
+        kalshi_boost = 0
+        kalshi_legs = 0
         
         for leg in legs:
             combined_prob *= leg.get('ai_prob', leg['p'])
             combined_confidence *= leg.get('ai_confidence', 0.5)
             total_edge += leg.get('ai_edge', 0)
+            
+            # KALSHI INTEGRATION: Add Kalshi influence
+            if 'kalshi_validation' in leg:
+                kv = leg['kalshi_validation']
+                if kv.get('kalshi_available'):
+                    kalshi_legs += 1
+                    # Kalshi provides additional probability estimate
+                    kalshi_prob = kv.get('kalshi_prob', 0)
+                    sportsbook_prob = leg.get('p', 0)
+                    
+                    # If Kalshi and AI both disagree with sportsbook in same direction
+                    # that's a strong signal
+                    ai_prob = leg.get('ai_prob', sportsbook_prob)
+                    
+                    if kalshi_prob > sportsbook_prob and ai_prob > sportsbook_prob:
+                        # Both Kalshi and AI see value
+                        kalshi_boost += 15  # Strong boost
+                    elif kalshi_prob < sportsbook_prob and ai_prob < sportsbook_prob:
+                        # Both Kalshi and AI skeptical
+                        kalshi_boost -= 10  # Penalty
+                    elif abs(kalshi_prob - ai_prob) < 0.05:
+                        # Kalshi and AI agree (regardless of sportsbook)
+                        kalshi_boost += 10  # Agreement boost
+                    elif abs(kalshi_prob - sportsbook_prob) < 0.03:
+                        # Kalshi confirms market
+                        kalshi_boost += 5  # Small boost for confirmation
+                    else:
+                        # Kalshi contradicts both AI and market
+                        kalshi_boost -= 5  # Small penalty for confusion
         
         # Calculate combined decimal odds
         combined_odds = legs[0]['d']
@@ -311,23 +343,35 @@ class AIOptimizer:
         unique_games = len(set(leg['event_id'] for leg in legs))
         correlation_factor = unique_games / len(legs)
         
-        # Final score components - UPDATED for better balance
-        # Prioritize edge (where AI sees value) over raw EV
+        # Kalshi validation factor (0.8 to 1.2 multiplier)
+        if kalshi_legs > 0:
+            kalshi_factor = 1.0 + (kalshi_boost / 100)
+            kalshi_factor = max(0.8, min(1.2, kalshi_factor))  # Clamp between 0.8 and 1.2
+        else:
+            kalshi_factor = 1.0  # No Kalshi data = neutral
+        
+        # Final score components with KALSHI integration
         ev_score = ai_ev * 100  # EV contribution
         confidence_score = combined_confidence * 50  # Confidence contribution
-        edge_score = total_edge * 150  # INCREASED: Edge is now most important
+        edge_score = total_edge * 150  # Edge is most important
         
-        # UPDATED: Edge gets highest weight (shows where AI disagrees with market)
-        final_score = (edge_score * 0.45 +      # 45% edge (was 30%)
-                      ev_score * 0.30 +          # 30% EV (was 40%)
-                      confidence_score * 0.25) * correlation_factor  # 25% confidence (was 30%)
+        # Calculate base score
+        base_score = (edge_score * 0.45 +      # 45% edge
+                     ev_score * 0.30 +          # 30% EV
+                     confidence_score * 0.25)    # 25% confidence
+        
+        # Apply Kalshi factor and correlation factor
+        final_score = base_score * correlation_factor * kalshi_factor
         
         return {
             'score': final_score,
             'ai_ev': ai_ev,
             'confidence': combined_confidence,
             'edge': total_edge,
-            'correlation_factor': correlation_factor
+            'correlation_factor': correlation_factor,
+            'kalshi_factor': kalshi_factor,
+            'kalshi_legs': kalshi_legs,
+            'kalshi_boost': kalshi_boost
         }
 
 # ============ PRIZEPICKS INTEGRATION ============
@@ -1836,11 +1880,19 @@ def render_parlay_section_ai(title, rows, theover_data=None):
             if row['theover_conflicts'] > 1:
                 theover_boost += "s"
         
-        # Kalshi validation indicator
+        # Kalshi validation indicator with INFLUENCE
         kalshi_boost = ""
         kalshi_legs = sum(1 for leg in row.get('legs', []) if leg.get('kalshi_validation', {}).get('kalshi_available', False))
+        kalshi_factor = row.get('kalshi_factor', 1.0)
+        
         if kalshi_legs > 0:
-            kalshi_boost = f" | 📊 {kalshi_legs} Kalshi✓"
+            # Show if Kalshi boosted or reduced score
+            if kalshi_factor > 1.05:
+                kalshi_boost = f" | 📊 {kalshi_legs} Kalshi✓ ↗️+{(kalshi_factor-1)*100:.0f}%"
+            elif kalshi_factor < 0.95:
+                kalshi_boost = f" | 📊 {kalshi_legs} Kalshi✓ ↘️{(kalshi_factor-1)*100:.0f}%"
+            else:
+                kalshi_boost = f" | 📊 {kalshi_legs} Kalshi✓"
         
         prob_pct = row['p_ai'] * 100
         with st.expander(
@@ -1859,6 +1911,56 @@ def render_parlay_section_ai(title, rows, theover_data=None):
             with col_e:
                 delta_color = "normal" if row['ev_ai'] > 0 else "inverse"
                 st.metric("AI Expected Value", f"{ai_ev_pct:.2f}%")
+            
+            # Kalshi Influence Display (if Kalshi data present)
+            if row.get('kalshi_legs', 0) > 0:
+                st.markdown("---")
+                st.markdown("**📊 Kalshi Prediction Market Influence:**")
+                
+                col_k1, col_k2, col_k3, col_k4 = st.columns(4)
+                
+                with col_k1:
+                    st.metric(
+                        "Kalshi Legs",
+                        f"{row.get('kalshi_legs', 0)}/{len(row.get('legs', []))}",
+                        help="How many legs have Kalshi market data"
+                    )
+                
+                with col_k2:
+                    kalshi_boost_val = row.get('kalshi_boost', 0)
+                    st.metric(
+                        "Kalshi Boost Points",
+                        f"{kalshi_boost_val:+.0f}",
+                        delta=f"{'Positive' if kalshi_boost_val > 0 else 'Negative'}" if kalshi_boost_val != 0 else None,
+                        help="Raw boost points from Kalshi validation (+15 = strong confirmation, -10 = contradiction)"
+                    )
+                
+                with col_k3:
+                    kalshi_factor_val = row.get('kalshi_factor', 1.0)
+                    st.metric(
+                        "Score Multiplier",
+                        f"{kalshi_factor_val:.2f}x",
+                        delta=f"{(kalshi_factor_val-1)*100:+.0f}%" if kalshi_factor_val != 1.0 else None,
+                        help="How much Kalshi adjusted the AI score (1.0 = no change, >1.0 = boosted, <1.0 = reduced)"
+                    )
+                
+                with col_k4:
+                    # Calculate score change from Kalshi
+                    base_score = row['ai_score'] / kalshi_factor_val if kalshi_factor_val != 0 else row['ai_score']
+                    score_change = row['ai_score'] - base_score
+                    st.metric(
+                        "Score Impact",
+                        f"{score_change:+.1f} pts",
+                        help="How many points Kalshi added/subtracted from AI score"
+                    )
+                
+                # Explanation of Kalshi influence
+                if kalshi_factor_val > 1.05:
+                    st.success(f"🟢 **Kalshi BOOSTED this parlay by {(kalshi_factor_val-1)*100:.0f}%** - Prediction markets confirm AI analysis!")
+                elif kalshi_factor_val < 0.95:
+                    st.warning(f"🟠 **Kalshi REDUCED this parlay by {(1-kalshi_factor_val)*100:.0f}%** - Prediction markets skeptical of AI picks.")
+                else:
+                    st.info("🟡 **Kalshi NEUTRAL** - Prediction markets neither strongly confirm nor contradict AI.")
             
             # theover.ai boost info if available
             if row.get('theover_bonus', 0) != 0:
@@ -1926,12 +2028,15 @@ def render_parlay_section_ai(title, rows, theover_data=None):
                 
                 # Kalshi validation display
                 kalshi_display = "—"
+                kalshi_influence_display = ""
+                
                 if 'kalshi_validation' in leg:
                     kv = leg['kalshi_validation']
                     if kv.get('kalshi_available'):
                         kalshi_prob = kv.get('kalshi_prob', 0) * 100
                         validation = kv.get('validation', 'unavailable')
                         
+                        # Show Kalshi probability
                         if validation == 'confirms':
                             kalshi_display = f"✅ {kalshi_prob:.1f}%"
                         elif validation == 'kalshi_higher':
@@ -1942,6 +2047,18 @@ def render_parlay_section_ai(title, rows, theover_data=None):
                             kalshi_display = f"📉 {kalshi_prob:.1f}%"
                         elif validation == 'strong_contradiction':
                             kalshi_display = f"⚠️ {kalshi_prob:.1f}%"
+                        
+                        # Show how Kalshi influenced AI probability
+                        if 'kalshi_influence' in leg:
+                            influence = leg['kalshi_influence'] * 100
+                            if abs(influence) > 0.1:
+                                kalshi_influence_display = f"{influence:+.1f}%"
+                            else:
+                                kalshi_influence_display = "—"
+                        else:
+                            kalshi_influence_display = "—"
+                    else:
+                        kalshi_influence_display = "—"
                 
                 leg_entry = {
                     "Leg": j,
@@ -1949,14 +2066,19 @@ def render_parlay_section_ai(title, rows, theover_data=None):
                     "Selection": leg["label"],
                     "Odds": f"{leg['d']:.3f}",
                     "Market %": f"{leg['p']*100:.1f}%",
-                    "AI %": f"{leg.get('ai_prob', leg['p'])*100:.1f}%",
+                    "AI % (final)": f"{leg.get('ai_prob', leg['p'])*100:.1f}%",
                     "Kalshi": kalshi_display,
+                    "K Impact": kalshi_influence_display,
                     "Sentiment": leg.get('sentiment_trend', 'N/A'),
                     "theover.ai": theover_display
                 }
                 legs_data.append(leg_entry)
             
             st.dataframe(pd.DataFrame(legs_data), use_container_width=True, hide_index=True)
+            
+            # Kalshi impact legend
+            if any(leg.get('kalshi_validation', {}).get('kalshi_available') for leg in row.get("legs", [])):
+                st.caption("**K Impact** = How much Kalshi adjusted AI probability (blended 50% AI + 30% Kalshi + 20% Market)")
             
             # Show legend and summary
             if has_theover:
@@ -2637,8 +2759,25 @@ with main_tab1:
                                                             )
                                                             leg_data['kalshi_validation'] = kalshi_data
                                                             
-                                                            # Boost confidence if Kalshi confirms
+                                                            # INTEGRATE KALSHI INTO AI PROBABILITY
                                                             if kalshi_data['kalshi_available']:
+                                                                kalshi_prob = kalshi_data['kalshi_prob']
+                                                                
+                                                                # Weighted average: 50% AI, 30% Kalshi, 20% Market
+                                                                # When Kalshi exists, blend all three sources
+                                                                original_ai_prob = leg_data['ai_prob']
+                                                                blended_prob = (
+                                                                    original_ai_prob * 0.50 +  # AI model
+                                                                    kalshi_prob * 0.30 +        # Kalshi market
+                                                                    base_prob * 0.20            # Sportsbook
+                                                                )
+                                                                
+                                                                # Update the actual AI probability used in calculations
+                                                                leg_data['ai_prob'] = blended_prob
+                                                                leg_data['ai_prob_before_kalshi'] = original_ai_prob
+                                                                leg_data['kalshi_influence'] = blended_prob - original_ai_prob
+                                                                
+                                                                # Boost confidence if Kalshi confirms
                                                                 leg_data['ai_confidence'] = min(
                                                                     ai_confidence + kalshi_data['confidence_boost'],
                                                                     0.95
@@ -2693,8 +2832,24 @@ with main_tab1:
                                                             )
                                                             leg_data['kalshi_validation'] = kalshi_data
                                                             
-                                                            # Boost confidence if Kalshi confirms
+                                                            # INTEGRATE KALSHI INTO AI PROBABILITY
                                                             if kalshi_data['kalshi_available']:
+                                                                kalshi_prob = kalshi_data['kalshi_prob']
+                                                                
+                                                                # Weighted average: 50% AI, 30% Kalshi, 20% Market
+                                                                original_ai_prob = leg_data['ai_prob']
+                                                                blended_prob = (
+                                                                    original_ai_prob * 0.50 +  # AI model
+                                                                    kalshi_prob * 0.30 +        # Kalshi market
+                                                                    base_prob * 0.20            # Sportsbook
+                                                                )
+                                                                
+                                                                # Update the actual AI probability
+                                                                leg_data['ai_prob'] = blended_prob
+                                                                leg_data['ai_prob_before_kalshi'] = original_ai_prob
+                                                                leg_data['kalshi_influence'] = blended_prob - original_ai_prob
+                                                                
+                                                                # Boost confidence if Kalshi confirms
                                                                 leg_data['ai_confidence'] = min(
                                                                     ai_confidence + kalshi_data['confidence_boost'],
                                                                     0.95
