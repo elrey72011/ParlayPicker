@@ -979,7 +979,7 @@ if 'news_api_key' not in st.session_state:
 # Main navigation tabs
 main_tab1, main_tab2, main_tab3 = st.tabs([
     "🎯 Sports Betting Parlays", 
-    "🏆 PrizePicks Props",
+    "🔍 Sentiment & AI Analysis",
     "🎨 Custom Parlay Builder"
 ])
 
@@ -1609,248 +1609,409 @@ st.markdown("""
 st.caption("🟢 High Confidence | 💰 High +EV | 📈 Positive EV | 📉 Negative EV | Powered by AI & ML")
 
 # ===== TAB 2: PRIZEPICKS =====
+
+# ===== TAB 2: SENTIMENT & AI ANALYSIS =====
 with main_tab2:
-    st.subheader("🏆 PrizePicks Player Props Analyzer")
-    st.caption("AI-powered player prop analysis for NFL & NBA (2-4 pick entries)")
+    st.header("🔍 Sentiment & AI Analysis Dashboard")
+    st.markdown("**Advanced sentiment analysis using web scraping, news APIs, and AI-powered insights**")
+    st.caption("Get deep insights into team performance, news sentiment, betting trends, and AI predictions")
     
-    # theover.ai Integration Section
+    # API Configuration
     st.markdown("---")
-    st.markdown("### 📊 theover.ai Integration")
+    st.subheader("⚙️ Configuration")
     
-    theover_method = st.radio(
-        "How do you want to add theover.ai data?",
-        ["🚫 Skip (use sample data)", "📁 Upload CSV", "📋 Paste Data"],
-        horizontal=True
-    )
+    col_api1, col_api2 = st.columns(2)
+    with col_api1:
+        odds_key = st.session_state.get('api_key', "") or os.environ.get("ODDS_API_KEY", "")
+        if not odds_key:
+            st.warning("⚠️ Odds API key not configured. Please set it in the Sports Betting tab.")
     
-    theover_data = None
-    
-    if theover_method == "📁 Upload CSV":
-        st.info("""
-        **CSV Format Expected:**
-        - Columns: Player, Stat, Projection, Line (optional)
-        - Example: "LeBron James, Points, 31.2, 28.5"
-        """)
-        
-        uploaded_file = st.file_uploader(
-            "Upload theover.ai CSV export",
-            type=['csv'],
-            help="Export your theover.ai projections as CSV and upload here"
+    with col_api2:
+        news_key = st.session_state.get('news_api_key', "") or os.environ.get("NEWS_API_KEY", "")
+        news_key_input = st.text_input(
+            "NewsAPI Key (optional - enhances sentiment)",
+            value=news_key,
+            type="password",
+            help="Get free key at https://newsapi.org"
         )
-        
-        if uploaded_file:
-            try:
-                theover_data = pd.read_csv(uploaded_file)
-                st.success(f"✅ Loaded {len(theover_data)} projections from theover.ai")
-                
-                with st.expander("📋 Preview theover.ai Data"):
-                    st.dataframe(theover_data.head(10), use_container_width=True)
-                    
-            except Exception as e:
-                st.error(f"Error loading CSV: {e}")
-                
-    elif theover_method == "📋 Paste Data":
-        st.info("""
-        **Paste Format:**
-        ```
-        Player,Stat,Projection
-        LeBron James,Points,31.2
-        Steph Curry,3PT Made,4.8
-        ...
-        ```
-        Or tab-separated from Excel.
-        """)
-        
-        pasted_data = st.text_area(
-            "Paste theover.ai data here",
-            height=200,
-            placeholder="LeBron James,Points,31.2\nSteph Curry,3PT Made,4.8"
-        )
-        
-        if pasted_data.strip():
-            try:
-                # Try comma-separated first
-                if ',' in pasted_data:
-                    from io import StringIO
-                    theover_data = pd.read_csv(StringIO(pasted_data))
-                # Try tab-separated (from Excel)
-                elif '\t' in pasted_data:
-                    from io import StringIO
-                    theover_data = pd.read_csv(StringIO(pasted_data), sep='\t')
-                else:
-                    st.warning("Data format not recognized. Use comma or tab-separated values.")
-                
-                if theover_data is not None:
-                    st.success(f"✅ Loaded {len(theover_data)} projections from theover.ai")
-                    with st.expander("📋 Preview Pasted Data"):
-                        st.dataframe(theover_data.head(10), use_container_width=True)
-                        
-            except Exception as e:
-                st.error(f"Error parsing data: {e}")
+        if news_key_input != news_key:
+            st.session_state['news_api_key'] = news_key_input
+            st.session_state['sentiment_analyzer'] = RealSentimentAnalyzer(news_key_input)
     
     st.markdown("---")
     
-    pp_analyzer = st.session_state['prizepicks_analyzer']
+    # Team Selection
+    st.subheader("🎯 Select Teams to Analyze")
     
-    col_pp1, col_pp2 = st.columns(2)
-    with col_pp1:
-        pp_sport = st.selectbox("Select Sport", ["NFL", "NBA"])
-    with col_pp2:
-        pp_num_props = st.slider("Number of props to analyze", 10, 30, 20)
+    col_sport, col_num = st.columns(2)
+    with col_sport:
+        analysis_sport = st.selectbox(
+            "Sport",
+            options=APP_CFG["sports_common"],
+            key="analysis_sport"
+        )
     
-    col_pp3, col_pp4 = st.columns(2)
-    with col_pp3:
-        pp_min_picks = st.selectbox("Minimum picks per entry", [2, 3], index=0)
-    with col_pp4:
-        pp_max_picks = st.selectbox("Maximum picks per entry", [3, 4], index=1)
+    with col_num:
+        num_teams = st.slider("Number of teams to analyze", 2, 10, 5)
     
-    show_pp_entries = st.slider("Show top entries", 5, 20, 10)
-    
-    if st.button("🔍 Analyze PrizePicks Props", type="primary"):
-        with st.spinner(f"Analyzing {pp_sport} player props..."):
-            # Generate props (in production, fetch from PrizePicks)
-            props = pp_analyzer.generate_sample_props(pp_sport, pp_num_props)
-            
-            if not props:
-                st.warning("No props available for analysis")
-                st.stop()
-            
-            # Enhance props with theover.ai data if available
-            if theover_data is not None and not theover_data.empty:
-                st.info("🎯 Enhancing analysis with theover.ai projections...")
-                
-                # Normalize column names
-                theover_df = theover_data.copy()
-                theover_df.columns = [c.strip().lower() for c in theover_df.columns]
-                
-                # Try to match props with theover.ai data
-                for prop in props:
-                    player_name = prop['player'].lower()
-                    stat_type = prop['stat'].lower()
+    # Fetch games and extract teams
+    if st.button("🔍 Load Teams", type="primary"):
+        if not odds_key:
+            st.error("Please configure Odds API key first")
+        else:
+            with st.spinner(f"Loading {analysis_sport} teams..."):
+                try:
+                    snap = fetch_oddsapi_snapshot(odds_key, analysis_sport)
+                    events = snap.get("events", [])
                     
-                    # Find matching projection
-                    match = theover_df[
-                        (theover_df.get('player', '').str.lower().str.contains(player_name.split()[0], na=False)) &
-                        (theover_df.get('stat', '').str.lower().str.contains(stat_type.split()[0], na=False))
-                    ]
-                    
-                    if not match.empty:
-                        theover_proj = match.iloc[0].get('projection', prop['projection'])
-                        try:
-                            theover_proj = float(theover_proj)
-                            prop['theover_projection'] = theover_proj
-                            prop['projection'] = theover_proj  # Use theover projection
-                            prop['edge'] = ((theover_proj - prop['line']) / prop['line'] * 100)
-                            prop['source'] = 'theover.ai'
-                        except:
-                            prop['source'] = 'sample'
+                    if not events:
+                        st.warning("No games found for this sport")
                     else:
-                        prop['source'] = 'sample'
-            
-            # Find best entries
-            best_entries = pp_analyzer.find_best_picks(props, pp_min_picks, pp_max_picks)[:show_pp_entries]
-            
-            # Display summary
-            theover_count = sum(1 for p in props if p.get('source') == 'theover.ai')
-            if theover_count > 0:
-                st.success(f"✅ Analyzed {len(props)} player props for {pp_sport} ({theover_count} from theover.ai 🎯)")
-            else:
-                st.success(f"✅ Analyzed {len(props)} player props for {pp_sport}")
-            
-            with st.expander("📊 Props Overview", expanded=False):
-                props_df = pd.DataFrame([{
-                    "Player": p["player"],
-                    "Team": p["team"],
-                    "Stat": p["stat"],
-                    "Line": p["line"],
-                    "Projection": p["projection"],
-                    "Edge %": f"{((p['projection'] - p['line']) / p['line'] * 100):.1f}%",
-                    "Source": "🎯 theover.ai" if p.get('source') == 'theover.ai' else "📊 Sample"
-                } for p in props])
-                st.dataframe(props_df, use_container_width=True, hide_index=True)
-            
-            # Display best entries
-            st.markdown("### 🎯 Best PrizePicks Entries")
-            
-            for i, entry in enumerate(best_entries, start=1):
-                num_picks = entry["num_picks"]
-                payout = entry["payout_multiplier"]
+                        # Extract unique teams
+                        teams = set()
+                        team_games = {}  # Map team to their games
+                        
+                        for ev in events:
+                            home = ev.get("home_team")
+                            away = ev.get("away_team")
+                            
+                            if home:
+                                teams.add(home)
+                                if home not in team_games:
+                                    team_games[home] = []
+                                team_games[home].append({
+                                    'opponent': away,
+                                    'location': 'home',
+                                    'game_id': ev.get('id'),
+                                    'commence_time': ev.get('commence_time')
+                                })
+                            
+                            if away:
+                                teams.add(away)
+                                if away not in team_games:
+                                    team_games[away] = []
+                                team_games[away].append({
+                                    'opponent': home,
+                                    'location': 'away',
+                                    'game_id': ev.get('id'),
+                                    'commence_time': ev.get('commence_time')
+                                })
+                        
+                        st.session_state['analysis_teams'] = sorted(list(teams))
+                        st.session_state['team_games'] = team_games
+                        st.success(f"✅ Found {len(teams)} teams with upcoming games")
                 
-                # Color code by confidence
-                if entry["avg_confidence"] > 0.7:
-                    conf_icon = "🟢"
-                elif entry["avg_confidence"] > 0.5:
-                    conf_icon = "🟡"
-                else:
-                    conf_icon = "🟠"
-                
-                with st.expander(
-                    f"{conf_icon} #{i} - {num_picks}-Pick Entry | {payout}x Payout | Score: {entry['score']:.1f}"
-                ):
-                    col_metric1, col_metric2, col_metric3, col_metric4 = st.columns(4)
-                    with col_metric1:
-                        st.metric("Picks", num_picks)
-                    with col_metric2:
-                        st.metric("Payout", f"{payout}x")
-                    with col_metric3:
-                        st.metric("Avg Confidence", f"{entry['avg_confidence']*100:.1f}%")
-                    with col_metric4:
-                        st.metric("Total Edge", f"{entry['total_edge']:.1f}%")
-                    
-                    st.markdown("**📋 Your Picks:**")
-                    picks_data = []
-                    for j, pick in enumerate(entry["picks"], start=1):
-                        picks_data.append({
-                            "#": j,
-                            "Player": pick["player"],
-                            "Team": pick["team"],
-                            "Stat": pick["stat"],
-                            "Line": pick["line"],
-                            "Pick": pick["direction"],
-                            "Projection": pick["projection"],
-                            "Edge": f"{pick['edge']:.1f}%",
-                            "Confidence": f"{pick['confidence']*100:.0f}%"
-                        })
-                    
-                    st.dataframe(pd.DataFrame(picks_data), use_container_width=True, hide_index=True)
-                    
-                    st.markdown("**💵 Payout Scenarios:**")
-                    for stake in [10, 25, 50, 100]:
-                        win_amt = stake * payout
-                        profit = win_amt - stake
-                        st.write(f"${stake} entry → ${win_amt:.2f} win (${profit:.2f} profit)")
-                    
-                    # Export entry
-                    csv_buf = io.StringIO()
-                    pd.DataFrame(picks_data).to_csv(csv_buf, index=False)
-                    st.download_button(
-                        "💾 Download Entry CSV",
-                        data=csv_buf.getvalue(),
-                        file_name=f"prizepicks_{pp_sport.lower()}_{num_picks}pick_entry_{i}.csv",
-                        mime="text/csv",
-                        key=f"download_pp_{i}"
-                    )
-            
-            st.info("💡 **Note:** These are AI-generated projections for demonstration. In production, integrate with real PrizePicks lines and advanced player statistics.")
+                except Exception as e:
+                    st.error(f"Error loading teams: {str(e)}")
     
+    # Team Analysis
+    if 'analysis_teams' in st.session_state and st.session_state['analysis_teams']:
+        st.markdown("---")
+        st.subheader("📊 Team Sentiment Analysis")
+        
+        teams = st.session_state['analysis_teams']
+        selected_teams = st.multiselect(
+            "Select teams to analyze",
+            options=teams,
+            default=teams[:min(num_teams, len(teams))],
+            max_selections=10
+        )
+        
+        if st.button("🤖 Run Deep Analysis", type="primary"):
+            if not selected_teams:
+                st.warning("Please select at least one team")
+            else:
+                sentiment_analyzer = st.session_state.get('sentiment_analyzer')
+                
+                if not sentiment_analyzer:
+                    st.error("Sentiment analyzer not initialized")
+                else:
+                    progress_bar = st.progress(0)
+                    analysis_results = []
+                    
+                    for idx, team in enumerate(selected_teams):
+                        progress_bar.progress((idx + 1) / len(selected_teams))
+                        
+                        with st.spinner(f"Analyzing {team}..."):
+                            try:
+                                # Get sentiment
+                                sentiment = sentiment_analyzer.get_team_sentiment(team, analysis_sport)
+                                
+                                # Get game info
+                                games = st.session_state['team_games'].get(team, [])
+                                next_game = games[0] if games else None
+                                
+                                # Get odds if available
+                                odds_data = None
+                                if next_game:
+                                    for ev in st.session_state.get('available_games', []):
+                                        if ev.get('id') == next_game['game_id']:
+                                            h2h = ev.get('markets', {}).get('h2h', {})
+                                            if next_game['location'] == 'home':
+                                                odds_data = _dig(h2h, 'home.price')
+                                            else:
+                                                odds_data = _dig(h2h, 'away.price')
+                                            break
+                                
+                                analysis_results.append({
+                                    'team': team,
+                                    'sentiment': sentiment,
+                                    'next_game': next_game,
+                                    'odds': odds_data
+                                })
+                            
+                            except Exception as e:
+                                st.warning(f"Error analyzing {team}: {str(e)}")
+                    
+                    progress_bar.progress(1.0)
+                    
+                    # Display Results
+                    if analysis_results:
+                        st.markdown("---")
+                        st.markdown("### 📈 Analysis Results")
+                        
+                        # Summary metrics
+                        col_m1, col_m2, col_m3, col_m4 = st.columns(4)
+                        
+                        positive_teams = sum(1 for r in analysis_results if r['sentiment']['trend'] == 'positive')
+                        negative_teams = sum(1 for r in analysis_results if r['sentiment']['trend'] == 'negative')
+                        avg_score = sum(r['sentiment']['score'] for r in analysis_results) / len(analysis_results)
+                        avg_confidence = sum(r['sentiment']['confidence'] for r in analysis_results) / len(analysis_results)
+                        
+                        with col_m1:
+                            st.metric("Positive Sentiment", positive_teams)
+                        with col_m2:
+                            st.metric("Negative Sentiment", negative_teams)
+                        with col_m3:
+                            st.metric("Avg Sentiment Score", f"{avg_score:+.2f}")
+                        with col_m4:
+                            st.metric("Avg Confidence", f"{avg_confidence*100:.0f}%")
+                        
+                        # Sort by sentiment score
+                        analysis_results.sort(key=lambda x: x['sentiment']['score'], reverse=True)
+                        
+                        # Display each team
+                        st.markdown("### 🏈 Team-by-Team Breakdown")
+                        
+                        for result in analysis_results:
+                            team = result['team']
+                            sentiment = result['sentiment']
+                            next_game = result['next_game']
+                            odds = result['odds']
+                            
+                            # Determine sentiment icon and color
+                            if sentiment['trend'] == 'positive':
+                                trend_icon = "🟢"
+                                trend_color = "green"
+                            elif sentiment['trend'] == 'negative':
+                                trend_icon = "🔴"
+                                trend_color = "red"
+                            else:
+                                trend_icon = "🟡"
+                                trend_color = "orange"
+                            
+                            with st.expander(f"{trend_icon} {team} - {sentiment['trend'].upper()} ({sentiment['score']:+.2f})"):
+                                col_info1, col_info2 = st.columns(2)
+                                
+                                with col_info1:
+                                    st.markdown("**Sentiment Analysis:**")
+                                    st.write(f"- **Score:** {sentiment['score']:+.2f}")
+                                    st.write(f"- **Trend:** {sentiment['trend'].upper()}")
+                                    st.write(f"- **Confidence:** {sentiment['confidence']*100:.0f}%")
+                                    st.write(f"- **Sources:** {sentiment['sources']} articles")
+                                    st.write(f"- **Method:** {sentiment['method']}")
+                                
+                                with col_info2:
+                                    st.markdown("**Next Game:**")
+                                    if next_game:
+                                        location = "🏠 Home" if next_game['location'] == 'home' else "✈️ Away"
+                                        st.write(f"- **vs {next_game['opponent']}** ({location})")
+                                        if odds:
+                                            prob = implied_p_from_american(odds)
+                                            st.write(f"- **Odds:** {odds:+.0f}")
+                                            st.write(f"- **Implied Prob:** {prob*100:.1f}%")
+                                        
+                                        # Try to parse time
+                                        try:
+                                            import datetime
+                                            game_time = datetime.datetime.fromtimestamp(next_game['commence_time'])
+                                            st.write(f"- **Time:** {game_time.strftime('%m/%d %I:%M %p')}")
+                                        except:
+                                            pass
+                                    else:
+                                        st.write("No upcoming game found")
+                                
+                                # Betting recommendation based on sentiment + odds
+                                st.markdown("**💡 AI Betting Insight:**")
+                                
+                                if sentiment['score'] > 0.3 and sentiment['confidence'] > 0.6:
+                                    if odds and odds > 0:  # Underdog with positive sentiment
+                                        st.success("🟢 **STRONG VALUE** - Positive sentiment underdog. Market may be undervaluing this team.")
+                                    elif odds and odds < -200:  # Heavy favorite with positive sentiment
+                                        st.info("🟡 **GOOD SPOT** - Sentiment confirms favorite status, but odds may be steep.")
+                                    else:
+                                        st.success("🟢 **FAVORABLE** - Strong positive sentiment. Consider backing this team.")
+                                
+                                elif sentiment['score'] < -0.3 and sentiment['confidence'] > 0.6:
+                                    if odds and odds < 0:  # Favorite with negative sentiment
+                                        st.warning("🟠 **FADE CANDIDATE** - Negative sentiment on a favorite. Public may be overvaluing.")
+                                    else:
+                                        st.error("🔴 **AVOID** - Strong negative sentiment. Look elsewhere.")
+                                
+                                else:
+                                    st.info("🟡 **NEUTRAL** - No strong sentiment signal. Rely on other factors.")
+                        
+                        # Export option
+                        st.markdown("---")
+                        export_data = []
+                        for result in analysis_results:
+                            export_data.append({
+                                'Team': result['team'],
+                                'Sentiment Score': f"{result['sentiment']['score']:+.2f}",
+                                'Trend': result['sentiment']['trend'],
+                                'Confidence': f"{result['sentiment']['confidence']*100:.0f}%",
+                                'Sources': result['sentiment']['sources'],
+                                'Next Opponent': result['next_game']['opponent'] if result['next_game'] else 'N/A',
+                                'Location': result['next_game']['location'] if result['next_game'] else 'N/A',
+                                'Odds': f"{result['odds']:+.0f}" if result['odds'] else 'N/A'
+                            })
+                        
+                        df_export = pd.DataFrame(export_data)
+                        csv_buf = io.StringIO()
+                        df_export.to_csv(csv_buf, index=False)
+                        
+                        st.download_button(
+                            "💾 Download Analysis CSV",
+                            data=csv_buf.getvalue(),
+                            file_name=f"sentiment_analysis_{analysis_sport}.csv",
+                            mime="text/csv"
+                        )
+    
+    else:
+        st.info("👆 Click 'Load Teams' to start sentiment analysis")
+    
+    # Advanced Features Section
+    st.markdown("---")
+    st.markdown("### 🚀 Advanced Analysis Features")
+    
+    with st.expander("📰 News Sentiment Analysis"):
+        st.markdown("""
+        **How it works:**
+        - Scrapes recent news articles about each team (last 3 days)
+        - Uses NewsAPI.org for reliable news sources
+        - Analyzes headlines and descriptions using NLP
+        - Identifies positive words (win, dominant, stellar) vs negative words (lose, injury, struggle)
+        - Calculates sentiment score from -1.0 (very negative) to +1.0 (very positive)
+        - Provides confidence score based on number of sources and consistency
+        
+        **Positive Indicators:**
+        - Winning streak, dominant performance, star player excelling
+        - Record-breaking stats, momentum, clutch plays
+        - Positive coaching changes, key player returns
+        
+        **Negative Indicators:**
+        - Losing streak, injuries to key players, poor performance
+        - Internal conflicts, coaching issues, suspensions
+        - Defensive/offensive struggles, blown leads
+        """)
+    
+    with st.expander("🤖 AI Prediction Model"):
+        st.markdown("""
+        **Machine Learning Components:**
+        - **Input Features:** Home/Away odds, sentiment scores, historical patterns
+        - **Model Type:** Gradient boosting with probability calibration
+        - **Output:** Win probability for each team, confidence score, edge calculation
+        
+        **How AI Adjusts Probabilities:**
+        1. Takes market-implied probability from odds
+        2. Applies sentiment adjustment (±40% weight)
+        3. Considers home/away advantage
+        4. Calibrates based on historical accuracy
+        5. Outputs adjusted probability + confidence
+        
+        **Confidence Scoring:**
+        - High (70%+): Strong signal from multiple factors
+        - Medium (50-70%): Moderate signals, some uncertainty
+        - Low (<50%): Conflicting signals or limited data
+        """)
+    
+    with st.expander("📊 Betting Trend Analysis"):
+        st.markdown("""
+        **Market Movements:**
+        - Track line movements throughout the day
+        - Identify sharp vs public money
+        - Detect reverse line movement (line moves opposite to betting percentages)
+        
+        **Value Detection:**
+        - Compare sentiment score to market odds
+        - Find positive sentiment underdogs (best value)
+        - Identify overvalued favorites with negative sentiment
+        
+        **Correlation Analysis:**
+        - Sentiment vs actual outcomes (historical accuracy)
+        - Best sports/leagues for sentiment analysis
+        - Optimal bet types for sentiment-based betting
+        """)
+    
+    with st.expander("🎯 How to Use This Analysis"):
+        st.markdown("""
+        **Step 1: Load & Analyze**
+        1. Select sport and load current teams
+        2. Choose 3-5 teams you're interested in
+        3. Run deep analysis
+        
+        **Step 2: Interpret Results**
+        - **🟢 Green (Positive)**: Team has favorable news/momentum
+        - **🔴 Red (Negative)**: Team has concerning news/struggles  
+        - **🟡 Yellow (Neutral)**: No strong sentiment signal
+        
+        **Step 3: Find Value**
+        - Look for positive sentiment underdogs (market undervaluing)
+        - Fade negative sentiment favorites (market overvaluing)
+        - Combine with AI probability for best bets
+        
+        **Step 4: Validate**
+        - Use Custom Parlay Builder to test specific picks
+        - Compare sentiment analysis to AI expected value
+        - Make informed decision based on multiple factors
+        
+        **Best Practices:**
+        - Don't bet on sentiment alone - combine with AI analysis
+        - Higher confidence scores are more reliable
+        - More news sources = more reliable sentiment
+        - Recent news (1-3 days) is most relevant
+        """)
+    
+    # Tips
     st.markdown("---")
     st.markdown("""
-    ### 🏆 PrizePicks Strategy Tips:
+    ### 💡 Sentiment Analysis Tips:
     
-    **Entry Types:**
-    - **2-Pick:** 3x payout - Lower risk, good for high-confidence plays
-    - **3-Pick:** 5x payout - Balanced risk/reward
-    - **4-Pick:** 10x payout - Higher risk, maximum reward
+    **What Makes Strong Sentiment:**
+    - ✅ Multiple news sources (5+ articles)
+    - ✅ High confidence score (70%+)
+    - ✅ Recent news (last 24-48 hours)
+    - ✅ Consistent trend across sources
     
-    **Best Practices:**
-    - Focus on players with consistent performance
-    - Check injury reports before finalizing
-    - Diversify across different stat categories
-    - Avoid stacking too many players from same game
-    - Target props where your projection differs significantly from the line
+    **Red Flags:**
+    - ⚠️ Low confidence (<40%)
+    - ⚠️ Few news sources (<3 articles)
+    - ⚠️ Mixed signals (some positive, some negative)
+    - ⚠️ Old news (4+ days ago)
+    
+    **Best Use Cases:**
+    - 🎯 Finding undervalued underdogs with positive momentum
+    - 🎯 Fading overvalued favorites with negative news
+    - 🎯 Validating your own analysis with AI/sentiment
+    - 🎯 Identifying injury/coaching impacts quickly
+    
+    **Combine With:**
+    - Use sentiment for initial screening
+    - Use AI analysis for probability adjustment
+    - Use Custom Parlay Builder to test combinations
+    - Compare multiple data points before betting
     """)
 
-# ===== TAB 3: CUSTOM PARLAY BUILDER =====
 with main_tab3:
     st.header("🎨 Custom Parlay Builder")
     st.markdown("**Build your own parlay and get AI-powered analysis**")
