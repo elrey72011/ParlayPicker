@@ -651,12 +651,34 @@ def build_combos_ai(legs, k, allow_sgp, optimizer, theover_data=None, min_probab
         
         # Skip combos with missing required fields
         try:
-            # Create a unique key for this parlay based on the actual bets (not odds)
-            # This deduplicates parlays where only the odds differ
-            parlay_key = tuple(sorted([
-                f"{c.get('event_id', '')}_{c.get('type', '')}_{c.get('team', '')}_{c.get('side', '')}_{c.get('point', '')}"
-                for c in combo
-            ]))
+            # IMPROVED: Create a unique key that treats different spreads for same team as duplicates
+            # This prevents parlays like "Bucs -2.5 + Bucs -3.0" which are redundant
+            parlay_key_parts = []
+            for c in combo:
+                event_id = c.get('event_id', '')
+                bet_type = c.get('type', '')
+                team = c.get('team', '')
+                side = c.get('side', '')
+                
+                # For spreads/totals, don't include exact point in key
+                # This way Bucs -2.5 and Bucs -3.0 are treated as same bet
+                if bet_type in ['Spread', 'Total']:
+                    # Key without specific point value
+                    key_part = f"{event_id}_{bet_type}_{team}_{side}"
+                else:
+                    # For ML, include everything
+                    key_part = f"{event_id}_{bet_type}_{team}_{side}"
+                
+                parlay_key_parts.append(key_part)
+            
+            parlay_key = tuple(sorted(parlay_key_parts))
+            
+            # Check if this combination has duplicate legs (same team, same game, same bet type)
+            # This catches cases like "Bucs -2.5 + Bucs -3.0" in the same parlay
+            unique_bets = set(parlay_key_parts)
+            if len(unique_bets) < len(combo):
+                continue  # Skip parlays with duplicate bets
+                
         except Exception:
             continue  # Skip this combo if we can't create a key
         
@@ -737,7 +759,27 @@ def build_combos_ai(legs, k, allow_sgp, optimizer, theover_data=None, min_probab
     # This finds bets where AI thinks you have an edge
     # Positive EV = long-term profitable
     out.sort(key=lambda x: (x["ev_ai"], x["p_ai"]), reverse=True)
-    return out
+    
+    # FINAL DEDUPLICATION: Remove parlays that are too similar
+    # This catches edge cases where same game appears multiple times with slightly different bets
+    final_parlays = []
+    seen_game_combos = set()
+    
+    for parlay in out:
+        # Create a signature of which games are in this parlay
+        game_ids = tuple(sorted(set(leg['event_id'] for leg in parlay['legs'])))
+        
+        # For same-game combinations, also check the specific bets
+        bet_signature = tuple(sorted([
+            f"{leg['event_id']}_{leg['type']}_{leg.get('team', '')}_{leg.get('side', '')}"
+            for leg in parlay['legs']
+        ]))
+        
+        if bet_signature not in seen_game_combos:
+            final_parlays.append(parlay)
+            seen_game_combos.add(bet_signature)
+    
+    return final_parlays
 
 def render_parlay_section_ai(title, rows, theover_data=None):
     """Render parlays with AI insights"""
