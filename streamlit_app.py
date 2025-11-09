@@ -1969,20 +1969,150 @@ def render_parlay_section_ai(title, rows, theover_data=None):
                     if theover_conflicts > 0:
                         st.warning(f"⚠️ {theover_conflicts} leg(s) conflict with theover.ai recommendations")
             
-            # Kalshi validation legend
-            kalshi_confirmed = sum(1 for leg in row["legs"] if leg.get('kalshi_validation', {}).get('validation') == 'confirms')
-            kalshi_contradicts = sum(1 for leg in row["legs"] if 'contradiction' in leg.get('kalshi_validation', {}).get('validation', ''))
+            # Kalshi validation legend and detailed influence
+            kalshi_available = sum(1 for leg in row.get("legs", []) if leg.get('kalshi_validation', {}).get('kalshi_available', False))
             
-            if kalshi_confirmed > 0 or kalshi_contradicts > 0:
+            if kalshi_available > 0:
+                kalshi_confirmed = sum(1 for leg in row.get("legs", []) if leg.get('kalshi_validation', {}).get('validation') == 'confirms')
+                kalshi_higher = sum(1 for leg in row.get("legs", []) if 'higher' in leg.get('kalshi_validation', {}).get('validation', ''))
+                kalshi_contradicts = sum(1 for leg in row.get("legs", []) if 'contradiction' in leg.get('kalshi_validation', {}).get('validation', ''))
+                
+                st.markdown("---")
                 st.markdown("**📊 Kalshi Prediction Market Validation:**")
+                
                 col_k1, col_k2 = st.columns(2)
                 with col_k1:
-                    st.caption("✅ = Kalshi confirms | 📈 = Kalshi higher | 📉 = Kalshi lower | 🟢 = Strong Kalshi value | ⚠️ = Contradiction")
+                    st.caption("**Legend:** ✅ = Confirms | 📈 = Kalshi higher | 📉 = Kalshi lower | 🟢 = Strong value | ⚠️ = Contradiction")
                 with col_k2:
                     if kalshi_confirmed > 0:
-                        st.success(f"✅ {kalshi_confirmed} leg(s) confirmed by Kalshi prediction market")
+                        st.success(f"✅ {kalshi_confirmed} leg(s) confirmed by Kalshi")
+                    if kalshi_higher > 0:
+                        st.info(f"📈 {kalshi_higher} leg(s) show Kalshi value")
                     if kalshi_contradicts > 0:
-                        st.warning(f"⚠️ {kalshi_contradicts} leg(s) contradicted by Kalshi market")
+                        st.warning(f"⚠️ {kalshi_contradicts} leg(s) contradicted by Kalshi")
+                
+                # Detailed Kalshi Influence Analysis
+                st.markdown("**🔍 How Kalshi Influenced This Parlay:**")
+                
+                total_confidence_boost = 0
+                total_kalshi_edge = 0
+                kalshi_details = []
+                
+                for j, leg in enumerate(row.get("legs", []), start=1):
+                    kv = leg.get('kalshi_validation', {})
+                    if kv.get('kalshi_available'):
+                        kalshi_prob = kv.get('kalshi_prob', 0)
+                        validation = kv.get('validation', 'unavailable')
+                        confidence_boost = kv.get('confidence_boost', 0)
+                        edge = kv.get('edge', 0)
+                        market_ticker = kv.get('market_ticker', 'N/A')
+                        
+                        total_confidence_boost += confidence_boost
+                        total_kalshi_edge += edge
+                        
+                        # Create status icon
+                        if validation == 'confirms':
+                            status_icon = "✅"
+                            status_text = "CONFIRMS"
+                            status_color = "green"
+                        elif validation == 'strong_kalshi_higher':
+                            status_icon = "🟢"
+                            status_text = "STRONG VALUE"
+                            status_color = "green"
+                        elif 'higher' in validation:
+                            status_icon = "📈"
+                            status_text = "KALSHI HIGHER"
+                            status_color = "blue"
+                        elif 'contradiction' in validation:
+                            status_icon = "⚠️"
+                            status_text = "CONTRADICTION"
+                            status_color = "red"
+                        else:
+                            status_icon = "📉"
+                            status_text = "KALSHI LOWER"
+                            status_color = "orange"
+                        
+                        sportsbook_prob = leg.get('p', 0) * 100
+                        kalshi_prob_pct = kalshi_prob * 100
+                        discrepancy = abs(kalshi_prob - leg.get('p', 0)) * 100
+                        
+                        kalshi_details.append({
+                            'Leg': j,
+                            'Pick': leg.get('team', 'N/A'),
+                            'Status': f"{status_icon} {status_text}",
+                            'Sportsbook': f"{sportsbook_prob:.1f}%",
+                            'Kalshi': f"{kalshi_prob_pct:.1f}%",
+                            'Discrepancy': f"{discrepancy:.1f}%",
+                            'Confidence Boost': f"{confidence_boost*100:+.0f}%",
+                            'Edge': f"{edge*100:+.1f}%",
+                            'Market': market_ticker[:20]
+                        })
+                
+                if kalshi_details:
+                    st.dataframe(pd.DataFrame(kalshi_details), use_container_width=True, hide_index=True)
+                    
+                    # Summary metrics
+                    st.markdown("**📈 Kalshi Impact Summary:**")
+                    col_impact1, col_impact2, col_impact3, col_impact4 = st.columns(4)
+                    
+                    with col_impact1:
+                        st.metric(
+                            "Legs Validated",
+                            f"{kalshi_available}/{len(row.get('legs', []))}",
+                            help="How many legs have Kalshi market data"
+                        )
+                    
+                    with col_impact2:
+                        st.metric(
+                            "Total Confidence Boost",
+                            f"{total_confidence_boost*100:+.0f}%",
+                            help="How much Kalshi boosted overall confidence"
+                        )
+                    
+                    with col_impact3:
+                        st.metric(
+                            "Additional Edge",
+                            f"{total_kalshi_edge*100:+.1f}%",
+                            help="Extra edge identified from Kalshi vs sportsbook"
+                        )
+                    
+                    with col_impact4:
+                        avg_discrepancy = sum(abs(leg.get('kalshi_validation', {}).get('discrepancy', 0)) 
+                                            for leg in row.get("legs", []) 
+                                            if leg.get('kalshi_validation', {}).get('kalshi_available')) / max(kalshi_available, 1)
+                        st.metric(
+                            "Avg Discrepancy",
+                            f"{avg_discrepancy*100:.1f}%",
+                            help="Average difference between Kalshi and sportsbook"
+                        )
+                    
+                    # Interpretation
+                    st.markdown("**💡 Interpretation:**")
+                    
+                    if total_confidence_boost >= 0.15:
+                        st.success("🟢 **STRONG KALSHI CONFIRMATION** - All sources strongly agree. High confidence bet!")
+                    elif total_confidence_boost >= 0.05:
+                        st.info("🟡 **MODERATE CONFIRMATION** - Kalshi generally agrees. Good bet with decent validation.")
+                    elif total_confidence_boost >= -0.05:
+                        st.warning("🟠 **NEUTRAL VALIDATION** - Kalshi shows mixed signals. Proceed with caution.")
+                    else:
+                        st.error("🔴 **KALSHI DISAGREES** - Prediction market contradicts this parlay. Consider skipping or investigating further.")
+                    
+                    if total_kalshi_edge > 0.10:
+                        st.success(f"💰 **VALUE DETECTED**: Kalshi shows {total_kalshi_edge*100:.1f}% additional edge! This parlay may be underpriced by sportsbooks.")
+                    elif total_kalshi_edge < -0.10:
+                        st.warning(f"⚠️ **OVERPRICED WARNING**: Kalshi thinks this parlay is overpriced. Sportsbooks may be offering poor value.")
+                    
+                    # Recommendation based on Kalshi
+                    kalshi_score = (total_confidence_boost * 50) + (total_kalshi_edge * 30) + (kalshi_confirmed / max(kalshi_available, 1) * 20)
+                    
+                    st.markdown("**🎯 Kalshi-Based Recommendation:**")
+                    if kalshi_score > 15:
+                        st.success("✅ **KALSHI APPROVES** - Strong validation from prediction markets. Excellent bet!")
+                    elif kalshi_score > 5:
+                        st.info("🟡 **KALSHI CAUTIOUS** - Some validation but mixed signals. Decent bet if AI score is high.")
+                    else:
+                        st.warning("⚠️ **KALSHI SKEPTICAL** - Prediction market doesn't support this parlay. Bet with caution or skip.")
             
             # Betting scenarios
             st.markdown("**💵 Betting Scenarios:**")
