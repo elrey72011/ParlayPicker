@@ -1418,111 +1418,73 @@ def validate_with_kalshi(kalshi_integrator, home_team: str, away_team: str,
     """
     Validate sportsbook odds with Kalshi prediction market
     
-    Args:
-        kalshi_integrator: KalshiIntegrator instance
-        home_team: Home team name
-        away_team: Away team name
-        side: 'home' or 'away' - which team the bet is on
-        sportsbook_prob: Implied probability from sportsbook odds
-        sport: Sport key (e.g., 'americanfootball_nfl')
-    
     Returns:
-        Dict containing:
-        - 'kalshi_prob': Kalshi market probability
-        - 'kalshi_available': True if Kalshi data found
-        - 'discrepancy': Difference between markets
-        - 'validation': Status string
-        - 'edge': Edge value
-        - 'confidence_boost': Confidence adjustment
-        - 'market_ticker': Kalshi market ticker
-        - 'market_title': Kalshi market title
+        'kalshi_prob': Kalshi market probability
+        'discrepancy': Difference between markets
+        'validation': 'confirms', 'contradicts', or 'unavailable'
+        'edge': Additional edge from Kalshi vs sportsbook
+        'confidence_boost': How much to boost confidence (0-0.20)
     """
     try:
         # Try to find matching Kalshi market
         markets = kalshi_integrator.get_sports_markets()
         
-        # Determine which team we're betting on
-        bet_team = home_team if side == 'home' else away_team
-        
         # Search for matching market
+        team_to_check = home_team if side == 'home' else away_team
+        
         for market in markets:
             title = market.get('title', '').upper()
             ticker = market.get('ticker', '').upper()
             
-            # IMPROVED: Check if this market matches our specific game
-            # Require BOTH teams to be mentioned to identify the specific game
-            home_mentioned = home_team.upper() in title or home_team.upper() in ticker
-            away_mentioned = away_team.upper() in title or away_team.upper() in ticker
-            
-            # Must have both teams to be the right game
-            if not (home_mentioned and away_mentioned):
-                continue
-            
-            # Get orderbook
-            orderbook = kalshi_integrator.get_orderbook(market.get('ticker', ''))
-            
-            if orderbook:
-                yes_bids = orderbook.get('yes', [])
-                no_bids = orderbook.get('no', [])
+            # Check if this market matches our game
+            if (home_team.upper() in title or away_team.upper() in title or
+                home_team.upper() in ticker or away_team.upper() in ticker):
                 
-                if yes_bids:
-                    # IMPROVED: Determine which side of the market to use
-                    # If the bet_team is prominently featured in the market title,
-                    # use YES probability; otherwise use NO (or 1 - YES)
-                    
-                    # Check if our bet team is the "YES" side of this market
-                    bet_team_is_yes = bet_team.upper() in title
-                    
-                    if bet_team_is_yes:
-                        # Our team is the YES side
+                # Get orderbook
+                orderbook = kalshi_integrator.get_orderbook(market.get('ticker', ''))
+                
+                if orderbook:
+                    yes_bids = orderbook.get('yes', [])
+                    if yes_bids:
                         kalshi_prob = yes_bids[0].get('price', 0) / 100
-                    else:
-                        # Our team is the NO side (or implied by market structure)
-                        if no_bids:
-                            kalshi_prob = no_bids[0].get('price', 0) / 100
-                        else:
-                            # No explicit NO bids, use complement
-                            kalshi_prob = 1.0 - (yes_bids[0].get('price', 0) / 100)
-                    
-                    # Calculate discrepancy
-                    discrepancy = abs(kalshi_prob - sportsbook_prob)
-                    
-                    # Determine validation
-                    if discrepancy < 0.05:  # Within 5%
-                        validation = 'confirms'
-                        confidence_boost = 0.10  # Boost 10% confidence
-                        edge = 0
-                    elif discrepancy < 0.10:  # 5-10% difference
-                        if kalshi_prob > sportsbook_prob:
-                            validation = 'kalshi_higher'
-                            confidence_boost = 0.05
-                            edge = kalshi_prob - sportsbook_prob
-                        else:
-                            validation = 'kalshi_lower'
-                            confidence_boost = -0.05  # Reduce confidence
-                            edge = sportsbook_prob - kalshi_prob
-                    else:  # >10% difference
-                        if kalshi_prob > sportsbook_prob:
-                            validation = 'strong_kalshi_higher'
-                            confidence_boost = 0.15
-                            edge = kalshi_prob - sportsbook_prob
-                        else:
-                            validation = 'strong_contradiction'
-                            confidence_boost = -0.10
+                        
+                        # Calculate discrepancy
+                        discrepancy = abs(kalshi_prob - sportsbook_prob)
+                        
+                        # Determine validation
+                        if discrepancy < 0.05:  # Within 5%
+                            validation = 'confirms'
+                            confidence_boost = 0.10  # Boost 10% confidence
                             edge = 0
-                    
-                    return {
-                        'kalshi_prob': kalshi_prob,
-                        'kalshi_available': True,
-                        'discrepancy': discrepancy,
-                        'validation': validation,
-                        'edge': edge,
-                        'confidence_boost': confidence_boost,
-                        'market_ticker': market.get('ticker', ''),
-                        'market_title': market.get('title', ''),
-                        'bet_team': bet_team,
-                        'bet_team_is_yes': bet_team_is_yes
-                    }
+                        elif discrepancy < 0.10:  # 5-10% difference
+                            if kalshi_prob > sportsbook_prob:
+                                validation = 'kalshi_higher'
+                                confidence_boost = 0.05
+                                edge = kalshi_prob - sportsbook_prob
+                            else:
+                                validation = 'kalshi_lower'
+                                confidence_boost = -0.05  # Reduce confidence
+                                edge = sportsbook_prob - kalshi_prob
+                        else:  # >10% difference
+                            if kalshi_prob > sportsbook_prob:
+                                validation = 'strong_kalshi_higher'
+                                confidence_boost = 0.15
+                                edge = kalshi_prob - sportsbook_prob
+                            else:
+                                validation = 'strong_contradiction'
+                                confidence_boost = -0.10
+                                edge = 0
+                        
+                        return {
+                            'kalshi_prob': kalshi_prob,
+                            'kalshi_available': True,
+                            'discrepancy': discrepancy,
+                            'validation': validation,
+                            'edge': edge,
+                            'confidence_boost': confidence_boost,
+                            'market_ticker': market.get('ticker', ''),
+                            'market_title': market.get('title', '')
+                        }
         
         # No matching market found
         return {
@@ -1546,11 +1508,8 @@ def validate_with_kalshi(kalshi_integrator, home_team: str, away_team: str,
             'edge': 0,
             'confidence_boost': 0,
             'market_ticker': None,
-            'market_title': None,
-            'error_message': str(e)
+            'market_title': None
         }
-        'market_title': None
-                }
 
 # ============ UTILITY FUNCTIONS ============
 def american_to_decimal(odds) -> float:
