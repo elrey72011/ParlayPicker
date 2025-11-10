@@ -1550,7 +1550,7 @@ def validate_with_kalshi(kalshi_integrator, home_team: str, away_team: str,
             'error_message': str(e)
         }
         'market_title': None
-        }
+                }
 
 # ============ UTILITY FUNCTIONS ============
 def american_to_decimal(odds) -> float:
