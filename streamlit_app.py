@@ -1,9 +1,8 @@
 # IMPROVED KALSHI MATCHING LOGIC
 # This fixes the issue where Kalshi markets exist but aren't being matched correctly
 
-def validate_with_kalshi_improved(kalshi_integrator, home_team: str, away_team: str, 
-                                   bet_type: str, bet_team: str, sportsbook_prob: float, 
-                                   sport: str) -> Dict:
+def validate_with_kalshi(kalshi_integrator, home_team: str, away_team: str, 
+                        side: str, sportsbook_prob: float, sport: str) -> Dict:
     """
     IMPROVED: Validate sportsbook odds with Kalshi prediction market
     
