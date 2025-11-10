@@ -1549,7 +1549,7 @@ def validate_with_kalshi(kalshi_integrator, home_team: str, away_team: str,
             'market_title': None,
             'error_message': str(e)
         }
-            'market_title': None
+        'market_title': None
         }
 
 # ============ UTILITY FUNCTIONS ============
