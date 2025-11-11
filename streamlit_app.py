@@ -535,9 +535,6 @@ class KalshiIntegrator:
             st.warning(f"Error fetching Kalshi markets: {str(e)}")
             return []
 
-            st.warning(f"Error fetching Kalshi markets: {str(e)}")
-            return []
-    
     def get_sports_markets(self) -> List[Dict]:
         """Get all active sports betting markets"""
         all_markets = self.get_markets()
@@ -4508,4 +4505,5 @@ with main_tab4:
     - Compare AI probability with Kalshi pricing
     - Bet when AI and Kalshi agree on value
     """)
+
 
