@@ -1499,17 +1499,16 @@ def validate_with_kalshi(kalshi_integrator, home_team: str, away_team: str,
                 continue  # Not the right game
             
             # Get orderbook
-            orderbook = kalshi_integrator.get_orderbook(market.get('ticker', ''))
-            
-            if not orderbook:
+            # Get orderbook (safe)
+            orderbook = kalshi_integrator.get_orderbook(market.get('ticker', '')) or {}
+
+            yes_bids = orderbook.get('yes') or []
+            no_bids = orderbook.get('no') or []
+
+            # If both sides are empty, skip this market safely
+            if not yes_bids and not no_bids:
                 continue
-            
-            yes_bids = orderbook.get('yes', [])
-            no_bids = orderbook.get('no', [])
-            
-            if not yes_bids:
-                continue
-            
+
             # Determine which side of the market represents our bet
             bet_team_in_title = teams_match(bet_team, title)
             
