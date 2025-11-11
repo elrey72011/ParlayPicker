@@ -525,28 +525,29 @@ class KalshiIntegrator:
             self.headers["Authorization"] = f"Bearer {self.api_key}"
 
         def get_markets(self, category: str = None, status: str = "open") -> List[Dict]:
-            try:
-                endpoint = f"{self.api_url}/markets"
-                params = {
-                    "limit": 100,
-                    "status": status
-                }
+    try:
+        endpoint = f"{self.api_url}/markets"
+        params = {
+            "limit": 100,
+            "status": status
+        }
 
-                # ✅ Removed series_ticker filter — it was returning zero results
-                # if category:
-                #     params["series_ticker"] = category.upper()
+        # ✅ Removed series_ticker filter – it was restricting results
+        # if category:
+        #     params["series_ticker"] = category.upper()
 
-                response = requests.get(endpoint, headers=self.headers, params=params, timeout=10)
+        response = requests.get(endpoint, headers=self.headers, params=params, timeout=10)
 
-                if response.status_code == 200:
-                    data = response.json()
-                    return data.get("markets", [])
-                else:
-                    return []
+        if response.status_code == 200:
+            data = response.json()
+            return data.get("markets", [])
+        else:
+            return []
 
-            except Exception as e:
-                st.warning(f"Error fetching Kalshi markets: {str(e)}")
-                return []
+    except Exception as e:
+        st.warning(f"Error fetching Kalshi markets: {str(e)}")
+        return []
+
 
         except Exception as e:
             st.warning(f"Error fetching Kalshi markets: {str(e)}")
