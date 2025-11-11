@@ -1471,7 +1471,13 @@ def validate_with_kalshi(kalshi_integrator, home_team: str, away_team: str,
     try:
         # Get all sports markets
         markets = kalshi_integrator.get_sports_markets()
-        
+        if not markets:
+            return {
+                'kalshi_prob': None, 'kalshi_available': False, 'discrepancy': 0,
+                'validation': 'unavailable', 'edge': 0, 'confidence_boost': 0,
+                'market_ticker': None, 'market_title': None
+            }
+
         # Determine which team we're betting on
         bet_team = home_team if side == 'home' else away_team
         other_team = away_team if side == 'home' else home_team
@@ -1618,57 +1624,39 @@ def fetch_oddsapi_snapshot(api_key: str, sport_key: str) -> Dict[str, Any]:
         r = requests.get(url, params=params, timeout=12)
         r.raise_for_status()
         data = r.json()
-        
-        # Check if we got valid data
-        if not data or not isinstance(data, list):
-            st.warning(f"No data returned for {sport_key}")
-            return {"events": []}
-            
+        if not isinstance(data, list):
+            st.warning(f"No list for {sport_key}"); return {"events": []}
     except requests.exceptions.Timeout:
-        st.warning(f"Request timeout for {sport_key} - skipping")
-        return {"events": []}
+        st.warning(f"Request timeout for {sport_key} - skipping"); return {"events": []}
     except requests.exceptions.RequestException as e:
-        st.error(f"API request failed for {sport_key}: {str(e)}")
-        return {"events": []}
+        st.error(f"API request failed for {sport_key}: {e}"); return {"events": []}
     except Exception as e:
-        st.error(f"Unexpected error fetching {sport_key}: {str(e)}")
-        return {"events": []}
-    
+        st.error(f"Unexpected error fetching {sport_key}: {e}"); return {"events": []}
+
     events = []
-    for ev in (data or []):
-        home, away = ev.get("home_team"), ev.get("away_team")
-        markets = {"h2h":{}, "spreads":[], "totals":[]}
-        for b in ev.get("bookmakers") or []:
-            for m in b.get("markets") or []:
+    for ev in data:
+        home = ev.get("home_team"); away = ev.get("away_team")
+        markets = {"h2h": {}, "spreads": [], "totals": []}
+        for b in (ev.get("bookmakers") or []):
+            for m in (b.get("markets") or []):
                 key = m.get("key")
+                outs = m.get("outcomes") or []
                 if key == "h2h":
-                    for o in m.get("outcomes") or []:
-                        if o.get("name")==home: 
-                            markets["h2h"]["home"] = {"price": o.get("price")}
-                        elif o.get("name")==away: 
-                            markets["h2h"]["away"] = {"price": o.get("price")}
+                    for o in outs:
+                        n = o.get("name")
+                        if n == home: markets["h2h"]["home"] = {"price": o.get("price")}
+                        elif n == away: markets["h2h"]["away"] = {"price": o.get("price")}
                 elif key == "spreads":
-                    for o in m.get("outcomes") or []:
-                        markets["spreads"].append({
-                            "name": o.get("name"), 
-                            "point": o.get("point"), 
-                            "price": o.get("price")
-                        })
+                    for o in outs:
+                        if o.get("point") is None or o.get("price") is None: continue
+                        markets["spreads"].append({"name": o.get("name"), "point": o.get("point"), "price": o.get("price")})
                 elif key == "totals":
-                    for o in m.get("outcomes") or []:
-                        markets["totals"].append({
-                            "name": o.get("name"), 
-                            "point": o.get("point"), 
-                            "price": o.get("price")
-                        })
-        events.append({
-            "id": ev.get("id"),
-            "commence_time": ev.get("commence_time"),
-            "home_team": home, 
-            "away_team": away,
-            "markets": markets
-        })
+                    for o in outs:
+                        if o.get("point") is None or o.get("price") is None: continue
+                        markets["totals"].append({"name": o.get("name"), "point": o.get("point"), "price": o.get("price")})
+        events.append({"id": ev.get("id"), "commence_time": ev.get("commence_time"), "home_team": home, "away_team": away, "markets": markets})
     return {"events": events}
+
 
 def calculate_profit(decimal_odds: float, stake: float = 100) -> float:
     return (decimal_odds - 1.0) * stake
