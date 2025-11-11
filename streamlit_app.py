@@ -525,12 +525,12 @@ class KalshiIntegrator:
             self.headers["Authorization"] = f"Bearer {self.api_key}"
 
         def get_markets(self, category: str = None, status: str = "open") -> List[Dict]:
-    try:
-        endpoint = f"{self.api_url}/markets"
-        params = {
-            "limit": 100,
-            "status": status
-        }
+            try:
+                endpoint = f"{self.api_url}/markets"
+                params = {
+                    "limit": 100,
+                    "status": status
+                }
 
         # ✅ Removed series_ticker filter – it was restricting results
         # if category:
