@@ -507,53 +507,34 @@ class PrizePicksAnalyzer:
 
 class KalshiIntegrator:
     """Integrates Kalshi prediction market odds and analysis"""
-    
+
     def __init__(self, api_key: str = None, api_secret: str = None):
         self.api_key = api_key or os.environ.get("KALSHI_API_KEY")
         self.api_secret = api_secret or os.environ.get("KALSHI_API_SECRET")
         self.base_url = "https://api.elections.kalshi.com/trade-api/v2"
         self.demo_url = "https://demo-api.elections.kalshi.com/trade-api/v2"
-        
-        # Use demo for testing, production for live
         self.api_url = self.base_url if self.api_key else self.demo_url
-        
-        self.headers = {
-            "Content-Type": "application/json"
-        }
-        
+        self.headers = {"Content-Type": "application/json"}
         if self.api_key:
             self.headers["Authorization"] = f"Bearer {self.api_key}"
 
-        def get_markets(self, category: str = None, status: str = "open") -> List[Dict]:
-            try:
-                endpoint = f"{self.api_url}/markets"
-                params = {
-                    "limit": 100,
-                    "status": status
-                }
-
-                # ✅ Removed series_ticker filter – it was returning zero results
-                # if category:
-                #     params["series_ticker"] = category.upper()
-
-                response = requests.get(endpoint, headers=self.headers, params=params, timeout=10)
-
-                if response.status_code == 200:
-                    data = response.json()
-                    return data.get("markets", [])
-                else:
-                    return []
-
-            except Exception as e:
-                st.warning(f"Error fetching Kalshi markets: {str(e)}")
+    def get_markets(self, category: str = None, status: str = "open") -> List[Dict]:
+        try:
+            endpoint = f"{self.api_url}/markets"
+            params = {
+                "limit": 100,
+                "status": status
+            }
+            response = requests.get(endpoint, headers=self.headers, params=params, timeout=10)
+            if response.status_code == 200:
+                data = response.json()
+                return data.get("markets", [])
+            else:
                 return []
-
-
-            except Exception as e:
-                st.warning(f"Error fetching Kalshi markets: {str(e)}")
-                return []
-
         except Exception as e:
+            st.warning(f"Error fetching Kalshi markets: {str(e)}")
+            return []
+
             st.warning(f"Error fetching Kalshi markets: {str(e)}")
             return []
     
