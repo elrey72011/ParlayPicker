@@ -9,6 +9,7 @@ import requests
 import streamlit as st
 import pytz
 
+
 # ============ HELPER FUNCTIONS ============
 def american_to_decimal_safe(odds) -> float | None:
     """
@@ -22,19 +23,20 @@ def american_to_decimal_safe(odds) -> float | None:
         if abs(o) < 100:
             return None
         if o >= 100:
-            return 1.0 + o/100.0
+            return 1.0 + o / 100.0
         else:
-            return 1.0 + 100.0/abs(o)
+            return 1.0 + 100.0 / abs(o)
     except Exception:
         return None
+
 
 APP_CFG: Dict[str, Any] = {
     "title": "ParlayDesk - AI-Enhanced Odds Finder",
     "sports_common": [
-        "americanfootball_nfl","americanfootball_ncaaf",
-        "basketball_nba","basketball_ncaab",
-        "baseball_mlb","icehockey_nhl","mma_mixed_martial_arts",
-        "soccer_epl","soccer_uefa_champs_league","tennis_atp_singles"
+        "americanfootball_nfl", "americanfootball_ncaaf",
+        "basketball_nba", "basketball_ncaab",
+        "baseball_mlb", "icehockey_nhl", "mma_mixed_martial_arts",
+        "soccer_epl", "soccer_uefa_champs_league", "tennis_atp_singles"
     ],
     "prizepicks_sports": {
         "americanfootball_nfl": "NFL",
@@ -42,30 +44,31 @@ APP_CFG: Dict[str, Any] = {
     }
 }
 
+
 # ============ REAL SENTIMENT ANALYSIS ENGINE ============
 class RealSentimentAnalyzer:
     """
     REAL sentiment analysis using actual news sources and NLP
-    
+
     Data Sources:
     - NewsAPI.org (free tier: 100 requests/day)
     - Basic NLP sentiment classification
     """
-    
+
     def __init__(self, news_api_key: str = None):
         self.news_api_key = news_api_key or os.environ.get("NEWS_API_KEY")
         self.sentiment_cache = {}
         self.cache_duration = 1800  # 30 minutes
-        
+
         # Sentiment word lists
         self.positive_words = {
-            'win', 'wins', 'won', 'winning', 'victory', 'beat', 'beats', 
-            'dominant', 'strong', 'excellent', 'best', 'great', 'hot', 
+            'win', 'wins', 'won', 'winning', 'victory', 'beat', 'beats',
+            'dominant', 'strong', 'excellent', 'best', 'great', 'hot',
             'streak', 'momentum', 'comeback', 'champion', 'star', 'explosive',
             'impressive', 'outstanding', 'stellar', 'clutch', 'elite',
             'record-breaking', 'unstoppable', 'phenomenal', 'surging', 'rolling'
         }
-        
+
         self.negative_words = {
             'lose', 'loses', 'lost', 'losing', 'defeat', 'beaten',
             'weak', 'poor', 'worst', 'bad', 'cold', 'slump', 'struggle',
@@ -73,39 +76,39 @@ class RealSentimentAnalyzer:
             'blow', 'collapse', 'disaster', 'awful', 'terrible', 'embarrassing',
             'turnover', 'frustrated', 'disappointing', 'concerning', 'worry'
         }
-    
+
     def get_team_sentiment(self, team_name: str, sport: str) -> Dict[str, float]:
         """
         Get REAL sentiment analysis for a team using NewsAPI
         """
         cache_key = f"{team_name}_{sport}_{datetime.now().date()}"
-        
+
         # Check cache
         if cache_key in self.sentiment_cache:
             cached = self.sentiment_cache[cache_key]
             age = (datetime.now() - cached['timestamp']).seconds
             if age < self.cache_duration:
                 return cached['data']
-        
+
         # Try NewsAPI if configured
         if self.news_api_key:
             result = self._analyze_with_newsapi(team_name, sport)
         else:
             result = self._fallback_neutral()
-        
+
         self.sentiment_cache[cache_key] = {
             'data': result,
             'timestamp': datetime.now()
         }
-        
+
         return result
-    
+
     def _analyze_with_newsapi(self, team_name: str, sport: str) -> Dict:
         """Analyze sentiment using NewsAPI.org"""
         try:
             from_date = (datetime.now() - timedelta(days=3)).strftime('%Y-%m-%d')
             to_date = datetime.now().strftime('%Y-%m-%d')
-            
+
             query = f'"{team_name}"'
             if 'nba' in sport.lower():
                 query += ' NBA basketball'
@@ -115,7 +118,7 @@ class RealSentimentAnalyzer:
                 query += ' MLB baseball'
             elif 'nhl' in sport.lower():
                 query += ' NHL hockey'
-            
+
             response = requests.get(
                 "https://newsapi.org/v2/everything",
                 params={
@@ -129,28 +132,28 @@ class RealSentimentAnalyzer:
                 },
                 timeout=10
             )
-            
+
             if response.status_code != 200:
                 return self._fallback_neutral()
-            
+
             articles = response.json().get('articles', [])
-            
+
             if not articles:
                 return self._fallback_neutral()
-            
+
             sentiment_scores = []
             for article in articles[:20]:
                 text = f"{article.get('title', '')} {article.get('description', '')}".lower()
                 score = self._calculate_text_sentiment(text)
                 sentiment_scores.append(score)
-            
+
             if sentiment_scores:
                 avg_score = sum(sentiment_scores) / len(sentiment_scores)
                 score_variance = sum((s - avg_score) ** 2 for s in sentiment_scores) / len(sentiment_scores)
                 confidence = max(0.3, min(0.95, 1.0 - score_variance))
-                
+
                 trend = 'positive' if avg_score > 0.15 else ('negative' if avg_score < -0.15 else 'neutral')
-                
+
                 return {
                     'score': avg_score,
                     'confidence': confidence,
@@ -158,26 +161,26 @@ class RealSentimentAnalyzer:
                     'trend': trend,
                     'method': 'NewsAPI + NLP'
                 }
-            
+
             return self._fallback_neutral()
-            
+
         except Exception:
             return self._fallback_neutral()
-    
+
     def _calculate_text_sentiment(self, text: str) -> float:
         """Calculate sentiment score using word matching"""
         words = re.findall(r'\b\w+\b', text.lower())
-        
+
         positive_count = sum(1 for word in words if word in self.positive_words)
         negative_count = sum(1 for word in words if word in self.negative_words)
-        
+
         total = positive_count + negative_count
         if total == 0:
             return 0.0
-        
+
         sentiment_score = (positive_count - negative_count) / total * 0.7
         return max(-1.0, min(1.0, sentiment_score))
-    
+
     def _fallback_neutral(self) -> Dict:
         """Return neutral sentiment when API unavailable"""
         return {
@@ -188,29 +191,31 @@ class RealSentimentAnalyzer:
             'method': 'No API key'
         }
 
+
 # Alias for compatibility
 SentimentAnalyzer = RealSentimentAnalyzer
+
 
 # ============ ML PREDICTION ENGINE ============
 class MLPredictor:
     """Machine Learning prediction engine for game outcomes"""
-    
+
     def __init__(self):
         self.model_loaded = False
         self.feature_importance = {}
-    
-    def predict_game_outcome(self, home_team: str, away_team: str, 
-                            home_odds: float, away_odds: float,
-                            sentiment_home: float, sentiment_away: float) -> Dict[str, float]:
+
+    def predict_game_outcome(self, home_team: str, away_team: str,
+                             home_odds: float, away_odds: float,
+                             sentiment_home: float, sentiment_away: float) -> Dict[str, float]:
         """
         Predict game outcome using ensemble ML approach
         Returns adjusted probabilities for home/away
         """
-        
+
         # Calculate base probabilities from odds
         home_implied = self._odds_to_prob(home_odds)
         away_implied = self._odds_to_prob(away_odds)
-        
+
         # Feature engineering
         features = {
             'home_odds': home_odds,
@@ -221,26 +226,26 @@ class MLPredictor:
             'sentiment_diff': sentiment_home - sentiment_away,
             'market_efficiency': abs(home_implied + away_implied - 1.0)
         }
-        
+
         # ML Adjustment (in production, this would use trained XGBoost/LightGBM)
         # UPDATED: Sentiment now has real impact (40% vs 15% before)
         sentiment_weight = 0.40  # Increased from 0.15 to 0.40
-        market_weight = 0.60     # Decreased from 0.85 to 0.60
-        
+        market_weight = 0.60  # Decreased from 0.85 to 0.60
+
         # Adjust probabilities based on sentiment
         sentiment_adjustment = (sentiment_home - sentiment_away) * sentiment_weight
-        
+
         home_adjusted = home_implied * market_weight + (0.5 + sentiment_adjustment) * (1 - market_weight)
         away_adjusted = away_implied * market_weight + (0.5 - sentiment_adjustment) * (1 - market_weight)
-        
+
         # Normalize to sum to 1
         total = home_adjusted + away_adjusted
         home_adjusted /= total
         away_adjusted /= total
-        
+
         # Calculate confidence based on agreement between sources
         confidence = self._calculate_confidence(features, home_adjusted, home_implied)
-        
+
         return {
             'home_prob': home_adjusted,
             'away_prob': away_adjusted,
@@ -248,39 +253,40 @@ class MLPredictor:
             'edge': abs(home_adjusted - home_implied),
             'recommendation': 'home' if home_adjusted > away_adjusted else 'away'
         }
-    
+
     def _odds_to_prob(self, american_odds: float) -> float:
         """Convert American odds to probability"""
         if american_odds > 0:
             return 100.0 / (american_odds + 100.0)
         else:
             return abs(american_odds) / (abs(american_odds) + 100.0)
-    
+
     def _calculate_confidence(self, features: dict, ml_prob: float, market_prob: float) -> float:
         """Calculate prediction confidence score"""
         # Higher confidence when:
         # 1. Sentiment is strong and clear
         # 2. ML and market agree
         # 3. Market efficiency is high
-        
+
         sentiment_strength = abs(features['sentiment_diff'])
         ml_market_agreement = 1.0 - abs(ml_prob - market_prob)
         market_eff = 1.0 - features['market_efficiency']
-        
-        confidence = (sentiment_strength * 0.3 + 
-                     ml_market_agreement * 0.4 + 
-                     market_eff * 0.3)
-        
+
+        confidence = (sentiment_strength * 0.3 +
+                      ml_market_agreement * 0.4 +
+                      market_eff * 0.3)
+
         return min(max(confidence, 0.3), 0.95)  # Clamp between 30% and 95%
+
 
 # ============ AI PARLAY OPTIMIZER ============
 class AIOptimizer:
     """Optimizes parlay selection using AI insights"""
-    
+
     def __init__(self, sentiment_analyzer: SentimentAnalyzer, ml_predictor: MLPredictor):
         self.sentiment = sentiment_analyzer
         self.ml = ml_predictor
-    
+
     def score_parlay(self, legs: List[Dict]) -> Dict[str, float]:
         """
         Score a parlay combination using AI
@@ -289,19 +295,19 @@ class AIOptimizer:
         """
         if not legs:
             return {'score': 0, 'confidence': 0}
-        
+
         # Calculate combined probability (AI-adjusted)
         combined_prob = 1.0
         combined_confidence = 1.0
         total_edge = 0
         kalshi_boost = 0
         kalshi_legs = 0
-        
+
         for leg in legs:
             combined_prob *= leg.get('ai_prob', leg['p'])
             combined_confidence *= leg.get('ai_confidence', 0.5)
             total_edge += leg.get('ai_edge', 0)
-            
+
             # KALSHI INTEGRATION: Add Kalshi influence
             if 'kalshi_validation' in leg:
                 kv = leg['kalshi_validation']
@@ -310,11 +316,11 @@ class AIOptimizer:
                     # Kalshi provides additional probability estimate
                     kalshi_prob = kv.get('kalshi_prob', 0)
                     sportsbook_prob = leg.get('p', 0)
-                    
+
                     # If Kalshi and AI both disagree with sportsbook in same direction
                     # that's a strong signal
                     ai_prob = leg.get('ai_prob', sportsbook_prob)
-                    
+
                     if kalshi_prob > sportsbook_prob and ai_prob > sportsbook_prob:
                         # Both Kalshi and AI see value
                         kalshi_boost += 15  # Strong boost
@@ -330,39 +336,39 @@ class AIOptimizer:
                     else:
                         # Kalshi contradicts both AI and market
                         kalshi_boost -= 5  # Small penalty for confusion
-        
+
         # Calculate combined decimal odds
         combined_odds = legs[0]['d']
         for leg in legs[1:]:
             combined_odds *= leg['d']
-        
+
         # AI-enhanced EV
         ai_ev = (combined_prob * combined_odds) - 1.0
-        
+
         # Correlation penalty (same-game parlays are correlated)
         unique_games = len(set(leg['event_id'] for leg in legs))
         correlation_factor = unique_games / len(legs)
-        
+
         # Kalshi validation factor (0.8 to 1.2 multiplier)
         if kalshi_legs > 0:
             kalshi_factor = 1.0 + (kalshi_boost / 100)
             kalshi_factor = max(0.8, min(1.2, kalshi_factor))  # Clamp between 0.8 and 1.2
         else:
             kalshi_factor = 1.0  # No Kalshi data = neutral
-        
+
         # Final score components with KALSHI integration
         ev_score = ai_ev * 100  # EV contribution
         confidence_score = combined_confidence * 50  # Confidence contribution
         edge_score = total_edge * 150  # Edge is most important
-        
+
         # Calculate base score
-        base_score = (edge_score * 0.45 +      # 45% edge
-                     ev_score * 0.30 +          # 30% EV
-                     confidence_score * 0.25)    # 25% confidence
-        
+        base_score = (edge_score * 0.45 +  # 45% edge
+                      ev_score * 0.30 +  # 30% EV
+                      confidence_score * 0.25)  # 25% confidence
+
         # Apply Kalshi factor and correlation factor
         final_score = base_score * correlation_factor * kalshi_factor
-        
+
         return {
             'score': final_score,
             'ai_ev': ai_ev,
@@ -374,24 +380,25 @@ class AIOptimizer:
             'kalshi_boost': kalshi_boost
         }
 
+
 # ============ PRIZEPICKS INTEGRATION ============
 class PrizePicksAnalyzer:
     """Analyzes player props for PrizePicks optimal picks"""
-    
+
     def __init__(self):
         self.prop_cache = {}
         self.stat_categories = {
             "NFL": ["Pass Yds", "Rush Yds", "Rec Yds", "Pass TDs", "Receptions", "Rush+Rec Yds"],
             "NBA": ["Points", "Rebounds", "Assists", "3-PT Made", "Pts+Rebs+Asts", "Pts+Rebs", "Pts+Asts"]
         }
-    
+
     def generate_sample_props(self, sport: str, num_props: int = 20) -> List[Dict]:
         """
         Generate sample player props for analysis
         In production, this would fetch from PrizePicks API or scraping
         """
         props = []
-        
+
         if sport == "NFL":
             players = [
                 ("Patrick Mahomes", "KC", "QB"), ("Josh Allen", "BUF", "QB"),
@@ -424,7 +431,7 @@ class PrizePicksAnalyzer:
                         "player": player, "team": team, "pos": pos,
                         "stat": "Receptions", "line": 5.5, "projection": 6.2
                     })
-        
+
         elif sport == "NBA":
             players = [
                 ("Luka Doncic", "DAL", "PG"), ("Giannis Antetokounmpo", "MIL", "PF"),
@@ -447,20 +454,20 @@ class PrizePicksAnalyzer:
                         "player": player, "team": team, "pos": pos,
                         "stat": "Rebounds", "line": 10.5, "projection": 11.8
                     })
-        
+
         return props
-    
+
     def calculate_prop_edge(self, prop: Dict) -> Dict:
         """Calculate edge for a prop bet"""
         line = prop["line"]
         projection = prop["projection"]
-        
+
         # Simple edge calculation
         edge = ((projection - line) / line) * 100
-        
+
         # Confidence based on how far projection is from line
         confidence = min(abs(edge) / 10, 1.0) * 0.7 + 0.3  # 30-100%
-        
+
         return {
             **prop,
             "edge": edge,
@@ -468,28 +475,28 @@ class PrizePicksAnalyzer:
             "direction": "OVER" if projection > line else "UNDER",
             "value": abs(projection - line)
         }
-    
+
     def find_best_picks(self, props: List[Dict], min_picks: int = 2, max_picks: int = 4) -> List[Dict]:
         """Find best prop combinations for PrizePicks entries"""
         # Score each prop
         scored_props = [self.calculate_prop_edge(p) for p in props]
-        
+
         # Filter to only positive edge props
         positive_edge = [p for p in scored_props if p["edge"] > 0]
-        
+
         # Sort by edge * confidence
         positive_edge.sort(key=lambda x: x["edge"] * x["confidence"], reverse=True)
-        
+
         # Build combinations
         best_entries = []
         for k in range(min_picks, max_picks + 1):
             for combo in itertools.combinations(positive_edge[:15], k):  # Top 15 props
                 total_edge = sum(p["edge"] for p in combo)
                 avg_confidence = sum(p["confidence"] for p in combo) / len(combo)
-                
+
                 # PrizePicks scoring (approximate payouts)
                 payout_multiplier = {2: 3.0, 3: 5.0, 4: 10.0}.get(k, 10.0)
-                
+
                 best_entries.append({
                     "picks": combo,
                     "num_picks": k,
@@ -498,7 +505,7 @@ class PrizePicksAnalyzer:
                     "payout_multiplier": payout_multiplier,
                     "score": total_edge * avg_confidence * payout_multiplier
                 })
-        
+
         best_entries.sort(key=lambda x: x["score"], reverse=True)
         return best_entries
 
@@ -538,71 +545,71 @@ class KalshiIntegrator:
     def get_sports_markets(self) -> List[Dict]:
         """Get all active sports betting markets"""
         all_markets = self.get_markets()
-        
+
         # Filter for sports-related markets
-        sports_keywords = ['NFL', 'NBA', 'MLB', 'NHL', 'UFC', 'SOCCER', 'TENNIS', 
-                          'GOLF', 'FOOTBALL', 'BASKETBALL', 'BASEBALL', 'HOCKEY']
-        
+        sports_keywords = ['NFL', 'NBA', 'MLB', 'NHL', 'UFC', 'SOCCER', 'TENNIS',
+                           'GOLF', 'FOOTBALL', 'BASKETBALL', 'BASEBALL', 'HOCKEY']
+
         sports_markets = []
         for market in all_markets:
             title = market.get('title', '').upper()
             ticker = market.get('ticker', '').upper()
-            
+
             if any(keyword in title or keyword in ticker for keyword in sports_keywords):
                 sports_markets.append(market)
-        
+
         return sports_markets
-    
+
     def get_market_details(self, market_ticker: str) -> Dict:
         """Get detailed information about a specific market"""
         try:
             endpoint = f"{self.api_url}/markets/{market_ticker}"
             response = requests.get(endpoint, headers=self.headers, timeout=10)
-            
+
             if response.status_code == 200:
                 return response.json().get("market", {})
             else:
                 return {}
-        
+
         except Exception as e:
             st.warning(f"Error fetching market details: {str(e)}")
             return {}
-    
+
     def get_orderbook(self, market_ticker: str) -> Dict:
         """Get current orderbook (bids/asks) for a market"""
         try:
             endpoint = f"{self.api_url}/markets/{market_ticker}/orderbook"
             response = requests.get(endpoint, headers=self.headers, timeout=10)
-            
+
             if response.status_code == 200:
                 return response.json().get("orderbook", {})
             else:
                 return {}
-        
+
         except Exception as e:
             st.warning(f"Error fetching orderbook: {str(e)}")
             return {}
-    
+
     def compare_with_sportsbook(self, kalshi_market: Dict, sportsbook_odds: Dict) -> Dict:
         """
         Compare Kalshi prediction market with traditional sportsbook
-        
+
         This finds arbitrage and value opportunities
         """
         kalshi_yes_price = kalshi_market.get('yes_bid', 0) / 100  # Convert cents to probability
         kalshi_no_price = kalshi_market.get('no_bid', 0) / 100
-        
+
         # Get implied probability from sportsbook
         sb_odds = sportsbook_odds.get('price')
         if sb_odds:
             sb_prob = implied_p_from_american(sb_odds)
         else:
             sb_prob = None
-        
+
         # Calculate discrepancy
         if sb_prob and kalshi_yes_price:
             discrepancy = abs(kalshi_yes_price - sb_prob)
-            
+
             # Determine which side is better value
             if kalshi_yes_price < sb_prob - 0.05:  # Kalshi underpricing by 5%+
                 recommendation = "🟢 BUY YES on Kalshi (underpriced vs sportsbook)"
@@ -613,7 +620,7 @@ class KalshiIntegrator:
             else:
                 recommendation = "🟡 Prices aligned (no significant edge)"
                 edge = discrepancy
-            
+
             return {
                 'kalshi_prob': kalshi_yes_price,
                 'sportsbook_prob': sb_prob,
@@ -622,7 +629,7 @@ class KalshiIntegrator:
                 'recommendation': recommendation,
                 'has_arbitrage': discrepancy > 0.10  # 10%+ difference
             }
-        
+
         return {
             'kalshi_prob': kalshi_yes_price,
             'sportsbook_prob': sb_prob,
@@ -631,28 +638,28 @@ class KalshiIntegrator:
             'recommendation': '⚪ Insufficient data for comparison',
             'has_arbitrage': False
         }
-    
-    def find_arbitrage_opportunities(self, kalshi_markets: List[Dict], 
+
+    def find_arbitrage_opportunities(self, kalshi_markets: List[Dict],
                                      sportsbook_events: List[Dict]) -> List[Dict]:
         """
         Find arbitrage opportunities between Kalshi and traditional sportsbooks
-        
+
         Returns list of arbitrage opportunities with expected profit
         """
         arbitrage_opps = []
-        
+
         for kalshi_market in kalshi_markets:
             title = kalshi_market.get('title', '')
-            
+
             # Try to match with sportsbook events
             for sb_event in sportsbook_events:
                 # Simple matching logic (can be enhanced)
                 home_team = sb_event.get('home_team', '')
                 away_team = sb_event.get('away_team', '')
-                
+
                 if home_team in title or away_team in title:
                     comparison = self.compare_with_sportsbook(kalshi_market, sb_event)
-                    
+
                     if comparison['has_arbitrage']:
                         arbitrage_opps.append({
                             'kalshi_market': title,
@@ -660,14 +667,14 @@ class KalshiIntegrator:
                             'sportsbook_game': f"{away_team} @ {home_team}",
                             'comparison': comparison
                         })
-        
+
         return arbitrage_opps
-    
-    def analyze_kalshi_market(self, market: Dict, sentiment_score: float = 0, 
-                             ml_probability: float = None) -> Dict:
+
+    def analyze_kalshi_market(self, market: Dict, sentiment_score: float = 0,
+                              ml_probability: float = None) -> Dict:
         """
         Comprehensive analysis of a Kalshi market
-        
+
         Combines:
         - Kalshi orderbook data
         - Sentiment analysis
@@ -678,35 +685,35 @@ class KalshiIntegrator:
         yes_ask = market.get('yes_ask', 100) / 100
         no_bid = market.get('no_bid', 0) / 100
         no_ask = market.get('no_ask', 100) / 100
-        
+
         volume = market.get('volume', 0)
         open_interest = market.get('open_interest', 0)
-        
+
         # Market efficiency (tight spread = efficient)
         yes_spread = yes_ask - yes_bid
         no_spread = no_ask - no_bid
         avg_spread = (yes_spread + no_spread) / 2
-        
+
         efficiency = 1 - avg_spread  # Higher = more efficient
-        
+
         # Compare with AI prediction
         kalshi_implied = yes_bid  # Using bid as market consensus
-        
+
         if ml_probability:
             ai_edge = ml_probability - kalshi_implied
-            
+
             if ai_edge > 0.10:
-                ai_recommendation = f"🟢 STRONG BUY YES - AI sees {ai_edge*100:.1f}% edge"
+                ai_recommendation = f"🟢 STRONG BUY YES - AI sees {ai_edge * 100:.1f}% edge"
             elif ai_edge < -0.10:
-                ai_recommendation = f"🟢 STRONG BUY NO - AI sees {abs(ai_edge)*100:.1f}% edge"
+                ai_recommendation = f"🟢 STRONG BUY NO - AI sees {abs(ai_edge) * 100:.1f}% edge"
             elif abs(ai_edge) < 0.05:
                 ai_recommendation = "🟡 FAIR PRICE - AI agrees with market"
             else:
-                ai_recommendation = f"🟡 SLIGHT EDGE - AI sees {ai_edge*100:.1f}% edge"
+                ai_recommendation = f"🟡 SLIGHT EDGE - AI sees {ai_edge * 100:.1f}% edge"
         else:
             ai_edge = 0
             ai_recommendation = "⚪ No AI prediction available"
-        
+
         # Sentiment alignment
         if sentiment_score > 0.3 and kalshi_implied < 0.6:
             sentiment_signal = "🟢 Positive sentiment + underpriced = BUY YES"
@@ -714,7 +721,7 @@ class KalshiIntegrator:
             sentiment_signal = "🟢 Negative sentiment + overpriced = BUY NO"
         else:
             sentiment_signal = "🟡 Sentiment neutral or priced in"
-        
+
         # Liquidity assessment
         if volume > 1000 and open_interest > 500:
             liquidity = "🟢 High liquidity - easy to enter/exit"
@@ -722,7 +729,7 @@ class KalshiIntegrator:
             liquidity = "🟡 Moderate liquidity - tradeable"
         else:
             liquidity = "🔴 Low liquidity - be cautious"
-        
+
         return {
             'kalshi_probability': kalshi_implied,
             'yes_bid': yes_bid,
@@ -740,8 +747,8 @@ class KalshiIntegrator:
                 ai_edge, sentiment_score, efficiency, volume
             )
         }
-    
-    def _calculate_overall_score(self, ai_edge: float, sentiment: float, 
+
+    def _calculate_overall_score(self, ai_edge: float, sentiment: float,
                                  efficiency: float, volume: int) -> float:
         """Calculate overall opportunity score 0-100"""
         # Weight different factors
@@ -749,50 +756,50 @@ class KalshiIntegrator:
         sentiment_score = min(abs(sentiment) * 50, 20)  # Max 20 points
         efficiency_score = efficiency * 15  # Max 15 points
         liquidity_score = min(volume / 100, 15)  # Max 15 points
-        
+
         total = edge_score + sentiment_score + efficiency_score + liquidity_score
         return min(total, 100)
-    
+
     def get_best_opportunities(self, min_score: float = 60) -> List[Dict]:
         """
         Find the best Kalshi betting opportunities
-        
+
         Returns markets with high overall scores
         """
         markets = self.get_sports_markets()
         opportunities = []
-        
+
         for market in markets:
             # Get orderbook
             ticker = market.get('ticker')
             orderbook = self.get_orderbook(ticker)
-            
+
             if orderbook:
                 # Enhance market data with orderbook
                 market['yes_bid'] = orderbook.get('yes', [{}])[0].get('price', 0)
                 market['yes_ask'] = orderbook.get('yes', [{}])[-1].get('price', 100)
                 market['no_bid'] = orderbook.get('no', [{}])[0].get('price', 0)
                 market['no_ask'] = orderbook.get('no', [{}])[-1].get('price', 100)
-                
+
                 # Analyze
                 analysis = self.analyze_kalshi_market(market)
-                
+
                 if analysis['overall_score'] >= min_score:
                     opportunities.append({
                         'market': market,
                         'analysis': analysis
                     })
-        
+
         # Sort by score
         opportunities.sort(key=lambda x: x['analysis']['overall_score'], reverse=True)
-        
+
         return opportunities
-    
-    def calculate_kelly_for_kalshi(self, kalshi_prob: float, ai_prob: float, 
+
+    def calculate_kelly_for_kalshi(self, kalshi_prob: float, ai_prob: float,
                                    bankroll: float = 1000) -> Dict:
         """
         Calculate Kelly Criterion for Kalshi market
-        
+
         Kalshi uses probability pricing (0-100 cents), not traditional odds
         """
         if ai_prob <= kalshi_prob:
@@ -802,41 +809,41 @@ class KalshiIntegrator:
                 'expected_value': 0,
                 'recommendation': '🔴 NO EDGE - AI probability not better than Kalshi price'
             }
-        
+
         # Edge calculation for binary market
         edge = ai_prob - kalshi_prob
-        
+
         # Kelly formula for binary outcome: f = edge / (1 - kalshi_prob)
         if kalshi_prob < 0.95:  # Avoid division issues
             kelly_fraction = edge / (1 - kalshi_prob)
         else:
             kelly_fraction = 0
-        
+
         # Conservative Kelly (0.25x)
         kelly_fraction = kelly_fraction * 0.25
         kelly_fraction = max(0, min(kelly_fraction, 0.10))  # Cap at 10%
-        
+
         kelly_percentage = kelly_fraction * 100
         recommended_stake = bankroll * kelly_fraction
-        
+
         # Expected value
         expected_payout = ai_prob * (1 / kalshi_prob)
         expected_value = expected_payout - 1
-        
+
         if kelly_percentage > 3:
             risk = "High"
         elif kelly_percentage > 1:
             risk = "Medium"
         else:
             risk = "Low"
-        
+
         return {
             'kelly_percentage': kelly_percentage,
             'recommended_stake': recommended_stake,
             'expected_value': expected_value,
             'edge_percentage': edge * 100,
             'risk_level': risk,
-            'recommendation': f"🟢 BET {kelly_percentage:.1f}% (${recommended_stake:.0f}) | Edge: {edge*100:+.1f}%"
+            'recommendation': f"🟢 BET {kelly_percentage:.1f}% (${recommended_stake:.0f}) | Edge: {edge * 100:+.1f}%"
         }
 
 
@@ -845,16 +852,16 @@ class KalshiIntegrator:
 # 1. SHARP MONEY DETECTOR
 class SharpMoneyDetector:
     """Detects sharp money movement and line steam"""
-    
+
     def __init__(self):
         self.line_history = {}  # Track line movements
         self.steam_threshold = 0.5  # Half point move = steam
-    
-    def analyze_line_movement(self, game_id: str, current_line: float, 
+
+    def analyze_line_movement(self, game_id: str, current_line: float,
                               opening_line: float, public_bet_pct: float = None) -> Dict:
         """
         Analyze if line movement suggests sharp money
-        
+
         Returns:
             'movement': Points line moved
             'direction': 'with_public' or 'reverse' or 'neutral'
@@ -862,7 +869,7 @@ class SharpMoneyDetector:
             'confidence': How confident we are (0-1)
         """
         movement = current_line - opening_line
-        
+
         # Reverse line movement = sharp money indicator
         # (Line moves opposite to where public is betting)
         is_reverse = False
@@ -871,17 +878,17 @@ class SharpMoneyDetector:
                 is_reverse = True
             elif public_bet_pct < 35 and movement > 0.3:  # Public on underdog, line moves other way
                 is_reverse = True
-        
+
         # Steam = sudden sharp move (0.5+ points)
         is_steam = abs(movement) >= self.steam_threshold
-        
+
         # Confidence based on movement size and reverse nature
         confidence = min(abs(movement) / 3.0, 0.95)  # Max 95% confidence
         if is_reverse:
             confidence = min(confidence + 0.2, 0.95)  # Boost confidence for reverse moves
-        
+
         direction = 'reverse' if is_reverse else ('with_public' if public_bet_pct else 'neutral')
-        
+
         return {
             'movement': movement,
             'direction': direction,
@@ -890,7 +897,7 @@ class SharpMoneyDetector:
             'confidence': confidence,
             'recommendation': self._get_recommendation(movement, is_reverse, is_steam)
         }
-    
+
     def _get_recommendation(self, movement: float, is_reverse: bool, is_steam: bool) -> str:
         """Generate betting recommendation based on sharp action"""
         if is_reverse and abs(movement) > 1.0:
@@ -904,14 +911,15 @@ class SharpMoneyDetector:
         else:
             return "🟡 MODERATE MOVEMENT - Monitor closely"
 
+
 # 2. PLAYER IMPACT ANALYZER
 class PlayerImpactAnalyzer:
     """Analyzes impact of injuries and player absence"""
-    
+
     def __init__(self):
         # Historical impact data (simplified - in production, use real database)
         self.position_weights = {
-            'QB': 0.35,   # Quarterback most important in NFL
+            'QB': 0.35,  # Quarterback most important in NFL
             'RB': 0.12,
             'WR': 0.10,
             'TE': 0.08,
@@ -926,15 +934,15 @@ class PlayerImpactAnalyzer:
             'PF': 0.18,
             'C': 0.17
         }
-    
-    def analyze_injury_impact(self, team: str, injured_players: List[Dict], 
+
+    def analyze_injury_impact(self, team: str, injured_players: List[Dict],
                               team_odds_before: float) -> Dict:
         """
         Calculate how injuries should affect team performance
-        
+
         Args:
             injured_players: [{'name': 'Patrick Mahomes', 'position': 'QB', 'status': 'OUT'}]
-        
+
         Returns:
             'total_impact': -0.15 means team is 15% worse
             'adjusted_odds': What odds should be
@@ -942,11 +950,11 @@ class PlayerImpactAnalyzer:
         """
         total_impact = 0.0
         key_players_out = []
-        
+
         for player in injured_players:
             position = player.get('position', '').upper()
             status = player.get('status', '').upper()
-            
+
             # Weight impact by position and injury severity
             if status == 'OUT':
                 impact = self.position_weights.get(position, 0.05)
@@ -958,13 +966,13 @@ class PlayerImpactAnalyzer:
             elif status == 'QUESTIONABLE':
                 impact = self.position_weights.get(position, 0.05) * 0.30
                 total_impact += impact
-        
+
         # Adjust odds based on impact
         # Negative impact = odds get worse (more positive/less negative)
         if team_odds_before:
             prob_before = implied_p_from_american(team_odds_before)
             prob_adjusted = prob_before * (1 - total_impact)
-            
+
             # Convert back to American odds
             if prob_adjusted > 0.5:
                 adjusted_odds = -100 * (prob_adjusted / (1 - prob_adjusted))
@@ -972,11 +980,11 @@ class PlayerImpactAnalyzer:
                 adjusted_odds = 100 * ((1 - prob_adjusted) / prob_adjusted)
         else:
             adjusted_odds = None
-        
+
         confidence = min(total_impact * 2, 0.9)  # More injuries = more confident
-        
+
         recommendation = self._get_injury_recommendation(total_impact, key_players_out)
-        
+
         return {
             'total_impact': total_impact,
             'adjusted_odds': adjusted_odds,
@@ -984,7 +992,7 @@ class PlayerImpactAnalyzer:
             'confidence': confidence,
             'recommendation': recommendation
         }
-    
+
     def _get_injury_recommendation(self, impact: float, key_players: List[str]) -> str:
         """Generate recommendation based on injury impact"""
         if impact > 0.25:
@@ -996,10 +1004,11 @@ class PlayerImpactAnalyzer:
         else:
             return "🟢 MINIMAL IMPACT - Team at full strength"
 
+
 # 3. WEATHER ANALYZER
 class WeatherAnalyzer:
     """Analyzes weather impact on outdoor games"""
-    
+
     def __init__(self, weather_api_key: str = None):
         self.api_key = weather_api_key or os.environ.get("WEATHER_API_KEY")
         self.outdoor_venues = {
@@ -1025,12 +1034,12 @@ class WeatherAnalyzer:
             'San Francisco 49ers': True,
             # MLB - all outdoor except dome stadiums
         }
-    
-    def analyze_weather_impact(self, home_team: str, sport: str, 
+
+    def analyze_weather_impact(self, home_team: str, sport: str,
                                weather_data: Dict = None) -> Dict:
         """
         Analyze how weather affects the game
-        
+
         weather_data: {
             'temp': 35,  # Fahrenheit
             'wind_speed': 20,  # MPH
@@ -1045,11 +1054,11 @@ class WeatherAnalyzer:
                 'total_adjustment': 0.0,
                 'recommendation': '🏟️ INDOOR - Weather not a factor'
             }
-        
+
         if not weather_data:
             # Try to fetch real weather if API configured
             weather_data = self._fetch_weather(home_team) if self.api_key else {}
-        
+
         if not weather_data:
             return {
                 'is_outdoor': True,
@@ -1057,15 +1066,15 @@ class WeatherAnalyzer:
                 'total_adjustment': 0.0,
                 'recommendation': '⚪ Weather data unavailable'
             }
-        
+
         temp = weather_data.get('temp', 70)
         wind = weather_data.get('wind_speed', 0)
         precip = weather_data.get('precipitation', 0)
-        
+
         # Calculate impact on scoring (for totals)
         impact = 0.0
         factors = []
-        
+
         # Temperature impact (NFL)
         if sport in ['americanfootball_nfl', 'americanfootball_ncaaf']:
             if temp < 32:
@@ -1077,7 +1086,7 @@ class WeatherAnalyzer:
             elif temp > 95:
                 impact -= 0.05  # Extreme heat also reduces scoring
                 factors.append(f"🔥 Hot ({temp}°F)")
-        
+
         # Wind impact (huge for passing/kicking)
         if wind > 20:
             impact -= 0.20  # Strong wind kills passing game
@@ -1088,7 +1097,7 @@ class WeatherAnalyzer:
         elif wind > 10:
             impact -= 0.05
             factors.append(f"🍃 Breezy ({wind} MPH)")
-        
+
         # Precipitation impact
         if precip > 0.5:
             impact -= 0.15  # Heavy rain/snow significantly reduces scoring
@@ -1096,31 +1105,32 @@ class WeatherAnalyzer:
         elif precip > 0.1:
             impact -= 0.08
             factors.append(f"☔ Light Precipitation")
-        
+
         # Total adjustment (can be significant)
         total_adjustment = impact
-        
+
         recommendation = self._get_weather_recommendation(total_adjustment, factors)
-        
+
         return {
             'is_outdoor': True,
             'impact': impact,
             'total_adjustment': total_adjustment,
             'factors': factors,
             'recommendation': recommendation,
-            'suggested_play': 'UNDER' if total_adjustment < -0.10 else ('OVER' if total_adjustment > 0.05 else 'NEUTRAL')
+            'suggested_play': 'UNDER' if total_adjustment < -0.10 else (
+                'OVER' if total_adjustment > 0.05 else 'NEUTRAL')
         }
-    
+
     def _is_outdoor(self, team: str) -> bool:
         """Check if team plays in outdoor venue"""
         return self.outdoor_venues.get(team, False)
-    
+
     def _fetch_weather(self, team: str) -> Dict:
         """Fetch real weather data (placeholder for API call)"""
         # In production, use OpenWeatherMap or similar
         # For now, return empty to use manual input
         return {}
-    
+
     def _get_weather_recommendation(self, adjustment: float, factors: List[str]) -> str:
         """Generate weather-based recommendation"""
         if adjustment < -0.20:
@@ -1134,21 +1144,22 @@ class WeatherAnalyzer:
         else:
             return "⚪ NEUTRAL - Weather not a major factor"
 
+
 # 4. KELLY CRITERION CALCULATOR
 class KellyCalculator:
     """Calculates optimal bet sizing using Kelly Criterion"""
-    
-    def calculate_kelly(self, win_probability: float, decimal_odds: float, 
-                       bankroll: float = 1000, conservative: bool = True) -> Dict:
+
+    def calculate_kelly(self, win_probability: float, decimal_odds: float,
+                        bankroll: float = 1000, conservative: bool = True) -> Dict:
         """
         Calculate Kelly Criterion bet size
-        
+
         Args:
             win_probability: Your estimated probability of winning (0-1)
             decimal_odds: Payout odds in decimal format
             bankroll: Total bankroll
             conservative: Use fractional Kelly (recommended)
-        
+
         Returns:
             'kelly_percentage': % of bankroll to bet
             'recommended_stake': Dollar amount to bet
@@ -1157,14 +1168,14 @@ class KellyCalculator:
         """
         # Kelly formula: f = (bp - q) / b
         # where f = fraction to bet, b = odds-1, p = win prob, q = lose prob
-        
+
         b = decimal_odds - 1  # Net odds
         p = win_probability
         q = 1 - p
-        
+
         # Calculate edge
         edge = (p * decimal_odds) - 1
-        
+
         if edge <= 0:
             # No edge, don't bet
             return {
@@ -1174,20 +1185,20 @@ class KellyCalculator:
                 'risk_level': 'NONE',
                 'recommendation': '🔴 NO EDGE - Do not bet (negative EV)'
             }
-        
+
         # Full Kelly
         kelly_fraction = (b * p - q) / b
-        
+
         # Clamp to reasonable range
         kelly_fraction = max(0, min(kelly_fraction, 0.25))  # Never bet more than 25%
-        
+
         # Conservative Kelly (recommended: 0.25x to 0.5x Kelly)
         if conservative:
             kelly_fraction *= 0.25  # Quarter Kelly
-        
+
         kelly_percentage = kelly_fraction * 100
         recommended_stake = bankroll * kelly_fraction
-        
+
         # Risk level based on Kelly %
         if kelly_percentage < 1:
             risk_level = 'Low'
@@ -1197,9 +1208,9 @@ class KellyCalculator:
             risk_level = 'High'
         else:
             risk_level = 'Very High'
-        
+
         recommendation = self._get_kelly_recommendation(kelly_percentage, edge, risk_level)
-        
+
         return {
             'kelly_percentage': kelly_percentage,
             'recommended_stake': recommended_stake,
@@ -1208,34 +1219,35 @@ class KellyCalculator:
             'risk_level': risk_level,
             'recommendation': recommendation
         }
-    
+
     def _get_kelly_recommendation(self, kelly_pct: float, edge: float, risk: str) -> str:
         """Generate Kelly-based recommendation"""
         if kelly_pct == 0:
             return "🔴 NO BET - Negative expected value"
         elif kelly_pct < 1:
-            return f"🟢 SMALL BET - {kelly_pct:.1f}% of bankroll | {risk} risk | Edge: {edge*100:+.1f}%"
+            return f"🟢 SMALL BET - {kelly_pct:.1f}% of bankroll | {risk} risk | Edge: {edge * 100:+.1f}%"
         elif kelly_pct < 3:
-            return f"🟡 MEDIUM BET - {kelly_pct:.1f}% of bankroll | {risk} risk | Edge: {edge*100:+.1f}%"
+            return f"🟡 MEDIUM BET - {kelly_pct:.1f}% of bankroll | {risk} risk | Edge: {edge * 100:+.1f}%"
         elif kelly_pct < 5:
-            return f"🟠 LARGE BET - {kelly_pct:.1f}% of bankroll | {risk} risk | Edge: {edge*100:+.1f}%"
+            return f"🟠 LARGE BET - {kelly_pct:.1f}% of bankroll | {risk} risk | Edge: {edge * 100:+.1f}%"
         else:
-            return f"🔴 REDUCE SIZE - {kelly_pct:.1f}% too high, cap at 5% | Edge: {edge*100:+.1f}%"
+            return f"🔴 REDUCE SIZE - {kelly_pct:.1f}% too high, cap at 5% | Edge: {edge * 100:+.1f}%"
+
 
 # 5. MATCHUP ANALYZER
 class MatchupAnalyzer:
     """Analyzes historical head-to-head matchups"""
-    
+
     def __init__(self):
         # In production, fetch from real database
         # This is simplified for demonstration
         self.matchup_history = {}
-    
-    def analyze_matchup(self, home_team: str, away_team: str, 
-                       recent_games: int = 10) -> Dict:
+
+    def analyze_matchup(self, home_team: str, away_team: str,
+                        recent_games: int = 10) -> Dict:
         """
         Analyze historical matchup between teams
-        
+
         Returns patterns like:
         - Home team dominance
         - Scoring trends
@@ -1244,7 +1256,7 @@ class MatchupAnalyzer:
         """
         # Simplified analysis (in production, query actual database)
         matchup_key = f"{home_team}_vs_{away_team}"
-        
+
         # Placeholder data structure
         analysis = {
             'games_analyzed': 0,
@@ -1257,22 +1269,22 @@ class MatchupAnalyzer:
             'confidence': 0.3,
             'recommendation': '⚪ Insufficient historical data'
         }
-        
+
         # In production, calculate from real data:
         # - Win percentages
         # - Scoring averages
         # - Recent trends
         # - Home/away splits
-        
+
         return analysis
-    
+
     def get_recommendation(self, analysis: Dict) -> str:
         """Generate matchup-based recommendation"""
         if analysis['games_analyzed'] < 3:
             return "⚪ Limited history - rely on other factors"
-        
+
         home_win_pct = analysis['home_wins'] / analysis['games_analyzed']
-        
+
         if home_win_pct > 0.7:
             return "🟢 HOME TEAM DOMINATES - Strong historical advantage"
         elif home_win_pct < 0.3:
@@ -1280,25 +1292,26 @@ class MatchupAnalyzer:
         else:
             return "🟡 COMPETITIVE MATCHUP - No clear historical edge"
 
+
 # 6. ADVANCED STATS INTEGRATOR
 class AdvancedStatsIntegrator:
     """Integrates advanced metrics like EPA, DVOA, etc."""
-    
+
     def __init__(self):
         # Weights for different advanced metrics
         self.metric_weights = {
-            'epa': 0.30,      # Expected Points Added
-            'dvoa': 0.25,     # Defense-adjusted Value Over Average  
+            'epa': 0.30,  # Expected Points Added
+            'dvoa': 0.25,  # Defense-adjusted Value Over Average
             'success_rate': 0.20,
             'explosive_play_rate': 0.15,
             'turnover_rate': 0.10
         }
-    
-    def calculate_team_strength(self, team: str, sport: str, 
-                               advanced_metrics: Dict = None) -> Dict:
+
+    def calculate_team_strength(self, team: str, sport: str,
+                                advanced_metrics: Dict = None) -> Dict:
         """
         Calculate overall team strength using advanced metrics
-        
+
         advanced_metrics: {
             'offensive_epa': 0.15,
             'defensive_epa': -0.10,
@@ -1316,21 +1329,21 @@ class AdvancedStatsIntegrator:
                 'confidence': 0.2,
                 'recommendation': '⚪ Advanced stats unavailable'
             }
-        
+
         # Combine metrics using weights
         offensive_score = 0.0
         defensive_score = 0.0
-        
+
         # EPA (Expected Points Added)
         if 'offensive_epa' in advanced_metrics:
             offensive_score += advanced_metrics['offensive_epa'] * self.metric_weights['epa']
         if 'defensive_epa' in advanced_metrics:
             defensive_score += advanced_metrics['defensive_epa'] * self.metric_weights['epa']
-        
+
         overall_rating = offensive_score + defensive_score
-        
+
         recommendation = self._get_advanced_stats_recommendation(overall_rating)
-        
+
         return {
             'overall_rating': overall_rating,
             'offensive_rating': offensive_score,
@@ -1338,7 +1351,7 @@ class AdvancedStatsIntegrator:
             'confidence': 0.75,
             'recommendation': recommendation
         }
-    
+
     def _get_advanced_stats_recommendation(self, rating: float) -> str:
         """Generate recommendation from advanced stats"""
         if rating > 0.20:
@@ -1352,21 +1365,22 @@ class AdvancedStatsIntegrator:
         else:
             return "🔴 POOR TEAM - Weak underlying metrics"
 
+
 # 7. SOCIAL MEDIA ANALYZER (Simplified)
 class SocialMediaAnalyzer:
     """Analyzes Twitter/Reddit for real-time sentiment"""
-    
+
     def __init__(self, twitter_api_key: str = None):
         self.twitter_key = twitter_api_key or os.environ.get("TWITTER_API_KEY")
         self.keywords = {
             'positive': ['win', 'great', 'amazing', 'clutch', 'dominant', 'beast'],
             'negative': ['lose', 'bad', 'terrible', 'bench', 'cut', 'injured']
         }
-    
+
     def analyze_social_sentiment(self, team: str, player: str = None) -> Dict:
         """
         Analyze social media sentiment
-        
+
         Note: This is a simplified placeholder. Full implementation requires:
         - Twitter API v2 access
         - Reddit API (PRAW) integration
@@ -1380,7 +1394,7 @@ class SocialMediaAnalyzer:
             'confidence': 0.2,
             'recommendation': '⚪ Social media analysis unavailable (API key needed)'
         }
-    
+
     def detect_breaking_news(self, team: str) -> Dict:
         """Detect breaking news that might not be priced in yet"""
         # Placeholder - would monitor Twitter for breaking news keywords
@@ -1390,17 +1404,18 @@ class SocialMediaAnalyzer:
             'urgency': 'low'
         }
 
+
 # ============ KALSHI VALIDATION HELPER ============
-def validate_with_kalshi(kalshi_integrator, home_team: str, away_team: str, 
-                        side: str, sportsbook_prob: float, sport: str) -> Dict:
+def validate_with_kalshi(kalshi_integrator, home_team: str, away_team: str,
+                         side: str, sportsbook_prob: float, sport: str) -> Dict:
     """
     IMPROVED: Validate sportsbook odds with Kalshi prediction market
-    
+
     Now handles team name variations like:
     - "Memphis Grizzlies" matches "Memphis"
-    - "New York Knicks" matches "New York K"  
+    - "New York Knicks" matches "New York K"
     - "Los Angeles Lakers" matches "LA Lakers"
-    
+
     Returns:
         'kalshi_prob': Kalshi market probability
         'discrepancy': Difference between markets
@@ -1408,18 +1423,18 @@ def validate_with_kalshi(kalshi_integrator, home_team: str, away_team: str,
         'edge': Additional edge from Kalshi vs sportsbook
         'confidence_boost': How much to boost confidence (0-0.20)
     """
-    
+
     def normalize_team_name(team: str) -> List[str]:
         """Generate multiple variations of a team name for flexible matching"""
         team_upper = team.upper()
         variations = [team_upper]
-        
+
         # Split into parts and add individual words
         parts = team_upper.split()
         for part in parts:
             if len(part) > 2:  # Skip very short words
                 variations.append(part)
-        
+
         # Special handling for common abbreviations
         abbreviations = {
             'NEW YORK': ['NY', 'NEW YORK K', 'N.Y.'],
@@ -1429,23 +1444,23 @@ def validate_with_kalshi(kalshi_integrator, home_team: str, away_team: str,
             'OKLAHOMA CITY': ['OKC'],
             'WASHINGTON': ['WSH'],
         }
-        
+
         for city, abbrevs in abbreviations.items():
             if team_upper.startswith(city):
                 variations.extend(abbrevs)
-        
+
         return variations
-    
+
     def teams_match(bet_team: str, market_text: str) -> bool:
         """Check if a bet team matches text in a market"""
         bet_variations = normalize_team_name(bet_team)
         market_upper = market_text.upper()
-        
+
         for variation in bet_variations:
             if variation in market_upper or market_upper in variation:
                 return True
         return False
-    
+
     try:
         # Get all sports markets
         markets = kalshi_integrator.get_sports_markets()
@@ -1459,23 +1474,23 @@ def validate_with_kalshi(kalshi_integrator, home_team: str, away_team: str,
         # Determine which team we're betting on
         bet_team = home_team if side == 'home' else away_team
         other_team = away_team if side == 'home' else home_team
-        
+
         # Search for matching market
         for market in markets:
             title = market.get('title', '')
             ticker = market.get('ticker', '')
             subtitle = market.get('subtitle', '')
-            
+
             # Combine all text for searching
             market_text = f"{title} {ticker} {subtitle}"
-            
+
             # Check if this market is about our game (need BOTH teams)
             has_bet_team = teams_match(bet_team, market_text)
             has_other_team = teams_match(other_team, market_text)
-            
+
             if not (has_bet_team and has_other_team):
                 continue  # Not the right game
-            
+
             # Get orderbook
             # Get orderbook (safe)
             orderbook = kalshi_integrator.get_orderbook(market.get('ticker', '')) or {}
@@ -1489,7 +1504,7 @@ def validate_with_kalshi(kalshi_integrator, home_team: str, away_team: str,
 
             # Determine which side of the market represents our bet
             bet_team_in_title = teams_match(bet_team, title)
-            
+
             if bet_team_in_title:
                 # Our team is the YES side
                 kalshi_prob = yes_bids[0].get('price', 0) / 100
@@ -1499,10 +1514,10 @@ def validate_with_kalshi(kalshi_integrator, home_team: str, away_team: str,
                     kalshi_prob = no_bids[0].get('price', 0) / 100
                 else:
                     kalshi_prob = 1.0 - (yes_bids[0].get('price', 0) / 100)
-            
+
             # Calculate discrepancy
             discrepancy = abs(kalshi_prob - sportsbook_prob)
-            
+
             # Determine validation
             if discrepancy < 0.05:  # Within 5%
                 validation = 'confirms'
@@ -1526,7 +1541,7 @@ def validate_with_kalshi(kalshi_integrator, home_team: str, away_team: str,
                     validation = 'strong_contradiction'
                     confidence_boost = -0.10
                     edge = 0
-            
+
             return {
                 'kalshi_prob': kalshi_prob,
                 'kalshi_available': True,
@@ -1537,7 +1552,7 @@ def validate_with_kalshi(kalshi_integrator, home_team: str, away_team: str,
                 'market_ticker': market.get('ticker', ''),
                 'market_title': market.get('title', '')
             }
-        
+
         # No matching market found
         return {
             'kalshi_prob': None,
@@ -1549,7 +1564,7 @@ def validate_with_kalshi(kalshi_integrator, home_team: str, away_team: str,
             'market_ticker': None,
             'market_title': None
         }
-    
+
     except Exception as e:
         # Error fetching Kalshi data
         return {
@@ -1563,19 +1578,23 @@ def validate_with_kalshi(kalshi_integrator, home_team: str, away_team: str,
             'market_title': None
         }
 
+
 # ============ UTILITY FUNCTIONS ============
 def american_to_decimal(odds) -> float:
     odds = float(odds)
-    if odds >= 100: return 1.0 + odds/100.0
-    if odds <= -100: return 1.0 + 100.0/abs(odds)
+    if odds >= 100: return 1.0 + odds / 100.0
+    if odds <= -100: return 1.0 + 100.0 / abs(odds)
     raise ValueError("Bad American odds")
+
 
 def implied_p_from_american(odds) -> float:
     odds = float(odds)
-    return 100.0/(odds+100.0) if odds>0 else abs(odds)/(abs(odds)+100.0)
+    return 100.0 / (odds + 100.0) if odds > 0 else abs(odds) / (abs(odds) + 100.0)
 
-def ev_rate(p: float, d: float) -> float: 
-    return p*d - 1.0
+
+def ev_rate(p: float, d: float) -> float:
+    return p * d - 1.0
+
 
 def _dig(obj, path, default=None):
     try:
@@ -1591,8 +1610,10 @@ def _dig(obj, path, default=None):
     except Exception:
         return default
 
-def _odds_api_base(): 
+
+def _odds_api_base():
     return "https://api.the-odds-api.com"
+
 
 def fetch_oddsapi_snapshot(api_key: str, sport_key: str) -> Dict[str, Any]:
     url = f"{_odds_api_base()}/v4/sports/{sport_key}/odds"
@@ -1602,17 +1623,22 @@ def fetch_oddsapi_snapshot(api_key: str, sport_key: str) -> Dict[str, Any]:
         r.raise_for_status()
         data = r.json()
         if not isinstance(data, list):
-            st.warning(f"No list for {sport_key}"); return {"events": []}
+            st.warning(f"No list for {sport_key}");
+            return {"events": []}
     except requests.exceptions.Timeout:
-        st.warning(f"Request timeout for {sport_key} - skipping"); return {"events": []}
+        st.warning(f"Request timeout for {sport_key} - skipping");
+        return {"events": []}
     except requests.exceptions.RequestException as e:
-        st.error(f"API request failed for {sport_key}: {e}"); return {"events": []}
+        st.error(f"API request failed for {sport_key}: {e}");
+        return {"events": []}
     except Exception as e:
-        st.error(f"Unexpected error fetching {sport_key}: {e}"); return {"events": []}
+        st.error(f"Unexpected error fetching {sport_key}: {e}");
+        return {"events": []}
 
     events = []
     for ev in data:
-        home = ev.get("home_team"); away = ev.get("away_team")
+        home = ev.get("home_team");
+        away = ev.get("away_team")
         markets = {"h2h": {}, "spreads": [], "totals": []}
         for b in (ev.get("bookmakers") or []):
             for m in (b.get("markets") or []):
@@ -1621,22 +1647,29 @@ def fetch_oddsapi_snapshot(api_key: str, sport_key: str) -> Dict[str, Any]:
                 if key == "h2h":
                     for o in outs:
                         n = o.get("name")
-                        if n == home: markets["h2h"]["home"] = {"price": o.get("price")}
-                        elif n == away: markets["h2h"]["away"] = {"price": o.get("price")}
+                        if n == home:
+                            markets["h2h"]["home"] = {"price": o.get("price")}
+                        elif n == away:
+                            markets["h2h"]["away"] = {"price": o.get("price")}
                 elif key == "spreads":
                     for o in outs:
                         if o.get("point") is None or o.get("price") is None: continue
-                        markets["spreads"].append({"name": o.get("name"), "point": o.get("point"), "price": o.get("price")})
+                        markets["spreads"].append(
+                            {"name": o.get("name"), "point": o.get("point"), "price": o.get("price")})
                 elif key == "totals":
                     for o in outs:
                         if o.get("point") is None or o.get("price") is None: continue
-                        markets["totals"].append({"name": o.get("name"), "point": o.get("point"), "price": o.get("price")})
-        events.append({"id": ev.get("id"), "commence_time": ev.get("commence_time"), "home_team": home, "away_team": away, "markets": markets})
+                        markets["totals"].append(
+                            {"name": o.get("name"), "point": o.get("point"), "price": o.get("price")})
+        events.append(
+            {"id": ev.get("id"), "commence_time": ev.get("commence_time"), "home_team": home, "away_team": away,
+             "markets": markets})
     return {"events": events}
 
 
 def calculate_profit(decimal_odds: float, stake: float = 100) -> float:
     return (decimal_odds - 1.0) * stake
+
 
 def match_theover_to_leg(leg, theover_data):
     """
@@ -1648,17 +1681,17 @@ def match_theover_to_leg(leg, theover_data):
     """
     if theover_data is None or theover_data.empty:
         return None
-    
+
     try:
         # Normalize column names
         theover_df = theover_data.copy()
         theover_df.columns = [c.strip().lower() for c in theover_df.columns]
-        
+
         # Extract info from leg
         leg_label = leg.get('label', '').lower()
         team = leg.get('team', '').lower()
         market_type = leg.get('type', '').lower()
-        
+
         # Check if this is theover.ai format (has awayteam, hometeam, pick columns)
         if 'awayteam' in theover_df.columns and 'hometeam' in theover_df.columns and 'pick' in theover_df.columns:
             # theover.ai format - match by teams and pick type
@@ -1666,12 +1699,12 @@ def match_theover_to_leg(leg, theover_data):
                 away_team = str(row.get('awayteam', '')).lower()
                 home_team = str(row.get('hometeam', '')).lower()
                 pick = str(row.get('pick', '')).lower()
-                
+
                 # Check if both teams match the leg (for totals)
                 if market_type == 'total':
                     # Check if the matchup matches
                     if (away_team in leg_label or team in away_team) and \
-                       (home_team in leg_label or team in home_team):
+                            (home_team in leg_label or team in home_team):
                         # Return the pick (Over/Under) with match validation
                         if pick in ['over', 'under']:
                             # Check if the leg direction matches theover.ai pick
@@ -1680,20 +1713,20 @@ def match_theover_to_leg(leg, theover_data):
                                 leg_direction = 'over'
                             elif 'under' in leg_label:
                                 leg_direction = 'under'
-                            
+
                             matches = (leg_direction == pick) if leg_direction else None
-                            
+
                             return {
                                 'pick': pick.capitalize(),
                                 'matches': matches,
                                 'signal': '✅' if matches else ('⚠️' if matches == False else '❓')
                             }
-                
+
                 # Check for moneyline or spread picks on specific teams
                 elif team:
                     team_matches = team in away_team or away_team in team or \
-                                 team in home_team or home_team in team
-                    
+                                   team in home_team or home_team in team
+
                     if team_matches:
                         # For ML or spread, return the pick if available
                         if pick and pick != 'nan':
@@ -1702,19 +1735,19 @@ def match_theover_to_leg(leg, theover_data):
                                 'matches': None,  # Can't validate ML/spread direction yet
                                 'signal': '🎯'
                             }
-        
+
         else:
             # Standard format - original matching logic
             for idx, row in theover_df.iterrows():
                 row_team = str(row.get('team', row.get('player', ''))).lower()
                 row_market = str(row.get('stat', row.get('market', ''))).lower()
-                
+
                 # Check for team match
                 if team in row_team or row_team in team:
                     # Check for market type match
                     if ('moneyline' in market_type and ('ml' in row_market or 'win' in row_market)) or \
-                       ('spread' in market_type and 'spread' in row_market) or \
-                       ('total' in market_type and ('total' in row_market or 'points' in row_market)):
+                            ('spread' in market_type and 'spread' in row_market) or \
+                            ('total' in market_type and ('total' in row_market or 'points' in row_market)):
                         projection = row.get('projection', None)
                         if projection is not None:
                             return {
@@ -1722,20 +1755,21 @@ def match_theover_to_leg(leg, theover_data):
                                 'matches': None,
                                 'signal': '🎯'
                             }
-        
+
         return None
     except Exception as e:
         return None
+
 
 def build_combos_ai(legs, k, allow_sgp, optimizer, theover_data=None, min_probability=0.25, max_probability=0.70):
     """Build parlay combinations with AI scoring - deduplicates and keeps best odds
     Now filters parlays to realistic probability range (default: 25-70%)"""
     parlay_map = {}  # Maps parlay_key -> best parlay so far
-    
+
     for combo in itertools.combinations(legs, k):
         if not allow_sgp and len({c["event_id"] for c in combo}) < k:
             continue
-        
+
         # Skip combos with missing required fields
         try:
             # IMPROVED: Create a unique key that treats different spreads for same team as duplicates
@@ -1746,7 +1780,7 @@ def build_combos_ai(legs, k, allow_sgp, optimizer, theover_data=None, min_probab
                 bet_type = c.get('type', '')
                 team = c.get('team', '')
                 side = c.get('side', '')
-                
+
                 # For spreads/totals, don't include exact point in key
                 # This way Bucs -2.5 and Bucs -3.0 are treated as same bet
                 if bet_type in ['Spread', 'Total']:
@@ -1755,24 +1789,24 @@ def build_combos_ai(legs, k, allow_sgp, optimizer, theover_data=None, min_probab
                 else:
                     # For ML, include everything
                     key_part = f"{event_id}_{bet_type}_{team}_{side}"
-                
+
                 parlay_key_parts.append(key_part)
-            
+
             parlay_key = tuple(sorted(parlay_key_parts))
-            
+
             # Check if this combination has duplicate legs (same team, same game, same bet type)
             # This catches cases like "Bucs -2.5 + Bucs -3.0" in the same parlay
             unique_bets = set(parlay_key_parts)
             if len(unique_bets) < len(combo):
                 continue  # Skip parlays with duplicate bets
-                
+
         except Exception:
             continue  # Skip this combo if we can't create a key
-        
+
         d = 1.0
         p_market = 1.0
         p_ai = 1.0
-        
+
         # Safety check: Skip if any leg has invalid decimal odds
         skip_combo = False
         for c in combo:
@@ -1783,18 +1817,18 @@ def build_combos_ai(legs, k, allow_sgp, optimizer, theover_data=None, min_probab
             d *= leg_d
             p_market *= c.get("p", 0.5)
             p_ai *= c.get("ai_prob", c.get("p", 0.5))
-        
+
         if skip_combo or d <= 0:
             continue  # Skip this combo if odds are invalid
-        
+
         # Get AI score for this parlay
         ai_metrics = optimizer.score_parlay(list(combo))
-        
+
         # Calculate theover.ai validation bonus
         theover_bonus = 0.0
         theover_matches = 0
         theover_conflicts = 0
-        
+
         if theover_data is not None:
             for leg in combo:
                 result = match_theover_to_leg(leg, theover_data)
@@ -1806,14 +1840,14 @@ def build_combos_ai(legs, k, allow_sgp, optimizer, theover_data=None, min_probab
                     elif matches == False:
                         theover_conflicts += 1
                         theover_bonus -= 0.10  # 10% penalty per conflicting leg
-        
+
         profit = calculate_profit(d, 100)
         market_ev = ev_rate(p_market, d)
-        
+
         # Apply theover.ai bonus to AI score
         base_ai_score = ai_metrics['score']
         boosted_ai_score = base_ai_score * (1.0 + theover_bonus)
-        
+
         parlay_data = {
             "legs": combo,
             "d": d,
@@ -1830,43 +1864,44 @@ def build_combos_ai(legs, k, allow_sgp, optimizer, theover_data=None, min_probab
             "ai_confidence": ai_metrics['confidence'],
             "ai_edge": ai_metrics['edge']
         }
-        
+
         # Keep only the version with best combined odds (highest decimal odds = best payout)
         if parlay_key not in parlay_map or d > parlay_map[parlay_key]["d"]:
             parlay_map[parlay_key] = parlay_data
-    
+
     # Convert back to list
     out = list(parlay_map.values())
-    
+
     # FILTER: Keep only realistic parlays in the value zone
     # Remove longshots AND heavy favorites (chalk parlays)
     out = [p for p in out if min_probability <= p["p_ai"] <= max_probability]
-    
+
     # SIMPLE & EFFECTIVE: Sort by AI Expected Value
     # This finds bets where AI thinks you have an edge
     # Positive EV = long-term profitable
     out.sort(key=lambda x: (x["ev_ai"], x["p_ai"]), reverse=True)
-    
+
     # FINAL DEDUPLICATION: Remove parlays that are too similar
     # This catches edge cases where same game appears multiple times with slightly different bets
     final_parlays = []
     seen_game_combos = set()
-    
+
     for parlay in out:
         # Create a signature of which games are in this parlay
         game_ids = tuple(sorted(set(leg['event_id'] for leg in parlay['legs'])))
-        
+
         # For same-game combinations, also check the specific bets
         bet_signature = tuple(sorted([
             f"{leg['event_id']}_{leg['type']}_{leg.get('team', '')}_{leg.get('side', '')}"
             for leg in parlay['legs']
         ]))
-        
+
         if bet_signature not in seen_game_combos:
             final_parlays.append(parlay)
             seen_game_combos.add(bet_signature)
-    
+
     return final_parlays
+
 
 def render_parlay_section_ai(title, rows, theover_data=None):
     """Render parlays with AI insights"""
@@ -1874,7 +1909,7 @@ def render_parlay_section_ai(title, rows, theover_data=None):
     if not rows:
         st.info("No combinations found with current filters")
         return
-    
+
     for i, row in enumerate(rows, start=1):
         # AI confidence indicator
         conf = row['ai_confidence']
@@ -1884,7 +1919,7 @@ def render_parlay_section_ai(title, rows, theover_data=None):
             conf_icon = "🟡"
         else:
             conf_icon = "🟠"
-        
+
         # EV indicator
         ai_ev_pct = row['ev_ai'] * 100
         if ai_ev_pct > 5:
@@ -1893,7 +1928,7 @@ def render_parlay_section_ai(title, rows, theover_data=None):
             ev_icon = "📈"
         else:
             ev_icon = "📉"
-        
+
         # Probability warning
         prob = row['p_ai']
         if prob < 0.25:
@@ -1902,7 +1937,7 @@ def render_parlay_section_ai(title, rows, theover_data=None):
             prob_warning = "⚡"  # Caution
         else:
             prob_warning = ""  # Good probability
-        
+
         # theover.ai boost indicator
         theover_boost = ""
         if row.get('theover_matches', 0) > 0:
@@ -1913,24 +1948,25 @@ def render_parlay_section_ai(title, rows, theover_data=None):
             theover_boost = f" | ⚠️ {row['theover_conflicts']} conflict"
             if row['theover_conflicts'] > 1:
                 theover_boost += "s"
-        
+
         # Kalshi validation indicator with INFLUENCE
         kalshi_boost = ""
-        kalshi_legs = sum(1 for leg in row.get('legs', []) if leg.get('kalshi_validation', {}).get('kalshi_available', False))
+        kalshi_legs = sum(
+            1 for leg in row.get('legs', []) if leg.get('kalshi_validation', {}).get('kalshi_available', False))
         kalshi_factor = row.get('kalshi_factor', 1.0)
-        
+
         if kalshi_legs > 0:
             # Show if Kalshi boosted or reduced score
             if kalshi_factor > 1.05:
-                kalshi_boost = f" | 📊 {kalshi_legs} Kalshi✓ ↗️+{(kalshi_factor-1)*100:.0f}%"
+                kalshi_boost = f" | 📊 {kalshi_legs} Kalshi✓ ↗️+{(kalshi_factor - 1) * 100:.0f}%"
             elif kalshi_factor < 0.95:
-                kalshi_boost = f" | 📊 {kalshi_legs} Kalshi✓ ↘️{(kalshi_factor-1)*100:.0f}%"
+                kalshi_boost = f" | 📊 {kalshi_legs} Kalshi✓ ↘️{(kalshi_factor - 1) * 100:.0f}%"
             else:
                 kalshi_boost = f" | 📊 {kalshi_legs} Kalshi✓"
-        
+
         prob_pct = row['p_ai'] * 100
         with st.expander(
-            f"{conf_icon}{ev_icon}{prob_warning} #{i} - AI Score: {row['ai_score']:.1f}{theover_boost}{kalshi_boost} | Odds: {row['d']:.2f} | AI Prob: {prob_pct:.1f}% | Profit: ${row['profit']:.2f}"
+                f"{conf_icon}{ev_icon}{prob_warning} #{i} - AI Score: {row['ai_score']:.1f}{theover_boost}{kalshi_boost} | Odds: {row['d']:.2f} | AI Prob: {prob_pct:.1f}% | Profit: ${row['profit']:.2f}"
         ):
             # Metrics
             col_a, col_b, col_c, col_d, col_e = st.columns(5)
@@ -1939,32 +1975,31 @@ def render_parlay_section_ai(title, rows, theover_data=None):
             with col_b:
                 st.metric("AI Probability", f"{prob_pct:.2f}%")
             with col_c:
-                st.metric("AI Confidence", f"{conf*100:.1f}%")
+                st.metric("AI Confidence", f"{conf * 100:.1f}%")
             with col_d:
                 st.metric("Profit on $100", f"${row['profit']:.2f}")
             with col_e:
                 delta_color = "normal" if row['ev_ai'] > 0 else "inverse"
                 st.metric("AI Expected Value", f"{ai_ev_pct:.2f}%")
-            
+
             # KALSHI STATUS - ALWAYS SHOW (whether data exists or not)
             st.markdown("---")
             kalshi_legs_with_data = row.get('kalshi_legs', 0)
             total_legs = len(row.get('legs', []))
-            
+
             if kalshi_legs_with_data > 0:
                 # HAS KALSHI DATA - Show influence
                 st.markdown("### 📊 Kalshi Prediction Market Influence:")
 
-                
                 col_k1, col_k2, col_k3, col_k4 = st.columns(4)
-                
+
                 with col_k1:
                     st.metric(
                         "Kalshi Legs",
                         f"{row.get('kalshi_legs', 0)}/{len(row.get('legs', []))}",
                         help="How many legs have Kalshi market data"
                     )
-                
+
                 with col_k2:
                     kalshi_boost_val = row.get('kalshi_boost', 0)
                     st.metric(
@@ -1973,16 +2008,16 @@ def render_parlay_section_ai(title, rows, theover_data=None):
                         delta=f"{'Positive' if kalshi_boost_val > 0 else 'Negative'}" if kalshi_boost_val != 0 else None,
                         help="Raw boost points from Kalshi validation (+15 = strong confirmation, -10 = contradiction)"
                     )
-                
+
                 with col_k3:
                     kalshi_factor_val = row.get('kalshi_factor', 1.0)
                     st.metric(
                         "Score Multiplier",
                         f"{kalshi_factor_val:.2f}x",
-                        delta=f"{(kalshi_factor_val-1)*100:+.0f}%" if kalshi_factor_val != 1.0 else None,
+                        delta=f"{(kalshi_factor_val - 1) * 100:+.0f}%" if kalshi_factor_val != 1.0 else None,
                         help="How much Kalshi adjusted the AI score (1.0 = no change, >1.0 = boosted, <1.0 = reduced)"
                     )
-                
+
                 with col_k4:
                     # Calculate score change from Kalshi
                     base_score = row['ai_score'] / kalshi_factor_val if kalshi_factor_val != 0 else row['ai_score']
@@ -1992,12 +2027,14 @@ def render_parlay_section_ai(title, rows, theover_data=None):
                         f"{score_change:+.1f} pts",
                         help="How many points Kalshi added/subtracted from AI score"
                     )
-                
+
                 # Explanation of Kalshi influence
                 if kalshi_factor_val > 1.05:
-                    st.success(f"🟢 **Kalshi BOOSTED this parlay by {(kalshi_factor_val-1)*100:.0f}%** - Prediction markets confirm AI analysis!")
+                    st.success(
+                        f"🟢 **Kalshi BOOSTED this parlay by {(kalshi_factor_val - 1) * 100:.0f}%** - Prediction markets confirm AI analysis!")
                 elif kalshi_factor_val < 0.95:
-                    st.warning(f"🟠 **Kalshi REDUCED this parlay by {(1-kalshi_factor_val)*100:.0f}%** - Prediction markets skeptical of AI picks.")
+                    st.warning(
+                        f"🟠 **Kalshi REDUCED this parlay by {(1 - kalshi_factor_val) * 100:.0f}%** - Prediction markets skeptical of AI picks.")
                 else:
                     st.info("🟡 **Kalshi NEUTRAL** - Prediction markets neither strongly confirm nor contradict AI.")
             else:
@@ -2005,44 +2042,46 @@ def render_parlay_section_ai(title, rows, theover_data=None):
                 st.markdown("### 📊 Kalshi Prediction Market Status:")
                 st.warning(f"""
                 **⚠️ No Kalshi Data Available for this Parlay** ({kalshi_legs_with_data}/{total_legs} legs)
-                
+
                 **This means:**
                 - ✅ Analysis still uses AI + Sentiment (2 of 3 sources)
                 - ⚠️ Missing prediction market validation
                 - 🔄 Kalshi Factor = 1.0x (neutral, no impact)
                 - 📊 AI Score unchanged by Kalshi
-                
+
                 **Why no data?**
                 - Kalshi doesn't have markets for these specific games
                 - Kalshi focuses on season-long outcomes (playoffs, championships)
                 - Individual game spreads/totals rarely have Kalshi markets
-                
+
                 **What this means:**
                 - Bet based on AI + Sentiment confidence
                 - Higher risk without 3rd source validation
                 - Consider checking Tab 4 for available Kalshi markets
-                
+
                 💡 **Tip:** For Kalshi validation, focus on season futures, playoff odds, or major championships.
                 """)
-            
+
             # theover.ai boost info if available
             if row.get('theover_bonus', 0) != 0:
                 theover_bonus_pct = row['theover_bonus'] * 100
                 if theover_bonus_pct > 0:
-                    st.success(f"🎯 **theover.ai Boost:** +{theover_bonus_pct:.0f}% to AI score ({row.get('theover_matches', 0)} matching picks)")
+                    st.success(
+                        f"🎯 **theover.ai Boost:** +{theover_bonus_pct:.0f}% to AI score ({row.get('theover_matches', 0)} matching picks)")
                 else:
-                    st.warning(f"⚠️ **theover.ai Conflict:** {theover_bonus_pct:.0f}% penalty ({row.get('theover_conflicts', 0)} conflicting picks)")
-            
+                    st.warning(
+                        f"⚠️ **theover.ai Conflict:** {theover_bonus_pct:.0f}% penalty ({row.get('theover_conflicts', 0)} conflicting picks)")
+
             # Market vs AI comparison
             st.markdown("**📊 Market vs AI Analysis:**")
             comp_col1, comp_col2 = st.columns(2)
             with comp_col1:
-                st.write(f"Market EV: {row['ev_market']*100:.2f}%")
-                st.write(f"Market Prob: {row['p']*100:.2f}%")
+                st.write(f"Market EV: {row['ev_market'] * 100:.2f}%")
+                st.write(f"Market Prob: {row['p'] * 100:.2f}%")
             with comp_col2:
                 st.write(f"AI EV: {ai_ev_pct:.2f}%")
-                st.write(f"AI Edge: {row['ai_edge']*100:.2f}%")
-                
+                st.write(f"AI Edge: {row['ai_edge'] * 100:.2f}%")
+
                 # Show sentiment impact
                 prob_diff = (row['p_ai'] - row['p']) * 100
                 if abs(prob_diff) > 1:
@@ -2050,27 +2089,27 @@ def render_parlay_section_ai(title, rows, theover_data=None):
                         st.success(f"↗️ Sentiment boosted by {prob_diff:.1f}%")
                     else:
                         st.warning(f"↘️ Sentiment reduced by {abs(prob_diff):.1f}%")
-            
+
             # Legs breakdown with theover.ai integration
             st.markdown("**🎯 Parlay Legs:**")
             legs_data = []
             has_theover = False
             theover_matches = 0
             theover_conflicts = 0
-            
+
             for j, leg in enumerate(row["legs"], start=1):
                 # Try to match with theover.ai data
                 theover_result = match_theover_to_leg(leg, theover_data)
-                
+
                 if theover_result is not None:
                     has_theover = True
-                    
+
                     # Handle dict result (new format with validation)
                     if isinstance(theover_result, dict):
                         pick = theover_result.get('pick', '')
                         matches = theover_result.get('matches')
                         signal = theover_result.get('signal', '🎯')
-                        
+
                         # Count matches and conflicts for summary
                         if matches == True:
                             theover_matches += 1
@@ -2088,17 +2127,17 @@ def render_parlay_section_ai(title, rows, theover_data=None):
                             theover_display = f"🎯 {theover_result}"
                 else:
                     theover_display = "—"
-                
+
                 # Kalshi validation display
                 kalshi_display = "—"
                 kalshi_influence_display = ""
-                
+
                 if 'kalshi_validation' in leg:
                     kv = leg['kalshi_validation']
                     if kv.get('kalshi_available'):
                         kalshi_prob = kv.get('kalshi_prob', 0) * 100
                         validation = kv.get('validation', 'unavailable')
-                        
+
                         # Show Kalshi probability
                         if validation == 'confirms':
                             kalshi_display = f"✅ {kalshi_prob:.1f}%"
@@ -2110,7 +2149,7 @@ def render_parlay_section_ai(title, rows, theover_data=None):
                             kalshi_display = f"📉 {kalshi_prob:.1f}%"
                         elif validation == 'strong_contradiction':
                             kalshi_display = f"⚠️ {kalshi_prob:.1f}%"
-                        
+
                         # Show how Kalshi influenced AI probability
                         if 'kalshi_influence' in leg:
                             influence = leg['kalshi_influence'] * 100
@@ -2122,65 +2161,72 @@ def render_parlay_section_ai(title, rows, theover_data=None):
                             kalshi_influence_display = "—"
                     else:
                         kalshi_influence_display = "—"
-                
+
                 leg_entry = {
                     "Leg": j,
                     "Type": leg["market"],
                     "Selection": leg["label"],
                     "Odds": f"{leg['d']:.3f}",
-                    "Market %": f"{leg['p']*100:.1f}%",
-                    "AI % (final)": f"{leg.get('ai_prob', leg['p'])*100:.1f}%",
+                    "Market %": f"{leg['p'] * 100:.1f}%",
+                    "AI % (final)": f"{leg.get('ai_prob', leg['p']) * 100:.1f}%",
                     "Kalshi": kalshi_display,
                     "K Impact": kalshi_influence_display,
                     "Sentiment": leg.get('sentiment_trend', 'N/A'),
                     "theover.ai": theover_display
                 }
                 legs_data.append(leg_entry)
-            
+
             st.dataframe(pd.DataFrame(legs_data), use_container_width=True, hide_index=True)
-            
+
             # Kalshi impact legend
             if any(leg.get('kalshi_validation', {}).get('kalshi_available') for leg in row.get("legs", [])):
-                st.caption("**K Impact** = How much Kalshi adjusted AI probability (blended 50% AI + 30% Kalshi + 20% Market)")
-            
+                st.caption(
+                    "**K Impact** = How much Kalshi adjusted AI probability (blended 50% AI + 30% Kalshi + 20% Market)")
+
             # Show legend and summary
             if has_theover:
                 col_legend1, col_legend2 = st.columns(2)
                 with col_legend1:
-                    st.caption("✅ = Matches theover.ai pick | ⚠️ = Conflicts with theover.ai | 🎯 = theover.ai data available")
+                    st.caption(
+                        "✅ = Matches theover.ai pick | ⚠️ = Conflicts with theover.ai | 🎯 = theover.ai data available")
                 with col_legend2:
                     if theover_matches > 0:
                         st.success(f"✅ {theover_matches} leg(s) match theover.ai recommendations")
                     if theover_conflicts > 0:
                         st.warning(f"⚠️ {theover_conflicts} leg(s) conflict with theover.ai recommendations")
-            
+
             # Kalshi validation legend and detailed influence
-            kalshi_available = sum(1 for leg in row.get("legs", []) if leg.get('kalshi_validation', {}).get('kalshi_available', False))
-            
+            kalshi_available = sum(
+                1 for leg in row.get("legs", []) if leg.get('kalshi_validation', {}).get('kalshi_available', False))
+
             # Show info if Kalshi enabled but no data found
             if 'kalshi_validation' in row.get("legs", [{}])[0] and kalshi_available == 0:
                 st.info("""
                 **📊 Kalshi Validation Enabled** but no matching markets found for these games.
-                
+
                 **This is normal because:**
                 - Kalshi may not have markets for all games
                 - Markets might be for season-long outcomes (playoffs, championships) rather than individual games
                 - Try checking Tab 4 to see what Kalshi markets are actually available
-                
+
                 **Note:** Parlay analysis still uses AI + Sentiment, just without Kalshi cross-validation.
                 """)
-            
+
             if kalshi_available > 0:
-                kalshi_confirmed = sum(1 for leg in row.get("legs", []) if leg.get('kalshi_validation', {}).get('validation') == 'confirms')
-                kalshi_higher = sum(1 for leg in row.get("legs", []) if 'higher' in leg.get('kalshi_validation', {}).get('validation', ''))
-                kalshi_contradicts = sum(1 for leg in row.get("legs", []) if 'contradiction' in leg.get('kalshi_validation', {}).get('validation', ''))
-                
+                kalshi_confirmed = sum(1 for leg in row.get("legs", []) if
+                                       leg.get('kalshi_validation', {}).get('validation') == 'confirms')
+                kalshi_higher = sum(1 for leg in row.get("legs", []) if
+                                    'higher' in leg.get('kalshi_validation', {}).get('validation', ''))
+                kalshi_contradicts = sum(1 for leg in row.get("legs", []) if
+                                         'contradiction' in leg.get('kalshi_validation', {}).get('validation', ''))
+
                 st.markdown("---")
                 st.markdown("**📊 Kalshi Prediction Market Validation:**")
-                
+
                 col_k1, col_k2 = st.columns(2)
                 with col_k1:
-                    st.caption("**Legend:** ✅ = Confirms | 📈 = Kalshi higher | 📉 = Kalshi lower | 🟢 = Strong value | ⚠️ = Contradiction")
+                    st.caption(
+                        "**Legend:** ✅ = Confirms | 📈 = Kalshi higher | 📉 = Kalshi lower | 🟢 = Strong value | ⚠️ = Contradiction")
                 with col_k2:
                     if kalshi_confirmed > 0:
                         st.success(f"✅ {kalshi_confirmed} leg(s) confirmed by Kalshi")
@@ -2188,14 +2234,14 @@ def render_parlay_section_ai(title, rows, theover_data=None):
                         st.info(f"📈 {kalshi_higher} leg(s) show Kalshi value")
                     if kalshi_contradicts > 0:
                         st.warning(f"⚠️ {kalshi_contradicts} leg(s) contradicted by Kalshi")
-                
+
                 # Detailed Kalshi Influence Analysis
                 st.markdown("**🔍 How Kalshi Influenced This Parlay:**")
-                
+
                 total_confidence_boost = 0
                 total_kalshi_edge = 0
                 kalshi_details = []
-                
+
                 for j, leg in enumerate(row.get("legs", []), start=1):
                     kv = leg.get('kalshi_validation', {})
                     if kv.get('kalshi_available'):
@@ -2204,10 +2250,10 @@ def render_parlay_section_ai(title, rows, theover_data=None):
                         confidence_boost = kv.get('confidence_boost', 0)
                         edge = kv.get('edge', 0)
                         market_ticker = kv.get('market_ticker', 'N/A')
-                        
+
                         total_confidence_boost += confidence_boost
                         total_kalshi_edge += edge
-                        
+
                         # Create status icon
                         if validation == 'confirms':
                             status_icon = "✅"
@@ -2229,11 +2275,11 @@ def render_parlay_section_ai(title, rows, theover_data=None):
                             status_icon = "📉"
                             status_text = "KALSHI LOWER"
                             status_color = "orange"
-                        
+
                         sportsbook_prob = leg.get('p', 0) * 100
                         kalshi_prob_pct = kalshi_prob * 100
                         discrepancy = abs(kalshi_prob - leg.get('p', 0)) * 100
-                        
+
                         kalshi_details.append({
                             'Leg': j,
                             'Pick': leg.get('team', 'N/A'),
@@ -2241,77 +2287,86 @@ def render_parlay_section_ai(title, rows, theover_data=None):
                             'Sportsbook': f"{sportsbook_prob:.1f}%",
                             'Kalshi': f"{kalshi_prob_pct:.1f}%",
                             'Discrepancy': f"{discrepancy:.1f}%",
-                            'Confidence Boost': f"{confidence_boost*100:+.0f}%",
-                            'Edge': f"{edge*100:+.1f}%",
+                            'Confidence Boost': f"{confidence_boost * 100:+.0f}%",
+                            'Edge': f"{edge * 100:+.1f}%",
                             'Market': market_ticker[:20]
                         })
-                
+
                 if kalshi_details:
                     st.dataframe(pd.DataFrame(kalshi_details), use_container_width=True, hide_index=True)
-                    
+
                     # Summary metrics
                     st.markdown("**📈 Kalshi Impact Summary:**")
                     col_impact1, col_impact2, col_impact3, col_impact4 = st.columns(4)
-                    
+
                     with col_impact1:
                         st.metric(
                             "Legs Validated",
                             f"{kalshi_available}/{len(row.get('legs', []))}",
                             help="How many legs have Kalshi market data"
                         )
-                    
+
                     with col_impact2:
                         st.metric(
                             "Total Confidence Boost",
-                            f"{total_confidence_boost*100:+.0f}%",
+                            f"{total_confidence_boost * 100:+.0f}%",
                             help="How much Kalshi boosted overall confidence"
                         )
-                    
+
                     with col_impact3:
                         st.metric(
                             "Additional Edge",
-                            f"{total_kalshi_edge*100:+.1f}%",
+                            f"{total_kalshi_edge * 100:+.1f}%",
                             help="Extra edge identified from Kalshi vs sportsbook"
                         )
-                    
+
                     with col_impact4:
-                        avg_discrepancy = sum(abs(leg.get('kalshi_validation', {}).get('discrepancy', 0)) 
-                                            for leg in row.get("legs", []) 
-                                            if leg.get('kalshi_validation', {}).get('kalshi_available')) / max(kalshi_available, 1)
+                        avg_discrepancy = sum(abs(leg.get('kalshi_validation', {}).get('discrepancy', 0))
+                                              for leg in row.get("legs", [])
+                                              if leg.get('kalshi_validation', {}).get('kalshi_available')) / max(
+                            kalshi_available, 1)
                         st.metric(
                             "Avg Discrepancy",
-                            f"{avg_discrepancy*100:.1f}%",
+                            f"{avg_discrepancy * 100:.1f}%",
                             help="Average difference between Kalshi and sportsbook"
                         )
-                    
+
                     # Interpretation
                     st.markdown("**💡 Interpretation:**")
-                    
+
                     if total_confidence_boost >= 0.15:
-                        st.success("🟢 **STRONG KALSHI CONFIRMATION** - All sources strongly agree. High confidence bet!")
+                        st.success(
+                            "🟢 **STRONG KALSHI CONFIRMATION** - All sources strongly agree. High confidence bet!")
                     elif total_confidence_boost >= 0.05:
-                        st.info("🟡 **MODERATE CONFIRMATION** - Kalshi generally agrees. Good bet with decent validation.")
+                        st.info(
+                            "🟡 **MODERATE CONFIRMATION** - Kalshi generally agrees. Good bet with decent validation.")
                     elif total_confidence_boost >= -0.05:
                         st.warning("🟠 **NEUTRAL VALIDATION** - Kalshi shows mixed signals. Proceed with caution.")
                     else:
-                        st.error("🔴 **KALSHI DISAGREES** - Prediction market contradicts this parlay. Consider skipping or investigating further.")
-                    
+                        st.error(
+                            "🔴 **KALSHI DISAGREES** - Prediction market contradicts this parlay. Consider skipping or investigating further.")
+
                     if total_kalshi_edge > 0.10:
-                        st.success(f"💰 **VALUE DETECTED**: Kalshi shows {total_kalshi_edge*100:.1f}% additional edge! This parlay may be underpriced by sportsbooks.")
+                        st.success(
+                            f"💰 **VALUE DETECTED**: Kalshi shows {total_kalshi_edge * 100:.1f}% additional edge! This parlay may be underpriced by sportsbooks.")
                     elif total_kalshi_edge < -0.10:
-                        st.warning(f"⚠️ **OVERPRICED WARNING**: Kalshi thinks this parlay is overpriced. Sportsbooks may be offering poor value.")
-                    
+                        st.warning(
+                            f"⚠️ **OVERPRICED WARNING**: Kalshi thinks this parlay is overpriced. Sportsbooks may be offering poor value.")
+
                     # Recommendation based on Kalshi
-                    kalshi_score = (total_confidence_boost * 50) + (total_kalshi_edge * 30) + (kalshi_confirmed / max(kalshi_available, 1) * 20)
-                    
+                    kalshi_score = (total_confidence_boost * 50) + (total_kalshi_edge * 30) + (
+                                kalshi_confirmed / max(kalshi_available, 1) * 20)
+
                     st.markdown("**🎯 Kalshi-Based Recommendation:**")
                     if kalshi_score > 15:
                         st.success("✅ **KALSHI APPROVES** - Strong validation from prediction markets. Excellent bet!")
                     elif kalshi_score > 5:
-                        st.info("🟡 **KALSHI CAUTIOUS** - Some validation but mixed signals. Decent bet if AI score is high.")
+                        st.info(
+                            "🟡 **KALSHI CAUTIOUS** - Some validation but mixed signals. Decent bet if AI score is high.")
                     else:
-                        st.warning("⚠️ **KALSHI SKEPTICAL** - Prediction market doesn't support this parlay. Bet with caution or skip.")
-            
+                        st.warning(
+                            "⚠️ **KALSHI SKEPTICAL** - Prediction market doesn't support this parlay. Bet with caution or skip.")
+
             # Betting scenarios
             st.markdown("**💵 Betting Scenarios:**")
             for stake in [50, 100, 250, 500]:
@@ -2319,7 +2374,7 @@ def render_parlay_section_ai(title, rows, theover_data=None):
                 payout = stake + profit_amt
                 exp_return = stake * (1 + row['ev_ai'])
                 st.write(f"${stake} bet → ${payout:.2f} payout | Expected return: ${exp_return:.2f}")
-            
+
             # CSV export
             csv_buf = io.StringIO()
             df_export = pd.DataFrame(legs_data)
@@ -2331,6 +2386,7 @@ def render_parlay_section_ai(title, rows, theover_data=None):
                 mime="text/csv",
                 key=f"download_ai_{title}_{i}"
             )
+
 
 # ============ STREAMLIT UI ============
 st.set_page_config(page_title=APP_CFG["title"], layout="wide")
@@ -2378,7 +2434,7 @@ if 'kalshi_integrator' not in st.session_state:
 
 # Main navigation tabs
 main_tab1, main_tab2, main_tab3, main_tab4 = st.tabs([
-    "🎯 Sports Betting Parlays", 
+    "🎯 Sports Betting Parlays",
     "🔍 Sentiment & AI Analysis",
     "🎨 Custom Parlay Builder",
     "📊 Kalshi Prediction Markets"
@@ -2398,7 +2454,7 @@ with main_tab1:
 
     if not key:
         key = st.text_input(
-            "TheOddsAPI key (first time setup)", 
+            "TheOddsAPI key (first time setup)",
             value="",
             type="password",
             help="This will be remembered for future sessions"
@@ -2410,10 +2466,10 @@ with main_tab1:
     else:
         if 'show_api_section' not in st.session_state:
             st.session_state['show_api_section'] = False
-        
+
         if st.session_state['show_api_section']:
             new_key = st.text_input(
-                "Update API key", 
+                "Update API key",
                 value="",
                 type="password"
             )
@@ -2430,26 +2486,26 @@ with main_tab1:
                 if st.button("Change key"):
                     st.session_state['show_api_section'] = True
                     st.rerun()
-    
+
     # News API Configuration (for real sentiment)
     st.markdown("---")
     st.markdown("### 📰 Real Sentiment Analysis (Optional)")
-    
+
     col_news1, col_news2 = st.columns([3, 1])
     with col_news1:
         if not st.session_state.get('news_api_key'):
             with st.expander("ℹ️ Enable REAL Sentiment Analysis"):
                 st.info("""
                 **Upgrade to real sentiment analysis!**
-                
+
                 Currently using: Neutral placeholders (no real analysis)
-                
+
                 **With NewsAPI:**
                 - ✅ Analyzes actual news articles
                 - ✅ Real NLP sentiment scoring
                 - ✅ Last 3 days of team news
                 - ✅ Free tier: 100 requests/day
-                
+
                 **Get your free API key:**
                 1. Visit [newsapi.org](https://newsapi.org/)
                 2. Sign up (takes 1 minute)
@@ -2470,7 +2526,7 @@ with main_tab1:
         else:
             st.success("📰 Real Sentiment Analysis: ENABLED")
             st.caption("Analyzing actual news articles for team sentiment")
-            
+
     with col_news2:
         if st.session_state.get('news_api_key'):
             if st.button("Disable", key="disable_news_api"):
@@ -2482,41 +2538,41 @@ with main_tab1:
     # theover.ai Integration Section
     st.markdown("---")
     st.markdown("### 📊 theover.ai Integration (Optional)")
-    
+
     theover_method = st.radio(
         "Add theover.ai projections for enhanced analysis?",
         ["🚫 Skip", "📁 Upload CSV", "📋 Paste Data"],
         horizontal=True,
         help="theover.ai projections will be matched with parlay legs to show additional analysis"
     )
-    
+
     theover_parlay_data = None
-    
+
     if theover_method == "📁 Upload CSV":
         st.info("""
         **Expected CSV Format:**
         - Columns: Team/Player, Stat/Market, Projection
         - Example: "Lakers, Points Total, 112.5" or "Bucks ML, Win Probability, 0.65"
         """)
-        
+
         uploaded_file = st.file_uploader(
             "Upload theover.ai CSV export",
             type=['csv'],
             help="Export your theover.ai projections as CSV",
             key="theover_parlay_upload"
         )
-        
+
         if uploaded_file:
             try:
                 theover_parlay_data = pd.read_csv(uploaded_file)
                 st.success(f"✅ Loaded {len(theover_parlay_data)} projections from theover.ai")
-                
+
                 with st.expander("📋 Preview theover.ai Data"):
                     st.dataframe(theover_parlay_data.head(10), use_container_width=True)
-                    
+
             except Exception as e:
                 st.error(f"Error loading CSV: {e}")
-                
+
     elif theover_method == "📋 Paste Data":
         st.info("""
         **Paste Format (comma or tab-separated):**
@@ -2526,35 +2582,37 @@ with main_tab1:
         Bucks,Win Probability,0.68
         ```
         """)
-        
+
         pasted_data = st.text_area(
             "Paste theover.ai data here",
             height=150,
             placeholder="Lakers,Points Total,112.5\nBucks,Win Probability,0.68",
             key="theover_parlay_paste"
         )
-        
+
         if pasted_data.strip():
             try:
                 # Try comma-separated first
                 if ',' in pasted_data:
                     from io import StringIO
+
                     theover_parlay_data = pd.read_csv(StringIO(pasted_data))
                 # Try tab-separated (from Excel)
                 elif '\t' in pasted_data:
                     from io import StringIO
+
                     theover_parlay_data = pd.read_csv(StringIO(pasted_data), sep='\t')
                 else:
                     st.warning("Data format not recognized. Use comma or tab-separated values.")
-                
+
                 if theover_parlay_data is not None:
                     st.success(f"✅ Loaded {len(theover_parlay_data)} projections from theover.ai")
                     with st.expander("📋 Preview Pasted Data"):
                         st.dataframe(theover_parlay_data.head(10), use_container_width=True)
-                        
+
             except Exception as e:
                 st.error(f"Error parsing data: {e}")
-    
+
     st.markdown("---")
 
     col1, col2 = st.columns(2)
@@ -2581,37 +2639,37 @@ with main_tab1:
 
     # Sport Selection
     sports = st.multiselect(
-        "Sports keys", 
-        options=APP_CFG["sports_common"], 
+        "Sports keys",
+        options=APP_CFG["sports_common"],
         default=APP_CFG["sports_common"][:6]
     )
 
     # AI Settings
     with st.expander("⚙️ AI Settings", expanded=False):
         st.markdown("### Machine Learning Configuration")
-        
+
         st.info("""
         **✨ HIGH CONFIDENCE BETS MODE**
-        
+
         - Minimum AI confidence: **60%** (high confidence only)
         - Probability range: **30-65%** (value zone, not chalk)
         - Ranked by: **Expected Value** (AI edge over market)
         - Sentiment weight: **40%** (significant factor)
-        
+
         **Strategy: Only bet on high-confidence value picks** 🎯
         """)
-        
+
         col_ai1, col_ai2 = st.columns(2)
         with col_ai1:
-            use_sentiment = st.checkbox("Enable Sentiment Analysis", value=True, 
+            use_sentiment = st.checkbox("Enable Sentiment Analysis", value=True,
                                         help="Analyze news and social media sentiment")
             use_ml_predictions = st.checkbox("Enable ML Predictions", value=True,
-                                            help="Use machine learning for probability adjustments")
+                                             help="Use machine learning for probability adjustments")
         with col_ai2:
             min_ai_confidence = st.slider("Minimum AI Confidence", 0.0, 1.0, 0.60, 0.05,
                                           help="Filter out low-confidence predictions (0.60 = 60% confidence minimum)")
             min_parlay_probability = st.slider(
-                "Minimum Parlay Probability", 
+                "Minimum Parlay Probability",
                 0.20, 0.60, 0.30, 0.05,
                 help="Filter out longshot parlays (0.30 = 30% min chance for high confidence)"
             )
@@ -2620,8 +2678,9 @@ with main_tab1:
                 0.45, 0.85, 0.65, 0.05,
                 help="Exclude heavy favorites (0.65 = 65% max, keeps value plays only)"
             )
-            
-        st.caption("🔴 = Too risky (<30%) | 🟡 = Moderate (30-50%) | 🟢 = High confidence value (50-65%) | ❌ = Too safe (>65%)")
+
+        st.caption(
+            "🔴 = Too risky (<30%) | 🟡 = Moderate (30-50%) | 🟢 = High confidence value (50-65%) | ❌ = Too safe (>65%)")
 
     col3, col4, col5 = st.columns(3)
     with col3:
@@ -2630,8 +2689,9 @@ with main_tab1:
         show_top = st.slider("Show top N combos", 1, 50, 15, 1)
     with col5:
         allow_sgp = st.checkbox("Allow same-game legs", value=False)
-    
-    st.info("💡 **Duplicate Removal:** Identical bets from different bookmakers are automatically deduplicated, keeping only the best odds.")
+
+    st.info(
+        "💡 **Duplicate Removal:** Identical bets from different bookmakers are automatically deduplicated, keeping only the best odds.")
 
     # Bet type filters
     st.subheader("Include Bet Types")
@@ -2651,7 +2711,7 @@ with main_tab1:
         value=False,
         help="Compare sportsbook odds with Kalshi prediction markets to find discrepancies and boost confidence"
     )
-    
+
     if use_kalshi:
         st.info("""
         **Kalshi Validation Benefits:**
@@ -2660,45 +2720,45 @@ with main_tab1:
         - ⚠️ Flags contradictions when markets disagree
         - 💎 Identifies arbitrage opportunities
         - 🔍 Shows additional edge from market discrepancies
-        
+
         **Important Note:** Kalshi typically has markets for:
         - Season-long outcomes (playoffs, championships, win totals)
         - Major events and marquee matchups
         - NOT every individual regular season game
-        
+
         If you see "—" in the Kalshi column, it means no matching market was found for that specific game.
         This is normal and expected. The parlay analysis will still work using AI + Sentiment.
-        
+
         **Tip:** Check Tab 4 to see what Kalshi markets are actually available right now.
         """)
-        
+
         with st.expander("ℹ️ Understanding Kalshi Market Coverage"):
             st.markdown("""
             **What Kalshi Markets Are Available:**
-            
+
             ✅ **Common Kalshi Markets:**
             - "Will [Team] make the playoffs?"
             - "Will [Team] win the Super Bowl/Championship?"
             - "Will [Team] win more than X games?"
             - "Will [Player] win MVP?"
             - Major rivalry games or primetime matchups
-            
+
             ❌ **NOT Usually Available:**
             - Individual regular season game outcomes
             - Week-to-week game spreads
             - Game totals (over/under)
             - Every team's games
-            
+
             **Why This Matters:**
             - Your parlay might have 0 Kalshi matches → That's OK!
             - Kalshi is a bonus validation source, not required
             - AI + Sentiment still provide strong analysis
-            
+
             **When Kalshi DOES Match:**
             - You get extra confidence boost
             - Can spot market inefficiencies
             - Valuable cross-validation
-            
+
             **Recommendation:**
             - Leave Kalshi validation ON (no harm if no matches)
             - When it finds matches, that's a bonus!
@@ -2713,75 +2773,80 @@ with main_tab1:
         except Exception:
             return False
 
+
     if st.button("🤖 Find AI-Optimized Parlays", type="primary"):
         # Get API key from session state or environment only
         api_key = st.session_state.get('api_key', "") or os.environ.get("ODDS_API_KEY", "")
-        
+
         if not api_key:
             st.error("No API key provided. Please enter your API key above.")
             st.stop()
-        
+
         if not (inc_ml or inc_spread or inc_total):
             st.error("Please select at least one bet type")
             st.stop()
-        
+
         try:
             # Safely get AI components
             try:
                 sentiment_analyzer = st.session_state.get('sentiment_analyzer')
                 ml_predictor = st.session_state.get('ml_predictor')
                 ai_optimizer = st.session_state.get('ai_optimizer')
-                
+
                 if not sentiment_analyzer or not ml_predictor or not ai_optimizer:
                     st.error("AI components not initialized. Please refresh the page.")
                     st.stop()
             except Exception as e:
                 st.error(f"Error accessing AI components: {str(e)}")
                 st.stop()
-        
+
             with st.spinner("🧠 Analyzing markets with AI..."):
                 progress_bar = st.progress(0)
                 all_legs = []
                 total_sports = len(sports or APP_CFG["sports_common"])
-                
+
                 for sport_idx, skey in enumerate(sports or APP_CFG["sports_common"]):
                     try:
                         progress_bar.progress((sport_idx) / total_sports)
                         snap = fetch_oddsapi_snapshot(api_key, skey)
-                        
+
                         if not snap or not snap.get("events"):
                             continue  # Skip if no events
-                        
+
                         for ev in (snap.get("events") or [])[:per_sport_events]:
                             try:
-                                if not is_same_day(ev.get("commence_time")): 
+                                if not is_same_day(ev.get("commence_time")):
                                     continue
-                                
+
                                 eid = ev.get("id")
                                 home = ev.get("home_team", "?")
                                 away = ev.get("away_team", "?")
                                 mkts = ev.get("markets") or {}
-                                
+
                                 if not eid or not home or not away:
                                     continue  # Skip invalid events
-                                
+
                                 # Get sentiment for both teams
                                 try:
-                                    home_sentiment = sentiment_analyzer.get_team_sentiment(home, skey) if use_sentiment else {'score': 0, 'trend': 'neutral'}
-                                    away_sentiment = sentiment_analyzer.get_team_sentiment(away, skey) if use_sentiment else {'score': 0, 'trend': 'neutral'}
+                                    home_sentiment = sentiment_analyzer.get_team_sentiment(home,
+                                                                                           skey) if use_sentiment else {
+                                        'score': 0, 'trend': 'neutral'}
+                                    away_sentiment = sentiment_analyzer.get_team_sentiment(away,
+                                                                                           skey) if use_sentiment else {
+                                        'score': 0, 'trend': 'neutral'}
                                 except Exception:
                                     home_sentiment = {'score': 0, 'trend': 'neutral'}
                                     away_sentiment = {'score': 0, 'trend': 'neutral'}
-                                
+
                                 # Moneyline with AI
                                 if inc_ml and "h2h" in mkts:
                                     hp = _dig(mkts["h2h"], "home.price")
                                     ap = _dig(mkts["h2h"], "away.price")
-                                    
+
                                     if hp is not None and -750 <= hp <= 750:
                                         base_prob = implied_p_from_american(hp)
                                         ai_prob = base_prob
-                                        
+
                                         if use_ml_predictions and ap is not None:
                                             ml_prediction = ml_predictor.predict_game_outcome(
                                                 home, away, hp, ap,
@@ -2793,7 +2858,7 @@ with main_tab1:
                                         else:
                                             ai_confidence = 0.5
                                             ai_edge = 0
-                                        
+
                                         if ai_confidence >= min_ai_confidence:
                                             decimal_odds = american_to_decimal_safe(hp)
                                             if decimal_odds is not None:  # Safety check
@@ -2811,7 +2876,7 @@ with main_tab1:
                                                     "d": decimal_odds,
                                                     "sentiment_trend": home_sentiment['trend']
                                                 }
-                                                
+
                                                 # Kalshi Validation
                                                 if use_kalshi:
                                                     try:
@@ -2821,25 +2886,26 @@ with main_tab1:
                                                                 kalshi, home, away, 'home', base_prob, skey
                                                             )
                                                             leg_data['kalshi_validation'] = kalshi_data
-                                                            
+
                                                             # INTEGRATE KALSHI INTO AI PROBABILITY
                                                             if kalshi_data['kalshi_available']:
                                                                 kalshi_prob = kalshi_data['kalshi_prob']
-                                                                
+
                                                                 # Weighted average: 50% AI, 30% Kalshi, 20% Market
                                                                 # When Kalshi exists, blend all three sources
                                                                 original_ai_prob = leg_data['ai_prob']
                                                                 blended_prob = (
-                                                                    original_ai_prob * 0.50 +  # AI model
-                                                                    kalshi_prob * 0.30 +        # Kalshi market
-                                                                    base_prob * 0.20            # Sportsbook
+                                                                        original_ai_prob * 0.50 +  # AI model
+                                                                        kalshi_prob * 0.30 +  # Kalshi market
+                                                                        base_prob * 0.20  # Sportsbook
                                                                 )
-                                                                
+
                                                                 # Update the actual AI probability used in calculations
                                                                 leg_data['ai_prob'] = blended_prob
                                                                 leg_data['ai_prob_before_kalshi'] = original_ai_prob
-                                                                leg_data['kalshi_influence'] = blended_prob - original_ai_prob
-                                                                
+                                                                leg_data[
+                                                                    'kalshi_influence'] = blended_prob - original_ai_prob
+
                                                                 # Boost confidence if Kalshi confirms
                                                                 leg_data['ai_confidence'] = min(
                                                                     ai_confidence + kalshi_data['confidence_boost'],
@@ -2848,13 +2914,13 @@ with main_tab1:
                                                                 leg_data['kalshi_edge'] = kalshi_data['edge']
                                                     except Exception:
                                                         leg_data['kalshi_validation'] = {'kalshi_available': False}
-                                                
+
                                                 all_legs.append(leg_data)
-                            
+
                                     if ap is not None and -750 <= ap <= 750:
                                         base_prob = implied_p_from_american(ap)
                                         ai_prob = base_prob
-                                        
+
                                         if use_ml_predictions and hp is not None:
                                             ml_prediction = ml_predictor.predict_game_outcome(
                                                 home, away, hp, ap,
@@ -2866,7 +2932,7 @@ with main_tab1:
                                         else:
                                             ai_confidence = 0.5
                                             ai_edge = 0
-                                        
+
                                         if ai_confidence >= min_ai_confidence:
                                             decimal_odds = american_to_decimal_safe(ap)
                                             if decimal_odds is not None:  # Safety check
@@ -2884,7 +2950,7 @@ with main_tab1:
                                                     "d": decimal_odds,
                                                     "sentiment_trend": away_sentiment['trend']
                                                 }
-                                                
+
                                                 # Kalshi Validation
                                                 if use_kalshi:
                                                     try:
@@ -2894,24 +2960,25 @@ with main_tab1:
                                                                 kalshi, home, away, 'away', base_prob, skey
                                                             )
                                                             leg_data['kalshi_validation'] = kalshi_data
-                                                            
+
                                                             # INTEGRATE KALSHI INTO AI PROBABILITY
                                                             if kalshi_data['kalshi_available']:
                                                                 kalshi_prob = kalshi_data['kalshi_prob']
-                                                                
+
                                                                 # Weighted average: 50% AI, 30% Kalshi, 20% Market
                                                                 original_ai_prob = leg_data['ai_prob']
                                                                 blended_prob = (
-                                                                    original_ai_prob * 0.50 +  # AI model
-                                                                    kalshi_prob * 0.30 +        # Kalshi market
-                                                                    base_prob * 0.20            # Sportsbook
+                                                                        original_ai_prob * 0.50 +  # AI model
+                                                                        kalshi_prob * 0.30 +  # Kalshi market
+                                                                        base_prob * 0.20  # Sportsbook
                                                                 )
-                                                                
+
                                                                 # Update the actual AI probability
                                                                 leg_data['ai_prob'] = blended_prob
                                                                 leg_data['ai_prob_before_kalshi'] = original_ai_prob
-                                                                leg_data['kalshi_influence'] = blended_prob - original_ai_prob
-                                                                
+                                                                leg_data[
+                                                                    'kalshi_influence'] = blended_prob - original_ai_prob
+
                                                                 # Boost confidence if Kalshi confirms
                                                                 leg_data['ai_confidence'] = min(
                                                                     ai_confidence + kalshi_data['confidence_boost'],
@@ -2920,26 +2987,26 @@ with main_tab1:
                                                                 leg_data['kalshi_edge'] = kalshi_data['edge']
                                                     except Exception:
                                                         leg_data['kalshi_validation'] = {'kalshi_available': False}
-                                                
+
                                                 all_legs.append(leg_data)
-                                
+
                                 # Spreads
                                 if inc_spread and "spreads" in mkts:
                                     for o in mkts["spreads"][:4]:
                                         nm, pt, pr = o.get("name"), o.get("point"), o.get("price")
-                                        if nm is None or pt is None or pr is None: 
+                                        if nm is None or pt is None or pr is None:
                                             continue
-                                        
+
                                         base_prob = implied_p_from_american(pr)
                                         sentiment = home_sentiment if nm == home else away_sentiment
-                                        
+
                                         # Simple sentiment adjustment for spreads (40% weight)
                                         ai_prob = base_prob * (1 + sentiment['score'] * 0.40)
                                         ai_prob = max(0.1, min(0.9, ai_prob))  # Clamp
-                                        
+
                                         # Higher confidence for spread bets (adjusted from 0.6 to 0.65)
                                         ai_confidence = 0.65
-                                        
+
                                         decimal_odds = american_to_decimal_safe(pr)
                                         if decimal_odds is not None and ai_confidence >= min_ai_confidence:  # Safety check
                                             all_legs.append({
@@ -2957,24 +3024,24 @@ with main_tab1:
                                                 "d": decimal_odds,
                                                 "sentiment_trend": sentiment['trend']
                                             })
-                                
+
                                 # Totals
                                 if inc_total and "totals" in mkts:
                                     for o in mkts["totals"][:4]:
                                         nm, pt, pr = o.get("name"), o.get("point"), o.get("price")
-                                        if nm is None or pt is None or pr is None: 
+                                        if nm is None or pt is None or pr is None:
                                             continue
-                                        
+
                                         base_prob = implied_p_from_american(pr)
-                                        
+
                                         # For totals, combine both teams' offensive sentiment (40% weight)
                                         combined_sentiment = (home_sentiment['score'] + away_sentiment['score']) / 2
                                         ai_prob = base_prob * (1 + combined_sentiment * 0.40 * 0.5)
                                         ai_prob = max(0.1, min(0.9, ai_prob))
-                                        
+
                                         # Higher confidence for totals (adjusted from 0.55 to 0.60)
                                         ai_confidence = 0.60
-                                        
+
                                         decimal_odds = american_to_decimal_safe(pr)
                                         if decimal_odds is not None and ai_confidence >= min_ai_confidence:  # Safety check
                                             all_legs.append({
@@ -2992,95 +3059,101 @@ with main_tab1:
                                                 "d": decimal_odds,
                                                 "sentiment_trend": "neutral"
                                             })
-                            
+
                             except Exception as e:
                                 # Skip this event if there's an error processing it
                                 continue
-                    
+
                     except Exception as e:
                         # Skip this sport if there's an error
                         st.warning(f"Error processing {skey}: {str(e)[:100]}")
                         continue
-                
+
                 progress_bar.progress(1.0)
-                
+
                 if not all_legs:
                     st.warning("No bets found for selected date/sports/filters")
                     st.stop()
-                
+
                 # AI Summary
                 st.success(f"🤖 AI Analysis Complete: Found {len(all_legs)} betting opportunities")
-                
+
                 # Show AI insights
                 with st.expander("📊 AI Market Analysis", expanded=True):
                     col_insight1, col_insight2, col_insight3 = st.columns(3)
-                    
+
                     high_confidence = [leg for leg in all_legs if leg.get('ai_confidence', 0) > 0.7]
                     positive_ev = [leg for leg in all_legs if leg.get('ai_prob', 0) * leg['d'] > 1.05]
                     sentiment_edge = [leg for leg in all_legs if leg.get('sentiment_trend') == 'positive']
-                    
+
                     with col_insight1:
-                        st.metric("High Confidence Bets", len(high_confidence), 
-                                 help="Bets with >70% AI confidence")
+                        st.metric("High Confidence Bets", len(high_confidence),
+                                  help="Bets with >70% AI confidence")
                     with col_insight2:
                         st.metric("Positive AI EV Bets", len(positive_ev),
-                                 help="Bets with >5% expected value")
+                                  help="Bets with >5% expected value")
                     with col_insight3:
                         st.metric("Positive Sentiment", len(sentiment_edge),
-                                 help="Teams with positive news sentiment")
-                
+                                  help="Teams with positive news sentiment")
+
                 # Create tabs for different parlay sizes
                 tab_2, tab_3, tab_4, tab_5 = st.tabs([
-                    "🎯 2-Leg Parlays", 
-                    "🎲 3-Leg Parlays", 
-                    "🚀 4-Leg Parlays", 
+                    "🎯 2-Leg Parlays",
+                    "🎲 3-Leg Parlays",
+                    "🚀 4-Leg Parlays",
                     "💎 5-Leg Parlays"
                 ])
-                
+
                 with tab_2:
                     st.subheader("Best 2-Leg AI-Optimized Parlays")
                     try:
                         with st.spinner("Calculating optimal 2-leg combinations..."):
-                            combos_2 = build_combos_ai(all_legs, 2, allow_sgp, ai_optimizer, theover_parlay_data, min_parlay_probability, max_parlay_probability)[:show_top]
+                            combos_2 = build_combos_ai(all_legs, 2, allow_sgp, ai_optimizer, theover_parlay_data,
+                                                       min_parlay_probability, max_parlay_probability)[:show_top]
                             render_parlay_section_ai("2-Leg AI Parlays", combos_2, theover_parlay_data)
                     except Exception as e:
                         st.error(f"Error building 2-leg parlays: {str(e)}")
-                
+
                 with tab_3:
                     st.subheader("Best 3-Leg AI-Optimized Parlays")
                     try:
                         with st.spinner("Calculating optimal 3-leg combinations..."):
-                            combos_3 = build_combos_ai(all_legs, 3, allow_sgp, ai_optimizer, theover_parlay_data, min_parlay_probability, max_parlay_probability)[:show_top]
+                            combos_3 = build_combos_ai(all_legs, 3, allow_sgp, ai_optimizer, theover_parlay_data,
+                                                       min_parlay_probability, max_parlay_probability)[:show_top]
                             render_parlay_section_ai("3-Leg AI Parlays", combos_3, theover_parlay_data)
                     except Exception as e:
                         st.error(f"Error building 3-leg parlays: {str(e)}")
-                
+
                 with tab_4:
                     st.subheader("Best 4-Leg AI-Optimized Parlays")
                     try:
                         with st.spinner("Calculating optimal 4-leg combinations..."):
-                            combos_4 = build_combos_ai(all_legs, 4, allow_sgp, ai_optimizer, theover_parlay_data, min_parlay_probability, max_parlay_probability)[:show_top]
+                            combos_4 = build_combos_ai(all_legs, 4, allow_sgp, ai_optimizer, theover_parlay_data,
+                                                       min_parlay_probability, max_parlay_probability)[:show_top]
                             render_parlay_section_ai("4-Leg AI Parlays", combos_4, theover_parlay_data)
                     except Exception as e:
                         st.error(f"Error building 4-leg parlays: {str(e)}")
-                
+
                 with tab_5:
                     st.subheader("Best 5-Leg AI-Optimized Parlays")
                     try:
                         with st.spinner("Calculating optimal 5-leg combinations..."):
-                            combos_5 = build_combos_ai(all_legs, 5, allow_sgp, ai_optimizer, theover_parlay_data, min_parlay_probability, max_parlay_probability)[:show_top]
+                            combos_5 = build_combos_ai(all_legs, 5, allow_sgp, ai_optimizer, theover_parlay_data,
+                                                       min_parlay_probability, max_parlay_probability)[:show_top]
                             render_parlay_section_ai("5-Leg AI Parlays", combos_5, theover_parlay_data)
                     except Exception as e:
                         st.error(f"Error building 5-leg parlays: {str(e)}")
-        
+
         except KeyError as e:
             st.error(f"Configuration error: Missing key {str(e)}. Please refresh the page.")
             import traceback
+
             with st.expander("Error Details"):
                 st.code(traceback.format_exc())
         except Exception as e:
             st.error(f"An error occurred: {str(e)}")
             import traceback
+
             with st.expander("Full Error Details (for debugging)"):
                 st.code(traceback.format_exc())
             st.info("Please try:")
@@ -3091,6 +3164,8 @@ with main_tab1:
             4. Try a different date
             5. Disable sentiment analysis if enabled
             """)
+
+
 # ---- Global safe odds helper (always available) ------------------------------
 def american_to_decimal_safe(odds) -> float | None:
     """
@@ -3104,11 +3179,13 @@ def american_to_decimal_safe(odds) -> float | None:
         if abs(o) < 100:
             return None
         if o >= 100:
-            return 1.0 + o/100.0
+            return 1.0 + o / 100.0
         else:
-            return 1.0 + 100.0/abs(o)
+            return 1.0 + 100.0 / abs(o)
     except Exception:
         return None
+
+
 # -----------------------------------------------------------------------------
 # ---- Safety shim to guarantee robust odds conversion ----
 try:
@@ -3116,7 +3193,7 @@ try:
 except NameError:
     pass
 # ---------------------------------------------------------
-    
+
 st.markdown("---")
 st.markdown("""
     ### 🤖 AI Features Explained:
@@ -3146,7 +3223,7 @@ st.markdown("""
     - Higher scores = best overall opportunities
     - Accounts for correlation in same-game parlays
     """)
-    
+
 st.caption("🟢 High Confidence | 💰 High +EV | 📈 Positive EV | 📉 Negative EV | Powered by AI & ML")
 
 # ===== TAB 2: PRIZEPICKS =====
@@ -3156,17 +3233,17 @@ with main_tab2:
     st.header("🔍 Sentiment & AI Analysis Dashboard")
     st.markdown("**Advanced sentiment analysis using web scraping, news APIs, and AI-powered insights**")
     st.caption("Get deep insights into team performance, news sentiment, betting trends, and AI predictions")
-    
+
     # API Configuration
     st.markdown("---")
     st.subheader("⚙️ Configuration")
-    
+
     col_api1, col_api2 = st.columns(2)
     with col_api1:
         odds_key = st.session_state.get('api_key', "") or os.environ.get("ODDS_API_KEY", "")
         if not odds_key:
             st.warning("⚠️ Odds API key not configured. Please set it in the Sports Betting tab.")
-    
+
     with col_api2:
         news_key = st.session_state.get('news_api_key', "") or os.environ.get("NEWS_API_KEY", "")
         news_key_input = st.text_input(
@@ -3178,12 +3255,12 @@ with main_tab2:
         if news_key_input != news_key:
             st.session_state['news_api_key'] = news_key_input
             st.session_state['sentiment_analyzer'] = RealSentimentAnalyzer(news_key_input)
-    
+
     st.markdown("---")
-    
+
     # Team Selection
     st.subheader("🎯 Select Teams to Analyze")
-    
+
     col_sport, col_num = st.columns(2)
     with col_sport:
         analysis_sport = st.selectbox(
@@ -3191,10 +3268,10 @@ with main_tab2:
             options=APP_CFG["sports_common"],
             key="analysis_sport"
         )
-    
+
     with col_num:
         num_teams = st.slider("Number of teams to analyze", 2, 10, 5)
-    
+
     # Fetch games and extract teams
     if st.button("🔍 Load Teams", type="primary"):
         if not odds_key:
@@ -3204,18 +3281,18 @@ with main_tab2:
                 try:
                     snap = fetch_oddsapi_snapshot(odds_key, analysis_sport)
                     events = snap.get("events", [])
-                    
+
                     if not events:
                         st.warning("No games found for this sport")
                     else:
                         # Extract unique teams
                         teams = set()
                         team_games = {}  # Map team to their games
-                        
+
                         for ev in events:
                             home = ev.get("home_team")
                             away = ev.get("away_team")
-                            
+
                             if home:
                                 teams.add(home)
                                 if home not in team_games:
@@ -3226,7 +3303,7 @@ with main_tab2:
                                     'game_id': ev.get('id'),
                                     'commence_time': ev.get('commence_time')
                                 })
-                            
+
                             if away:
                                 teams.add(away)
                                 if away not in team_games:
@@ -3237,19 +3314,19 @@ with main_tab2:
                                     'game_id': ev.get('id'),
                                     'commence_time': ev.get('commence_time')
                                 })
-                        
+
                         st.session_state['analysis_teams'] = sorted(list(teams))
                         st.session_state['team_games'] = team_games
                         st.success(f"✅ Found {len(teams)} teams with upcoming games")
-                
+
                 except Exception as e:
                     st.error(f"Error loading teams: {str(e)}")
-    
+
     # Team Analysis
     if 'analysis_teams' in st.session_state and st.session_state['analysis_teams']:
         st.markdown("---")
         st.subheader("📊 Team Sentiment Analysis")
-        
+
         teams = st.session_state['analysis_teams']
         selected_teams = st.multiselect(
             "Select teams to analyze",
@@ -3257,31 +3334,31 @@ with main_tab2:
             default=teams[:min(num_teams, len(teams))],
             max_selections=10
         )
-        
+
         if st.button("🤖 Run Deep Analysis", type="primary"):
             if not selected_teams:
                 st.warning("Please select at least one team")
             else:
                 sentiment_analyzer = st.session_state.get('sentiment_analyzer')
-                
+
                 if not sentiment_analyzer:
                     st.error("Sentiment analyzer not initialized")
                 else:
                     progress_bar = st.progress(0)
                     analysis_results = []
-                    
+
                     for idx, team in enumerate(selected_teams):
                         progress_bar.progress((idx + 1) / len(selected_teams))
-                        
+
                         with st.spinner(f"Analyzing {team}..."):
                             try:
                                 # Get sentiment
                                 sentiment = sentiment_analyzer.get_team_sentiment(team, analysis_sport)
-                                
+
                                 # Get game info
                                 games = st.session_state['team_games'].get(team, [])
                                 next_game = games[0] if games else None
-                                
+
                                 # Get odds if available
                                 odds_data = None
                                 if next_game:
@@ -3293,32 +3370,33 @@ with main_tab2:
                                             else:
                                                 odds_data = _dig(h2h, 'away.price')
                                             break
-                                
+
                                 analysis_results.append({
                                     'team': team,
                                     'sentiment': sentiment,
                                     'next_game': next_game,
                                     'odds': odds_data
                                 })
-                            
+
                             except Exception as e:
                                 st.warning(f"Error analyzing {team}: {str(e)}")
-                    
+
                     progress_bar.progress(1.0)
-                    
+
                     # Display Results
                     if analysis_results:
                         st.markdown("---")
                         st.markdown("### 📈 Analysis Results")
-                        
+
                         # Summary metrics
                         col_m1, col_m2, col_m3, col_m4 = st.columns(4)
-                        
+
                         positive_teams = sum(1 for r in analysis_results if r['sentiment']['trend'] == 'positive')
                         negative_teams = sum(1 for r in analysis_results if r['sentiment']['trend'] == 'negative')
                         avg_score = sum(r['sentiment']['score'] for r in analysis_results) / len(analysis_results)
-                        avg_confidence = sum(r['sentiment']['confidence'] for r in analysis_results) / len(analysis_results)
-                        
+                        avg_confidence = sum(r['sentiment']['confidence'] for r in analysis_results) / len(
+                            analysis_results)
+
                         with col_m1:
                             st.metric("Positive Sentiment", positive_teams)
                         with col_m2:
@@ -3326,20 +3404,20 @@ with main_tab2:
                         with col_m3:
                             st.metric("Avg Sentiment Score", f"{avg_score:+.2f}")
                         with col_m4:
-                            st.metric("Avg Confidence", f"{avg_confidence*100:.0f}%")
-                        
+                            st.metric("Avg Confidence", f"{avg_confidence * 100:.0f}%")
+
                         # Sort by sentiment score
                         analysis_results.sort(key=lambda x: x['sentiment']['score'], reverse=True)
-                        
+
                         # Display each team
                         st.markdown("### 🏈 Team-by-Team Breakdown")
-                        
+
                         for result in analysis_results:
                             team = result['team']
                             sentiment = result['sentiment']
                             next_game = result['next_game']
                             odds = result['odds']
-                            
+
                             # Determine sentiment icon and color
                             if sentiment['trend'] == 'positive':
                                 trend_icon = "🟢"
@@ -3350,18 +3428,19 @@ with main_tab2:
                             else:
                                 trend_icon = "🟡"
                                 trend_color = "orange"
-                            
-                            with st.expander(f"{trend_icon} {team} - {sentiment['trend'].upper()} ({sentiment['score']:+.2f})"):
+
+                            with st.expander(
+                                    f"{trend_icon} {team} - {sentiment['trend'].upper()} ({sentiment['score']:+.2f})"):
                                 col_info1, col_info2 = st.columns(2)
-                                
+
                                 with col_info1:
                                     st.markdown("**Sentiment Analysis:**")
                                     st.write(f"- **Score:** {sentiment['score']:+.2f}")
                                     st.write(f"- **Trend:** {sentiment['trend'].upper()}")
-                                    st.write(f"- **Confidence:** {sentiment['confidence']*100:.0f}%")
+                                    st.write(f"- **Confidence:** {sentiment['confidence'] * 100:.0f}%")
                                     st.write(f"- **Sources:** {sentiment['sources']} articles")
                                     st.write(f"- **Method:** {sentiment['method']}")
-                                
+
                                 with col_info2:
                                     st.markdown("**Next Game:**")
                                     if next_game:
@@ -3370,38 +3449,43 @@ with main_tab2:
                                         if odds:
                                             prob = implied_p_from_american(odds)
                                             st.write(f"- **Odds:** {odds:+.0f}")
-                                            st.write(f"- **Implied Prob:** {prob*100:.1f}%")
-                                        
+                                            st.write(f"- **Implied Prob:** {prob * 100:.1f}%")
+
                                         # Try to parse time
                                         try:
                                             import datetime
+
                                             game_time = datetime.datetime.fromtimestamp(next_game['commence_time'])
                                             st.write(f"- **Time:** {game_time.strftime('%m/%d %I:%M %p')}")
                                         except:
                                             pass
                                     else:
                                         st.write("No upcoming game found")
-                                
+
                                 # Betting recommendation based on sentiment + odds
                                 st.markdown("**💡 AI Betting Insight:**")
-                                
+
                                 if sentiment['score'] > 0.3 and sentiment['confidence'] > 0.6:
                                     if odds and odds > 0:  # Underdog with positive sentiment
-                                        st.success("🟢 **STRONG VALUE** - Positive sentiment underdog. Market may be undervaluing this team.")
+                                        st.success(
+                                            "🟢 **STRONG VALUE** - Positive sentiment underdog. Market may be undervaluing this team.")
                                     elif odds and odds < -200:  # Heavy favorite with positive sentiment
-                                        st.info("🟡 **GOOD SPOT** - Sentiment confirms favorite status, but odds may be steep.")
+                                        st.info(
+                                            "🟡 **GOOD SPOT** - Sentiment confirms favorite status, but odds may be steep.")
                                     else:
-                                        st.success("🟢 **FAVORABLE** - Strong positive sentiment. Consider backing this team.")
-                                
+                                        st.success(
+                                            "🟢 **FAVORABLE** - Strong positive sentiment. Consider backing this team.")
+
                                 elif sentiment['score'] < -0.3 and sentiment['confidence'] > 0.6:
                                     if odds and odds < 0:  # Favorite with negative sentiment
-                                        st.warning("🟠 **FADE CANDIDATE** - Negative sentiment on a favorite. Public may be overvaluing.")
+                                        st.warning(
+                                            "🟠 **FADE CANDIDATE** - Negative sentiment on a favorite. Public may be overvaluing.")
                                     else:
                                         st.error("🔴 **AVOID** - Strong negative sentiment. Look elsewhere.")
-                                
+
                                 else:
                                     st.info("🟡 **NEUTRAL** - No strong sentiment signal. Rely on other factors.")
-                        
+
                         # Export option
                         st.markdown("---")
                         export_data = []
@@ -3410,31 +3494,31 @@ with main_tab2:
                                 'Team': result['team'],
                                 'Sentiment Score': f"{result['sentiment']['score']:+.2f}",
                                 'Trend': result['sentiment']['trend'],
-                                'Confidence': f"{result['sentiment']['confidence']*100:.0f}%",
+                                'Confidence': f"{result['sentiment']['confidence'] * 100:.0f}%",
                                 'Sources': result['sentiment']['sources'],
                                 'Next Opponent': result['next_game']['opponent'] if result['next_game'] else 'N/A',
                                 'Location': result['next_game']['location'] if result['next_game'] else 'N/A',
                                 'Odds': f"{result['odds']:+.0f}" if result['odds'] else 'N/A'
                             })
-                        
+
                         df_export = pd.DataFrame(export_data)
                         csv_buf = io.StringIO()
                         df_export.to_csv(csv_buf, index=False)
-                        
+
                         st.download_button(
                             "💾 Download Analysis CSV",
                             data=csv_buf.getvalue(),
                             file_name=f"sentiment_analysis_{analysis_sport}.csv",
                             mime="text/csv"
                         )
-    
+
     else:
         st.info("👆 Click 'Load Teams' to start sentiment analysis")
-    
+
     # Advanced Features Section
     st.markdown("---")
     st.markdown("### 🚀 Advanced Analysis Features")
-    
+
     with st.expander("📰 News Sentiment Analysis"):
         st.markdown("""
         **How it works:**
@@ -3444,108 +3528,108 @@ with main_tab2:
         - Identifies positive words (win, dominant, stellar) vs negative words (lose, injury, struggle)
         - Calculates sentiment score from -1.0 (very negative) to +1.0 (very positive)
         - Provides confidence score based on number of sources and consistency
-        
+
         **Positive Indicators:**
         - Winning streak, dominant performance, star player excelling
         - Record-breaking stats, momentum, clutch plays
         - Positive coaching changes, key player returns
-        
+
         **Negative Indicators:**
         - Losing streak, injuries to key players, poor performance
         - Internal conflicts, coaching issues, suspensions
         - Defensive/offensive struggles, blown leads
         """)
-    
+
     with st.expander("🤖 AI Prediction Model"):
         st.markdown("""
         **Machine Learning Components:**
         - **Input Features:** Home/Away odds, sentiment scores, historical patterns
         - **Model Type:** Gradient boosting with probability calibration
         - **Output:** Win probability for each team, confidence score, edge calculation
-        
+
         **How AI Adjusts Probabilities:**
         1. Takes market-implied probability from odds
         2. Applies sentiment adjustment (±40% weight)
         3. Considers home/away advantage
         4. Calibrates based on historical accuracy
         5. Outputs adjusted probability + confidence
-        
+
         **Confidence Scoring:**
         - High (70%+): Strong signal from multiple factors
         - Medium (50-70%): Moderate signals, some uncertainty
         - Low (<50%): Conflicting signals or limited data
         """)
-    
+
     with st.expander("📊 Betting Trend Analysis"):
         st.markdown("""
         **Market Movements:**
         - Track line movements throughout the day
         - Identify sharp vs public money
         - Detect reverse line movement (line moves opposite to betting percentages)
-        
+
         **Value Detection:**
         - Compare sentiment score to market odds
         - Find positive sentiment underdogs (best value)
         - Identify overvalued favorites with negative sentiment
-        
+
         **Correlation Analysis:**
         - Sentiment vs actual outcomes (historical accuracy)
         - Best sports/leagues for sentiment analysis
         - Optimal bet types for sentiment-based betting
         """)
-    
+
     with st.expander("🎯 How to Use This Analysis"):
         st.markdown("""
         **Step 1: Load & Analyze**
         1. Select sport and load current teams
         2. Choose 3-5 teams you're interested in
         3. Run deep analysis
-        
+
         **Step 2: Interpret Results**
         - **🟢 Green (Positive)**: Team has favorable news/momentum
         - **🔴 Red (Negative)**: Team has concerning news/struggles  
         - **🟡 Yellow (Neutral)**: No strong sentiment signal
-        
+
         **Step 3: Find Value**
         - Look for positive sentiment underdogs (market undervaluing)
         - Fade negative sentiment favorites (market overvaluing)
         - Combine with AI probability for best bets
-        
+
         **Step 4: Validate**
         - Use Custom Parlay Builder to test specific picks
         - Compare sentiment analysis to AI expected value
         - Make informed decision based on multiple factors
-        
+
         **Best Practices:**
         - Don't bet on sentiment alone - combine with AI analysis
         - Higher confidence scores are more reliable
         - More news sources = more reliable sentiment
         - Recent news (1-3 days) is most relevant
         """)
-    
+
     # Tips
     st.markdown("---")
     st.markdown("""
     ### 💡 Sentiment Analysis Tips:
-    
+
     **What Makes Strong Sentiment:**
     - ✅ Multiple news sources (5+ articles)
     - ✅ High confidence score (70%+)
     - ✅ Recent news (last 24-48 hours)
     - ✅ Consistent trend across sources
-    
+
     **Red Flags:**
     - ⚠️ Low confidence (<40%)
     - ⚠️ Few news sources (<3 articles)
     - ⚠️ Mixed signals (some positive, some negative)
     - ⚠️ Old news (4+ days ago)
-    
+
     **Best Use Cases:**
     - 🎯 Finding undervalued underdogs with positive momentum
     - 🎯 Fading overvalued favorites with negative news
     - 🎯 Validating your own analysis with AI/sentiment
     - 🎯 Identifying injury/coaching impacts quickly
-    
+
     **Combine With:**
     - Use sentiment for initial screening
     - Use AI analysis for probability adjustment
@@ -3556,24 +3640,25 @@ with main_tab2:
 with main_tab3:
     st.header("🎨 Custom Parlay Builder")
     st.markdown("**Build your own parlay and get AI-powered analysis**")
-    st.caption("Select 2-4 legs, then get comprehensive AI/ML analysis with sentiment, probability, and edge calculations")
-    
+    st.caption(
+        "Select 2-4 legs, then get comprehensive AI/ML analysis with sentiment, probability, and edge calculations")
+
     # API key check
     api_key = st.session_state.get('api_key', "") or os.environ.get("ODDS_API_KEY", "")
-    
+
     if not api_key:
         st.warning("⚠️ Please enter your Odds API key in the 'Sports Betting Parlays' tab first")
         st.stop()
-    
+
     # Initialize session state for custom parlay legs
     if 'custom_legs' not in st.session_state:
         st.session_state['custom_legs'] = []
-    
+
     st.markdown("---")
-    
+
     # Step 1: Fetch Available Games
     st.subheader("📋 Step 1: Select Sport & Date")
-    
+
     col_sport, col_date = st.columns(2)
     with col_sport:
         custom_sport = st.selectbox(
@@ -3587,7 +3672,7 @@ with main_tab3:
             value=pd.Timestamp.now().date(),
             key="custom_date"
         )
-    
+
     if st.button("🔄 Load Games", type="primary"):
         with st.spinner(f"Loading {custom_sport} games..."):
             try:
@@ -3596,14 +3681,14 @@ with main_tab3:
                 st.success(f"✅ Loaded {len(st.session_state.get('available_games', []))} games")
             except Exception as e:
                 st.error(f"Error loading games: {str(e)}")
-    
+
     # Step 2: Add Legs to Custom Parlay
     if 'available_games' in st.session_state and st.session_state['available_games']:
         st.markdown("---")
         st.subheader("⚡ Step 2: Build Your Parlay")
-        
+
         games = st.session_state['available_games']
-        
+
         # Game selector
         game_options = [f"{g['away_team']} @ {g['home_team']}" for g in games]
         selected_game_idx = st.selectbox(
@@ -3612,13 +3697,13 @@ with main_tab3:
             format_func=lambda x: game_options[x],
             key="game_selector"
         )
-        
+
         if selected_game_idx is not None:
             selected_game = games[selected_game_idx]
             home_team = selected_game['home_team']
             away_team = selected_game['away_team']
             markets = selected_game.get('markets', {})
-            
+
             # Bet type selector
             col_bet1, col_bet2 = st.columns(2)
             with col_bet1:
@@ -3627,13 +3712,13 @@ with main_tab3:
                     options=["Moneyline", "Spread", "Total"],
                     key="bet_type_selector"
                 )
-            
+
             with col_bet2:
                 if bet_type == "Moneyline":
                     h2h = markets.get('h2h', {})
                     home_price = _dig(h2h, 'home.price')
                     away_price = _dig(h2h, 'away.price')
-                    
+
                     if home_price and away_price:
                         selection = st.selectbox(
                             "Selection",
@@ -3643,7 +3728,7 @@ with main_tab3:
                             ],
                             key="ml_selector"
                         )
-                        
+
                         # Parse selection
                         if home_team in selection:
                             pick_team = home_team
@@ -3656,7 +3741,7 @@ with main_tab3:
                     else:
                         st.warning("Moneyline odds not available for this game")
                         selection = None
-                
+
                 elif bet_type == "Spread":
                     spreads = markets.get('spreads', [])
                     if spreads:
@@ -3673,7 +3758,7 @@ with main_tab3:
                                     'price': price,
                                     'side': 'home' if team == home_team else 'away'
                                 })
-                        
+
                         if spread_options:
                             selection = st.selectbox(
                                 "Selection",
@@ -3681,7 +3766,7 @@ with main_tab3:
                                 format_func=lambda x: spread_options[x]['label'],
                                 key="spread_selector"
                             )
-                            
+
                             if selection is not None:
                                 pick_data = spread_options[selection]
                                 pick_team = pick_data['team']
@@ -3694,7 +3779,7 @@ with main_tab3:
                     else:
                         st.warning("Spread odds not available")
                         selection = None
-                
+
                 elif bet_type == "Total":
                     totals = markets.get('totals', [])
                     if totals:
@@ -3710,7 +3795,7 @@ with main_tab3:
                                     'point': point,
                                     'price': price
                                 })
-                        
+
                         if total_options:
                             selection = st.selectbox(
                                 "Selection",
@@ -3718,7 +3803,7 @@ with main_tab3:
                                 format_func=lambda x: total_options[x]['label'],
                                 key="total_selector"
                             )
-                            
+
                             if selection is not None:
                                 pick_data = total_options[selection]
                                 pick_team = f"{home_team} vs {away_team}"
@@ -3731,7 +3816,7 @@ with main_tab3:
                     else:
                         st.warning("Total odds not available")
                         selection = None
-            
+
             # Add leg button
             if selection is not None and st.button("➕ Add to Parlay", type="secondary"):
                 # Create leg data
@@ -3746,10 +3831,10 @@ with main_tab3:
                     'price': pick_price,
                     'd': american_to_decimal_safe(pick_price)
                 }
-                
+
                 if bet_type in ['Spread', 'Total']:
                     leg['point'] = pick_point
-                
+
                 # Check if already at max legs
                 if len(st.session_state['custom_legs']) >= 4:
                     st.warning("⚠️ Maximum 4 legs allowed. Remove a leg to add another.")
@@ -3757,24 +3842,24 @@ with main_tab3:
                     # Check for duplicates (same game + same bet type)
                     duplicate = False
                     for existing_leg in st.session_state['custom_legs']:
-                        if (existing_leg['event_id'] == leg['event_id'] and 
-                            existing_leg['type'] == leg['type'] and
-                            existing_leg['team'] == leg['team']):
+                        if (existing_leg['event_id'] == leg['event_id'] and
+                                existing_leg['type'] == leg['type'] and
+                                existing_leg['team'] == leg['team']):
                             duplicate = True
                             break
-                    
+
                     if duplicate:
                         st.warning("⚠️ This leg is already in your parlay")
                     else:
                         st.session_state['custom_legs'].append(leg)
                         st.success(f"✅ Added to parlay!")
                         st.rerun()
-    
+
     # Step 3: Show Current Parlay
     if st.session_state['custom_legs']:
         st.markdown("---")
         st.subheader("🎯 Your Custom Parlay")
-        
+
         for i, leg in enumerate(st.session_state['custom_legs'], 1):
             col_leg, col_remove = st.columns([5, 1])
             with col_leg:
@@ -3784,26 +3869,26 @@ with main_tab3:
                 elif leg['type'] == 'Total':
                     label += f" {leg['side']} {leg['point']}"
                 label += f" @{leg['price']:+.0f}"
-                
+
                 st.write(f"**Leg {i}:** {label}")
-            
+
             with col_remove:
                 if st.button("🗑️", key=f"remove_{i}"):
-                    st.session_state['custom_legs'].pop(i-1)
+                    st.session_state['custom_legs'].pop(i - 1)
                     st.rerun()
-        
+
         # Step 4: Analyze Parlay
         if len(st.session_state['custom_legs']) >= 2:
             st.markdown("---")
             st.subheader("🤖 AI Analysis")
-            
+
             if st.button("🔍 Analyze My Parlay", type="primary"):
                 with st.spinner("🧠 Running AI/ML analysis..."):
                     try:
                         sentiment_analyzer = st.session_state.get('sentiment_analyzer')
                         ml_predictor = st.session_state.get('ml_predictor')
                         ai_optimizer = st.session_state.get('ai_optimizer')
-                        
+
                         # Enhance legs with AI analysis
                         analyzed_legs = []
                         for leg in st.session_state['custom_legs']:
@@ -3818,10 +3903,10 @@ with main_tab3:
                             except Exception:
                                 home_sentiment = {'score': 0, 'trend': 'neutral'}
                                 away_sentiment = {'score': 0, 'trend': 'neutral'}
-                            
+
                             # Calculate probabilities
                             base_prob = implied_p_from_american(leg['price'])
-                            
+
                             # Get AI probability
                             if leg['type'] == 'Moneyline' and ml_predictor:
                                 # Get opponent price for ML prediction
@@ -3834,7 +3919,7 @@ with main_tab3:
                                         else:
                                             opp_price = _dig(h2h, 'home.price')
                                         break
-                                
+
                                 if opp_price:
                                     ml_prediction = ml_predictor.predict_game_outcome(
                                         leg['home_team'], leg['away_team'],
@@ -3853,12 +3938,12 @@ with main_tab3:
                                 sentiment = home_sentiment if leg['team'] == leg['home_team'] else away_sentiment
                                 if leg['type'] == 'Total':
                                     sentiment = {'score': (home_sentiment['score'] + away_sentiment['score']) / 2}
-                                
+
                                 ai_prob = base_prob * (1 + sentiment['score'] * 0.40)
                                 ai_prob = max(0.1, min(0.9, ai_prob))
                                 ai_confidence = 0.65 if leg['type'] == 'Spread' else 0.60
                                 ai_edge = abs(ai_prob - base_prob)
-                            
+
                             # Add analysis to leg
                             analyzed_leg = leg.copy()
                             analyzed_leg.update({
@@ -3866,22 +3951,23 @@ with main_tab3:
                                 'ai_prob': ai_prob,
                                 'ai_confidence': ai_confidence,
                                 'ai_edge': ai_edge,
-                                'sentiment_trend': home_sentiment['trend'] if leg['side'] == 'home' else away_sentiment['trend'],
+                                'sentiment_trend': home_sentiment['trend'] if leg['side'] == 'home' else away_sentiment[
+                                    'trend'],
                                 'home_sentiment': home_sentiment,
                                 'away_sentiment': away_sentiment
                             })
                             analyzed_legs.append(analyzed_leg)
-                        
+
                         # Calculate parlay metrics
                         combined_odds = 1.0
                         market_prob = 1.0
                         ai_prob = 1.0
-                        
+
                         for leg in analyzed_legs:
                             combined_odds *= leg['d']
                             market_prob *= leg['p']
                             ai_prob *= leg['ai_prob']
-                        
+
                         # Get AI optimizer score
                         if ai_optimizer:
                             ai_metrics = ai_optimizer.score_parlay(analyzed_legs)
@@ -3892,34 +3978,35 @@ with main_tab3:
                                 'confidence': sum(l['ai_confidence'] for l in analyzed_legs) / len(analyzed_legs),
                                 'edge': sum(l['ai_edge'] for l in analyzed_legs)
                             }
-                        
+
                         # Calculate payouts
                         stake = 100
                         potential_payout = stake * combined_odds
                         potential_profit = potential_payout - stake
-                        
+
                         # Market EV
                         market_ev = (market_prob * combined_odds) - 1.0
                         market_expected_return = stake * market_ev
-                        
+
                         # AI EV
                         ai_expected_return = stake * ai_metrics['ai_ev']
-                        
+
                         # Display Results
                         st.markdown("### 📊 Analysis Results")
-                        
+
                         # Main metrics
                         col1, col2, col3, col4 = st.columns(4)
                         with col1:
                             st.metric("Combined Odds", f"{combined_odds:.2f}x")
                         with col2:
-                            st.metric("Market Probability", f"{market_prob*100:.1f}%")
+                            st.metric("Market Probability", f"{market_prob * 100:.1f}%")
                         with col3:
-                            st.metric("AI Probability", f"{ai_prob*100:.1f}%")
+                            st.metric("AI Probability", f"{ai_prob * 100:.1f}%")
                         with col4:
-                            confidence_color = "🟢" if ai_metrics['confidence'] > 0.7 else ("🟡" if ai_metrics['confidence'] > 0.5 else "🟠")
-                            st.metric("AI Confidence", f"{confidence_color} {ai_metrics['confidence']*100:.0f}%")
-                        
+                            confidence_color = "🟢" if ai_metrics['confidence'] > 0.7 else (
+                                "🟡" if ai_metrics['confidence'] > 0.5 else "🟠")
+                            st.metric("AI Confidence", f"{confidence_color} {ai_metrics['confidence'] * 100:.0f}%")
+
                         # EV metrics
                         col5, col6, col7 = st.columns(3)
                         with col5:
@@ -3938,7 +4025,7 @@ with main_tab3:
                             )
                         with col7:
                             st.metric("AI Score", f"{ai_metrics['score']:.1f}")
-                        
+
                         # Sentiment Analysis
                         st.markdown("### 🎭 Sentiment Analysis")
                         for i, leg in enumerate(analyzed_legs, 1):
@@ -3952,7 +4039,7 @@ with main_tab3:
                                     st.write(f"**{leg['away_team']}**")
                                     st.write(f"Sentiment: {leg['away_sentiment']['trend'].upper()}")
                                     st.write(f"Score: {leg['away_sentiment']['score']:+.2f}")
-                        
+
                         # Detailed Leg Analysis
                         st.markdown("### 📋 Leg-by-Leg Breakdown")
                         leg_data = []
@@ -3962,31 +4049,31 @@ with main_tab3:
                                 "Game": leg['game'],
                                 "Pick": f"{leg['team']} {leg['type']}",
                                 "Odds": f"{leg['price']:+.0f}",
-                                "Market %": f"{leg['p']*100:.1f}%",
-                                "AI %": f"{leg['ai_prob']*100:.1f}%",
-                                "AI Confidence": f"{leg['ai_confidence']*100:.0f}%",
-                                "Edge": f"{leg['ai_edge']*100:+.1f}%",
+                                "Market %": f"{leg['p'] * 100:.1f}%",
+                                "AI %": f"{leg['ai_prob'] * 100:.1f}%",
+                                "AI Confidence": f"{leg['ai_confidence'] * 100:.0f}%",
+                                "Edge": f"{leg['ai_edge'] * 100:+.1f}%",
                                 "Sentiment": leg['sentiment_trend']
                             })
-                        
+
                         st.dataframe(pd.DataFrame(leg_data), use_container_width=True, hide_index=True)
-                        
+
                         # Payout Scenarios
                         st.markdown("### 💰 Payout Scenarios")
                         st.write(f"**On a $100 bet:**")
                         st.write(f"- Total Payout: **${potential_payout:.2f}**")
                         st.write(f"- Profit: **${potential_profit:.2f}**")
-                        st.write(f"- ROI: **{(potential_profit/stake)*100:.1f}%**")
-                        
+                        st.write(f"- ROI: **{(potential_profit / stake) * 100:.1f}%**")
+
                         st.markdown("**Other Stakes:**")
                         for bet_amount in [25, 50, 100, 250, 500]:
                             payout = bet_amount * combined_odds
                             profit = payout - bet_amount
                             st.write(f"${bet_amount} → ${payout:.2f} (${profit:+.2f} profit)")
-                        
+
                         # Recommendation
                         st.markdown("### 💡 AI Recommendation")
-                        
+
                         # Decision logic
                         if ai_expected_return > 5 and ai_metrics['confidence'] > 0.65:
                             st.success("🟢 **STRONG PLAY** - Positive AI EV with high confidence")
@@ -3996,43 +4083,45 @@ with main_tab3:
                             st.warning("🟠 **CAUTION** - Market EV positive but AI less confident")
                         else:
                             st.error("🔴 **AVOID** - Negative expected value")
-                        
+
                         # Key insights
                         st.markdown("**Key Insights:**")
                         insights = []
-                        
+
                         if ai_prob > market_prob * 1.1:
-                            insights.append(f"✅ AI sees {((ai_prob/market_prob-1)*100):.0f}% better chance than market")
+                            insights.append(
+                                f"✅ AI sees {((ai_prob / market_prob - 1) * 100):.0f}% better chance than market")
                         elif ai_prob < market_prob * 0.9:
-                            insights.append(f"⚠️ AI sees {((1-ai_prob/market_prob)*100):.0f}% worse chance than market")
-                        
+                            insights.append(
+                                f"⚠️ AI sees {((1 - ai_prob / market_prob) * 100):.0f}% worse chance than market")
+
                         if ai_metrics['confidence'] > 0.7:
                             insights.append("✅ High AI confidence across all legs")
                         elif ai_metrics['confidence'] < 0.5:
                             insights.append("⚠️ Low AI confidence - consider alternative picks")
-                        
+
                         positive_sentiment = sum(1 for leg in analyzed_legs if leg['sentiment_trend'] == 'positive')
                         if positive_sentiment == len(analyzed_legs):
                             insights.append("✅ All picks have positive sentiment")
                         elif positive_sentiment == 0:
                             insights.append("⚠️ No picks have positive sentiment")
-                        
+
                         for insight in insights:
                             st.write(insight)
-                        
+
                         # Download option
                         st.markdown("---")
                         analysis_data = {
                             "Parlay": [f"Custom {len(analyzed_legs)}-Leg"],
                             "Combined Odds": [f"{combined_odds:.2f}"],
-                            "Market Probability": [f"{market_prob*100:.1f}%"],
-                            "AI Probability": [f"{ai_prob*100:.1f}%"],
-                            "AI Confidence": [f"{ai_metrics['confidence']*100:.0f}%"],
+                            "Market Probability": [f"{market_prob * 100:.1f}%"],
+                            "AI Probability": [f"{ai_prob * 100:.1f}%"],
+                            "AI Confidence": [f"{ai_metrics['confidence'] * 100:.0f}%"],
                             "Market EV": [f"${market_expected_return:+.2f}"],
                             "AI EV": [f"${ai_expected_return:+.2f}"],
                             "AI Score": [f"{ai_metrics['score']:.1f}"]
                         }
-                        
+
                         csv_buf = io.StringIO()
                         pd.DataFrame(analysis_data).to_csv(csv_buf, index=False)
                         st.download_button(
@@ -4041,38 +4130,39 @@ with main_tab3:
                             file_name="custom_parlay_analysis.csv",
                             mime="text/csv"
                         )
-                        
+
                     except Exception as e:
                         st.error(f"Error analyzing parlay: {str(e)}")
                         with st.expander("Error Details"):
                             import traceback
+
                             st.code(traceback.format_exc())
         else:
             st.info("ℹ️ Add at least 2 legs to analyze your parlay")
-        
+
         # Clear parlay button
         if st.button("🗑️ Clear All Legs", type="secondary"):
             st.session_state['custom_legs'] = []
             st.rerun()
     else:
         st.info("👆 Load games and start building your parlay above")
-    
+
     # Tips section
     st.markdown("---")
     st.markdown("""
     ### 💡 Custom Parlay Tips:
-    
+
     **Building Your Parlay:**
     - Start with 2-3 legs for better win probability
     - Mix different bet types (ML, Spread, Total) for variety
     - Avoid same-game parlays unless you have strong correlation thesis
-    
+
     **Using AI Analysis:**
     - **Positive AI EV** = AI thinks you have an edge
     - **High Confidence (70%+)** = AI very sure about probabilities
     - **Positive Sentiment** = Recent news favors this pick
     - **Green AI Score** = Strong overall recommendation
-    
+
     **Making Decisions:**
     - ✅ Target: Positive AI EV + High Confidence + Good Sentiment
     - ⚠️ Caution: Negative AI EV or Low Confidence
@@ -4083,12 +4173,13 @@ with main_tab3:
 with main_tab4:
     st.header("📊 Kalshi Prediction Markets")
     st.markdown("**Compare prediction market odds with traditional sportsbooks and AI analysis**")
-    st.caption("Find arbitrage opportunities and value bets by comparing Kalshi's wisdom-of-crowds pricing with sportsbook odds")
-    
+    st.caption(
+        "Find arbitrage opportunities and value bets by comparing Kalshi's wisdom-of-crowds pricing with sportsbook odds")
+
     # API Configuration
     st.markdown("---")
     st.subheader("⚙️ Kalshi Configuration")
-    
+
     col_kalshi1, col_kalshi2 = st.columns(2)
     with col_kalshi1:
         kalshi_key = st.text_input(
@@ -4100,10 +4191,10 @@ with main_tab4:
         if kalshi_key != st.session_state.get('kalshi_api_key', ''):
             st.session_state['kalshi_api_key'] = kalshi_key
             st.session_state['kalshi_integrator'] = KalshiIntegrator(
-                kalshi_key, 
+                kalshi_key,
                 st.session_state.get('kalshi_api_secret', '')
             )
-    
+
     with col_kalshi2:
         kalshi_secret = st.text_input(
             "Kalshi API Secret (optional)",
@@ -4117,24 +4208,25 @@ with main_tab4:
                 st.session_state.get('kalshi_api_key', ''),
                 kalshi_secret
             )
-    
+
     if not kalshi_key:
-        st.info("💡 **Demo Mode:** You can explore Kalshi without API keys. For live trading, get your API key at [kalshi.com](https://kalshi.com)")
-    
+        st.info(
+            "💡 **Demo Mode:** You can explore Kalshi without API keys. For live trading, get your API key at [kalshi.com](https://kalshi.com)")
+
     st.markdown("---")
-    
+
     # Main Analysis Sections
     analysis_mode = st.radio(
         "Select Analysis Mode:",
         ["🔍 Browse Kalshi Sports Markets", "⚖️ Compare with Sportsbooks", "💎 Find Arbitrage Opportunities"],
         horizontal=True
     )
-    
+
     kalshi = st.session_state.get('kalshi_integrator')
-    
+
     if analysis_mode == "🔍 Browse Kalshi Sports Markets":
         st.subheader("🏈 Available Sports Betting Markets")
-        
+
         if st.button("🔄 Load Kalshi Markets", type="primary"):
             with st.spinner("Fetching Kalshi markets..."):
                 try:
@@ -4144,12 +4236,12 @@ with main_tab4:
                 except Exception as e:
                     st.error(f"Error loading markets: {str(e)}")
                     st.info("💡 Try demo mode without API keys to explore sample markets")
-        
+
         if 'kalshi_markets' in st.session_state and st.session_state['kalshi_markets']:
             markets = st.session_state['kalshi_markets']
-            
+
             st.markdown(f"### 📋 {len(markets)} Markets Available")
-            
+
             # Filter options
             col_filter1, col_filter2 = st.columns(2)
             with col_filter1:
@@ -4158,19 +4250,19 @@ with main_tab4:
                     options=["All"] + ["NFL", "NBA", "MLB", "NHL", "UFC", "Soccer"],
                     key="kalshi_sport_filter"
                 )
-            
+
             with col_filter2:
                 sort_by = st.selectbox(
                     "Sort by",
                     options=["Volume (High to Low)", "Close Date (Soonest)", "Title (A-Z)"],
                     key="kalshi_sort"
                 )
-            
+
             # Filter markets
             filtered_markets = markets
             if sport_filter != "All":
                 filtered_markets = [m for m in markets if sport_filter.upper() in m.get('title', '').upper()]
-            
+
             # Sort markets
             if sort_by == "Volume (High to Low)":
                 filtered_markets.sort(key=lambda x: x.get('volume', 0), reverse=True)
@@ -4178,40 +4270,42 @@ with main_tab4:
                 filtered_markets.sort(key=lambda x: x.get('close_time', ''))
             else:
                 filtered_markets.sort(key=lambda x: x.get('title', ''))
-            
+
             # Display markets
             for i, market in enumerate(filtered_markets[:20]):  # Show top 20
                 title = market.get('title', 'Unknown Market')
                 ticker = market.get('ticker', '')
                 volume = market.get('volume', 0)
-                
-                with st.expander(f"**{i+1}. {title}**"):
+
+                with st.expander(f"**{i + 1}. {title}**"):
                     col_m1, col_m2 = st.columns(2)
-                    
+
                     with col_m1:
                         st.write(f"**Ticker:** {ticker}")
                         st.write(f"**Volume:** {volume:,} contracts")
                         st.write(f"**Status:** {market.get('status', 'unknown')}")
-                    
+
                     with col_m2:
                         # Get orderbook for this market
                         if st.button(f"📊 Analyze {ticker[:15]}...", key=f"analyze_{ticker}"):
                             with st.spinner("Fetching market details..."):
                                 try:
                                     orderbook = kalshi.get_orderbook(ticker)
-                                    
+
                                     if orderbook:
                                         yes_bids = orderbook.get('yes', [])
                                         no_bids = orderbook.get('no', [])
-                                        
+
                                         if yes_bids:
                                             best_yes_bid = yes_bids[0].get('price', 0) / 100
-                                            st.success(f"**YES Price:** {best_yes_bid*100:.1f}¢ ({best_yes_bid*100:.1f}% probability)")
-                                        
+                                            st.success(
+                                                f"**YES Price:** {best_yes_bid * 100:.1f}¢ ({best_yes_bid * 100:.1f}% probability)")
+
                                         if no_bids:
                                             best_no_bid = no_bids[0].get('price', 0) / 100
-                                            st.info(f"**NO Price:** {best_no_bid*100:.1f}¢ ({best_no_bid*100:.1f}% probability)")
-                                        
+                                            st.info(
+                                                f"**NO Price:** {best_no_bid * 100:.1f}¢ ({best_no_bid * 100:.1f}% probability)")
+
                                         # Kelly recommendation
                                         if yes_bids:
                                             st.markdown("**💰 Kelly Sizing:**")
@@ -4223,22 +4317,22 @@ with main_tab4:
                                             st.write(kelly_result['recommendation'])
                                     else:
                                         st.warning("No orderbook data available")
-                                
+
                                 except Exception as e:
                                     st.error(f"Error: {str(e)}")
-            
+
             if len(filtered_markets) > 20:
                 st.info(f"Showing top 20 of {len(filtered_markets)} markets. Adjust filters to see others.")
-        
+
         else:
             st.info("👆 Click 'Load Kalshi Markets' to see available betting opportunities")
-    
+
     elif analysis_mode == "⚖️ Compare with Sportsbooks":
         st.subheader("⚖️ Kalshi vs Sportsbook Odds Comparison")
         st.markdown("Compare prediction market pricing with traditional sportsbook odds to find value")
-        
+
         col_comp1, col_comp2 = st.columns(2)
-        
+
         with col_comp1:
             st.markdown("#### Kalshi Market")
             kalshi_market_title = st.text_input(
@@ -4254,7 +4348,7 @@ with main_tab4:
                 step=0.1,
                 help="Price in cents (e.g., 65 = 65% probability)"
             ) / 100
-        
+
         with col_comp2:
             st.markdown("#### Sportsbook")
             sb_selection = st.text_input(
@@ -4270,65 +4364,65 @@ with main_tab4:
                 step=5,
                 help="American odds (e.g., -150, +200)"
             )
-        
+
         if st.button("🔍 Compare Markets", type="primary"):
             # Calculate sportsbook implied probability
             sb_prob = implied_p_from_american(sb_odds)
-            
+
             # Comparison
             discrepancy = abs(kalshi_yes_price - sb_prob)
             edge = kalshi_yes_price - sb_prob
-            
+
             st.markdown("---")
             st.markdown("### 📊 Comparison Results")
-            
+
             col_r1, col_r2, col_r3 = st.columns(3)
-            
+
             with col_r1:
-                st.metric("Kalshi Probability", f"{kalshi_yes_price*100:.1f}%")
+                st.metric("Kalshi Probability", f"{kalshi_yes_price * 100:.1f}%")
             with col_r2:
-                st.metric("Sportsbook Probability", f"{sb_prob*100:.1f}%")
+                st.metric("Sportsbook Probability", f"{sb_prob * 100:.1f}%")
             with col_r3:
-                st.metric("Discrepancy", f"{discrepancy*100:.1f}%", 
-                         delta=f"{edge*100:+.1f}% edge" if edge != 0 else None)
-            
+                st.metric("Discrepancy", f"{discrepancy * 100:.1f}%",
+                          delta=f"{edge * 100:+.1f}% edge" if edge != 0 else None)
+
             # Recommendation
             st.markdown("### 💡 Recommendation")
-            
+
             if discrepancy > 0.10:  # 10%+ difference
                 if kalshi_yes_price < sb_prob:
                     st.success(f"🟢 **STRONG VALUE on Kalshi YES**")
-                    st.write(f"- Kalshi is pricing YES at {kalshi_yes_price*100:.1f}%")
-                    st.write(f"- Sportsbook implies {sb_prob*100:.1f}%")
-                    st.write(f"- **Edge: {(sb_prob - kalshi_yes_price)*100:.1f}% in your favor**")
+                    st.write(f"- Kalshi is pricing YES at {kalshi_yes_price * 100:.1f}%")
+                    st.write(f"- Sportsbook implies {sb_prob * 100:.1f}%")
+                    st.write(f"- **Edge: {(sb_prob - kalshi_yes_price) * 100:.1f}% in your favor**")
                     st.write(f"- **Action:** Buy YES on Kalshi")
                 else:
                     st.success(f"🟢 **STRONG VALUE on Sportsbook**")
-                    st.write(f"- Kalshi is overpricing at {kalshi_yes_price*100:.1f}%")
-                    st.write(f"- Sportsbook implies {sb_prob*100:.1f}%")
-                    st.write(f"- **Edge: {(kalshi_yes_price - sb_prob)*100:.1f}%**")
+                    st.write(f"- Kalshi is overpricing at {kalshi_yes_price * 100:.1f}%")
+                    st.write(f"- Sportsbook implies {sb_prob * 100:.1f}%")
+                    st.write(f"- **Edge: {(kalshi_yes_price - sb_prob) * 100:.1f}%**")
                     st.write(f"- **Action:** Take sportsbook bet OR buy NO on Kalshi")
-            
+
             elif discrepancy > 0.05:  # 5-10% difference
                 if kalshi_yes_price < sb_prob:
                     st.info(f"🟡 **MODERATE VALUE on Kalshi YES**")
-                    st.write(f"- Small edge of {(sb_prob - kalshi_yes_price)*100:.1f}%")
+                    st.write(f"- Small edge of {(sb_prob - kalshi_yes_price) * 100:.1f}%")
                     st.write(f"- Consider Kalshi YES if you agree with sportsbook assessment")
                 else:
                     st.info(f"🟡 **MODERATE VALUE on Sportsbook**")
-                    st.write(f"- Small edge of {(kalshi_yes_price - sb_prob)*100:.1f}%")
+                    st.write(f"- Small edge of {(kalshi_yes_price - sb_prob) * 100:.1f}%")
                     st.write(f"- Consider sportsbook if you agree with that probability")
-            
+
             else:
                 st.success("✅ **MARKETS IN AGREEMENT**")
                 st.write(f"- Both markets pricing very similarly")
-                st.write(f"- Difference of only {discrepancy*100:.1f}%")
+                st.write(f"- Difference of only {discrepancy * 100:.1f}%")
                 st.write(f"- No significant arbitrage or value opportunity")
                 st.write(f"- Bet on either if you have additional information/analysis")
-            
+
             # Kelly calculation for Kalshi
             st.markdown("### 💰 Optimal Bet Sizing (Kalshi)")
-            
+
             user_confidence = st.slider(
                 "Your Confidence Level",
                 min_value=0.0,
@@ -4338,7 +4432,7 @@ with main_tab4:
                 format="%.1f%%",
                 help="Your personal assessment of the probability"
             )
-            
+
             bankroll = st.number_input(
                 "Your Bankroll",
                 min_value=100,
@@ -4346,114 +4440,115 @@ with main_tab4:
                 value=1000,
                 step=100
             )
-            
+
             kelly = kalshi.calculate_kelly_for_kalshi(kalshi_yes_price, user_confidence, bankroll)
-            
+
             col_k1, col_k2, col_k3 = st.columns(3)
             with col_k1:
                 st.metric("Kelly %", f"{kelly['kelly_percentage']:.2f}%")
             with col_k2:
                 st.metric("Recommended Stake", f"${kelly['recommended_stake']:.0f}")
             with col_k3:
-                st.metric("Expected Value", f"{kelly['expected_value']*100:+.1f}%")
-            
+                st.metric("Expected Value", f"{kelly['expected_value'] * 100:+.1f}%")
+
             st.write(kelly['recommendation'])
-    
+
     elif analysis_mode == "💎 Find Arbitrage Opportunities":
         st.subheader("💎 Arbitrage Opportunity Scanner")
         st.markdown("Automatically find discrepancies between Kalshi and traditional sportsbooks")
-        
-        st.info("🔧 **Coming Soon:** This feature will automatically scan all markets and identify arbitrage opportunities where you can profit regardless of outcome by betting both sides.")
-        
+
+        st.info(
+            "🔧 **Coming Soon:** This feature will automatically scan all markets and identify arbitrage opportunities where you can profit regardless of outcome by betting both sides.")
+
         st.markdown("""
         **How Arbitrage Works:**
-        
+
         1. **Find Discrepancy:** Kalshi prices YES at 40% but sportsbook implies 50%
         2. **Bet Both Sides:** 
            - Bet YES on Kalshi (40¢)
            - Bet NO equivalent on sportsbook
         3. **Lock Profit:** Guaranteed profit regardless of outcome
-        
+
         **Requirements:**
         - Discrepancy must be > 10% (to cover fees)
         - Sufficient liquidity on both sides
         - Fast execution (prices move quickly)
-        
+
         **Manual Search:**
         Use the "Compare with Sportsbooks" tab above to manually check for arbitrage opportunities.
         """)
-    
+
     # Educational Section
     st.markdown("---")
     st.markdown("### 📚 Understanding Kalshi Prediction Markets")
-    
+
     with st.expander("🤔 What is Kalshi?"):
         st.markdown("""
         **Kalshi** is a CFTC-regulated prediction market where you can trade on real-world events:
-        
+
         - **Legal & Regulated:** First CFTC-regulated event contract exchange in the US
         - **Binary Outcomes:** Markets settle to either 0¢ or 100¢
         - **Pricing:** Prices represent probability (65¢ = 65% chance)
         - **Liquidity:** Limit orderbook like stocks
-        
+
         **Example:**
         - Market: "Will Chiefs win their next game?"
         - YES trading at 70¢ = Market thinks 70% chance
         - If you buy YES at 70¢ and Chiefs win, you get 100¢ (30¢ profit)
         - If they lose, you get 0¢ (lose your 70¢)
         """)
-    
+
     with st.expander("💡 Why Compare with Sportsbooks?"):
         st.markdown("""
         **Different Pricing Mechanisms:**
-        
+
         **Kalshi (Prediction Market):**
         - Wisdom of crowds pricing
         - Real money at stake
         - Efficient market hypothesis
         - Can be slower to react to news
-        
+
         **Sportsbooks:**
         - Built-in vig (~5-10%)
         - Designed to balance book
         - React quickly to sharp money
         - Public bias can skew lines
-        
+
         **Opportunities:**
         - ✅ Kalshi often has better prices (lower vig)
         - ✅ Arbitrage when markets disagree significantly
         - ✅ Value bets when you trust one pricing over the other
         - ✅ Hedge existing positions
         """)
-    
+
     with st.expander("🎯 How to Use This Tool"):
         st.markdown("""
         **Step 1: Browse Markets**
         - Load Kalshi sports markets
         - Find events you're interested in
         - Check current pricing
-        
+
         **Step 2: Compare Prices**
         - Find the same event on a sportsbook
         - Use "Compare with Sportsbooks" tab
         - Look for 5%+ discrepancies
-        
+
         **Step 3: Make Decision**
         - If Kalshi < Sportsbook: Buy YES on Kalshi
         - If Kalshi > Sportsbook: Take sportsbook OR buy NO on Kalshi
         - If similar: Use your own analysis to decide
-        
+
         **Step 4: Size Optimally**
         - Use Kelly Calculator
         - Input your confidence level
         - Bet recommended amount
-        
+
         **Step 5: Track & Learn**
         - Monitor your positions
         - See which market was more accurate
         - Refine your strategy
         """)
-    
+
     with st.expander("⚠️ Important Considerations"):
         st.markdown("""
         **Advantages of Kalshi:**
@@ -4461,13 +4556,13 @@ with main_tab4:
         - ✅ Can exit position early (sell before event)
         - ✅ Legal in most US states
         - ✅ No betting limits (unlike sportsbooks)
-        
+
         **Disadvantages:**
         - ⚠️ Lower liquidity than sportsbooks
         - ⚠️ Spreads can be wide on low-volume markets
         - ⚠️ Fewer markets available
         - ⚠️ Funds take time to withdraw
-        
+
         **Best Practices:**
         - Only trade on high-volume markets
         - Check the spread before entering
@@ -4475,30 +4570,30 @@ with main_tab4:
         - Compare fees with sportsbook vig
         - Consider exit liquidity
         """)
-    
+
     # Tips section
     st.markdown("---")
     st.markdown("""
     ### 💡 Kalshi Trading Tips:
-    
+
     **Finding Value:**
     - ✅ Look for 5%+ discrepancies with sportsbooks
     - ✅ Check multiple sportsbooks for best comparison
     - ✅ Use AI analysis from other tabs to inform your view
     - ✅ Focus on high-volume markets (easier exit)
-    
+
     **Risk Management:**
     - ✅ Use Kelly Criterion for position sizing
     - ✅ Don't tie up too much capital (lower liquidity)
     - ✅ Set maximum position sizes
     - ✅ Consider exit strategy before entering
-    
+
     **Advanced Strategies:**
     - 📈 Arbitrage between Kalshi and sportsbooks
     - 📈 Hedge existing sportsbook bets on Kalshi
     - 📈 Take early profits by selling before event
     - 📈 Buy when news breaks before market adjusts
-    
+
     **Combining with AI:**
     - Use Tab 2 sentiment analysis to validate Kalshi prices
     - Use Tab 3 custom builder to calculate fair value
@@ -4506,4 +4601,164 @@ with main_tab4:
     - Bet when AI and Kalshi agree on value
     """)
 
+# === KALSHI TEAM LOADER PATCH v1 ===
+# This block monkey-patches the KalshiIntegrator class (if present in session_state)
+# with methods to fetch all sports markets and extract teams, then adds a UI
+# to load teams from Kalshi into st.session_state['analysis_teams'].
+try:
+    import re
+    import requests
+    import streamlit as st
+
+    def _kalshi_patch_integrator(kalshi_obj):
+        KI = kalshi_obj.__class__
+
+        # Only add methods if they're missing
+        if not hasattr(KI, "_list_all_markets"):
+            def _list_all_markets(self, status: str = "open", limit: int = 100):
+                all_markets = []
+                cursor = None
+                tries = 0
+                max_tries = 30
+                while tries < max_tries:
+                    tries += 1
+                    params = {"limit": limit, "status": status}
+                    if cursor:
+                        params["cursor"] = cursor
+                    try:
+                        endpoint = f"{self.api_url}/markets"
+                        r = requests.get(endpoint, headers=self.headers, params=params, timeout=12)
+                        if r.status_code != 200:
+                            break
+                        payload = r.json() or {}
+                        markets = payload.get("markets", [])
+                        all_markets.extend(markets)
+                        if len(markets) < limit:
+                            break
+                        cursor = payload.get("next") or payload.get("next_cursor")
+                        if not cursor:
+                            break
+                    except Exception:
+                        break
+                # dedupe by ticker/id
+                seen = set()
+                deduped = []
+                for m in all_markets:
+                    t = m.get("ticker") or m.get("id") or id(m)
+                    if t in seen:
+                        continue
+                    seen.add(t)
+                    deduped.append(m)
+                return deduped
+            KI._list_all_markets = _list_all_markets
+
+        if not hasattr(KI, "get_all_sports_markets"):
+            def get_all_sports_markets(self, status: str = "open"):
+                sports_keywords = ['NFL','NBA','MLB','NHL','UFC','SOCCER','TENNIS','GOLF','FOOTBALL','BASKETBALL','BASEBALL','HOCKEY']
+                all_mkts = self._list_all_markets(status=status, limit=100)
+                out = []
+                for m in all_mkts:
+                    title = (m.get("title") or "").upper()
+                    ticker = (m.get("ticker") or "").upper()
+                    if any(k in title or k in ticker for k in sports_keywords):
+                        out.append(m)
+                return out
+            KI.get_all_sports_markets = get_all_sports_markets
+
+        if not hasattr(KI, "_normalize_pieces"):
+            def _normalize_pieces(self, text: str):
+                s = (text or "").strip()
+                if not s:
+                    return []
+                for sep in [" vs ", " @ ", " at ", " v ", "|", ":", "-", ",", "/"]:
+                    s = s.replace(sep, " ")
+                s = re.sub(r"[\(\[\{].*?[\)\]\}]", " ", s)
+                s = re.sub(r"\s+", " ", s).strip()
+                return s.split(" ")
+            KI._normalize_pieces = _normalize_pieces
+
+        if not hasattr(KI, "_clean_team_token"):
+            def _clean_team_token(self, token: str) -> str:
+                t = (token or "").strip()
+                if not t:
+                    return ""
+                if re.fullmatch(r"[0-9./:%]+", t):
+                    return ""
+                LEAGUE_WORDS = {"NFL","NBA","MLB","NHL","UFC","NCAAF","NCAAB","SOCCER","GOLF","TENNIS","FOOTBALL",
+                                 "BASKETBALL","BASEBALL","HOCKEY","ODDS","TOTAL","SPREAD","YES","NO"}
+                if t.upper() in LEAGUE_WORDS:
+                    return ""
+                if len(t) <= 2 and t.upper() not in {"LA","NY","SF","OKC"}:
+                    return ""
+                return t
+            KI._clean_team_token = _clean_team_token
+
+        if not hasattr(KI, "_extract_teams_from_text"):
+            def _extract_teams_from_text(self, text: str):
+                parts = self._normalize_pieces(text)
+                cleaned = []
+                for p in parts:
+                    c = self._clean_team_token(p)
+                    if c:
+                        cleaned.append(c)
+                joined = []
+                current = []
+                for w in cleaned:
+                    if re.match(r"^[A-Za-z][A-Za-z'.-]*$", w):
+                        current.append(w)
+                    else:
+                        if current:
+                            joined.append(" ".join(current))
+                            current = []
+                if current:
+                    joined.append(" ".join(current))
+                return joined or cleaned
+            KI._extract_teams_from_text = _extract_teams_from_text
+
+        if not hasattr(KI, "get_all_teams"):
+            def get_all_teams(self, status: str = "open"):
+                markets = self.get_all_sports_markets(status=status)
+                raw = set()
+                for m in markets:
+                    title = m.get("title","")
+                    ticker = m.get("ticker","")
+                    subtitle = m.get("subtitle","")
+                    for txt in (title, ticker, subtitle):
+                        for team in self._extract_teams_from_text(txt):
+                            raw.add(team)
+                norm_map = {}
+                for t in raw:
+                    key = t.lower()
+                    if key not in norm_map:
+                        norm_map[key] = t
+                teams = sorted(norm_map.values(), key=lambda x: x.lower())
+                return teams
+            KI.get_all_teams = get_all_teams
+
+    # Render a small sidebar control to load teams from Kalshi
+    try:
+        if "kalshi_integrator" in st.session_state and st.session_state["kalshi_integrator"]:
+            kalshi = st.session_state["kalshi_integrator"]
+            _kalshi_patch_integrator(kalshi)
+
+            with st.sidebar.expander("Kalshi Teams Loader", expanded=False):
+                if st.button("📥 Load Teams from Kalshi"):
+                    with st.spinner("Parsing teams from Kalshi markets..."):
+                        try:
+                            kalshi_teams = kalshi.get_all_teams(status="open")
+                            if not kalshi_teams:
+                                st.warning("No teams found from Kalshi markets.")
+                            else:
+                                st.session_state['analysis_teams'] = kalshi_teams
+                                st.session_state['team_games'] = {t: [] for t in kalshi_teams}
+                                st.success(f"Loaded {len(kalshi_teams)} teams from Kalshi.")
+                        except Exception as e:
+                            st.error(f"Error extracting teams from Kalshi: {e}")
+    except Exception:
+        # Non-fatal if Streamlit not running yet or kalshi integrator not set
+        pass
+except Exception:
+    # Silent guard: if Streamlit/requests aren't available at import time, do nothing.
+    pass
+# === END KALSHI TEAM LOADER PATCH v1 ===
 
