@@ -1406,23 +1406,22 @@ class SocialMediaAnalyzer:
 
 
 # ============ KALSHI VALIDATION HELPER ============
+
 def validate_with_kalshi(kalshi_integrator, home_team: str, away_team: str,
                          side: str, sportsbook_prob: float, sport: str) -> Dict:
     """
-    IMPROVED: Validate sportsbook odds with Kalshi prediction market
+    Validate sportsbook odds with Kalshi prediction market.
 
-    Now handles team name variations like:
-    - "Memphis Grizzlies" matches "Memphis"
-    - "New York Knicks" matches "New York K"
-    - "Los Angeles Lakers" matches "LA Lakers"
+    Logic:
+      1) STRICT: look for a market mentioning BOTH teams (rare on Kalshi).
+      2) PARTIAL: if no strict match, prefer a futures-like market that mentions the bet team;
+                  if still none, fall back to ANY market that mentions the bet team.
 
     Returns:
-        'kalshi_prob': Kalshi market probability
-        'discrepancy': Difference between markets
-        'validation': 'confirms', 'contradicts', or 'unavailable'
-        'edge': Additional edge from Kalshi vs sportsbook
-        'confidence_boost': How much to boost confidence (0-0.20)
+      - kalshi_prob (0..1), kalshi_available (bool), discrepancy, validation
+      - edge (small), confidence_boost (small), market_ticker, market_title
     """
+    import re
 
     def normalize_team_name(team: str) -> List[str]:
         team_upper = (team or "").upper()
@@ -1431,17 +1430,17 @@ def validate_with_kalshi(kalshi_integrator, home_team: str, away_team: str,
         parts = re.split(r"\s+", team_upper.strip())
         variations: List[str] = [team_upper]
 
-        # Progressive prefixes
+        # progressive prefixes (NEW -> NEW YORK -> NEW YORK KNICKS)
         current = []
         for p2 in parts:
             current.append(p2)
             variations.append(" ".join(current))
 
-        # Suffix-trimmed versions
-        for i2 in range(len(parts)-1, 0, -1):
+        # suffix-trimmed versions (drop mascots)
+        for i2 in range(len(parts) - 1, 0, -1):
             variations.append(" ".join(parts[:i2]))
 
-        # Heuristic abbreviations (initials and city/team 3-letter codes)
+        # heuristics: initials + 3-letter city/team
         initials = "".join(w[0] for w in parts if w and w[0].isalpha())
         if len(initials) >= 2:
             variations.append(initials)
@@ -1452,7 +1451,7 @@ def validate_with_kalshi(kalshi_integrator, home_team: str, away_team: str,
         if len(initials) >= 3:
             variations.append(initials[:3])
 
-        # Common manual overrides
+        # common abbreviations
         abbreviations = {
             'NEW YORK': ['NY', 'N.Y.', 'NYK', 'BKN'],
             'LOS ANGELES': ['LA', 'L.A.', 'LAL', 'LAC'],
@@ -1467,7 +1466,143 @@ def validate_with_kalshi(kalshi_integrator, home_team: str, away_team: str,
             if team_upper.startswith(city) or city in team_upper:
                 variations.extend(abbrevs)
 
-        return list(dict.fromkeys(variations))    def teams_match(bet_team: str, market_text: str) -> bool:
+        return list(dict.fromkeys(variations))
+
+    def teams_match(bet_team: str, market_text: str) -> bool:
+        bet_variations = normalize_team_name(bet_team)
+        market_upper = (market_text or "").upper()
+        for variation in bet_variations:
+            if variation and (variation in market_upper or market_upper in variation):
+                return True
+        return False
+
+    try:
+        # Fetch sports markets (open first, then fallback to all)
+        markets = kalshi_integrator.get_all_sports_markets(status="open") or []
+        if not markets:
+            markets = kalshi_integrator.get_all_sports_markets(status=None) or []
+
+        bet_team = home_team if side == 'home' else away_team
+        other_team = away_team if side == 'home' else home_team
+
+        # ---- STRICT: both teams mentioned ----
+        strict_market = None
+        for m in markets:
+            title = m.get('title', '') or ''
+            ticker = m.get('ticker', '') or ''
+            subtitle = m.get('subtitle', '') or ''
+            text = f"{title} {ticker} {subtitle}"
+
+            if teams_match(bet_team, text) and teams_match(other_team, text):
+                strict_market = m
+                break
+
+        if strict_market is not None:
+            orderbook = kalshi_integrator.get_orderbook(strict_market.get('ticker', '')) or {}
+            yes_bids = orderbook.get('yes') or []
+            no_bids = orderbook.get('no') or []
+            if not yes_bids and not no_bids:
+                raise RuntimeError("Empty orderbook")
+
+            yes_price = (yes_bids[0].get('price', 0) / 100.0) if yes_bids else 0.0
+            no_price  = (no_bids[0].get('price', 0) / 100.0) if no_bids else 0.0
+            kalshi_prob = max(yes_price, 1.0 - no_price)
+
+            discrepancy = kalshi_prob - sportsbook_prob
+            validation = (
+                'confirms' if abs(discrepancy) >= 0.05 and kalshi_prob > sportsbook_prob else
+                'strong_contradiction' if abs(discrepancy) >= 0.05 and kalshi_prob < sportsbook_prob else
+                'agreement' if abs(discrepancy) < 0.05 else
+                'market_confirm'
+            )
+            confidence_boost = min(max(abs(discrepancy) * 0.25, 0.0), 0.10)  # up to +0.10
+            edge = discrepancy
+
+            return {
+                'kalshi_prob': kalshi_prob,
+                'kalshi_available': True,
+                'discrepancy': discrepancy,
+                'validation': validation,
+                'edge': edge,
+                'confidence_boost': confidence_boost,
+                'market_ticker': strict_market.get('ticker'),
+                'market_title': strict_market.get('title', 'Kalshi Market')
+            }
+
+        # ---- PARTIAL: futures-like markets, else any market that mentions the bet team ----
+        futures_keywords = ['PLAYOFF', 'CHAMP', 'DIVISION', 'CONFERENCE', 'WIN TOTAL', 'WINS', 'TITLE', 'TO WIN', 'AWARD', 'MVP']
+        partial_market = None
+        fallback_market = None
+        for m in markets:
+            title = m.get('title', '') or ''
+            ticker = m.get('ticker', '') or ''
+            subtitle = m.get('subtitle', '') or ''
+            text_upper = f"{title} {ticker} {subtitle}".upper()
+
+            if not teams_match(bet_team, text_upper):
+                continue
+
+            if fallback_market is None:
+                fallback_market = m
+            if any(k in text_upper for k in futures_keywords):
+                partial_market = m
+                break
+
+        if partial_market is None:
+            partial_market = fallback_market
+
+        if partial_market is not None:
+            ob = kalshi_integrator.get_orderbook(partial_market.get('ticker', '')) or {}
+            yes_bids = ob.get('yes') or []
+            no_bids  = ob.get('no') or []
+            if not yes_bids and not no_bids:
+                derived = 0.50
+            else:
+                yes_price = (yes_bids[0].get('price', 0) / 100.0) if yes_bids else 0.0
+                no_price  = (no_bids[0].get('price', 0) / 100.0) if no_bids else 0.0
+                derived = max(yes_price, 1.0 - no_price)
+
+            strength = abs(derived - 0.50)            # 0..0.5
+            confidence_boost = min(0.02 + strength * 0.08, 0.06)  # 0.02..0.06
+            edge = (derived - 0.50) * 0.10
+
+            return {
+                'kalshi_prob': derived,
+                'kalshi_available': True,
+                'discrepancy': derived - sportsbook_prob,
+                'validation': 'partial_support',
+                'edge': edge,
+                'confidence_boost': confidence_boost,
+                'market_ticker': partial_market.get('ticker'),
+                'market_title': partial_market.get('title', 'Kalshi (Partial)')
+            }
+
+        # nothing found
+        return {
+            'kalshi_prob': None,
+            'kalshi_available': False,
+            'discrepancy': 0,
+            'validation': 'unavailable',
+            'edge': 0,
+            'confidence_boost': 0,
+            'market_ticker': None,
+            'market_title': None
+        }
+
+    except Exception:
+        return {
+            'kalshi_prob': None,
+            'kalshi_available': False,
+            'discrepancy': 0,
+            'validation': 'error',
+            'edge': 0,
+            'confidence_boost': 0,
+            'market_ticker': None,
+            'market_title': None
+        }
+
+
+def teams_match(bet_team: str, market_text: str) -> bool:
         """Check if a bet team matches text in a market"""
         bet_variations = normalize_team_name(bet_team)
         market_upper = market_text.upper()
