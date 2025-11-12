@@ -1,57 +1,49 @@
 """
-ParlayPicker — Full Clean Build (with Kalshi Partial Validation)
----------------------------------------------------------------
-This is a self-contained Streamlit app that includes:
-
+ParlayPicker — Ready Build (Kalshi Partial Validation + Robust Guards)
+---------------------------------------------------------------------
 - Sidebar:
-  • API key inputs (TheOddsAPI, Kalshi, TheOver.ai placeholder)
-  • Kalshi Teams Loader
-  • Kalshi Debug (fetch counts + market samples)
+  • API key inputs (TheOddsAPI, Kalshi, TheOver.ai optional)
+  • Kalshi Teams Loader (guarded; retries; safe errors)
+  • Kalshi Debug (counts + sample markets)
   • Basic settings
 
 - Tabs:
-  • Best Bets (pulls events from TheOddsAPI and previews JSON)
-  • Build Parlay (construct legs, validates with Kalshi [strict + partial],
-    blends AI/Market/Kalshi, and scores combos; shows Kalshi impact/metrics)
+  • Best Bets (pulls from TheOddsAPI)
+  • Build Parlay (legs, Kalshi validation strict+partial, blending, scoring)
 
-- Sources:
-  • TheOddsAPI (moneyline)
-  • Kalshi (prediction markets)
-  • theOver.ai placeholder hook (non-breaking)
+- Integrations:
+  • TheOddsAPI (ML)
+  • Kalshi (prediction markets; partial futures support)
+  • theOver.ai placeholder hook
 
 Notes:
-- This file is indentation-normalized (4 spaces).
-- No external modules beyond Streamlit + requests + pandas + numpy are required.
-- All Kalshi logic is defensive; missing/empty orderbooks won’t crash the app.
+- 4-space indentation, defensive try/except.
+- No secrets hardcoded; reads env or st.secrets.
 """
 
 import os
 import re
-import json
-import math
 import itertools
-from typing import Dict, Any, List, Tuple, Optional
-from datetime import datetime, timedelta, timezone
+from typing import Dict, Any, List, Optional
+from datetime import timedelta, timezone
 
 import requests
 import pandas as pd
-import numpy as np
 import streamlit as st
 
 # =========================
-# Configuration / Secrets
+# Config / Secrets
 # =========================
-
 THEODDS_API_KEY = os.getenv("THEODDS_API_KEY") or st.secrets.get("THEODDS_API_KEY", "")
 KALSHI_API_KEY = os.getenv("KALSHI_API_KEY") or st.secrets.get("KALSHI_API_KEY", "")
 KALSHI_API_URL = os.getenv("KALSHI_API_URL") or st.secrets.get("KALSHI_API_URL", "https://trading-api.kalshi.com/v1")
 THEOVER_API_KEY = os.getenv("THEOVER_API_KEY") or st.secrets.get("THEOVER_API_KEY", "")  # optional
 
-LOCAL_TZ = timezone(timedelta(hours=0))  # UTC baseline; adjust if needed
+LOCAL_TZ = timezone(timedelta(hours=0))  # UTC baseline
 
 
 # =========================
-# Helper Functions
+# Helpers
 # =========================
 def american_to_decimal_safe(odds) -> Optional[float]:
     try:
@@ -79,7 +71,7 @@ def clamp(x: float, lo: float, hi: float) -> float:
 # TheOddsAPI
 # =========================
 def get_theodds_games(sport_key: str = "basketball_nba", regions: str = "us") -> List[Dict]:
-    """Pull games & ML market from TheOddsAPI (requires THEODDS_API_KEY)."""
+    """Pull games & ML markets from TheOddsAPI (requires THEODDS_API_KEY)."""
     if not THEODDS_API_KEY:
         return []
     try:
@@ -99,35 +91,30 @@ def get_theodds_games(sport_key: str = "basketball_nba", regions: str = "us") ->
 
 
 def build_legs_from_theodds(events: List[Dict]) -> List[Dict]:
-    """
-    Create legs (moneyline) from TheOddsAPI events.
-    We select the first bookmaker's H2H line for the home team for demo purposes.
-    """
+    """Create ML legs from TheOddsAPI events (home team outcome for demo)."""
     legs: List[Dict] = []
     for ev in events:
         eid = ev.get("id")
         home = ev.get("home_team")
-        # Determine away team
         teams = ev.get("teams") or []
         away = None
         for t in teams:
             if t != home:
                 away = t
+                break
         if not (eid and home and away):
             continue
 
-        # Extract ML odds
+        # Extract h2h for home
         d_odds = None
         p_imp = None
         label = None
-        market = "ML"
 
         bks = ev.get("bookmakers") or []
         if bks:
             mkts = bks[0].get("markets") or []
             if mkts and mkts[0].get("key") == "h2h":
                 outcomes = mkts[0].get("outcomes") or []
-                # choose the home team outcome
                 for out in outcomes:
                     if out.get("name") == home:
                         ap = out.get("price")
@@ -144,11 +131,11 @@ def build_legs_from_theodds(events: List[Dict]) -> List[Dict]:
                 "event_id": eid,
                 "home": home,
                 "away": away,
-                "market": market,
+                "market": "ML",
                 "label": label,
                 "d": d_odds,
                 "p": p_imp,
-                "ai_prob": p_imp,           # start from market implied probability
+                "ai_prob": p_imp,           # start from market implied prob
                 "ai_confidence": 0.60,      # placeholder
                 "ai_edge": 0.0,             # placeholder
                 "sport": "NBA",
@@ -160,7 +147,7 @@ def build_legs_from_theodds(events: List[Dict]) -> List[Dict]:
 # theOver.ai placeholder
 # =========================
 def match_theover_to_leg(leg: Dict, theover_json: Any) -> Dict:
-    """Placeholder: return neutral impact unless wired to your data."""
+    """Placeholder for theOver.ai; safe no-op impact."""
     return {"matches": False, "impact": 0.0}
 
 
@@ -178,7 +165,7 @@ class KalshiIntegrator:
         }
 
     def _list_all_markets(self, status: Optional[str] = "open", limit: int = 100) -> List[Dict]:
-        """List markets with pagination; status is optional."""
+        """List markets with pagination; status optional. Defensive retries."""
         all_markets: List[Dict] = []
         cursor = None
         tries = 0
@@ -218,19 +205,22 @@ class KalshiIntegrator:
 
     def get_all_sports_markets(self, status: Optional[str] = "open") -> List[Dict]:
         sports_keywords = ['NFL','NBA','MLB','NHL','UFC','SOCCER','TENNIS','GOLF','FOOTBALL','BASKETBALL','BASEBALL','HOCKEY']
-        all_mkts = self._list_all_markets(status=status, limit=100)
-        if not all_mkts:
-            all_mkts = self._list_all_markets(status=None, limit=100)
+        try:
+            all_mkts = self._list_all_markets(status=status, limit=100)
+            if not all_mkts:
+                all_mkts = self._list_all_markets(status=None, limit=100)
+        except Exception:
+            all_mkts = []
+
         out = []
         for m in all_mkts:
             title = (m.get("title") or "").upper()
             ticker = (m.get("ticker") or "").upper()
             if any(k in title or k in ticker for k in sports_keywords):
                 out.append(m)
-        # Fallback: return everything if filter yields nothing
-        if not out:
-            return all_mkts
-        return out
+
+        # If filtering removed everything, return all markets so team-matching can still work
+        return out or all_mkts
 
     def get_orderbook(self, ticker: str) -> Dict:
         if not ticker:
@@ -487,12 +477,10 @@ def validate_with_kalshi(kalshi_integrator, home_team: str, away_team: str,
 
 
 # =========================
-# Parlay Scoring
+# Scoring
 # =========================
 def score_parlay(legs: List[Dict]) -> Dict[str, Any]:
-    """
-    Score a parlay combination using simple EV + confidence + edge, with Kalshi influence.
-    """
+    """Score a parlay and compute Kalshi impact."""
     if not legs:
         return {'score': 0, 'confidence': 0, 'ev_ai': 0, 'kalshi_factor': 1.0, 'kalshi_legs': 0, 'kalshi_boost': 0}
 
@@ -605,9 +593,9 @@ def render_kalshi_section(row: Dict[str, Any], combo_legs: List[Dict]):
 # =========================
 # Streamlit App
 # =========================
-st.set_page_config(page_title="ParlayPicker + Kalshi (Full Clean)", layout="wide")
+st.set_page_config(page_title="ParlayPicker — Ready (Kalshi)", layout="wide")
 
-st.title("ParlayPicker — Full Clean (Kalshi Partial Validation)")
+st.title("ParlayPicker — Ready Build (Kalshi Partial Validation)")
 
 with st.sidebar:
     st.subheader("Connections")
@@ -616,44 +604,62 @@ with st.sidebar:
     KALSHI_API_URL = st.text_input("Kalshi API URL", value=KALSHI_API_URL)
     THEOVER_API_KEY = st.text_input("theOver.ai API Key (optional)", value=THEOVER_API_KEY, type="password")
 
-    # Initialize Kalshi
-    if KALSHI_API_KEY and ("kalshi_integrator" not in st.session_state):
-        st.session_state["kalshi_integrator"] = KalshiIntegrator(KALSHI_API_KEY, KALSHI_API_URL)
-
+    # Init Kalshi on-demand
     st.markdown("---")
     st.subheader("Kalshi Teams Loader")
     if st.button("📥 Load Teams from Kalshi"):
-        kalshi = st.session_state.get("kalshi_integrator")
-        if not kalshi:
-            st.error("Kalshi integrator not initialized.")
+        if not KALSHI_API_KEY:
+            st.error("Please enter your Kalshi API key above first.")
         else:
-            with st.spinner("Fetching teams from Kalshi markets..."):
-                teams = kalshi.get_all_teams(status="open")
-                if not teams:
-                    teams = kalshi.get_all_teams(status=None)
-                if teams:
-                    st.session_state["analysis_teams"] = teams
-                    st.session_state["team_games"] = {t: [] for t in teams}
-                    st.success(f"Loaded {len(teams)} teams from Kalshi.")
-                else:
-                    st.warning("No teams parsed from Kalshi (try again later).")
+            # (Re)initialize integrator if missing or changed
+            needs_init = (
+                "kalshi_integrator" not in st.session_state
+                or not st.session_state["kalshi_integrator"]
+                or not isinstance(st.session_state["kalshi_integrator"], KalshiIntegrator)
+            )
+            if needs_init:
+                st.session_state["kalshi_integrator"] = KalshiIntegrator(KALSHI_API_KEY, KALSHI_API_URL)
+
+            kalshi = st.session_state.get("kalshi_integrator")
+            if not kalshi:
+                st.error("Kalshi integrator could not be initialized.")
+            else:
+                with st.spinner("Fetching teams from Kalshi markets..."):
+                    try:
+                        teams = kalshi.get_all_teams(status="open")
+                        if not teams:
+                            teams = kalshi.get_all_teams(status=None)
+
+                        if teams:
+                            st.session_state["analysis_teams"] = teams
+                            st.session_state["team_games"] = {t: [] for t in teams}
+                            st.success(f"Loaded {len(teams)} teams from Kalshi.")
+                        else:
+                            st.warning("No teams found. (Kalshi may not have active sports markets right now.)")
+                    except Exception as e:
+                        st.error(f"Kalshi fetch failed: {e}")
 
     with st.expander("Kalshi Debug"):
         if st.button("🔎 Test Kalshi Fetch"):
+            if "kalshi_integrator" not in st.session_state or not st.session_state["kalshi_integrator"]:
+                if KALSHI_API_KEY:
+                    st.session_state["kalshi_integrator"] = KalshiIntegrator(KALSHI_API_KEY, KALSHI_API_URL)
             kalshi = st.session_state.get("kalshi_integrator")
             if kalshi:
-                mkts_open = kalshi.get_all_sports_markets(status="open")
-                mkts_all = kalshi.get_all_sports_markets(status=None)
-                st.write(f"Open sports markets: {len(mkts_open)} | All (no-status): {len(mkts_all)}")
-                for m in (mkts_open or mkts_all)[:15]:
-                    st.write({"ticker": m.get("ticker"), "title": m.get("title"), "subtitle": m.get("subtitle")})
+                try:
+                    mkts_open = kalshi.get_all_sports_markets(status="open")
+                    mkts_all = kalshi.get_all_sports_markets(status=None)
+                    st.write(f"Open sports markets: {len(mkts_open)} | All (no-status): {len(mkts_all)}")
+                    for m in (mkts_open or mkts_all)[:15]:
+                        st.write({"ticker": m.get("ticker"), "title": m.get("title"), "subtitle": m.get("subtitle")})
+                except Exception as e:
+                    st.error(f"Kalshi debug fetch error: {e}")
             else:
                 st.warning("Kalshi integrator not initialized.")
 
     st.markdown("---")
     st.subheader("Settings")
-    st.caption("This demo uses home moneylines for simplicity.")
-
+    st.caption("Demo builds legs from home moneylines to keep the example focused.")
 
 # Tabs
 tab1, tab2 = st.tabs(["Best Bets", "Build Parlay"])
@@ -666,14 +672,14 @@ with tab1:
         st.session_state["last_events"] = evs
         st.success(f"Fetched {len(evs)} events from TheOddsAPI.")
         st.json((evs[:3] if evs else []))
-    st.caption("Tip: after fetching, go to 'Build Parlay' to analyze.")
-
+    st.caption("After fetching, switch to 'Build Parlay' to analyze with Kalshi.")
 
 with tab2:
     st.header("Build Parlay")
     events = st.session_state.get("last_events") or get_theodds_games()
     legs = build_legs_from_theodds(events)
 
+    # Validate with Kalshi and blend
     kalshi = st.session_state.get("kalshi_integrator")
     if kalshi:
         for leg in legs:
@@ -687,7 +693,6 @@ with tab2:
                     sport=leg.get("sport","")
                 )
                 leg["kalshi_validation"] = v
-                # Blend probabilities when Kalshi is available
                 if v.get("kalshi_available"):
                     original_ai = leg["ai_prob"]
                     kalshi_prob = v.get("kalshi_prob", original_ai)
