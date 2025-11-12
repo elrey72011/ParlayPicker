@@ -248,6 +248,215 @@ SPORT_KEY_TO_LEAGUE: Dict[str, str] = {
 }
 
 # ============ REAL SENTIMENT ANALYSIS ENGINE ============
+class RealSentimentAnalyzer:
+    """
+    REAL sentiment analysis using actual news sources and NLP
+    
+    Data Sources:
+    - NewsAPI.org (free tier: 100 requests/day)
+    - Basic NLP sentiment classification
+    """
+    
+    def __init__(self, news_api_key: str = None):
+        self.news_api_key = news_api_key or os.environ.get("NEWS_API_KEY")
+        self.sentiment_cache = {}
+        self.cache_duration = 1800  # 30 minutes
+        
+        # Sentiment word lists
+        self.positive_words = {
+            'win', 'wins', 'won', 'winning', 'victory', 'beat', 'beats', 
+            'dominant', 'strong', 'excellent', 'best', 'great', 'hot', 
+            'streak', 'momentum', 'comeback', 'champion', 'star', 'explosive',
+            'impressive', 'outstanding', 'stellar', 'clutch', 'elite',
+            'record-breaking', 'unstoppable', 'phenomenal', 'surging', 'rolling'
+        }
+        
+        self.negative_words = {
+            'lose', 'loses', 'lost', 'losing', 'defeat', 'beaten',
+            'weak', 'poor', 'worst', 'bad', 'cold', 'slump', 'struggle',
+            'injury', 'injured', 'hurt', 'out', 'questionable', 'doubtful',
+            'blow', 'collapse', 'disaster', 'awful', 'terrible', 'embarrassing',
+            'turnover', 'frustrated', 'disappointing', 'concerning', 'worry'
+        }
+    
+    def get_team_sentiment(self, team_name: str, sport: str) -> Dict[str, float]:
+        """
+        Get REAL sentiment analysis for a team using NewsAPI
+        """
+        cache_key = f"{team_name}_{sport}_{datetime.now().date()}"
+        
+        # Check cache
+        if cache_key in self.sentiment_cache:
+            cached = self.sentiment_cache[cache_key]
+            age = (datetime.now() - cached['timestamp']).seconds
+            if age < self.cache_duration:
+                return cached['data']
+        
+        # Try NewsAPI if configured
+        if self.news_api_key:
+            result = self._analyze_with_newsapi(team_name, sport)
+        else:
+            result = self._fallback_neutral()
+        
+        self.sentiment_cache[cache_key] = {
+            'data': result,
+            'timestamp': datetime.now()
+        }
+        
+        return result
+    
+    def _analyze_with_newsapi(self, team_name: str, sport: str) -> Dict:
+        """Analyze sentiment using NewsAPI.org"""
+        try:
+            from_date = (datetime.now() - timedelta(days=3)).strftime('%Y-%m-%d')
+            to_date = datetime.now().strftime('%Y-%m-%d')
+            
+            query = f'"{team_name}"'
+            if 'nba' in sport.lower():
+                query += ' NBA basketball'
+            elif 'nfl' in sport.lower():
+                query += ' NFL football'
+            elif 'mlb' in sport.lower():
+                query += ' MLB baseball'
+            elif 'nhl' in sport.lower():
+                query += ' NHL hockey'
+            
+            response = requests.get(
+                "https://newsapi.org/v2/everything",
+                params={
+                    'q': query,
+                    'from': from_date,
+                    'to': to_date,
+                    'language': 'en',
+                    'sortBy': 'relevancy',
+                    'pageSize': 20,
+                    'apiKey': self.news_api_key
+                },
+                timeout=10
+            )
+            
+            if response.status_code != 200:
+                return self._fallback_neutral()
+            
+            articles = response.json().get('articles', [])
+            
+            if not articles:
+                return self._fallback_neutral()
+            
+            sentiment_scores = []
+            for article in articles[:20]:
+                text = f"{article.get('title', '')} {article.get('description', '')}".lower()
+                score = self._calculate_text_sentiment(text)
+                sentiment_scores.append(score)
+            
+            if sentiment_scores:
+                avg_score = sum(sentiment_scores) / len(sentiment_scores)
+                score_variance = sum((s - avg_score) ** 2 for s in sentiment_scores) / len(sentiment_scores)
+                confidence = max(0.3, min(0.95, 1.0 - score_variance))
+                
+                trend = 'positive' if avg_score > 0.15 else ('negative' if avg_score < -0.15 else 'neutral')
+                
+                return {
+                    'score': avg_score,
+                    'confidence': confidence,
+                    'sources': len(sentiment_scores),
+                    'trend': trend,
+                    'method': 'NewsAPI + NLP'
+                }
+            
+            return self._fallback_neutral()
+            
+        except Exception:
+            return self._fallback_neutral()
+    
+    def _calculate_text_sentiment(self, text: str) -> float:
+        """Calculate sentiment score using word matching"""
+        words = re.findall(r'\b\w+\b', text.lower())
+        
+        positive_count = sum(1 for word in words if word in self.positive_words)
+        negative_count = sum(1 for word in words if word in self.negative_words)
+        
+        total = positive_count + negative_count
+        if total == 0:
+            return 0.0
+        
+        sentiment_score = (positive_count - negative_count) / total * 0.7
+        return max(-1.0, min(1.0, sentiment_score))
+    
+    def _fallback_neutral(self) -> Dict:
+        """Return neutral sentiment when API unavailable"""
+        return {
+            'score': 0.0,
+            'confidence': 0.2,
+            'sources': 0,
+            'trend': 'neutral',
+            'method': 'No API key'
+        }
+
+# Map teams back to their primary league so we can build league-aware fallbacks
+KALSHI_LEAGUE_TEAM_SETS: Dict[str, List[str]] = {
+    "NFL": [
+        "ARIZONA CARDINALS", "ATLANTA FALCONS", "BALTIMORE RAVENS", "BUFFALO BILLS",
+        "CAROLINA PANTHERS", "CHICAGO BEARS", "CINCINNATI BENGALS", "CLEVELAND BROWNS",
+        "DALLAS COWBOYS", "DENVER BRONCOS", "DETROIT LIONS", "GREEN BAY PACKERS",
+        "HOUSTON TEXANS", "INDIANAPOLIS COLTS", "JACKSONVILLE JAGUARS", "KANSAS CITY CHIEFS",
+        "LAS VEGAS RAIDERS", "LOS ANGELES CHARGERS", "LOS ANGELES RAMS", "MIAMI DOLPHINS",
+        "MINNESOTA VIKINGS", "NEW ENGLAND PATRIOTS", "NEW ORLEANS SAINTS", "NEW YORK GIANTS",
+        "NEW YORK JETS", "PHILADELPHIA EAGLES", "PITTSBURGH STEELERS", "SAN FRANCISCO 49ERS",
+        "SEATTLE SEAHAWKS", "TAMPA BAY BUCCANEERS", "TENNESSEE TITANS", "WASHINGTON COMMANDERS"
+    ],
+    "NBA": [
+        "ATLANTA HAWKS", "BOSTON CELTICS", "BROOKLYN NETS", "CHARLOTTE HORNETS",
+        "CHICAGO BULLS", "CLEVELAND CAVALIERS", "DALLAS MAVERICKS", "DENVER NUGGETS",
+        "DETROIT PISTONS", "GOLDEN STATE WARRIORS", "HOUSTON ROCKETS", "INDIANA PACERS",
+        "LOS ANGELES CLIPPERS", "LOS ANGELES LAKERS", "MEMPHIS GRIZZLIES", "MIAMI HEAT",
+        "MILWAUKEE BUCKS", "MINNESOTA TIMBERWOLVES", "NEW ORLEANS PELICANS", "NEW YORK KNICKS",
+        "OKLAHOMA CITY THUNDER", "ORLANDO MAGIC", "PHILADELPHIA 76ERS", "PHOENIX SUNS",
+        "PORTLAND TRAIL BLAZERS", "SACRAMENTO KINGS", "SAN ANTONIO SPURS", "TORONTO RAPTORS",
+        "UTAH JAZZ", "WASHINGTON WIZARDS"
+    ],
+    "MLB": [
+        "ARIZONA DIAMONDBACKS", "ATLANTA BRAVES", "BALTIMORE ORIOLES", "BOSTON RED SOX",
+        "CHICAGO CUBS", "CHICAGO WHITE SOX", "CINCINNATI REDS", "CLEVELAND GUARDIANS",
+        "COLORADO ROCKIES", "DETROIT TIGERS", "HOUSTON ASTROS", "KANSAS CITY ROYALS",
+        "LOS ANGELES ANGELS", "LOS ANGELES DODGERS", "MIAMI MARLINS", "MILWAUKEE BREWERS",
+        "MINNESOTA TWINS", "NEW YORK METS", "NEW YORK YANKEES", "OAKLAND ATHLETICS",
+        "PHILADELPHIA PHILLIES", "PITTSBURGH PIRATES", "SAN DIEGO PADRES", "SAN FRANCISCO GIANTS",
+        "SEATTLE MARINERS", "ST. LOUIS CARDINALS", "TAMPA BAY RAYS", "TEXAS RANGERS",
+        "TORONTO BLUE JAYS", "WASHINGTON NATIONALS"
+    ],
+    "NHL": [
+        "ANAHEIM DUCKS", "ARIZONA COYOTES", "BOSTON BRUINS", "BUFFALO SABRES",
+        "CALGARY FLAMES", "CAROLINA HURRICANES", "CHICAGO BLACKHAWKS", "COLORADO AVALANCHE",
+        "COLUMBUS BLUE JACKETS", "DALLAS STARS", "DETROIT RED WINGS", "EDMONTON OILERS",
+        "FLORIDA PANTHERS", "LOS ANGELES KINGS", "MINNESOTA WILD", "MONTREAL CANADIENS",
+        "NASHVILLE PREDATORS", "NEW JERSEY DEVILS", "NEW YORK ISLANDERS", "NEW YORK RANGERS",
+        "OTTAWA SENATORS", "PHILADELPHIA FLYERS", "PITTSBURGH PENGUINS", "SAN JOSE SHARKS",
+        "SEATTLE KRAKEN", "ST. LOUIS BLUES", "TAMPA BAY LIGHTNING", "TORONTO MAPLE LEAFS",
+        "VANCOUVER CANUCKS", "VEGAS GOLDEN KNIGHTS", "WASHINGTON CAPITALS", "WINNIPEG JETS"
+    ],
+}
+
+KALSHI_TEAM_LEAGUE_MAP: Dict[str, str] = {
+    team: league
+    for league, teams in KALSHI_LEAGUE_TEAM_SETS.items()
+    for team in teams
+}
+
+SPORT_KEY_TO_LEAGUE: Dict[str, str] = {
+    "americanfootball_nfl": "NFL",
+    "americanfootball_ncaaf": "NCAAF",
+    "basketball_nba": "NBA",
+    "basketball_ncaab": "NCAAB",
+    "baseball_mlb": "MLB",
+    "icehockey_nhl": "NHL",
+    "mma_mixed_martial_arts": "MMA",
+    "soccer_epl": "EPL",
+    "soccer_uefa_champs_league": "UEFA",
+    "tennis_atp_singles": "TENNIS",
+}
+
+# ============ REAL SENTIMENT ANALYSIS ENGINE ============
 # (moved to app_core.sentiment so it can be reused without importing the
 # Streamlit UI. RealSentimentAnalyzer and SentimentAnalyzer are imported above.)
 
@@ -1855,6 +2064,264 @@ def validate_with_kalshi(kalshi_integrator, home_team: str, away_team: str,
             'market_scope': 'error',
             'data_source': 'error'
         }
+        return
+
+    leg_data['kalshi_validation'] = kalshi_data
+
+    if not kalshi_data.get('kalshi_available'):
+        return
+
+    original_ai_prob = leg_data.get('ai_prob', base_prob)
+    kalshi_prob = kalshi_data.get('kalshi_prob', base_prob)
+
+    blended_prob = (
+        original_ai_prob * 0.50 +  # AI model
+        kalshi_prob * 0.30 +       # Kalshi market
+        base_prob * 0.20           # Sportsbook baseline
+    )
+
+    leg_data['ai_prob_before_kalshi'] = original_ai_prob
+    leg_data['ai_prob'] = blended_prob
+    leg_data['kalshi_influence'] = blended_prob - original_ai_prob
+    leg_data['kalshi_edge'] = kalshi_data.get('edge', 0)
+    leg_data['ai_confidence'] = min(
+        leg_data.get('ai_confidence', 0.5) + kalshi_data.get('confidence_boost', 0),
+        0.95
+    )
+
+# Helper to apply Kalshi validation to a betting leg in-place
+def integrate_kalshi_into_leg(
+    leg_data: Dict[str, Any],
+    home_team: str,
+    away_team: str,
+    side: str,
+    base_prob: float,
+    sport: str,
+    use_kalshi: bool,
+) -> None:
+    """Mutate a leg dictionary with Kalshi validation + probability blending."""
+
+    # Ensure downstream code sees the reason when Kalshi is not active
+    if not use_kalshi:
+        leg_data.setdefault('kalshi_validation', {
+            'kalshi_available': False,
+            'validation': 'disabled',
+            'edge': 0,
+            'confidence_boost': 0,
+            'market_scope': 'disabled',
+            'data_source': 'disabled'
+        })
+        return
+
+    kalshi = None
+    try:
+        kalshi = st.session_state.get('kalshi_integrator')
+    except Exception:
+        # When Streamlit session state isn't available (e.g. testing), skip gracefully
+        pass
+
+    if not kalshi:
+        leg_data['kalshi_validation'] = {
+            'kalshi_available': False,
+            'validation': 'unavailable',
+            'edge': 0,
+            'confidence_boost': 0,
+            'market_scope': 'not_initialized',
+            'data_source': 'unavailable'
+        }
+        return
+
+    try:
+        kalshi_data = validate_with_kalshi(kalshi, home_team, away_team, side, base_prob, sport)
+    except Exception:
+        leg_data['kalshi_validation'] = {
+            'kalshi_available': False,
+            'validation': 'error',
+            'edge': 0,
+            'confidence_boost': 0,
+            'market_scope': 'error',
+            'data_source': 'error'
+        }
+        return
+
+    leg_data['kalshi_validation'] = kalshi_data
+
+    if not kalshi_data.get('kalshi_available'):
+        return
+
+    original_ai_prob = leg_data.get('ai_prob', base_prob)
+    kalshi_prob = kalshi_data.get('kalshi_prob', base_prob)
+
+    blended_prob = (
+        original_ai_prob * 0.50 +  # AI model
+        kalshi_prob * 0.30 +       # Kalshi market
+        base_prob * 0.20           # Sportsbook baseline
+    )
+
+    leg_data['ai_prob_before_kalshi'] = original_ai_prob
+    leg_data['ai_prob'] = blended_prob
+    leg_data['kalshi_influence'] = blended_prob - original_ai_prob
+    leg_data['kalshi_edge'] = kalshi_data.get('edge', 0)
+    leg_data['ai_confidence'] = min(
+        leg_data.get('ai_confidence', 0.5) + kalshi_data.get('confidence_boost', 0),
+        0.95
+    )
+
+# Helper to apply Kalshi validation to a betting leg in-place
+def integrate_kalshi_into_leg(
+    leg_data: Dict[str, Any],
+    home_team: str,
+    away_team: str,
+    side: str,
+    base_prob: float,
+    sport: str,
+    use_kalshi: bool,
+) -> None:
+    """Mutate a leg dictionary with Kalshi validation + probability blending."""
+
+    # Ensure downstream code sees the reason when Kalshi is not active
+    if not use_kalshi:
+        leg_data.setdefault('kalshi_validation', {
+            'kalshi_available': False,
+            'validation': 'disabled',
+            'edge': 0,
+            'confidence_boost': 0,
+            'market_scope': 'disabled',
+            'data_source': 'disabled'
+        })
+        return
+
+    kalshi = None
+    try:
+        kalshi = st.session_state.get('kalshi_integrator')
+    except Exception:
+        # When Streamlit session state isn't available (e.g. testing), skip gracefully
+        pass
+
+    if not kalshi:
+        leg_data['kalshi_validation'] = {
+            'kalshi_available': False,
+            'validation': 'unavailable',
+            'edge': 0,
+            'confidence_boost': 0,
+            'market_scope': 'not_initialized',
+            'data_source': 'unavailable'
+        }
+        return
+
+    try:
+        kalshi_data = validate_with_kalshi(kalshi, home_team, away_team, side, base_prob, sport)
+    except Exception:
+        leg_data['kalshi_validation'] = {
+            'kalshi_available': False,
+            'validation': 'error',
+            'edge': 0,
+            'confidence_boost': 0,
+            'market_scope': 'error',
+            'data_source': 'error'
+        }
+        return
+
+    leg_data['kalshi_validation'] = kalshi_data
+
+    if not kalshi_data.get('kalshi_available'):
+        return
+
+    original_ai_prob = leg_data.get('ai_prob', base_prob)
+    kalshi_prob = kalshi_data.get('kalshi_prob', base_prob)
+
+    blended_prob = (
+        original_ai_prob * 0.50 +  # AI model
+        kalshi_prob * 0.30 +       # Kalshi market
+        base_prob * 0.20           # Sportsbook baseline
+    )
+
+    leg_data['ai_prob_before_kalshi'] = original_ai_prob
+    leg_data['ai_prob'] = blended_prob
+    leg_data['kalshi_influence'] = blended_prob - original_ai_prob
+    leg_data['kalshi_edge'] = kalshi_data.get('edge', 0)
+    leg_data['ai_confidence'] = min(
+        leg_data.get('ai_confidence', 0.5) + kalshi_data.get('confidence_boost', 0),
+        0.95
+    )
+
+# Helper to apply Kalshi validation to a betting leg in-place
+def integrate_kalshi_into_leg(
+    leg_data: Dict[str, Any],
+    home_team: str,
+    away_team: str,
+    side: str,
+    base_prob: float,
+    sport: str,
+    use_kalshi: bool,
+) -> None:
+    """Mutate a leg dictionary with Kalshi validation + probability blending."""
+
+    # Ensure downstream code sees the reason when Kalshi is not active
+    if not use_kalshi:
+        leg_data.setdefault('kalshi_validation', {
+            'kalshi_available': False,
+            'validation': 'disabled',
+            'edge': 0,
+            'confidence_boost': 0,
+            'market_scope': 'disabled',
+            'data_source': 'disabled'
+        })
+        return
+
+    kalshi = None
+    try:
+        kalshi = st.session_state.get('kalshi_integrator')
+    except Exception:
+        # When Streamlit session state isn't available (e.g. testing), skip gracefully
+        pass
+
+    if not kalshi:
+        leg_data['kalshi_validation'] = {
+            'kalshi_available': False,
+            'validation': 'unavailable',
+            'edge': 0,
+            'confidence_boost': 0,
+            'market_scope': 'not_initialized',
+            'data_source': 'unavailable'
+        }
+        return
+
+    try:
+        kalshi_data = validate_with_kalshi(kalshi, home_team, away_team, side, base_prob, sport)
+    except Exception:
+        leg_data['kalshi_validation'] = {
+            'kalshi_available': False,
+            'validation': 'error',
+            'edge': 0,
+            'confidence_boost': 0,
+            'market_scope': 'error',
+            'data_source': 'error'
+        }
+        return
+
+    leg_data['kalshi_validation'] = kalshi_data
+
+    if not kalshi_data.get('kalshi_available'):
+        return
+
+    original_ai_prob = leg_data.get('ai_prob', base_prob)
+    kalshi_prob = kalshi_data.get('kalshi_prob', base_prob)
+
+    blended_prob = (
+        original_ai_prob * 0.50 +  # AI model
+        kalshi_prob * 0.30 +       # Kalshi market
+        base_prob * 0.20           # Sportsbook baseline
+    )
+
+    leg_data['ai_prob_before_kalshi'] = original_ai_prob
+    leg_data['ai_prob'] = blended_prob
+    leg_data['kalshi_influence'] = blended_prob - original_ai_prob
+    leg_data['kalshi_edge'] = kalshi_data.get('edge', 0)
+    leg_data['ai_confidence'] = min(
+        leg_data.get('ai_confidence', 0.5) + kalshi_data.get('confidence_boost', 0),
+        0.95
+    )
 
 # Helper to apply Kalshi validation to a betting leg in-place
 def integrate_kalshi_into_leg(
