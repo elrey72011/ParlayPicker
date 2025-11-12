@@ -1425,33 +1425,49 @@ def validate_with_kalshi(kalshi_integrator, home_team: str, away_team: str,
     """
 
     def normalize_team_name(team: str) -> List[str]:
-        """Generate multiple variations of a team name for flexible matching"""
-        team_upper = team.upper()
-        variations = [team_upper]
+        team_upper = (team or "").upper()
+        if not team_upper:
+            return []
+        parts = re.split(r"\s+", team_upper.strip())
+        variations: List[str] = [team_upper]
 
-        # Split into parts and add individual words
-        parts = team_upper.split()
-        for part in parts:
-            if len(part) > 2:  # Skip very short words
-                variations.append(part)
+        # Progressive prefixes
+        current = []
+        for p2 in parts:
+            current.append(p2)
+            variations.append(" ".join(current))
 
-        # Special handling for common abbreviations
+        # Suffix-trimmed versions
+        for i2 in range(len(parts)-1, 0, -1):
+            variations.append(" ".join(parts[:i2]))
+
+        # Heuristic abbreviations (initials and city/team 3-letter codes)
+        initials = "".join(w[0] for w in parts if w and w[0].isalpha())
+        if len(initials) >= 2:
+            variations.append(initials)
+        if len(parts) >= 1:
+            variations.append(parts[0][:3])
+        if len(parts) >= 2:
+            variations.append(parts[-1][:3])
+        if len(initials) >= 3:
+            variations.append(initials[:3])
+
+        # Common manual overrides
         abbreviations = {
-            'NEW YORK': ['NY', 'NEW YORK K', 'N.Y.'],
-            'LOS ANGELES': ['LA', 'L.A.'],
-            'SAN FRANCISCO': ['SF', 'S.F.'],
-            'GOLDEN STATE': ['GS'],
+            'NEW YORK': ['NY', 'N.Y.', 'NYK', 'BKN'],
+            'LOS ANGELES': ['LA', 'L.A.', 'LAL', 'LAC'],
+            'GOLDEN STATE': ['GS', 'GSW'],
             'OKLAHOMA CITY': ['OKC'],
-            'WASHINGTON': ['WSH'],
+            'TORONTO': ['TOR'],
+            'BROOKLYN': ['BKN', 'NETS'],
+            'SAN FRANCISCO': ['SF', 'S.F.'],
+            'WASHINGTON': ['WSH', 'WAS'],
         }
-
         for city, abbrevs in abbreviations.items():
-            if team_upper.startswith(city):
+            if team_upper.startswith(city) or city in team_upper:
                 variations.extend(abbrevs)
 
-        return variations
-
-    def teams_match(bet_team: str, market_text: str) -> bool:
+        return list(dict.fromkeys(variations))    def teams_match(bet_team: str, market_text: str) -> bool:
         """Check if a bet team matches text in a market"""
         bet_variations = normalize_team_name(bet_team)
         market_upper = market_text.upper()
@@ -4599,4 +4615,24 @@ with main_tab4:
     - Use Tab 3 custom builder to calculate fair value
     - Compare AI probability with Kalshi pricing
     - Bet when AI and Kalshi agree on value
-    """)
+    """
+# ==== Kalshi Debug Tools ====
+try:
+    import streamlit as st
+    if "kalshi_integrator" in st.session_state and st.session_state["kalshi_integrator"]:
+        _kalshi_obj = st.session_state["kalshi_integrator"]
+        with st.sidebar.expander("Kalshi Debug", expanded=False):
+            if st.button("🔎 Test Kalshi Fetch"):
+                try:
+                    mkts_open = _kalshi_obj.get_all_sports_markets(status="open") or []
+                    mkts_all = _kalshi_obj.get_all_sports_markets(status=None) or []
+                    st.write(f"Open sports markets: {len(mkts_open)} | All (no-status): {len(mkts_all)}")
+                    sample = (mkts_open or mkts_all)[:15]
+                    for m in sample:
+                        st.write({"ticker": m.get("ticker"), "title": m.get("title"), "subtitle": m.get("subtitle")})
+                except Exception as _e:
+                    st.error(f"Kalshi fetch error: {_e}")
+except Exception:
+    pass
+# ==== End Kalshi Debug Tools ====
+)
