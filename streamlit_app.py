@@ -1727,7 +1727,7 @@ class SocialMediaAnalyzer:
         }
 
 # ============ KALSHI VALIDATION HELPER ============
-def validate_with_kalshi(kalshi_integrator, home_team: str, away_team: str, 
+def validate_with_kalshi(kalshi_integrator, home_team: str, away_team: str,
                         side: str, sportsbook_prob: float, sport: str) -> Dict:
     """
     IMPROVED: Validate sportsbook odds with Kalshi prediction market
@@ -1795,13 +1795,33 @@ def validate_with_kalshi(kalshi_integrator, home_team: str, away_team: str,
         return unique_variations
     
     def teams_match(bet_team: str, market_text: str) -> bool:
-        """Check if a bet team matches text in a market"""
+        """Check if a bet team matches text in a market without short false-positives."""
         bet_variations = normalize_team_name(bet_team)
-        market_upper = market_text.upper().replace('_', ' ')
+        market_upper = re.sub(r"[^A-Z0-9 ]", " ", market_text.upper().replace('_', ' '))
+        market_compact = market_upper.replace(' ', '')
+        market_tokens = set(re.findall(r"[A-Z0-9]+", market_upper))
 
         for variation in bet_variations:
-            if variation in market_upper or market_upper in variation:
+            variation_upper = variation.upper()
+            variation_clean = re.sub(r"[^A-Z0-9 ]", " ", variation_upper).strip()
+            variation_compact = variation_clean.replace(' ', '')
+
+            if not variation_compact:
+                continue
+
+            # Longer variations (team names, extended abbreviations) can match anywhere in the text
+            if len(variation_compact) >= 4 and variation_compact in market_compact:
                 return True
+
+            # Compare token-by-token to avoid matching "LA" with "ATLANTA"
+            variation_tokens = re.findall(r"[A-Z0-9]+", variation_clean)
+            if variation_tokens and all(token in market_tokens for token in variation_tokens):
+                return True
+
+            # Allow short tokens (NY, LA, SF) only on whole-word matches
+            if len(variation_compact) <= 3 and variation_clean in market_tokens:
+                return True
+
         return False
     
     def extract_probability(orderbook: Dict[str, Any]) -> Optional[float]:
@@ -1978,6 +1998,30 @@ def validate_with_kalshi(kalshi_integrator, home_team: str, away_team: str,
             'market_scope': 'error',
             'data_source': 'error'
         }
+        return
+
+    leg_data['kalshi_validation'] = kalshi_data
+
+    if not kalshi_data.get('kalshi_available'):
+        return
+
+    original_ai_prob = leg_data.get('ai_prob', base_prob)
+    kalshi_prob = kalshi_data.get('kalshi_prob', base_prob)
+
+    blended_prob = (
+        original_ai_prob * 0.50 +  # AI model
+        kalshi_prob * 0.30 +       # Kalshi market
+        base_prob * 0.20           # Sportsbook baseline
+    )
+
+    leg_data['ai_prob_before_kalshi'] = original_ai_prob
+    leg_data['ai_prob'] = blended_prob
+    leg_data['kalshi_influence'] = blended_prob - original_ai_prob
+    leg_data['kalshi_edge'] = kalshi_data.get('edge', 0)
+    leg_data['ai_confidence'] = min(
+        leg_data.get('ai_confidence', 0.5) + kalshi_data.get('confidence_boost', 0),
+        0.95
+    )
 
 # ============ UTILITY FUNCTIONS ============
 def american_to_decimal(odds) -> float:
@@ -2448,28 +2492,59 @@ def render_parlay_section_ai(title, rows, theover_data=None):
             else:
                 # NO KALSHI DATA - Explain why
                 st.markdown("### 📊 Kalshi Prediction Market Status:")
-                st.warning(f"""
-                **⚠️ No Kalshi Data Available for this Parlay** ({kalshi_legs_with_data}/{total_legs} legs)
-                
-                **This means:**
-                - ✅ Analysis still uses AI + Sentiment (2 of 3 sources)
-                - ⚠️ Missing prediction market validation
-                - 🔄 Kalshi Factor = 1.0x (neutral, no impact)
-                - 📊 AI Score unchanged by Kalshi
-                
-                **Why no data?**
-                - Kalshi doesn't have markets for these specific games
-                - Kalshi focuses on season-long outcomes (playoffs, championships)
-                - Individual game spreads/totals rarely have Kalshi markets
-                
-                **What this means:**
-                - Bet based on AI + Sentiment confidence
-                - Higher risk without 3rd source validation
-                - Consider checking Tab 4 for available Kalshi markets
-                
-                💡 **Tip:** For Kalshi validation, focus on season futures, playoff odds, or major championships.
-                """)
-            
+                legs = row.get('legs', [])
+                scopes = [leg.get('kalshi_validation', {}).get('market_scope') for leg in legs]
+                unsupported_labels = [
+                    leg.get('label')
+                    for leg in legs
+                    if leg.get('kalshi_validation', {}).get('market_scope') in {
+                        'total_market', 'unsupported_market', 'totals_not_supported'
+                    }
+                ]
+                error_labels = [
+                    leg.get('label')
+                    for leg in legs
+                    if leg.get('kalshi_validation', {}).get('market_scope') == 'error'
+                ]
+                not_initialized = any(scope == 'not_initialized' for scope in scopes)
+                disabled = (not st.session_state.get('kalshi_enabled', False)) or any(scope == 'disabled' for scope in scopes)
+
+                if disabled:
+                    st.info("Kalshi validation is turned off. Toggle the Kalshi checkbox above to blend prediction markets into the analysis.")
+                elif unsupported_labels:
+                    st.info("Kalshi does not publish totals/prop markets, so these leg(s) rely on AI + sentiment only:")
+                    for label in unsupported_labels:
+                        st.caption(f"• {label}")
+                    st.caption("Moneyline and spread legs will include Kalshi coverage whenever a market is available.")
+                elif not_initialized:
+                    st.info("Kalshi markets have not loaded yet. Add your Kalshi API key or retry to use the live/synthetic market data.")
+                elif error_labels:
+                    st.warning("Kalshi validation encountered an error for these legs (falling back to AI + sentiment):")
+                    for label in error_labels:
+                        st.caption(f"• {label}")
+                else:
+                    st.warning(f"""
+                    **⚠️ No Kalshi Data Available for this Parlay** ({kalshi_legs_with_data}/{total_legs} legs)
+
+                    **This means:**
+                    - ✅ Analysis still uses AI + Sentiment (2 of 3 sources)
+                    - ⚠️ Missing prediction market validation
+                    - 🔄 Kalshi Factor = 1.0x (neutral, no impact)
+                    - 📊 AI Score unchanged by Kalshi
+
+                    **Why no data?**
+                    - Kalshi doesn't have markets for these specific games
+                    - Kalshi focuses on season-long outcomes (playoffs, championships)
+                    - Individual game spreads/totals rarely have Kalshi markets
+
+                    **What this means:**
+                    - Bet based on AI + Sentiment confidence
+                    - Higher risk without 3rd source validation
+                    - Consider checking Tab 4 for available Kalshi markets
+
+                    💡 **Tip:** For Kalshi validation, focus on season futures, playoff odds, or major championships.
+                    """)
+
             # theover.ai boost info if available
             if row.get('theover_bonus', 0) != 0:
                 theover_bonus_pct = row['theover_bonus'] * 100
@@ -3101,7 +3176,9 @@ with main_tab1:
         value=False,
         help="Compare sportsbook odds with Kalshi prediction markets to find discrepancies and boost confidence"
     )
-    
+
+    st.session_state['kalshi_enabled'] = use_kalshi
+
     if use_kalshi:
         st.info("""
         **Kalshi Validation Benefits:**
@@ -3261,44 +3338,17 @@ with main_tab1:
                                                     "d": decimal_odds,
                                                     "sentiment_trend": home_sentiment['trend']
                                                 }
-                                                
-                                                # Kalshi Validation
-                                                if use_kalshi:
-                                                    try:
-                                                        kalshi = st.session_state.get('kalshi_integrator')
-                                                        if kalshi:
-                                                            kalshi_data = validate_with_kalshi(
-                                                                kalshi, home, away, 'home', base_prob, skey
-                                                            )
-                                                            leg_data['kalshi_validation'] = kalshi_data
-                                                            
-                                                            # INTEGRATE KALSHI INTO AI PROBABILITY
-                                                            if kalshi_data['kalshi_available']:
-                                                                kalshi_prob = kalshi_data['kalshi_prob']
-                                                                
-                                                                # Weighted average: 50% AI, 30% Kalshi, 20% Market
-                                                                # When Kalshi exists, blend all three sources
-                                                                original_ai_prob = leg_data['ai_prob']
-                                                                blended_prob = (
-                                                                    original_ai_prob * 0.50 +  # AI model
-                                                                    kalshi_prob * 0.30 +        # Kalshi market
-                                                                    base_prob * 0.20            # Sportsbook
-                                                                )
-                                                                
-                                                                # Update the actual AI probability used in calculations
-                                                                leg_data['ai_prob'] = blended_prob
-                                                                leg_data['ai_prob_before_kalshi'] = original_ai_prob
-                                                                leg_data['kalshi_influence'] = blended_prob - original_ai_prob
-                                                                
-                                                                # Boost confidence if Kalshi confirms
-                                                                leg_data['ai_confidence'] = min(
-                                                                    ai_confidence + kalshi_data['confidence_boost'],
-                                                                    0.95
-                                                                )
-                                                                leg_data['kalshi_edge'] = kalshi_data['edge']
-                                                    except Exception:
-                                                        leg_data['kalshi_validation'] = {'kalshi_available': False}
-                                                
+
+                                                integrate_kalshi_into_leg(
+                                                    leg_data,
+                                                    home,
+                                                    away,
+                                                    'home',
+                                                    base_prob,
+                                                    skey,
+                                                    use_kalshi
+                                                )
+
                                                 all_legs.append(leg_data)
                             
                                     if ap is not None and -750 <= ap <= 750:
@@ -3334,43 +3384,17 @@ with main_tab1:
                                                     "d": decimal_odds,
                                                     "sentiment_trend": away_sentiment['trend']
                                                 }
-                                                
-                                                # Kalshi Validation
-                                                if use_kalshi:
-                                                    try:
-                                                        kalshi = st.session_state.get('kalshi_integrator')
-                                                        if kalshi:
-                                                            kalshi_data = validate_with_kalshi(
-                                                                kalshi, home, away, 'away', base_prob, skey
-                                                            )
-                                                            leg_data['kalshi_validation'] = kalshi_data
-                                                            
-                                                            # INTEGRATE KALSHI INTO AI PROBABILITY
-                                                            if kalshi_data['kalshi_available']:
-                                                                kalshi_prob = kalshi_data['kalshi_prob']
-                                                                
-                                                                # Weighted average: 50% AI, 30% Kalshi, 20% Market
-                                                                original_ai_prob = leg_data['ai_prob']
-                                                                blended_prob = (
-                                                                    original_ai_prob * 0.50 +  # AI model
-                                                                    kalshi_prob * 0.30 +        # Kalshi market
-                                                                    base_prob * 0.20            # Sportsbook
-                                                                )
-                                                                
-                                                                # Update the actual AI probability
-                                                                leg_data['ai_prob'] = blended_prob
-                                                                leg_data['ai_prob_before_kalshi'] = original_ai_prob
-                                                                leg_data['kalshi_influence'] = blended_prob - original_ai_prob
-                                                                
-                                                                # Boost confidence if Kalshi confirms
-                                                                leg_data['ai_confidence'] = min(
-                                                                    ai_confidence + kalshi_data['confidence_boost'],
-                                                                    0.95
-                                                                )
-                                                                leg_data['kalshi_edge'] = kalshi_data['edge']
-                                                    except Exception:
-                                                        leg_data['kalshi_validation'] = {'kalshi_available': False}
-                                                
+
+                                                integrate_kalshi_into_leg(
+                                                    leg_data,
+                                                    home,
+                                                    away,
+                                                    'away',
+                                                    base_prob,
+                                                    skey,
+                                                    use_kalshi
+                                                )
+
                                                 all_legs.append(leg_data)
                                 
                                 # Spreads
@@ -3392,7 +3416,7 @@ with main_tab1:
                                         
                                         decimal_odds = american_to_decimal_safe(pr)
                                         if decimal_odds is not None and ai_confidence >= min_ai_confidence:  # Safety check
-                                            all_legs.append({
+                                            leg_data = {
                                                 "event_id": eid,
                                                 "type": "Spread",
                                                 "team": nm,
@@ -3406,7 +3430,19 @@ with main_tab1:
                                                 "ai_edge": abs(ai_prob - base_prob),
                                                 "d": decimal_odds,
                                                 "sentiment_trend": sentiment['trend']
-                                            })
+                                            }
+
+                                            integrate_kalshi_into_leg(
+                                                leg_data,
+                                                home,
+                                                away,
+                                                'home' if nm == home else 'away',
+                                                base_prob,
+                                                skey,
+                                                use_kalshi
+                                            )
+
+                                            all_legs.append(leg_data)
                                 
                                 # Totals
                                 if inc_total and "totals" in mkts:
@@ -3427,7 +3463,7 @@ with main_tab1:
                                         
                                         decimal_odds = american_to_decimal_safe(pr)
                                         if decimal_odds is not None and ai_confidence >= min_ai_confidence:  # Safety check
-                                            all_legs.append({
+                                            leg_data = {
                                                 "event_id": eid,
                                                 "type": "Total",
                                                 "team": f"{home} vs {away}",
@@ -3441,7 +3477,29 @@ with main_tab1:
                                                 "ai_edge": abs(ai_prob - base_prob),
                                                 "d": decimal_odds,
                                                 "sentiment_trend": "neutral"
-                                            })
+                                            }
+
+                                            if use_kalshi:
+                                                leg_data['kalshi_validation'] = {
+                                                    'kalshi_available': False,
+                                                    'validation': 'unsupported',
+                                                    'edge': 0,
+                                                    'confidence_boost': 0,
+                                                    'market_scope': 'total_market',
+                                                    'data_source': 'unsupported',
+                                                    'reason': 'Kalshi does not list totals/over-under style markets'
+                                                }
+                                            else:
+                                                leg_data['kalshi_validation'] = {
+                                                    'kalshi_available': False,
+                                                    'validation': 'disabled',
+                                                    'edge': 0,
+                                                    'confidence_boost': 0,
+                                                    'market_scope': 'disabled',
+                                                    'data_source': 'disabled'
+                                                }
+
+                                            all_legs.append(leg_data)
                             
                             except Exception as e:
                                 # Skip this event if there's an error processing it
