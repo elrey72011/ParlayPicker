@@ -9,6 +9,8 @@ import requests
 import streamlit as st
 import pytz
 
+from app_core.sentiment import RealSentimentAnalyzer, SentimentAnalyzer
+
 # ============ HELPER FUNCTIONS ============
 def american_to_decimal_safe(odds) -> float | None:
     """
@@ -391,8 +393,72 @@ class RealSentimentAnalyzer:
             'method': 'No API key'
         }
 
-# Alias for compatibility
-SentimentAnalyzer = RealSentimentAnalyzer
+# Map teams back to their primary league so we can build league-aware fallbacks
+KALSHI_LEAGUE_TEAM_SETS: Dict[str, List[str]] = {
+    "NFL": [
+        "ARIZONA CARDINALS", "ATLANTA FALCONS", "BALTIMORE RAVENS", "BUFFALO BILLS",
+        "CAROLINA PANTHERS", "CHICAGO BEARS", "CINCINNATI BENGALS", "CLEVELAND BROWNS",
+        "DALLAS COWBOYS", "DENVER BRONCOS", "DETROIT LIONS", "GREEN BAY PACKERS",
+        "HOUSTON TEXANS", "INDIANAPOLIS COLTS", "JACKSONVILLE JAGUARS", "KANSAS CITY CHIEFS",
+        "LAS VEGAS RAIDERS", "LOS ANGELES CHARGERS", "LOS ANGELES RAMS", "MIAMI DOLPHINS",
+        "MINNESOTA VIKINGS", "NEW ENGLAND PATRIOTS", "NEW ORLEANS SAINTS", "NEW YORK GIANTS",
+        "NEW YORK JETS", "PHILADELPHIA EAGLES", "PITTSBURGH STEELERS", "SAN FRANCISCO 49ERS",
+        "SEATTLE SEAHAWKS", "TAMPA BAY BUCCANEERS", "TENNESSEE TITANS", "WASHINGTON COMMANDERS"
+    ],
+    "NBA": [
+        "ATLANTA HAWKS", "BOSTON CELTICS", "BROOKLYN NETS", "CHARLOTTE HORNETS",
+        "CHICAGO BULLS", "CLEVELAND CAVALIERS", "DALLAS MAVERICKS", "DENVER NUGGETS",
+        "DETROIT PISTONS", "GOLDEN STATE WARRIORS", "HOUSTON ROCKETS", "INDIANA PACERS",
+        "LOS ANGELES CLIPPERS", "LOS ANGELES LAKERS", "MEMPHIS GRIZZLIES", "MIAMI HEAT",
+        "MILWAUKEE BUCKS", "MINNESOTA TIMBERWOLVES", "NEW ORLEANS PELICANS", "NEW YORK KNICKS",
+        "OKLAHOMA CITY THUNDER", "ORLANDO MAGIC", "PHILADELPHIA 76ERS", "PHOENIX SUNS",
+        "PORTLAND TRAIL BLAZERS", "SACRAMENTO KINGS", "SAN ANTONIO SPURS", "TORONTO RAPTORS",
+        "UTAH JAZZ", "WASHINGTON WIZARDS"
+    ],
+    "MLB": [
+        "ARIZONA DIAMONDBACKS", "ATLANTA BRAVES", "BALTIMORE ORIOLES", "BOSTON RED SOX",
+        "CHICAGO CUBS", "CHICAGO WHITE SOX", "CINCINNATI REDS", "CLEVELAND GUARDIANS",
+        "COLORADO ROCKIES", "DETROIT TIGERS", "HOUSTON ASTROS", "KANSAS CITY ROYALS",
+        "LOS ANGELES ANGELS", "LOS ANGELES DODGERS", "MIAMI MARLINS", "MILWAUKEE BREWERS",
+        "MINNESOTA TWINS", "NEW YORK METS", "NEW YORK YANKEES", "OAKLAND ATHLETICS",
+        "PHILADELPHIA PHILLIES", "PITTSBURGH PIRATES", "SAN DIEGO PADRES", "SAN FRANCISCO GIANTS",
+        "SEATTLE MARINERS", "ST. LOUIS CARDINALS", "TAMPA BAY RAYS", "TEXAS RANGERS",
+        "TORONTO BLUE JAYS", "WASHINGTON NATIONALS"
+    ],
+    "NHL": [
+        "ANAHEIM DUCKS", "ARIZONA COYOTES", "BOSTON BRUINS", "BUFFALO SABRES",
+        "CALGARY FLAMES", "CAROLINA HURRICANES", "CHICAGO BLACKHAWKS", "COLORADO AVALANCHE",
+        "COLUMBUS BLUE JACKETS", "DALLAS STARS", "DETROIT RED WINGS", "EDMONTON OILERS",
+        "FLORIDA PANTHERS", "LOS ANGELES KINGS", "MINNESOTA WILD", "MONTREAL CANADIENS",
+        "NASHVILLE PREDATORS", "NEW JERSEY DEVILS", "NEW YORK ISLANDERS", "NEW YORK RANGERS",
+        "OTTAWA SENATORS", "PHILADELPHIA FLYERS", "PITTSBURGH PENGUINS", "SAN JOSE SHARKS",
+        "SEATTLE KRAKEN", "ST. LOUIS BLUES", "TAMPA BAY LIGHTNING", "TORONTO MAPLE LEAFS",
+        "VANCOUVER CANUCKS", "VEGAS GOLDEN KNIGHTS", "WASHINGTON CAPITALS", "WINNIPEG JETS"
+    ],
+}
+
+KALSHI_TEAM_LEAGUE_MAP: Dict[str, str] = {
+    team: league
+    for league, teams in KALSHI_LEAGUE_TEAM_SETS.items()
+    for team in teams
+}
+
+SPORT_KEY_TO_LEAGUE: Dict[str, str] = {
+    "americanfootball_nfl": "NFL",
+    "americanfootball_ncaaf": "NCAAF",
+    "basketball_nba": "NBA",
+    "basketball_ncaab": "NCAAB",
+    "baseball_mlb": "MLB",
+    "icehockey_nhl": "NHL",
+    "mma_mixed_martial_arts": "MMA",
+    "soccer_epl": "EPL",
+    "soccer_uefa_champs_league": "UEFA",
+    "tennis_atp_singles": "TENNIS",
+}
+
+# ============ REAL SENTIMENT ANALYSIS ENGINE ============
+# (moved to app_core.sentiment so it can be reused without importing the
+# Streamlit UI. RealSentimentAnalyzer and SentimentAnalyzer are imported above.)
 
 # ============ ML PREDICTION ENGINE ============
 class MLPredictor:
@@ -1995,6 +2061,84 @@ def validate_with_kalshi(kalshi_integrator, home_team: str, away_team: str,
             'confidence_boost': 0,
             'market_ticker': None,
             'market_title': None,
+            'market_scope': 'error',
+            'data_source': 'error'
+        }
+        return
+
+    leg_data['kalshi_validation'] = kalshi_data
+
+    if not kalshi_data.get('kalshi_available'):
+        return
+
+    original_ai_prob = leg_data.get('ai_prob', base_prob)
+    kalshi_prob = kalshi_data.get('kalshi_prob', base_prob)
+
+    blended_prob = (
+        original_ai_prob * 0.50 +  # AI model
+        kalshi_prob * 0.30 +       # Kalshi market
+        base_prob * 0.20           # Sportsbook baseline
+    )
+
+    leg_data['ai_prob_before_kalshi'] = original_ai_prob
+    leg_data['ai_prob'] = blended_prob
+    leg_data['kalshi_influence'] = blended_prob - original_ai_prob
+    leg_data['kalshi_edge'] = kalshi_data.get('edge', 0)
+    leg_data['ai_confidence'] = min(
+        leg_data.get('ai_confidence', 0.5) + kalshi_data.get('confidence_boost', 0),
+        0.95
+    )
+
+# Helper to apply Kalshi validation to a betting leg in-place
+def integrate_kalshi_into_leg(
+    leg_data: Dict[str, Any],
+    home_team: str,
+    away_team: str,
+    side: str,
+    base_prob: float,
+    sport: str,
+    use_kalshi: bool,
+) -> None:
+    """Mutate a leg dictionary with Kalshi validation + probability blending."""
+
+    # Ensure downstream code sees the reason when Kalshi is not active
+    if not use_kalshi:
+        leg_data.setdefault('kalshi_validation', {
+            'kalshi_available': False,
+            'validation': 'disabled',
+            'edge': 0,
+            'confidence_boost': 0,
+            'market_scope': 'disabled',
+            'data_source': 'disabled'
+        })
+        return
+
+    kalshi = None
+    try:
+        kalshi = st.session_state.get('kalshi_integrator')
+    except Exception:
+        # When Streamlit session state isn't available (e.g. testing), skip gracefully
+        pass
+
+    if not kalshi:
+        leg_data['kalshi_validation'] = {
+            'kalshi_available': False,
+            'validation': 'unavailable',
+            'edge': 0,
+            'confidence_boost': 0,
+            'market_scope': 'not_initialized',
+            'data_source': 'unavailable'
+        }
+        return
+
+    try:
+        kalshi_data = validate_with_kalshi(kalshi, home_team, away_team, side, base_prob, sport)
+    except Exception:
+        leg_data['kalshi_validation'] = {
+            'kalshi_available': False,
+            'validation': 'error',
+            'edge': 0,
+            'confidence_boost': 0,
             'market_scope': 'error',
             'data_source': 'error'
         }
