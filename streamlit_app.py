@@ -308,35 +308,38 @@ class AIOptimizer:
             combined_confidence *= leg.get('ai_confidence', 0.5)
             total_edge += leg.get('ai_edge', 0)
 
+
             # KALSHI INTEGRATION: Add Kalshi influence
             if 'kalshi_validation' in leg:
                 kv = leg['kalshi_validation']
                 if kv.get('kalshi_available'):
                     kalshi_legs += 1
-                    # Kalshi provides additional probability estimate
                     kalshi_prob = kv.get('kalshi_prob', 0)
                     sportsbook_prob = leg.get('p', 0)
+                    ai_prob = leg.get('ai_prob', sportsbook_prob)
 
-                    # If Kalshi and AI both disagree with sportsbook in same direction
-               ai_prob = leg.get('ai_prob', sportsbook_prob)
-
+                    # If partial support, scale the boost/penalty down (half strength)
                     weight = 0.5 if kv.get('validation') == 'partial_support' else 1.0
-                    if kalshi_prob > sportsbook_prob and ai_prob > sportsbook_prob:
-                        # Both Kalshi and AI see value
-                        kalshi_boost += int(15 * weight)  # Strong boost (scaled)
-                    elif kalshi_prob < sportsbook_prob and ai_prob < sportsbook_prob:
-                        # Both Kalshi and AI skeptical
-                        kalshi_boost -= int(10 * weight)  # Penalty (scaled)
-                    elif abs(kalshi_prob - ai_prob) < 0.05:
-                        # Kalshi and AI agree (regardless of sportsbook)
-                        kalshi_boost += 10  # Agreement boost
-                    elif abs(kalshi_prob - sportsbook_prob) < 0.03:
-                        # Kalshi confirms market
-                        kalshi_boost += 5  # Small boost for confirmation
-                    else:
-                        # Kalshi contradicts both AI and market
-                        kalshi_boost -= 5  # Small penalty for confusion
 
+                    # Strong alignment (AI + Kalshi > sportsbook)
+                    if kalshi_prob > sportsbook_prob and ai_prob > sportsbook_prob:
+                        kalshi_boost += int(15 * weight)  # Strong boost
+
+                    # Both skeptical
+                    elif kalshi_prob < sportsbook_prob and ai_prob < sportsbook_prob:
+                        kalshi_boost -= int(10 * weight)  # Penalty
+
+                    # Kalshi and AI agree within 5%
+                    elif abs(kalshi_prob - ai_prob) < 0.05:
+                        kalshi_boost += int(10 * weight)  # Agreement boost
+
+                    # Kalshi confirms sportsbook within 3%
+                    elif abs(kalshi_prob - sportsbook_prob) < 0.03:
+                        kalshi_boost += int(5 * weight)  # Small boost
+
+                    # Otherwise contradictory/noisy
+                    else:
+                        kalshi_boost -= int(5 * weight)  # Small penalty
         # Calculate combined decimal odds
         combined_odds = legs[0]['d']
         for leg in legs[1:]:
