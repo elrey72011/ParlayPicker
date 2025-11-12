@@ -42,6 +42,146 @@ APP_CFG: Dict[str, Any] = {
     }
 }
 
+# Comprehensive mapping of Kalshi team abbreviations → canonical team names.
+# The Kalshi markets often reference tickers like "NBA.LAL_GSW" or subtitles using
+# short-hands. By centralizing these variations we can translate between
+# sportsbook-style names ("Los Angeles Lakers") and Kalshi identifiers ("LAL").
+# This dramatically increases the likelihood that we locate the correct Kalshi
+# market when validating a parlay leg.
+KALSHI_TEAM_ABBREVIATIONS: Dict[str, List[str]] = {
+    # ========================= NFL =========================
+    "ARIZONA CARDINALS": ["ARI", "ARZ", "AZ"],
+    "ATLANTA FALCONS": ["ATL"],
+    "BALTIMORE RAVENS": ["BAL"],
+    "BUFFALO BILLS": ["BUF"],
+    "CAROLINA PANTHERS": ["CAR", "CLT"],
+    "CHICAGO BEARS": ["CHI", "CHB"],
+    "CINCINNATI BENGALS": ["CIN", "CINC"],
+    "CLEVELAND BROWNS": ["CLE"],
+    "DALLAS COWBOYS": ["DAL"],
+    "DENVER BRONCOS": ["DEN"],
+    "DETROIT LIONS": ["DET"],
+    "GREEN BAY PACKERS": ["GB", "GBP", "GBE"],
+    "HOUSTON TEXANS": ["HOU", "HTX"],
+    "INDIANAPOLIS COLTS": ["IND"],
+    "JACKSONVILLE JAGUARS": ["JAX", "JAC"],
+    "KANSAS CITY CHIEFS": ["KC", "KCC"],
+    "LAS VEGAS RAIDERS": ["LV", "LVR"],
+    "LOS ANGELES CHARGERS": ["LAC", "LA CHARGERS"],
+    "LOS ANGELES RAMS": ["LAR", "LA RAMS"],
+    "MIAMI DOLPHINS": ["MIA"],
+    "MINNESOTA VIKINGS": ["MIN", "MINN"],
+    "NEW ENGLAND PATRIOTS": ["NE", "NEP"],
+    "NEW ORLEANS SAINTS": ["NO", "NOS"],
+    "NEW YORK GIANTS": ["NYG", "NY GIANTS"],
+    "NEW YORK JETS": ["NYJ", "NY JETS"],
+    "PHILADELPHIA EAGLES": ["PHI", "PHL", "PHI EAGLES"],
+    "PITTSBURGH STEELERS": ["PIT", "PITTSBURGH"],
+    "SAN FRANCISCO 49ERS": ["SF", "SFO", "SF 49ERS"],
+    "SEATTLE SEAHAWKS": ["SEA", "SEA HAWKS"],
+    "TAMPA BAY BUCCANEERS": ["TB", "TBB"],
+    "TENNESSEE TITANS": ["TEN", "TENN"],
+    "WASHINGTON COMMANDERS": ["WAS", "WSH"],
+
+    # ========================= NBA =========================
+    "ATLANTA HAWKS": ["ATL"],
+    "BOSTON CELTICS": ["BOS"],
+    "BROOKLYN NETS": ["BKN", "BRK"],
+    "CHARLOTTE HORNETS": ["CHA", "CHH", "CLT"],
+    "CHICAGO BULLS": ["CHI"],
+    "CLEVELAND CAVALIERS": ["CLE", "CAVS"],
+    "DALLAS MAVERICKS": ["DAL", "MAVS"],
+    "DENVER NUGGETS": ["DEN"],
+    "DETROIT PISTONS": ["DET"],
+    "GOLDEN STATE WARRIORS": ["GSW", "GS"],
+    "HOUSTON ROCKETS": ["HOU"],
+    "INDIANA PACERS": ["IND"],
+    "LOS ANGELES CLIPPERS": ["LAC", "LA CLIPPERS"],
+    "LOS ANGELES LAKERS": ["LAL", "LA LAKERS"],
+    "MEMPHIS GRIZZLIES": ["MEM"],
+    "MIAMI HEAT": ["MIA"],
+    "MILWAUKEE BUCKS": ["MIL"],
+    "MINNESOTA TIMBERWOLVES": ["MIN", "MINN"],
+    "NEW ORLEANS PELICANS": ["NOP", "NO PELICANS"],
+    "NEW YORK KNICKS": ["NYK", "NY KNICKS"],
+    "OKLAHOMA CITY THUNDER": ["OKC"],
+    "ORLANDO MAGIC": ["ORL"],
+    "PHILADELPHIA 76ERS": ["PHI", "PHL", "SIXERS"],
+    "PHOENIX SUNS": ["PHX"],
+    "PORTLAND TRAIL BLAZERS": ["POR", "PTB", "PDX"],
+    "SACRAMENTO KINGS": ["SAC"],
+    "SAN ANTONIO SPURS": ["SAS", "SA SPURS"],
+    "TORONTO RAPTORS": ["TOR"],
+    "UTAH JAZZ": ["UTA"],
+    "WASHINGTON WIZARDS": ["WAS", "WSH"],
+
+    # ========================= MLB =========================
+    "ARIZONA DIAMONDBACKS": ["ARI", "ARZ", "AZ"],
+    "ATLANTA BRAVES": ["ATL"],
+    "BALTIMORE ORIOLES": ["BAL"],
+    "BOSTON RED SOX": ["BOS"],
+    "CHICAGO CUBS": ["CHC"],
+    "CHICAGO WHITE SOX": ["CWS", "CHW"],
+    "CINCINNATI REDS": ["CIN", "CINC"],
+    "CLEVELAND GUARDIANS": ["CLE", "CLV"],
+    "COLORADO ROCKIES": ["COL"],
+    "DETROIT TIGERS": ["DET"],
+    "HOUSTON ASTROS": ["HOU"],
+    "KANSAS CITY ROYALS": ["KC", "KCR"],
+    "LOS ANGELES ANGELS": ["LAA", "LA ANGELS"],
+    "LOS ANGELES DODGERS": ["LAD", "LA DODGERS"],
+    "MIAMI MARLINS": ["MIA"],
+    "MILWAUKEE BREWERS": ["MIL"],
+    "MINNESOTA TWINS": ["MIN", "MINN"],
+    "NEW YORK METS": ["NYM", "NY METS"],
+    "NEW YORK YANKEES": ["NYY", "NY YANKEES"],
+    "OAKLAND ATHLETICS": ["OAK"],
+    "PHILADELPHIA PHILLIES": ["PHI", "PHL", "PHILS"],
+    "PITTSBURGH PIRATES": ["PIT"],
+    "SAN DIEGO PADRES": ["SD", "SDP"],
+    "SAN FRANCISCO GIANTS": ["SF", "SFG"],
+    "SEATTLE MARINERS": ["SEA"],
+    "ST. LOUIS CARDINALS": ["STL", "SLC"],
+    "TAMPA BAY RAYS": ["TB", "TBR"],
+    "TEXAS RANGERS": ["TEX"],
+    "TORONTO BLUE JAYS": ["TOR"],
+    "WASHINGTON NATIONALS": ["WSH", "WAS"],
+
+    # ========================= NHL =========================
+    "ANAHEIM DUCKS": ["ANA"],
+    "ARIZONA COYOTES": ["ARI", "ARZ", "AZ"],
+    "BOSTON BRUINS": ["BOS"],
+    "BUFFALO SABRES": ["BUF"],
+    "CALGARY FLAMES": ["CGY"],
+    "CAROLINA HURRICANES": ["CAR", "CLT"],
+    "CHICAGO BLACKHAWKS": ["CHI"],
+    "COLORADO AVALANCHE": ["COL"],
+    "COLUMBUS BLUE JACKETS": ["CBJ"],
+    "DALLAS STARS": ["DAL"],
+    "DETROIT RED WINGS": ["DET"],
+    "EDMONTON OILERS": ["EDM"],
+    "FLORIDA PANTHERS": ["FLA"],
+    "LOS ANGELES KINGS": ["LAK", "LA KINGS"],
+    "MINNESOTA WILD": ["MIN", "MINN"],
+    "MONTREAL CANADIENS": ["MTL"],
+    "NASHVILLE PREDATORS": ["NSH"],
+    "NEW JERSEY DEVILS": ["NJD"],
+    "NEW YORK ISLANDERS": ["NYI"],
+    "NEW YORK RANGERS": ["NYR"],
+    "OTTAWA SENATORS": ["OTT"],
+    "PHILADELPHIA FLYERS": ["PHI", "PHL"],
+    "PITTSBURGH PENGUINS": ["PIT"],
+    "SAN JOSE SHARKS": ["SJS"],
+    "SEATTLE KRAKEN": ["SEA"],
+    "ST. LOUIS BLUES": ["STL"],
+    "TAMPA BAY LIGHTNING": ["TB", "TBL"],
+    "TORONTO MAPLE LEAFS": ["TOR"],
+    "VANCOUVER CANUCKS": ["VAN"],
+    "VEGAS GOLDEN KNIGHTS": ["VGK", "VEGAS"],
+    "WASHINGTON CAPITALS": ["WSH", "WAS"],
+    "WINNIPEG JETS": ["WPG"],
+}
+
 # ============ REAL SENTIMENT ANALYSIS ENGINE ============
 class RealSentimentAnalyzer:
     """
@@ -1434,14 +1574,14 @@ def validate_with_kalshi(kalshi_integrator, home_team: str, away_team: str,
     def normalize_team_name(team: str) -> List[str]:
         """Generate multiple variations of a team name for flexible matching"""
         team_upper = team.upper()
-        variations = [team_upper]
-        
+        variations = [team_upper, team_upper.replace(" ", "")]
+
         # Split into parts and add individual words
         parts = team_upper.split()
         for part in parts:
             if len(part) > 2:  # Skip very short words
                 variations.append(part)
-        
+
         # Special handling for common abbreviations
         abbreviations = {
             'NEW YORK': ['NY', 'NEW YORK K', 'N.Y.'],
@@ -1451,18 +1591,40 @@ def validate_with_kalshi(kalshi_integrator, home_team: str, away_team: str,
             'OKLAHOMA CITY': ['OKC'],
             'WASHINGTON': ['WSH'],
         }
-        
+
         for city, abbrevs in abbreviations.items():
             if team_upper.startswith(city):
                 variations.extend(abbrevs)
-        
-        return variations
+
+        # Kalshi-specific abbreviation support
+        for canonical, abbrs in KALSHI_TEAM_ABBREVIATIONS.items():
+            canonical_upper = canonical.upper()
+            canonical_words = canonical_upper.split()
+
+            # Direct matches (exact, contains, or shared keywords)
+            if (
+                team_upper == canonical_upper
+                or canonical_upper in team_upper
+                or team_upper in canonical_upper
+                or any(word in canonical_words for word in parts if len(word) > 2)
+            ):
+                variations.extend(abbrs)
+
+        # Remove duplicates while preserving order
+        seen = set()
+        unique_variations = []
+        for variation in variations:
+            if variation not in seen:
+                seen.add(variation)
+                unique_variations.append(variation)
+
+        return unique_variations
     
     def teams_match(bet_team: str, market_text: str) -> bool:
         """Check if a bet team matches text in a market"""
         bet_variations = normalize_team_name(bet_team)
-        market_upper = market_text.upper()
-        
+        market_upper = market_text.upper().replace('_', ' ')
+
         for variation in bet_variations:
             if variation in market_upper or market_upper in variation:
                 return True
