@@ -17,6 +17,7 @@ from app_core import (
     APISportsHockeyClient,
     HistoricalDataBuilder,
     HistoricalMLPredictor,
+    MLPredictor,
     RealSentimentAnalyzer,
     SentimentAnalyzer,
 )
