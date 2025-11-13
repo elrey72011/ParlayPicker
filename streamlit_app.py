@@ -54,6 +54,44 @@ APP_CFG: Dict[str, Any] = {
 }
 
 
+def resolve_odds_api_key_with_source() -> Tuple[str, Optional[str]]:
+    """Return the active Odds API key and where it was sourced from."""
+
+    # Prefer Streamlit secrets if available so hosted deployments can supply
+    # credentials without exposing them in the UI.
+    secret_container = getattr(st, "secrets", None)
+    if secret_container is not None:
+        for secret_name in ("ODDS_API_KEY", "THE_ODDS_API_KEY"):
+            try:
+                secret_value = secret_container.get(secret_name)
+            except Exception:
+                secret_value = None
+            if secret_value:
+                return str(secret_value), f"secret:{secret_name}"
+
+    for env_name in ("ODDS_API_KEY", "THE_ODDS_API_KEY"):
+        env_value = os.environ.get(env_name)
+        if env_value:
+            return env_value, f"env:{env_name}"
+
+    # Fall back to whatever is already in session state (if accessible).
+    try:
+        session_key = st.session_state.get('api_key', "")
+    except Exception:
+        session_key = ""
+    if session_key:
+        return session_key, "session:api_key"
+
+    return "", None
+
+
+def resolve_odds_api_key() -> str:
+    """Lightweight helper so background threads can safely fetch the Odds key."""
+
+    key, _ = resolve_odds_api_key_with_source()
+    return key
+
+
 def render_sidebar_controls() -> Dict[str, Any]:
     """Render configuration controls in the Streamlit sidebar."""
 
@@ -61,7 +99,9 @@ def render_sidebar_controls() -> Dict[str, Any]:
     sidebar.header("⚙️ Control Center")
 
     # --------------------- Odds API key ---------------------
-    st.session_state.setdefault('api_key', os.environ.get("ODDS_API_KEY", ""))
+    default_odds_key, odds_key_source = resolve_odds_api_key_with_source()
+    st.session_state.setdefault('api_key', default_odds_key)
+    st.session_state.setdefault('odds_key_source', odds_key_source)
     odds_api_input = sidebar.text_input(
         "The Odds API key",
         value=st.session_state.get('api_key', ""),
@@ -92,8 +132,9 @@ def render_sidebar_controls() -> Dict[str, Any]:
         sidebar.caption("ℹ️ Using neutral fallback sentiment")
 
     # --------------------- API-Sports keys ---------------------
-    st.session_state.setdefault('apisports_api_key', resolve_nfl_apisports_key()[0])
-    st.session_state.setdefault('apisports_key_source', resolve_nfl_apisports_key()[1])
+    nfl_key_default, nfl_source_default = resolve_nfl_apisports_key()
+    st.session_state.setdefault('apisports_api_key', nfl_key_default)
+    st.session_state.setdefault('apisports_key_source', nfl_source_default)
     nfl_key_input = sidebar.text_input(
         "NFL API-Sports key",
         value=st.session_state.get('apisports_api_key', ""),
@@ -104,8 +145,9 @@ def render_sidebar_controls() -> Dict[str, Any]:
         st.session_state['apisports_api_key'] = nfl_key_input
         st.session_state['apisports_key_source'] = "user"
 
-    st.session_state.setdefault('nhl_apisports_api_key', resolve_nhl_apisports_key()[0])
-    st.session_state.setdefault('nhl_apisports_key_source', resolve_nhl_apisports_key()[1])
+    nhl_key_default, nhl_source_default = resolve_nhl_apisports_key()
+    st.session_state.setdefault('nhl_apisports_api_key', nhl_key_default)
+    st.session_state.setdefault('nhl_apisports_key_source', nhl_source_default)
     nhl_key_input = sidebar.text_input(
         "NHL API-Sports key",
         value=st.session_state.get('nhl_apisports_api_key', ""),
@@ -221,7 +263,7 @@ def resolve_nfl_apisports_key() -> Tuple[str, Optional[str]]:
     """Locate the NFL API-Sports key from Streamlit secrets or the environment."""
 
     secret_container = getattr(st, "secrets", None)
-    if secret_container:
+    if secret_container is not None:
         for secret_name in ("NFL_APISPORTS_API_KEY", "APISPORTS_API_KEY", "API_SPORTS_KEY"):
             try:
                 secret_value = secret_container.get(secret_name)
@@ -242,7 +284,7 @@ def resolve_nhl_apisports_key() -> Tuple[str, Optional[str]]:
     """Locate the NHL API-Sports key from Streamlit secrets or the environment."""
 
     secret_container = getattr(st, "secrets", None)
-    if secret_container:
+    if secret_container is not None:
         for secret_name in ("NHL_APISPORTS_API_KEY", "APISPORTS_API_KEY", "API_SPORTS_KEY"):
             try:
                 secret_value = secret_container.get(secret_name)
@@ -1883,149 +1925,6 @@ def validate_with_kalshi(kalshi_integrator, home_team: str, away_team: str,
         }
         return
 
-    leg_data['kalshi_validation'] = kalshi_data
-
-    if not kalshi_data.get('kalshi_available'):
-        return
-
-    original_ai_prob = leg_data.get('ai_prob', base_prob)
-    kalshi_prob = kalshi_data.get('kalshi_prob', base_prob)
-
-    blended_prob = (
-        original_ai_prob * 0.50 +  # AI model
-        kalshi_prob * 0.30 +       # Kalshi market
-        base_prob * 0.20           # Sportsbook baseline
-    )
-
-    leg_data['ai_prob_before_kalshi'] = original_ai_prob
-    leg_data['ai_prob'] = blended_prob
-    leg_data['kalshi_influence'] = blended_prob - original_ai_prob
-    leg_data['kalshi_edge'] = kalshi_data.get('edge', 0)
-    leg_data['ai_confidence'] = min(
-        leg_data.get('ai_confidence', 0.5) + kalshi_data.get('confidence_boost', 0),
-        0.95
-    )
-
-# Helper to apply Kalshi validation to a betting leg in-place
-def integrate_kalshi_into_leg(
-    leg_data: Dict[str, Any],
-    home_team: str,
-    away_team: str,
-    side: str,
-    base_prob: float,
-    sport: str,
-    use_kalshi: bool,
-) -> None:
-    """Mutate a leg dictionary with Kalshi validation + probability blending."""
-
-    # Ensure downstream code sees the reason when Kalshi is not active
-    if not use_kalshi:
-        leg_data.setdefault('kalshi_validation', {
-            'kalshi_available': False,
-            'validation': 'disabled',
-            'edge': 0,
-            'confidence_boost': 0,
-            'market_scope': 'disabled',
-            'data_source': 'disabled'
-        })
-        return
-
-    kalshi = None
-    try:
-        kalshi = st.session_state.get('kalshi_integrator')
-    except Exception:
-        # When Streamlit session state isn't available (e.g. testing), skip gracefully
-        pass
-
-    if not kalshi:
-        leg_data['kalshi_validation'] = {
-            'kalshi_available': False,
-            'validation': 'unavailable',
-            'edge': 0,
-            'confidence_boost': 0,
-            'market_scope': 'not_initialized',
-            'data_source': 'unavailable'
-        }
-        return
-
-    try:
-        kalshi_data = validate_with_kalshi(kalshi, home_team, away_team, side, base_prob, sport)
-    except Exception:
-        leg_data['kalshi_validation'] = {
-            'kalshi_available': False,
-            'validation': 'error',
-            'edge': 0,
-            'confidence_boost': 0,
-            'market_scope': 'error',
-            'data_source': 'error'
-        }
-        return
-
-    leg_data['kalshi_validation'] = kalshi_data
-
-    if not kalshi_data.get('kalshi_available'):
-        return
-
-    original_ai_prob = leg_data.get('ai_prob', base_prob)
-    kalshi_prob = kalshi_data.get('kalshi_prob', base_prob)
-
-    blended_prob = (
-        original_ai_prob * 0.50 +  # AI model
-        kalshi_prob * 0.30 +       # Kalshi market
-        base_prob * 0.20           # Sportsbook baseline
-    )
-
-    leg_data['ai_prob_before_kalshi'] = original_ai_prob
-    leg_data['ai_prob'] = blended_prob
-    leg_data['kalshi_influence'] = blended_prob - original_ai_prob
-    leg_data['kalshi_edge'] = kalshi_data.get('edge', 0)
-    leg_data['ai_confidence'] = min(
-        leg_data.get('ai_confidence', 0.5) + kalshi_data.get('confidence_boost', 0),
-        0.95
-    )
-
-# Helper to apply Kalshi validation to a betting leg in-place
-def integrate_kalshi_into_leg(
-    leg_data: Dict[str, Any],
-    home_team: str,
-    away_team: str,
-    side: str,
-    base_prob: float,
-    sport: str,
-    use_kalshi: bool,
-) -> None:
-    """Mutate a leg dictionary with Kalshi validation + probability blending."""
-
-    # Ensure downstream code sees the reason when Kalshi is not active
-    if not use_kalshi:
-        leg_data.setdefault('kalshi_validation', {
-            'kalshi_available': False,
-            'validation': 'disabled',
-            'edge': 0,
-            'confidence_boost': 0,
-            'market_scope': 'disabled',
-            'data_source': 'disabled'
-        })
-        return
-
-    kalshi = None
-    try:
-        kalshi = st.session_state.get('kalshi_integrator')
-    except Exception:
-        # When Streamlit session state isn't available (e.g. testing), skip gracefully
-        pass
-
-    if not kalshi:
-        leg_data['kalshi_validation'] = {
-            'kalshi_available': False,
-            'validation': 'unavailable',
-            'edge': 0,
-            'confidence_boost': 0,
-            'market_scope': 'not_initialized',
-            'data_source': 'unavailable'
-        }
-        return
-
     try:
         kalshi_data = validate_with_kalshi(kalshi, home_team, away_team, side, base_prob, sport)
     except Exception:
@@ -3212,15 +3111,27 @@ if 'sentiment_analyzer' not in st.session_state:
     st.session_state['sentiment_analyzer'] = RealSentimentAnalyzer(news_key)
     st.session_state['news_api_key'] = news_key
 if 'historical_data_builder' not in st.session_state:
-    st.session_state['historical_data_builder'] = HistoricalDataBuilder(
-        lambda: st.session_state.get('api_key', "") or os.environ.get("ODDS_API_KEY", ""),
-        days_back=120,
-        max_days_back=540,
-        min_rows_target=30,
-    )
+    try:
+        st.session_state['historical_data_builder'] = HistoricalDataBuilder(
+            resolve_odds_api_key,
+            days_back=120,
+            max_days_back=540,
+            min_rows_target=30,
+        )
+        st.session_state.pop('historical_builder_error', None)
+    except TypeError as builder_error:  # pragma: no cover - defensive guard
+        logger.exception("Failed to initialize HistoricalDataBuilder", exc_info=True)
+        fallback_builder = HistoricalDataBuilder(resolve_odds_api_key)
+        st.session_state['historical_data_builder'] = fallback_builder
+        st.session_state['historical_builder_error'] = str(builder_error)
 if 'ml_predictor' not in st.session_state:
     builder = st.session_state['historical_data_builder']
-    st.session_state['ml_predictor'] = HistoricalMLPredictor(builder)
+    if builder is not None:
+        st.session_state['ml_predictor'] = HistoricalMLPredictor(builder)
+    else:
+        st.session_state['ml_predictor'] = HistoricalMLPredictor(
+            HistoricalDataBuilder(resolve_odds_api_key)
+        )
 if 'ai_optimizer' not in st.session_state:
     st.session_state['ai_optimizer'] = AIOptimizer(
         st.session_state['sentiment_analyzer'],
@@ -3457,6 +3368,12 @@ with main_tab1:
     )
 
     builder = st.session_state.get('historical_data_builder')
+    builder_error = st.session_state.get('historical_builder_error')
+    if builder_error:
+        st.error(
+            "Historical dataset builder unavailable: "
+            f"{builder_error}. Using default settings until resolved."
+        )
     ml_predictor_state = st.session_state.get('ml_predictor')
     if builder and ml_predictor_state:
         st.markdown("#### 🤖 Historical ML Training Status")
