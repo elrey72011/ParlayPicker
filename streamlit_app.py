@@ -1901,6 +1901,35 @@ def validate_with_kalshi(kalshi_integrator, home_team: str, away_team: str,
         }
 
 # Helper to apply Kalshi validation to a betting leg in-place
+# SYNTAX ERROR FIX GUIDE
+
+## Error Location
+Line 3605 in `integrate_kalshi_into_leg` function
+
+## Common Causes
+
+The error is likely one of these issues:
+
+### 1. Missing or Extra Parenthesis/Bracket
+
+Check around line 3605 for:
+- Unclosed `(` or `[` or `{`
+- Extra `)` or `]` or `}`
+- Mismatched quotes `"` or `'`
+
+### 2. Incorrect Indentation
+
+Python requires consistent indentation. Check if you have:
+- Mixed tabs and spaces
+- Incorrect indentation level
+
+---
+
+## FIXED VERSION of integrate_kalshi_into_leg
+
+Replace your current function with this corrected version:
+
+```python
 def integrate_kalshi_into_leg(
     leg_data: Dict[str, Any],
     home_team: str,
@@ -1977,6 +2006,107 @@ def integrate_kalshi_into_leg(
         leg_data.get('ai_confidence', 0.5) + kalshi_data.get('confidence_boost', 0),
         0.95
     )
+```
+
+---
+
+## QUICK FIX STEPS
+
+1. **Find the function** - Search for `def integrate_kalshi_into_leg`
+2. **Check line 3605** - Look at what's on this line
+3. **Common issues to check:**
+
+### Issue A: Unclosed parenthesis
+```python
+# WRONG:
+leg_data.setdefault('kalshi_validation', {
+    'kalshi_available': False,
+    # Missing closing brace!
+
+# RIGHT:
+leg_data.setdefault('kalshi_validation', {
+    'kalshi_available': False,
+})  # Both braces closed
+```
+
+### Issue B: Indentation
+```python
+# WRONG (mixed indentation):
+def integrate_kalshi_into_leg(...):
+    if not use_kalshi:
+        leg_data.setdefault(...)  # 4 spaces
+      return  # Only 2 spaces - ERROR!
+
+# RIGHT (consistent):
+def integrate_kalshi_into_leg(...):
+    if not use_kalshi:
+        leg_data.setdefault(...)  # 4 spaces
+        return  # 4 spaces - OK!
+```
+
+### Issue C: Missing comma
+```python
+# WRONG:
+leg_data.setdefault('kalshi_validation', {
+    'kalshi_available': False
+    'validation': 'disabled'  # Missing comma!
+})
+
+# RIGHT:
+leg_data.setdefault('kalshi_validation', {
+    'kalshi_available': False,  # Comma added
+    'validation': 'disabled'
+})
+```
+
+---
+
+## TEMPORARY WORKAROUND
+
+If you need the app running NOW, you can temporarily comment out the Kalshi integration:
+
+```python
+def integrate_kalshi_into_leg(
+    leg_data: Dict[str, Any],
+    home_team: str,
+    away_team: str,
+    side: str,
+    base_prob: float,
+    sport: str,
+    use_kalshi: bool,
+) -> None:
+    """Temporary stub - Kalshi disabled"""
+    leg_data['kalshi_validation'] = {
+        'kalshi_available': False,
+        'validation': 'disabled',
+        'edge': 0,
+        'confidence_boost': 0,
+    }
+    return
+```
+
+This will let the app run while you fix the syntax error.
+
+---
+
+## VERIFICATION
+
+After fixing, your function should:
+1. Have matching braces: `{` and `}`
+2. Have matching parentheses: `(` and `)`
+3. Use consistent indentation (4 spaces recommended)
+4. Have commas between dictionary items
+5. Have properly closed strings
+
+---
+
+## IF STILL STUCK
+
+Send me:
+1. Lines 3600-3610 of your file
+2. Or the entire `integrate_kalshi_into_leg` function
+
+And I'll pinpoint the exact issue!
 
 # ============ UTILITY FUNCTIONS ============
 def american_to_decimal(odds) -> float:
