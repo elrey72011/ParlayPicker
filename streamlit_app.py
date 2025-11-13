@@ -1984,6 +1984,84 @@ def integrate_kalshi_into_leg(
         0.95
     )
 
+# Helper to apply Kalshi validation to a betting leg in-place
+def integrate_kalshi_into_leg(
+    leg_data: Dict[str, Any],
+    home_team: str,
+    away_team: str,
+    side: str,
+    base_prob: float,
+    sport: str,
+    use_kalshi: bool,
+) -> None:
+    """Mutate a leg dictionary with Kalshi validation + probability blending."""
+
+    # Ensure downstream code sees the reason when Kalshi is not active
+    if not use_kalshi:
+        leg_data.setdefault('kalshi_validation', {
+            'kalshi_available': False,
+            'validation': 'disabled',
+            'edge': 0,
+            'confidence_boost': 0,
+            'market_scope': 'disabled',
+            'data_source': 'disabled'
+        })
+        return
+
+    kalshi = None
+    try:
+        kalshi = st.session_state.get('kalshi_integrator')
+    except Exception:
+        # When Streamlit session state isn't available (e.g. testing), skip gracefully
+        pass
+
+    if not kalshi:
+        leg_data['kalshi_validation'] = {
+            'kalshi_available': False,
+            'validation': 'unavailable',
+            'edge': 0,
+            'confidence_boost': 0,
+            'market_scope': 'not_initialized',
+            'data_source': 'unavailable'
+        }
+        return
+
+    try:
+        kalshi_data = validate_with_kalshi(kalshi, home_team, away_team, side, base_prob, sport)
+    except Exception:
+        leg_data['kalshi_validation'] = {
+            'kalshi_available': False,
+            'validation': 'error',
+            'edge': 0,
+            'confidence_boost': 0,
+            'market_scope': 'error',
+            'data_source': 'error'
+        }
+        return
+
+    leg_data['kalshi_validation'] = kalshi_data
+
+    if not kalshi_data.get('kalshi_available'):
+        return
+
+    original_ai_prob = leg_data.get('ai_prob', base_prob)
+    kalshi_prob = kalshi_data.get('kalshi_prob', base_prob)
+
+    blended_prob = (
+        original_ai_prob * 0.50 +  # AI model
+        kalshi_prob * 0.30 +       # Kalshi market
+        base_prob * 0.20           # Sportsbook baseline
+    )
+
+    leg_data['ai_prob_before_kalshi'] = original_ai_prob
+    leg_data['ai_prob'] = blended_prob
+    leg_data['kalshi_influence'] = blended_prob - original_ai_prob
+    leg_data['kalshi_edge'] = kalshi_data.get('edge', 0)
+    leg_data['ai_confidence'] = min(
+        leg_data.get('ai_confidence', 0.5) + kalshi_data.get('confidence_boost', 0),
+        0.95
+    )
+
 # ============ UTILITY FUNCTIONS ============
 def american_to_decimal(odds) -> float:
     odds = float(odds)
@@ -3311,7 +3389,33 @@ with main_tab1:
         for idx, (sport_label, sport_key, sport_client, sport_icon) in enumerate(sport_rows):
             with status_cols[idx % 2]:
                 st.markdown(f"**{sport_icon} {sport_label} Historical Model**")
-                metadata = ml_predictor_state.training_metadata(sport_key)
+
+                default_metadata = {
+                    "sport_key": sport_key,
+                    "dataset_rows": 0,
+                    "training_rows": 0,
+                    "model_ready": False,
+                    "last_dataset_build": None,
+                    "last_trained": None,
+                    "min_rows": getattr(ml_predictor_state, "min_rows", 25),
+                    "error": None,
+                }
+
+                metadata = default_metadata.copy()
+                if hasattr(ml_predictor_state, "training_metadata"):
+                    try:
+                        fetched_metadata = ml_predictor_state.training_metadata(sport_key) or {}
+                        if isinstance(fetched_metadata, dict):
+                            metadata.update(fetched_metadata)
+                        else:
+                            metadata["error"] = "invalid_metadata_payload"
+                    except Exception as metadata_error:  # pragma: no cover - defensive guard
+                        logger.exception(
+                            "Failed to load ML training metadata for %s", sport_key, exc_info=True
+                        )
+                        metadata["error"] = "metadata_unavailable"
+                else:
+                    metadata["error"] = "predictor_missing"
 
                 st.metric(
                     "Historical games",
@@ -3349,6 +3453,9 @@ with main_tab1:
                         'games_fetch_failed': 'API-Sports schedule request failed. Retry shortly.',
                         'summary_build_failed': 'Could not assemble team summaries from API-Sports.',
                         'no_historical_rows': 'No completed games found in the selected window yet.',
+                        'metadata_unavailable': 'Model metadata is unavailable right now. Please retry shortly.',
+                        'predictor_missing': 'Machine learning module is not ready. Refresh after initialization.',
+                        'invalid_metadata_payload': 'Received unexpected metadata payload. Check server logs.',
                     }.get(error_code, error_code.replace('_', ' '))
                     st.error(friendly)
                 elif status_lines:
