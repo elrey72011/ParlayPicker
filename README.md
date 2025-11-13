@@ -1,6 +1,8 @@
 # 🎯 ParlayDesk - AI-Enhanced Sports Betting Analysis
 
-AI-powered parlay finder with machine learning predictions trained on historical data from The Odds API.
+AI-powered parlay finder with machine learning predictions trained on historical data from The Odds API, Kalshi market validation, and live NFL & NHL context from API-Sports.
+
+> **What's new:** the primary Streamlit app now bundles the historical-machine-learning workflow that previously lived in the "enhanced" build. Provide your The Odds API and API-Sports keys and the app will auto-build logistic models from recent API-Sports schedules, blend them with Kalshi and sentiment signals, and surface the combined analysis throughout the UI.
 
 ![Python](https://img.shields.io/badge/python-3.9+-blue.svg)
 ![Streamlit](https://img.shields.io/badge/streamlit-1.28+-red.svg)
@@ -49,6 +51,7 @@ pip install -r requirements.txt
 streamlit run streamlit_app.py
 
 # Enter your API key in the sidebar
+# (The app will automatically train logistic models once Odds API and API-Sports keys are supplied.)
 ```
 
 ### Option 2: Enhanced Version (ML Powered)
@@ -77,12 +80,15 @@ streamlit run streamlit_app_enhanced.py
 
 ### Standard Version
 - 🎲 Multi-sport odds aggregation (NFL, NBA, MLB, NHL, etc.)
+- 🤖 Automatic logistic-regression predictions trained on recent API-Sports schedules (no manual training step)
 - 📊 Parlay combination builder (2-leg, 3-leg, 4-leg)
 - 💰 Expected Value (EV) calculations
-- 🏆 PrizePicks player prop analyzer
-- 📈 Real-time odds from The Odds API
+- 🛰️ API-Sports NFL & NHL live data integration
+- 🌐 Embedded API-Sports league widget for cross-sport research
+- 📈 Real-time odds from The Odds API blended with Kalshi validation
 
 ### Enhanced Version (Additional)
+- 🔁 *Legacy documentation:* the enhanced build remains available for experimentation with gradient boosting, but the standard app already handles historical ML workflows automatically.
 - 🧠 **ML Model Training** on 7-180 days of historical data
 - 📊 **Gradient Boosting Classifier** with feature engineering
 - 🎯 **55-65% Prediction Accuracy** (validated on test data)
@@ -149,6 +155,25 @@ api_key = "your-api-key-here"
 ```
 
 Or enter your API key directly in the sidebar.
+
+To enable NFL live data integration, add your API-Sports token under the `NFL_APISPORTS_API_KEY` secret:
+
+```toml
+# .streamlit/secrets.toml
+NFL_APISPORTS_API_KEY = "your-nfl-api-sports-token"
+```
+
+To enable NHL live data integration, add your hockey token under the `NHL_APISPORTS_API_KEY` secret:
+
+```toml
+# .streamlit/secrets.toml
+NHL_APISPORTS_API_KEY = "your-nhl-api-sports-token"
+```
+
+The app automatically picks up those keys from Streamlit secrets. If the secrets
+aren't defined it falls back to the `NFL_APISPORTS_API_KEY`, `NHL_APISPORTS_API_KEY`,
+`APISPORTS_API_KEY`, or `API_SPORTS_KEY` environment variables so existing deployments
+keep working without additional configuration.
 
 ## 🛠️ Development
 
