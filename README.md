@@ -151,6 +151,13 @@ api_key = "your-api-key-here"
 
 Or enter your API key directly in the sidebar.
 
+To enable the NFL live data integration, add your API-Sports token under the `NFL_APISPORTS_API_KEY` secret:
+
+```toml
+# .streamlit/secrets.toml
+NFL_APISPORTS_API_KEY = "your-nfl-api-sports-token"
+```
+
 ## 🛠️ Development
 
 ```bash

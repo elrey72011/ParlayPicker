@@ -2285,7 +2285,7 @@ def render_parlay_section_ai(title, rows, theover_data=None):
                         help="Number of legs with live API-Sports context",
                     )
                 else:
-                    st.metric("API-Sports Legs", "0", help="Provide an API-Sports key to enrich NFL legs")
+                    st.metric("API-Sports Legs", "0", help="Provide an NFL API-Sports key to enrich NFL legs")
             
             # KALSHI STATUS - ALWAYS SHOW (whether data exists or not)
             st.markdown("---")
@@ -3137,19 +3137,19 @@ with main_tab1:
     st.subheader("🏈 API-Sports NFL Data Integration")
     current_api_sports_key = st.session_state.get('apisports_api_key', apisports_client.api_key if apisports_client else "")
     new_api_sports_key = st.text_input(
-        "API-Sports Key (American football)",
+        "NFL API-Sports Key",
         value=current_api_sports_key,
         type="password",
-        help="Create a free account at https://api-sports.io/documentation/american-football/v1 to obtain a key"
+        help="Set the NFL_APISPORTS_API_KEY secret or create a free account at https://api-sports.io/documentation/american-football/v1 to obtain a key"
     )
     if new_api_sports_key != current_api_sports_key:
         st.session_state['apisports_api_key'] = new_api_sports_key
         if apisports_client:
             apisports_client.update_api_key(new_api_sports_key)
         if new_api_sports_key:
-            st.success("✅ API-Sports key saved for this session.")
+            st.success("✅ NFL API-Sports key saved for this session.")
         else:
-            st.info("API-Sports integration disabled until a key is provided.")
+            st.info("API-Sports integration disabled until an NFL key is provided.")
 
     
     def is_within_date_window(iso_str) -> bool:
@@ -5024,10 +5024,10 @@ with main_tab5:
 
     st.header("🏈 API-Sports NFL Live Data")
     st.markdown("**Pull live NFL context (records, form, scoring trends) directly from api-sports.io**")
-    st.caption("Provide your API-Sports key in the Sports Betting tab to enable these insights.")
+    st.caption("Provide your NFL API-Sports key in the Sports Betting tab to enable these insights.")
 
     if not apisports_client or not apisports_client.is_configured():
-        st.warning("Add your API-Sports key in the Sports Betting tab to load live NFL data.")
+        st.warning("Add your NFL API-Sports key in the Sports Betting tab to load live NFL data.")
     else:
         default_tz = st.session_state.get('user_timezone', 'America/New_York')
         tz_input = st.text_input("Timezone (IANA)", value=default_tz, key="apisports_live_tz")
@@ -5105,7 +5105,7 @@ with main_tab5:
             or (apisports_client.api_key if apisports_client else "")
         )
         if not widget_key:
-            st.info("Provide an API-Sports key in the Sports Betting tab to load the widget.")
+            st.info("Provide an NFL API-Sports key in the Sports Betting tab to load the widget.")
         else:
             sport_labels = {
                 "NFL": "nfl",

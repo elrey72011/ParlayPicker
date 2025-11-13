@@ -50,7 +50,12 @@ class APISportsFootballClient:
     NFL_LEAGUE_ID = 1
 
     def __init__(self, api_key: Optional[str] = None, session: Optional[requests.Session] = None) -> None:
-        self.api_key = api_key or os.environ.get("APISPORTS_API_KEY") or os.environ.get("API_SPORTS_KEY")
+        self.api_key = (
+            api_key
+            or os.environ.get("NFL_APISPORTS_API_KEY")
+            or os.environ.get("APISPORTS_API_KEY")
+            or os.environ.get("API_SPORTS_KEY")
+        )
         self.session = session or requests.Session()
         self.timeout = 10
         self._games_cache: Dict[tuple, List[Dict]] = {}
