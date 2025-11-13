@@ -118,15 +118,35 @@ def _normalize_team_name(name: Optional[str]) -> Optional[str]:
 
 
 def _season_label_meets_minimum(label: str, minimum_year: int) -> bool:
-    """Return True when the season identifier is at or above the minimum year."""
+    """Return True when the season identifier overlaps the minimum year."""
 
     try:
-        years = [int(part) for part in re.findall(r"\d{4}", label)]
+        years = [int(part) for part in re.findall(r"\d{2,4}", label)]
     except ValueError:
         years = []
     if not years:
         return True
-    return min(years) >= minimum_year
+
+    # Treat two-digit season suffixes (e.g. "2023-24") as offsets from the
+    # detected start year so split-season leagues are evaluated correctly.
+    normalized_years: List[int] = []
+    for idx, value in enumerate(years):
+        if value >= 1000:
+            normalized_years.append(value)
+        elif normalized_years:
+            # Clamp two-digit end years into the same century as the start year.
+            century = (normalized_years[0] // 100) * 100
+            normalized_years.append(century + value)
+        else:
+            # When the first fragment is two digits assume it belongs to the
+            # same century as the minimum year threshold (e.g. "23-24" → 2023).
+            if minimum_year >= 100:
+                century = (minimum_year // 100) * 100
+                normalized_years.append(century + value)
+            else:
+                normalized_years.append(value)
+
+    return max(normalized_years or years) >= minimum_year
 
 
 def _extract_score(entry: Any) -> Optional[float]:
