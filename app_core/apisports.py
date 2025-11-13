@@ -1,15 +1,12 @@
-"""Lightweight client for API-Sports American football data.
+"""Lightweight clients for API-Sports live sports data."""
 
-The Streamlit app uses this module to pull live NFL games and team statistics so
-odds analysis can be enriched with real-world league context.
-"""
 from __future__ import annotations
 
 import os
 import re
 from dataclasses import dataclass
 from datetime import date, datetime
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Sequence, Tuple
 
 import pytz
 import requests
@@ -17,7 +14,7 @@ import requests
 
 @dataclass
 class TeamSummary:
-    """Minimal statistics for an American football team."""
+    """Minimal statistics for a team returned by API-Sports."""
 
     id: Optional[int]
     name: str
@@ -30,7 +27,7 @@ class TeamSummary:
 
 @dataclass
 class GameSummary:
-    """Relevant details for an NFL game fetched from API-Sports."""
+    """Relevant details for a game fetched from API-Sports."""
 
     id: Optional[int]
     league: Optional[str]
@@ -41,13 +38,23 @@ class GameSummary:
     venue: Optional[str]
     home: TeamSummary
     away: TeamSummary
+    sport_key: Optional[str] = None
+    sport_name: Optional[str] = None
+    scoring_metric: Optional[str] = None
 
 
-class APISportsFootballClient:
-    """Small wrapper around the API-Sports American football endpoints."""
+class _APISportsBaseClient:
+    """Shared helper for sport-specific API-Sports clients."""
 
-    BASE_URL = "https://v1.american-football.api-sports.io"
-    NFL_LEAGUE_ID = 1
+    BASE_URL: str = ""
+    DEFAULT_LEAGUE_ID: int = 0
+    SECRET_ENV_PRIORITY: Sequence[str] = ()
+    SPORT_KEY: Optional[str] = None
+    SPORT_NAME: Optional[str] = None
+    STAT_CATEGORY_OFFENSE: str = "points"
+    STAT_CATEGORY_DEFENSE: str = "points"
+    SCORING_METRIC_LABEL: str = "points"
+    SEASON_CUTOFF_MONTH: int = 1
 
     def __init__(
         self,
@@ -60,7 +67,7 @@ class APISportsFootballClient:
         if resolved_key:
             self.key_source = key_source or "runtime"
         else:
-            for env_name in ("NFL_APISPORTS_API_KEY", "APISPORTS_API_KEY", "API_SPORTS_KEY"):
+            for env_name in self.SECRET_ENV_PRIORITY:
                 candidate = os.environ.get(env_name)
                 if candidate:
                     resolved_key = candidate
@@ -70,8 +77,8 @@ class APISportsFootballClient:
         self.api_key = resolved_key or ""
         self.session = session or requests.Session()
         self.timeout = 10
-        self._games_cache: Dict[tuple, List[Dict]] = {}
-        self._team_cache: Dict[tuple, Dict] = {}
+        self._games_cache: Dict[Tuple[str, str, int, str], List[Dict]] = {}
+        self._team_cache: Dict[Tuple[int, str, int], Dict] = {}
         self.last_error: Optional[str] = None
 
         if self.api_key:
@@ -88,8 +95,8 @@ class APISportsFootballClient:
             self.key_source = source or "runtime"
         else:
             self.key_source = None
-        if api_key:
-            self.session.headers.update({"x-apisports-key": api_key})
+        if self.api_key:
+            self.session.headers.update({"x-apisports-key": self.api_key})
         else:
             self.session.headers.pop("x-apisports-key", None)
         self._games_cache.clear()
@@ -101,12 +108,12 @@ class APISportsFootballClient:
 
         return self.key_source
 
-    @staticmethod
-    def current_season_for_date(target: Optional[date] = None) -> str:
-        """Return the NFL season year (e.g. "2023") for a given date."""
+    @classmethod
+    def current_season_for_date(cls, target: Optional[date] = None) -> str:
+        """Return the season year (e.g. "2023") for a given date."""
 
         target = target or datetime.utcnow().date()
-        if target.month >= 3:
+        if target.month >= cls.SEASON_CUTOFF_MONTH:
             start_year = target.year
         else:
             start_year = target.year - 1
@@ -144,14 +151,15 @@ class APISportsFootballClient:
         self,
         target_date: date,
         timezone: str = "America/New_York",
-        league_id: int = NFL_LEAGUE_ID,
+        league_id: Optional[int] = None,
         season: Optional[str] = None,
     ) -> List[Dict]:
-        """Fetch NFL games for a given date and timezone."""
+        """Fetch games for a given date and timezone."""
 
         if not self.is_configured():
             return []
 
+        league_id = league_id or self.DEFAULT_LEAGUE_ID
         season = season or self.current_season_for_date(target_date)
         cache_key = (target_date.isoformat(), timezone, league_id, season)
         if cache_key in self._games_cache:
@@ -174,13 +182,14 @@ class APISportsFootballClient:
         self,
         team_id: Optional[int],
         season: str,
-        league_id: int = NFL_LEAGUE_ID,
+        league_id: Optional[int] = None,
     ) -> Dict:
         """Fetch team statistics for the specified season."""
 
         if not self.is_configured() or not team_id:
             return {}
 
+        league_id = league_id or self.DEFAULT_LEAGUE_ID
         cache_key = (team_id, season, league_id)
         if cache_key in self._team_cache:
             return self._team_cache[cache_key]
@@ -247,10 +256,9 @@ class APISportsFootballClient:
             return "cold"
         return "neutral"
 
-    @staticmethod
-    def _average_points(stats: Dict, direction: str = "for") -> Optional[float]:
-        points = (stats or {}).get("points") or {}
-        bucket = points.get(direction) or {}
+    def _average_stat(self, stats: Dict, direction: str = "for") -> Optional[float]:
+        metrics = (stats or {}).get(self.STAT_CATEGORY_OFFENSE if direction == "for" else self.STAT_CATEGORY_DEFENSE) or {}
+        bucket = metrics.get(direction) or {}
         avg = bucket.get("average") or {}
         for key in ("total", "points", "value"):
             value = avg.get(key)
@@ -313,8 +321,8 @@ class APISportsFootballClient:
             name=home_team.get("name", ""),
             record=self._format_record(home_stats),
             form=home_stats.get("form"),
-            average_points_for=self._average_points(home_stats, "for"),
-            average_points_against=self._average_points(home_stats, "against"),
+            average_points_for=self._average_stat(home_stats, "for"),
+            average_points_against=self._average_stat(home_stats, "against"),
             trend=self._determine_trend(home_stats.get("form")),
         )
         away_summary = TeamSummary(
@@ -322,8 +330,8 @@ class APISportsFootballClient:
             name=away_team.get("name", ""),
             record=self._format_record(away_stats),
             form=away_stats.get("form"),
-            average_points_for=self._average_points(away_stats, "for"),
-            average_points_against=self._average_points(away_stats, "against"),
+            average_points_for=self._average_stat(away_stats, "for"),
+            average_points_against=self._average_stat(away_stats, "against"),
             trend=self._determine_trend(away_stats.get("form")),
         )
 
@@ -337,4 +345,35 @@ class APISportsFootballClient:
             venue=venue,
             home=home_summary,
             away=away_summary,
+            sport_key=self.SPORT_KEY,
+            sport_name=self.SPORT_NAME,
+            scoring_metric=self.SCORING_METRIC_LABEL,
         )
+
+
+class APISportsFootballClient(_APISportsBaseClient):
+    """Small wrapper around the API-Sports American football endpoints."""
+
+    BASE_URL = "https://v1.american-football.api-sports.io"
+    DEFAULT_LEAGUE_ID = 1  # NFL
+    SECRET_ENV_PRIORITY = ("NFL_APISPORTS_API_KEY", "APISPORTS_API_KEY", "API_SPORTS_KEY")
+    SPORT_KEY = "americanfootball_nfl"
+    SPORT_NAME = "NFL"
+    STAT_CATEGORY_OFFENSE = "points"
+    STAT_CATEGORY_DEFENSE = "points"
+    SCORING_METRIC_LABEL = "points"
+    SEASON_CUTOFF_MONTH = 3
+
+
+class APISportsHockeyClient(_APISportsBaseClient):
+    """Wrapper around the API-Sports ice hockey endpoints (NHL focus)."""
+
+    BASE_URL = "https://v1.hockey.api-sports.io"
+    DEFAULT_LEAGUE_ID = 57  # NHL
+    SECRET_ENV_PRIORITY = ("NHL_APISPORTS_API_KEY", "APISPORTS_API_KEY", "API_SPORTS_KEY")
+    SPORT_KEY = "icehockey_nhl"
+    SPORT_NAME = "NHL"
+    STAT_CATEGORY_OFFENSE = "goals"
+    STAT_CATEGORY_DEFENSE = "goals"
+    SCORING_METRIC_LABEL = "goals"
+    SEASON_CUTOFF_MONTH = 7

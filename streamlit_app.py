@@ -12,7 +12,12 @@ import streamlit as st
 import streamlit.components.v1 as components
 import pytz
 
-from app_core import APISportsFootballClient, RealSentimentAnalyzer, SentimentAnalyzer
+from app_core import (
+    APISportsFootballClient,
+    APISportsHockeyClient,
+    RealSentimentAnalyzer,
+    SentimentAnalyzer,
+)
 
 # ============ HELPER FUNCTIONS ============
 def american_to_decimal_safe(odds) -> float | None:
@@ -58,6 +63,27 @@ def resolve_nfl_apisports_key() -> Tuple[str, Optional[str]]:
                 return str(secret_value), f"secret:{secret_name}"
 
     for env_name in ("NFL_APISPORTS_API_KEY", "APISPORTS_API_KEY", "API_SPORTS_KEY"):
+        env_value = os.environ.get(env_name)
+        if env_value:
+            return env_value, f"env:{env_name}"
+
+    return "", None
+
+
+def resolve_nhl_apisports_key() -> Tuple[str, Optional[str]]:
+    """Locate the NHL API-Sports key from Streamlit secrets or the environment."""
+
+    secret_container = getattr(st, "secrets", None)
+    if secret_container:
+        for secret_name in ("NHL_APISPORTS_API_KEY", "APISPORTS_API_KEY", "API_SPORTS_KEY"):
+            try:
+                secret_value = secret_container.get(secret_name)
+            except Exception:
+                secret_value = None
+            if secret_value:
+                return str(secret_value), f"secret:{secret_name}"
+
+    for env_name in ("NHL_APISPORTS_API_KEY", "APISPORTS_API_KEY", "API_SPORTS_KEY"):
         env_value = os.environ.get(env_name)
         if env_value:
             return env_value, f"env:{env_name}"
@@ -378,6 +404,7 @@ class AIOptimizer:
         kalshi_legs = 0
         apisports_boost = 0
         apisports_legs = 0
+        apisports_sports: set[str] = set()
         
         for leg in legs:
             combined_prob *= leg.get('ai_prob', leg['p'])
@@ -418,6 +445,9 @@ class AIOptimizer:
             apisports_info = leg.get('apisports')
             if apisports_info:
                 apisports_legs += 1
+                sport_key = apisports_info.get('sport_key') if isinstance(apisports_info, dict) else None
+                if sport_key:
+                    apisports_sports.add(sport_key)
                 trend = apisports_info.get('trend')
                 if trend == 'hot':
                     apisports_boost += 5
@@ -472,7 +502,8 @@ class AIOptimizer:
             'kalshi_boost': kalshi_boost,
             'apisports_factor': live_data_factor,
             'apisports_legs': apisports_legs,
-            'apisports_boost': apisports_boost
+            'apisports_boost': apisports_boost,
+            'apisports_sports': sorted(apisports_sports),
         }
 
 # ============ KALSHI INTEGRATION ============
@@ -1913,7 +1944,7 @@ def _odds_api_base():
     return "https://api.the-odds-api.com"
 
 
-def build_leg_apisports_payload(summary: Any, side: str) -> Dict[str, Any]:
+def build_leg_apisports_payload(summary: Any, side: str, sport_key: Optional[str] = None) -> Dict[str, Any]:
     """Return a compact snapshot of API-Sports data for a parlay leg."""
 
     if not summary:
@@ -1936,6 +1967,9 @@ def build_leg_apisports_payload(summary: Any, side: str) -> Dict[str, Any]:
         'status': _get(summary, 'status'),
         'kickoff': _get(summary, 'kickoff_local'),
         'venue': _get(summary, 'venue'),
+        'sport_key': sport_key or _get(summary, 'sport_key'),
+        'sport_name': _get(summary, 'sport_name'),
+        'scoring_metric': _get(summary, 'scoring_metric'),
         'team_record': _get(team_obj, 'record'),
         'team_form': _get(team_obj, 'form'),
         'trend': _get(team_obj, 'trend'),
@@ -2207,7 +2241,8 @@ def build_combos_ai(legs, k, allow_sgp, optimizer, theover_data=None, min_probab
             "kalshi_legs": ai_metrics.get('kalshi_legs', 0),
             "apisports_factor": ai_metrics.get('apisports_factor', 1.0),
             "apisports_boost": ai_metrics.get('apisports_boost', 0),
-            "apisports_legs": ai_metrics.get('apisports_legs', 0)
+            "apisports_legs": ai_metrics.get('apisports_legs', 0),
+            "apisports_sports": ai_metrics.get('apisports_sports', []),
         }
         
         # Keep only the version with best combined odds (highest decimal odds = best payout)
@@ -2310,13 +2345,22 @@ def render_parlay_section_ai(title, rows, theover_data=None):
         apisports_info = ""
         apisports_legs = row.get('apisports_legs', 0)
         apisports_factor = row.get('apisports_factor', 1.0)
+        apisports_sports = row.get('apisports_sports', []) or []
         if apisports_legs:
+            sport_icon_lookup = {
+                "americanfootball_nfl": "🏈",
+                "icehockey_nhl": "🏒",
+            }
+            icon_sequence = "".join(
+                sport_icon_lookup.get(sport, "🛰️") for sport in sorted(set(apisports_sports))
+            ) or "🛰️"
+            label = f"{icon_sequence} API-Sports {apisports_legs}"
             if apisports_factor > 1.02:
-                apisports_info = f" | 🏈 API-Sports {apisports_legs} ↗️"
+                apisports_info = f" | {label} ↗️"
             elif apisports_factor < 0.98:
-                apisports_info = f" | 🏈 API-Sports {apisports_legs} ↘️"
+                apisports_info = f" | {label} ↘️"
             else:
-                apisports_info = f" | 🏈 API-Sports {apisports_legs}"
+                apisports_info = f" | {label}"
 
         prob_pct = row['p_ai'] * 100
         with st.expander(
@@ -2343,7 +2387,11 @@ def render_parlay_section_ai(title, rows, theover_data=None):
                         help="Number of legs with live API-Sports context",
                     )
                 else:
-                    st.metric("API-Sports Legs", "0", help="Provide an NFL API-Sports key to enrich NFL legs")
+                    st.metric(
+                        "API-Sports Legs",
+                        "0",
+                        help="Provide an API-Sports key (NFL or NHL) to enrich supported legs",
+                    )
             
             # KALSHI STATUS - ALWAYS SHOW (whether data exists or not)
             st.markdown("---")
@@ -2576,6 +2624,9 @@ def render_parlay_section_ai(title, rows, theover_data=None):
                 apisports_details = leg.get('apisports')
                 if isinstance(apisports_details, dict) and apisports_details:
                     parts = []
+                    sport_name = apisports_details.get('sport_name')
+                    if sport_name:
+                        parts.append(f"{sport_name}")
                     record = apisports_details.get('team_record')
                     if record:
                         parts.append(f"Record {record}")
@@ -2584,11 +2635,18 @@ def render_parlay_section_ai(title, rows, theover_data=None):
                         icon = {'hot': '🔥', 'cold': '🥶', 'neutral': '⚪️'}.get(trend, '📊')
                         parts.append(f"{icon} {trend.capitalize()}")
                     avg_for = apisports_details.get('team_avg_points_for')
+                    metric_label = apisports_details.get('scoring_metric') or 'points'
+                    metric_text = 'pts'
+                    if isinstance(metric_label, str):
+                        if metric_label.lower() in ('points', 'point'):
+                            metric_text = 'pts'
+                        else:
+                            metric_text = metric_label.lower()
                     if isinstance(avg_for, (int, float)):
-                        parts.append(f"{avg_for:.1f} pts for")
+                        parts.append(f"{avg_for:.1f} {metric_text} for")
                     avg_against = apisports_details.get('team_avg_points_against')
                     if isinstance(avg_against, (int, float)):
-                        parts.append(f"{avg_against:.1f} pts allowed")
+                        parts.append(f"{avg_against:.1f} {metric_text} allowed")
                     status = apisports_details.get('status')
                     if status:
                         parts.append(status)
@@ -2618,7 +2676,7 @@ def render_parlay_section_ai(title, rows, theover_data=None):
             if any(leg.get('kalshi_validation', {}).get('kalshi_available') for leg in row.get("legs", [])):
                 st.caption("**K Impact** = How much Kalshi adjusted AI probability (blended 50% AI + 30% Kalshi + 20% Market)")
             if any(leg.get('apisports') for leg in row.get("legs", [])):
-                st.caption("**API-Sports** = Live NFL data (record, form, kickoff) from api-sports.io")
+                st.caption("**API-Sports** = Live NFL/NHL data (records, form, kickoff) from api-sports.io")
 
             # Show legend and summary
             if has_theover:
@@ -2862,6 +2920,18 @@ elif 'apisports_api_key' not in st.session_state:
     st.session_state['apisports_api_key'] = (
         apisports_client.api_key if apisports_client else ""
     )
+if 'apisports_hockey_client' not in st.session_state:
+    nhl_key, nhl_source = resolve_nhl_apisports_key()
+    st.session_state['nhl_apisports_api_key'] = nhl_key
+    st.session_state['apisports_hockey_client'] = APISportsHockeyClient(
+        nhl_key or None,
+        key_source=nhl_source,
+    )
+elif 'nhl_apisports_api_key' not in st.session_state:
+    hockey_client = st.session_state.get('apisports_hockey_client')
+    st.session_state['nhl_apisports_api_key'] = (
+        hockey_client.api_key if hockey_client else ""
+    )
 
 # Main navigation tabs
 main_tab1, main_tab2, main_tab3, main_tab4, main_tab5 = st.tabs([
@@ -2869,7 +2939,7 @@ main_tab1, main_tab2, main_tab3, main_tab4, main_tab5 = st.tabs([
     "🔍 Sentiment & AI Analysis",
     "🎨 Custom Parlay Builder",
     "📊 Kalshi Prediction Markets",
-    "🏈 API-Sports NFL Live Data"
+    "🛰️ API-Sports Live Data"
 ])
 
 # ===== TAB 1: SPORTS BETTING PARLAYS =====
@@ -2883,6 +2953,15 @@ with main_tab1:
         )
         st.session_state['apisports_client'] = apisports_client
         st.session_state.setdefault('apisports_api_key', fallback_key)
+    hockey_client = st.session_state.get('apisports_hockey_client')
+    if hockey_client is None:
+        fallback_key, fallback_source = resolve_nhl_apisports_key()
+        hockey_client = APISportsHockeyClient(
+            fallback_key or None,
+            key_source=fallback_source,
+        )
+        st.session_state['apisports_hockey_client'] = hockey_client
+        st.session_state.setdefault('nhl_apisports_api_key', fallback_key)
 
     # API Configuration
     stored_key = os.environ.get("ODDS_API_KEY", "")
@@ -3250,7 +3329,37 @@ with main_tab1:
     else:
         st.caption("No NFL API-Sports key detected; live data calls will be skipped.")
 
-    
+    st.subheader("🏒 API-Sports NHL Data Integration")
+    current_nhl_key = st.session_state.get(
+        'nhl_apisports_api_key',
+        hockey_client.api_key if hockey_client else "",
+    )
+    new_nhl_key = st.text_input(
+        "NHL API-Sports Key",
+        value=current_nhl_key,
+        type="password",
+        help="Set the NHL_APISPORTS_API_KEY secret or create a free account at https://api-sports.io/documentation/hockey/v1 to obtain a key",
+    )
+    if new_nhl_key != current_nhl_key:
+        st.session_state['nhl_apisports_api_key'] = new_nhl_key
+        if hockey_client:
+            hockey_client.update_api_key(
+                new_nhl_key,
+                source="manual-entry" if new_nhl_key else None,
+            )
+        if new_nhl_key:
+            st.success("✅ NHL API-Sports key saved for this session.")
+        else:
+            st.info("NHL live data integration disabled until a key is provided.")
+
+    if hockey_client and hockey_client.is_configured():
+        st.caption(
+            f"Using NHL API-Sports key from {describe_key_origin(hockey_client.key_origin())}."
+        )
+    else:
+        st.caption("No NHL API-Sports key detected; NHL live data will be skipped.")
+
+
     def is_within_date_window(iso_str) -> bool:
         """Return True when an event falls within the selected day ± window."""
         try:
@@ -3290,7 +3399,7 @@ with main_tab1:
             with st.spinner("🧠 Analyzing markets with AI..."):
                 progress_bar = st.progress(0)
                 all_legs = []
-                apisports_games_cache: Dict[Tuple[str, str], List[Dict[str, Any]]] = {}
+                apisports_games_cache: Dict[Tuple[str, str, str], List[Dict[str, Any]]] = {}
                 total_sports = len(sports or APP_CFG["sports_common"])
                 
                 for sport_idx, skey in enumerate(sports or APP_CFG["sports_common"]):
@@ -3319,7 +3428,21 @@ with main_tab1:
                                 apisports_payload_away = None
                                 apisports_payload_total = None
 
-                                if skey == "americanfootball_nfl" and apisports_client and apisports_client.is_configured():
+                                client_for_leg = None
+                                if (
+                                    skey == "americanfootball_nfl"
+                                    and apisports_client
+                                    and apisports_client.is_configured()
+                                ):
+                                    client_for_leg = apisports_client
+                                elif (
+                                    skey == "icehockey_nhl"
+                                    and hockey_client
+                                    and hockey_client.is_configured()
+                                ):
+                                    client_for_leg = hockey_client
+
+                                if client_for_leg:
                                     try:
                                         event_ts = pd.to_datetime(ev.get("commence_time"), utc=True)
                                         tz_label = st.session_state.get('user_timezone') or getattr(tz, 'zone', 'UTC') or 'UTC'
@@ -3328,27 +3451,35 @@ with main_tab1:
                                         except Exception:
                                             target_tz = pytz.timezone('UTC')
                                         local_date = event_ts.tz_convert(target_tz).date()
-                                        cache_key = (local_date.isoformat(), tz_label)
+                                        cache_key = (skey, local_date.isoformat(), tz_label)
 
                                         if cache_key not in apisports_games_cache:
-                                            apisports_games_cache[cache_key] = apisports_client.get_games_by_date(
+                                            apisports_games_cache[cache_key] = client_for_leg.get_games_by_date(
                                                 local_date,
                                                 timezone=tz_label,
                                             )
 
-                                        matched_game = apisports_client.match_game(
+                                        matched_game = client_for_leg.match_game(
                                             apisports_games_cache.get(cache_key, []),
                                             home,
                                             away,
                                         )
 
                                         if matched_game:
-                                            apisports_summary = apisports_client.build_game_summary(
+                                            apisports_summary = client_for_leg.build_game_summary(
                                                 matched_game,
                                                 tz_name=tz_label,
                                             )
-                                            apisports_payload_home = build_leg_apisports_payload(apisports_summary, 'home')
-                                            apisports_payload_away = build_leg_apisports_payload(apisports_summary, 'away')
+                                            apisports_payload_home = build_leg_apisports_payload(
+                                                apisports_summary,
+                                                'home',
+                                                sport_key=skey,
+                                            )
+                                            apisports_payload_away = build_leg_apisports_payload(
+                                                apisports_summary,
+                                                'away',
+                                                sport_key=skey,
+                                            )
                                             total_trend = apisports_payload_home.get('trend') or apisports_payload_away.get('trend')
                                             apisports_payload_total = {
                                                 key: getattr(apisports_summary, attr)
@@ -3362,6 +3493,9 @@ with main_tab1:
                                                 ]
                                                 if getattr(apisports_summary, attr, None)
                                             }
+                                            apisports_payload_total['sport_key'] = skey
+                                            apisports_payload_total['sport_name'] = getattr(apisports_summary, 'sport_name', None)
+                                            apisports_payload_total['scoring_metric'] = getattr(apisports_summary, 'scoring_metric', None)
                                             if total_trend:
                                                 apisports_payload_total['trend'] = total_trend
                                     except Exception:
@@ -5118,52 +5252,104 @@ with main_tab4:
 with main_tab5:
     apisports_client = st.session_state.get('apisports_client')
     if apisports_client is None:
-        apisports_client = APISportsFootballClient()
+        fallback_key, fallback_source = resolve_nfl_apisports_key()
+        apisports_client = APISportsFootballClient(
+            fallback_key or None,
+            key_source=fallback_source,
+        )
         st.session_state['apisports_client'] = apisports_client
 
-    st.header("🏈 API-Sports NFL Live Data")
-    st.markdown("**Pull live NFL context (records, form, scoring trends) directly from api-sports.io**")
-    st.caption("Provide your NFL API-Sports key in the Sports Betting tab to enable these insights.")
+    hockey_client = st.session_state.get('apisports_hockey_client')
+    if hockey_client is None:
+        fallback_key, fallback_source = resolve_nhl_apisports_key()
+        hockey_client = APISportsHockeyClient(
+            fallback_key or None,
+            key_source=fallback_source,
+        )
+        st.session_state['apisports_hockey_client'] = hockey_client
 
-    if not apisports_client or not apisports_client.is_configured():
-        st.warning("Add your NFL API-Sports key in the Sports Betting tab to load live NFL data.")
+    st.header("🛰️ API-Sports Live Data")
+    st.markdown("**Pull live NFL and NHL context (records, form, scoring trends) directly from api-sports.io**")
+
+    league_choice = st.selectbox(
+        "League",
+        options=["NFL", "NHL"],
+        key="apisports_live_league",
+    )
+
+    league_config = {
+        "NFL": {
+            "client": apisports_client,
+            "caption": "Provide your NFL API-Sports key in the Sports Betting tab to enable these insights.",
+            "warning": "Add your NFL API-Sports key in the Sports Betting tab to load live NFL data.",
+            "button": "Fetch NFL games",
+            "spinner": "Loading NFL schedule from API-Sports...",
+            "no_games": "No NFL games found for this date.",
+            "emoji": "🏈",
+        },
+        "NHL": {
+            "client": hockey_client,
+            "caption": "Provide your NHL API-Sports key in the Sports Betting tab to enable these insights.",
+            "warning": "Add your NHL API-Sports key in the Sports Betting tab to load live NHL data.",
+            "button": "Fetch NHL games",
+            "spinner": "Loading NHL schedule from API-Sports...",
+            "no_games": "No NHL games found for this date.",
+            "emoji": "🏒",
+        },
+    }
+
+    config = league_config.get(league_choice, league_config["NFL"])
+    selected_client = config["client"]
+    st.caption(config["caption"])
+
+    if not selected_client or not selected_client.is_configured():
+        st.warning(config["warning"])
     else:
         default_tz = st.session_state.get('user_timezone', 'America/New_York')
-        tz_input = st.text_input("Timezone (IANA)", value=default_tz, key="apisports_live_tz")
+        tz_key = f"apisports_live_tz_{league_choice.lower()}"
+        tz_input = st.text_input("Timezone (IANA)", value=default_tz, key=tz_key)
         try:
             tz_obj = pytz.timezone(tz_input)
         except Exception:
             tz_obj = pytz.timezone('UTC')
             st.warning("Invalid timezone. Using UTC for display.")
 
+        date_key = f"apisports_live_date_{league_choice.lower()}"
         game_date = st.date_input(
             "Game date",
             value=pd.Timestamp.now(tz_obj).date(),
-            key="apisports_live_date"
+            key=date_key,
         )
 
-        if st.button("Fetch NFL games", key="fetch_apisports_games"):
-            with st.spinner("Loading NFL schedule from API-Sports..."):
-                games = apisports_client.get_games_by_date(game_date, timezone=tz_input)
+        if st.button(config["button"], key=f"fetch_apisports_games_{league_choice.lower()}"):
+            with st.spinner(config["spinner"]):
+                games = selected_client.get_games_by_date(game_date, timezone=tz_input)
 
             if not games:
-                if apisports_client.last_error:
-                    st.error(f"API-Sports error: {apisports_client.last_error}")
+                if selected_client.last_error:
+                    st.error(f"API-Sports error: {selected_client.last_error}")
                 else:
-                    st.info("No NFL games found for this date.")
+                    st.info(config["no_games"])
             else:
                 st.success(f"✅ Loaded {len(games)} games")
                 for raw_game in games:
-                    summary = apisports_client.build_game_summary(raw_game, tz_name=tz_input)
+                    summary = selected_client.build_game_summary(raw_game, tz_name=tz_input)
                     home = summary.home
                     away = summary.away
 
                     st.markdown("---")
-                    st.subheader(f"{away.name} @ {home.name}")
+                    st.subheader(f"{config['emoji']} {away.name} @ {home.name}")
+
+                    metric_label = summary.scoring_metric or 'points'
+                    if isinstance(metric_label, str):
+                        metric_lower = metric_label.lower()
+                        metric_text = 'Pts' if metric_lower in ('points', 'point') else metric_label.title()
+                    else:
+                        metric_text = 'Pts'
 
                     col_meta, col_home, col_away = st.columns([2, 2, 2])
                     with col_meta:
-                        st.write(f"Kickoff: {summary.kickoff_local or 'TBD'}")
+                        st.write(f"Start: {summary.kickoff_local or 'TBD'}")
                         st.write(f"Status: {summary.status or 'Scheduled'}")
                         st.write(f"Venue: {summary.venue or 'TBD'}")
                         st.write(f"Stage: {summary.stage or 'Regular Season'}")
@@ -5172,9 +5358,9 @@ with main_tab5:
                         st.write(f"Record: {home.record or '—'}")
                         st.write(f"Form: {home.form or '—'}")
                         if home.average_points_for is not None:
-                            st.write(f"Pts For: {home.average_points_for:.1f}")
+                            st.write(f"{metric_text} For: {home.average_points_for:.1f}")
                         if home.average_points_against is not None:
-                            st.write(f"Pts Allowed: {home.average_points_against:.1f}")
+                            st.write(f"{metric_text} Allowed: {home.average_points_against:.1f}")
                         if home.trend:
                             icon = {'hot': '🔥', 'cold': '🥶', 'neutral': '⚪️'}.get(home.trend, '📊')
                             st.write(f"Trend: {icon} {home.trend.capitalize()}")
@@ -5183,28 +5369,30 @@ with main_tab5:
                         st.write(f"Record: {away.record or '—'}")
                         st.write(f"Form: {away.form or '—'}")
                         if away.average_points_for is not None:
-                            st.write(f"Pts For: {away.average_points_for:.1f}")
+                            st.write(f"{metric_text} For: {away.average_points_for:.1f}")
                         if away.average_points_against is not None:
-                            st.write(f"Pts Allowed: {away.average_points_against:.1f}")
+                            st.write(f"{metric_text} Allowed: {away.average_points_against:.1f}")
                         if away.trend:
                             icon = {'hot': '🔥', 'cold': '🥶', 'neutral': '⚪️'}.get(away.trend, '📊')
                             st.write(f"Trend: {icon} {away.trend.capitalize()}")
 
-                if apisports_client.last_error:
-                    st.info(f"API-Sports notice: {apisports_client.last_error}")
+                if selected_client.last_error:
+                    st.info(f"API-Sports notice: {selected_client.last_error}")
 
         st.markdown("---")
         st.subheader("🌐 API-Sports League Widget")
         st.caption(
-            "Embed the official API-Sports widget to explore leagues beyond the NFL using the same API key."
+            "Embed the official API-Sports widget to explore leagues beyond the configured sport using your key."
         )
 
         widget_key = (
             st.session_state.get('apisports_api_key')
+            or st.session_state.get('nhl_apisports_api_key')
             or (apisports_client.api_key if apisports_client else "")
+            or (hockey_client.api_key if hockey_client else "")
         )
         if not widget_key:
-            st.info("Provide an NFL API-Sports key in the Sports Betting tab to load the widget.")
+            st.info("Provide an NFL or NHL API-Sports key in the Sports Betting tab to load the widget.")
         else:
             sport_labels = {
                 "NFL": "nfl",
@@ -5216,10 +5404,11 @@ with main_tab5:
                 "WNBA": "wnba",
                 "MLS": "mls",
             }
+            default_index = list(sport_labels.keys()).index(league_choice) if league_choice in sport_labels else 0
             selected_label = st.selectbox(
                 "Widget sport",
                 options=list(sport_labels.keys()),
-                index=0,
+                index=default_index,
                 key="apisports_widget_sport",
                 help="Choose which league the API-Sports widget should highlight.",
             )

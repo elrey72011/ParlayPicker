@@ -1,6 +1,6 @@
 # 🎯 ParlayDesk - AI-Enhanced Sports Betting Analysis
 
-AI-powered parlay finder with machine learning predictions trained on historical data from The Odds API, Kalshi market validation, and live NFL context from API-Sports.
+AI-powered parlay finder with machine learning predictions trained on historical data from The Odds API, Kalshi market validation, and live NFL & NHL context from API-Sports.
 
 ![Python](https://img.shields.io/badge/python-3.9+-blue.svg)
 ![Streamlit](https://img.shields.io/badge/streamlit-1.28+-red.svg)
@@ -79,7 +79,7 @@ streamlit run streamlit_app_enhanced.py
 - 🎲 Multi-sport odds aggregation (NFL, NBA, MLB, NHL, etc.)
 - 📊 Parlay combination builder (2-leg, 3-leg, 4-leg)
 - 💰 Expected Value (EV) calculations
-- 🏈 API-Sports NFL live data integration
+- 🛰️ API-Sports NFL & NHL live data integration
 - 🌐 Embedded API-Sports league widget for cross-sport research
 - 📈 Real-time odds from The Odds API
 
@@ -151,16 +151,24 @@ api_key = "your-api-key-here"
 
 Or enter your API key directly in the sidebar.
 
-To enable the NFL live data integration, add your API-Sports token under the `NFL_APISPORTS_API_KEY` secret:
+To enable NFL live data integration, add your API-Sports token under the `NFL_APISPORTS_API_KEY` secret:
 
 ```toml
 # .streamlit/secrets.toml
 NFL_APISPORTS_API_KEY = "your-nfl-api-sports-token"
 ```
 
-The app will automatically pick up that key from Streamlit secrets. If the secret
-isn't defined it falls back to the `NFL_APISPORTS_API_KEY`, `APISPORTS_API_KEY`,
-or `API_SPORTS_KEY` environment variables so existing deployments keep working.
+To enable NHL live data integration, add your hockey token under the `NHL_APISPORTS_API_KEY` secret:
+
+```toml
+# .streamlit/secrets.toml
+NHL_APISPORTS_API_KEY = "your-nhl-api-sports-token"
+```
+
+The app automatically picks up those keys from Streamlit secrets. If the secrets
+aren't defined it falls back to the `NFL_APISPORTS_API_KEY`, `NHL_APISPORTS_API_KEY`,
+`APISPORTS_API_KEY`, or `API_SPORTS_KEY` environment variables so existing deployments
+keep working without additional configuration.
 
 ## 🛠️ Development
 
