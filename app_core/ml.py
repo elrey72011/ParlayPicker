@@ -106,10 +106,20 @@ def _normalize_team_name(name: Optional[str]) -> Optional[str]:
 
 
 def _extract_score(entry: Any) -> Optional[float]:
+    """Return a numeric score from the API-Sports score container.
+
+    Different leagues expose completed-game tallies under sport-specific keys
+    (e.g. hockey uses ``goals`` while baseball relies on ``runs``). The previous
+    implementation only checked for ``total``/``score``/``points`` which meant
+    NHL and MLB results were ignored, leaving historical datasets empty and the
+    logistic models stuck on the heuristic fallback. By normalizing these common
+    aliases we ensure every completed game contributes training data.
+    """
+
     if isinstance(entry, (int, float)):
         return float(entry)
     if isinstance(entry, dict):
-        for key in ("total", "score", "points"):
+        for key in ("total", "score", "points", "goals", "runs"):
             value = entry.get(key)
             if isinstance(value, (int, float)):
                 return float(value)
