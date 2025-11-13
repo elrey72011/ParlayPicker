@@ -1,6 +1,7 @@
 # ParlayDesk_AI_Enhanced.py - v9.1 FIXED
 # AI-Enhanced parlay finder with sentiment analysis, ML predictions, and live market data
 import os, io, json, itertools, re, copy
+from html import escape
 from dataclasses import asdict
 from typing import Dict, Any, List, Tuple, Optional
 from datetime import datetime, timedelta
@@ -8,6 +9,7 @@ import pandas as pd
 import numpy as np
 import requests
 import streamlit as st
+import streamlit.components.v1 as components
 import pytz
 
 from app_core import APISportsBasketballClient, RealSentimentAnalyzer, SentimentAnalyzer
@@ -1742,121 +1744,6 @@ def validate_with_kalshi(kalshi_integrator, home_team: str, away_team: str,
             'market_scope': 'error',
             'data_source': 'error'
         }
-        return
-
-    try:
-        kalshi_data = validate_with_kalshi(kalshi, home_team, away_team, side, base_prob, sport)
-    except Exception:
-        leg_data['kalshi_validation'] = {
-            'kalshi_available': False,
-            'validation': 'error',
-            'edge': 0,
-            'confidence_boost': 0,
-            'market_scope': 'error',
-            'data_source': 'error'
-        }
-        return
-
-    leg_data['kalshi_validation'] = kalshi_data
-
-    if not kalshi_data.get('kalshi_available'):
-        return
-
-    original_ai_prob = leg_data.get('ai_prob', base_prob)
-    kalshi_prob = kalshi_data.get('kalshi_prob', base_prob)
-
-    blended_prob = (
-        original_ai_prob * 0.50 +  # AI model
-        kalshi_prob * 0.30 +       # Kalshi market
-        base_prob * 0.20           # Sportsbook baseline
-    )
-
-    leg_data['ai_prob_before_kalshi'] = original_ai_prob
-    leg_data['ai_prob'] = blended_prob
-    leg_data['kalshi_influence'] = blended_prob - original_ai_prob
-    leg_data['kalshi_edge'] = kalshi_data.get('edge', 0)
-    leg_data['ai_confidence'] = min(
-        leg_data.get('ai_confidence', 0.5) + kalshi_data.get('confidence_boost', 0),
-        0.95
-    )
-
-# Helper to apply Kalshi validation to a betting leg in-place
-def integrate_kalshi_into_leg(
-    leg_data: Dict[str, Any],
-    home_team: str,
-    away_team: str,
-    side: str,
-    base_prob: float,
-    sport: str,
-    use_kalshi: bool,
-) -> None:
-    """Mutate a leg dictionary with Kalshi validation + probability blending."""
-
-    # Ensure downstream code sees the reason when Kalshi is not active
-    if not use_kalshi:
-        leg_data.setdefault('kalshi_validation', {
-            'kalshi_available': False,
-            'validation': 'disabled',
-            'edge': 0,
-            'confidence_boost': 0,
-            'market_scope': 'disabled',
-            'data_source': 'disabled'
-        })
-        return
-
-    kalshi = None
-    try:
-        kalshi = st.session_state.get('kalshi_integrator')
-    except Exception:
-        # When Streamlit session state isn't available (e.g. testing), skip gracefully
-        pass
-
-    if not kalshi:
-        leg_data['kalshi_validation'] = {
-            'kalshi_available': False,
-            'validation': 'unavailable',
-            'edge': 0,
-            'confidence_boost': 0,
-            'market_scope': 'not_initialized',
-            'data_source': 'unavailable'
-        }
-        return
-
-    try:
-        kalshi_data = validate_with_kalshi(kalshi, home_team, away_team, side, base_prob, sport)
-    except Exception:
-        leg_data['kalshi_validation'] = {
-            'kalshi_available': False,
-            'validation': 'error',
-            'edge': 0,
-            'confidence_boost': 0,
-            'market_scope': 'error',
-            'data_source': 'error'
-        }
-        return
-
-    leg_data['kalshi_validation'] = kalshi_data
-
-    if not kalshi_data.get('kalshi_available'):
-        return
-
-    original_ai_prob = leg_data.get('ai_prob', base_prob)
-    kalshi_prob = kalshi_data.get('kalshi_prob', base_prob)
-
-    blended_prob = (
-        original_ai_prob * 0.50 +  # AI model
-        kalshi_prob * 0.30 +       # Kalshi market
-        base_prob * 0.20           # Sportsbook baseline
-    )
-
-    leg_data['ai_prob_before_kalshi'] = original_ai_prob
-    leg_data['ai_prob'] = blended_prob
-    leg_data['kalshi_influence'] = blended_prob - original_ai_prob
-    leg_data['kalshi_edge'] = kalshi_data.get('edge', 0)
-    leg_data['ai_confidence'] = min(
-        leg_data.get('ai_confidence', 0.5) + kalshi_data.get('confidence_boost', 0),
-        0.95
-    )
 
 # Helper to apply Kalshi validation to a betting leg in-place
 def integrate_kalshi_into_leg(
@@ -5196,4 +5083,72 @@ with main_tab5:
 
                 if apisports_client.last_error:
                     st.info(f"API-Sports notice: {apisports_client.last_error}")
+
+        st.markdown("---")
+        st.subheader("🌐 API-Sports League Widget")
+        st.caption(
+            "Embed the official API-Sports widget to explore leagues beyond the NBA using the same API key."
+        )
+
+        widget_key = (
+            st.session_state.get('apisports_api_key')
+            or (apisports_client.api_key if apisports_client else "")
+        )
+        if not widget_key:
+            st.info("Provide an API-Sports key in the Sports Betting tab to load the widget.")
+        else:
+            sport_labels = {
+                "NFL": "nfl",
+                "NBA": "nba",
+                "MLB": "mlb",
+                "NHL": "nhl",
+                "NCAAB": "ncaab",
+                "NCAAF": "ncaaf",
+                "WNBA": "wnba",
+                "MLS": "mls",
+            }
+            selected_label = st.selectbox(
+                "Widget sport",
+                options=list(sport_labels.keys()),
+                index=1,
+                key="apisports_widget_sport",
+                help="Choose which league the API-Sports widget should highlight.",
+            )
+            theme_label = st.selectbox(
+                "Widget theme",
+                options=["Light", "Dark"],
+                index=0,
+                key="apisports_widget_theme",
+            )
+            show_widget_errors = st.checkbox(
+                "Show API error messages in widget",
+                value=True,
+                key="apisports_widget_errors",
+            )
+            widget_height = st.slider(
+                "Widget height (px)",
+                400,
+                900,
+                600,
+                50,
+                key="apisports_widget_height",
+            )
+
+            widget_theme = "white" if theme_label == "Light" else "dark"
+            widget_sport = sport_labels.get(selected_label, "nfl")
+
+            widget_html = f"""
+            <div class=\"apisports-widget\">
+              <script type=\"module\" src=\"https://widgets.api-sports.io/2.0.3/widgets.js\"></script>
+              <api-sports-widget data-type=\"config\"
+                data-key=\"{escape(widget_key)}\"
+                data-sport=\"{escape(widget_sport)}\"
+                data-lang=\"en\"
+                data-theme=\"{escape(widget_theme)}\"
+                data-show-errors=\"{str(show_widget_errors).lower()}\"
+              ></api-sports-widget>
+              <api-sports-widget data-type=\"leagues\"></api-sports-widget>
+            </div>
+            """
+            components.html(widget_html, height=widget_height, scrolling=True)
 

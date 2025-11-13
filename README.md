@@ -80,6 +80,7 @@ streamlit run streamlit_app_enhanced.py
 - 📊 Parlay combination builder (2-leg, 3-leg, 4-leg)
 - 💰 Expected Value (EV) calculations
 - 🏀 API-Sports NBA live data integration
+- 🌐 Embedded API-Sports league widget for cross-sport research
 - 📈 Real-time odds from The Odds API
 
 ### Enhanced Version (Additional)
