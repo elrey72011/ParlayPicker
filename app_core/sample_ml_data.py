@@ -282,8 +282,14 @@ _GENERIC_TEMPLATE = {
 _TEMPLATES.setdefault(
     "generic",
     [
-        GENERIC_TEMPLATE,
-        {**GENERIC_TEMPLATE, "home_win": 0, "sentiment_diff": -0.07, "home_ml_implied": 0.44, "away_ml_implied": 0.56},
+        dict(_GENERIC_TEMPLATE),
+        {
+            **_GENERIC_TEMPLATE,
+            "home_win": 0,
+            "sentiment_diff": -0.07,
+            "home_ml_implied": 0.44,
+            "away_ml_implied": 0.56,
+        },
     ],
 )
 
