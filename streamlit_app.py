@@ -2924,7 +2924,7 @@ except Exception as tab_error:  # pragma: no cover - defensive fallback
     logger.debug(
         "Falling back to container-based layout for tabs: %s",
         tab_error,
-        exc_info=True,)
+        exc_info=True,
     )
 
 if len(tabs) != len(tab_labels):  # pragma: no cover - ultra-defensive guard
