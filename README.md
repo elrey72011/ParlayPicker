@@ -1,6 +1,6 @@
 # 🎯 ParlayDesk - AI-Enhanced Sports Betting Analysis
 
-AI-powered parlay finder with machine learning predictions trained on historical data from The Odds API.
+AI-powered parlay finder with machine learning predictions trained on historical data from The Odds API, Kalshi market validation, and live NFL context from API-Sports.
 
 ![Python](https://img.shields.io/badge/python-3.9+-blue.svg)
 ![Streamlit](https://img.shields.io/badge/streamlit-1.28+-red.svg)
@@ -79,7 +79,8 @@ streamlit run streamlit_app_enhanced.py
 - 🎲 Multi-sport odds aggregation (NFL, NBA, MLB, NHL, etc.)
 - 📊 Parlay combination builder (2-leg, 3-leg, 4-leg)
 - 💰 Expected Value (EV) calculations
-- 🏆 PrizePicks player prop analyzer
+- 🏈 API-Sports NFL live data integration
+- 🌐 Embedded API-Sports league widget for cross-sport research
 - 📈 Real-time odds from The Odds API
 
 ### Enhanced Version (Additional)
@@ -149,6 +150,13 @@ api_key = "your-api-key-here"
 ```
 
 Or enter your API key directly in the sidebar.
+
+To enable the NFL live data integration, add your API-Sports token under the `NFL_APISPORTS_API_KEY` secret:
+
+```toml
+# .streamlit/secrets.toml
+NFL_APISPORTS_API_KEY = "your-nfl-api-sports-token"
+```
 
 ## 🛠️ Development
 
