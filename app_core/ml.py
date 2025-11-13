@@ -266,6 +266,16 @@ class HistoricalDataBuilder:
         if sport_key and client:
             self._clients[sport_key] = client
 
+    def reset_cache(self) -> None:
+        """Clear cached datasets and errors to reduce memory footprint."""
+
+        self._dataset_cache.clear()
+        self._dataset_timestamp.clear()
+        self._dataset_attempt_timestamp.clear()
+        self._dataset_errors.clear()
+        self._dataset_metadata.clear()
+        self._odds_cache.clear()
+
     # ------------------------------------------------------------------
     def get_dataset(self, sport_key: Optional[str], rebuild: bool = False) -> pd.DataFrame:
         if not sport_key:
