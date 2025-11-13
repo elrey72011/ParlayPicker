@@ -21,6 +21,12 @@ from app_core import (
     SentimentAnalyzer,
 )
 
+from pathlib import Path
+
+# Cache directory for historical data and models  
+CACHE_DIR = Path("/home/claude/historical_cache")
+CACHE_DIR.mkdir(exist_ok=True)
+
 # ============ HELPER FUNCTIONS ============
 def american_to_decimal_safe(odds) -> Optional[float]:
     """
@@ -299,6 +305,61 @@ SPORT_KEY_TO_LEAGUE: Dict[str, str] = {
 # (moved to app_core.sentiment so it can be reused without importing the
 # Streamlit UI. RealSentimentAnalyzer and SentimentAnalyzer are imported above.)
 
+# ============ ENHANCED MODEL MANAGEMENT ============
+class EnhancedModelManager:
+    """Manages training, caching, and validation of ML models"""
+    
+    def __init__(self, cache_dir: Path):
+        self.cache_dir = cache_dir
+        self.models_dir = cache_dir / "models"
+        self.datasets_dir = cache_dir / "datasets"
+        self.performance_dir = cache_dir / "performance"
+        
+        self.models_dir.mkdir(exist_ok=True)
+        self.datasets_dir.mkdir(exist_ok=True)
+        self.performance_dir.mkdir(exist_ok=True)
+    
+    def get_model_path(self, sport_key: str) -> Path:
+        return self.models_dir / f"{sport_key}_model.pkl"
+    
+    def model_exists(self, sport_key: str) -> bool:
+        return self.get_model_path(sport_key).exists()
+    
+    def get_model_age(self, sport_key: str) -> Optional[timedelta]:
+        model_path = self.get_model_path(sport_key)
+        if not model_path.exists():
+            return None
+        mtime = datetime.fromtimestamp(model_path.stat().st_mtime)
+        return datetime.now() - mtime
+    
+    def get_performance_path(self, sport_key: str) -> Path:
+        return self.performance_dir / f"{sport_key}_performance.json"
+    
+    def load_performance_metrics(self, sport_key: str) -> Optional[Dict]:
+        perf_path = self.get_performance_path(sport_key)
+        if not perf_path.exists():
+            return None
+        try:
+            with open(perf_path, 'r') as f:
+                return json.load(f)
+        except Exception:
+            return None
+    
+    def save_performance_metrics(self, sport_key: str, metrics: Dict):
+        perf_path = self.get_performance_path(sport_key)
+        try:
+            with open(perf_path, 'w') as f:
+                json.dump(metrics, f, indent=2)
+        except Exception as e:
+            st.warning(f"Could not save performance metrics: {e}")
+    
+    def get_all_trained_sports(self) -> List[str]:
+        trained = []
+        for model_file in self.models_dir.glob("*_model.pkl"):
+            sport_key = model_file.stem.replace("_model", "")
+            trained.append(sport_key)
+        return trained
+
 # ============ AI PARLAY OPTIMIZER ============
 class AIOptimizer:
     """Optimizes parlay selection using AI insights"""
@@ -425,6 +486,129 @@ class AIOptimizer:
             'apisports_boost': apisports_boost,
             'apisports_sports': sorted(apisports_sports),
         }
+
+# ============ ML TRAINING TAB ============
+def render_ml_training_tab(api_key: str, ml_predictor, model_manager):
+    """Dedicated tab for training ML models"""
+    
+    st.header("🧠 Machine Learning Model Training")
+    st.markdown("**Train predictive models on historical odds and outcomes**")
+    
+    if not api_key:
+        st.error("⚠️ Please enter your Odds API key first")
+        return
+    
+    st.markdown("---")
+    st.subheader("📊 Current Model Status")
+    
+    trained_sports = model_manager.get_all_trained_sports()
+    
+    if not trained_sports:
+        st.info("No models trained yet. Train your first model below!")
+    else:
+        st.success(f"✅ {len(trained_sports)} sports have trained models")
+        
+        cols = st.columns(min(3, len(trained_sports)))
+        for idx, sport_key in enumerate(trained_sports):
+            with cols[idx % 3]:
+                age = model_manager.get_model_age(sport_key)
+                perf = model_manager.load_performance_metrics(sport_key)
+                
+                st.markdown(f"**{sport_key.upper()}**")
+                if age:
+                    st.caption(f"Trained {age.days} days ago" if age.days > 0 else "Trained today")
+                if perf:
+                    st.metric("Accuracy", f"{perf.get('accuracy', 0)*100:.1f}%")
+                    st.caption(f"{perf.get('training_size', 0)} games")
+                    if age and age.days > 7:
+                        st.warning("⚠️ Consider retraining")
+    
+    st.markdown("---")
+    st.subheader("⚙️ Train New Model")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        train_sport = st.selectbox("Sport to Train", APP_CFG["sports_common"], key="train_sport")
+    with col2:
+        days_back = st.slider("Days of Historical Data", 7, 180, 45, 7)
+    
+    st.info(f"📊 Training will use ~{days_back * 2} API calls")
+    
+    if st.button("🚀 Start Training", type="primary"):
+        progress_container = st.empty()
+        status_container = st.empty()
+        
+        try:
+            # Download data
+            status_container.info("📥 Downloading historical data...")
+            progress_container.progress(0.3)
+            
+            dataset = ml_predictor.data_builder.get_dataset(train_sport, rebuild=True)
+            
+            if dataset.empty:
+                st.error("❌ No historical data available")
+                return
+            
+            status_container.info(f"✅ Downloaded {len(dataset)} games")
+            progress_container.progress(0.6)
+            
+            # Train model
+            status_container.info("🧠 Training ML model...")
+            model = ml_predictor._ensure_model(train_sport)
+            
+            if model is None:
+                st.error("❌ Training failed")
+                return
+            
+            progress_container.progress(0.9)
+            
+            # Calculate metrics
+            from app_core.ml import FEATURE_COLUMNS
+            from sklearn.model_selection import train_test_split
+            from sklearn.metrics import classification_report, confusion_matrix
+            
+            X = dataset.reindex(columns=FEATURE_COLUMNS).to_numpy(dtype=float)
+            y = dataset["home_win"].to_numpy(dtype=int)
+            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+            
+            test_accuracy = model.score(X_test, y_test)
+            y_pred = model.predict(X_test)
+            report = classification_report(y_test, y_pred, output_dict=True)
+            
+            # Save metrics
+            metrics = {
+                'sport_key': train_sport,
+                'training_date': datetime.now().isoformat(),
+                'training_size': ml_predictor._training_rows.get(train_sport, 0),
+                'accuracy': test_accuracy,
+                'precision': report['1']['precision'],
+                'recall': report['1']['recall'],
+                'f1_score': report['1']['f1-score'],
+                'days_back': days_back,
+            }
+            model_manager.save_performance_metrics(train_sport, metrics)
+            
+            progress_container.progress(1.0)
+            status_container.empty()
+            
+            st.success(f"✅ Model trained! Accuracy: {test_accuracy*100:.1f}%")
+            
+            # Show results
+            col1, col2, col3, col4 = st.columns(4)
+            col1.metric("Accuracy", f"{test_accuracy*100:.1f}%")
+            col2.metric("Precision", f"{report['1']['precision']*100:.1f}%")
+            col3.metric("Recall", f"{report['1']['recall']*100:.1f}%")
+            col4.metric("F1 Score", f"{report['1']['f1-score']*100:.1f}%")
+            
+            if test_accuracy > 0.58:
+                st.success("🟢 Excellent model!")
+            elif test_accuracy > 0.54:
+                st.info("🟡 Good model")
+            else:
+                st.warning("🟠 Fair model - consider more data")
+        
+        except Exception as e:
+            st.error(f"❌ Error: {str(e)}")
 
 # ============ KALSHI INTEGRATION ============
 
@@ -2835,6 +3019,10 @@ if 'sentiment_analyzer' not in st.session_state:
     news_key = os.environ.get("NEWS_API_KEY", "")
     st.session_state['sentiment_analyzer'] = RealSentimentAnalyzer(news_key)
     st.session_state['news_api_key'] = news_key
+    
+# Add to your existing initialization
+if 'model_manager' not in st.session_state:
+    st.session_state['model_manager'] = EnhancedModelManager(CACHE_DIR)
 if 'historical_data_builder' not in st.session_state:
     st.session_state['historical_data_builder'] = HistoricalDataBuilder(
         lambda: st.session_state.get('api_key', "") or os.environ.get("ODDS_API_KEY", "")
@@ -2897,13 +3085,22 @@ elif 'nhl_apisports_api_key' not in st.session_state:
     )
 
 # Main navigation tabs
-main_tab1, main_tab2, main_tab3, main_tab4, main_tab5 = st.tabs([
+main_tab1, main_tab2, main_tab3, main_tab4, main_tab5, main_tab6 = st.tabs([
+    "🧠 ML Training",  # NEW
     "🎯 Sports Betting Parlays",
     "🔍 Sentiment & AI Analysis",
     "🎨 Custom Parlay Builder",
     "📊 Kalshi Prediction Markets",
     "🛰️ API-Sports Live Data"
 ])
+
+# ===== NEW TAB 1: ML TRAINING =====
+with main_tab1:
+    render_ml_training_tab(
+        st.session_state.get('api_key', ""),
+        st.session_state.get('ml_predictor'),
+        st.session_state.get('model_manager')
+    )
 
 # ===== TAB 1: SPORTS BETTING PARLAYS =====
 with main_tab1:
@@ -2975,6 +3172,23 @@ with main_tab1:
                 if st.button("Change key"):
                     st.session_state['show_api_section'] = True
                     st.rerun()
+
+with st.sidebar:
+    # ... your existing sidebar code ...
+    
+    st.markdown("---")
+    st.subheader("🧠 ML Models")
+    model_manager = st.session_state.get('model_manager')
+    if model_manager:
+        trained = model_manager.get_all_trained_sports()
+        if trained:
+            st.success(f"✅ {len(trained)} trained")
+            for sport in trained[:3]:
+                age = model_manager.get_model_age(sport)
+                if age:
+                    st.caption(f"{sport.split('_')[-1].upper()}: {age.days}d old")
+        else:
+            st.info("No models yet")
     
     # News API Configuration (for real sentiment)
     st.markdown("---")
