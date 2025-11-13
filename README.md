@@ -81,7 +81,9 @@ API-Sports Schedules + The Odds API → Feature Engineering → Logistic Pipelin
 
 When the current season hasn't produced enough completed games (such as early in the offseason), the builder automatically
 backfills with earlier campaigns—including the full 2024 schedules for NFL and NHL—so the logistic model still trains on a
-balanced dataset before influencing the parlay analysis.
+balanced dataset before influencing the parlay analysis. If the live feeds remain sparse even after those backfills, the
+trainer tops up the dataset with a small synthetic sample so the logistic model stays calibrated; the Streamlit status panel
+calls out how many "booster" rows were injected alongside the real games.
 
 **Example Pattern Learned:**
 ```

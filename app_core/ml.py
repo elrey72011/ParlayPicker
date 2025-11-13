@@ -9,6 +9,8 @@ import numpy as np
 import pandas as pd
 import requests
 
+from .sample_ml_data import build_sample_rows
+
 try:  # pragma: no cover - optional dependency shim
     from sklearn.linear_model import LogisticRegression
     from sklearn.pipeline import Pipeline
@@ -269,6 +271,9 @@ class HistoricalDataBuilder:
             "max_days_back": None,
             "season_backfills": None,
             "min_rows_target": self.min_rows_target,
+            "sample_rows_added": None,
+            "real_rows": 0,
+            "used_sample_data": False,
         }
 
         if not sport_key:
@@ -288,6 +293,9 @@ class HistoricalDataBuilder:
             info["seasons"] = metadata.get("seasons")
             info["max_days_back"] = metadata.get("max_days_back")
             info["season_backfills"] = metadata.get("season_backfills")
+            info["sample_rows_added"] = metadata.get("sample_rows_added")
+            info["real_rows"] = metadata.get("real_rows")
+            info["used_sample_data"] = metadata.get("used_sample_data")
         return info
 
     # ------------------------------------------------------------------
@@ -310,6 +318,7 @@ class HistoricalDataBuilder:
         season_backfills: List[str] = []
         seen_keys: Set[Tuple[str, ...]] = set()
         max_offset_used = 0
+        sample_rows_added = 0
 
         def collect_by_dates(start_offset: int, end_offset: int) -> None:
             nonlocal max_offset_used
@@ -367,10 +376,22 @@ class HistoricalDataBuilder:
                 if len(rows) >= self.min_rows_target:
                     break
 
+        real_rows_before_samples = len(rows)
+
+        if len(rows) < self.min_rows_target:
+            rows_needed = self.min_rows_target - len(rows)
+            sample_rows = build_sample_rows(sport_key, rows_needed)
+            if sample_rows:
+                rows.extend(sample_rows)
+                sample_rows_added = len(sample_rows)
+
         metadata = {
             "seasons": sorted(seasons_used) if seasons_used else None,
             "max_days_back": max_offset_used if max_offset_used else None,
             "season_backfills": season_backfills if season_backfills else None,
+            "sample_rows_added": sample_rows_added or None,
+            "real_rows": real_rows_before_samples,
+            "used_sample_data": bool(sample_rows_added),
         }
         self._dataset_metadata[sport_key] = metadata
 
@@ -668,6 +689,9 @@ class HistoricalMLPredictor:
         info["dataset_max_days_back"] = dataset_info.get("max_days_back")
         info["season_backfills"] = dataset_info.get("season_backfills")
         info["min_rows_target"] = dataset_info.get("min_rows_target")
+        info["sample_rows_added"] = dataset_info.get("sample_rows_added")
+        info["real_rows"] = dataset_info.get("real_rows")
+        info["used_sample_data"] = dataset_info.get("used_sample_data")
 
         if dataset.empty or len(dataset) < self.min_rows or dataset["home_win"].nunique() < 2:
             info["training_rows"] = int(len(dataset))
