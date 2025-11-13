@@ -20,8 +20,8 @@ from app_core import (
     HistoricalMLPredictor,
     MLPredictor,
     RealSentimentAnalyzer,
-    SentimentAnalyzer,
-)
+    SentimentAnalyzer,)
+
 
 logger = logging.getLogger(__name__)
 
