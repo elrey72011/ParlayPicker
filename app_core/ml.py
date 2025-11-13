@@ -118,11 +118,36 @@ def _extract_score(entry: Any) -> Optional[float]:
 
     if isinstance(entry, (int, float)):
         return float(entry)
+    if isinstance(entry, str):
+        try:
+            return float(entry)
+        except ValueError:
+            return None
     if isinstance(entry, dict):
         for key in ("total", "score", "points", "goals", "runs"):
             value = entry.get(key)
             if isinstance(value, (int, float)):
                 return float(value)
+            if isinstance(value, str):
+                try:
+                    return float(value)
+                except ValueError:
+                    pass
+            if isinstance(value, dict):
+                for nested_key in ("total", "fulltime", "current", "final"):
+                    nested_value = value.get(nested_key)
+                    if isinstance(nested_value, (int, float)):
+                        return float(nested_value)
+                    if isinstance(nested_value, str):
+                        try:
+                            return float(nested_value)
+                        except ValueError:
+                            continue
+        # Some sports embed the scoring metric deeper (e.g., period breakdowns).
+        for nested in entry.values():
+            result = _extract_score(nested)
+            if result is not None:
+                return result
     return None
 
 
