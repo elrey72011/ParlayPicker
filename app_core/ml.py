@@ -8,10 +8,19 @@ from typing import Any, Callable, Dict, Optional, Tuple, Set, List
 import numpy as np
 import pandas as pd
 import requests
-from sklearn.linear_model import LogisticRegression
-from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import StandardScaler
-from sklearn.impute import SimpleImputer
+
+try:  # pragma: no cover - optional dependency shim
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.pipeline import Pipeline
+    from sklearn.preprocessing import StandardScaler
+    from sklearn.impute import SimpleImputer
+    SKLEARN_AVAILABLE = True
+except Exception:  # noqa: BLE001 - surface gracefully
+    LogisticRegression = None  # type: ignore[assignment]
+    Pipeline = None  # type: ignore[assignment]
+    StandardScaler = None  # type: ignore[assignment]
+    SimpleImputer = None  # type: ignore[assignment]
+    SKLEARN_AVAILABLE = False
 
 ODDS_BASE_URL = "https://api.the-odds-api.com"
 
@@ -624,7 +633,7 @@ class HistoricalMLPredictor:
 
     def __init__(self, data_builder: HistoricalDataBuilder) -> None:
         self.data_builder = data_builder
-        self._models: Dict[str, Pipeline] = {}
+        self._models: Dict[str, Any] = {}
         self._model_timestamp: Dict[str, datetime] = {}
         self._training_rows: Dict[str, int] = {}
         self.min_rows = 25
@@ -666,6 +675,13 @@ class HistoricalMLPredictor:
             info["last_trained"] = self._model_timestamp.get(sport_key)
             return info
 
+        if not SKLEARN_AVAILABLE:
+            info["training_rows"] = int(len(dataset))
+            info["model_ready"] = False
+            info["error"] = info.get("error") or "sklearn_not_available"
+            info["last_trained"] = self._model_timestamp.get(sport_key)
+            return info
+
         model = self._ensure_model(sport_key)
         info["model_ready"] = model is not None and sport_key in self._models
         info["last_trained"] = self._model_timestamp.get(sport_key)
@@ -673,12 +689,16 @@ class HistoricalMLPredictor:
         return info
 
     # ------------------------------------------------------------------
-    def _ensure_model(self, sport_key: Optional[str]) -> Optional[Pipeline]:
+    def _ensure_model(self, sport_key: Optional[str]) -> Optional[Any]:
         if not sport_key:
             return None
 
         dataset = self.data_builder.get_dataset(sport_key)
         if dataset.empty or dataset["home_win"].nunique() < 2 or len(dataset) < self.min_rows:
+            return None
+
+        if not SKLEARN_AVAILABLE:
+            self._training_rows[sport_key] = len(dataset)
             return None
 
         needs_retrain = False
