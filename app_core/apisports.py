@@ -57,6 +57,7 @@ class _APISportsBaseClient:
     SCORING_METRIC_LABEL: str = "points"
     SEASON_CUTOFF_MONTH: int = 1
     SEASON_FORMAT: str = "single"  # "single" -> "2024", "split" -> "2023-2024"
+    MIN_BACKFILL_YEAR: Optional[int] = None
 
     def __init__(
         self,
@@ -496,6 +497,7 @@ class APISportsBasketballClient(_APISportsBaseClient):
     SCORING_METRIC_LABEL = "points"
     SEASON_CUTOFF_MONTH = 7
     SEASON_FORMAT = "split"
+    MIN_BACKFILL_YEAR = 2024
 
 
 class APISportsHockeyClient(_APISportsBaseClient):

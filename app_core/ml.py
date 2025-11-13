@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta
+import re
 from typing import Any, Callable, Dict, Optional, Tuple, Set, List
 
 import numpy as np
@@ -114,6 +115,18 @@ def _normalize_team_name(name: Optional[str]) -> Optional[str]:
     if not name:
         return None
     return "".join(ch for ch in name.upper() if ch.isalnum())
+
+
+def _season_label_meets_minimum(label: str, minimum_year: int) -> bool:
+    """Return True when the season identifier is at or above the minimum year."""
+
+    try:
+        years = [int(part) for part in re.findall(r"\d{4}", label)]
+    except ValueError:
+        years = []
+    if not years:
+        return True
+    return min(years) >= minimum_year
 
 
 def _extract_score(entry: Any) -> Optional[float]:
@@ -431,6 +444,10 @@ class HistoricalDataBuilder:
                 if season_label is None:
                     continue
                 label = str(season_label)
+                minimum_year = getattr(client, "MIN_BACKFILL_YEAR", None)
+                if isinstance(minimum_year, int) and minimum_year > 0:
+                    if not _season_label_meets_minimum(label, minimum_year):
+                        continue
                 if label and label not in candidates:
                     candidates.append(label)
         return candidates
