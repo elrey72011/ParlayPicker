@@ -54,6 +54,169 @@ APP_CFG: Dict[str, Any] = {
 }
 
 
+def render_sidebar_controls() -> Dict[str, Any]:
+    """Render configuration controls in the Streamlit sidebar."""
+
+    sidebar = st.sidebar
+    sidebar.header("⚙️ Control Center")
+
+    # --------------------- Odds API key ---------------------
+    st.session_state.setdefault('api_key', os.environ.get("ODDS_API_KEY", ""))
+    odds_api_input = sidebar.text_input(
+        "The Odds API key",
+        value=st.session_state.get('api_key', ""),
+        type="password",
+        help="Stored for this session so live odds and historical snapshots can load.",
+    ).strip()
+    if odds_api_input != st.session_state.get('api_key', ""):
+        st.session_state['api_key'] = odds_api_input
+    if st.session_state.get('api_key'):
+        sidebar.caption("✅ The Odds API key configured")
+    else:
+        sidebar.caption("❌ Enter your The Odds API key to fetch odds data")
+
+    # --------------------- News API key ---------------------
+    st.session_state.setdefault('news_api_key', os.environ.get("NEWS_API_KEY", ""))
+    news_api_input = sidebar.text_input(
+        "NewsAPI key (sentiment)",
+        value=st.session_state.get('news_api_key', ""),
+        type="password",
+        help="Optional. Enables real news sentiment analysis when provided.",
+    ).strip()
+    if news_api_input != st.session_state.get('news_api_key', ""):
+        st.session_state['news_api_key'] = news_api_input
+        st.session_state['sentiment_analyzer'] = RealSentimentAnalyzer(news_api_input or None)
+    if st.session_state.get('news_api_key'):
+        sidebar.caption("📰 Live sentiment enabled")
+    else:
+        sidebar.caption("ℹ️ Using neutral fallback sentiment")
+
+    # --------------------- API-Sports keys ---------------------
+    st.session_state.setdefault('apisports_api_key', resolve_nfl_apisports_key()[0])
+    st.session_state.setdefault('apisports_key_source', resolve_nfl_apisports_key()[1])
+    nfl_key_input = sidebar.text_input(
+        "NFL API-Sports key",
+        value=st.session_state.get('apisports_api_key', ""),
+        type="password",
+        help="Used for live NFL context and historical model training.",
+    ).strip()
+    if nfl_key_input != st.session_state.get('apisports_api_key', ""):
+        st.session_state['apisports_api_key'] = nfl_key_input
+        st.session_state['apisports_key_source'] = "user"
+
+    st.session_state.setdefault('nhl_apisports_api_key', resolve_nhl_apisports_key()[0])
+    st.session_state.setdefault('nhl_apisports_key_source', resolve_nhl_apisports_key()[1])
+    nhl_key_input = sidebar.text_input(
+        "NHL API-Sports key",
+        value=st.session_state.get('nhl_apisports_api_key', ""),
+        type="password",
+        help="Used for live NHL context and historical model training.",
+    ).strip()
+    if nhl_key_input != st.session_state.get('nhl_apisports_api_key', ""):
+        st.session_state['nhl_apisports_api_key'] = nhl_key_input
+        st.session_state['nhl_apisports_key_source'] = "user"
+
+    # --------------------- Time & sport filters ---------------------
+    sidebar.subheader("📅 Filters")
+    default_tz_name = st.session_state.get('user_timezone', 'America/New_York')
+    tz_input = sidebar.text_input(
+        "Timezone (IANA)",
+        value=default_tz_name,
+        help="Controls how kickoff times and date filters are interpreted.",
+    ).strip() or default_tz_name
+    try:
+        tz_obj = pytz.timezone(tz_input)
+        tz_name = getattr(tz_obj, 'zone', tz_input) or tz_input
+    except Exception:
+        tz_obj = pytz.timezone('UTC')
+        tz_name = 'UTC'
+        sidebar.warning("Invalid timezone entered. Defaulting to UTC.")
+    st.session_state['user_timezone'] = tz_name
+
+    default_date = st.session_state.get('selected_date')
+    if not default_date:
+        default_date = datetime.now(tz_obj).date()
+    sel_date = sidebar.date_input(
+        "Focus date",
+        value=default_date,
+        help="Only bets within the selected window around this date are shown.",
+    )
+    st.session_state['selected_date'] = sel_date
+
+    day_window = sidebar.slider(
+        "Include events within ±N days",
+        0,
+        7,
+        int(st.session_state.get('day_window', 0) or 0),
+        1,
+    )
+    st.session_state['day_window'] = day_window
+
+    default_sports = st.session_state.get('selected_sports')
+    if not default_sports:
+        default_sports = APP_CFG["sports_common"][:6]
+    sports = sidebar.multiselect(
+        "Sports keys",
+        options=APP_CFG["sports_common"],
+        default=default_sports,
+    )
+    st.session_state['selected_sports'] = sports
+
+    # --------------------- AI settings ---------------------
+    ai_expander = sidebar.expander("🤖 AI Settings", expanded=False)
+    with ai_expander:
+        use_sentiment = ai_expander.checkbox(
+            "Enable Sentiment Analysis",
+            value=st.session_state.get('use_sentiment', True),
+            help="Analyze news sentiment for each team when computing edges.",
+        )
+        use_ml_predictions = ai_expander.checkbox(
+            "Enable ML Predictions",
+            value=st.session_state.get('use_ml_predictions', True),
+            help="Blend trained historical models into probability estimates.",
+        )
+        min_ai_confidence = ai_expander.slider(
+            "Minimum AI Confidence",
+            0.0,
+            1.0,
+            float(st.session_state.get('min_ai_confidence', 0.60) or 0.60),
+            0.05,
+        )
+        min_parlay_probability = ai_expander.slider(
+            "Minimum Parlay Probability",
+            0.20,
+            0.60,
+            float(st.session_state.get('min_parlay_probability', 0.30) or 0.30),
+            0.05,
+        )
+        max_parlay_probability = ai_expander.slider(
+            "Maximum Parlay Probability",
+            0.45,
+            0.85,
+            float(st.session_state.get('max_parlay_probability', 0.65) or 0.65),
+            0.05,
+        )
+
+    st.session_state['use_sentiment'] = use_sentiment
+    st.session_state['use_ml_predictions'] = use_ml_predictions
+    st.session_state['min_ai_confidence'] = min_ai_confidence
+    st.session_state['min_parlay_probability'] = min_parlay_probability
+    st.session_state['max_parlay_probability'] = max_parlay_probability
+
+    return {
+        "tz": tz_obj,
+        "timezone_name": tz_name,
+        "selected_date": sel_date,
+        "day_window": day_window,
+        "sports": sports,
+        "use_sentiment": use_sentiment,
+        "use_ml_predictions": use_ml_predictions,
+        "min_ai_confidence": min_ai_confidence,
+        "min_parlay_probability": min_parlay_probability,
+        "max_parlay_probability": max_parlay_probability,
+    }
+
+
 def resolve_nfl_apisports_key() -> Tuple[str, Optional[str]]:
     """Locate the NFL API-Sports key from Streamlit secrets or the environment."""
 
@@ -1710,7 +1873,6 @@ def validate_with_kalshi(kalshi_integrator, home_team: str, away_team: str,
         return {
             'kalshi_prob': None,
             'kalshi_available': False,
-            'discrepancy': 0,
             'validation': 'error',
             'edge': 0,
             'confidence_boost': 0,
@@ -1719,6 +1881,30 @@ def validate_with_kalshi(kalshi_integrator, home_team: str, away_team: str,
             'market_scope': 'error',
             'data_source': 'error'
         }
+        return
+
+    leg_data['kalshi_validation'] = kalshi_data
+
+    if not kalshi_data.get('kalshi_available'):
+        return
+
+    original_ai_prob = leg_data.get('ai_prob', base_prob)
+    kalshi_prob = kalshi_data.get('kalshi_prob', base_prob)
+
+    blended_prob = (
+        original_ai_prob * 0.50 +  # AI model
+        kalshi_prob * 0.30 +       # Kalshi market
+        base_prob * 0.20           # Sportsbook baseline
+    )
+
+    leg_data['ai_prob_before_kalshi'] = original_ai_prob
+    leg_data['ai_prob'] = blended_prob
+    leg_data['kalshi_influence'] = blended_prob - original_ai_prob
+    leg_data['kalshi_edge'] = kalshi_data.get('edge', 0)
+    leg_data['ai_confidence'] = min(
+        leg_data.get('ai_confidence', 0.5) + kalshi_data.get('confidence_boost', 0),
+        0.95
+    )
 
 # Helper to apply Kalshi validation to a betting leg in-place
 def integrate_kalshi_into_leg(
@@ -1868,6 +2054,14 @@ def build_leg_apisports_payload(summary: Any, side: str, sport_key: Optional[str
     }
 
     return {k: v for k, v in payload.items() if v not in (None, '')}
+
+
+def format_timestamp_utc(ts: Optional[datetime]) -> Optional[str]:
+    """Format a naive UTC timestamp for display."""
+
+    if isinstance(ts, datetime):
+        return ts.strftime("%Y-%m-%d %H:%M UTC")
+    return None
 
 def fetch_oddsapi_snapshot(api_key: str, sport_key: str) -> Dict[str, Any]:
     url = f"{_odds_api_base()}/v4/sports/{sport_key}/odds"
@@ -2617,6 +2811,20 @@ def render_parlay_section_ai(title, rows, theover_data=None):
                         parts.append(kickoff)
                     apisports_display = " | ".join(parts) if parts else "Live data"
 
+                model_used = leg.get('ai_model_source')
+                if model_used == 'historical-logistic':
+                    model_display = 'Historical ML'
+                elif isinstance(model_used, str) and model_used:
+                    model_display = model_used.replace('-', ' ').title()
+                else:
+                    model_display = '—'
+
+                training_rows_val = leg.get('ai_training_rows')
+                if isinstance(training_rows_val, (int, float)) and training_rows_val:
+                    training_display = f"{int(training_rows_val)}"
+                else:
+                    training_display = '—'
+
                 leg_entry = {
                     "Leg": j,
                     "Type": leg["market"],
@@ -2624,6 +2832,8 @@ def render_parlay_section_ai(title, rows, theover_data=None):
                     "Odds": f"{leg['d']:.3f}",
                     "Market %": f"{leg['p']*100:.1f}%",
                     "AI % (final)": f"{leg.get('ai_prob', leg['p'])*100:.1f}%",
+                    "ML Model": model_display,
+                    "Training Rows": training_display,
                     "Kalshi": kalshi_display,
                     "K Impact": kalshi_influence_display,
                     "Sentiment": leg.get('sentiment_trend', 'N/A'),
@@ -2633,6 +2843,12 @@ def render_parlay_section_ai(title, rows, theover_data=None):
                 legs_data.append(leg_entry)
             
             st.dataframe(pd.DataFrame(legs_data), use_container_width=True, hide_index=True)
+
+            if any(leg.get('ai_model_source') for leg in row.get("legs", [])):
+                st.caption(
+                    "**ML Model** = Historical ML uses logistic regression trained on API-Sports data;"
+                    " **Training Rows** = number of historical games in the most recent fit."
+                )
 
             # Kalshi impact legend
             if any(leg.get('kalshi_validation', {}).get('kalshi_available') for leg in row.get("legs", [])):
@@ -2841,7 +3057,8 @@ if 'sentiment_analyzer' not in st.session_state:
     st.session_state['news_api_key'] = news_key
 if 'historical_data_builder' not in st.session_state:
     st.session_state['historical_data_builder'] = HistoricalDataBuilder(
-        lambda: st.session_state.get('api_key', "") or os.environ.get("ODDS_API_KEY", "")
+        lambda: st.session_state.get('api_key', "") or os.environ.get("ODDS_API_KEY", ""),
+        days_back=90,
     )
 if 'ml_predictor' not in st.session_state:
     builder = st.session_state['historical_data_builder']
@@ -2851,8 +3068,17 @@ if 'ai_optimizer' not in st.session_state:
         st.session_state['sentiment_analyzer'],
         st.session_state['ml_predictor']
     )
-if 'news_api_key' not in st.session_state:
-    st.session_state['news_api_key'] = os.environ.get("NEWS_API_KEY", "")
+
+sidebar_state = render_sidebar_controls()
+tz = sidebar_state["tz"]
+sel_date = sidebar_state["selected_date"]
+_day_window = sidebar_state["day_window"]
+sports = sidebar_state["sports"]
+use_sentiment = sidebar_state["use_sentiment"]
+use_ml_predictions = sidebar_state["use_ml_predictions"]
+min_ai_confidence = sidebar_state["min_ai_confidence"]
+min_parlay_probability = sidebar_state["min_parlay_probability"]
+max_parlay_probability = sidebar_state["max_parlay_probability"]
 
 # Initialize advanced analyzers
 if 'sharp_detector' not in st.session_state:
@@ -2876,11 +3102,15 @@ if 'kalshi_integrator' not in st.session_state:
     kalshi_secret = os.environ.get("KALSHI_API_SECRET", "")
     st.session_state['kalshi_integrator'] = KalshiIntegrator(kalshi_key, kalshi_secret)
 if 'apisports_client' not in st.session_state:
-    initial_key, initial_source = resolve_nfl_apisports_key()
-    st.session_state['apisports_api_key'] = initial_key
+    stored_key = st.session_state.get('apisports_api_key')
+    stored_source = st.session_state.get('apisports_key_source')
+    if not stored_key:
+        stored_key, stored_source = resolve_nfl_apisports_key()
+        st.session_state['apisports_api_key'] = stored_key
+        st.session_state['apisports_key_source'] = stored_source
     st.session_state['apisports_client'] = APISportsFootballClient(
-        initial_key or None,
-        key_source=initial_source,
+        stored_key or None,
+        key_source=stored_source,
     )
 elif 'apisports_api_key' not in st.session_state:
     apisports_client = st.session_state.get('apisports_client')
@@ -2888,11 +3118,15 @@ elif 'apisports_api_key' not in st.session_state:
         apisports_client.api_key if apisports_client else ""
     )
 if 'apisports_hockey_client' not in st.session_state:
-    nhl_key, nhl_source = resolve_nhl_apisports_key()
-    st.session_state['nhl_apisports_api_key'] = nhl_key
+    stored_hockey_key = st.session_state.get('nhl_apisports_api_key')
+    stored_hockey_source = st.session_state.get('nhl_apisports_key_source')
+    if not stored_hockey_key:
+        stored_hockey_key, stored_hockey_source = resolve_nhl_apisports_key()
+        st.session_state['nhl_apisports_api_key'] = stored_hockey_key
+        st.session_state['nhl_apisports_key_source'] = stored_hockey_source
     st.session_state['apisports_hockey_client'] = APISportsHockeyClient(
-        nhl_key or None,
-        key_source=nhl_source,
+        stored_hockey_key or None,
+        key_source=stored_hockey_source,
     )
 elif 'nhl_apisports_api_key' not in st.session_state:
     hockey_client = st.session_state.get('apisports_hockey_client')
@@ -2935,141 +3169,49 @@ main_tab1, main_tab2, main_tab3, main_tab4, main_tab5 = tabs
 # ===== TAB 1: SPORTS BETTING PARLAYS =====
 with main_tab1:
     apisports_client = st.session_state.get('apisports_client')
+    nfl_key = st.session_state.get('apisports_api_key', "")
+    nfl_source = st.session_state.get('apisports_key_source')
     if apisports_client is None:
-        fallback_key, fallback_source = resolve_nfl_apisports_key()
         apisports_client = APISportsFootballClient(
-            fallback_key or None,
-            key_source=fallback_source,
+            nfl_key or None,
+            key_source=nfl_source,
         )
         st.session_state['apisports_client'] = apisports_client
-        st.session_state.setdefault('apisports_api_key', fallback_key)
+    else:
+        if apisports_client.api_key != (nfl_key or ""):
+            apisports_client.update_api_key(nfl_key or None, source=nfl_source or "user")
+
     hockey_client = st.session_state.get('apisports_hockey_client')
+    nhl_key = st.session_state.get('nhl_apisports_api_key', "")
+    nhl_source = st.session_state.get('nhl_apisports_key_source')
     if hockey_client is None:
-        fallback_key, fallback_source = resolve_nhl_apisports_key()
         hockey_client = APISportsHockeyClient(
-            fallback_key or None,
-            key_source=fallback_source,
+            nhl_key or None,
+            key_source=nhl_source,
         )
         st.session_state['apisports_hockey_client'] = hockey_client
-        st.session_state.setdefault('nhl_apisports_api_key', fallback_key)
+    else:
+        if hockey_client.api_key != (nhl_key or ""):
+            hockey_client.update_api_key(nhl_key or None, source=nhl_source or "user")
 
     ml_predictor = st.session_state.get('ml_predictor')
     if ml_predictor:
         ml_predictor.register_client('americanfootball_nfl', apisports_client)
         ml_predictor.register_client('icehockey_nhl', hockey_client)
 
-    # API Configuration
-    stored_key = os.environ.get("ODDS_API_KEY", "")
+    # Quick configuration summary to reinforce sidebar selections
+    config_cols = st.columns(3)
+    with config_cols[0]:
+        st.metric("Odds API", "Configured" if st.session_state.get('api_key') else "Missing")
+    with config_cols[1]:
+        st.metric("Sentiment", "Live" if st.session_state.get('news_api_key') else "Neutral")
+    with config_cols[2]:
+        timezone_label = st.session_state.get('user_timezone', 'UTC')
+        st.metric("Timezone", timezone_label)
 
-    if 'api_key' in st.session_state:
-        key = st.session_state['api_key']
-    elif stored_key:
-        key = stored_key
-    else:
-        key = ""
-
-    if not key:
-        key = st.text_input(
-            "TheOddsAPI key (first time setup)", 
-            value="",
-            type="password",
-            help="This will be remembered for future sessions"
-        )
-        if key:
-            st.session_state['api_key'] = key
-            st.success("✅ API key saved for this session!")
-            st.rerun()
-    else:
-        if 'show_api_section' not in st.session_state:
-            st.session_state['show_api_section'] = False
-        
-        if st.session_state['show_api_section']:
-            new_key = st.text_input(
-                "Update API key", 
-                value="",
-                type="password"
-            )
-            if new_key:
-                st.session_state['api_key'] = new_key
-                st.session_state['show_api_section'] = False
-                st.success("✅ API key updated!")
-                st.rerun()
-        else:
-            col_api1, col_api2 = st.columns([4, 1])
-            with col_api1:
-                st.success("🔑 API key is configured")
-            with col_api2:
-                if st.button("Change key"):
-                    st.session_state['show_api_section'] = True
-                    st.rerun()
-
-with st.sidebar:
-    # ... your existing sidebar code ...
-    
     st.markdown("---")
-    st.subheader("🧠 ML Models")
-    model_manager = st.session_state.get('model_manager')
-    if model_manager:
-        trained = model_manager.get_all_trained_sports()
-        if trained:
-            st.success(f"✅ {len(trained)} trained")
-            for sport in trained[:3]:
-                age = model_manager.get_model_age(sport)
-                if age:
-                    st.caption(f"{sport.split('_')[-1].upper()}: {age.days}d old")
-        else:
-            st.info("No models yet")
-    
-    # News API Configuration (for real sentiment)
-    st.markdown("---")
-    st.markdown("### 📰 Real Sentiment Analysis (Optional)")
-    
-    col_news1, col_news2 = st.columns([3, 1])
-    with col_news1:
-        if not st.session_state.get('news_api_key'):
-            with st.expander("ℹ️ Enable REAL Sentiment Analysis"):
-                st.info("""
-                **Upgrade to real sentiment analysis!**
-                
-                Currently using: Neutral placeholders (no real analysis)
-                
-                **With NewsAPI:**
-                - ✅ Analyzes actual news articles
-                - ✅ Real NLP sentiment scoring
-                - ✅ Last 3 days of team news
-                - ✅ Free tier: 100 requests/day
-                
-                **Get your free API key:**
-                1. Visit [newsapi.org](https://newsapi.org/)
-                2. Sign up (takes 1 minute)
-                3. Copy your API key
-                4. Paste below
-                """)
-                news_key_input = st.text_input(
-                    "NewsAPI Key",
-                    type="password",
-                    help="Get free at https://newsapi.org/"
-                )
-                if news_key_input:
-                    st.session_state['news_api_key'] = news_key_input
-                    # Reinitialize sentiment analyzer with new key
-                    st.session_state['sentiment_analyzer'] = RealSentimentAnalyzer(news_key_input)
-                    st.success("✅ Real sentiment analysis enabled!")
-                    st.rerun()
-        else:
-            st.success("📰 Real Sentiment Analysis: ENABLED")
-            st.caption("Analyzing actual news articles for team sentiment")
-            
-    with col_news2:
-        if st.session_state.get('news_api_key'):
-            if st.button("Disable", key="disable_news_api"):
-                st.session_state['news_api_key'] = ""
-                st.session_state['sentiment_analyzer'] = RealSentimentAnalyzer(None)
-                st.info("Switched to neutral sentiment (no API)")
-                st.rerun()
 
     # theover.ai Integration Section
-    st.markdown("---")
     st.markdown("### 📊 theover.ai Integration (Optional)")
     
     theover_method = st.radio(
@@ -3146,72 +3288,74 @@ with st.sidebar:
     
     st.markdown("---")
 
-    col1, col2 = st.columns(2)
-    with col1:
-        tz_name = st.text_input("Timezone (IANA)", value="America/New_York")
-        try:
-            tz = pytz.timezone(tz_name)
-        except Exception:
-            tz = pytz.timezone("UTC")
-            st.warning("Invalid timezone; using UTC")
-        st.session_state['user_timezone'] = getattr(tz, 'zone', tz_name)
-
-    with col2:
-        sel_date = st.date_input(
-            "Only events on date (local to timezone)",
-            value=pd.Timestamp.now(tz).date()
+    st.caption(
+        "AI filters applied: sentiment {sentiment_state}, ML {ml_state}, confidence ≥ {conf:.0%}, parlay probability {min_prob:.0%}-{max_prob:.0%}".format(
+            sentiment_state="on" if use_sentiment else "off",
+            ml_state="on" if use_ml_predictions else "off",
+            conf=min_ai_confidence,
+            min_prob=min_parlay_probability,
+            max_prob=max_parlay_probability,
         )
-
-        # Historical window slider
-        _day_window = st.slider(
-            "Include events within ±N days",
-            0, 7, 0, 1,
-            help="Leverage historical odds snapshots."
-        )
-
-    # Sport Selection
-    sports = st.multiselect(
-        "Sports keys", 
-        options=APP_CFG["sports_common"], 
-        default=APP_CFG["sports_common"][:6]
     )
 
-    # AI Settings
-    with st.expander("⚙️ AI Settings", expanded=False):
-        st.markdown("### Machine Learning Configuration")
-        
-        st.info("""
-        **✨ HIGH CONFIDENCE BETS MODE**
-        
-        - Minimum AI confidence: **60%** (high confidence only)
-        - Probability range: **30-65%** (value zone, not chalk)
-        - Ranked by: **Expected Value** (AI edge over market)
-        - Sentiment weight: **40%** (significant factor)
-        
-        **Strategy: Only bet on high-confidence value picks** 🎯
-        """)
-        
-        col_ai1, col_ai2 = st.columns(2)
-        with col_ai1:
-            use_sentiment = st.checkbox("Enable Sentiment Analysis", value=True, 
-                                        help="Analyze news and social media sentiment")
-            use_ml_predictions = st.checkbox("Enable ML Predictions", value=True,
-                                            help="Use machine learning for probability adjustments")
-        with col_ai2:
-            min_ai_confidence = st.slider("Minimum AI Confidence", 0.0, 1.0, 0.60, 0.05,
-                                          help="Filter out low-confidence predictions (0.60 = 60% confidence minimum)")
-            min_parlay_probability = st.slider(
-                "Minimum Parlay Probability", 
-                0.20, 0.60, 0.30, 0.05,
-                help="Filter out longshot parlays (0.30 = 30% min chance for high confidence)"
-            )
-            max_parlay_probability = st.slider(
-                "Maximum Parlay Probability",
-                0.45, 0.85, 0.65, 0.05,
-                help="Exclude heavy favorites (0.65 = 65% max, keeps value plays only)"
-            )
-            
-        st.caption("🔴 = Too risky (<30%) | 🟡 = Moderate (30-50%) | 🟢 = High confidence value (50-65%) | ❌ = Too safe (>65%)")
+    builder = st.session_state.get('historical_data_builder')
+    ml_predictor_state = st.session_state.get('ml_predictor')
+    if builder and ml_predictor_state:
+        st.markdown("#### 🤖 Historical ML Training Status")
+        status_cols = st.columns(2)
+        sport_rows = [
+            ("NFL", "americanfootball_nfl", apisports_client, "🏈"),
+            ("NHL", "icehockey_nhl", hockey_client, "🏒"),
+        ]
+
+        for idx, (sport_label, sport_key, sport_client, sport_icon) in enumerate(sport_rows):
+            with status_cols[idx % 2]:
+                st.markdown(f"**{sport_icon} {sport_label} Historical Model**")
+                metadata = ml_predictor_state.training_metadata(sport_key)
+
+                st.metric(
+                    "Historical games",
+                    int(metadata.get('dataset_rows', 0)),
+                    help="Joined API-Sports summaries with historical odds. Rebuilt every 6 hours.",
+                )
+                st.metric(
+                    "Training rows used",
+                    int(metadata.get('training_rows', 0)),
+                    help="Rows consumed by the logistic model during the last training run.",
+                )
+
+                if metadata.get('model_ready'):
+                    st.success("Model trained on recent history ✅")
+                else:
+                    if metadata.get('dataset_rows', 0) < metadata.get('min_rows', 0):
+                        st.warning(
+                            f"Collecting more games… need {metadata.get('min_rows', 0)}+ rows for training.",
+                        )
+                    else:
+                        st.info("Training will kick in once enough balanced outcomes are available.")
+
+                last_built = format_timestamp_utc(metadata.get('last_dataset_build'))
+                last_trained = format_timestamp_utc(metadata.get('last_trained'))
+                status_lines: List[str] = []
+                if last_built:
+                    status_lines.append(f"Data refreshed: {last_built}")
+                if last_trained:
+                    status_lines.append(f"Model trained: {last_trained}")
+                error_code = metadata.get('error')
+                if error_code and metadata.get('dataset_rows', 0) == 0:
+                    friendly = {
+                        'missing_api_key': 'Add your API-Sports key to fetch team history.',
+                        'unregistered_client': 'Register this league with the ML builder.',
+                        'games_fetch_failed': 'API-Sports schedule request failed. Retry shortly.',
+                        'summary_build_failed': 'Could not assemble team summaries from API-Sports.',
+                        'no_historical_rows': 'No completed games found in the selected window yet.',
+                    }.get(error_code, error_code.replace('_', ' '))
+                    st.error(friendly)
+                elif status_lines:
+                    for line in status_lines:
+                        st.caption(line)
+                elif not sport_client or not getattr(sport_client, 'is_configured', lambda: False)():
+                    st.info("Provide an API-Sports key to enable historical ML training.")
 
     col3, col4, col5 = st.columns(3)
     with col3:
@@ -4283,21 +4427,25 @@ with main_tab2:
     with st.expander("🤖 AI Prediction Model"):
         st.markdown("""
         **Machine Learning Components:**
-        - **Input Features:** Home/Away odds, sentiment scores, historical patterns
-        - **Model Type:** Gradient boosting with probability calibration
+        - **Input Features:** API-Sports team trends, The Odds API closing prices, sentiment deltas, home/away context
+        - **Model Type:** Logistic regression pipeline (imputer + scaler + balanced solver) retrained every 6 hours
+        - **Historical Window:** Most recent 90 days of completed games per league (25+ rows required)
         - **Output:** Win probability for each team, confidence score, edge calculation
-        
+
         **How AI Adjusts Probabilities:**
-        1. Takes market-implied probability from odds
-        2. Applies sentiment adjustment (±40% weight)
-        3. Considers home/away advantage
-        4. Calibrates based on historical accuracy
-        5. Outputs adjusted probability + confidence
-        
+        1. Collects API-Sports matchup summaries (record, form, points for/against) and sportsbook odds
+        2. Trains a balanced logistic regression on recent outcomes once enough data is available
+        3. Blends model output with market odds and sentiment (65% model • 25% market • 10% sentiment)
+        4. Applies home-field baselines and API-Sports trend boosts
+        5. Outputs adjusted probability + confidence and tracks the training sample size
+
         **Confidence Scoring:**
         - High (70%+): Strong signal from multiple factors
         - Medium (50-70%): Moderate signals, some uncertainty
         - Low (<50%): Conflicting signals or limited data
+
+        **Fallback Mode:**
+        - When fewer than 25 historical games exist or the dataset lacks both outcomes, the app reverts to the odds + sentiment heuristic and flags the "Historical ML" column accordingly.
         """)
     
     with st.expander("📊 Betting Trend Analysis"):
