@@ -1,10 +1,10 @@
 """Core modules shared between the Streamlit app and auxiliary scripts."""
 
-from .apisports import APISportsBasketballClient, GameSummary, TeamSummary
+from .apisports import APISportsFootballClient, GameSummary, TeamSummary
 from .sentiment import RealSentimentAnalyzer, SentimentAnalyzer
 
 __all__ = [
-    "APISportsBasketballClient",
+    "APISportsFootballClient",
     "GameSummary",
     "TeamSummary",
     "RealSentimentAnalyzer",

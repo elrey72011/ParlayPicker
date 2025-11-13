@@ -1,6 +1,6 @@
-"""Lightweight client for API-Sports basketball data.
+"""Lightweight client for API-Sports American football data.
 
-The Streamlit app uses this module to pull live games and team statistics so
+The Streamlit app uses this module to pull live NFL games and team statistics so
 odds analysis can be enriched with real-world league context.
 """
 from __future__ import annotations
@@ -17,36 +17,37 @@ import requests
 
 @dataclass
 class TeamSummary:
-    """Minimal statistics for a basketball team."""
+    """Minimal statistics for an American football team."""
 
     id: Optional[int]
     name: str
     record: Optional[str]
     form: Optional[str]
-    average_points: Optional[float]
+    average_points_for: Optional[float]
+    average_points_against: Optional[float]
     trend: Optional[str]
 
 
 @dataclass
 class GameSummary:
-    """Relevant details for an NBA game fetched from API-Sports."""
+    """Relevant details for an NFL game fetched from API-Sports."""
 
     id: Optional[int]
     league: Optional[str]
     season: Optional[str]
     status: Optional[str]
     stage: Optional[str]
-    tipoff_local: Optional[str]
-    arena: Optional[str]
+    kickoff_local: Optional[str]
+    venue: Optional[str]
     home: TeamSummary
     away: TeamSummary
 
 
-class APISportsBasketballClient:
-    """Small wrapper around the API-Sports basketball endpoints."""
+class APISportsFootballClient:
+    """Small wrapper around the API-Sports American football endpoints."""
 
-    BASE_URL = "https://v1.basketball.api-sports.io"
-    NBA_LEAGUE_ID = 12
+    BASE_URL = "https://v1.american-football.api-sports.io"
+    NFL_LEAGUE_ID = 1
 
     def __init__(self, api_key: Optional[str] = None, session: Optional[requests.Session] = None) -> None:
         self.api_key = api_key or os.environ.get("APISPORTS_API_KEY") or os.environ.get("API_SPORTS_KEY")
@@ -76,14 +77,14 @@ class APISportsBasketballClient:
 
     @staticmethod
     def current_season_for_date(target: Optional[date] = None) -> str:
-        """Return the NBA season string (e.g. "2023-2024") for a given date."""
+        """Return the NFL season year (e.g. "2023") for a given date."""
 
         target = target or datetime.utcnow().date()
-        if target.month >= 7:
+        if target.month >= 3:
             start_year = target.year
         else:
             start_year = target.year - 1
-        return f"{start_year}-{start_year + 1}"
+        return str(start_year)
 
     # ------------------------------------------------------------------
     # Networking helpers
@@ -117,10 +118,10 @@ class APISportsBasketballClient:
         self,
         target_date: date,
         timezone: str = "America/New_York",
-        league_id: int = NBA_LEAGUE_ID,
+        league_id: int = NFL_LEAGUE_ID,
         season: Optional[str] = None,
     ) -> List[Dict]:
-        """Fetch NBA games for a given date and timezone."""
+        """Fetch NFL games for a given date and timezone."""
 
         if not self.is_configured():
             return []
@@ -147,7 +148,7 @@ class APISportsBasketballClient:
         self,
         team_id: Optional[int],
         season: str,
-        league_id: int = NBA_LEAGUE_ID,
+        league_id: int = NFL_LEAGUE_ID,
     ) -> Dict:
         """Fetch team statistics for the specified season."""
 
@@ -201,8 +202,11 @@ class APISportsBasketballClient:
         games = (stats or {}).get("games") or {}
         wins = (games.get("wins") or {}).get("total")
         losses = (games.get("loses") or {}).get("total")
+        draws = (games.get("draws") or {}).get("total")
         if wins is None or losses is None:
             return None
+        if draws is not None and draws > 0:
+            return f"{wins}-{losses}-{draws}"
         return f"{wins}-{losses}"
 
     @staticmethod
@@ -218,11 +222,11 @@ class APISportsBasketballClient:
         return "neutral"
 
     @staticmethod
-    def _average_points(stats: Dict) -> Optional[float]:
+    def _average_points(stats: Dict, direction: str = "for") -> Optional[float]:
         points = (stats or {}).get("points") or {}
-        avg = points.get("average") or {}
-        # Some responses use "total", others "points"
-        for key in ("total", "points"):
+        bucket = points.get(direction) or {}
+        avg = bucket.get("average") or {}
+        for key in ("total", "points", "value"):
             value = avg.get(key)
             if isinstance(value, (int, float)):
                 return float(value)
@@ -239,25 +243,38 @@ class APISportsBasketballClient:
         season = season or game.get("season") or self.current_season_for_date()
         teams = game.get("teams") or {}
         status = (game.get("status") or {}).get("long") or (game.get("status") or {}).get("short")
+
         stage = game.get("stage")
-        arena = (game.get("arena") or {}).get("name")
+        if not stage:
+            week = game.get("week")
+            if isinstance(week, dict):
+                stage = week.get("name") or week.get("number")
+            elif isinstance(week, str):
+                stage = week
+
+        venue_info = game.get("game") or {}
+        venue_raw = venue_info.get("venue") or (game.get("venue") or {}).get("name") or (game.get("arena") or {}).get("name")
+        if isinstance(venue_raw, dict):
+            venue = venue_raw.get("name") or venue_raw.get("city")
+        else:
+            venue = venue_raw
 
         try:
             tz = pytz.timezone(tz_name)
         except Exception:
             tz = pytz.timezone("UTC")
-        tip_iso = (game.get("date") or {}).get("start") or (game.get("date") or {}).get("utc")
+        tip_iso = venue_info.get("date") or (game.get("date") or {}).get("start") or (game.get("date") or {}).get("utc")
         if tip_iso:
             try:
-                tipoff_local = (
+                kickoff_local = (
                     datetime.fromisoformat(tip_iso.replace("Z", "+00:00"))
                     .astimezone(tz)
                     .strftime("%Y-%m-%d %I:%M %p %Z")
                 )
             except ValueError:
-                tipoff_local = None
+                kickoff_local = None
         else:
-            tipoff_local = None
+            kickoff_local = None
 
         home_team = teams.get("home") or {}
         away_team = teams.get("away") or {}
@@ -270,7 +287,8 @@ class APISportsBasketballClient:
             name=home_team.get("name", ""),
             record=self._format_record(home_stats),
             form=home_stats.get("form"),
-            average_points=self._average_points(home_stats),
+            average_points_for=self._average_points(home_stats, "for"),
+            average_points_against=self._average_points(home_stats, "against"),
             trend=self._determine_trend(home_stats.get("form")),
         )
         away_summary = TeamSummary(
@@ -278,7 +296,8 @@ class APISportsBasketballClient:
             name=away_team.get("name", ""),
             record=self._format_record(away_stats),
             form=away_stats.get("form"),
-            average_points=self._average_points(away_stats),
+            average_points_for=self._average_points(away_stats, "for"),
+            average_points_against=self._average_points(away_stats, "against"),
             trend=self._determine_trend(away_stats.get("form")),
         )
 
@@ -288,8 +307,8 @@ class APISportsBasketballClient:
             season=season,
             status=status,
             stage=stage,
-            tipoff_local=tipoff_local,
-            arena=arena,
+            kickoff_local=kickoff_local,
+            venue=venue,
             home=home_summary,
             away=away_summary,
         )
