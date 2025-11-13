@@ -20,8 +20,8 @@ from app_core import (
     HistoricalMLPredictor,
     MLPredictor,
     RealSentimentAnalyzer,
-    SentimentAnalyzer,)
-
+    SentimentAnalyzer,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -226,11 +226,34 @@ def render_sidebar_controls() -> Dict[str, Any]:
             value=st.session_state.get('use_sentiment', True),
             help="Analyze news sentiment for each team when computing edges.",
         )
+
+        current_ml_state = bool(st.session_state.get('use_ml_predictions', True))
         use_ml_predictions = ai_expander.checkbox(
             "Enable ML Predictions",
-            value=st.session_state.get('use_ml_predictions', True),
+            value=current_ml_state,
             help="Blend trained historical models into probability estimates.",
         )
+
+        toggle_label = "🔌 Disable ML for this session" if use_ml_predictions else "⚡ Re-enable ML predictions"
+        toggle_help = (
+            "Temporarily turn the historical machine-learning models off. "
+            "When disabled, the app falls back to odds + sentiment without training datasets."
+            if use_ml_predictions
+            else "Turn the historical machine-learning models back on for eligible sports."
+        )
+        if ai_expander.button(
+            toggle_label,
+            key="toggle_ml_predictions_button",
+            use_container_width=True,
+            help=toggle_help,
+        ):
+            use_ml_predictions = not use_ml_predictions
+            st.session_state['use_ml_predictions'] = use_ml_predictions
+
+        if not use_ml_predictions:
+            ai_expander.info(
+                "ML predictions are disabled. Odds, sentiment, Kalshi, and live data signals still run as usual."
+            )
         min_ai_confidence = ai_expander.slider(
             "Minimum AI Confidence",
             0.0,
@@ -2074,6 +2097,84 @@ def integrate_kalshi_into_leg(
         0.95
     )
 
+# Helper to apply Kalshi validation to a betting leg in-place
+def integrate_kalshi_into_leg(
+    leg_data: Dict[str, Any],
+    home_team: str,
+    away_team: str,
+    side: str,
+    base_prob: float,
+    sport: str,
+    use_kalshi: bool,
+) -> None:
+    """Mutate a leg dictionary with Kalshi validation + probability blending."""
+
+    # Ensure downstream code sees the reason when Kalshi is not active
+    if not use_kalshi:
+        leg_data.setdefault('kalshi_validation', {
+            'kalshi_available': False,
+            'validation': 'disabled',
+            'edge': 0,
+            'confidence_boost': 0,
+            'market_scope': 'disabled',
+            'data_source': 'disabled'
+        })
+        return
+
+    kalshi = None
+    try:
+        kalshi = st.session_state.get('kalshi_integrator')
+    except Exception:
+        # When Streamlit session state isn't available (e.g. testing), skip gracefully
+        pass
+
+    if not kalshi:
+        leg_data['kalshi_validation'] = {
+            'kalshi_available': False,
+            'validation': 'unavailable',
+            'edge': 0,
+            'confidence_boost': 0,
+            'market_scope': 'not_initialized',
+            'data_source': 'unavailable'
+        }
+        return
+
+    try:
+        kalshi_data = validate_with_kalshi(kalshi, home_team, away_team, side, base_prob, sport)
+    except Exception:
+        leg_data['kalshi_validation'] = {
+            'kalshi_available': False,
+            'validation': 'error',
+            'edge': 0,
+            'confidence_boost': 0,
+            'market_scope': 'error',
+            'data_source': 'error'
+        }
+        return
+
+    leg_data['kalshi_validation'] = kalshi_data
+
+    if not kalshi_data.get('kalshi_available'):
+        return
+
+    original_ai_prob = leg_data.get('ai_prob', base_prob)
+    kalshi_prob = kalshi_data.get('kalshi_prob', base_prob)
+
+    blended_prob = (
+        original_ai_prob * 0.50 +  # AI model
+        kalshi_prob * 0.30 +       # Kalshi market
+        base_prob * 0.20           # Sportsbook baseline
+    )
+
+    leg_data['ai_prob_before_kalshi'] = original_ai_prob
+    leg_data['ai_prob'] = blended_prob
+    leg_data['kalshi_influence'] = blended_prob - original_ai_prob
+    leg_data['kalshi_edge'] = kalshi_data.get('edge', 0)
+    leg_data['ai_confidence'] = min(
+        leg_data.get('ai_confidence', 0.5) + kalshi_data.get('confidence_boost', 0),
+        0.95
+    )
+
 # ============ UTILITY FUNCTIONS ============
 def american_to_decimal(odds) -> float:
     odds = float(odds)
@@ -3336,7 +3437,7 @@ with main_tab1:
             basketball_client.update_api_key(nba_key or None, source=nba_source or "user")
 
     ml_predictor = st.session_state.get('ml_predictor')
-    if ml_predictor:
+    if ml_predictor and use_ml_predictions:
         if 'americanfootball_nfl' in active_sport_keys:
             ml_predictor.register_client('americanfootball_nfl', apisports_client)
         if 'icehockey_nhl' in active_sport_keys:
@@ -3451,7 +3552,11 @@ with main_tab1:
             f"{builder_error}. Using default settings until resolved."
         )
     ml_predictor_state = st.session_state.get('ml_predictor')
-    if builder and ml_predictor_state:
+    if not use_ml_predictions:
+        st.info(
+            "Machine-learning predictions are turned off. Re-enable them in the sidebar when you're ready to blend historical models."
+        )
+    elif builder and ml_predictor_state:
         st.markdown("#### 🤖 Historical ML Training Status")
         ml_capable_rows = [
             ("NFL", "americanfootball_nfl", apisports_client, "🏈"),

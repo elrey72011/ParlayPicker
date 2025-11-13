@@ -139,6 +139,12 @@ To enable NFL live data integration, add your API-Sports token under the `NFL_AP
 NFL_APISPORTS_API_KEY = "your-nfl-api-sports-token"
 ```
 
+### Temporarily disabling ML
+
+Open the **AI Settings** expander in the sidebar and click **“🔌 Disable ML for this session”** to turn off the historical
+machine-learning models. The app will immediately fall back to odds, sentiment, Kalshi, and live data signals without
+building training datasets. Click **“⚡ Re-enable ML predictions”** at any time to bring the models back.
+
 To enable NHL live data integration, add your hockey token under the `NHL_APISPORTS_API_KEY` secret:
 
 ```toml
