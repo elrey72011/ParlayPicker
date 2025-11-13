@@ -49,13 +49,25 @@ class APISportsFootballClient:
     BASE_URL = "https://v1.american-football.api-sports.io"
     NFL_LEAGUE_ID = 1
 
-    def __init__(self, api_key: Optional[str] = None, session: Optional[requests.Session] = None) -> None:
-        self.api_key = (
-            api_key
-            or os.environ.get("NFL_APISPORTS_API_KEY")
-            or os.environ.get("APISPORTS_API_KEY")
-            or os.environ.get("API_SPORTS_KEY")
-        )
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        session: Optional[requests.Session] = None,
+        key_source: Optional[str] = None,
+    ) -> None:
+        self.key_source: Optional[str] = key_source
+        resolved_key = api_key or ""
+        if resolved_key:
+            self.key_source = key_source or "runtime"
+        else:
+            for env_name in ("NFL_APISPORTS_API_KEY", "APISPORTS_API_KEY", "API_SPORTS_KEY"):
+                candidate = os.environ.get(env_name)
+                if candidate:
+                    resolved_key = candidate
+                    self.key_source = f"env:{env_name}"
+                    break
+
+        self.api_key = resolved_key or ""
         self.session = session or requests.Session()
         self.timeout = 10
         self._games_cache: Dict[tuple, List[Dict]] = {}
@@ -70,8 +82,12 @@ class APISportsFootballClient:
     def is_configured(self) -> bool:
         return bool(self.api_key)
 
-    def update_api_key(self, api_key: Optional[str]) -> None:
+    def update_api_key(self, api_key: Optional[str], source: Optional[str] = None) -> None:
         self.api_key = api_key or ""
+        if self.api_key:
+            self.key_source = source or "runtime"
+        else:
+            self.key_source = None
         if api_key:
             self.session.headers.update({"x-apisports-key": api_key})
         else:
@@ -79,6 +95,11 @@ class APISportsFootballClient:
         self._games_cache.clear()
         self._team_cache.clear()
         self.last_error = None
+
+    def key_origin(self) -> Optional[str]:
+        """Return a short description of where the API key came from."""
+
+        return self.key_source
 
     @staticmethod
     def current_season_for_date(target: Optional[date] = None) -> str:

@@ -43,6 +43,27 @@ APP_CFG: Dict[str, Any] = {
     ]
 }
 
+
+def resolve_nfl_apisports_key() -> Tuple[str, Optional[str]]:
+    """Locate the NFL API-Sports key from Streamlit secrets or the environment."""
+
+    secret_container = getattr(st, "secrets", None)
+    if secret_container:
+        for secret_name in ("NFL_APISPORTS_API_KEY", "APISPORTS_API_KEY", "API_SPORTS_KEY"):
+            try:
+                secret_value = secret_container.get(secret_name)
+            except Exception:
+                secret_value = None
+            if secret_value:
+                return str(secret_value), f"secret:{secret_name}"
+
+    for env_name in ("NFL_APISPORTS_API_KEY", "APISPORTS_API_KEY", "API_SPORTS_KEY"):
+        env_value = os.environ.get(env_name)
+        if env_value:
+            return env_value, f"env:{env_name}"
+
+    return "", None
+
 # Comprehensive mapping of Kalshi team abbreviations → canonical team names.
 # The Kalshi markets often reference tickers like "NBA.LAL_GSW" or subtitles using
 # short-hands. By centralizing these variations we can translate between
@@ -1744,6 +1765,43 @@ def validate_with_kalshi(kalshi_integrator, home_team: str, away_team: str,
             'market_scope': 'error',
             'data_source': 'error'
         }
+        return
+
+    try:
+        kalshi_data = validate_with_kalshi(kalshi, home_team, away_team, side, base_prob, sport)
+    except Exception:
+        leg_data['kalshi_validation'] = {
+            'kalshi_available': False,
+            'validation': 'error',
+            'edge': 0,
+            'confidence_boost': 0,
+            'market_scope': 'error',
+            'data_source': 'error'
+        }
+        return
+
+    leg_data['kalshi_validation'] = kalshi_data
+
+    if not kalshi_data.get('kalshi_available'):
+        return
+
+    original_ai_prob = leg_data.get('ai_prob', base_prob)
+    kalshi_prob = kalshi_data.get('kalshi_prob', base_prob)
+
+    blended_prob = (
+        original_ai_prob * 0.50 +  # AI model
+        kalshi_prob * 0.30 +       # Kalshi market
+        base_prob * 0.20           # Sportsbook baseline
+    )
+
+    leg_data['ai_prob_before_kalshi'] = original_ai_prob
+    leg_data['ai_prob'] = blended_prob
+    leg_data['kalshi_influence'] = blended_prob - original_ai_prob
+    leg_data['kalshi_edge'] = kalshi_data.get('edge', 0)
+    leg_data['ai_confidence'] = min(
+        leg_data.get('ai_confidence', 0.5) + kalshi_data.get('confidence_boost', 0),
+        0.95
+    )
 
 # Helper to apply Kalshi validation to a betting leg in-place
 def integrate_kalshi_into_leg(
@@ -2793,7 +2851,17 @@ if 'kalshi_integrator' not in st.session_state:
     kalshi_secret = os.environ.get("KALSHI_API_SECRET", "")
     st.session_state['kalshi_integrator'] = KalshiIntegrator(kalshi_key, kalshi_secret)
 if 'apisports_client' not in st.session_state:
-    st.session_state['apisports_client'] = APISportsFootballClient()
+    initial_key, initial_source = resolve_nfl_apisports_key()
+    st.session_state['apisports_api_key'] = initial_key
+    st.session_state['apisports_client'] = APISportsFootballClient(
+        initial_key or None,
+        key_source=initial_source,
+    )
+elif 'apisports_api_key' not in st.session_state:
+    apisports_client = st.session_state.get('apisports_client')
+    st.session_state['apisports_api_key'] = (
+        apisports_client.api_key if apisports_client else ""
+    )
 
 # Main navigation tabs
 main_tab1, main_tab2, main_tab3, main_tab4, main_tab5 = st.tabs([
@@ -2808,8 +2876,13 @@ main_tab1, main_tab2, main_tab3, main_tab4, main_tab5 = st.tabs([
 with main_tab1:
     apisports_client = st.session_state.get('apisports_client')
     if apisports_client is None:
-        apisports_client = APISportsFootballClient()
+        fallback_key, fallback_source = resolve_nfl_apisports_key()
+        apisports_client = APISportsFootballClient(
+            fallback_key or None,
+            key_source=fallback_source,
+        )
         st.session_state['apisports_client'] = apisports_client
+        st.session_state.setdefault('apisports_api_key', fallback_key)
 
     # API Configuration
     stored_key = os.environ.get("ODDS_API_KEY", "")
@@ -3135,7 +3208,10 @@ with main_tab1:
 
     st.markdown("---")
     st.subheader("🏈 API-Sports NFL Data Integration")
-    current_api_sports_key = st.session_state.get('apisports_api_key', apisports_client.api_key if apisports_client else "")
+    current_api_sports_key = st.session_state.get(
+        'apisports_api_key',
+        apisports_client.api_key if apisports_client else "",
+    )
     new_api_sports_key = st.text_input(
         "NFL API-Sports Key",
         value=current_api_sports_key,
@@ -3145,11 +3221,34 @@ with main_tab1:
     if new_api_sports_key != current_api_sports_key:
         st.session_state['apisports_api_key'] = new_api_sports_key
         if apisports_client:
-            apisports_client.update_api_key(new_api_sports_key)
+            apisports_client.update_api_key(
+                new_api_sports_key,
+                source="manual-entry" if new_api_sports_key else None,
+            )
         if new_api_sports_key:
             st.success("✅ NFL API-Sports key saved for this session.")
         else:
             st.info("API-Sports integration disabled until an NFL key is provided.")
+
+    def describe_key_origin(origin: Optional[str]) -> str:
+        if not origin:
+            return "no configured source"
+        if origin.startswith("secret:"):
+            return f"Streamlit secret `{origin.split(':', 1)[1]}`"
+        if origin.startswith("env:"):
+            return f"environment variable `{origin.split(':', 1)[1]}`"
+        if origin == "manual-entry":
+            return "manual entry"
+        if origin == "runtime":
+            return "runtime configuration"
+        return origin
+
+    if apisports_client and apisports_client.is_configured():
+        st.caption(
+            f"Using NFL API-Sports key from {describe_key_origin(apisports_client.key_origin())}."
+        )
+    else:
+        st.caption("No NFL API-Sports key detected; live data calls will be skipped.")
 
     
     def is_within_date_window(iso_str) -> bool:

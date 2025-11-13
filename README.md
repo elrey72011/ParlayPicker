@@ -158,6 +158,10 @@ To enable the NFL live data integration, add your API-Sports token under the `NF
 NFL_APISPORTS_API_KEY = "your-nfl-api-sports-token"
 ```
 
+The app will automatically pick up that key from Streamlit secrets. If the secret
+isn't defined it falls back to the `NFL_APISPORTS_API_KEY`, `APISPORTS_API_KEY`,
+or `API_SPORTS_KEY` environment variables so existing deployments keep working.
+
 ## 🛠️ Development
 
 ```bash
