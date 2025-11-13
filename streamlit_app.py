@@ -511,7 +511,7 @@ SPORT_KEY_TO_LEAGUE: Dict[str, str] = {
 class AIOptimizer:
     """Optimizes parlay selection using AI insights"""
     
-    def __init__(self, sentiment_analyzer: SentimentAnalyzer, ml_predictor: MLPredictor):
+    def __init__(self, sentiment_analyzer, ml_predictor):
         self.sentiment = sentiment_analyzer
         self.ml = ml_predictor
     
@@ -1915,7 +1915,6 @@ def validate_with_kalshi(kalshi_integrator, home_team: str, away_team: str,
         return {
             'kalshi_prob': None,
             'kalshi_available': False,
-            'discrepancy': 0,
             'validation': 'error',
             'edge': 0,
             'confidence_boost': 0,
