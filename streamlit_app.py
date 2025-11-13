@@ -303,7 +303,7 @@ SPORT_KEY_TO_LEAGUE: Dict[str, str] = {
 class AIOptimizer:
     """Optimizes parlay selection using AI insights"""
     
-    def __init__(self, sentiment_analyzer: SentimentAnalyzer, ml_predictor: MLPredictor):
+    def __init__(self, sentiment_analyzer: SentimentAnalyzer, ml_predictor: HistoricalMLPredictor):
         self.sentiment = sentiment_analyzer
         self.ml = ml_predictor
     
@@ -5519,4 +5519,3 @@ with main_tab5:
             </div>
             """
             components.html(widget_html, height=widget_height, scrolling=True)
-
