@@ -1,6 +1,6 @@
 # ParlayDesk_AI_Enhanced.py - v9.1 FIXED
 # AI-Enhanced parlay finder with sentiment analysis, ML predictions, and live market data
-import os, io, json, itertools, re, copy
+import os, io, json, itertools, re, copy, logging
 from html import escape
 from dataclasses import asdict
 from typing import Dict, Any, List, Tuple, Optional
@@ -21,6 +21,8 @@ from app_core import (
     RealSentimentAnalyzer,
     SentimentAnalyzer,
 )
+
+logger = logging.getLogger(__name__)
 
 # ============ HELPER FUNCTIONS ============
 def american_to_decimal_safe(odds) -> Optional[float]:
@@ -1708,6 +1710,7 @@ def validate_with_kalshi(kalshi_integrator, home_team: str, away_team: str,
         return {
             'kalshi_prob': None,
             'kalshi_available': False,
+            'discrepancy': 0,
             'validation': 'error',
             'edge': 0,
             'confidence_boost': 0,
@@ -2897,14 +2900,28 @@ elif 'nhl_apisports_api_key' not in st.session_state:
         hockey_client.api_key if hockey_client else ""
     )
 
-# Main navigation tabs
-main_tab1, main_tab2, main_tab3, main_tab4, main_tab5 = st.tabs([
+# Main navigation tabs (fallback to containers if tabs are unavailable)
+tab_labels = [
     "🎯 Sports Betting Parlays",
     "🔍 Sentiment & AI Analysis",
     "🎨 Custom Parlay Builder",
     "📊 Kalshi Prediction Markets",
-    "🛰️ API-Sports Live Data"
-])
+    "🛰️ API-Sports Live Data",
+]
+try:
+    tabs = st.tabs(tab_labels)
+    if len(tabs) != len(tab_labels):
+        raise ValueError("Streamlit returned an unexpected number of tabs")
+except Exception as tab_error:  # pragma: no cover - defensive fallback
+    st.warning(
+        "Tab layout is unavailable in this Streamlit runtime."
+        " Showing sections sequentially instead.",
+        icon="⚠️",
+    )
+    tabs = [st.container() for _ in tab_labels]
+    logger.debug("Falling back to container-based layout for tabs: %s", tab_error)
+
+main_tab1, main_tab2, main_tab3, main_tab4, main_tab5 = tabs
 
 # ===== NEW TAB 1: ML TRAINING =====
 with main_tab1:
