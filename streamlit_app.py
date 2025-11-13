@@ -303,7 +303,7 @@ SPORT_KEY_TO_LEAGUE: Dict[str, str] = {
 class AIOptimizer:
     """Optimizes parlay selection using AI insights"""
     
-    def __init__(self, sentiment_analyzer: SentimentAnalyzer, ml_predictor: HistoricalMLPredictor):
+    def __init__(self, sentiment_analyzer, ml_predictor):
         self.sentiment = sentiment_analyzer
         self.ml = ml_predictor
     
