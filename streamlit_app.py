@@ -1710,7 +1710,6 @@ def validate_with_kalshi(kalshi_integrator, home_team: str, away_team: str,
         return {
             'kalshi_prob': None,
             'kalshi_available': False,
-            'discrepancy': 0,
             'validation': 'error',
             'edge': 0,
             'confidence_boost': 0,
@@ -1719,6 +1718,30 @@ def validate_with_kalshi(kalshi_integrator, home_team: str, away_team: str,
             'market_scope': 'error',
             'data_source': 'error'
         }
+        return
+
+    leg_data['kalshi_validation'] = kalshi_data
+
+    if not kalshi_data.get('kalshi_available'):
+        return
+
+    original_ai_prob = leg_data.get('ai_prob', base_prob)
+    kalshi_prob = kalshi_data.get('kalshi_prob', base_prob)
+
+    blended_prob = (
+        original_ai_prob * 0.50 +  # AI model
+        kalshi_prob * 0.30 +       # Kalshi market
+        base_prob * 0.20           # Sportsbook baseline
+    )
+
+    leg_data['ai_prob_before_kalshi'] = original_ai_prob
+    leg_data['ai_prob'] = blended_prob
+    leg_data['kalshi_influence'] = blended_prob - original_ai_prob
+    leg_data['kalshi_edge'] = kalshi_data.get('edge', 0)
+    leg_data['ai_confidence'] = min(
+        leg_data.get('ai_confidence', 0.5) + kalshi_data.get('confidence_boost', 0),
+        0.95
+    )
 
 # Helper to apply Kalshi validation to a betting leg in-place
 def integrate_kalshi_into_leg(
@@ -1868,6 +1891,14 @@ def build_leg_apisports_payload(summary: Any, side: str, sport_key: Optional[str
     }
 
     return {k: v for k, v in payload.items() if v not in (None, '')}
+
+
+def format_timestamp_utc(ts: Optional[datetime]) -> Optional[str]:
+    """Format a naive UTC timestamp for display."""
+
+    if isinstance(ts, datetime):
+        return ts.strftime("%Y-%m-%d %H:%M UTC")
+    return None
 
 def fetch_oddsapi_snapshot(api_key: str, sport_key: str) -> Dict[str, Any]:
     url = f"{_odds_api_base()}/v4/sports/{sport_key}/odds"
@@ -2617,6 +2648,20 @@ def render_parlay_section_ai(title, rows, theover_data=None):
                         parts.append(kickoff)
                     apisports_display = " | ".join(parts) if parts else "Live data"
 
+                model_used = leg.get('ai_model_source')
+                if model_used == 'historical-logistic':
+                    model_display = 'Historical ML'
+                elif isinstance(model_used, str) and model_used:
+                    model_display = model_used.replace('-', ' ').title()
+                else:
+                    model_display = '—'
+
+                training_rows_val = leg.get('ai_training_rows')
+                if isinstance(training_rows_val, (int, float)) and training_rows_val:
+                    training_display = f"{int(training_rows_val)}"
+                else:
+                    training_display = '—'
+
                 leg_entry = {
                     "Leg": j,
                     "Type": leg["market"],
@@ -2624,6 +2669,8 @@ def render_parlay_section_ai(title, rows, theover_data=None):
                     "Odds": f"{leg['d']:.3f}",
                     "Market %": f"{leg['p']*100:.1f}%",
                     "AI % (final)": f"{leg.get('ai_prob', leg['p'])*100:.1f}%",
+                    "ML Model": model_display,
+                    "Training Rows": training_display,
                     "Kalshi": kalshi_display,
                     "K Impact": kalshi_influence_display,
                     "Sentiment": leg.get('sentiment_trend', 'N/A'),
@@ -2633,6 +2680,12 @@ def render_parlay_section_ai(title, rows, theover_data=None):
                 legs_data.append(leg_entry)
             
             st.dataframe(pd.DataFrame(legs_data), use_container_width=True, hide_index=True)
+
+            if any(leg.get('ai_model_source') for leg in row.get("legs", [])):
+                st.caption(
+                    "**ML Model** = Historical ML uses logistic regression trained on API-Sports data;"
+                    " **Training Rows** = number of historical games in the most recent fit."
+                )
 
             # Kalshi impact legend
             if any(leg.get('kalshi_validation', {}).get('kalshi_available') for leg in row.get("legs", [])):
@@ -2841,7 +2894,8 @@ if 'sentiment_analyzer' not in st.session_state:
     st.session_state['news_api_key'] = news_key
 if 'historical_data_builder' not in st.session_state:
     st.session_state['historical_data_builder'] = HistoricalDataBuilder(
-        lambda: st.session_state.get('api_key', "") or os.environ.get("ODDS_API_KEY", "")
+        lambda: st.session_state.get('api_key', "") or os.environ.get("ODDS_API_KEY", ""),
+        days_back=90,
     )
 if 'ml_predictor' not in st.session_state:
     builder = st.session_state['historical_data_builder']
@@ -3212,6 +3266,65 @@ with st.sidebar:
             )
             
         st.caption("🔴 = Too risky (<30%) | 🟡 = Moderate (30-50%) | 🟢 = High confidence value (50-65%) | ❌ = Too safe (>65%)")
+
+    builder = st.session_state.get('historical_data_builder')
+    ml_predictor_state = st.session_state.get('ml_predictor')
+    if builder and ml_predictor_state:
+        st.markdown("#### 🤖 Historical ML Training Status")
+        status_cols = st.columns(2)
+        sport_rows = [
+            ("NFL", "americanfootball_nfl", apisports_client, "🏈"),
+            ("NHL", "icehockey_nhl", hockey_client, "🏒"),
+        ]
+
+        for idx, (sport_label, sport_key, sport_client, sport_icon) in enumerate(sport_rows):
+            with status_cols[idx % 2]:
+                st.markdown(f"**{sport_icon} {sport_label} Historical Model**")
+                metadata = ml_predictor_state.training_metadata(sport_key)
+
+                st.metric(
+                    "Historical games",
+                    int(metadata.get('dataset_rows', 0)),
+                    help="Joined API-Sports summaries with historical odds. Rebuilt every 6 hours.",
+                )
+                st.metric(
+                    "Training rows used",
+                    int(metadata.get('training_rows', 0)),
+                    help="Rows consumed by the logistic model during the last training run.",
+                )
+
+                if metadata.get('model_ready'):
+                    st.success("Model trained on recent history ✅")
+                else:
+                    if metadata.get('dataset_rows', 0) < metadata.get('min_rows', 0):
+                        st.warning(
+                            f"Collecting more games… need {metadata.get('min_rows', 0)}+ rows for training.",
+                        )
+                    else:
+                        st.info("Training will kick in once enough balanced outcomes are available.")
+
+                last_built = format_timestamp_utc(metadata.get('last_dataset_build'))
+                last_trained = format_timestamp_utc(metadata.get('last_trained'))
+                status_lines: List[str] = []
+                if last_built:
+                    status_lines.append(f"Data refreshed: {last_built}")
+                if last_trained:
+                    status_lines.append(f"Model trained: {last_trained}")
+                error_code = metadata.get('error')
+                if error_code and metadata.get('dataset_rows', 0) == 0:
+                    friendly = {
+                        'missing_api_key': 'Add your API-Sports key to fetch team history.',
+                        'unregistered_client': 'Register this league with the ML builder.',
+                        'games_fetch_failed': 'API-Sports schedule request failed. Retry shortly.',
+                        'summary_build_failed': 'Could not assemble team summaries from API-Sports.',
+                        'no_historical_rows': 'No completed games found in the selected window yet.',
+                    }.get(error_code, error_code.replace('_', ' '))
+                    st.error(friendly)
+                elif status_lines:
+                    for line in status_lines:
+                        st.caption(line)
+                elif not sport_client or not getattr(sport_client, 'is_configured', lambda: False)():
+                    st.info("Provide an API-Sports key to enable historical ML training.")
 
     col3, col4, col5 = st.columns(3)
     with col3:
@@ -4283,21 +4396,25 @@ with main_tab2:
     with st.expander("🤖 AI Prediction Model"):
         st.markdown("""
         **Machine Learning Components:**
-        - **Input Features:** Home/Away odds, sentiment scores, historical patterns
-        - **Model Type:** Gradient boosting with probability calibration
+        - **Input Features:** API-Sports team trends, The Odds API closing prices, sentiment deltas, home/away context
+        - **Model Type:** Logistic regression pipeline (imputer + scaler + balanced solver) retrained every 6 hours
+        - **Historical Window:** Most recent 90 days of completed games per league (25+ rows required)
         - **Output:** Win probability for each team, confidence score, edge calculation
-        
+
         **How AI Adjusts Probabilities:**
-        1. Takes market-implied probability from odds
-        2. Applies sentiment adjustment (±40% weight)
-        3. Considers home/away advantage
-        4. Calibrates based on historical accuracy
-        5. Outputs adjusted probability + confidence
-        
+        1. Collects API-Sports matchup summaries (record, form, points for/against) and sportsbook odds
+        2. Trains a balanced logistic regression on recent outcomes once enough data is available
+        3. Blends model output with market odds and sentiment (65% model • 25% market • 10% sentiment)
+        4. Applies home-field baselines and API-Sports trend boosts
+        5. Outputs adjusted probability + confidence and tracks the training sample size
+
         **Confidence Scoring:**
         - High (70%+): Strong signal from multiple factors
         - Medium (50-70%): Moderate signals, some uncertainty
         - Low (<50%): Conflicting signals or limited data
+
+        **Fallback Mode:**
+        - When fewer than 25 historical games exist or the dataset lacks both outcomes, the app reverts to the odds + sentiment heuristic and flags the "Historical ML" column accordingly.
         """)
     
     with st.expander("📊 Betting Trend Analysis"):

@@ -154,6 +154,8 @@ class HistoricalDataBuilder:
         self._clients: Dict[str, Any] = {}
         self._dataset_cache: Dict[str, pd.DataFrame] = {}
         self._dataset_timestamp: Dict[str, datetime] = {}
+        self._dataset_attempt_timestamp: Dict[str, datetime] = {}
+        self._dataset_errors: Dict[str, Optional[str]] = {}
         self._odds_cache: Dict[str, Tuple[datetime, Dict[Tuple[str, str, date], Dict[str, Optional[float]]]]] = {}
         self._http = requests.Session()
 
@@ -172,6 +174,7 @@ class HistoricalDataBuilder:
                 return self._dataset_cache[sport_key]
 
         dataset = self._build_dataset(sport_key)
+        self._dataset_attempt_timestamp[sport_key] = datetime.utcnow()
         if dataset.empty:
             # Avoid caching empty results so a newly provided API key can
             # trigger another fetch instead of being stuck with a cold cache.
@@ -181,12 +184,44 @@ class HistoricalDataBuilder:
 
         self._dataset_cache[sport_key] = dataset
         self._dataset_timestamp[sport_key] = datetime.utcnow()
+        self._dataset_errors[sport_key] = None
         return dataset
+
+    # ------------------------------------------------------------------
+    def dataset_info(self, sport_key: Optional[str]) -> Dict[str, Optional[Any]]:
+        """Return cached dataset metadata without forcing a rebuild."""
+
+        info: Dict[str, Optional[Any]] = {
+            "sport_key": sport_key,
+            "rows": 0,
+            "last_built": None,
+            "last_attempt": None,
+            "error": None,
+        }
+
+        if not sport_key:
+            return info
+
+        dataset = self._dataset_cache.get(sport_key)
+        if dataset is not None:
+            info["rows"] = int(len(dataset))
+            info["last_built"] = self._dataset_timestamp.get(sport_key)
+        else:
+            info["rows"] = 0
+
+        info["last_attempt"] = self._dataset_attempt_timestamp.get(sport_key)
+        info["error"] = self._dataset_errors.get(sport_key)
+        return info
 
     # ------------------------------------------------------------------
     def _build_dataset(self, sport_key: str) -> pd.DataFrame:
         client = self._clients.get(sport_key)
-        if not client or not getattr(client, "is_configured", lambda: False)():
+        if not client:
+            self._dataset_errors[sport_key] = "unregistered_client"
+            return pd.DataFrame(columns=FEATURE_COLUMNS + ["home_win"])
+
+        if not getattr(client, "is_configured", lambda: False)():
+            self._dataset_errors[sport_key] = "missing_api_key"
             return pd.DataFrame(columns=FEATURE_COLUMNS + ["home_win"])
 
         today = datetime.utcnow().date()
@@ -198,6 +233,7 @@ class HistoricalDataBuilder:
             try:
                 games = client.get_games_by_date(target_date, timezone=self.timezone)
             except Exception:
+                self._dataset_errors[sport_key] = getattr(client, "last_error", "games_fetch_failed")
                 continue
 
             for game in games or []:
@@ -209,6 +245,7 @@ class HistoricalDataBuilder:
                 try:
                     summary = client.build_game_summary(game, tz_name=self.timezone)
                 except Exception:
+                    self._dataset_errors[sport_key] = getattr(client, "last_error", "summary_build_failed")
                     continue
 
                 feature_row = self._summary_to_features(summary)
@@ -228,8 +265,11 @@ class HistoricalDataBuilder:
                 rows.append(feature_row)
 
         if not rows:
+            if sport_key not in self._dataset_errors:
+                self._dataset_errors[sport_key] = getattr(client, "last_error", "no_historical_rows")
             return pd.DataFrame(columns=FEATURE_COLUMNS + ["home_win"])
 
+        self._dataset_errors[sport_key] = None
         df = pd.DataFrame(rows)
         df = df.drop_duplicates()
         ordered_cols = [col for col in FEATURE_COLUMNS if col in df.columns]
@@ -411,6 +451,42 @@ class HistoricalMLPredictor:
 
     def register_client(self, sport_key: str, client: Any) -> None:
         self.data_builder.register_client(sport_key, client)
+
+    # ------------------------------------------------------------------
+    def training_metadata(self, sport_key: Optional[str]) -> Dict[str, Optional[Any]]:
+        """Return the current training status for the given sport."""
+
+        info: Dict[str, Optional[Any]] = {
+            "sport_key": sport_key,
+            "dataset_rows": 0,
+            "last_dataset_build": None,
+            "model_ready": False,
+            "last_trained": None,
+            "training_rows": 0,
+            "min_rows": self.min_rows,
+            "error": None,
+        }
+
+        if not sport_key:
+            return info
+
+        dataset = self.data_builder.get_dataset(sport_key)
+        info["dataset_rows"] = int(len(dataset))
+        dataset_info = self.data_builder.dataset_info(sport_key)
+        info["last_dataset_build"] = dataset_info.get("last_built")
+        info["error"] = dataset_info.get("error")
+
+        if dataset.empty or len(dataset) < self.min_rows or dataset["home_win"].nunique() < 2:
+            info["training_rows"] = int(len(dataset))
+            info["model_ready"] = False
+            info["last_trained"] = self._model_timestamp.get(sport_key)
+            return info
+
+        model = self._ensure_model(sport_key)
+        info["model_ready"] = model is not None and sport_key in self._models
+        info["last_trained"] = self._model_timestamp.get(sport_key)
+        info["training_rows"] = int(self._training_rows.get(sport_key, len(dataset)))
+        return info
 
     # ------------------------------------------------------------------
     def _ensure_model(self, sport_key: Optional[str]) -> Optional[Pipeline]:

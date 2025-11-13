@@ -88,23 +88,18 @@ streamlit run streamlit_app_enhanced.py
 - 📈 Real-time odds from The Odds API blended with Kalshi validation
 
 ### Enhanced Version (Additional)
-- 🔁 *Legacy documentation:* the enhanced build remains available for experimentation with gradient boosting, but the standard app already handles historical ML workflows automatically.
-- 🧠 **ML Model Training** on 7-180 days of historical data
-- 📊 **Gradient Boosting Classifier** with feature engineering
-- 🎯 **55-65% Prediction Accuracy** (validated on test data)
-- 💡 **Real Edge Detection** (ML probability vs market odds)
-- 📈 **Historical Analysis** tab with insights
-- 🔄 **Local Caching** for faster retraining
-- 📉 **Feature Importance** rankings
+- 🔁 *Legacy experiments:* gradient-boosting prototypes remain for comparison, but the standard build now auto-trains logistic models.
+- 🧪 Optional notebooks for trying alternative models or wider historical windows
+- 🧮 Advanced feature-engineering templates to extend the ML pipeline further
 
 ## 🔬 How the ML Works
 
 ```
-Historical Odds → Feature Engineering → Model Training → Validation
-        ↓                    ↓                  ↓            ↓
-   (Past games)        (11+ features)    (Gradient Boost)  (58% acc)
-        ↓                    ↓                  ↓            ↓
-Current Odds → Extract Features → Predict → Compare to Market → Edge!
+API-Sports Schedules + The Odds API → Feature Engineering → Logistic Pipeline → Blended Probabilities
+              ↓                               ↓                        ↓                      ↓
+     (Records, form, trends)        (11 numerical features)   Impute → Scale → Train    65% ML • 25% market • 10% sentiment
+              ↓                               ↓                        ↓                      ↓
+ Current Odds → Build Feature Vector → Predict → Compare to Market → Edge!
 ```
 
 **Example Pattern Learned:**
@@ -122,7 +117,7 @@ Current Odds → Extract Features → Predict → Compare to Market → Edge!
 AI Metrics:
 ├─ Confidence: 72% (high)
 ├─ AI EV: +8.5% (excellent value)
-├─ Model Accuracy: 58.3%
+├─ Model Source: Historical ML (276 training rows)
 └─ Edge: +7% over market
 
 Parlay Legs:
