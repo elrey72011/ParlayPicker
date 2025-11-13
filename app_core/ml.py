@@ -172,6 +172,13 @@ class HistoricalDataBuilder:
                 return self._dataset_cache[sport_key]
 
         dataset = self._build_dataset(sport_key)
+        if dataset.empty:
+            # Avoid caching empty results so a newly provided API key can
+            # trigger another fetch instead of being stuck with a cold cache.
+            self._dataset_cache.pop(sport_key, None)
+            self._dataset_timestamp.pop(sport_key, None)
+            return dataset
+
         self._dataset_cache[sport_key] = dataset
         self._dataset_timestamp[sport_key] = datetime.utcnow()
         return dataset
@@ -262,7 +269,9 @@ class HistoricalDataBuilder:
 
         odds_key = self._odds_key_getter() if self._odds_key_getter else None
         if not odds_key:
-            self._odds_cache[sport_key] = (datetime.utcnow(), {})
+            # Don't pin an empty cache when credentials are missing; retry once
+            # the user supplies a key.
+            self._odds_cache.pop(sport_key, None)
             return {}
 
         params = {
@@ -315,6 +324,11 @@ class HistoricalDataBuilder:
                 "home_ml_implied": _implied_prob(best_home),
                 "away_ml_implied": _implied_prob(best_away),
             }
+
+        if not mapping:
+            # Allow quick retries when the API call fails or returns nothing.
+            self._odds_cache.pop(sport_key, None)
+            return mapping
 
         self._odds_cache[sport_key] = (datetime.utcnow(), mapping)
         return mapping
