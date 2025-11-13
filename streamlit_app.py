@@ -2908,10 +2908,12 @@ tab_labels = [
     "📊 Kalshi Prediction Markets",
     "🛰️ API-Sports Live Data",
 ]
+tabs = []
 try:
-    tabs = st.tabs(tab_labels)
-    if len(tabs) != len(tab_labels):
+    potential_tabs = st.tabs(tab_labels)
+    if len(potential_tabs) != len(tab_labels):
         raise ValueError("Streamlit returned an unexpected number of tabs")
+    tabs = list(potential_tabs)
 except Exception as tab_error:  # pragma: no cover - defensive fallback
     st.warning(
         "Tab layout is unavailable in this Streamlit runtime."
@@ -2919,17 +2921,16 @@ except Exception as tab_error:  # pragma: no cover - defensive fallback
         icon="⚠️",
     )
     tabs = [st.container() for _ in tab_labels]
-    logger.debug("Falling back to container-based layout for tabs: %s", tab_error)
+    logger.debug(
+        "Falling back to container-based layout for tabs: %s",
+        tab_error,
+        exc_info=True,
+    )
+
+if len(tabs) != len(tab_labels):  # pragma: no cover - ultra-defensive guard
+    tabs = [st.container() for _ in tab_labels]
 
 main_tab1, main_tab2, main_tab3, main_tab4, main_tab5 = tabs
-
-# ===== NEW TAB 1: ML TRAINING =====
-with main_tab1:
-    render_ml_training_tab(
-        st.session_state.get('api_key', ""),
-        st.session_state.get('ml_predictor'),
-        st.session_state.get('model_manager')
-    )
 
 # ===== TAB 1: SPORTS BETTING PARLAYS =====
 with main_tab1:
