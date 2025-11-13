@@ -55,6 +55,7 @@ class _APISportsBaseClient:
     STAT_CATEGORY_DEFENSE: str = "points"
     SCORING_METRIC_LABEL: str = "points"
     SEASON_CUTOFF_MONTH: int = 1
+    SEASON_FORMAT: str = "single"  # "single" -> "2024", "split" -> "2023-2024"
 
     def __init__(
         self,
@@ -109,15 +110,31 @@ class _APISportsBaseClient:
         return self.key_source
 
     @classmethod
-    def current_season_for_date(cls, target: Optional[date] = None) -> str:
-        """Return the season year (e.g. "2023") for a given date."""
-
+    def _season_start_year(cls, target: Optional[date] = None) -> int:
         target = target or datetime.utcnow().date()
         if target.month >= cls.SEASON_CUTOFF_MONTH:
-            start_year = target.year
-        else:
-            start_year = target.year - 1
-        return str(start_year)
+            return target.year
+        return target.year - 1
+
+    @classmethod
+    def season_candidates_for_date(cls, target: Optional[date] = None) -> List[str]:
+        """Return possible season identifiers for the target date."""
+
+        start_year = cls._season_start_year(target)
+        if cls.SEASON_FORMAT == "split":
+            # API-Sports tends to use "2023-2024" for leagues that span years.
+            return [
+                f"{start_year}-{start_year + 1}",
+                str(start_year),
+                str(start_year + 1),
+            ]
+        return [str(start_year)]
+
+    @classmethod
+    def current_season_for_date(cls, target: Optional[date] = None) -> str:
+        """Return the primary season label (first candidate) for the given date."""
+
+        return cls.season_candidates_for_date(target)[0]
 
     # ------------------------------------------------------------------
     # Networking helpers
@@ -160,28 +177,40 @@ class _APISportsBaseClient:
             return []
 
         league_id = league_id or self.DEFAULT_LEAGUE_ID
-        season = season or self.current_season_for_date(target_date)
-        cache_key = (target_date.isoformat(), timezone, league_id, season)
-        if cache_key in self._games_cache:
-            return self._games_cache[cache_key]
-
-        payload = self._request(
-            "/games",
-            {
-                "date": target_date.isoformat(),
-                "timezone": timezone,
-                "league": league_id,
-                "season": season,
-            },
+        season_candidates = (
+            [season]
+            if season
+            else self.season_candidates_for_date(target_date)
         )
-        games = (payload or {}).get("response", []) if payload else []
-        self._games_cache[cache_key] = games
-        return games
+
+        last_games: List[Dict] = []
+        for season_label in season_candidates:
+            cache_key = (target_date.isoformat(), timezone, league_id, season_label)
+            if cache_key in self._games_cache:
+                games = self._games_cache[cache_key]
+            else:
+                payload = self._request(
+                    "/games",
+                    {
+                        "date": target_date.isoformat(),
+                        "timezone": timezone,
+                        "league": league_id,
+                        "season": season_label,
+                    },
+                )
+                games = (payload or {}).get("response", []) if payload else []
+                self._games_cache[cache_key] = games
+
+            last_games = games
+            if games:
+                return games
+
+        return last_games
 
     def get_team_statistics(
         self,
         team_id: Optional[int],
-        season: str,
+        season: Optional[str],
         league_id: Optional[int] = None,
     ) -> Dict:
         """Fetch team statistics for the specified season."""
@@ -190,21 +219,34 @@ class _APISportsBaseClient:
             return {}
 
         league_id = league_id or self.DEFAULT_LEAGUE_ID
-        cache_key = (team_id, season, league_id)
-        if cache_key in self._team_cache:
-            return self._team_cache[cache_key]
-
-        payload = self._request(
-            "/teams/statistics",
-            {
-                "team": team_id,
-                "league": league_id,
-                "season": season,
-            },
+        season_str = str(season) if season is not None else None
+        season_candidates = (
+            [season_str]
+            if season_str
+            else self.season_candidates_for_date()
         )
-        stats = (payload or {}).get("response", {}) if payload else {}
-        self._team_cache[cache_key] = stats
-        return stats
+
+        for season_label in season_candidates:
+            if season_label is None:
+                continue
+            cache_key = (team_id, season_label, league_id)
+            if cache_key in self._team_cache:
+                stats = self._team_cache[cache_key]
+            else:
+                payload = self._request(
+                    "/teams/statistics",
+                    {
+                        "team": team_id,
+                        "league": league_id,
+                        "season": season_label,
+                    },
+                )
+                stats = (payload or {}).get("response", {}) if payload else {}
+                self._team_cache[cache_key] = stats
+            if stats:
+                return stats
+
+        return {}
 
     # ------------------------------------------------------------------
     # Formatting helpers
@@ -274,7 +316,13 @@ class _APISportsBaseClient:
     ) -> GameSummary:
         """Convert a raw API response into a structured summary."""
 
-        season = season or game.get("season") or self.current_season_for_date()
+        raw_season = season or game.get("season") or self.current_season_for_date()
+        if isinstance(raw_season, (int, float)):
+            season_label = str(int(raw_season))
+        else:
+            season_label = str(raw_season) if raw_season is not None else None
+
+        season = season_label or self.current_season_for_date()
         teams = game.get("teams") or {}
         status = (game.get("status") or {}).get("long") or (game.get("status") or {}).get("short")
 
@@ -363,6 +411,7 @@ class APISportsFootballClient(_APISportsBaseClient):
     STAT_CATEGORY_DEFENSE = "points"
     SCORING_METRIC_LABEL = "points"
     SEASON_CUTOFF_MONTH = 3
+    SEASON_FORMAT = "single"
 
 
 class APISportsHockeyClient(_APISportsBaseClient):
@@ -377,3 +426,4 @@ class APISportsHockeyClient(_APISportsBaseClient):
     STAT_CATEGORY_DEFENSE = "goals"
     SCORING_METRIC_LABEL = "goals"
     SEASON_CUTOFF_MONTH = 7
+    SEASON_FORMAT = "split"
