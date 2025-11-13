@@ -4,7 +4,7 @@ from __future__ import annotations
 import os
 import re
 from datetime import datetime, timedelta
-from typing import Dict
+from typing import Dict, Optional
 
 import requests
 
@@ -12,7 +12,7 @@ import requests
 class RealSentimentAnalyzer:
     """Provide sentiment signals using NewsAPI articles or a neutral fallback."""
 
-    def __init__(self, news_api_key: str | None = None) -> None:
+    def __init__(self, news_api_key: Optional[str] = None) -> None:
         self.news_api_key = news_api_key or os.environ.get("NEWS_API_KEY")
         self.sentiment_cache: Dict[str, Dict] = {}
         self.cache_duration = 1800  # 30 minutes
