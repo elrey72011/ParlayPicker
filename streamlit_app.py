@@ -134,17 +134,17 @@ def render_sidebar_controls() -> Dict[str, Any]:
 
     # --------------------- API-Sports keys ---------------------
     nfl_key_default, nfl_source_default = resolve_nfl_apisports_key()
-    st.session_state.setdefault('apisports_api_key', nfl_key_default)
-    st.session_state.setdefault('apisports_key_source', nfl_source_default)
+    st.session_state.setdefault('nfl_apisports_api_key', nfl_key_default)
+    st.session_state.setdefault('nfl_apisports_key_source', nfl_source_default)
     nfl_key_input = sidebar.text_input(
         "NFL API-Sports key",
-        value=st.session_state.get('apisports_api_key', ""),
+        value=st.session_state.get('nfl_apisports_api_key', ""),
         type="password",
         help="Used for live NFL context and historical model training.",
     ).strip()
-    if nfl_key_input != st.session_state.get('apisports_api_key', ""):
-        st.session_state['apisports_api_key'] = nfl_key_input
-        st.session_state['apisports_key_source'] = "user"
+    if nfl_key_input != st.session_state.get('nfl_apisports_api_key', ""):
+        st.session_state['nfl_apisports_api_key'] = nfl_key_input
+        st.session_state['nfl_apisports_key_source'] = "user"
 
     nhl_key_default, nhl_source_default = resolve_nhl_apisports_key()
     st.session_state.setdefault('nhl_apisports_api_key', nhl_key_default)
@@ -2088,6 +2088,84 @@ def integrate_kalshi_into_leg(
         0.95
     )
 
+# Helper to apply Kalshi validation to a betting leg in-place
+def integrate_kalshi_into_leg(
+    leg_data: Dict[str, Any],
+    home_team: str,
+    away_team: str,
+    side: str,
+    base_prob: float,
+    sport: str,
+    use_kalshi: bool,
+) -> None:
+    """Mutate a leg dictionary with Kalshi validation + probability blending."""
+
+    # Ensure downstream code sees the reason when Kalshi is not active
+    if not use_kalshi:
+        leg_data.setdefault('kalshi_validation', {
+            'kalshi_available': False,
+            'validation': 'disabled',
+            'edge': 0,
+            'confidence_boost': 0,
+            'market_scope': 'disabled',
+            'data_source': 'disabled'
+        })
+        return
+
+    kalshi = None
+    try:
+        kalshi = st.session_state.get('kalshi_integrator')
+    except Exception:
+        # When Streamlit session state isn't available (e.g. testing), skip gracefully
+        pass
+
+    if not kalshi:
+        leg_data['kalshi_validation'] = {
+            'kalshi_available': False,
+            'validation': 'unavailable',
+            'edge': 0,
+            'confidence_boost': 0,
+            'market_scope': 'not_initialized',
+            'data_source': 'unavailable'
+        }
+        return
+
+    try:
+        kalshi_data = validate_with_kalshi(kalshi, home_team, away_team, side, base_prob, sport)
+    except Exception:
+        leg_data['kalshi_validation'] = {
+            'kalshi_available': False,
+            'validation': 'error',
+            'edge': 0,
+            'confidence_boost': 0,
+            'market_scope': 'error',
+            'data_source': 'error'
+        }
+        return
+
+    leg_data['kalshi_validation'] = kalshi_data
+
+    if not kalshi_data.get('kalshi_available'):
+        return
+
+    original_ai_prob = leg_data.get('ai_prob', base_prob)
+    kalshi_prob = kalshi_data.get('kalshi_prob', base_prob)
+
+    blended_prob = (
+        original_ai_prob * 0.50 +  # AI model
+        kalshi_prob * 0.30 +       # Kalshi market
+        base_prob * 0.20           # Sportsbook baseline
+    )
+
+    leg_data['ai_prob_before_kalshi'] = original_ai_prob
+    leg_data['ai_prob'] = blended_prob
+    leg_data['kalshi_influence'] = blended_prob - original_ai_prob
+    leg_data['kalshi_edge'] = kalshi_data.get('edge', 0)
+    leg_data['ai_confidence'] = min(
+        leg_data.get('ai_confidence', 0.5) + kalshi_data.get('confidence_boost', 0),
+        0.95
+    )
+
 # ============ UTILITY FUNCTIONS ============
 def american_to_decimal(odds) -> float:
     odds = float(odds)
@@ -2771,7 +2849,7 @@ def render_parlay_section_ai(title, rows, theover_data=None):
                     st.info("🟡 **API-Sports neutral** – live data is included but trends are balanced.")
             else:
                 st.markdown("### 🛰️ API-Sports Live Data Status:")
-                apisports_client = st.session_state.get('apisports_client')
+                apisports_client = st.session_state.get('apisports_nfl_client')
                 hockey_client = st.session_state.get('apisports_hockey_client')
                 if not (
                     (apisports_client and apisports_client.is_configured())
@@ -3247,20 +3325,20 @@ if 'kalshi_integrator' not in st.session_state:
     kalshi_key = os.environ.get("KALSHI_API_KEY", "")
     kalshi_secret = os.environ.get("KALSHI_API_SECRET", "")
     st.session_state['kalshi_integrator'] = KalshiIntegrator(kalshi_key, kalshi_secret)
-if 'apisports_client' not in st.session_state:
-    stored_key = st.session_state.get('apisports_api_key')
-    stored_source = st.session_state.get('apisports_key_source')
+if 'apisports_nfl_client' not in st.session_state:
+    stored_key = st.session_state.get('nfl_apisports_api_key')
+    stored_source = st.session_state.get('nfl_apisports_key_source')
     if not stored_key:
         stored_key, stored_source = resolve_nfl_apisports_key()
-        st.session_state['apisports_api_key'] = stored_key
-        st.session_state['apisports_key_source'] = stored_source
-    st.session_state['apisports_client'] = APISportsFootballClient(
+        st.session_state['nfl_apisports_api_key'] = stored_key
+        st.session_state['nfl_apisports_key_source'] = stored_source
+    st.session_state['apisports_nfl_client'] = APISportsFootballClient(
         stored_key or None,
         key_source=stored_source,
     )
-elif 'apisports_api_key' not in st.session_state:
-    apisports_client = st.session_state.get('apisports_client')
-    st.session_state['apisports_api_key'] = (
+elif 'nfl_apisports_api_key' not in st.session_state:
+    apisports_client = st.session_state.get('apisports_nfl_client')
+    st.session_state['nfl_apisports_api_key'] = (
         apisports_client.api_key if apisports_client else ""
     )
 if 'apisports_hockey_client' not in st.session_state:
@@ -3331,15 +3409,15 @@ main_tab1, main_tab2, main_tab3, main_tab4, main_tab5 = tabs
 
 # ===== TAB 1: SPORTS BETTING PARLAYS =====
 with main_tab1:
-    apisports_client = st.session_state.get('apisports_client')
-    nfl_key = st.session_state.get('apisports_api_key', "")
-    nfl_source = st.session_state.get('apisports_key_source')
+    apisports_client = st.session_state.get('apisports_nfl_client')
+    nfl_key = st.session_state.get('nfl_apisports_api_key', "")
+    nfl_source = st.session_state.get('nfl_apisports_key_source')
     if apisports_client is None:
         apisports_client = APISportsFootballClient(
             nfl_key or None,
             key_source=nfl_source,
         )
-        st.session_state['apisports_client'] = apisports_client
+        st.session_state['apisports_nfl_client'] = apisports_client
     else:
         if apisports_client.api_key != (nfl_key or ""):
             apisports_client.update_api_key(nfl_key or None, source=nfl_source or "user")
@@ -3703,52 +3781,72 @@ with main_tab1:
             """)
 
     st.markdown("---")
-    st.subheader("🏈 API-Sports NFL Data Integration")
-    current_api_sports_key = st.session_state.get(
-        'apisports_api_key',
-        apisports_client.api_key if apisports_client else "",
-    )
-    new_api_sports_key = st.text_input(
-        "NFL API-Sports Key",
-        value=current_api_sports_key,
-        type="password",
-        help="Set the NFL_APISPORTS_API_KEY secret or create a free account at https://api-sports.io/documentation/american-football/v1 to obtain a key"
-    )
-    if new_api_sports_key != current_api_sports_key:
-        st.session_state['apisports_api_key'] = new_api_sports_key
-        if apisports_client:
-            apisports_client.update_api_key(
-                new_api_sports_key,
-                source="manual-entry" if new_api_sports_key else None,
-            )
-        if new_api_sports_key:
-            st.success("✅ NFL API-Sports key saved for this session.")
-        else:
-            st.info("API-Sports integration disabled until an NFL key is provided.")
 
-    st.subheader("🏀 API-Sports NBA Data Integration")
-    current_nba_key = st.session_state.get(
-        'nba_apisports_api_key',
-        basketball_client.api_key if basketball_client else "",
-    )
-    new_nba_key = st.text_input(
-        "NBA API-Sports Key",
-        value=current_nba_key,
-        type="password",
-        help="Set the NBA_APISPORTS_API_KEY secret or grab a basketball token from https://api-sports.io/documentation/basketball/v1",
-    )
-    if new_nba_key != current_nba_key:
-        st.session_state['nba_apisports_api_key'] = new_nba_key
-        st.session_state['nba_apisports_key_source'] = "manual-entry" if new_nba_key else None
-        if basketball_client:
-            basketball_client.update_api_key(
-                new_nba_key,
-                source="manual-entry" if new_nba_key else None,
-            )
-        if new_nba_key:
-            st.success("✅ NBA API-Sports key saved for this session.")
+    def render_api_sports_key_section(
+        header: str,
+        label: str,
+        session_key: str,
+        source_session_key: Optional[str],
+        client,
+        help_text: str,
+        success_message: str,
+        empty_message: str,
+        widget_suffix: str,
+    ) -> None:
+        st.subheader(header)
+        client_key = client.api_key if client else ""
+        current_value = st.session_state.get(session_key, client_key or "")
+        st.session_state.setdefault(session_key, current_value or "")
+        widget_key = f"{session_key}_{widget_suffix}"
+        widget_default = st.session_state.get(widget_key, current_value or "")
+        new_value_raw = st.text_input(
+            label,
+            value=widget_default,
+            key=widget_key,
+            type="password",
+            help=help_text,
+        )
+        new_value = (new_value_raw or "").strip()
+        stored_value = st.session_state.get(session_key, "")
+        if new_value != stored_value:
+            st.session_state[session_key] = new_value
+            if source_session_key:
+                st.session_state[source_session_key] = "manual-entry" if new_value else None
+            if client:
+                client.update_api_key(new_value, source="manual-entry" if new_value else None)
+            if new_value:
+                st.success(success_message)
+            else:
+                st.info(empty_message)
         else:
-            st.info("NBA live data disabled until an API-Sports key is provided.")
+            if st.session_state.get(widget_key, "") != stored_value:
+                st.session_state[widget_key] = stored_value
+            if not stored_value:
+                st.caption(empty_message)
+
+    render_api_sports_key_section(
+        header="🏈 API-Sports NFL Data Integration",
+        label="NFL API-Sports Key",
+        session_key='nfl_apisports_api_key',
+        source_session_key='nfl_apisports_key_source',
+        client=apisports_client,
+        help_text="Set the NFL_APISPORTS_API_KEY secret or create a free account at https://api-sports.io/documentation/american-football/v1 to obtain a key",
+        success_message="✅ NFL API-Sports key saved for this session.",
+        empty_message="API-Sports integration disabled until an NFL key is provided.",
+        widget_suffix="main",
+    )
+
+    render_api_sports_key_section(
+        header="🏀 API-Sports NBA Data Integration",
+        label="NBA API-Sports Key",
+        session_key='nba_apisports_api_key',
+        source_session_key='nba_apisports_key_source',
+        client=basketball_client,
+        help_text="Set the NBA_APISPORTS_API_KEY secret or grab a basketball token from https://api-sports.io/documentation/basketball/v1",
+        success_message="✅ NBA API-Sports key saved for this session.",
+        empty_message="NBA live data disabled until an API-Sports key is provided.",
+        widget_suffix="main",
+    )
 
     def describe_key_origin(origin: Optional[str]) -> str:
         if not origin:
@@ -3777,28 +3875,17 @@ with main_tab1:
     else:
         st.caption("No NBA API-Sports key detected; NBA live data will be skipped.")
 
-    st.subheader("🏒 API-Sports NHL Data Integration")
-    current_nhl_key = st.session_state.get(
-        'nhl_apisports_api_key',
-        hockey_client.api_key if hockey_client else "",
+    render_api_sports_key_section(
+        header="🏒 API-Sports NHL Data Integration",
+        label="NHL API-Sports Key",
+        session_key='nhl_apisports_api_key',
+        source_session_key='nhl_apisports_key_source',
+        client=hockey_client,
+        help_text="Set the NHL_APISPORTS_API_KEY secret or create a free account at https://api-sports.io/documentation/hockey/v1 to obtain a key",
+        success_message="✅ NHL API-Sports key saved for this session.",
+        empty_message="NHL live data integration disabled until a key is provided.",
+        widget_suffix="main",
     )
-    new_nhl_key = st.text_input(
-        "NHL API-Sports Key",
-        value=current_nhl_key,
-        type="password",
-        help="Set the NHL_APISPORTS_API_KEY secret or create a free account at https://api-sports.io/documentation/hockey/v1 to obtain a key",
-    )
-    if new_nhl_key != current_nhl_key:
-        st.session_state['nhl_apisports_api_key'] = new_nhl_key
-        if hockey_client:
-            hockey_client.update_api_key(
-                new_nhl_key,
-                source="manual-entry" if new_nhl_key else None,
-            )
-        if new_nhl_key:
-            st.success("✅ NHL API-Sports key saved for this session.")
-        else:
-            st.info("NHL live data integration disabled until a key is provided.")
 
     if hockey_client and hockey_client.is_configured():
         st.caption(
@@ -5810,14 +5897,14 @@ with main_tab4:
 
 # ===== TAB 5: API-SPORTS LIVE DATA =====
 with main_tab5:
-    apisports_client = st.session_state.get('apisports_client')
+    apisports_client = st.session_state.get('apisports_nfl_client')
     if apisports_client is None:
         fallback_key, fallback_source = resolve_nfl_apisports_key()
         apisports_client = APISportsFootballClient(
             fallback_key or None,
             key_source=fallback_source,
         )
-        st.session_state['apisports_client'] = apisports_client
+        st.session_state['apisports_nfl_client'] = apisports_client
 
     hockey_client = st.session_state.get('apisports_hockey_client')
     if hockey_client is None:
@@ -5964,7 +6051,7 @@ with main_tab5:
         )
 
         widget_key = (
-            st.session_state.get('apisports_api_key')
+            st.session_state.get('nfl_apisports_api_key')
             or st.session_state.get('nba_apisports_api_key')
             or st.session_state.get('nhl_apisports_api_key')
             or (apisports_client.api_key if apisports_client else "")
