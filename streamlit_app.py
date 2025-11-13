@@ -2062,6 +2062,84 @@ def integrate_kalshi_into_leg(
         0.95
     )
 
+# Helper to apply Kalshi validation to a betting leg in-place
+def integrate_kalshi_into_leg(
+    leg_data: Dict[str, Any],
+    home_team: str,
+    away_team: str,
+    side: str,
+    base_prob: float,
+    sport: str,
+    use_kalshi: bool,
+) -> None:
+    """Mutate a leg dictionary with Kalshi validation + probability blending."""
+
+    # Ensure downstream code sees the reason when Kalshi is not active
+    if not use_kalshi:
+        leg_data.setdefault('kalshi_validation', {
+            'kalshi_available': False,
+            'validation': 'disabled',
+            'edge': 0,
+            'confidence_boost': 0,
+            'market_scope': 'disabled',
+            'data_source': 'disabled'
+        })
+        return
+
+    kalshi = None
+    try:
+        kalshi = st.session_state.get('kalshi_integrator')
+    except Exception:
+        # When Streamlit session state isn't available (e.g. testing), skip gracefully
+        pass
+
+    if not kalshi:
+        leg_data['kalshi_validation'] = {
+            'kalshi_available': False,
+            'validation': 'unavailable',
+            'edge': 0,
+            'confidence_boost': 0,
+            'market_scope': 'not_initialized',
+            'data_source': 'unavailable'
+        }
+        return
+
+    try:
+        kalshi_data = validate_with_kalshi(kalshi, home_team, away_team, side, base_prob, sport)
+    except Exception:
+        leg_data['kalshi_validation'] = {
+            'kalshi_available': False,
+            'validation': 'error',
+            'edge': 0,
+            'confidence_boost': 0,
+            'market_scope': 'error',
+            'data_source': 'error'
+        }
+        return
+
+    leg_data['kalshi_validation'] = kalshi_data
+
+    if not kalshi_data.get('kalshi_available'):
+        return
+
+    original_ai_prob = leg_data.get('ai_prob', base_prob)
+    kalshi_prob = kalshi_data.get('kalshi_prob', base_prob)
+
+    blended_prob = (
+        original_ai_prob * 0.50 +  # AI model
+        kalshi_prob * 0.30 +       # Kalshi market
+        base_prob * 0.20           # Sportsbook baseline
+    )
+
+    leg_data['ai_prob_before_kalshi'] = original_ai_prob
+    leg_data['ai_prob'] = blended_prob
+    leg_data['kalshi_influence'] = blended_prob - original_ai_prob
+    leg_data['kalshi_edge'] = kalshi_data.get('edge', 0)
+    leg_data['ai_confidence'] = min(
+        leg_data.get('ai_confidence', 0.5) + kalshi_data.get('confidence_boost', 0),
+        0.95
+    )
+
 # ============ UTILITY FUNCTIONS ============
 def american_to_decimal(odds) -> float:
     odds = float(odds)
@@ -3136,7 +3214,9 @@ if 'sentiment_analyzer' not in st.session_state:
 if 'historical_data_builder' not in st.session_state:
     st.session_state['historical_data_builder'] = HistoricalDataBuilder(
         lambda: st.session_state.get('api_key', "") or os.environ.get("ODDS_API_KEY", ""),
-        days_back=90,
+        days_back=120,
+        max_days_back=540,
+        min_rows_target=30,
     )
 if 'ml_predictor' not in st.session_state:
     builder = st.session_state['historical_data_builder']
@@ -3428,12 +3508,13 @@ with main_tab1:
                     help="Rows consumed by the logistic model during the last training run.",
                 )
 
+                rows_needed = int(metadata.get('min_rows_target') or metadata.get('min_rows', 0) or 0)
                 if metadata.get('model_ready'):
                     st.success("Model trained on recent history ✅")
                 else:
-                    if metadata.get('dataset_rows', 0) < metadata.get('min_rows', 0):
+                    if rows_needed and metadata.get('dataset_rows', 0) < rows_needed:
                         st.warning(
-                            f"Collecting more games… need {metadata.get('min_rows', 0)}+ rows for training.",
+                            f"Collecting more games… need {rows_needed}+ rows for training.",
                         )
                     else:
                         st.info("Training will kick in once enough balanced outcomes are available.")
@@ -3453,6 +3534,8 @@ with main_tab1:
                         'games_fetch_failed': 'API-Sports schedule request failed. Retry shortly.',
                         'summary_build_failed': 'Could not assemble team summaries from API-Sports.',
                         'no_historical_rows': 'No completed games found in the selected window yet.',
+                        'season_fetch_failed': 'Season backfill request failed. Retry after checking your API-Sports quota.',
+                        'insufficient_rows': 'Need more completed games from API-Sports. Try expanding the season window.',
                         'metadata_unavailable': 'Model metadata is unavailable right now. Please retry shortly.',
                         'predictor_missing': 'Machine learning module is not ready. Refresh after initialization.',
                         'invalid_metadata_payload': 'Received unexpected metadata payload. Check server logs.',
@@ -3463,6 +3546,17 @@ with main_tab1:
                         st.caption(line)
                 elif not sport_client or not getattr(sport_client, 'is_configured', lambda: False)():
                     st.info("Provide an API-Sports key to enable historical ML training.")
+
+                seasons = metadata.get('dataset_seasons') or metadata.get('seasons')
+                if seasons:
+                    season_str = ", ".join(str(season) for season in seasons)
+                    st.caption(f"Seasons in training set: {season_str}")
+                max_days = metadata.get('dataset_max_days_back')
+                if max_days:
+                    st.caption(f"Historical lookback window: {int(max_days)} days")
+                backfills = metadata.get('season_backfills')
+                if backfills:
+                    st.caption("Season backfills attempted: " + ", ".join(str(b) for b in backfills))
 
     col3, col4, col5 = st.columns(3)
     with col3:

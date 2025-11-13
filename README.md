@@ -57,6 +57,7 @@ streamlit run streamlit_app.py
 ### Core Features
 - 🎲 Multi-sport odds aggregation (NFL, NBA, MLB, NHL, etc.)
 - 🤖 Automatic logistic-regression predictions trained on recent API-Sports schedules (no manual training step)
+- 🗂️ Multi-season backfill automatically taps prior campaigns (e.g., 2024 data) whenever the latest window is sparse
 - 📊 Parlay combination builder (2-leg, 3-leg, 4-leg)
 - 💰 Expected Value (EV) calculations
 - 🛰️ API-Sports NFL & NHL live data integration
@@ -78,9 +79,13 @@ API-Sports Schedules + The Odds API → Feature Engineering → Logistic Pipelin
  Current Odds → Build Feature Vector → Predict → Compare to Market → Edge!
 ```
 
+When the current season hasn't produced enough completed games (such as early in the offseason), the builder automatically
+backfills with earlier campaigns—including the full 2024 schedules for NFL and NHL—so the logistic model still trains on a
+balanced dataset before influencing the parlay analysis.
+
 **Example Pattern Learned:**
 ```
-"Home favorites at -300 with -7.5 spread in NFL: 
+"Home favorites at -300 with -7.5 spread in NFL:
  Market says 75%, ML model says 78% based on 147 similar games
  → 3% edge detected!"
 ```

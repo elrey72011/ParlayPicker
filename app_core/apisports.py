@@ -79,6 +79,7 @@ class _APISportsBaseClient:
         self.session = session or requests.Session()
         self.timeout = 10
         self._games_cache: Dict[Tuple[str, str, int, str], List[Dict]] = {}
+        self._season_games_cache: Dict[Tuple[str, str, int], List[Dict]] = {}
         self._team_cache: Dict[Tuple[int, str, int], Dict] = {}
         self.last_error: Optional[str] = None
 
@@ -101,6 +102,7 @@ class _APISportsBaseClient:
         else:
             self.session.headers.pop("x-apisports-key", None)
         self._games_cache.clear()
+        self._season_games_cache.clear()
         self._team_cache.clear()
         self.last_error = None
 
@@ -206,6 +208,35 @@ class _APISportsBaseClient:
                 return games
 
         return last_games
+
+    def get_games_by_season(
+        self,
+        season: str,
+        timezone: str = "America/New_York",
+        league_id: Optional[int] = None,
+    ) -> List[Dict]:
+        """Fetch all games for a given season label."""
+
+        if not self.is_configured():
+            return []
+
+        league_id = league_id or self.DEFAULT_LEAGUE_ID
+        season_label = str(season)
+        cache_key = (season_label, timezone, league_id)
+        if cache_key in self._season_games_cache:
+            return self._season_games_cache[cache_key]
+
+        payload = self._request(
+            "/games",
+            {
+                "season": season_label,
+                "timezone": timezone,
+                "league": league_id,
+            },
+        )
+        games = (payload or {}).get("response", []) if payload else []
+        self._season_games_cache[cache_key] = games
+        return games
 
     def get_team_statistics(
         self,

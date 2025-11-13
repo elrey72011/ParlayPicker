@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta
-from typing import Any, Callable, Dict, Optional, Tuple
+from typing import Any, Callable, Dict, Optional, Tuple, Set, List
 
 import numpy as np
 import pandas as pd
@@ -138,6 +138,25 @@ def _kickoff_date(iso_ts: Optional[str]) -> Optional[date]:
         return None
 
 
+def _game_identifier(game: Dict[str, Any]) -> Optional[Tuple[str, ...]]:
+    if not isinstance(game, dict):
+        return None
+
+    game_id = game.get("id")
+    if isinstance(game_id, (int, float, str)):
+        return ("id", str(game_id))
+
+    teams = game.get("teams") or {}
+    home_team = (teams.get("home") or {}).get("name")
+    away_team = (teams.get("away") or {}).get("name")
+    home_norm = _normalize_team_name(home_team)
+    away_norm = _normalize_team_name(away_team)
+    kickoff = _kickoff_date(_extract_commence_iso(game))
+    if home_norm and away_norm and kickoff:
+        return ("matchup", home_norm, away_norm, kickoff.isoformat())
+    return None
+
+
 class HistoricalDataBuilder:
     """Build datasets that join API-Sports summaries with historical odds."""
 
@@ -147,15 +166,20 @@ class HistoricalDataBuilder:
         *,
         timezone: str = "America/New_York",
         days_back: int = 45,
+        max_days_back: int = 365,
+        min_rows_target: int = 25,
     ) -> None:
         self._odds_key_getter = odds_key_getter
         self.timezone = timezone
         self.days_back = max(7, days_back)
+        self.max_days_back = max(self.days_back, max_days_back)
+        self.min_rows_target = max(5, min_rows_target)
         self._clients: Dict[str, Any] = {}
         self._dataset_cache: Dict[str, pd.DataFrame] = {}
         self._dataset_timestamp: Dict[str, datetime] = {}
         self._dataset_attempt_timestamp: Dict[str, datetime] = {}
         self._dataset_errors: Dict[str, Optional[str]] = {}
+        self._dataset_metadata: Dict[str, Dict[str, Any]] = {}
         self._odds_cache: Dict[str, Tuple[datetime, Dict[Tuple[str, str, date], Dict[str, Optional[float]]]]] = {}
         self._http = requests.Session()
 
@@ -197,6 +221,10 @@ class HistoricalDataBuilder:
             "last_built": None,
             "last_attempt": None,
             "error": None,
+            "seasons": None,
+            "max_days_back": None,
+            "season_backfills": None,
+            "min_rows_target": self.min_rows_target,
         }
 
         if not sport_key:
@@ -211,6 +239,11 @@ class HistoricalDataBuilder:
 
         info["last_attempt"] = self._dataset_attempt_timestamp.get(sport_key)
         info["error"] = self._dataset_errors.get(sport_key)
+        metadata = self._dataset_metadata.get(sport_key, {})
+        if metadata:
+            info["seasons"] = metadata.get("seasons")
+            info["max_days_back"] = metadata.get("max_days_back")
+            info["season_backfills"] = metadata.get("season_backfills")
         return info
 
     # ------------------------------------------------------------------
@@ -218,64 +251,176 @@ class HistoricalDataBuilder:
         client = self._clients.get(sport_key)
         if not client:
             self._dataset_errors[sport_key] = "unregistered_client"
+            self._dataset_metadata[sport_key] = {}
             return pd.DataFrame(columns=FEATURE_COLUMNS + ["home_win"])
 
         if not getattr(client, "is_configured", lambda: False)():
             self._dataset_errors[sport_key] = "missing_api_key"
+            self._dataset_metadata[sport_key] = {}
             return pd.DataFrame(columns=FEATURE_COLUMNS + ["home_win"])
 
         today = datetime.utcnow().date()
-        rows = []
+        rows: List[Dict[str, Any]] = []
         odds_map = self._get_historical_odds_map(sport_key)
+        seasons_used: Set[str] = set()
+        season_backfills: List[str] = []
+        seen_keys: Set[Tuple[str, ...]] = set()
+        max_offset_used = 0
 
-        for offset in range(1, self.days_back + 1):
-            target_date = today - timedelta(days=offset)
-            try:
-                games = client.get_games_by_date(target_date, timezone=self.timezone)
-            except Exception:
-                self._dataset_errors[sport_key] = getattr(client, "last_error", "games_fetch_failed")
-                continue
-
-            for game in games or []:
-                home_score = _extract_score((game.get("scores") or {}).get("home"))
-                away_score = _extract_score((game.get("scores") or {}).get("away"))
-                if home_score is None or away_score is None:
-                    continue
-
+        def collect_by_dates(start_offset: int, end_offset: int) -> None:
+            nonlocal max_offset_used
+            for offset in range(start_offset, end_offset + 1):
+                target_date = today - timedelta(days=offset)
+                max_offset_used = max(max_offset_used, offset)
                 try:
-                    summary = client.build_game_summary(game, tz_name=self.timezone)
+                    games = client.get_games_by_date(target_date, timezone=self.timezone)
                 except Exception:
-                    self._dataset_errors[sport_key] = getattr(client, "last_error", "summary_build_failed")
+                    self._dataset_errors[sport_key] = getattr(client, "last_error", "games_fetch_failed")
                     continue
 
-                feature_row = self._summary_to_features(summary)
-                commence_iso = _extract_commence_iso(game)
-                odds_entry = self._lookup_odds_entry(summary, commence_iso, odds_map)
-                if odds_entry:
-                    feature_row.update(odds_entry)
+                for game in games or []:
+                    feature_row, season_label = self._process_game(
+                        client,
+                        sport_key,
+                        game,
+                        odds_map,
+                        seen_keys,
+                    )
+                    if feature_row:
+                        rows.append(feature_row)
+                        if season_label:
+                            seasons_used.add(str(season_label))
 
-                feature_row.setdefault("home_ml_implied", None)
-                feature_row.setdefault("away_ml_implied", None)
-                feature_row.setdefault("sentiment_home", 0.0)
-                feature_row.setdefault("sentiment_away", 0.0)
-                feature_row.setdefault("sentiment_diff", 0.0)
-                feature_row.setdefault("home_field_advantage", 1.0)
+        collect_by_dates(1, self.days_back)
 
-                feature_row["home_win"] = 1 if home_score > away_score else 0
-                rows.append(feature_row)
+        if len(rows) < self.min_rows_target and self.max_days_back > self.days_back:
+            collect_by_dates(self.days_back + 1, self.max_days_back)
+
+        if len(rows) < self.min_rows_target and hasattr(client, "get_games_by_season"):
+            for season_label in self._season_backfill_candidates(client, today):
+                if not season_label or season_label in season_backfills:
+                    continue
+                season_backfills.append(season_label)
+                try:
+                    games = client.get_games_by_season(season_label, timezone=self.timezone)
+                except Exception:
+                    self._dataset_errors[sport_key] = getattr(client, "last_error", "season_fetch_failed")
+                    continue
+
+                for game in games or []:
+                    feature_row, season_used = self._process_game(
+                        client,
+                        sport_key,
+                        game,
+                        odds_map,
+                        seen_keys,
+                        season_override=season_label,
+                    )
+                    if feature_row:
+                        rows.append(feature_row)
+                        if season_used:
+                            seasons_used.add(str(season_used))
+                if len(rows) >= self.min_rows_target:
+                    break
+
+        metadata = {
+            "seasons": sorted(seasons_used) if seasons_used else None,
+            "max_days_back": max_offset_used if max_offset_used else None,
+            "season_backfills": season_backfills if season_backfills else None,
+        }
+        self._dataset_metadata[sport_key] = metadata
 
         if not rows:
             if sport_key not in self._dataset_errors:
                 self._dataset_errors[sport_key] = getattr(client, "last_error", "no_historical_rows")
             return pd.DataFrame(columns=FEATURE_COLUMNS + ["home_win"])
 
-        self._dataset_errors[sport_key] = None
+        if len(rows) < self.min_rows_target and not self._dataset_errors.get(sport_key):
+            self._dataset_errors[sport_key] = "insufficient_rows"
+        else:
+            self._dataset_errors[sport_key] = None
+
         df = pd.DataFrame(rows)
         df = df.drop_duplicates()
         ordered_cols = [col for col in FEATURE_COLUMNS if col in df.columns]
         if "home_win" in df.columns:
             ordered_cols.append("home_win")
         return df[ordered_cols]
+
+    def _season_backfill_candidates(self, client: Any, today: date) -> List[str]:
+        candidates: List[str] = []
+        base_dates = [
+            today,
+            today - timedelta(days=180),
+            today - timedelta(days=365),
+            today - timedelta(days=540),
+            today - timedelta(days=730),
+        ]
+
+        for base in base_dates:
+            try:
+                season_list = client.season_candidates_for_date(base)
+            except Exception:
+                season_list = []
+            for season_label in season_list or []:
+                if season_label is None:
+                    continue
+                label = str(season_label)
+                if label and label not in candidates:
+                    candidates.append(label)
+        return candidates
+
+    def _process_game(
+        self,
+        client: Any,
+        sport_key: str,
+        game: Dict[str, Any],
+        odds_map: Dict[Tuple[str, str, date], Dict[str, Optional[float]]],
+        seen_keys: Set[Tuple[str, ...]],
+        *,
+        season_override: Optional[str] = None,
+    ) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+        if not isinstance(game, dict):
+            return None, None
+
+        identifier = _game_identifier(game)
+        if identifier and identifier in seen_keys:
+            return None, None
+
+        home_score = _extract_score((game.get("scores") or {}).get("home"))
+        away_score = _extract_score((game.get("scores") or {}).get("away"))
+        if home_score is None or away_score is None:
+            return None, None
+
+        try:
+            summary = client.build_game_summary(
+                game,
+                tz_name=self.timezone,
+                season=season_override,
+            )
+        except Exception:
+            self._dataset_errors[sport_key] = getattr(client, "last_error", "summary_build_failed")
+            return None, None
+
+        feature_row = self._summary_to_features(summary)
+        commence_iso = _extract_commence_iso(game)
+        odds_entry = self._lookup_odds_entry(summary, commence_iso, odds_map)
+        if odds_entry:
+            feature_row.update(odds_entry)
+
+        feature_row.setdefault("home_ml_implied", None)
+        feature_row.setdefault("away_ml_implied", None)
+        feature_row.setdefault("sentiment_home", 0.0)
+        feature_row.setdefault("sentiment_away", 0.0)
+        feature_row.setdefault("sentiment_diff", 0.0)
+        feature_row.setdefault("home_field_advantage", 1.0)
+
+        feature_row["home_win"] = 1 if home_score > away_score else 0
+
+        if identifier:
+            seen_keys.add(identifier)
+
+        return feature_row, getattr(summary, "season", None)
 
     # ------------------------------------------------------------------
     def _summary_to_features(self, summary: Any) -> Dict[str, Optional[float]]:
@@ -475,6 +620,10 @@ class HistoricalMLPredictor:
         dataset_info = self.data_builder.dataset_info(sport_key)
         info["last_dataset_build"] = dataset_info.get("last_built")
         info["error"] = dataset_info.get("error")
+        info["dataset_seasons"] = dataset_info.get("seasons")
+        info["dataset_max_days_back"] = dataset_info.get("max_days_back")
+        info["season_backfills"] = dataset_info.get("season_backfills")
+        info["min_rows_target"] = dataset_info.get("min_rows_target")
 
         if dataset.empty or len(dataset) < self.min_rows or dataset["home_win"].nunique() < 2:
             info["training_rows"] = int(len(dataset))
