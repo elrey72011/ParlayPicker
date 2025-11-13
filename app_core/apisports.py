@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import re
+import time
 from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Dict, List, Optional, Sequence, Tuple
@@ -78,6 +79,7 @@ class _APISportsBaseClient:
         self.api_key = resolved_key or ""
         self.session = session or requests.Session()
         self.timeout = 10
+        self.max_retries = 3
         self._games_cache: Dict[Tuple[str, str, int, str], List[Dict]] = {}
         self._season_games_cache: Dict[Tuple[str, str, int], List[Dict]] = {}
         self._team_cache: Dict[Tuple[int, str, int], Dict] = {}
@@ -146,24 +148,60 @@ class _APISportsBaseClient:
             return None
 
         url = f"{self.BASE_URL}{path}"
-        try:
-            resp = self.session.get(url, params=params or {}, timeout=self.timeout)
+        attempts = 0
+        while attempts < self.max_retries:
+            try:
+                resp = self.session.get(url, params=params or {}, timeout=self.timeout)
+            except requests.exceptions.Timeout:
+                self.last_error = "API-Sports timeout"
+                return None
+            except requests.RequestException as exc:
+                self.last_error = f"API-Sports request failed: {exc}"
+                return None
+
             if resp.status_code == 401:
                 self.last_error = "Invalid API-Sports key"
                 return None
-            resp.raise_for_status()
-            payload = resp.json()
+
+            if resp.status_code == 429:
+                retry_after = resp.headers.get("Retry-After")
+                wait_seconds: float
+                if retry_after:
+                    try:
+                        wait_seconds = float(retry_after)
+                    except ValueError:
+                        wait_seconds = 0.0
+                else:
+                    wait_seconds = 0.0
+                if wait_seconds <= 0:
+                    wait_seconds = min(2.0 ** attempts, 5.0)
+                attempts += 1
+                if attempts >= self.max_retries:
+                    self.last_error = "API-Sports rate limit reached. Please try again shortly."
+                    return None
+                self.last_error = "API-Sports rate limit reached. Retrying shortly..."
+                time.sleep(wait_seconds)
+                continue
+
+            try:
+                resp.raise_for_status()
+            except requests.RequestException as exc:
+                self.last_error = f"API-Sports request failed: {exc}"
+                return None
+
+            try:
+                payload = resp.json()
+            except ValueError:
+                self.last_error = "Invalid JSON from API-Sports"
+                return None
+
             if payload.get("errors"):
                 self.last_error = "; ".join(payload.get("errors", {}).values()) or "Unknown API-Sports error"
                 return None
+
             self.last_error = None
             return payload
-        except requests.exceptions.Timeout:
-            self.last_error = "API-Sports timeout"
-        except requests.RequestException as exc:
-            self.last_error = f"API-Sports request failed: {exc}"
-        except ValueError:
-            self.last_error = "Invalid JSON from API-Sports"
+
         return None
 
     def get_games_by_date(
