@@ -13,6 +13,7 @@ import streamlit.components.v1 as components
 import pytz
 
 from app_core import (
+    APISportsBasketballClient,
     APISportsFootballClient,
     APISportsHockeyClient,
     HistoricalDataBuilder,
@@ -158,6 +159,19 @@ def render_sidebar_controls() -> Dict[str, Any]:
         st.session_state['nhl_apisports_api_key'] = nhl_key_input
         st.session_state['nhl_apisports_key_source'] = "user"
 
+    nba_key_default, nba_source_default = resolve_nba_apisports_key()
+    st.session_state.setdefault('nba_apisports_api_key', nba_key_default)
+    st.session_state.setdefault('nba_apisports_key_source', nba_source_default)
+    nba_key_input = sidebar.text_input(
+        "NBA API-Sports key",
+        value=st.session_state.get('nba_apisports_api_key', ""),
+        type="password",
+        help="Used for live NBA context and historical model training.",
+    ).strip()
+    if nba_key_input != st.session_state.get('nba_apisports_api_key', ""):
+        st.session_state['nba_apisports_api_key'] = nba_key_input
+        st.session_state['nba_apisports_key_source'] = "user"
+
     # --------------------- Time & sport filters ---------------------
     sidebar.subheader("📅 Filters")
     default_tz_name = st.session_state.get('user_timezone', 'America/New_York')
@@ -294,6 +308,27 @@ def resolve_nhl_apisports_key() -> Tuple[str, Optional[str]]:
                 return str(secret_value), f"secret:{secret_name}"
 
     for env_name in ("NHL_APISPORTS_API_KEY", "APISPORTS_API_KEY", "API_SPORTS_KEY"):
+        env_value = os.environ.get(env_name)
+        if env_value:
+            return env_value, f"env:{env_name}"
+
+    return "", None
+
+
+def resolve_nba_apisports_key() -> Tuple[str, Optional[str]]:
+    """Locate the NBA API-Sports key from Streamlit secrets or the environment."""
+
+    secret_container = getattr(st, "secrets", None)
+    if secret_container is not None:
+        for secret_name in ("NBA_APISPORTS_API_KEY", "APISPORTS_API_KEY", "API_SPORTS_KEY"):
+            try:
+                secret_value = secret_container.get(secret_name)
+            except Exception:
+                secret_value = None
+            if secret_value:
+                return str(secret_value), f"secret:{secret_name}"
+
+    for env_name in ("NBA_APISPORTS_API_KEY", "APISPORTS_API_KEY", "API_SPORTS_KEY"):
         env_value = os.environ.get(env_name)
         if env_value:
             return env_value, f"env:{env_name}"
@@ -2488,7 +2523,7 @@ def render_parlay_section_ai(title, rows, theover_data=None):
                     st.metric(
                         "API-Sports Legs",
                         "0",
-                        help="Provide an API-Sports key (NFL or NHL) to enrich supported legs",
+                        help="Provide an API-Sports key (NFL, NBA, or NHL) to enrich supported legs",
                     )
             
             # KALSHI STATUS - ALWAYS SHOW (whether data exists or not)
@@ -2680,14 +2715,148 @@ def render_parlay_section_ai(title, rows, theover_data=None):
                     st.warning(
                         f"🟠 **API-Sports reduced this parlay by {(1-live_data_factor)*100:.0f}%** due to cold or negative trends."
                     )
+                
+                # Explanation of Kalshi influence
+                if kalshi_factor_val > 1.05:
+                    st.success(f"🟢 **Kalshi BOOSTED this parlay by {(kalshi_factor_val-1)*100:.0f}%** - Prediction markets confirm AI analysis!")
+                elif kalshi_factor_val < 0.95:
+                    st.warning(f"🟠 **Kalshi REDUCED this parlay by {(1-kalshi_factor_val)*100:.0f}%** - Prediction markets skeptical of AI picks.")
+                else:
+                    st.info("🟡 **Kalshi NEUTRAL** - Prediction markets neither strongly confirm nor contradict AI.")
+            else:
+                # NO KALSHI DATA - Explain why
+                st.markdown("### 📊 Kalshi Prediction Market Status:")
+                legs = row.get('legs', [])
+                scopes = [leg.get('kalshi_validation', {}).get('market_scope') for leg in legs]
+                unsupported_labels = [
+                    leg.get('label')
+                    for leg in legs
+                    if leg.get('kalshi_validation', {}).get('market_scope') in {
+                        'total_market', 'unsupported_market', 'totals_not_supported'
+                    }
+                ]
+                error_labels = [
+                    leg.get('label')
+                    for leg in legs
+                    if leg.get('kalshi_validation', {}).get('market_scope') == 'error'
+                ]
+                not_initialized = any(scope == 'not_initialized' for scope in scopes)
+                disabled = (not st.session_state.get('kalshi_enabled', False)) or any(scope == 'disabled' for scope in scopes)
+
+                if disabled:
+                    st.info("Kalshi validation is turned off. Toggle the Kalshi checkbox above to blend prediction markets into the analysis.")
+                elif unsupported_labels:
+                    st.info("Kalshi does not publish totals/prop markets, so these leg(s) rely on AI + sentiment only:")
+                    for label in unsupported_labels:
+                        st.caption(f"• {label}")
+                    st.caption("Moneyline and spread legs will include Kalshi coverage whenever a market is available.")
+                elif not_initialized:
+                    st.info("Kalshi markets have not loaded yet. Add your Kalshi API key or retry to use the live/synthetic market data.")
+                elif error_labels:
+                    st.warning("Kalshi validation encountered an error for these legs (falling back to AI + sentiment):")
+                    for label in error_labels:
+                        st.caption(f"• {label}")
+                else:
+                    st.warning(f"""
+                    **⚠️ No Kalshi Data Available for this Parlay** ({kalshi_legs_with_data}/{total_legs} legs)
+
+                    **This means:**
+                    - ✅ Analysis still uses AI + Sentiment (2 of 3 sources)
+                    - ⚠️ Missing prediction market validation
+                    - 🔄 Kalshi Factor = 1.0x (neutral, no impact)
+                    - 📊 AI Score unchanged by Kalshi
+
+                    **Why no data?**
+                    - Kalshi doesn't have markets for these specific games
+                    - Kalshi focuses on season-long outcomes (playoffs, championships)
+                    - Individual game spreads/totals rarely have Kalshi markets
+
+                    **What this means:**
+                    - Bet based on AI + Sentiment confidence
+                    - Higher risk without 3rd source validation
+                    - Consider checking Tab 4 for available Kalshi markets
+
+                    💡 **Tip:** For Kalshi validation, focus on season futures, playoff odds, or major championships.
+                    """)
+
+            apisports_legs_with_data = row.get('apisports_legs', 0)
+            live_data_factor = row.get('apisports_factor', 1.0)
+            apisports_boost = row.get('apisports_boost', 0)
+            apisports_sports = row.get('apisports_sports', []) or []
+
+            sport_icon_lookup = {
+                'americanfootball_nfl': '🏈',
+                'basketball_nba': '🏀',
+                'icehockey_nhl': '🏒',
+            }
+
+            if apisports_legs_with_data:
+                st.markdown("### 🛰️ API-Sports Live Data Influence:")
+
+                if apisports_sports:
+                    icons = " ".join(
+                        sport_icon_lookup.get(sport, '🛰️') for sport in sorted(set(apisports_sports))
+                    )
+                    st.caption(
+                        f"Live data applied from: {icons} {', '.join(sorted(set(apisports_sports)))}"
+                    )
+
+                col_a1, col_a2, col_a3, col_a4 = st.columns(4)
+
+                with col_a1:
+                    st.metric(
+                        "Live Data Legs",
+                        f"{apisports_legs_with_data}/{len(row.get('legs', []))}",
+                        help="How many legs include API-Sports team context",
+                    )
+
+                with col_a2:
+                    delta_color = "normal" if apisports_boost >= 0 else "inverse"
+                    st.metric(
+                        "Trend Boost Points",
+                        f"{apisports_boost:+.0f}",
+                        delta=float(apisports_boost) if apisports_boost else None,
+                        delta_color=delta_color,
+                        help="Boost or penalty applied from API-Sports hot/cold team trends",
+                    )
+
+                with col_a3:
+                    st.metric(
+                        "Score Multiplier",
+                        f"{live_data_factor:.2f}x",
+                        delta=f"{(live_data_factor-1)*100:+.0f}%" if live_data_factor != 1.0 else None,
+                        help="Adjustment to the AI score from API-Sports trends",
+                    )
+
+                with col_a4:
+                    baseline = row['ai_score'] / live_data_factor if live_data_factor else row['ai_score']
+                    live_delta = row['ai_score'] - baseline
+                    st.metric(
+                        "Score Impact",
+                        f"{live_delta:+.1f} pts",
+                        help="How many points API-Sports live data added or removed",
+                    )
+
+                if live_data_factor >= 1.02:
+                    st.success(
+                        f"🟢 **API-Sports boosted this parlay by {(live_data_factor-1)*100:.0f}%** thanks to favorable team trends."
+                    )
+                elif live_data_factor <= 0.98:
+                    st.warning(
+                        f"🟠 **API-Sports reduced this parlay by {(1-live_data_factor)*100:.0f}%** due to cold or negative trends."
+                    )
                 else:
                     st.info("🟡 **API-Sports neutral** – live data is included but trends are balanced.")
             else:
                 st.markdown("### 🛰️ API-Sports Live Data Status:")
                 apisports_client = st.session_state.get('apisports_client')
                 hockey_client = st.session_state.get('apisports_hockey_client')
-                if not ((apisports_client and apisports_client.is_configured()) or (hockey_client and hockey_client.is_configured())):
-                    st.info("Add your NFL or NHL API-Sports key in the Live Data tab to blend team trends into scoring.")
+                if not (
+                    (apisports_client and apisports_client.is_configured())
+                    or (basketball_client and basketball_client.is_configured())
+                    or (hockey_client and hockey_client.is_configured())
+                ):
+                    st.info("Add your NFL, NBA, or NHL API-Sports key in the Live Data tab to blend team trends into scoring.")
                 else:
                     st.info("Live API-Sports data is configured but no matching games were found for this parlay.")
 
@@ -3168,6 +3337,23 @@ elif 'nhl_apisports_api_key' not in st.session_state:
         hockey_client.api_key if hockey_client else ""
     )
 
+if 'apisports_basketball_client' not in st.session_state:
+    stored_nba_key = st.session_state.get('nba_apisports_api_key')
+    stored_nba_source = st.session_state.get('nba_apisports_key_source')
+    if not stored_nba_key:
+        stored_nba_key, stored_nba_source = resolve_nba_apisports_key()
+        st.session_state['nba_apisports_api_key'] = stored_nba_key
+        st.session_state['nba_apisports_key_source'] = stored_nba_source
+    st.session_state['apisports_basketball_client'] = APISportsBasketballClient(
+        stored_nba_key or None,
+        key_source=stored_nba_source,
+    )
+elif 'nba_apisports_api_key' not in st.session_state:
+    basketball_client = st.session_state.get('apisports_basketball_client')
+    st.session_state['nba_apisports_api_key'] = (
+        basketball_client.api_key if basketball_client else ""
+    )
+
 # Main navigation tabs (fallback to containers if tabs are unavailable)
 tab_labels = [
     "🎯 Sports Betting Parlays",
@@ -3228,12 +3414,27 @@ with main_tab1:
         if hockey_client.api_key != (nhl_key or ""):
             hockey_client.update_api_key(nhl_key or None, source=nhl_source or "user")
 
+    basketball_client = st.session_state.get('apisports_basketball_client')
+    nba_key = st.session_state.get('nba_apisports_api_key', "")
+    nba_source = st.session_state.get('nba_apisports_key_source')
+    if basketball_client is None:
+        basketball_client = APISportsBasketballClient(
+            nba_key or None,
+            key_source=nba_source,
+        )
+        st.session_state['apisports_basketball_client'] = basketball_client
+    else:
+        if basketball_client.api_key != (nba_key or ""):
+            basketball_client.update_api_key(nba_key or None, source=nba_source or "user")
+
     ml_predictor = st.session_state.get('ml_predictor')
     if ml_predictor:
         if 'americanfootball_nfl' in active_sport_keys:
             ml_predictor.register_client('americanfootball_nfl', apisports_client)
         if 'icehockey_nhl' in active_sport_keys:
             ml_predictor.register_client('icehockey_nhl', hockey_client)
+        if 'basketball_nba' in active_sport_keys:
+            ml_predictor.register_client('basketball_nba', basketball_client)
 
     # Quick configuration summary to reinforce sidebar selections
     config_cols = st.columns(3)
@@ -3346,12 +3547,13 @@ with main_tab1:
         st.markdown("#### 🤖 Historical ML Training Status")
         ml_capable_rows = [
             ("NFL", "americanfootball_nfl", apisports_client, "🏈"),
+            ("NBA", "basketball_nba", basketball_client, "🏀"),
             ("NHL", "icehockey_nhl", hockey_client, "🏒"),
         ]
         active_ml_rows = [row for row in ml_capable_rows if row[1] in active_sport_keys]
 
         if not active_ml_rows:
-            st.info("Select an NFL or NHL sport to enable historical ML training.")
+            st.info("Select an NFL, NBA, or NHL sport to enable historical ML training.")
         else:
             status_cols = st.columns(min(2, len(active_ml_rows)))
 
@@ -3555,6 +3757,30 @@ with main_tab1:
         else:
             st.info("API-Sports integration disabled until an NFL key is provided.")
 
+    st.subheader("🏀 API-Sports NBA Data Integration")
+    current_nba_key = st.session_state.get(
+        'nba_apisports_api_key',
+        basketball_client.api_key if basketball_client else "",
+    )
+    new_nba_key = st.text_input(
+        "NBA API-Sports Key",
+        value=current_nba_key,
+        type="password",
+        help="Set the NBA_APISPORTS_API_KEY secret or grab a basketball token from https://api-sports.io/documentation/basketball/v1",
+    )
+    if new_nba_key != current_nba_key:
+        st.session_state['nba_apisports_api_key'] = new_nba_key
+        st.session_state['nba_apisports_key_source'] = "manual-entry" if new_nba_key else None
+        if basketball_client:
+            basketball_client.update_api_key(
+                new_nba_key,
+                source="manual-entry" if new_nba_key else None,
+            )
+        if new_nba_key:
+            st.success("✅ NBA API-Sports key saved for this session.")
+        else:
+            st.info("NBA live data disabled until an API-Sports key is provided.")
+
     def describe_key_origin(origin: Optional[str]) -> str:
         if not origin:
             return "no configured source"
@@ -3574,6 +3800,13 @@ with main_tab1:
         )
     else:
         st.caption("No NFL API-Sports key detected; live data calls will be skipped.")
+
+    if basketball_client and basketball_client.is_configured():
+        st.caption(
+            f"Using NBA API-Sports key from {describe_key_origin(basketball_client.key_origin())}."
+        )
+    else:
+        st.caption("No NBA API-Sports key detected; NBA live data will be skipped.")
 
     st.subheader("🏒 API-Sports NHL Data Integration")
     current_nhl_key = st.session_state.get(
@@ -3681,6 +3914,12 @@ with main_tab1:
                                     and apisports_client.is_configured()
                                 ):
                                     client_for_leg = apisports_client
+                                elif (
+                                    skey == "basketball_nba"
+                                    and basketball_client
+                                    and basketball_client.is_configured()
+                                ):
+                                    client_for_leg = basketball_client
                                 elif (
                                     skey == "icehockey_nhl"
                                     and hockey_client
@@ -5620,12 +5859,21 @@ with main_tab5:
         )
         st.session_state['apisports_hockey_client'] = hockey_client
 
+    basketball_client = st.session_state.get('apisports_basketball_client')
+    if basketball_client is None:
+        fallback_key, fallback_source = resolve_nba_apisports_key()
+        basketball_client = APISportsBasketballClient(
+            fallback_key or None,
+            key_source=fallback_source,
+        )
+        st.session_state['apisports_basketball_client'] = basketball_client
+
     st.header("🛰️ API-Sports Live Data")
-    st.markdown("**Pull live NFL and NHL context (records, form, scoring trends) directly from api-sports.io**")
+    st.markdown("**Pull live NFL, NBA, and NHL context (records, form, scoring trends) directly from api-sports.io**")
 
     league_choice = st.selectbox(
         "League",
-        options=["NFL", "NHL"],
+        options=["NFL", "NBA", "NHL"],
         key="apisports_live_league",
     )
 
@@ -5638,6 +5886,15 @@ with main_tab5:
             "spinner": "Loading NFL schedule from API-Sports...",
             "no_games": "No NFL games found for this date.",
             "emoji": "🏈",
+        },
+        "NBA": {
+            "client": basketball_client,
+            "caption": "Provide your NBA API-Sports key in the Sports Betting tab to enable these insights.",
+            "warning": "Add your NBA API-Sports key in the Sports Betting tab to load live NBA data.",
+            "button": "Fetch NBA games",
+            "spinner": "Loading NBA schedule from API-Sports...",
+            "no_games": "No NBA games found for this date.",
+            "emoji": "🏀",
         },
         "NHL": {
             "client": hockey_client,
@@ -5739,12 +5996,14 @@ with main_tab5:
 
         widget_key = (
             st.session_state.get('apisports_api_key')
+            or st.session_state.get('nba_apisports_api_key')
             or st.session_state.get('nhl_apisports_api_key')
             or (apisports_client.api_key if apisports_client else "")
+            or (basketball_client.api_key if basketball_client else "")
             or (hockey_client.api_key if hockey_client else "")
         )
         if not widget_key:
-            st.info("Provide an NFL or NHL API-Sports key in the Sports Betting tab to load the widget.")
+            st.info("Provide an NFL, NBA, or NHL API-Sports key in the Sports Betting tab to load the widget.")
         else:
             sport_labels = {
                 "NFL": "nfl",

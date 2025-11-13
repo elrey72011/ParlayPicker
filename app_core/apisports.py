@@ -445,6 +445,21 @@ class APISportsFootballClient(_APISportsBaseClient):
     SEASON_FORMAT = "single"
 
 
+class APISportsBasketballClient(_APISportsBaseClient):
+    """Wrapper around the API-Sports basketball endpoints (NBA focus)."""
+
+    BASE_URL = "https://v1.basketball.api-sports.io"
+    DEFAULT_LEAGUE_ID = 12  # NBA
+    SECRET_ENV_PRIORITY = ("NBA_APISPORTS_API_KEY", "APISPORTS_API_KEY", "API_SPORTS_KEY")
+    SPORT_KEY = "basketball_nba"
+    SPORT_NAME = "NBA"
+    STAT_CATEGORY_OFFENSE = "points"
+    STAT_CATEGORY_DEFENSE = "points"
+    SCORING_METRIC_LABEL = "points"
+    SEASON_CUTOFF_MONTH = 7
+    SEASON_FORMAT = "split"
+
+
 class APISportsHockeyClient(_APISportsBaseClient):
     """Wrapper around the API-Sports ice hockey endpoints (NHL focus)."""
 

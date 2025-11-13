@@ -146,9 +146,16 @@ To enable NHL live data integration, add your hockey token under the `NHL_APISPO
 NHL_APISPORTS_API_KEY = "your-nhl-api-sports-token"
 ```
 
+To stream NBA context, supply the basketball token under `NBA_APISPORTS_API_KEY`:
+
+```toml
+# .streamlit/secrets.toml
+NBA_APISPORTS_API_KEY = "your-nba-api-sports-token"
+```
+
 The app automatically picks up those keys from Streamlit secrets. If the secrets
-aren't defined it falls back to the `NFL_APISPORTS_API_KEY`, `NHL_APISPORTS_API_KEY`,
-`APISPORTS_API_KEY`, or `API_SPORTS_KEY` environment variables so existing deployments
+aren't defined it falls back to the `NFL_APISPORTS_API_KEY`, `NBA_APISPORTS_API_KEY`,
+`NHL_APISPORTS_API_KEY`, `APISPORTS_API_KEY`, or `API_SPORTS_KEY` environment variables so existing deployments
 keep working without additional configuration.
 
 ## 🛠️ Development
