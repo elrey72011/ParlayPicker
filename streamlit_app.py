@@ -304,7 +304,7 @@ SPORT_KEY_TO_LEAGUE: Dict[str, str] = {
 class AIOptimizer:
     """Optimizes parlay selection using AI insights"""
     
-    def __init__(self, sentiment_analyzer: SentimentAnalyzer, ml_predictor: MLPredictor):
+    def __init__(self, sentiment_analyzer, ml_predictor):
         self.sentiment = sentiment_analyzer
         self.ml = ml_predictor
     
@@ -1708,7 +1708,6 @@ def validate_with_kalshi(kalshi_integrator, home_team: str, away_team: str,
         return {
             'kalshi_prob': None,
             'kalshi_available': False,
-            'discrepancy': 0,
             'validation': 'error',
             'edge': 0,
             'confidence_boost': 0,
@@ -2907,6 +2906,14 @@ main_tab1, main_tab2, main_tab3, main_tab4, main_tab5 = st.tabs([
     "🛰️ API-Sports Live Data"
 ])
 
+# ===== NEW TAB 1: ML TRAINING =====
+with main_tab1:
+    render_ml_training_tab(
+        st.session_state.get('api_key', ""),
+        st.session_state.get('ml_predictor'),
+        st.session_state.get('model_manager')
+    )
+
 # ===== TAB 1: SPORTS BETTING PARLAYS =====
 with main_tab1:
     apisports_client = st.session_state.get('apisports_client')
@@ -2977,6 +2984,23 @@ with main_tab1:
                 if st.button("Change key"):
                     st.session_state['show_api_section'] = True
                     st.rerun()
+
+with st.sidebar:
+    # ... your existing sidebar code ...
+    
+    st.markdown("---")
+    st.subheader("🧠 ML Models")
+    model_manager = st.session_state.get('model_manager')
+    if model_manager:
+        trained = model_manager.get_all_trained_sports()
+        if trained:
+            st.success(f"✅ {len(trained)} trained")
+            for sport in trained[:3]:
+                age = model_manager.get_model_age(sport)
+                if age:
+                    st.caption(f"{sport.split('_')[-1].upper()}: {age.days}d old")
+        else:
+            st.info("No models yet")
     
     # News API Configuration (for real sentiment)
     st.markdown("---")
