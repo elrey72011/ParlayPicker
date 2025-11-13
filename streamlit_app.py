@@ -15,6 +15,8 @@ import pytz
 from app_core import (
     APISportsFootballClient,
     APISportsHockeyClient,
+    HistoricalDataBuilder,
+    HistoricalMLPredictor,
     RealSentimentAnalyzer,
     SentimentAnalyzer,
 )
@@ -296,88 +298,6 @@ SPORT_KEY_TO_LEAGUE: Dict[str, str] = {
 # ============ REAL SENTIMENT ANALYSIS ENGINE ============
 # (moved to app_core.sentiment so it can be reused without importing the
 # Streamlit UI. RealSentimentAnalyzer and SentimentAnalyzer are imported above.)
-
-# ============ ML PREDICTION ENGINE ============
-class MLPredictor:
-    """Machine Learning prediction engine for game outcomes"""
-    
-    def __init__(self):
-        self.model_loaded = False
-        self.feature_importance = {}
-    
-    def predict_game_outcome(self, home_team: str, away_team: str, 
-                            home_odds: float, away_odds: float,
-                            sentiment_home: float, sentiment_away: float) -> Dict[str, float]:
-        """
-        Predict game outcome using ensemble ML approach
-        Returns adjusted probabilities for home/away
-        """
-        
-        # Calculate base probabilities from odds
-        home_implied = self._odds_to_prob(home_odds)
-        away_implied = self._odds_to_prob(away_odds)
-        
-        # Feature engineering
-        features = {
-            'home_odds': home_odds,
-            'away_odds': away_odds,
-            'odds_differential': home_odds - away_odds,
-            'sentiment_home': sentiment_home,
-            'sentiment_away': sentiment_away,
-            'sentiment_diff': sentiment_home - sentiment_away,
-            'market_efficiency': abs(home_implied + away_implied - 1.0)
-        }
-        
-        # ML Adjustment (in production, this would use trained XGBoost/LightGBM)
-        # UPDATED: Sentiment now has real impact (40% vs 15% before)
-        sentiment_weight = 0.40  # Increased from 0.15 to 0.40
-        market_weight = 0.60     # Decreased from 0.85 to 0.60
-        
-        # Adjust probabilities based on sentiment
-        sentiment_adjustment = (sentiment_home - sentiment_away) * sentiment_weight
-        
-        home_adjusted = home_implied * market_weight + (0.5 + sentiment_adjustment) * (1 - market_weight)
-        away_adjusted = away_implied * market_weight + (0.5 - sentiment_adjustment) * (1 - market_weight)
-        
-        # Normalize to sum to 1
-        total = home_adjusted + away_adjusted
-        home_adjusted /= total
-        away_adjusted /= total
-        
-        # Calculate confidence based on agreement between sources
-        confidence = self._calculate_confidence(features, home_adjusted, home_implied)
-        
-        return {
-            'home_prob': home_adjusted,
-            'away_prob': away_adjusted,
-            'confidence': confidence,
-            'edge': abs(home_adjusted - home_implied),
-            'recommendation': 'home' if home_adjusted > away_adjusted else 'away'
-        }
-    
-    def _odds_to_prob(self, american_odds: float) -> float:
-        """Convert American odds to probability"""
-        if american_odds > 0:
-            return 100.0 / (american_odds + 100.0)
-        else:
-            return abs(american_odds) / (abs(american_odds) + 100.0)
-    
-    def _calculate_confidence(self, features: dict, ml_prob: float, market_prob: float) -> float:
-        """Calculate prediction confidence score"""
-        # Higher confidence when:
-        # 1. Sentiment is strong and clear
-        # 2. ML and market agree
-        # 3. Market efficiency is high
-        
-        sentiment_strength = abs(features['sentiment_diff'])
-        ml_market_agreement = 1.0 - abs(ml_prob - market_prob)
-        market_eff = 1.0 - features['market_efficiency']
-        
-        confidence = (sentiment_strength * 0.3 + 
-                     ml_market_agreement * 0.4 + 
-                     market_eff * 0.3)
-        
-        return min(max(confidence, 0.3), 0.95)  # Clamp between 30% and 95%
 
 # ============ AI PARLAY OPTIMIZER ============
 class AIOptimizer:
@@ -2915,8 +2835,13 @@ if 'sentiment_analyzer' not in st.session_state:
     news_key = os.environ.get("NEWS_API_KEY", "")
     st.session_state['sentiment_analyzer'] = RealSentimentAnalyzer(news_key)
     st.session_state['news_api_key'] = news_key
+if 'historical_data_builder' not in st.session_state:
+    st.session_state['historical_data_builder'] = HistoricalDataBuilder(
+        lambda: st.session_state.get('api_key', "") or os.environ.get("ODDS_API_KEY", "")
+    )
 if 'ml_predictor' not in st.session_state:
-    st.session_state['ml_predictor'] = MLPredictor()
+    builder = st.session_state['historical_data_builder']
+    st.session_state['ml_predictor'] = HistoricalMLPredictor(builder)
 if 'ai_optimizer' not in st.session_state:
     st.session_state['ai_optimizer'] = AIOptimizer(
         st.session_state['sentiment_analyzer'],
@@ -3000,6 +2925,11 @@ with main_tab1:
         )
         st.session_state['apisports_hockey_client'] = hockey_client
         st.session_state.setdefault('nhl_apisports_api_key', fallback_key)
+
+    ml_predictor = st.session_state.get('ml_predictor')
+    if ml_predictor:
+        ml_predictor.register_client('americanfootball_nfl', apisports_client)
+        ml_predictor.register_client('icehockey_nhl', hockey_client)
 
     # API Configuration
     stored_key = os.environ.get("ODDS_API_KEY", "")
@@ -3554,23 +3484,57 @@ with main_tab1:
                                 if inc_ml and "h2h" in mkts:
                                     hp = _dig(mkts["h2h"], "home.price")
                                     ap = _dig(mkts["h2h"], "away.price")
-                                    
+
+                                    ml_context = {
+                                        "sport_key": skey,
+                                        "event_id": eid,
+                                        "apisports_home": apisports_payload_home,
+                                        "apisports_away": apisports_payload_away,
+                                    }
+                                    ml_prediction_result = None
+                                    if use_ml_predictions and hp is not None and ap is not None:
+                                        try:
+                                            ml_prediction_result = ml_predictor.predict_game_outcome(
+                                                home,
+                                                away,
+                                                hp,
+                                                ap,
+                                                home_sentiment['score'],
+                                                away_sentiment['score'],
+                                                context=ml_context,
+                                            )
+                                        except Exception:
+                                            ml_prediction_result = None
+
                                     if hp is not None and -750 <= hp <= 750:
                                         base_prob = implied_p_from_american(hp)
                                         ai_prob = base_prob
-                                        
+
                                         if use_ml_predictions and ap is not None:
-                                            ml_prediction = ml_predictor.predict_game_outcome(
-                                                home, away, hp, ap,
-                                                home_sentiment['score'], away_sentiment['score']
-                                            )
-                                            ai_prob = ml_prediction['home_prob']
-                                            ai_confidence = ml_prediction['confidence']
-                                            ai_edge = ml_prediction['edge']
+                                            if ml_prediction_result is None:
+                                                try:
+                                                    ml_prediction_result = ml_predictor.predict_game_outcome(
+                                                        home,
+                                                        away,
+                                                        hp,
+                                                        ap,
+                                                        home_sentiment['score'],
+                                                        away_sentiment['score'],
+                                                        context=ml_context,
+                                                    )
+                                                except Exception:
+                                                    ml_prediction_result = None
+                                            if ml_prediction_result:
+                                                ai_prob = ml_prediction_result['home_prob']
+                                                ai_confidence = ml_prediction_result['confidence']
+                                                ai_edge = ml_prediction_result['edge']
+                                            else:
+                                                ai_confidence = 0.5
+                                                ai_edge = 0
                                         else:
                                             ai_confidence = 0.5
                                             ai_edge = 0
-                                        
+
                                         if ai_confidence >= min_ai_confidence:
                                             decimal_odds = american_to_decimal_safe(hp)
                                             if decimal_odds is not None:  # Safety check
@@ -3589,6 +3553,10 @@ with main_tab1:
                                                     "sentiment_trend": home_sentiment['trend']
                                                 }
 
+                                                if ml_prediction_result:
+                                                    leg_data['ai_model_source'] = ml_prediction_result.get('model_used')
+                                                    leg_data['ai_training_rows'] = ml_prediction_result.get('training_rows')
+
                                                 if apisports_payload_home:
                                                     leg_data['apisports'] = apisports_payload_home
 
@@ -3603,23 +3571,36 @@ with main_tab1:
                                                 )
 
                                                 all_legs.append(leg_data)
-                            
+
                                     if ap is not None and -750 <= ap <= 750:
                                         base_prob = implied_p_from_american(ap)
                                         ai_prob = base_prob
-                                        
+
                                         if use_ml_predictions and hp is not None:
-                                            ml_prediction = ml_predictor.predict_game_outcome(
-                                                home, away, hp, ap,
-                                                home_sentiment['score'], away_sentiment['score']
-                                            )
-                                            ai_prob = ml_prediction['away_prob']
-                                            ai_confidence = ml_prediction['confidence']
-                                            ai_edge = ml_prediction['edge']
+                                            if ml_prediction_result is None:
+                                                try:
+                                                    ml_prediction_result = ml_predictor.predict_game_outcome(
+                                                        home,
+                                                        away,
+                                                        hp,
+                                                        ap,
+                                                        home_sentiment['score'],
+                                                        away_sentiment['score'],
+                                                        context=ml_context,
+                                                    )
+                                                except Exception:
+                                                    ml_prediction_result = None
+                                            if ml_prediction_result:
+                                                ai_prob = ml_prediction_result['away_prob']
+                                                ai_confidence = ml_prediction_result['confidence']
+                                                ai_edge = ml_prediction_result['edge']
+                                            else:
+                                                ai_confidence = 0.5
+                                                ai_edge = 0
                                         else:
                                             ai_confidence = 0.5
                                             ai_edge = 0
-                                        
+
                                         if ai_confidence >= min_ai_confidence:
                                             decimal_odds = american_to_decimal_safe(ap)
                                             if decimal_odds is not None:  # Safety check
@@ -3637,6 +3618,10 @@ with main_tab1:
                                                     "d": decimal_odds,
                                                     "sentiment_trend": away_sentiment['trend']
                                                 }
+
+                                                if ml_prediction_result:
+                                                    leg_data['ai_model_source'] = ml_prediction_result.get('model_used')
+                                                    leg_data['ai_training_rows'] = ml_prediction_result.get('training_rows')
 
                                                 if apisports_payload_away:
                                                     leg_data['apisports'] = apisports_payload_away
@@ -4621,28 +4606,50 @@ with main_tab3:
                             if leg['type'] == 'Moneyline' and ml_predictor:
                                 # Get opponent price for ML prediction
                                 opp_price = None
+                                home_price = None
+                                away_price = None
                                 for g in st.session_state['available_games']:
                                     if g['id'] == leg['event_id']:
-                                        h2h = g.get('markets', {}).get('h2h', {})
+                                        h2h = g.get('markets', {}).get('h2h', {}) or {}
+                                        home_price = _dig(h2h, 'home.price')
+                                        away_price = _dig(h2h, 'away.price')
                                         if leg['side'] == 'home':
-                                            opp_price = _dig(h2h, 'away.price')
+                                            opp_price = away_price
                                         else:
-                                            opp_price = _dig(h2h, 'home.price')
+                                            opp_price = home_price
                                         break
-                                
+
                                 if opp_price:
+                                    ml_context = {
+                                        "sport_key": custom_sport,
+                                        "event_id": leg['event_id'],
+                                    }
+                                    apisports_payload = leg.get('apisports')
+                                    if isinstance(apisports_payload, dict):
+                                        if leg['side'] == 'home':
+                                            ml_context['apisports_home'] = apisports_payload
+                                        elif leg['side'] == 'away':
+                                            ml_context['apisports_away'] = apisports_payload
                                     ml_prediction = ml_predictor.predict_game_outcome(
-                                        leg['home_team'], leg['away_team'],
-                                        _dig(h2h, 'home.price'), _dig(h2h, 'away.price'),
-                                        home_sentiment['score'], away_sentiment['score']
+                                        leg['home_team'],
+                                        leg['away_team'],
+                                        home_price,
+                                        away_price,
+                                        home_sentiment['score'],
+                                        away_sentiment['score'],
+                                        context=ml_context,
                                     )
                                     ai_prob = ml_prediction[f"{leg['side']}_prob"]
                                     ai_confidence = ml_prediction['confidence']
                                     ai_edge = ml_prediction['edge']
+                                    ai_model_source = ml_prediction.get('model_used')
+                                    ai_training_rows = ml_prediction.get('training_rows')
                                 else:
                                     ai_prob = base_prob
                                     ai_confidence = 0.5
                                     ai_edge = 0
+                                    ai_model_source = None
+                                    ai_training_rows = None
                             else:
                                 # For spreads/totals, use sentiment adjustment
                                 sentiment = home_sentiment if leg['team'] == leg['home_team'] else away_sentiment
@@ -4661,6 +4668,8 @@ with main_tab3:
                                 'ai_prob': ai_prob,
                                 'ai_confidence': ai_confidence,
                                 'ai_edge': ai_edge,
+                                'ai_model_source': ai_model_source,
+                                'ai_training_rows': ai_training_rows,
                                 'sentiment_trend': home_sentiment['trend'] if leg['side'] == 'home' else away_sentiment['trend'],
                                 'home_sentiment': home_sentiment,
                                 'away_sentiment': away_sentiment
