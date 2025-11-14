@@ -3036,6 +3036,7 @@ def match_theover_to_leg(leg, theover_data, prepared: Optional[Dict[str, Any]] =
             predicted_team = (record.get('predicted_team') or '').strip()
             market_hint = record.get('market_hint') or ''
 
+            # --- matchup check ---
             matchup_ok = True
             if leg_home and leg_away:
                 direct = _names_match(home_team, leg_home) and _names_match(away_team, leg_away)
@@ -3050,6 +3051,7 @@ def match_theover_to_leg(leg, theover_data, prepared: Optional[Dict[str, Any]] =
             if explicit_prob is None and implied_prob is not None:
                 probability_source = 'moneyline_odds'
 
+            # --- totals (over/under) handling ---
             if market_type == 'total':
                 pick_lower = pick.lower()
                 if pick_lower not in {'over', 'under'} and record.get('pick_type') != 'total':
@@ -3077,6 +3079,7 @@ def match_theover_to_leg(leg, theover_data, prepared: Optional[Dict[str, Any]] =
                     'row_index': record.get('index'),
                 }
 
+            # --- non-total handling (spread / moneyline) ---
             if not team:
                 continue
 
@@ -3115,9 +3118,19 @@ def match_theover_to_leg(leg, theover_data, prepared: Optional[Dict[str, Any]] =
                 'row_index': record.get('index'),
             }
 
-def _tokenize_name(name: str) -> List[str]:
-    return [token for token in re.split(r"[^a-z0-9]+", (name or "").lower()) if token]
+        # if we get here, nothing matched
+        return None
 
+    except Exception as e:
+        # fail gracefully instead of crashing the app
+        print(f"match_theover_to_leg error: {e}")
+        return None
+
+def _tokenize_name(name: str) -> List[str]:
+    if not name:
+        return []
+    cleaned = re.sub(r'[^a-z0-9]+', ' ', name.lower())
+    return [token for token in cleaned.split() if token]
 
 def _names_match(candidate: str, *targets: str) -> bool:
     candidate = (candidate or "").lower().strip()
