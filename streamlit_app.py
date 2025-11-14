@@ -12,6 +12,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 import pytz
 from pathlib import Path
+import re
 
 from app_core import (
     APISportsBasketballClient,
@@ -2553,6 +2554,7 @@ def validate_with_kalshi(kalshi_integrator, home_team: str, away_team: str,
         return {
             'kalshi_prob': None,
             'kalshi_available': False,
+            'discrepancy': 0,
             'validation': 'error',
             'edge': 0,
             'confidence_boost': 0,
@@ -2801,56 +2803,102 @@ def match_theover_to_leg(leg, theover_data):
         # Normalize column names
         theover_df = theover_data.copy()
         theover_df.columns = [c.strip().lower() for c in theover_df.columns]
-        
+
         # Extract info from leg
         leg_label = leg.get('label', '').lower()
         team = leg.get('team', '').lower()
         market_type = leg.get('type', '').lower()
-        
+        leg_league = SPORT_KEY_TO_LEAGUE.get(leg.get('sport_key'), '').lower()
+        leg_home = (leg.get('home_team') or '').lower()
+        leg_away = (leg.get('away_team') or '').lower()
+
+        def _tokenize(name: str) -> List[str]:
+            return [token for token in re.split(r"[^a-z0-9]+", name.lower()) if token]
+
+        def _names_match(candidate: str, *targets: str) -> bool:
+            candidate = (candidate or '').lower().strip()
+            if not candidate:
+                return False
+            candidate_tokens = set(_tokenize(candidate))
+            for target in targets:
+                target_clean = (target or '').lower()
+                if not target_clean:
+                    continue
+                if candidate in target_clean or target_clean in candidate:
+                    return True
+                target_tokens = set(_tokenize(target_clean))
+                if candidate_tokens and candidate_tokens.issubset(target_tokens):
+                    return True
+            return False
+
         # Check if this is theover.ai format (has awayteam, hometeam, pick columns)
         if 'awayteam' in theover_df.columns and 'hometeam' in theover_df.columns and 'pick' in theover_df.columns:
             # theover.ai format - match by teams and pick type
             for idx, row in theover_df.iterrows():
-                away_team = str(row.get('awayteam', '')).lower()
-                home_team = str(row.get('hometeam', '')).lower()
-                pick = str(row.get('pick', '')).lower()
-                
-                # Check if both teams match the leg (for totals)
+                away_team = str(row.get('awayteam', '')).strip()
+                home_team = str(row.get('hometeam', '')).strip()
+                pick = str(row.get('pick', '')).strip().lower()
+                league_field = str(row.get('league', '')).strip().lower()
+
+                if leg_league and league_field:
+                    if leg_league not in league_field and league_field not in leg_league:
+                        continue
+
+                # Totals require the matchup to align on both teams
                 if market_type == 'total':
-                    # Check if the matchup matches
-                    if (away_team in leg_label or team in away_team) and \
-                       (home_team in leg_label or team in home_team):
-                        # Return the pick (Over/Under) with match validation
-                        if pick in ['over', 'under']:
-                            # Check if the leg direction matches theover.ai pick
-                            leg_direction = None
-                            if 'over' in leg_label:
-                                leg_direction = 'over'
-                            elif 'under' in leg_label:
-                                leg_direction = 'under'
-                            
-                            matches = (leg_direction == pick) if leg_direction else None
-                            
-                            return {
-                                'pick': pick.capitalize(),
-                                'matches': matches,
-                                'signal': '✅' if matches else ('⚠️' if matches == False else '❓')
-                            }
-                
-                # Check for moneyline or spread picks on specific teams
+                    if not (leg_home and leg_away):
+                        continue
+
+                    home_matches = _names_match(home_team, leg_home)
+                    away_matches = _names_match(away_team, leg_away)
+
+                    if not (home_matches and away_matches):
+                        # Try swapped order in case CSV labels are reversed
+                        home_matches = _names_match(home_team, leg_away)
+                        away_matches = _names_match(away_team, leg_home)
+
+                    if home_matches and away_matches and pick in {'over', 'under'}:
+                        leg_direction = None
+                        if 'over' in leg_label:
+                            leg_direction = 'over'
+                        elif 'under' in leg_label:
+                            leg_direction = 'under'
+
+                        matches = (leg_direction == pick) if leg_direction else None
+
+                        return {
+                            'pick': pick.capitalize(),
+                            'matches': matches,
+                            'signal': '✅' if matches else ('⚠️' if matches is False else '❓')
+                        }
+
+                # Moneyline/spread picks should align to one team (and optionally opponent)
                 elif team:
-                    team_matches = team in away_team or away_team in team or \
-                                 team in home_team or home_team in team
-                    
-                    if team_matches:
-                        # For ML or spread, return the pick if available
-                        if pick and pick != 'nan':
-                            return {
-                                'pick': pick.capitalize(),
-                                'matches': None,  # Can't validate ML/spread direction yet
-                                'signal': '🎯'
-                            }
-        
+                    if not away_team and not home_team:
+                        continue
+
+                    team_matches_away = _names_match(team, away_team)
+                    team_matches_home = _names_match(team, home_team)
+
+                    if not (team_matches_away or team_matches_home):
+                        continue
+
+                    opponent = (leg.get('opponent') or '').lower()
+                    if opponent:
+                        if team_matches_away:
+                            other_side = home_team
+                        else:
+                            other_side = away_team
+                        if other_side and not _names_match(opponent, other_side):
+                            continue
+
+                    if pick and pick.lower() != 'nan':
+                        return {
+                            'pick': pick.capitalize(),
+                            'matches': None,  # Can't validate ML/spread direction yet
+                            'signal': '🎯'
+                        }
+
         else:
             # Standard format - original matching logic
             for idx, row in theover_df.iterrows():

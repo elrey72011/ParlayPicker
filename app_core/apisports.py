@@ -178,9 +178,13 @@ class _APISportsBaseClient:
         search_term = (self.LEAGUE_SEARCH_TERM or "").lower()
         sport_name = (self.SPORT_NAME or "").lower()
 
+        exact_match: Optional[int] = None
+        fallback_match: Optional[int] = None
+
         for entry in response:
             league_info = entry.get("league") or {}
-            name = (league_info.get("name") or "").lower()
+            name_raw = league_info.get("name") or ""
+            name = name_raw.lower()
             if not name:
                 continue
 
@@ -198,8 +202,16 @@ class _APISportsBaseClient:
                     continue
 
             if candidate is not None:
-                resolved = candidate
-                break
+                if sport_name and name == sport_name:
+                    exact_match = candidate
+                    break
+                if fallback_match is None:
+                    fallback_match = candidate
+
+        if exact_match is not None:
+            resolved = exact_match
+        elif fallback_match is not None:
+            resolved = fallback_match
 
         if resolved is None and response:
             resolved = (response[0].get("league") or {}).get("id")
@@ -564,7 +576,7 @@ class APISportsBasketballClient(_APISportsBaseClient):
     """Wrapper around the API-Sports basketball endpoints (NBA focus)."""
 
     BASE_URL = "https://v1.basketball.api-sports.io"
-    DEFAULT_LEAGUE_ID = 0  # Resolved dynamically via league search
+    DEFAULT_LEAGUE_ID = 12  # NBA
     LEAGUE_SEARCH_TERM = "NBA"
     SECRET_ENV_PRIORITY = ("NBA_APISPORTS_API_KEY", "APISPORTS_API_KEY", "API_SPORTS_KEY")
     SPORT_KEY = "basketball_nba"
