@@ -48,7 +48,7 @@ class _APISportsBaseClient:
     """Shared helper for sport-specific API-Sports clients."""
 
     BASE_URL: str = ""
-    DEFAULT_LEAGUE_ID: int = 0
+    DEFAULT_LEAGUE_ID: Optional[int] = None
     SECRET_ENV_PRIORITY: Sequence[str] = ()
     SPORT_KEY: Optional[str] = None
     SPORT_NAME: Optional[str] = None
@@ -86,7 +86,7 @@ class _APISportsBaseClient:
         self._season_games_cache: Dict[Tuple[str, str, int], List[Dict]] = {}
         self._team_cache: Dict[Tuple[int, str, int], Dict] = {}
         self.last_error: Optional[str] = None
-        self._resolved_league_id: Optional[int] = self.DEFAULT_LEAGUE_ID or None
+        self._resolved_league_id: Optional[int] = self.DEFAULT_LEAGUE_ID
         self._league_lookup_attempted: bool = False
 
         if self.api_key:
@@ -111,7 +111,7 @@ class _APISportsBaseClient:
         self._season_games_cache.clear()
         self._team_cache.clear()
         self.last_error = None
-        self._resolved_league_id = self.DEFAULT_LEAGUE_ID or None
+        self._resolved_league_id = self.DEFAULT_LEAGUE_ID
         self._league_lookup_attempted = False
 
     def key_origin(self) -> Optional[str]:
@@ -154,70 +154,67 @@ class _APISportsBaseClient:
         if override:
             return override
 
+        if not self._league_lookup_attempted and self.LEAGUE_SEARCH_TERM:
+            self._league_lookup_attempted = True
+
+            payload = self._request(
+                "/leagues",
+                params={"search": self.LEAGUE_SEARCH_TERM},
+            )
+            if payload:
+                response = payload.get("response") or []
+                resolved: Optional[int] = None
+                search_term = (self.LEAGUE_SEARCH_TERM or "").lower()
+                sport_name = (self.SPORT_NAME or "").lower()
+
+                exact_match: Optional[int] = None
+                fallback_match: Optional[int] = None
+
+                for entry in response:
+                    league_info = entry.get("league") or {}
+                    name_raw = league_info.get("name") or ""
+                    name = name_raw.lower()
+                    if not name:
+                        continue
+
+                    if search_term and search_term not in name:
+                        continue
+                    if sport_name and sport_name not in name:
+                        continue
+
+                    candidate = league_info.get("id")
+                    country_name = (entry.get("country") or {}).get("name") or ""
+                    if country_name:
+                        country_name = country_name.lower()
+                        if country_name not in {"usa", "united states", "world", "international"}:
+                            # Ignore leagues outside the primary region when possible.
+                            continue
+
+                    if candidate is not None:
+                        if sport_name and name == sport_name:
+                            exact_match = candidate
+                            break
+                        if fallback_match is None:
+                            fallback_match = candidate
+
+                if exact_match is not None:
+                    resolved = exact_match
+                elif fallback_match is not None:
+                    resolved = fallback_match
+
+                if resolved is None and response:
+                    resolved = (response[0].get("league") or {}).get("id")
+
+                if resolved is not None:
+                    self._resolved_league_id = resolved
+            else:
+                # Allow another lookup attempt next call if the request failed
+                self._league_lookup_attempted = False
+
         if self._resolved_league_id is not None:
             return self._resolved_league_id
 
-        if self._league_lookup_attempted:
-            return None
-
-        self._league_lookup_attempted = True
-
-        if not self.LEAGUE_SEARCH_TERM:
-            return None
-
-        payload = self._request(
-            "/leagues",
-            params={"search": self.LEAGUE_SEARCH_TERM},
-        )
-        if not payload:
-            self._league_lookup_attempted = False
-            return None
-
-        response = payload.get("response") or []
-        resolved: Optional[int] = None
-        search_term = (self.LEAGUE_SEARCH_TERM or "").lower()
-        sport_name = (self.SPORT_NAME or "").lower()
-
-        exact_match: Optional[int] = None
-        fallback_match: Optional[int] = None
-
-        for entry in response:
-            league_info = entry.get("league") or {}
-            name_raw = league_info.get("name") or ""
-            name = name_raw.lower()
-            if not name:
-                continue
-
-            if search_term and search_term not in name:
-                continue
-            if sport_name and sport_name not in name:
-                continue
-
-            candidate = league_info.get("id")
-            country_name = (entry.get("country") or {}).get("name") or ""
-            if country_name:
-                country_name = country_name.lower()
-                if country_name not in {"usa", "united states", "world", "international"}:
-                    # Ignore leagues outside the primary region when possible.
-                    continue
-
-            if candidate is not None:
-                if sport_name and name == sport_name:
-                    exact_match = candidate
-                    break
-                if fallback_match is None:
-                    fallback_match = candidate
-
-        if exact_match is not None:
-            resolved = exact_match
-        elif fallback_match is not None:
-            resolved = fallback_match
-
-        if resolved is None and response:
-            resolved = (response[0].get("league") or {}).get("id")
-
-        self._resolved_league_id = resolved
-        return self._resolved_league_id
+        return None
 
     def _request(self, path: str, params: Optional[Dict] = None) -> Optional[Dict]:
         if not self.is_configured():
