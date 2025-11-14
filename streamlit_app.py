@@ -592,6 +592,11 @@ class AIOptimizer:
         total_edge = 0
         kalshi_boost = 0
         kalshi_legs = 0
+        kalshi_alignment_total = 0.0
+        kalshi_alignment_abs_total = 0.0
+        kalshi_alignment_positive = 0
+        kalshi_alignment_negative = 0
+        kalshi_alignment_count = 0
         apisports_boost = 0
         apisports_legs = 0
         apisports_sports: set[str] = set()
@@ -611,6 +616,19 @@ class AIOptimizer:
                     sportsbook_prob = leg.get('p', 0)
                     data_source = kv.get('data_source', 'kalshi')
                     source_weight = 0.6 if data_source and 'synthetic' in data_source else 1.0
+
+                    # Track Kalshi vs. model alignment before blending probabilities.
+                    ai_pre_kalshi = leg.get('ai_prob_before_kalshi')
+                    if ai_pre_kalshi is None:
+                        ai_pre_kalshi = leg.get('ai_prob', sportsbook_prob)
+                    alignment_delta = kalshi_prob - ai_pre_kalshi
+                    kalshi_alignment_total += alignment_delta
+                    kalshi_alignment_abs_total += abs(alignment_delta)
+                    kalshi_alignment_count += 1
+                    if alignment_delta >= 0.01:
+                        kalshi_alignment_positive += 1
+                    elif alignment_delta <= -0.01:
+                        kalshi_alignment_negative += 1
 
                     # If Kalshi and AI both disagree with sportsbook in same direction
                     # that's a strong signal
@@ -690,6 +708,15 @@ class AIOptimizer:
             'kalshi_factor': kalshi_factor,
             'kalshi_legs': kalshi_legs,
             'kalshi_boost': kalshi_boost,
+            'kalshi_alignment_avg': (kalshi_alignment_total / kalshi_alignment_count)
+            if kalshi_alignment_count
+            else 0.0,
+            'kalshi_alignment_abs_avg': (kalshi_alignment_abs_total / kalshi_alignment_count)
+            if kalshi_alignment_count
+            else 0.0,
+            'kalshi_alignment_positive': kalshi_alignment_positive,
+            'kalshi_alignment_negative': kalshi_alignment_negative,
+            'kalshi_alignment_count': kalshi_alignment_count,
             'apisports_factor': live_data_factor,
             'apisports_legs': apisports_legs,
             'apisports_boost': apisports_boost,
@@ -2244,6 +2271,84 @@ def integrate_kalshi_into_leg(
         0.95
     )
 
+# Helper to apply Kalshi validation to a betting leg in-place
+def integrate_kalshi_into_leg(
+    leg_data: Dict[str, Any],
+    home_team: str,
+    away_team: str,
+    side: str,
+    base_prob: float,
+    sport: str,
+    use_kalshi: bool,
+) -> None:
+    """Mutate a leg dictionary with Kalshi validation + probability blending."""
+
+    # Ensure downstream code sees the reason when Kalshi is not active
+    if not use_kalshi:
+        leg_data.setdefault('kalshi_validation', {
+            'kalshi_available': False,
+            'validation': 'disabled',
+            'edge': 0,
+            'confidence_boost': 0,
+            'market_scope': 'disabled',
+            'data_source': 'disabled'
+        })
+        return
+
+    kalshi = None
+    try:
+        kalshi = st.session_state.get('kalshi_integrator')
+    except Exception:
+        # When Streamlit session state isn't available (e.g. testing), skip gracefully
+        pass
+
+    if not kalshi:
+        leg_data['kalshi_validation'] = {
+            'kalshi_available': False,
+            'validation': 'unavailable',
+            'edge': 0,
+            'confidence_boost': 0,
+            'market_scope': 'not_initialized',
+            'data_source': 'unavailable'
+        }
+        return
+
+    try:
+        kalshi_data = validate_with_kalshi(kalshi, home_team, away_team, side, base_prob, sport)
+    except Exception:
+        leg_data['kalshi_validation'] = {
+            'kalshi_available': False,
+            'validation': 'error',
+            'edge': 0,
+            'confidence_boost': 0,
+            'market_scope': 'error',
+            'data_source': 'error'
+        }
+        return
+
+    leg_data['kalshi_validation'] = kalshi_data
+
+    if not kalshi_data.get('kalshi_available'):
+        return
+
+    original_ai_prob = leg_data.get('ai_prob', base_prob)
+    kalshi_prob = kalshi_data.get('kalshi_prob', base_prob)
+
+    blended_prob = (
+        original_ai_prob * 0.50 +  # AI model
+        kalshi_prob * 0.30 +       # Kalshi market
+        base_prob * 0.20           # Sportsbook baseline
+    )
+
+    leg_data['ai_prob_before_kalshi'] = original_ai_prob
+    leg_data['ai_prob'] = blended_prob
+    leg_data['kalshi_influence'] = blended_prob - original_ai_prob
+    leg_data['kalshi_edge'] = kalshi_data.get('edge', 0)
+    leg_data['ai_confidence'] = min(
+        leg_data.get('ai_confidence', 0.5) + kalshi_data.get('confidence_boost', 0),
+        0.95
+    )
+
 # ============ UTILITY FUNCTIONS ============
 def american_to_decimal(odds) -> float:
     odds = float(odds)
@@ -2579,6 +2684,11 @@ def build_combos_ai(legs, k, allow_sgp, optimizer, theover_data=None, min_probab
             "kalshi_factor": ai_metrics.get('kalshi_factor', 1.0),
             "kalshi_boost": ai_metrics.get('kalshi_boost', 0),
             "kalshi_legs": ai_metrics.get('kalshi_legs', 0),
+            "kalshi_alignment_avg": ai_metrics.get('kalshi_alignment_avg', 0.0),
+            "kalshi_alignment_abs_avg": ai_metrics.get('kalshi_alignment_abs_avg', 0.0),
+            "kalshi_alignment_positive": ai_metrics.get('kalshi_alignment_positive', 0),
+            "kalshi_alignment_negative": ai_metrics.get('kalshi_alignment_negative', 0),
+            "kalshi_alignment_count": ai_metrics.get('kalshi_alignment_count', 0),
             "apisports_factor": ai_metrics.get('apisports_factor', 1.0),
             "apisports_boost": ai_metrics.get('apisports_boost', 0),
             "apisports_legs": ai_metrics.get('apisports_legs', 0),
@@ -2681,6 +2791,10 @@ def render_parlay_section_ai(title, rows, theover_data=None):
                 kalshi_boost = f" | 📊 {kalshi_legs} Kalshi✓ ↘️{(kalshi_factor-1)*100:.0f}%"
             else:
                 kalshi_boost = f" | 📊 {kalshi_legs} Kalshi✓"
+
+            align_avg = row.get('kalshi_alignment_avg', 0.0)
+            if align_avg:
+                kalshi_boost += f" Δ{align_avg*100:+.1f}pp vs ML"
 
         apisports_info = ""
         apisports_legs = row.get('apisports_legs', 0)
@@ -2793,7 +2907,37 @@ def render_parlay_section_ai(title, rows, theover_data=None):
                         f"{score_change:+.1f} pts",
                         help="How many points Kalshi added/subtracted from AI score"
                     )
-                
+
+                align_avg = row.get('kalshi_alignment_avg', 0.0)
+                align_abs = row.get('kalshi_alignment_abs_avg', 0.0)
+                align_pos = row.get('kalshi_alignment_positive', 0)
+                align_neg = row.get('kalshi_alignment_negative', 0)
+                align_count = row.get('kalshi_alignment_count', 0)
+                disagreement_display = f"{align_neg}/{align_count}" if align_count else "—"
+
+                col_align1, col_align2, col_align3 = st.columns(3)
+
+                with col_align1:
+                    st.metric(
+                        "Avg Kalshi vs ML",
+                        f"{align_avg*100:+.1f} pp",
+                        help="Average percentage-point difference between Kalshi pricing and the trained model before blending"
+                    )
+
+                with col_align2:
+                    st.metric(
+                        "Avg Absolute Gap",
+                        f"{align_abs*100:.1f} pp",
+                        help="Typical gap size between Kalshi prices and the model regardless of direction"
+                    )
+
+                with col_align3:
+                    st.metric(
+                        "Disagreement Legs",
+                        disagreement_display,
+                        help="Legs where Kalshi is ≥1 percentage point more bearish than the model"
+                    )
+
                 # Explanation of Kalshi influence
                 if kalshi_factor_val > 1.05:
                     st.success(f"🟢 **Kalshi BOOSTED this parlay by {(kalshi_factor_val-1)*100:.0f}%** - Prediction markets confirm AI analysis!")
@@ -2801,6 +2945,16 @@ def render_parlay_section_ai(title, rows, theover_data=None):
                     st.warning(f"🟠 **Kalshi REDUCED this parlay by {(1-kalshi_factor_val)*100:.0f}%** - Prediction markets skeptical of AI picks.")
                 else:
                     st.info("🟡 **Kalshi NEUTRAL** - Prediction markets neither strongly confirm nor contradict AI.")
+
+                if align_neg > 0:
+                    st.warning(
+                        f"⚠️ Kalshi is more bearish than the model on {align_neg} of {align_count} leg(s)."
+                        " Expect the blended AI probability to drift toward the market price."
+                    )
+                elif align_pos > 0:
+                    st.success(
+                        f"✅ Kalshi prices {align_pos} leg(s) richer than the model, reinforcing the AI edge before blending."
+                    )
             else:
                 # NO KALSHI DATA - Explain why
                 st.markdown("### 📊 Kalshi Prediction Market Status:")
