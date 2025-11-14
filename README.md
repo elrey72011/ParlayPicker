@@ -19,6 +19,7 @@ AI-powered parlay finder with machine learning predictions trained on historical
 - ✅ Sentiment, weather, social, and sharp money overlays
 - ✅ Kalshi prediction-market blending with fallback handling
 - ✅ Custom parlay builder, EV calculators, and export tools
+- ✅ Save parlays for next-day tracking and refresh the hit/miss tracker with one click
 ## 📋 Requirements
 
 ### Base Installation
@@ -65,6 +66,7 @@ streamlit run streamlit_app.py
 - 🗂️ Multi-season backfill automatically taps prior campaigns (e.g., 2024 data) whenever the latest window is sparse
 - 📊 Parlay combination builder (2-leg, 3-leg, 4-leg)
 - 💰 Expected Value (EV) calculations
+- 📌 Parlay tracker saves picks and checks results against API-Sports scoreboards the next day
 - 🛰️ API-Sports NFL & NHL live data integration
 - 🌐 Embedded API-Sports league widget for cross-sport research
 - 📈 Real-time odds from The Odds API blended with Kalshi validation

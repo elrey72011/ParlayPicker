@@ -1,6 +1,6 @@
 # ParlayDesk_AI_Enhanced.py - v9.1 FIXED
 # AI-Enhanced parlay finder with sentiment analysis, ML predictions, and live market data
-import os, io, json, itertools, re, copy, logging
+import os, io, json, itertools, re, copy, logging, hashlib
 from html import escape
 from dataclasses import asdict
 from typing import Dict, Any, List, Tuple, Optional
@@ -11,6 +11,20 @@ import requests
 import streamlit as st
 import streamlit.components.v1 as components
 import pytz
+from pathlib import Path
+
+from app_core import (
+    APISportsBasketballClient,
+    APISportsFootballClient,
+    APISportsHockeyClient,
+    HistoricalDataBuilder,
+    HistoricalMLPredictor,
+    MLPredictor,
+    RealSentimentAnalyzer,
+    SentimentAnalyzer,
+)
+
+logger = logging.getLogger(__name__)
 
 from app_core import (
     APISportsBasketballClient,
@@ -53,6 +67,536 @@ APP_CFG: Dict[str, Any] = {
         "soccer_epl","soccer_uefa_champs_league","tennis_atp_singles"
     ]
 }
+
+
+TRACKED_PARLAYS_FILE = Path(__file__).resolve().parent / "tracked_parlays.json"
+
+
+def _safe_float(value: Any) -> Optional[float]:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _load_tracked_parlays_from_disk() -> List[Dict[str, Any]]:
+    if not TRACKED_PARLAYS_FILE.exists():
+        return []
+    try:
+        with TRACKED_PARLAYS_FILE.open("r", encoding="utf-8") as handle:
+            data = json.load(handle)
+        if isinstance(data, list):
+            return data
+    except Exception:
+        logger.debug("Failed to load tracked parlays from disk", exc_info=True)
+    return []
+
+
+def _write_tracked_parlays_to_disk(parlays: List[Dict[str, Any]]) -> None:
+    try:
+        TRACKED_PARLAYS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with TRACKED_PARLAYS_FILE.open("w", encoding="utf-8") as handle:
+            json.dump(parlays, handle, indent=2)
+    except Exception:
+        logger.debug("Failed to persist tracked parlays", exc_info=True)
+
+
+def get_tracked_parlays_state() -> List[Dict[str, Any]]:
+    tracked = st.session_state.get('tracked_parlays')
+    if tracked is None:
+        tracked = _load_tracked_parlays_from_disk()
+        st.session_state['tracked_parlays'] = tracked
+    return tracked
+
+
+def _parlay_signature(legs: List[Dict[str, Any]]) -> str:
+    tokens: List[str] = []
+    for leg in legs or []:
+        token = "|".join(
+            str(leg.get(key, ""))
+            for key in ("event_id", "market", "side", "point", "team")
+        )
+        tokens.append(token)
+    base = "||".join(sorted(tokens)) if tokens else str(datetime.utcnow().timestamp())
+    return hashlib.sha256(base.encode("utf-8")).hexdigest()
+
+
+def save_parlay_for_tracking(
+    parlay_row: Dict[str, Any],
+    title: str,
+    index: int,
+    timezone_label: Optional[str] = None,
+) -> Tuple[bool, str]:
+    legs_payload: List[Dict[str, Any]] = []
+    commence_candidates: List[datetime] = []
+
+    for leg in parlay_row.get('legs', []):
+        point_val = _safe_float(leg.get('point'))
+        commence_iso: Optional[str] = None
+        raw_commence = leg.get('commence_time') or leg.get('kickoff')
+        dt_obj = None
+        if raw_commence is not None:
+            dt_obj = _parse_commence_time(raw_commence)
+        if dt_obj is not None:
+            commence_candidates.append(dt_obj)
+            commence_iso = dt_obj.isoformat()
+        elif isinstance(raw_commence, str):
+            commence_iso = raw_commence
+
+        legs_payload.append({
+            'event_id': leg.get('event_id'),
+            'label': leg.get('label'),
+            'market': leg.get('market'),
+            'type': leg.get('type'),
+            'team': leg.get('team'),
+            'side': leg.get('side'),
+            'point': point_val,
+            'sport_key': leg.get('sport_key'),
+            'home_team': leg.get('home_team'),
+            'away_team': leg.get('away_team'),
+            'commence_time': commence_iso,
+            'decimal_odds': _safe_float(leg.get('d')),
+        })
+
+    if not legs_payload:
+        return False, "No legs available to save."
+
+    signature = _parlay_signature(legs_payload)
+    tracked = get_tracked_parlays_state()
+    timezone_name = timezone_label or st.session_state.get('user_timezone') or 'UTC'
+    now_utc = datetime.utcnow().replace(tzinfo=pytz.UTC).isoformat()
+    target_commence = min(commence_candidates).isoformat() if commence_candidates else None
+
+    analysis_payload = {
+        'decimal_odds': _safe_float(parlay_row.get('d')),
+        'ai_probability': _safe_float(parlay_row.get('p_ai')),
+        'market_probability': _safe_float(parlay_row.get('p')),
+        'ai_ev': _safe_float(parlay_row.get('ev_ai')),
+        'market_ev': _safe_float(parlay_row.get('ev_market')),
+        'ai_score': _safe_float(parlay_row.get('ai_score')),
+        'kalshi_factor': _safe_float(parlay_row.get('kalshi_factor')),
+    }
+    analysis_payload = {k: v for k, v in analysis_payload.items() if v is not None}
+
+    record: Dict[str, Any] = {
+        'parlay_id': signature,
+        'name': f"{title} #{index}",
+        'saved_at_utc': now_utc,
+        'analysis_timezone': timezone_name,
+        'source_title': title,
+        'leg_count': len(legs_payload),
+        'legs': legs_payload,
+        'analysis': analysis_payload,
+    }
+    if target_commence:
+        record['target_commence'] = target_commence
+
+    existing_idx = next((i for i, entry in enumerate(tracked) if entry.get('parlay_id') == signature), None)
+    if existing_idx is not None:
+        existing = tracked[existing_idx]
+        record['created_at_utc'] = existing.get('created_at_utc', existing.get('saved_at_utc', now_utc))
+        if 'evaluation' in existing:
+            record['evaluation'] = existing['evaluation']
+        tracked[existing_idx] = record
+        message = "Updated the existing tracked parlay."
+    else:
+        record['created_at_utc'] = now_utc
+        tracked.append(record)
+        message = "Parlay saved for next-day tracking."
+
+    _write_tracked_parlays_to_disk(tracked)
+    st.session_state['tracked_parlays'] = tracked
+    return True, message
+
+
+def remove_tracked_parlay(parlay_id: str) -> bool:
+    if not parlay_id:
+        return False
+    tracked = get_tracked_parlays_state()
+    new_list = [entry for entry in tracked if entry.get('parlay_id') != parlay_id]
+    if len(new_list) == len(tracked):
+        return False
+    _write_tracked_parlays_to_disk(new_list)
+    st.session_state['tracked_parlays'] = new_list
+    return True
+
+
+def _parse_commence_time(raw_value: Any) -> Optional[datetime]:
+    if raw_value is None:
+        return None
+    if isinstance(raw_value, datetime):
+        return raw_value.astimezone(pytz.UTC)
+    if isinstance(raw_value, (int, float)):
+        try:
+            return datetime.fromtimestamp(raw_value, tz=pytz.UTC)
+        except (OverflowError, OSError, ValueError):
+            return None
+    if isinstance(raw_value, str):
+        candidate = raw_value.strip()
+        if not candidate:
+            return None
+        try:
+            return datetime.fromisoformat(candidate.replace("Z", "+00:00")).astimezone(pytz.UTC)
+        except ValueError:
+            try:
+                return datetime.fromtimestamp(float(candidate), tz=pytz.UTC)
+            except (TypeError, ValueError, OverflowError, OSError):
+                return None
+    return None
+
+
+def _normalize_team_name(name: Optional[str]) -> str:
+    if not name:
+        return ""
+    return re.sub(r"[^A-Z]", "", name.upper())
+
+
+def _extract_score_value(container: Any) -> Optional[float]:
+    if container is None:
+        return None
+    if isinstance(container, (int, float)):
+        return float(container)
+    if isinstance(container, str):
+        try:
+            return float(container)
+        except ValueError:
+            return None
+    if isinstance(container, dict):
+        for key in ("total", "points", "score", "value", "runs", "goals"):
+            if key in container:
+                return _extract_score_value(container.get(key))
+    return None
+
+
+FINAL_STATUS_TOKENS = {
+    "finished",
+    "final",
+    "after extra time",
+    "after overtime",
+    "completed",
+    "ended",
+    "ft",
+    "aet",
+    "aot",
+}
+
+
+def _status_text(status_field: Any) -> Optional[str]:
+    if isinstance(status_field, dict):
+        for key in ("long", "short", "type", "description"):
+            value = status_field.get(key)
+            if value:
+                return str(value)
+    elif status_field:
+        return str(status_field)
+    return None
+
+
+def _is_final_status(status_text: Optional[str]) -> bool:
+    if not status_text:
+        return False
+    lowered = status_text.lower()
+    return any(token in lowered for token in FINAL_STATUS_TOKENS)
+
+
+def _aggregate_leg_statuses(results: List[Dict[str, Any]]) -> str:
+    if not results:
+        return "pending"
+    statuses = [res.get('status') for res in results]
+    if any(status == 'loss' for status in statuses):
+        return "miss"
+    if any(status in {"pending", "no_data", "missing_key"} for status in statuses):
+        return "pending"
+    if all(status == 'win' for status in statuses):
+        return "hit"
+    if all(status in {'win', 'push'} for status in statuses):
+        return "push"
+    return "pending"
+
+
+def _evaluate_leg_with_client(
+    leg: Dict[str, Any],
+    client: Any,
+    timezone_label: str,
+    games_cache: Dict[Tuple[str, str], List[Dict[str, Any]]],
+) -> Dict[str, Any]:
+    sport_key = leg.get('sport_key')
+    result: Dict[str, Any] = {
+        'status': 'pending',
+        'game_status': None,
+        'home_score': None,
+        'away_score': None,
+        'reason': None,
+    }
+
+    if client is None or not getattr(client, 'is_configured', lambda: False)():
+        result['reason'] = 'Missing API-Sports key'
+        result['warning'] = 'Provide the appropriate API-Sports key to evaluate saved parlays.'
+        result['status'] = 'missing_key'
+        return result
+
+    commence_dt = _parse_commence_time(leg.get('commence_time'))
+    if commence_dt is None:
+        commence_dt = _parse_commence_time(leg.get('kickoff'))
+
+    if commence_dt is None:
+        result['reason'] = 'Kickoff time unavailable'
+        return result
+
+    base_date = commence_dt.date()
+    date_candidates = [base_date]
+    for offset in (-1, 1):
+        alt_date = base_date + timedelta(days=offset)
+        if alt_date not in date_candidates:
+            date_candidates.append(alt_date)
+
+    matched_game: Optional[Dict[str, Any]] = None
+    for candidate in date_candidates:
+        cache_key = (client.SPORT_KEY or sport_key or "unknown", candidate.isoformat())
+        if cache_key not in games_cache:
+            try:
+                games_cache[cache_key] = client.get_games_by_date(candidate, timezone='UTC')
+            except Exception:
+                games_cache[cache_key] = []
+        games = games_cache.get(cache_key, [])
+        matched = client.match_game(games, leg.get('home_team'), leg.get('away_team'))
+        if matched:
+            matched_game = matched
+            break
+
+    if not matched_game:
+        result['reason'] = 'Game not yet available from API-Sports'
+        return result
+
+    status_text = _status_text(matched_game.get('status'))
+    result['game_status'] = status_text
+
+    scores = (matched_game.get('scores') or {})
+    home_score = _extract_score_value(scores.get('home'))
+    away_score = _extract_score_value(scores.get('away'))
+    result['home_score'] = home_score
+    result['away_score'] = away_score
+
+    if not _is_final_status(status_text):
+        result['reason'] = status_text or 'Game in progress'
+        return result
+
+    if home_score is None or away_score is None:
+        result['status'] = 'no_data'
+        result['reason'] = 'Final score unavailable'
+        return result
+
+    leg_type = (leg.get('type') or leg.get('market') or '').lower()
+    side = (leg.get('side') or '').lower()
+
+    if leg_type == 'moneyline':
+        if leg.get('side') == 'home':
+            if home_score > away_score:
+                result['status'] = 'win'
+            elif home_score < away_score:
+                result['status'] = 'loss'
+            else:
+                result['status'] = 'push'
+        else:
+            if away_score > home_score:
+                result['status'] = 'win'
+            elif away_score < home_score:
+                result['status'] = 'loss'
+            else:
+                result['status'] = 'push'
+        return result
+
+    if leg_type == 'spread':
+        point = _safe_float(leg.get('point'))
+        if point is None:
+            result['status'] = 'no_data'
+            result['reason'] = 'Spread point unavailable'
+            return result
+        if leg.get('side') == 'home':
+            adjusted_home = home_score + point
+            adjusted_away = away_score
+        else:
+            adjusted_home = home_score
+            adjusted_away = away_score + point
+        if adjusted_home > adjusted_away:
+            result['status'] = 'win'
+        elif adjusted_home < adjusted_away:
+            result['status'] = 'loss'
+        else:
+            result['status'] = 'push'
+        return result
+
+    if leg_type == 'total':
+        point = _safe_float(leg.get('point'))
+        if point is None:
+            result['status'] = 'no_data'
+            result['reason'] = 'Total point unavailable'
+            return result
+        total_points = home_score + away_score
+        if side.startswith('over'):
+            if total_points > point:
+                result['status'] = 'win'
+            elif total_points < point:
+                result['status'] = 'loss'
+            else:
+                result['status'] = 'push'
+        elif side.startswith('under'):
+            if total_points < point:
+                result['status'] = 'win'
+            elif total_points > point:
+                result['status'] = 'loss'
+            else:
+                result['status'] = 'push'
+        else:
+            result['status'] = 'no_data'
+            result['reason'] = 'Unknown totals side'
+        return result
+
+    result['status'] = 'no_data'
+    result['reason'] = f"Unsupported leg type: {leg.get('type')}"
+    return result
+
+
+def evaluate_tracked_parlays(
+    parlays: List[Dict[str, Any]],
+    clients: Dict[str, Any],
+    timezone_label: str,
+) -> Tuple[List[Dict[str, Any]], bool, Optional[str]]:
+    if not parlays:
+        return parlays, False, None
+
+    games_cache: Dict[Tuple[str, str], List[Dict[str, Any]]] = {}
+    warnings: List[str] = []
+    changed = False
+
+    for entry in parlays:
+        leg_results: List[Dict[str, Any]] = []
+        for leg in entry.get('legs', []):
+            sport_key = leg.get('sport_key')
+            client = clients.get(sport_key)
+            result = _evaluate_leg_with_client(leg, client, timezone_label, games_cache)
+            if 'warning' in result and result['warning']:
+                warnings.append(result['warning'])
+            leg_results.append({k: v for k, v in result.items() if k != 'warning'})
+
+        evaluation = {
+            'status': _aggregate_leg_statuses(leg_results),
+            'legs': leg_results,
+            'checked_at': datetime.utcnow().replace(tzinfo=pytz.UTC).isoformat(),
+        }
+
+        if entry.get('evaluation') != evaluation:
+            entry['evaluation'] = evaluation
+            changed = True
+
+    if changed:
+        _write_tracked_parlays_to_disk(parlays)
+        st.session_state['tracked_parlays'] = parlays
+
+    warning_message = None
+    if warnings:
+        unique_warnings = sorted(set(warnings))
+        warning_message = "\n".join(unique_warnings)
+
+    return parlays, changed, warning_message
+
+
+def render_saved_parlay_tracker(clients: Dict[str, Any], timezone_label: str) -> None:
+    st.markdown("### 🧾 Saved Parlay Tracker")
+    tracked = get_tracked_parlays_state()
+
+    with st.expander("View saved parlays and outcomes", expanded=False):
+        if not tracked:
+            st.info("Save a parlay to track its result after the games conclude.")
+            return
+
+        actions_col1, actions_col2 = st.columns([1, 1])
+        with actions_col1:
+            refresh_clicked = st.button("🔁 Refresh tracked results", key="refresh_tracked_parlays")
+        with actions_col2:
+            clear_clicked = st.button("🗑️ Clear all tracked parlays", key="clear_tracked_parlays")
+
+        if clear_clicked:
+            _write_tracked_parlays_to_disk([])
+            st.session_state['tracked_parlays'] = []
+            st.success("Cleared all saved parlays.")
+            tracked = []
+        elif refresh_clicked:
+            _, changed, warning_message = evaluate_tracked_parlays(tracked, clients, timezone_label)
+            if changed:
+                st.success("Updated tracked parlays with the latest results.")
+            if warning_message:
+                st.warning(warning_message)
+            tracked = get_tracked_parlays_state()
+
+        if not tracked:
+            st.info("No parlays are currently being tracked.")
+            return
+
+        summary_rows: List[Dict[str, Any]] = []
+        status_emojis = {
+            'hit': '✅ Hit',
+            'miss': '❌ Miss',
+            'push': '⚖️ Push',
+            'pending': '⏳ Pending',
+        }
+
+        for entry in tracked:
+            evaluation = entry.get('evaluation', {})
+            leg_results = evaluation.get('legs', []) or []
+            wins = sum(1 for res in leg_results if res.get('status') == 'win')
+            losses = sum(1 for res in leg_results if res.get('status') == 'loss')
+            pushes = sum(1 for res in leg_results if res.get('status') == 'push')
+            pending = sum(1 for res in leg_results if res.get('status') in {'pending', 'no_data', 'missing_key'})
+
+            summary_rows.append({
+                'Parlay': entry.get('name') or entry.get('parlay_id'),
+                'Legs': entry.get('leg_count', len(entry.get('legs', []))),
+                'Status': status_emojis.get(evaluation.get('status'), evaluation.get('status', 'pending').title()),
+                'Wins': wins,
+                'Losses': losses,
+                'Pushes': pushes,
+                'Pending': pending,
+                'Decimal Odds': entry.get('analysis', {}).get('decimal_odds'),
+                'Saved (UTC)': entry.get('created_at_utc'),
+                'Last Checked': evaluation.get('checked_at'),
+            })
+
+        if summary_rows:
+            summary_df = pd.DataFrame(summary_rows)
+            st.dataframe(summary_df, use_container_width=True, hide_index=True)
+
+        for entry in tracked:
+            evaluation = entry.get('evaluation', {})
+            leg_results = evaluation.get('legs', []) or []
+            parlay_label = entry.get('name') or entry.get('parlay_id')
+            status_display = status_emojis.get(evaluation.get('status'), evaluation.get('status', 'pending').title())
+            with st.expander(f"{parlay_label} — {status_display}"):
+                st.caption(f"Created: {entry.get('created_at_utc', 'N/A')} | Last checked: {evaluation.get('checked_at', 'N/A')}")
+                detail_rows: List[Dict[str, Any]] = []
+                for leg, result in zip(entry.get('legs', []), leg_results):
+                    score_display = None
+                    if result.get('home_score') is not None and result.get('away_score') is not None:
+                        score_display = f"{result['home_score']} - {result['away_score']}"
+                    detail_rows.append({
+                        'Selection': leg.get('label'),
+                        'Type': leg.get('type'),
+                        'Result': result.get('status', 'pending').title(),
+                        'Score': score_display or '—',
+                        'Game Status': result.get('game_status') or '—',
+                        'Reason': result.get('reason') or '—',
+                    })
+
+                if detail_rows:
+                    st.dataframe(pd.DataFrame(detail_rows), use_container_width=True, hide_index=True)
+                else:
+                    st.info("No leg details available.")
+
+                if st.button("🗑️ Remove from tracker", key=f"remove_tracked_{entry.get('parlay_id')}"):
+                    if remove_tracked_parlay(entry.get('parlay_id')):
+                        st.success("Removed parlay from tracker.")
+                    else:
+                        st.warning("Unable to remove parlay. Please try again.")
 
 
 def resolve_odds_api_key_with_source() -> Tuple[str, Optional[str]]:
@@ -2483,7 +3027,7 @@ def build_combos_ai(legs, k, allow_sgp, optimizer, theover_data=None, min_probab
     
     return final_parlays
 
-def render_parlay_section_ai(title, rows, theover_data=None):
+def render_parlay_section_ai(title, rows, theover_data=None, timezone_label: Optional[str] = None):
     """Render parlays with AI insights"""
     st.markdown(f"### {title}")
     if not rows:
@@ -2860,12 +3404,27 @@ def render_parlay_section_ai(title, rows, theover_data=None):
                 else:
                     st.info("Live API-Sports data is configured but no matching games were found for this parlay.")
 
-            # theover.ai boost info if available
-            if row.get('theover_bonus', 0) != 0:
-                theover_bonus_pct = row['theover_bonus'] * 100
-                if theover_bonus_pct > 0:
-                    st.success(f"🎯 **theover.ai Boost:** +{theover_bonus_pct:.0f}% to AI score ({row.get('theover_matches', 0)} matching picks)")
-                else:
+        save_key_suffix = hashlib.sha1(title.encode('utf-8')).hexdigest()[:6] if isinstance(title, str) else 'parlay'
+
+        if st.button(
+            "📌 Save this parlay for tracking",
+            key=f"save_parlay_{save_key_suffix}_{i}",
+        ):
+            tz_for_save = timezone_label or st.session_state.get('user_timezone', 'UTC') or 'UTC'
+            success, message = save_parlay_for_tracking(row, title, i, tz_for_save)
+            if success:
+                st.success(message)
+            else:
+                st.info(message)
+
+        st.caption("Saved parlays appear in the tracker above for next-day result checks.")
+
+        # theover.ai boost info if available
+        if row.get('theover_bonus', 0) != 0:
+            theover_bonus_pct = row['theover_bonus'] * 100
+            if theover_bonus_pct > 0:
+                st.success(f"🎯 **theover.ai Boost:** +{theover_bonus_pct:.0f}% to AI score ({row.get('theover_matches', 0)} matching picks)")
+            else:
                     st.warning(f"⚠️ **theover.ai Conflict:** {theover_bonus_pct:.0f}% penalty ({row.get('theover_conflicts', 0)} conflicting picks)")
             
             # Market vs AI comparison
@@ -3966,6 +4525,14 @@ with main_tab1:
     else:
         st.caption("No NHL API-Sports key detected; NHL live data will be skipped.")
 
+    tracker_clients = {
+        'americanfootball_nfl': apisports_client,
+        'basketball_nba': basketball_client,
+        'icehockey_nhl': hockey_client,
+    }
+    user_timezone_label = st.session_state.get('user_timezone', 'UTC')
+    render_saved_parlay_tracker(tracker_clients, user_timezone_label)
+
 
     def is_within_date_window(iso_str) -> bool:
         """Return True when an event falls within the selected day ± window."""
@@ -4195,7 +4762,11 @@ with main_tab1:
                                                     "ai_confidence": ai_confidence,
                                                     "ai_edge": ai_edge,
                                                     "d": decimal_odds,
-                                                    "sentiment_trend": home_sentiment['trend']
+                                                    "sentiment_trend": home_sentiment['trend'],
+                                                    "sport_key": skey,
+                                                    "home_team": home,
+                                                    "away_team": away,
+                                                    "commence_time": ev.get('commence_time'),
                                                 }
 
                                                 if ml_prediction_result:
@@ -4264,7 +4835,11 @@ with main_tab1:
                                                     "ai_confidence": ai_confidence,
                                                     "ai_edge": ai_edge,
                                                     "d": decimal_odds,
-                                                    "sentiment_trend": away_sentiment['trend']
+                                                    "sentiment_trend": away_sentiment['trend'],
+                                                    "sport_key": skey,
+                                                    "home_team": home,
+                                                    "away_team": away,
+                                                    "commence_time": ev.get('commence_time'),
                                                 }
 
                                                 if ml_prediction_result:
@@ -4321,7 +4896,11 @@ with main_tab1:
                                                 "ai_confidence": ai_confidence,
                                                 "ai_edge": abs(ai_prob - base_prob),
                                                 "d": decimal_odds,
-                                                "sentiment_trend": sentiment['trend']
+                                                "sentiment_trend": sentiment['trend'],
+                                                "sport_key": skey,
+                                                "home_team": home,
+                                                "away_team": away,
+                                                "commence_time": ev.get('commence_time'),
                                             }
 
                                             if nm == home and apisports_payload_home:
@@ -4373,7 +4952,11 @@ with main_tab1:
                                                 "ai_confidence": ai_confidence,
                                                 "ai_edge": abs(ai_prob - base_prob),
                                                 "d": decimal_odds,
-                                                "sentiment_trend": "neutral"
+                                                "sentiment_trend": "neutral",
+                                                "sport_key": skey,
+                                                "home_team": home,
+                                                "away_team": away,
+                                                "commence_time": ev.get('commence_time'),
                                             }
 
                                             if apisports_payload_total:
@@ -4473,7 +5056,7 @@ with main_tab1:
                     try:
                         with st.spinner("Calculating optimal 2-leg combinations..."):
                             combos_2 = build_combos_ai(all_legs, 2, allow_sgp, ai_optimizer, theover_parlay_data, min_parlay_probability, max_parlay_probability)[:show_top]
-                            render_parlay_section_ai("2-Leg AI Parlays", combos_2, theover_parlay_data)
+                            render_parlay_section_ai("2-Leg AI Parlays", combos_2, theover_parlay_data, timezone_label=user_timezone_label)
                     except Exception as e:
                         st.error(f"Error building 2-leg parlays: {str(e)}")
                 
@@ -4482,7 +5065,7 @@ with main_tab1:
                     try:
                         with st.spinner("Calculating optimal 3-leg combinations..."):
                             combos_3 = build_combos_ai(all_legs, 3, allow_sgp, ai_optimizer, theover_parlay_data, min_parlay_probability, max_parlay_probability)[:show_top]
-                            render_parlay_section_ai("3-Leg AI Parlays", combos_3, theover_parlay_data)
+                            render_parlay_section_ai("3-Leg AI Parlays", combos_3, theover_parlay_data, timezone_label=user_timezone_label)
                     except Exception as e:
                         st.error(f"Error building 3-leg parlays: {str(e)}")
                 
@@ -4491,7 +5074,7 @@ with main_tab1:
                     try:
                         with st.spinner("Calculating optimal 4-leg combinations..."):
                             combos_4 = build_combos_ai(all_legs, 4, allow_sgp, ai_optimizer, theover_parlay_data, min_parlay_probability, max_parlay_probability)[:show_top]
-                            render_parlay_section_ai("4-Leg AI Parlays", combos_4, theover_parlay_data)
+                            render_parlay_section_ai("4-Leg AI Parlays", combos_4, theover_parlay_data, timezone_label=user_timezone_label)
                     except Exception as e:
                         st.error(f"Error building 4-leg parlays: {str(e)}")
                 
@@ -4500,7 +5083,7 @@ with main_tab1:
                     try:
                         with st.spinner("Calculating optimal 5-leg combinations..."):
                             combos_5 = build_combos_ai(all_legs, 5, allow_sgp, ai_optimizer, theover_parlay_data, min_parlay_probability, max_parlay_probability)[:show_top]
-                            render_parlay_section_ai("5-Leg AI Parlays", combos_5, theover_parlay_data)
+                            render_parlay_section_ai("5-Leg AI Parlays", combos_5, theover_parlay_data, timezone_label=user_timezone_label)
                     except Exception as e:
                         st.error(f"Error building 5-leg parlays: {str(e)}")
         
