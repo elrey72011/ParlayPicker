@@ -2,7 +2,7 @@
 
 AI-powered parlay finder with machine learning predictions trained on historical data from The Odds API, Kalshi market validation, and live NFL & NHL context from API-Sports.
 
-> **What's new:** the primary Streamlit app now bundles the historical-machine-learning workflow that previously lived in the "enhanced" build. Provide your The Odds API and API-Sports keys and the app will auto-build logistic models from recent API-Sports schedules, blend them with Kalshi and sentiment signals, and surface the combined analysis throughout the UI.
+> **What's new:** the primary Streamlit app now bundles the historical-machine-learning workflow that previously lived in the "enhanced" build. Provide your The Odds API and API-Sports keys and the app will auto-build an ensemble (logistic regression + gradient boosting) from recent API-Sports schedules, blend it with Kalshi and sentiment signals, and surface the combined analysis throughout the UI.
 
 ![Python](https://img.shields.io/badge/python-3.9+-blue.svg)
 ![Streamlit](https://img.shields.io/badge/streamlit-1.28+-red.svg)
@@ -26,7 +26,7 @@ AI-powered parlay finder with machine learning predictions trained on historical
 pip install -r requirements.txt
 ```
 
-> 💡 **Tip:** scikit-learn remains optional—the app now ships with a lightweight
+> 💡 **Tip:** scikit-learn remains optional—the app defaults to a scikit-learn ensemble, but ships with a lightweight
 > NumPy-powered logistic regression fallback, so historical ML predictions still
 > train even in minimal environments (including Streamlit Cloud) without the
 > extra dependency.
@@ -61,7 +61,7 @@ streamlit run streamlit_app.py
 
 ### Core Features
 - 🎲 Multi-sport odds aggregation (NFL, NBA, MLB, NHL, etc.)
-- 🤖 Automatic logistic-regression predictions trained on recent API-Sports schedules (no manual training step)
+- 🤖 Automatic ensemble predictions (logistic + gradient boosting) trained on recent API-Sports schedules (no manual training step)
 - 🗂️ Multi-season backfill automatically taps prior campaigns (e.g., 2024 data) whenever the latest window is sparse
 - 📊 Parlay combination builder (2-leg, 3-leg, 4-leg)
 - 💰 Expected Value (EV) calculations
@@ -70,24 +70,24 @@ streamlit run streamlit_app.py
 - 📈 Real-time odds from The Odds API blended with Kalshi validation
 
 ### Advanced Extras
-- 🔁 *Legacy experiments:* gradient-boosting prototypes remain for comparison, but the main app now auto-trains logistic models.
+- 🔁 *Legacy experiments:* toggle ML off to compare against the odds/sentiment-only baseline whenever you want.
 - 🧪 Optional notebooks for trying alternative models or wider historical windows
 - 🧮 Advanced feature-engineering templates to extend the ML pipeline further
 
 ## 🔬 How the ML Works
 
 ```
-API-Sports Schedules + The Odds API → Feature Engineering → Logistic Pipeline → Blended Probabilities
+API-Sports Schedules + The Odds API → Feature Engineering → Ensemble Trainer → Blended Probabilities
               ↓                               ↓                        ↓                      ↓
-     (Records, form, trends)        (11 numerical features)   Impute → Scale → Train    65% ML • 25% market • 10% sentiment
+     (Records, form, trends)        (11 numerical features)   Logistic + HistGB blend   60% ML • 25% market • 15% sentiment
               ↓                               ↓                        ↓                      ↓
  Current Odds → Build Feature Vector → Predict → Compare to Market → Edge!
 ```
 
 When the current season hasn't produced enough completed games (such as early in the offseason), the builder automatically
-backfills with earlier campaigns—including the full 2024 schedules for NFL and NHL—so the logistic model still trains on a
+backfills with earlier campaigns—including the full 2024 schedules for NFL and NHL—so the ensemble still trains on a
 balanced dataset before influencing the parlay analysis. If the live feeds remain sparse even after those backfills, the
-trainer tops up the dataset with a small synthetic sample so the logistic model stays calibrated; the Streamlit status panel
+trainer tops up the dataset with a small synthetic sample so the ensemble stays calibrated; the Streamlit status panel
 calls out how many "booster" rows were injected alongside the real games.
 
 If scikit-learn isn't installed the builder seamlessly drops to an internal

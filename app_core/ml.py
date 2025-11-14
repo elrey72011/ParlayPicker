@@ -13,12 +13,14 @@ import requests
 from .sample_ml_data import build_sample_rows
 
 try:  # pragma: no cover - optional dependency shim
+    from sklearn.ensemble import HistGradientBoostingClassifier
     from sklearn.linear_model import LogisticRegression
     from sklearn.pipeline import Pipeline
     from sklearn.preprocessing import StandardScaler
     from sklearn.impute import SimpleImputer
     SKLEARN_AVAILABLE = True
 except Exception:  # noqa: BLE001 - surface gracefully
+    HistGradientBoostingClassifier = None  # type: ignore[assignment]
     LogisticRegression = None  # type: ignore[assignment]
     Pipeline = None  # type: ignore[assignment]
     StandardScaler = None  # type: ignore[assignment]
@@ -103,6 +105,41 @@ class _SimpleLogisticModel:
         probs = self._sigmoid(logits)
         stacked = np.column_stack([1.0 - probs, probs])
         return stacked.astype(float)
+
+
+class _SklearnEnsembleModel:
+    """Blend multiple scikit-learn classifiers for improved calibration."""
+
+    def __init__(self, components: List[Tuple[str, Any, float]]) -> None:
+        self._components = components
+        self._last_component_probs: Dict[str, np.ndarray] = {}
+
+    def predict_proba(self, X: Any) -> np.ndarray:
+        total_weight = 0.0
+        blended: Optional[np.ndarray] = None
+        self._last_component_probs = {}
+        for name, estimator, weight in self._components:
+            if weight <= 0:
+                continue
+            try:
+                probs = estimator.predict_proba(X)
+            except TypeError:
+                probs = estimator.predict_proba(np.asarray(X, dtype=float))
+            self._last_component_probs[name] = np.asarray(probs, dtype=float)
+            if blended is None:
+                blended = self._last_component_probs[name] * weight
+            else:
+                blended += self._last_component_probs[name] * weight
+            total_weight += weight
+
+        if blended is None or total_weight <= 0:
+            raise RuntimeError("No ensemble components produced probabilities")
+
+        return blended / total_weight
+
+    @property
+    def last_component_probs(self) -> Dict[str, np.ndarray]:
+        return self._last_component_probs
 
 ODDS_BASE_URL = "https://api.the-odds-api.com"
 
@@ -880,27 +917,66 @@ class HistoricalMLPredictor:
         model: Optional[Any] = None
         engine = ""
 
-        if SKLEARN_AVAILABLE and Pipeline and SimpleImputer and StandardScaler and LogisticRegression:
+        if SKLEARN_AVAILABLE and Pipeline and SimpleImputer and LogisticRegression and StandardScaler:
+            components: List[Tuple[str, Any, float]] = []
+            logistic_weight = 0.0
             try:
-                pipeline = Pipeline(
+                logistic_pipeline = Pipeline(
                     steps=[
                         ("imputer", SimpleImputer(strategy="median")),
                         ("scaler", StandardScaler()),
                         (
                             "model",
                             LogisticRegression(
-                                max_iter=500,
+                                max_iter=600,
                                 solver="lbfgs",
                                 class_weight="balanced",
+                                C=1.3,
                             ),
                         ),
                     ]
                 )
-                pipeline.fit(X, y)
-                model = pipeline
-                engine = "sklearn"
+                logistic_pipeline.fit(X, y)
+                logistic_weight = 0.5
+                components.append(("logistic", logistic_pipeline, logistic_weight))
             except Exception:
-                model = None
+                logistic_pipeline = None  # type: ignore[assignment]
+
+            gradient_weight = 0.0
+            if HistGradientBoostingClassifier is not None:
+                try:
+                    gradient_pipeline = Pipeline(
+                        steps=[
+                            ("imputer", SimpleImputer(strategy="median")),
+                            (
+                                "model",
+                                HistGradientBoostingClassifier(
+                                    learning_rate=0.08,
+                                    max_depth=4,
+                                    max_iter=400,
+                                    l2_regularization=0.25,
+                                ),
+                            ),
+                        ]
+                    )
+                    gradient_pipeline.fit(X, y)
+                    gradient_weight = 0.5 if logistic_weight > 0 else 1.0
+                    components.append(("gradient_boost", gradient_pipeline, gradient_weight))
+                except Exception:
+                    gradient_pipeline = None  # type: ignore[assignment]
+
+            # Normalize weights to sum to 1
+            total_weight = sum(weight for _, _, weight in components)
+            if total_weight > 0:
+                normalized_components = [
+                    (name, estimator, weight / total_weight)
+                    for name, estimator, weight in components
+                ]
+                model = _SklearnEnsembleModel(normalized_components)
+                engine = "blend"
+            elif logistic_weight > 0 and logistic_pipeline is not None:
+                model = logistic_pipeline
+                engine = "logistic"
 
         if model is None:
             fallback = _SimpleLogisticModel()
@@ -952,6 +1028,7 @@ class HistoricalMLPredictor:
 
         model = self._ensure_model(sport_key)
         model_engine = self._model_engine.get(sport_key)
+        training_rows = int(self._training_rows.get(sport_key, 0))
 
         market_home = feature_vector.get("home_ml_implied")
         market_away = feature_vector.get("away_ml_implied")
@@ -980,27 +1057,49 @@ class HistoricalMLPredictor:
                 except Exception:
                     model = None
                 else:
+                    component_probs: Dict[str, float] = {}
+                    raw_components = getattr(model, "last_component_probs", None)
+                    if isinstance(raw_components, dict):
+                        for name, values in raw_components.items():
+                            try:
+                                component_probs[name] = float(np.asarray(values, dtype=float)[0][1])
+                            except Exception:
+                                continue
+                    component_spread = 0.0
+                    if component_probs:
+                        component_values = list(component_probs.values())
+                        component_spread = max(component_values) - min(component_values)
                     sentiment_adjustment = float(np.tanh(sentiment_diff) * 0.08)
                     blended_home = (
-                        home_prob_model * 0.65
+                        home_prob_model * 0.6
                         + market_home * 0.25
-                        + (0.5 + sentiment_adjustment) * 0.10
+                        + (0.5 + sentiment_adjustment) * 0.15
                     )
                     home_prob = float(np.clip(blended_home, 0.02, 0.98))
                     away_prob = 1.0 - home_prob
                     agreement = 1.0 - abs(home_prob_model - market_home)
+                    sentiment_factor = 1 - min(1.0, abs(sentiment_adjustment) / 0.12)
+                    stability_factor = 1.0 - min(1.0, component_spread * 3.0)
+                    depth_factor = min(1.0, training_rows / float(max(self.min_rows, 1) * 3))
                     confidence = float(
                         np.clip(
-                            0.55
-                            + 0.35 * agreement
-                            + 0.1 * (1 - abs(sentiment_adjustment) / 0.08),
+                            0.50
+                            + 0.25 * agreement
+                            + 0.15 * depth_factor
+                            + 0.1 * stability_factor
+                            + 0.1 * sentiment_factor,
                             0.45,
-                            0.97,
+                            0.98,
                         )
                     )
                     edge = abs(home_prob - market_home)
-                    model_label = "historical-logistic"
-                    if model_engine:
+                    if model_engine == "blend":
+                        model_label = "historical-ensemble"
+                    elif model_engine == "logistic":
+                        model_label = "historical-logistic"
+                    else:
+                        model_label = "historical-ensemble"
+                    if model_engine and model_engine not in model_label:
                         model_label = f"{model_label}-{model_engine}"
                     return {
                         "home_prob": home_prob,
@@ -1009,7 +1108,8 @@ class HistoricalMLPredictor:
                         "edge": edge,
                         "recommendation": "home" if home_prob >= away_prob else "away",
                         "model_used": model_label,
-                        "training_rows": float(self._training_rows.get(sport_key, 0)),
+                        "training_rows": float(training_rows),
+                        "component_probabilities": component_probs,
                     }
 
         # Fallback heuristic when no model is available

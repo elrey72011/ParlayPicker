@@ -2016,48 +2016,6 @@ def validate_with_kalshi(kalshi_integrator, home_team: str, away_team: str,
             'market_scope': 'error',
             'data_source': 'error'
         }
-        return
-
-    try:
-        kalshi_data = validate_with_kalshi(kalshi, home_team, away_team, side, base_prob, sport)
-    except Exception:
-        leg_data['kalshi_validation'] = {
-            'kalshi_available': False,
-            'validation': 'error',
-            'edge': 0,
-            'confidence_boost': 0,
-            'market_scope': 'error',
-            'data_source': 'error'
-        }
-        return
-
-    leg_data['kalshi_validation'] = kalshi_data
-
-    if not kalshi_data.get('kalshi_available'):
-        return
-
-    original_ai_prob = leg_data.get('ai_prob', base_prob)
-    kalshi_prob = kalshi_data.get('kalshi_prob', base_prob)
-
-    blended_prob = (
-        original_ai_prob * 0.50 +  # AI model
-        kalshi_prob * 0.30 +       # Kalshi market
-        base_prob * 0.20           # Sportsbook baseline
-    )
-
-    alignment_delta = kalshi_prob - original_ai_prob
-
-    leg_data['ai_prob_before_kalshi'] = original_ai_prob
-    leg_data['ai_prob'] = blended_prob
-    leg_data['kalshi_influence'] = blended_prob - original_ai_prob
-    leg_data['kalshi_alignment_delta'] = alignment_delta
-    leg_data['kalshi_alignment_abs'] = abs(alignment_delta)
-    leg_data['kalshi_prob_raw'] = kalshi_prob
-    leg_data['kalshi_edge'] = kalshi_data.get('edge', 0)
-    leg_data['ai_confidence'] = min(
-        leg_data.get('ai_confidence', 0.5) + kalshi_data.get('confidence_boost', 0),
-        0.95
-    )
 
 # Helper to apply Kalshi validation to a betting leg in-place
 def integrate_kalshi_into_leg(
@@ -3042,16 +3000,34 @@ def render_parlay_section_ai(title, rows, theover_data=None):
 
                 model_used = leg.get('ai_model_source')
                 if isinstance(model_used, str) and model_used:
-                    if model_used.startswith('historical-logistic'):
+                    if model_used.startswith('historical-ensemble'):
+                        suffix = model_used[len('historical-ensemble'):].lstrip('-')
+                        if suffix:
+                            model_display = f"Historical Ensemble ({suffix.upper()})"
+                        else:
+                            model_display = 'Historical Ensemble'
+                    elif model_used.startswith('historical-logistic'):
                         suffix = model_used[len('historical-logistic'):].lstrip('-')
                         if suffix:
-                            model_display = f"Historical ML ({suffix.upper()})"
+                            model_display = f"Historical Logistic ({suffix.upper()})"
                         else:
-                            model_display = 'Historical ML'
+                            model_display = 'Historical Logistic'
                     else:
                         model_display = model_used.replace('-', ' ').title()
                 else:
                     model_display = '—'
+
+                component_display = '—'
+                component_payload = leg.get('ai_component_probabilities')
+                if isinstance(component_payload, dict) and component_payload:
+                    breakdown = []
+                    for key, val in sorted(component_payload.items()):
+                        try:
+                            breakdown.append(f"{key.replace('_', ' ').title()}: {float(val)*100:.1f}%")
+                        except Exception:
+                            continue
+                    if breakdown:
+                        component_display = "; ".join(breakdown)
 
                 training_rows_val = leg.get('ai_training_rows')
                 if isinstance(training_rows_val, (int, float)) and training_rows_val:
@@ -3080,6 +3056,7 @@ def render_parlay_section_ai(title, rows, theover_data=None):
                     "AI % (pre-Kalshi)": ai_pre_display,
                     "AI % (final)": f"{leg.get('ai_prob', leg['p'])*100:.1f}%",
                     "ML Model": model_display,
+                    "ML Breakdown": component_display,
                     "Training Rows": training_display,
                     "Kalshi": kalshi_display,
                     "K Impact": kalshi_influence_display,
@@ -3094,7 +3071,8 @@ def render_parlay_section_ai(title, rows, theover_data=None):
 
             if any(leg.get('ai_model_source') for leg in row.get("legs", [])):
                 st.caption(
-                    "**ML Model** = Historical ML uses logistic regression trained on API-Sports data;"
+                    "**ML Model** = Historical ML blends logistic regression with gradient boosting when available;"
+                    " **ML Breakdown** = component probabilities from each estimator;"
                     " **Training Rows** = number of historical games in the most recent fit."
                 )
 
@@ -3653,7 +3631,7 @@ with main_tab1:
         show_training = st.checkbox(
             "Show ML training diagnostics (may trigger large API downloads)",
             key="show_ml_training_status",
-            help="Enabling this fetches API-Sports history to update the logistic model status."
+            help="Enabling this fetches API-Sports history to update the historical model status."
         )
         if not show_training:
             st.info(
@@ -3712,15 +3690,20 @@ with main_tab1:
                         st.metric(
                             "Training rows used",
                             int(metadata.get('training_rows', 0)),
-                            help="Rows consumed by the logistic model during the last training run.",
+                            help="Rows consumed by the historical models during the last training run.",
                         )
 
                         engine_label = metadata.get('model_engine')
-                        if engine_label:
-                            if isinstance(engine_label, str) and engine_label.lower() == 'sklearn':
-                                st.caption("Engine: scikit-learn pipeline")
-                            elif isinstance(engine_label, str):
+                        if isinstance(engine_label, str):
+                            engine_lower = engine_label.lower()
+                            if engine_lower == 'blend':
+                                st.caption("Engine: scikit-learn ensemble (logistic + gradient boosting)")
+                            elif engine_lower == 'logistic':
+                                st.caption("Engine: scikit-learn logistic regression")
+                            elif engine_lower == 'simple':
                                 st.caption("Engine: NumPy logistic fallback")
+                            else:
+                                st.caption(f"Engine: {engine_label}")
 
                         rows_needed = int(metadata.get('min_rows_target') or metadata.get('min_rows', 0) or 0)
                         if metadata.get('model_ready'):
@@ -4218,6 +4201,9 @@ with main_tab1:
                                                 if ml_prediction_result:
                                                     leg_data['ai_model_source'] = ml_prediction_result.get('model_used')
                                                     leg_data['ai_training_rows'] = ml_prediction_result.get('training_rows')
+                                                    component_breakdown = ml_prediction_result.get('component_probabilities')
+                                                    if isinstance(component_breakdown, dict) and component_breakdown:
+                                                        leg_data['ai_component_probabilities'] = component_breakdown
 
                                                 if apisports_payload_home:
                                                     leg_data['apisports'] = apisports_payload_home
@@ -4284,6 +4270,9 @@ with main_tab1:
                                                 if ml_prediction_result:
                                                     leg_data['ai_model_source'] = ml_prediction_result.get('model_used')
                                                     leg_data['ai_training_rows'] = ml_prediction_result.get('training_rows')
+                                                    component_breakdown = ml_prediction_result.get('component_probabilities')
+                                                    if isinstance(component_breakdown, dict) and component_breakdown:
+                                                        leg_data['ai_component_probabilities'] = component_breakdown
 
                                                 if apisports_payload_away:
                                                     leg_data['apisports'] = apisports_payload_away
