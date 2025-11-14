@@ -739,16 +739,14 @@ def render_sidebar_controls() -> Dict[str, Any]:
     )
     st.session_state['day_window'] = day_window
 
-    default_sports = st.session_state.get('selected_sports')
-    if not default_sports:
-        default_sports = APP_CFG["sports_common"][:6]
+    default_sports = st.session_state.setdefault('selected_sports', APP_CFG["sports_common"][:6])
     sports = sidebar.multiselect(
         "Sports",
         options=APP_CFG["sports_common"],
         default=default_sports,
         format_func=format_sport_label,
+        key="selected_sports",
     )
-    st.session_state['selected_sports'] = sports
 
     # --------------------- AI settings ---------------------
     ai_expander = sidebar.expander("🤖 AI Settings", expanded=False)
