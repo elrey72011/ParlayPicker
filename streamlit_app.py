@@ -23,7 +23,11 @@ from app_core import (
     MLPredictor,
     RealSentimentAnalyzer,
     SentimentAnalyzer,
+    SportsDataNCAABClient,
+    SportsDataNCAAFClient,
+    SportsDataNBAClient,
     SportsDataNFLClient,
+    SportsDataNHLClient,
 )
 
 logger = logging.getLogger(__name__)
@@ -55,6 +59,70 @@ APP_CFG: Dict[str, Any] = {
         "baseball_mlb","icehockey_nhl","mma_mixed_martial_arts",
         "soccer_epl","soccer_uefa_champs_league","tennis_atp_singles"
     ]
+}
+
+
+SPORTSDATA_CONFIG: Dict[str, Dict[str, Any]] = {
+    "americanfootball_nfl": {
+        "label": "NFL",
+        "emoji": "🏈",
+        "client_class": SportsDataNFLClient,
+        "secret_names": (
+            "NFL_SPORTSDATA_API_KEY",
+            "SPORTSDATA_NFL_KEY",
+            "SPORTSDATA_API_KEY",
+            "SPORTSDATA_KEY",
+        ),
+        "help": "Set the NFL_SPORTSDATA_API_KEY secret or request an NFL token from https://sportsdata.io/",
+    },
+    "basketball_nba": {
+        "label": "NBA",
+        "emoji": "🏀",
+        "client_class": SportsDataNBAClient,
+        "secret_names": (
+            "NBA_SPORTSDATA_API_KEY",
+            "SPORTSDATA_NBA_KEY",
+            "SPORTSDATA_API_KEY",
+            "SPORTSDATA_KEY",
+        ),
+        "help": "Set the NBA_SPORTSDATA_API_KEY secret or provide your SportsData.io universal key.",
+    },
+    "icehockey_nhl": {
+        "label": "NHL",
+        "emoji": "🏒",
+        "client_class": SportsDataNHLClient,
+        "secret_names": (
+            "NHL_SPORTSDATA_API_KEY",
+            "SPORTSDATA_NHL_KEY",
+            "SPORTSDATA_API_KEY",
+            "SPORTSDATA_KEY",
+        ),
+        "help": "Set the NHL_SPORTSDATA_API_KEY secret or reuse your SportsData.io master key.",
+    },
+    "americanfootball_ncaaf": {
+        "label": "NCAAF",
+        "emoji": "🎓🏈",
+        "client_class": SportsDataNCAAFClient,
+        "secret_names": (
+            "NCAAF_SPORTSDATA_API_KEY",
+            "SPORTSDATA_NCAAF_KEY",
+            "SPORTSDATA_API_KEY",
+            "SPORTSDATA_KEY",
+        ),
+        "help": "Set the NCAAF_SPORTSDATA_API_KEY secret or reuse your SportsData.io key for college football.",
+    },
+    "basketball_ncaab": {
+        "label": "NCAAB",
+        "emoji": "🎓🏀",
+        "client_class": SportsDataNCAABClient,
+        "secret_names": (
+            "NCAAB_SPORTSDATA_API_KEY",
+            "SPORTSDATA_NCAAB_KEY",
+            "SPORTSDATA_API_KEY",
+            "SPORTSDATA_KEY",
+        ),
+        "help": "Set the NCAAB_SPORTSDATA_API_KEY secret or reuse your SportsData.io key for college hoops.",
+    },
 }
 
 
@@ -705,23 +773,35 @@ def render_sidebar_controls() -> Dict[str, Any]:
         st.session_state['nba_apisports_api_key'] = nba_key_input
         st.session_state['nba_apisports_key_source'] = "user"
 
-    sportsdata_key_default, sportsdata_source_default = resolve_nfl_sportsdata_key()
-    st.session_state.setdefault('nfl_sportsdata_api_key', sportsdata_key_default)
-    st.session_state.setdefault('nfl_sportsdata_key_source', sportsdata_source_default)
-    sportsdata_key_input = sidebar.text_input(
-        "NFL SportsData.io key",
-        value=st.session_state.get('nfl_sportsdata_api_key', ""),
-        type="password",
-        help="Adds SportsData.io team stats, streaks, and power indices to NFL analysis.",
-    ).strip()
-    if sportsdata_key_input != st.session_state.get('nfl_sportsdata_api_key', ""):
-        st.session_state['nfl_sportsdata_api_key'] = sportsdata_key_input
-        st.session_state['nfl_sportsdata_key_source'] = "user"
+    sidebar.subheader("📈 SportsData.io keys")
+    for sport_key, cfg in SPORTSDATA_CONFIG.items():
+        session_key = f"{sport_key}_sportsdata_api_key"
+        source_session_key = f"{sport_key}_sportsdata_key_source"
+        widget_key = f"{sport_key}_sportsdata_widget"
 
-    if st.session_state.get('nfl_sportsdata_api_key'):
-        sidebar.caption("🏈 SportsData.io NFL key detected")
-    else:
-        sidebar.caption("ℹ️ Add your SportsData.io NFL key to enrich the live team metrics")
+        if session_key not in st.session_state:
+            default_key, default_source = resolve_sportsdata_key(sport_key)
+            st.session_state[session_key] = default_key
+            st.session_state[source_session_key] = default_source
+
+        key_input = sidebar.text_input(
+            f"{cfg['label']} SportsData.io key",
+            value=st.session_state.get(session_key, ""),
+            type="password",
+            help=cfg.get('help', ""),
+            key=widget_key,
+        ).strip()
+
+        if key_input != st.session_state.get(session_key, ""):
+            st.session_state[session_key] = key_input
+            st.session_state[source_session_key] = "user" if key_input else None
+
+        if st.session_state.get(session_key):
+            sidebar.caption(f"{cfg['emoji']} SportsData.io {cfg['label']} key detected")
+        else:
+            sidebar.caption(
+                f"ℹ️ Add your SportsData.io {cfg['label']} key to enrich live metrics and ML features"
+            )
 
     # --------------------- Time & sport filters ---------------------
     sidebar.subheader("📅 Filters")
@@ -909,17 +989,18 @@ def resolve_nba_apisports_key() -> Tuple[str, Optional[str]]:
     return "", None
 
 
-def resolve_nfl_sportsdata_key() -> Tuple[str, Optional[str]]:
-    """Locate the NFL SportsData.io key from Streamlit secrets or the environment."""
+def resolve_sportsdata_key(sport_key: str) -> Tuple[str, Optional[str]]:
+    """Locate the SportsData.io key for a specific sport."""
+
+    config = SPORTSDATA_CONFIG.get(sport_key, {})
+    secret_priority: List[str] = list(dict.fromkeys(config.get("secret_names", ())))
+    for fallback_name in ("SPORTSDATA_API_KEY", "SPORTSDATA_KEY"):
+        if fallback_name not in secret_priority:
+            secret_priority.append(fallback_name)
 
     secret_container = getattr(st, "secrets", None)
     if secret_container is not None:
-        for secret_name in (
-            "NFL_SPORTSDATA_API_KEY",
-            "SPORTSDATA_NFL_KEY",
-            "SPORTSDATA_API_KEY",
-            "SPORTSDATA_KEY",
-        ):
+        for secret_name in secret_priority:
             try:
                 secret_value = secret_container.get(secret_name)
             except Exception:
@@ -927,17 +1008,35 @@ def resolve_nfl_sportsdata_key() -> Tuple[str, Optional[str]]:
             if secret_value:
                 return str(secret_value), f"secret:{secret_name}"
 
-    for env_name in (
-        "NFL_SPORTSDATA_API_KEY",
-        "SPORTSDATA_NFL_KEY",
-        "SPORTSDATA_API_KEY",
-        "SPORTSDATA_KEY",
-    ):
+    for env_name in secret_priority:
         env_value = os.environ.get(env_name)
         if env_value:
             return env_value, f"env:{env_name}"
 
     return "", None
+
+
+def ensure_sportsdata_clients() -> Dict[str, Any]:
+    """Instantiate and synchronize SportsData.io clients for all configured sports."""
+
+    clients: Dict[str, Any] = st.session_state.get('sportsdata_clients', {}) or {}
+
+    for sport_key, cfg in SPORTSDATA_CONFIG.items():
+        session_key = f"{sport_key}_sportsdata_api_key"
+        source_session_key = f"{sport_key}_sportsdata_key_source"
+        api_key = st.session_state.get(session_key, "")
+        source = st.session_state.get(source_session_key)
+
+        client = clients.get(sport_key)
+        if client is None:
+            client = cfg["client_class"](api_key or None, key_source=source)
+            clients[sport_key] = client
+        else:
+            if getattr(client, "api_key", "") != (api_key or ""):
+                client.update_api_key(api_key or None, source=source or "user")
+
+    st.session_state['sportsdata_clients'] = clients
+    return clients
 
 # Comprehensive mapping of Kalshi team abbreviations → canonical team names.
 # The Kalshi markets often reference tickers like "NBA.LAL_GSW" or subtitles using
@@ -2853,8 +2952,13 @@ def build_leg_sportsdata_payload(summary: Any, side: str, sport_key: Optional[st
         'kickoff': _get(summary, 'kickoff'),
         'stadium': _get(summary, 'stadium'),
         'status': _get(summary, 'status'),
-        'sport_key': sport_key or 'americanfootball_nfl',
-        'sport_name': 'NFL',
+        'sport_key': sport_key or _get(summary, 'sport_key') or 'americanfootball_nfl',
+        'sport_name': _get(summary, 'sport_name') or SPORTSDATA_CONFIG.get(
+            sport_key or '',
+            {
+                'label': 'SportsData.io',
+            },
+        ).get('label', 'SportsData.io'),
     }
 
     payload: Dict[str, Any] = dict(game_payload)
@@ -4035,15 +4139,21 @@ def render_parlay_section_ai(
                 st.markdown("### 🛰️ Live Data Status:")
                 apisports_client = st.session_state.get('apisports_nfl_client')
                 hockey_client = st.session_state.get('apisports_hockey_client')
-                sportsdata_client = st.session_state.get('sportsdata_nfl_client')
-                if not (
-                    (apisports_client and apisports_client.is_configured())
-                    or (basketball_client and basketball_client.is_configured())
-                    or (hockey_client and hockey_client.is_configured())
-                    or (sportsdata_client and sportsdata_client.is_configured())
-                ):
+                configured_apisports = any(
+                    client and client.is_configured()
+                    for client in (
+                        apisports_client,
+                        basketball_client,
+                        hockey_client,
+                    )
+                )
+                configured_sportsdata = any(
+                    client and getattr(client, "is_configured", lambda: False)()
+                    for client in sportsdata_clients.values()
+                )
+                if not (configured_apisports or configured_sportsdata):
                     st.info(
-                        "Add your NFL, NBA, or NHL API-Sports key plus the SportsData.io NFL key to blend live team trends into scoring."
+                        "Add your API-Sports and SportsData.io keys across the leagues you follow to blend live team trends into scoring."
                     )
                 else:
                     st.info("Live data feeds are configured but no matching games were found for this parlay.")
@@ -4806,18 +4916,7 @@ with main_tab1:
         if apisports_client.api_key != (nfl_key or ""):
             apisports_client.update_api_key(nfl_key or None, source=nfl_source or "user")
 
-    sportsdata_client = st.session_state.get('sportsdata_nfl_client')
-    sportsdata_key = st.session_state.get('nfl_sportsdata_api_key', "")
-    sportsdata_source = st.session_state.get('nfl_sportsdata_key_source')
-    if sportsdata_client is None:
-        sportsdata_client = SportsDataNFLClient(
-            sportsdata_key or None,
-            key_source=sportsdata_source,
-        )
-        st.session_state['sportsdata_nfl_client'] = sportsdata_client
-    else:
-        if getattr(sportsdata_client, 'api_key', "") != (sportsdata_key or ""):
-            sportsdata_client.update_api_key(sportsdata_key or None, source=sportsdata_source or "user")
+    sportsdata_clients = ensure_sportsdata_clients()
 
     hockey_client = st.session_state.get('apisports_hockey_client')
     nhl_key = st.session_state.get('nhl_apisports_api_key', "")
@@ -4849,10 +4948,27 @@ with main_tab1:
     if ml_predictor and use_ml_predictions:
         if 'americanfootball_nfl' in active_sport_keys:
             ml_predictor.register_client('americanfootball_nfl', apisports_client)
+            ml_predictor.register_sportsdata_client(
+                'americanfootball_nfl', sportsdata_clients.get('americanfootball_nfl')
+            )
         if 'icehockey_nhl' in active_sport_keys:
             ml_predictor.register_client('icehockey_nhl', hockey_client)
+            ml_predictor.register_sportsdata_client(
+                'icehockey_nhl', sportsdata_clients.get('icehockey_nhl')
+            )
         if 'basketball_nba' in active_sport_keys:
             ml_predictor.register_client('basketball_nba', basketball_client)
+            ml_predictor.register_sportsdata_client(
+                'basketball_nba', sportsdata_clients.get('basketball_nba')
+            )
+        if 'americanfootball_ncaaf' in active_sport_keys:
+            ml_predictor.register_sportsdata_client(
+                'americanfootball_ncaaf', sportsdata_clients.get('americanfootball_ncaaf')
+            )
+        if 'basketball_ncaab' in active_sport_keys:
+            ml_predictor.register_sportsdata_client(
+                'basketball_ncaab', sportsdata_clients.get('basketball_ncaab')
+            )
 
     # Quick configuration summary to reinforce sidebar selections
     config_cols = st.columns(3)
@@ -5264,12 +5380,16 @@ with main_tab1:
     else:
         st.caption("No NFL API-Sports key detected; live data calls will be skipped.")
 
-    if sportsdata_client and sportsdata_client.is_configured():
-        st.caption(
-            f"SportsData.io NFL key from {describe_key_origin(sportsdata_client.key_origin())}."
-        )
-    else:
-        st.caption("No SportsData.io key detected; NFL power metrics fall back to sportsbook + sentiment only.")
+    for sport_key, cfg in SPORTSDATA_CONFIG.items():
+        client = sportsdata_clients.get(sport_key)
+        if client and client.is_configured():
+            st.caption(
+                f"SportsData.io {cfg['label']} key from {describe_key_origin(client.key_origin())}."
+            )
+        else:
+            st.caption(
+                f"No SportsData.io {cfg['label']} key detected; {cfg['label']} power metrics fall back to sportsbook + sentiment only."
+            )
 
     if basketball_client and basketball_client.is_configured():
         st.caption(
@@ -5460,11 +5580,8 @@ with main_tab1:
                                         apisports_payload_away = None
                                         apisports_payload_total = None
 
-                                if (
-                                    skey == "americanfootball_nfl"
-                                    and sportsdata_client
-                                    and sportsdata_client.is_configured()
-                                ):
+                                client_for_sd = sportsdata_clients.get(skey)
+                                if client_for_sd and client_for_sd.is_configured():
                                     try:
                                         event_ts = pd.to_datetime(ev.get("commence_time"), utc=True)
                                         tz_label = st.session_state.get('user_timezone') or getattr(tz, 'zone', 'UTC') or 'UTC'
@@ -5473,7 +5590,7 @@ with main_tab1:
                                         except Exception:
                                             target_tz = pytz.timezone('UTC')
                                         local_date_sd = event_ts.tz_convert(target_tz).date()
-                                        sportsdata_summary = sportsdata_client.find_game_insight(
+                                        sportsdata_summary = client_for_sd.find_game_insight(
                                             local_date_sd,
                                             home,
                                             away,
@@ -7474,14 +7591,7 @@ with main_tab5:
         )
         st.session_state['apisports_nfl_client'] = apisports_client
 
-    sportsdata_client = st.session_state.get('sportsdata_nfl_client')
-    if sportsdata_client is None:
-        fallback_key, fallback_source = resolve_nfl_sportsdata_key()
-        sportsdata_client = SportsDataNFLClient(
-            fallback_key or None,
-            key_source=fallback_source,
-        )
-        st.session_state['sportsdata_nfl_client'] = sportsdata_client
+    sportsdata_clients = ensure_sportsdata_clients()
 
     hockey_client = st.session_state.get('apisports_hockey_client')
     if hockey_client is None:
@@ -7622,17 +7732,32 @@ with main_tab5:
                     st.info(f"API-Sports notice: {selected_client.last_error}")
 
         st.markdown("---")
-        st.subheader("🏈 SportsData.io NFL Snapshot")
-        st.caption("Review SportsData.io power metrics, streaks, and turnover margins for any date.")
+        st.subheader("📡 SportsData.io Snapshot")
+        st.caption("Review SportsData.io power metrics, streaks, and turnover margins across supported leagues.")
 
-        if not sportsdata_client or not sportsdata_client.is_configured():
-            st.warning("Add your NFL SportsData.io key in the Sports Betting tab to enable this snapshot.")
+        sd_options = [(cfg['label'], sport_key, cfg) for sport_key, cfg in SPORTSDATA_CONFIG.items()]
+        sd_labels = [label for label, _, _ in sd_options]
+        default_sd_index = 0
+        selected_sd_label = st.selectbox(
+            "SportsData.io league",
+            options=sd_labels,
+            index=default_sd_index,
+            key="sportsdata_snapshot_league",
+        )
+        selected_sd_key = next(key for label, key, _ in sd_options if label == selected_sd_label)
+        selected_sd_cfg = SPORTSDATA_CONFIG[selected_sd_key]
+        sd_client = sportsdata_clients.get(selected_sd_key)
+
+        if not sd_client or not sd_client.is_configured():
+            st.warning(
+                f"Add your SportsData.io {selected_sd_cfg['label']} key in the Sports Betting tab to enable this snapshot."
+            )
         else:
             sd_tz_default = st.session_state.get('user_timezone', 'America/New_York')
             sd_tz_input = st.text_input(
                 "Timezone (IANA)",
                 value=sd_tz_default,
-                key="sportsdata_live_tz",
+                key=f"sportsdata_live_tz_{selected_sd_key}",
             )
             try:
                 sd_tz_obj = pytz.timezone(sd_tz_input)
@@ -7643,34 +7768,38 @@ with main_tab5:
             sd_date = st.date_input(
                 "Game date (SportsData.io)",
                 value=pd.Timestamp.now(sd_tz_obj).date(),
-                key="sportsdata_live_date",
+                key=f"sportsdata_live_date_{selected_sd_key}",
             )
 
-            if st.button("Fetch SportsData.io NFL snapshot", key="fetch_sportsdata_snapshot"):
-                with st.spinner("Loading NFL data from SportsData.io..."):
-                    sd_games = sportsdata_client.get_scores_by_date(sd_date)
+            button_key = f"fetch_sportsdata_snapshot_{selected_sd_key}"
+            if st.button(
+                f"Fetch SportsData.io {selected_sd_cfg['label']} snapshot",
+                key=button_key,
+            ):
+                with st.spinner(f"Loading {selected_sd_cfg['label']} data from SportsData.io..."):
+                    sd_games = sd_client.get_scores_by_date(sd_date)
 
                 if not sd_games:
-                    if sportsdata_client.last_error:
-                        st.error(f"SportsData.io error: {sportsdata_client.last_error}")
+                    if sd_client.last_error:
+                        st.error(f"SportsData.io error: {sd_client.last_error}")
                     else:
-                        st.info("No NFL games returned for this date.")
+                        st.info(f"No {selected_sd_cfg['label']} games returned for this date.")
                 else:
                     st.success(f"✅ Loaded {len(sd_games)} game(s)")
                     for raw_game in sd_games:
-                        insight = sportsdata_client.build_game_insight(raw_game)
+                        insight = sd_client.build_game_insight(raw_game)
                         if not insight:
                             continue
 
                         st.markdown("---")
-                        st.subheader(f"🏈 {insight.away.name} @ {insight.home.name}")
+                        st.subheader(f"{selected_sd_cfg['emoji']} {insight.away.name} @ {insight.home.name}")
                         st.write(f"Kickoff: {insight.kickoff or 'TBD'}")
                         st.write(f"Status: {insight.status or 'Scheduled'}")
                         season_bits = [bit for bit in [insight.season, insight.season_type, insight.week] if bit]
                         if season_bits:
                             st.write("Season info: " + " • ".join(str(bit) for bit in season_bits))
                         if insight.stadium:
-                            st.write(f"Stadium: {insight.stadium}")
+                            st.write(f"Venue: {insight.stadium}")
 
                         col_sd_home, col_sd_away = st.columns(2)
 
@@ -7685,7 +7814,7 @@ with main_tab5:
                                     icon = {'hot': '🔥', 'cold': '🥶', 'neutral': '⚪️'}.get(team.trend, '📊')
                                     st.write(f"Trend: {icon} {team.trend.capitalize()}")
                                 if team.net_points_per_game is not None:
-                                    st.write(f"Net PPG: {team.net_points_per_game:+.1f}")
+                                    st.write(f"Net {selected_sd_cfg['label']} PPG: {team.net_points_per_game:+.1f}")
                                 if team.turnover_margin is not None:
                                     st.write(f"TO Margin: {team.turnover_margin:+.1f}")
                                 if team.power_index is not None:
@@ -7694,8 +7823,8 @@ with main_tab5:
                         _render_sd_team(col_sd_home, "Home", insight.home)
                         _render_sd_team(col_sd_away, "Away", insight.away)
 
-                    if sportsdata_client.last_error:
-                        st.info(f"SportsData.io notice: {sportsdata_client.last_error}")
+                    if sd_client.last_error:
+                        st.info(f"SportsData.io notice: {sd_client.last_error}")
 
         st.markdown("---")
         st.subheader("🌐 API-Sports League Widget")

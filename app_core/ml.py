@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta
 import re
 from typing import Any, Callable, Dict, Optional, Tuple, Set, List
+from types import SimpleNamespace
 
 import numpy as np
 import pandas as pd
@@ -155,6 +156,15 @@ FEATURE_COLUMNS = [
     "away_form_pct",
     "away_trend_score",
     "away_record_pct",
+    "sportsdata_home_power_index",
+    "sportsdata_home_turnover_margin",
+    "sportsdata_home_net",
+    "sportsdata_home_strength_delta",
+    "sportsdata_away_power_index",
+    "sportsdata_away_turnover_margin",
+    "sportsdata_away_net",
+    "sportsdata_away_strength_delta",
+    "sportsdata_strength_delta_diff",
     "sentiment_home",
     "sentiment_away",
     "sentiment_diff",
@@ -370,6 +380,7 @@ class HistoricalDataBuilder:
         self.max_days_back = max(self.days_back, max_days_back)
         self.min_rows_target = max(5, min_rows_target)
         self._clients: Dict[str, Any] = {}
+        self._sportsdata_clients: Dict[str, Any] = {}
         self._dataset_cache: Dict[str, pd.DataFrame] = {}
         self._dataset_timestamp: Dict[str, datetime] = {}
         self._dataset_attempt_timestamp: Dict[str, datetime] = {}
@@ -381,6 +392,10 @@ class HistoricalDataBuilder:
     def register_client(self, sport_key: str, client: Any) -> None:
         if sport_key and client:
             self._clients[sport_key] = client
+
+    def register_sportsdata_client(self, sport_key: str, client: Any) -> None:
+        if sport_key and client:
+            self._sportsdata_clients[sport_key] = client
 
     def reset_cache(self) -> None:
         """Clear cached datasets and errors to reduce memory footprint."""
@@ -460,12 +475,21 @@ class HistoricalDataBuilder:
     # ------------------------------------------------------------------
     def _build_dataset(self, sport_key: str) -> pd.DataFrame:
         client = self._clients.get(sport_key)
+        sportsdata_client = self._sportsdata_clients.get(sport_key)
+        client_configured = bool(client) and getattr(client, "is_configured", lambda: False)()
+        sportsdata_configured = bool(sportsdata_client) and getattr(
+            sportsdata_client, "is_configured", lambda: False
+        )()
+
+        if not client_configured and sportsdata_configured:
+            return self._build_dataset_from_sportsdata(sport_key, sportsdata_client)
+
         if not client:
             self._dataset_errors[sport_key] = "unregistered_client"
             self._dataset_metadata[sport_key] = {}
             return pd.DataFrame(columns=FEATURE_COLUMNS + ["home_win"])
 
-        if not getattr(client, "is_configured", lambda: False)():
+        if not client_configured:
             self._dataset_errors[sport_key] = "missing_api_key"
             self._dataset_metadata[sport_key] = {}
             return pd.DataFrame(columns=FEATURE_COLUMNS + ["home_win"])
@@ -588,6 +612,91 @@ class HistoricalDataBuilder:
             ordered_cols.append("home_win")
         return df[ordered_cols]
 
+    def _build_dataset_from_sportsdata(self, sport_key: str, client: Any) -> pd.DataFrame:
+        today = datetime.utcnow().date()
+        odds_map = self._get_historical_odds_map(sport_key)
+        rows: List[Dict[str, Any]] = []
+        seasons_used: Set[str] = set()
+        seen_keys: Set[Tuple[str, ...]] = set()
+        max_offset_used = 0
+        sample_rows_added = 0
+
+        desired_rows = max(self.min_rows_target + 10, int(self.min_rows_target * 1.2))
+
+        def collect(start_offset: int, end_offset: int) -> None:
+            nonlocal max_offset_used
+            for offset in range(start_offset, end_offset + 1):
+                if len(rows) >= desired_rows:
+                    break
+                target_date = today - timedelta(days=offset)
+                max_offset_used = max(max_offset_used, offset)
+                try:
+                    games = client.get_scores_by_date(target_date)
+                except Exception:
+                    self._dataset_errors[sport_key] = getattr(client, "last_error", "scores_fetch_failed")
+                    continue
+
+                if not isinstance(games, list):
+                    continue
+
+                for game in games:
+                    feature_row, season_label = self._process_sportsdata_game(
+                        sport_key,
+                        client,
+                        game,
+                        odds_map,
+                        seen_keys,
+                    )
+                    if feature_row:
+                        rows.append(feature_row)
+                        if season_label:
+                            seasons_used.add(str(season_label))
+                        if len(rows) >= desired_rows:
+                            break
+                if len(rows) >= desired_rows:
+                    break
+
+        collect(1, self.days_back)
+
+        if len(rows) < self.min_rows_target and self.max_days_back > self.days_back:
+            collect(self.days_back + 1, self.max_days_back)
+
+        real_rows_before_samples = len(rows)
+
+        if len(rows) < self.min_rows_target:
+            rows_needed = self.min_rows_target - len(rows)
+            sample_rows = build_sample_rows(sport_key, rows_needed)
+            if sample_rows:
+                rows.extend(sample_rows)
+                sample_rows_added = len(sample_rows)
+
+        metadata = {
+            "seasons": sorted(seasons_used) if seasons_used else None,
+            "max_days_back": max_offset_used if max_offset_used else None,
+            "season_backfills": None,
+            "sample_rows_added": sample_rows_added or None,
+            "real_rows": real_rows_before_samples,
+            "used_sample_data": bool(sample_rows_added),
+        }
+        self._dataset_metadata[sport_key] = metadata
+
+        if not rows:
+            if sport_key not in self._dataset_errors:
+                self._dataset_errors[sport_key] = getattr(client, "last_error", "no_historical_rows")
+            return pd.DataFrame(columns=FEATURE_COLUMNS + ["home_win"])
+
+        if len(rows) < self.min_rows_target and not self._dataset_errors.get(sport_key):
+            self._dataset_errors[sport_key] = "insufficient_rows"
+        else:
+            self._dataset_errors[sport_key] = None
+
+        df = pd.DataFrame(rows)
+        df = df.drop_duplicates()
+        ordered_cols = [col for col in FEATURE_COLUMNS if col in df.columns]
+        if "home_win" in df.columns:
+            ordered_cols.append("home_win")
+        return df[ordered_cols]
+
     def _season_backfill_candidates(self, client: Any, today: date) -> List[str]:
         candidates: List[str] = []
         base_dates = [
@@ -647,8 +756,23 @@ class HistoricalDataBuilder:
             self._dataset_errors[sport_key] = getattr(client, "last_error", "summary_build_failed")
             return None, None
 
-        feature_row = self._summary_to_features(summary)
         commence_iso = _extract_commence_iso(game)
+        sportsdata_client = self._sportsdata_clients.get(sport_key)
+        if sportsdata_client and getattr(sportsdata_client, "is_configured", lambda: False)():
+            kickoff_date = _kickoff_date(commence_iso)
+            home_name = getattr(getattr(summary, "home", None), "name", None)
+            away_name = getattr(getattr(summary, "away", None), "name", None)
+            if kickoff_date and home_name and away_name:
+                try:
+                    insight = sportsdata_client.find_game_insight(kickoff_date, home_name, away_name)
+                except Exception:
+                    insight = None
+                if insight:
+                    setattr(summary, "sportsdata_game", insight)
+                    setattr(summary, "sportsdata_home", insight.home)
+                    setattr(summary, "sportsdata_away", insight.away)
+
+        feature_row = self._summary_to_features(summary)
         odds_entry = self._lookup_odds_entry(summary, commence_iso, odds_map)
         if odds_entry:
             feature_row.update(odds_entry)
@@ -666,6 +790,137 @@ class HistoricalDataBuilder:
             seen_keys.add(identifier)
 
         return feature_row, getattr(summary, "season", None)
+
+    def _process_sportsdata_game(
+        self,
+        sport_key: str,
+        client: Any,
+        game: Dict[str, Any],
+        odds_map: Dict[Tuple[str, str, date], Dict[str, Optional[float]]],
+        seen_keys: Set[Tuple[str, ...]],
+    ) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+        if not isinstance(game, dict):
+            return None, None
+
+        home_score = self._sportsdata_extract_score(game, "home")
+        away_score = self._sportsdata_extract_score(game, "away")
+        if home_score is None or away_score is None:
+            return None, None
+
+        try:
+            insight = client.build_game_insight(game)
+        except Exception:
+            self._dataset_errors[sport_key] = getattr(client, "last_error", "insight_failed")
+            return None, None
+
+        if not insight:
+            return None, None
+
+        summary = self._sportsdata_insight_to_summary(sport_key, insight)
+        commence_iso = getattr(insight, "kickoff", None)
+        home_name = getattr(getattr(summary, "home", None), "name", None)
+        away_name = getattr(getattr(summary, "away", None), "name", None)
+        home_norm = _normalize_team_name(home_name)
+        away_norm = _normalize_team_name(away_name)
+        kickoff_date = _kickoff_date(commence_iso)
+
+        identifier: Tuple[str, ...]
+        if home_norm and away_norm and kickoff_date:
+            identifier = ("sportsdata", home_norm, away_norm, kickoff_date.isoformat())
+        else:
+            identifier = ("sportsdata", str(getattr(insight, "game_key", "")))
+
+        if identifier in seen_keys:
+            return None, None
+
+        feature_row = self._summary_to_features(summary)
+        odds_entry = self._lookup_odds_entry(summary, commence_iso, odds_map)
+        if odds_entry:
+            feature_row.update(odds_entry)
+
+        feature_row.setdefault("home_ml_implied", None)
+        feature_row.setdefault("away_ml_implied", None)
+        feature_row.setdefault("sentiment_home", 0.0)
+        feature_row.setdefault("sentiment_away", 0.0)
+        feature_row.setdefault("sentiment_diff", 0.0)
+        feature_row.setdefault("home_field_advantage", 1.0)
+
+        feature_row["home_win"] = 1 if home_score > away_score else 0
+
+        seen_keys.add(identifier)
+
+        return feature_row, getattr(insight, "season", None)
+
+    def _sportsdata_insight_to_summary(self, sport_key: str, insight: Any) -> Any:
+        def _team_namespace(team: Any) -> Optional[SimpleNamespace]:
+            if not team:
+                return None
+            return SimpleNamespace(
+                name=getattr(team, "name", None),
+                record=getattr(team, "record", None),
+                form=None,
+                trend=getattr(team, "trend", None),
+                average_points_for=_safe_float(getattr(team, "points_for_per_game", None)),
+                average_points_against=_safe_float(getattr(team, "points_against_per_game", None)),
+            )
+
+        sport_name = (getattr(insight, "sport_name", "") or "").upper()
+        scoring_metric = "points"
+        if "NHL" in sport_name:
+            scoring_metric = "goals"
+        elif "MLB" in sport_name:
+            scoring_metric = "runs"
+
+        summary = SimpleNamespace(
+            id=getattr(insight, "game_key", None),
+            league=getattr(insight, "sport_name", None),
+            season=getattr(insight, "season", None),
+            status=getattr(insight, "status", None),
+            stage=None,
+            kickoff_local=getattr(insight, "kickoff", None),
+            venue=getattr(insight, "stadium", None),
+            home=_team_namespace(getattr(insight, "home", None)),
+            away=_team_namespace(getattr(insight, "away", None)),
+            sport_key=sport_key or getattr(insight, "sport_key", None),
+            sport_name=getattr(insight, "sport_name", None),
+            game_key=getattr(insight, "game_key", None),
+            season_type=getattr(insight, "season_type", None),
+            week=getattr(insight, "week", None),
+            kickoff=getattr(insight, "kickoff", None),
+            stadium=getattr(insight, "stadium", None),
+            scoring_metric=scoring_metric,
+        )
+
+        setattr(summary, "sportsdata_game", insight)
+        setattr(summary, "sportsdata_home", getattr(insight, "home", None))
+        setattr(summary, "sportsdata_away", getattr(insight, "away", None))
+        return summary
+
+    def _sportsdata_extract_score(self, game: Dict[str, Any], side: str) -> Optional[float]:
+        if not isinstance(game, dict):
+            return None
+
+        normalized_side = side.strip().lower()
+        prefixes = [normalized_side, normalized_side.capitalize(), f"{normalized_side}Team"]
+        suffixes = ["Score", "TeamScore", "FinalScore", "Points", "Runs", "Goals"]
+
+        for prefix in prefixes:
+            clean_prefix = re.sub(r"[^A-Za-z]", "", prefix)
+            for suffix in suffixes:
+                key = f"{clean_prefix}{suffix}"
+                if key in game:
+                    score = _safe_float(game.get(key))
+                    if score is not None:
+                        return score
+
+        for suffix in ("score", "points", "runs", "goals"):
+            key = f"{normalized_side}_{suffix}"
+            if key in game:
+                score = _safe_float(game.get(key))
+                if score is not None:
+                    return score
+
+        return None
 
     # ------------------------------------------------------------------
     def _summary_to_features(self, summary: Any) -> Dict[str, Optional[float]]:
@@ -685,6 +940,59 @@ class HistoricalDataBuilder:
         features["away_form_pct"] = _form_to_pct(getattr(away, "form", None))
         features["away_trend_score"] = _trend_to_score(getattr(away, "trend", None))
         features["away_record_pct"] = _record_to_pct(getattr(away, "record", None))
+
+        sportsdata_home = getattr(summary, "sportsdata_home", None)
+        sportsdata_away = getattr(summary, "sportsdata_away", None)
+
+        if features["home_avg_for"] is None and sportsdata_home is not None:
+            features["home_avg_for"] = _safe_float(getattr(sportsdata_home, "points_for_per_game", None))
+        if features["home_avg_against"] is None and sportsdata_home is not None:
+            features["home_avg_against"] = _safe_float(getattr(sportsdata_home, "points_against_per_game", None))
+        if features["home_trend_score"] is None and sportsdata_home is not None:
+            features["home_trend_score"] = _trend_to_score(getattr(sportsdata_home, "trend", None))
+        if features["home_record_pct"] is None and sportsdata_home is not None:
+            features["home_record_pct"] = _record_to_pct(getattr(sportsdata_home, "record", None))
+
+        if features["away_avg_for"] is None and sportsdata_away is not None:
+            features["away_avg_for"] = _safe_float(getattr(sportsdata_away, "points_for_per_game", None))
+        if features["away_avg_against"] is None and sportsdata_away is not None:
+            features["away_avg_against"] = _safe_float(getattr(sportsdata_away, "points_against_per_game", None))
+        if features["away_trend_score"] is None and sportsdata_away is not None:
+            features["away_trend_score"] = _trend_to_score(getattr(sportsdata_away, "trend", None))
+        if features["away_record_pct"] is None and sportsdata_away is not None:
+            features["away_record_pct"] = _record_to_pct(getattr(sportsdata_away, "record", None))
+
+        features["sportsdata_home_power_index"] = _safe_float(getattr(sportsdata_home, "power_index", None))
+        features["sportsdata_home_turnover_margin"] = _safe_float(
+            getattr(sportsdata_home, "turnover_margin", None)
+        )
+        features["sportsdata_home_net"] = _safe_float(
+            getattr(sportsdata_home, "net_points_per_game", None)
+        )
+        features["sportsdata_home_strength_delta"] = _safe_float(
+            getattr(sportsdata_home, "strength_delta", None)
+        )
+
+        features["sportsdata_away_power_index"] = _safe_float(getattr(sportsdata_away, "power_index", None))
+        features["sportsdata_away_turnover_margin"] = _safe_float(
+            getattr(sportsdata_away, "turnover_margin", None)
+        )
+        features["sportsdata_away_net"] = _safe_float(
+            getattr(sportsdata_away, "net_points_per_game", None)
+        )
+        features["sportsdata_away_strength_delta"] = _safe_float(
+            getattr(sportsdata_away, "strength_delta", None)
+        )
+
+        home_strength = features["sportsdata_home_strength_delta"]
+        away_strength = features["sportsdata_away_strength_delta"]
+        if home_strength is not None and away_strength is not None:
+            features["sportsdata_strength_delta_diff"] = float(home_strength) - float(away_strength)
+        else:
+            home_power = features["sportsdata_home_power_index"]
+            away_power = features["sportsdata_away_power_index"]
+            if home_power is not None and away_power is not None:
+                features["sportsdata_strength_delta_diff"] = float(home_power) - float(away_power)
 
         # Leave odds/sentiment fields for later enrichment
         return features
@@ -806,15 +1114,33 @@ class HistoricalDataBuilder:
                 features["home_form_pct"] = _form_to_pct(payload.get("team_form"))
                 features["home_trend_score"] = _trend_to_score(payload.get("trend"))
                 features["home_record_pct"] = _record_to_pct(payload.get("team_record"))
+                features["sportsdata_home_power_index"] = _safe_float(payload.get("power_index"))
+                features["sportsdata_home_turnover_margin"] = _safe_float(payload.get("turnover_margin"))
+                features["sportsdata_home_net"] = _safe_float(payload.get("net_points_per_game"))
+                features["sportsdata_home_strength_delta"] = _safe_float(payload.get("strength_delta"))
             else:
                 features["away_avg_for"] = _safe_float(payload.get("team_avg_points_for"))
                 features["away_avg_against"] = _safe_float(payload.get("team_avg_points_against"))
                 features["away_form_pct"] = _form_to_pct(payload.get("team_form"))
                 features["away_trend_score"] = _trend_to_score(payload.get("trend"))
                 features["away_record_pct"] = _record_to_pct(payload.get("team_record"))
+                features["sportsdata_away_power_index"] = _safe_float(payload.get("power_index"))
+                features["sportsdata_away_turnover_margin"] = _safe_float(payload.get("turnover_margin"))
+                features["sportsdata_away_net"] = _safe_float(payload.get("net_points_per_game"))
+                features["sportsdata_away_strength_delta"] = _safe_float(payload.get("strength_delta"))
 
         _populate("home", home_payload)
         _populate("away", away_payload)
+
+        home_strength = features["sportsdata_home_strength_delta"]
+        away_strength = features["sportsdata_away_strength_delta"]
+        if home_strength is not None and away_strength is not None:
+            features["sportsdata_strength_delta_diff"] = float(home_strength) - float(away_strength)
+        else:
+            home_power = features["sportsdata_home_power_index"]
+            away_power = features["sportsdata_away_power_index"]
+            if home_power is not None and away_power is not None:
+                features["sportsdata_strength_delta_diff"] = float(home_power) - float(away_power)
 
         sentiment_home = _safe_float(sentiment_home) or 0.0
         sentiment_away = _safe_float(sentiment_away) or 0.0
@@ -842,6 +1168,9 @@ class HistoricalMLPredictor:
 
     def register_client(self, sport_key: str, client: Any) -> None:
         self.data_builder.register_client(sport_key, client)
+
+    def register_sportsdata_client(self, sport_key: str, client: Any) -> None:
+        self.data_builder.register_sportsdata_client(sport_key, client)
 
     # ------------------------------------------------------------------
     def training_metadata(self, sport_key: Optional[str]) -> Dict[str, Optional[Any]]:

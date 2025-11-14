@@ -1,4 +1,4 @@
-"""Thin client for SportsData.io NFL feeds used by the Streamlit app."""
+"""Multi-sport SportsData.io helpers used throughout the Streamlit app."""
 
 from __future__ import annotations
 
@@ -6,8 +6,8 @@ import os
 import re
 import time
 from dataclasses import dataclass
-from datetime import date, datetime
-from typing import Any, Dict, List, Optional, Tuple
+from datetime import date
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 import requests
 
@@ -26,6 +26,7 @@ class SportsDataTeamInsight:
     net_points_per_game: Optional[float]
     turnover_margin: Optional[float]
     power_index: Optional[float]
+    strength_delta: Optional[float] = None
 
 
 @dataclass
@@ -41,25 +42,49 @@ class SportsDataGameInsight:
     stadium: Optional[str]
     home: SportsDataTeamInsight
     away: SportsDataTeamInsight
+    sport_key: Optional[str] = None
+    sport_name: Optional[str] = None
 
 
-class SportsDataNFLClient:
-    """Lightweight helper that wraps the SportsData.io NFL API."""
+class SportsDataClientBase:
+    """Lightweight helper that wraps a SportsData.io API surface."""
 
-    BASE_URL = "https://api.sportsdata.io/v3/nfl"
-    SECRET_ENV_PRIORITY: Tuple[str, ...] = (
-        "NFL_SPORTSDATA_API_KEY",
-        "SPORTSDATA_NFL_KEY",
-        "SPORTSDATA_API_KEY",
-        "SPORTSDATA_KEY",
+    BASE_URL: str = ""
+    SPORT_KEY: Optional[str] = None
+    SPORT_NAME: Optional[str] = None
+    SECRET_ENV_PRIORITY: Sequence[str] = ()
+    DEFAULT_SEASON_TYPE: str = "REG"
+    RETRY_STATUS: Sequence[int] = (408, 425, 429, 500, 502, 503, 504)
+
+    # Keys that vary per sport/endpoint but describe similar metrics.
+    TEAM_IDENTIFIERS: Sequence[str] = ("Team", "Name", "Key", "GlobalTeamID")
+    POINTS_FOR_KEYS: Sequence[str] = (
+        "PointsFor",
+        "PointsScored",
+        "GoalsFor",
+        "GoalsScored",
+        "RunsScored",
     )
-    DEFAULT_SEASON_TYPE = "REG"
-    RETRY_STATUS = {408, 425, 429, 500, 502, 503, 504}
+    POINTS_AGAINST_KEYS: Sequence[str] = (
+        "PointsAgainst",
+        "PointsAllowed",
+        "GoalsAgainst",
+        "GoalsAllowed",
+        "RunsAllowed",
+    )
+    GAMES_PLAYED_KEYS: Sequence[str] = ("Games", "GamesPlayed")
+    TURNOVER_MARGIN_KEYS: Sequence[str] = (
+        "TurnoverMargin",
+        "TurnoversDifferential",
+        "TurnoverDifferential",
+    )
+    STREAK_KEYS: Sequence[str] = ("StreakDescription", "Streak", "CurrentStreak")
 
     def __init__(
         self,
         api_key: Optional[str] = None,
         session: Optional[requests.Session] = None,
+        *,
         key_source: Optional[str] = None,
     ) -> None:
         resolved_key = api_key or ""
@@ -132,7 +157,8 @@ class SportsDataNFLClient:
                 self.last_error = None
                 return data
             except requests.HTTPError as exc:
-                self.last_error = f"http_{exc.response.status_code if exc.response else 'error'}"
+                status = exc.response.status_code if exc.response is not None else "error"
+                self.last_error = f"http_{status}"
                 if (
                     exc.response is not None
                     and exc.response.status_code in self.RETRY_STATUS
@@ -155,9 +181,6 @@ class SportsDataNFLClient:
         if date_key in self._scores_cache:
             return self._scores_cache[date_key]
 
-        # SportsData.io accepts multiple date formats (e.g., 2024NOV10, 2024-11-10).
-        # Try the documented variants instead of assuming ISO dates to ensure
-        # games load even when the API expects month abbreviations.
         candidates = [
             target_date.strftime("%Y-%m-%d"),
             target_date.strftime("%Y%m%d"),
@@ -170,8 +193,6 @@ class SportsDataNFLClient:
             if isinstance(payload, list) and payload:
                 games = payload
                 break
-            # If the API responded successfully but with an empty list we still
-            # keep searching the other formats before giving up.
             if isinstance(payload, list):
                 games = payload
 
@@ -181,23 +202,27 @@ class SportsDataNFLClient:
     def _season_tokens(self, season: Optional[str], season_type: Optional[str]) -> List[str]:
         tokens: List[str] = []
         base = str(season) if season else ""
-        season_type = (season_type or self.DEFAULT_SEASON_TYPE or "").upper()
+        label = (season_type or self.DEFAULT_SEASON_TYPE or "").upper()
         if base:
             tokens.append(base)
-            tokens.append(f"{base}{season_type}")
-            tokens.append(f"{base}-{season_type}")
+            tokens.append(f"{base}{label}")
+            tokens.append(f"{base}-{label}")
         return [token for token in tokens if token]
 
+    def _team_stats_keys(self, season: Optional[str], season_type: Optional[str]) -> Tuple[str, str]:
+        return str(season or ""), (season_type or self.DEFAULT_SEASON_TYPE or "").upper()
+
     def _fetch_team_stats(
-        self, season: Optional[str], season_type: Optional[str]
+        self,
+        season: Optional[str],
+        season_type: Optional[str],
     ) -> Dict[str, Dict[str, Any]]:
-        key = (str(season or ""), (season_type or self.DEFAULT_SEASON_TYPE or "").upper())
+        key = self._team_stats_keys(season, season_type)
         if key in self._team_stats_cache:
             return self._team_stats_cache[key]
 
-        season_tokens = self._season_tokens(*key)
         stats_payload: Optional[List[Dict[str, Any]]] = None
-        for token in season_tokens or [None]:
+        for token in self._season_tokens(*key) or [None]:
             if not token:
                 continue
             candidate = self._request(f"/stats/json/TeamSeasonStats/{token}")
@@ -210,16 +235,12 @@ class SportsDataNFLClient:
             for entry in stats_payload:
                 if not isinstance(entry, dict):
                     continue
-                identifiers = {
-                    entry.get("Team"),
-                    entry.get("Name"),
-                    entry.get("Key"),
-                    entry.get("GlobalTeamID"),
-                }
+                identifiers = self._collect_identifiers(entry)
                 for ident in identifiers:
                     norm = self._normalize_name(ident)
                     if norm:
                         stats_map[norm] = entry
+
         self._team_stats_cache[key] = stats_map
         return stats_map
 
@@ -230,6 +251,12 @@ class SportsDataNFLClient:
         if value is None:
             return ""
         return re.sub(r"[^A-Z]", "", str(value).upper())
+
+    def _collect_identifiers(self, entry: Dict[str, Any]) -> Iterable[str]:
+        for field in self.TEAM_IDENTIFIERS:
+            value = entry.get(field)
+            if value:
+                yield str(value)
 
     def match_game(
         self,
@@ -283,6 +310,14 @@ class SportsDataNFLClient:
         if not home_team or not away_team:
             return None
 
+        if (
+            isinstance(home_team.power_index, (int, float))
+            and isinstance(away_team.power_index, (int, float))
+        ):
+            delta = float(home_team.power_index) - float(away_team.power_index)
+            home_team.strength_delta = delta
+            away_team.strength_delta = -delta
+
         return SportsDataGameInsight(
             game_key=str(game.get("GameKey") or game.get("GlobalGameID") or ""),
             season=str(season) if season else None,
@@ -293,6 +328,8 @@ class SportsDataNFLClient:
             stadium=stadium if isinstance(stadium, str) else None,
             home=home_team,
             away=away_team,
+            sport_key=self.SPORT_KEY,
+            sport_name=self.SPORT_NAME,
         )
 
     def _build_team_insight(
@@ -331,7 +368,7 @@ class SportsDataNFLClient:
                 if ties:
                     record += f"-{ties}"
 
-            streak_text = stats_entry.get("StreakDescription") or stats_entry.get("Streak")
+            streak_text = self._extract_first(stats_entry, self.STREAK_KEYS)
             if isinstance(streak_text, (int, float)):
                 streak_val = int(streak_text)
                 if streak_val > 0:
@@ -350,10 +387,10 @@ class SportsDataNFLClient:
                 else:
                     trend = "neutral"
 
-            games_played = stats_entry.get("Games") or stats_entry.get("GamesPlayed")
+            games_played = self._extract_first(stats_entry, self.GAMES_PLAYED_KEYS)
             if isinstance(games_played, (int, float)) and games_played:
-                pf = stats_entry.get("PointsFor") or stats_entry.get("PointsScored")
-                pa = stats_entry.get("PointsAgainst") or stats_entry.get("PointsAllowed")
+                pf = self._extract_first(stats_entry, self.POINTS_FOR_KEYS)
+                pa = self._extract_first(stats_entry, self.POINTS_AGAINST_KEYS)
                 if isinstance(pf, (int, float)):
                     points_for_pg = float(pf) / float(games_played)
                 if isinstance(pa, (int, float)):
@@ -361,16 +398,16 @@ class SportsDataNFLClient:
                 if points_for_pg is not None and points_against_pg is not None:
                     net_points_pg = points_for_pg - points_against_pg
 
-            turnover_margin_val = stats_entry.get("TurnoverMargin")
+            turnover_margin_val = self._extract_first(stats_entry, self.TURNOVER_MARGIN_KEYS)
             if isinstance(turnover_margin_val, (int, float)):
                 turnover_margin = float(turnover_margin_val)
 
-            # Simple power index derived from scoring margin and win percentage.
             win_pct = None
-            if isinstance(stats_entry.get("Wins"), (int, float)) and isinstance(stats_entry.get("Games"), (int, float)):
-                games = float(stats_entry.get("Games") or 0)
-                if games:
-                    win_pct = float(stats_entry.get("Wins") or 0) / games
+            games_total = self._extract_first(stats_entry, self.GAMES_PLAYED_KEYS)
+            wins_val = stats_entry.get("Wins") or stats_entry.get("Win")
+            if isinstance(games_total, (int, float)) and games_total:
+                win_pct = float(wins_val or 0.0) / float(games_total)
+
             margin_component = net_points_pg if net_points_pg is not None else 0.0
             win_component = (win_pct * 10.0) if win_pct is not None else 0.0
             power_index = margin_component + win_component
@@ -387,6 +424,12 @@ class SportsDataNFLClient:
             turnover_margin=turnover_margin,
             power_index=power_index,
         )
+
+    def _extract_first(self, entry: Dict[str, Any], keys: Sequence[str]) -> Optional[Any]:
+        for key in keys:
+            if key in entry:
+                return entry.get(key)
+        return None
 
     # ------------------------------------------------------------------
     def find_game_insight(
@@ -406,8 +449,74 @@ class SportsDataNFLClient:
         return self.build_game_insight(matched, team_stats=stats_map)
 
 
+class SportsDataNFLClient(SportsDataClientBase):
+    BASE_URL = "https://api.sportsdata.io/v3/nfl"
+    SPORT_KEY = "americanfootball_nfl"
+    SPORT_NAME = "NFL"
+    SECRET_ENV_PRIORITY = (
+        "NFL_SPORTSDATA_API_KEY",
+        "SPORTSDATA_NFL_KEY",
+        "SPORTSDATA_API_KEY",
+        "SPORTSDATA_KEY",
+    )
+
+
+class SportsDataNBAClient(SportsDataClientBase):
+    BASE_URL = "https://api.sportsdata.io/v3/nba"
+    SPORT_KEY = "basketball_nba"
+    SPORT_NAME = "NBA"
+    SECRET_ENV_PRIORITY = (
+        "NBA_SPORTSDATA_API_KEY",
+        "SPORTSDATA_NBA_KEY",
+        "SPORTSDATA_API_KEY",
+        "SPORTSDATA_KEY",
+    )
+
+
+class SportsDataNHLClient(SportsDataClientBase):
+    BASE_URL = "https://api.sportsdata.io/v3/nhl"
+    SPORT_KEY = "icehockey_nhl"
+    SPORT_NAME = "NHL"
+    SECRET_ENV_PRIORITY = (
+        "NHL_SPORTSDATA_API_KEY",
+        "SPORTSDATA_NHL_KEY",
+        "SPORTSDATA_API_KEY",
+        "SPORTSDATA_KEY",
+    )
+
+
+class SportsDataNCAAFClient(SportsDataClientBase):
+    BASE_URL = "https://api.sportsdata.io/v3/cfb"
+    SPORT_KEY = "americanfootball_ncaaf"
+    SPORT_NAME = "NCAAF"
+    SECRET_ENV_PRIORITY = (
+        "NCAAF_SPORTSDATA_API_KEY",
+        "SPORTSDATA_NCAAF_KEY",
+        "SPORTSDATA_API_KEY",
+        "SPORTSDATA_KEY",
+    )
+
+
+class SportsDataNCAABClient(SportsDataClientBase):
+    BASE_URL = "https://api.sportsdata.io/v3/cbb"
+    SPORT_KEY = "basketball_ncaab"
+    SPORT_NAME = "NCAAB"
+    SECRET_ENV_PRIORITY = (
+        "NCAAB_SPORTSDATA_API_KEY",
+        "SPORTSDATA_NCAAB_KEY",
+        "SPORTSDATA_API_KEY",
+        "SPORTSDATA_KEY",
+    )
+
+
 __all__ = [
-    "SportsDataNFLClient",
+    "SportsDataClientBase",
     "SportsDataGameInsight",
     "SportsDataTeamInsight",
+    "SportsDataNFLClient",
+    "SportsDataNBAClient",
+    "SportsDataNHLClient",
+    "SportsDataNCAAFClient",
+    "SportsDataNCAABClient",
 ]
+

@@ -305,6 +305,19 @@ def build_sample_rows(sport_key: str, rows_needed: int) -> List[Dict[str, float]
         template = templates[idx % len(templates)]
         row = dict(template)
 
+        for sd_key in [
+            "sportsdata_home_power_index",
+            "sportsdata_home_turnover_margin",
+            "sportsdata_home_net",
+            "sportsdata_home_strength_delta",
+            "sportsdata_away_power_index",
+            "sportsdata_away_turnover_margin",
+            "sportsdata_away_net",
+            "sportsdata_away_strength_delta",
+            "sportsdata_strength_delta_diff",
+        ]:
+            row.setdefault(sd_key, 0.0)
+
         # Create small deterministic adjustments so each row remains unique.
         scale = (idx // len(templates)) * 0.02
         swing = ((idx % 5) - 2) * 0.01

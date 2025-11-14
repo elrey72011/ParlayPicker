@@ -9,7 +9,11 @@ from .apisports import (
 )
 from .sportsdata import (
     SportsDataGameInsight,
+    SportsDataNCAABClient,
+    SportsDataNCAAFClient,
+    SportsDataNBAClient,
     SportsDataNFLClient,
+    SportsDataNHLClient,
     SportsDataTeamInsight,
 )
 from .ml import HistoricalDataBuilder, HistoricalMLPredictor, MLPredictor
@@ -22,6 +26,10 @@ __all__ = [
     "GameSummary",
     "TeamSummary",
     "SportsDataNFLClient",
+    "SportsDataNBAClient",
+    "SportsDataNHLClient",
+    "SportsDataNCAAFClient",
+    "SportsDataNCAABClient",
     "SportsDataGameInsight",
     "SportsDataTeamInsight",
     "HistoricalDataBuilder",
