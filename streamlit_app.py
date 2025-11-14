@@ -3689,6 +3689,12 @@ def render_parlay_section_ai(title, rows, theover_data=None, timezone_label: Opt
             }
             legs_data.append(leg_entry)
 
+            # Persist common displays for downstream tables (e.g., Kalshi panel)
+            leg['ai_model_display'] = model_display
+            leg['ai_component_display'] = component_display
+            leg['ai_training_display'] = training_display
+            leg['ai_pre_prob_display'] = ai_pre_display
+
         if leg_summaries:
             st.markdown("**📝 Selected Legs:**")
             st.markdown("\n".join(leg_summaries))
@@ -3805,11 +3811,26 @@ def render_parlay_section_ai(title, rows, theover_data=None, timezone_label: Opt
                     kalshi_prob_pct = kalshi_prob * 100
                     discrepancy = abs(kalshi_prob - leg.get('p', 0)) * 100
                     
+                    model_display = leg.get('ai_model_display')
+                    if not model_display:
+                        model_used = leg.get('ai_model_source')
+                        if isinstance(model_used, str) and model_used:
+                            if model_used.startswith('historical-ensemble'):
+                                suffix = model_used[len('historical-ensemble'):].lstrip('-')
+                                model_display = f"Historical Ensemble ({suffix.upper()})" if suffix else 'Historical Ensemble'
+                            elif model_used.startswith('historical-logistic'):
+                                suffix = model_used[len('historical-logistic'):].lstrip('-')
+                                model_display = f"Historical Logistic ({suffix.upper()})" if suffix else 'Historical Logistic'
+                            else:
+                                model_display = model_used.replace('-', ' ').title()
+                        else:
+                            model_display = '—'
+
                     ml_prob_pre = leg.get('ai_prob_before_kalshi')
                     if isinstance(ml_prob_pre, (int, float)):
                         ml_prob_display = f"{ml_prob_pre*100:.1f}%"
                     else:
-                        ml_prob_display = "—"
+                        ml_prob_display = leg.get('ai_pre_prob_display', "—")
 
                     alignment_delta = leg.get('kalshi_alignment_delta')
                     if isinstance(alignment_delta, (int, float)):
@@ -3822,12 +3843,15 @@ def render_parlay_section_ai(title, rows, theover_data=None, timezone_label: Opt
                         'Pick': leg.get('team', 'N/A'),
                         'Status': f"{status_icon} {status_text}",
                         'Sportsbook': f"{sportsbook_prob:.1f}%",
-                        'ML (pre-Kalshi)': ml_prob_display,
+                        'AI % (pre-Kalshi)': ml_prob_display,
                         'Kalshi': f"{kalshi_prob_pct:.1f}%",
                         'Kalshi vs ML': alignment_display,
                         'Discrepancy vs Market': f"{discrepancy:.1f}%",
                         'Confidence Boost': f"{confidence_boost*100:+.0f}%",
                         'Edge': f"{edge*100:+.1f}%",
+                        'ML Model': model_display,
+                        'ML Breakdown': leg.get('ai_component_display', '—'),
+                        'Training Rows': leg.get('ai_training_display', '—'),
                         'Market': market_ticker[:20]
                     })
             
