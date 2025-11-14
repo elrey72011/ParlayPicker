@@ -3189,7 +3189,7 @@ else:
     st.session_state.pop('ml_predictor', None)
     builder_error = None
     st.session_state['historical_builder_error'] = None
-    st.session_state['show_ml_training_status'] = False
+    st.session_state.setdefault('show_ml_training_status', False)
 
 ml_predictor_state = st.session_state.get('ml_predictor')
 ai_optimizer = st.session_state.get('ai_optimizer')
@@ -3475,8 +3475,6 @@ with main_tab1:
             key="show_ml_training_status",
             help="Enabling this fetches API-Sports history to update the logistic model status."
         )
-        st.session_state['show_ml_training_status'] = show_training
-
         if not show_training:
             st.info(
                 "Enable the checkbox above to refresh ML training metrics only when you need them."
