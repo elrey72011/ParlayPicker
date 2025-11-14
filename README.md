@@ -1,8 +1,8 @@
 # 🎯 ParlayDesk - AI-Enhanced Sports Betting Analysis
 
-AI-powered parlay finder with machine learning predictions trained on historical data from The Odds API, Kalshi market validation, and live NFL & NHL context from API-Sports.
+AI-powered parlay finder with machine learning predictions trained on historical data from The Odds API, Kalshi market validation, and live NFL & NHL context from API-Sports plus SportsData.io power metrics.
 
-> **What's new:** the primary Streamlit app now bundles the historical-machine-learning workflow that previously lived in the "enhanced" build. Provide your The Odds API and API-Sports keys and the app will auto-build an ensemble (logistic regression + gradient boosting) from recent API-Sports schedules, blend it with Kalshi and sentiment signals, and surface the combined analysis throughout the UI.
+> **What's new:** the primary Streamlit app now bundles the historical-machine-learning workflow that previously lived in the "enhanced" build. Provide your The Odds API, API-Sports, and optional SportsData.io keys and the app will auto-build an ensemble (logistic regression + gradient boosting) from recent schedules, layer on SportsData.io streak/turnover metrics, blend everything with Kalshi + sentiment signals, and surface the combined analysis throughout the UI.
 
 ![Python](https://img.shields.io/badge/python-3.9+-blue.svg)
 ![Streamlit](https://img.shields.io/badge/streamlit-1.28+-red.svg)
@@ -37,6 +37,7 @@ pip install -r requirements.txt
 - ✅ The Odds API key with **historical data access** for ML training
   - Get yours at: https://the-odds-api.com
 - ✅ API-Sports tokens for NFL/NHL live data overlays
+- ✅ SportsData.io NFL subscription key for streaks, turnover margin, and power indices
 - ✅ NewsAPI, weather, social, or Kalshi credentials for deeper context
 
 ## ⚡ Quick Start
@@ -68,7 +69,7 @@ streamlit run streamlit_app.py
 - 📊 Parlay combination builder (2-leg, 3-leg, 4-leg)
 - 💰 Expected Value (EV) calculations
 - 📌 Parlay tracker saves picks and checks results against API-Sports scoreboards the next day
-- 🛰️ API-Sports NFL & NHL live data integration
+- 🛰️ API-Sports NFL & NHL live data integration plus SportsData.io NFL power metrics
 - 🌐 Embedded API-Sports league widget for cross-sport research
 - 📈 Real-time odds from The Odds API blended with Kalshi validation
 - 🎯 League-aware theover.ai integration that fuses uploaded ML projections with the app's own models
@@ -153,6 +154,13 @@ To enable NFL live data integration, add your API-Sports token under the `NFL_AP
 ```toml
 # .streamlit/secrets.toml
 NFL_APISPORTS_API_KEY = "your-nfl-api-sports-token"
+```
+
+To layer in SportsData.io streaks, turnover margin, and power indices for NFL games, set the `NFL_SPORTSDATA_API_KEY` secret:
+
+```toml
+# .streamlit/secrets.toml
+NFL_SPORTSDATA_API_KEY = "your-nfl-sportsdata-token"
 ```
 
 ### Temporarily disabling ML

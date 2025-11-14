@@ -7,6 +7,11 @@ from .apisports import (
     GameSummary,
     TeamSummary,
 )
+from .sportsdata import (
+    SportsDataGameInsight,
+    SportsDataNFLClient,
+    SportsDataTeamInsight,
+)
 from .ml import HistoricalDataBuilder, HistoricalMLPredictor, MLPredictor
 from .sentiment import RealSentimentAnalyzer, SentimentAnalyzer
 
@@ -16,6 +21,9 @@ __all__ = [
     "APISportsHockeyClient",
     "GameSummary",
     "TeamSummary",
+    "SportsDataNFLClient",
+    "SportsDataGameInsight",
+    "SportsDataTeamInsight",
     "HistoricalDataBuilder",
     "HistoricalMLPredictor",
     "MLPredictor",
