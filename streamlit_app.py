@@ -26,19 +26,6 @@ from app_core import (
 
 logger = logging.getLogger(__name__)
 
-from app_core import (
-    APISportsBasketballClient,
-    APISportsFootballClient,
-    APISportsHockeyClient,
-    HistoricalDataBuilder,
-    HistoricalMLPredictor,
-    MLPredictor,
-    RealSentimentAnalyzer,
-    SentimentAnalyzer,
-)
-
-logger = logging.getLogger(__name__)
-
 # ============ HELPER FUNCTIONS ============
 def american_to_decimal_safe(odds) -> Optional[float]:
     """
@@ -756,9 +743,10 @@ def render_sidebar_controls() -> Dict[str, Any]:
     if not default_sports:
         default_sports = APP_CFG["sports_common"][:6]
     sports = sidebar.multiselect(
-        "Sports keys",
+        "Sports",
         options=APP_CFG["sports_common"],
         default=default_sports,
+        format_func=format_sport_label,
     )
     st.session_state['selected_sports'] = sports
 
@@ -1104,6 +1092,21 @@ SPORT_KEY_TO_LEAGUE: Dict[str, str] = {
     "soccer_uefa_champs_league": "UEFA",
     "tennis_atp_singles": "TENNIS",
 }
+
+
+def format_sport_label(sport_key: Any) -> str:
+    """Return a user-friendly league label for an Odds API sport key."""
+
+    if not isinstance(sport_key, str):
+        return str(sport_key)
+
+    if sport_key in SPORT_KEY_TO_LEAGUE:
+        return SPORT_KEY_TO_LEAGUE[sport_key]
+
+    if "_" in sport_key:
+        return sport_key.split("_")[-1].upper()
+
+    return sport_key.upper()
 
 # ============ REAL SENTIMENT ANALYSIS ENGINE ============
 # (moved to app_core.sentiment so it can be reused without importing the
@@ -4422,27 +4425,26 @@ with main_tab1:
     ) -> None:
         st.subheader(header)
         client_key = client.api_key if client else ""
-        current_value = st.session_state.get(session_key, client_key or "")
-        st.session_state.setdefault(session_key, current_value or "")
+        stored_value = st.session_state.get(session_key)
+        if stored_value is None:
+            stored_value = client_key or ""
+            st.session_state[session_key] = stored_value
+
         if source_session_key and source_session_key not in st.session_state:
             origin = client.key_origin() if client else None
             st.session_state[source_session_key] = origin
 
         widget_key = f"{session_key}_{widget_suffix}"
-        stored_value = st.session_state.get(session_key, "")
-        if widget_key in st.session_state and st.session_state.get(widget_key) != stored_value:
-            st.session_state[widget_key] = stored_value
-        default_value = stored_value or (client_key or "")
+        st.session_state.setdefault(widget_key, stored_value)
+
         new_value_raw = st.text_input(
             label,
-            value=default_value,
             key=widget_key,
             type="password",
             help=help_text,
         )
         new_value = (new_value_raw or "").strip()
-        stored_value = st.session_state.get(session_key, "")
-        if new_value != stored_value:
+        if new_value != st.session_state.get(session_key, ""):
             st.session_state[session_key] = new_value
             if source_session_key:
                 st.session_state[source_session_key] = "manual-entry" if new_value else None
@@ -4452,7 +4454,7 @@ with main_tab1:
                 st.success(success_message)
             else:
                 st.info(empty_message)
-        elif not stored_value:
+        elif not st.session_state.get(session_key):
             st.caption(empty_message)
 
     render_api_sports_key_section(
@@ -4461,7 +4463,7 @@ with main_tab1:
         session_key='nfl_apisports_api_key',
         source_session_key='nfl_apisports_key_source',
         client=apisports_client,
-        help_text="Set the NFL_APISPORTS_API_KEY secret or create a free account at https://api-sports.io/documentation/american-football/v1 to obtain a key",
+        help_text="Set the NFL_APISPORTS_API_KEY secret or request an NFL token from https://api-sports.io/",
         success_message="✅ NFL API-Sports key saved for this session.",
         empty_message="API-Sports integration disabled until an NFL key is provided.",
         widget_suffix="main",
@@ -4473,7 +4475,7 @@ with main_tab1:
         session_key='nba_apisports_api_key',
         source_session_key='nba_apisports_key_source',
         client=basketball_client,
-        help_text="Set the NBA_APISPORTS_API_KEY secret or grab a basketball token from https://api-sports.io/documentation/basketball/v1",
+        help_text="Set the NBA_APISPORTS_API_KEY secret or request an NBA token from https://api-sports.io/",
         success_message="✅ NBA API-Sports key saved for this session.",
         empty_message="NBA live data disabled until an API-Sports key is provided.",
         widget_suffix="main",
@@ -4512,7 +4514,7 @@ with main_tab1:
         session_key='nhl_apisports_api_key',
         source_session_key='nhl_apisports_key_source',
         client=hockey_client,
-        help_text="Set the NHL_APISPORTS_API_KEY secret or create a free account at https://api-sports.io/documentation/hockey/v1 to obtain a key",
+        help_text="Set the NHL_APISPORTS_API_KEY secret or request an NHL token from https://api-sports.io/",
         success_message="✅ NHL API-Sports key saved for this session.",
         empty_message="NHL live data integration disabled until a key is provided.",
         widget_suffix="main",
@@ -5203,7 +5205,8 @@ with main_tab2:
         analysis_sport = st.selectbox(
             "Sport",
             options=APP_CFG["sports_common"],
-            key="analysis_sport"
+            key="analysis_sport",
+            format_func=format_sport_label,
         )
     
     with col_num:
@@ -5214,7 +5217,8 @@ with main_tab2:
         if not odds_key:
             st.error("Please configure Odds API key first")
         else:
-            with st.spinner(f"Loading {analysis_sport} teams..."):
+            sport_label = format_sport_label(analysis_sport)
+            with st.spinner(f"Loading {sport_label} teams..."):
                 try:
                     snap = fetch_oddsapi_snapshot(odds_key, analysis_sport)
                     events = snap.get("events", [])
@@ -5438,7 +5442,7 @@ with main_tab2:
                         st.download_button(
                             "💾 Download Analysis CSV",
                             data=csv_buf.getvalue(),
-                            file_name=f"sentiment_analysis_{analysis_sport}.csv",
+                            file_name=f"sentiment_analysis_{format_sport_label(analysis_sport)}.csv",
                             mime="text/csv"
                         )
     
@@ -5597,7 +5601,8 @@ with main_tab3:
         custom_sport = st.selectbox(
             "Sport",
             options=APP_CFG["sports_common"],
-            key="custom_sport"
+            key="custom_sport",
+            format_func=format_sport_label,
         )
     with col_date:
         custom_date = st.date_input(
@@ -5607,7 +5612,8 @@ with main_tab3:
         )
     
     if st.button("🔄 Load Games", type="primary"):
-        with st.spinner(f"Loading {custom_sport} games..."):
+        sport_label = format_sport_label(custom_sport)
+        with st.spinner(f"Loading {sport_label} games..."):
             try:
                 snap = fetch_oddsapi_snapshot(api_key, custom_sport)
                 st.session_state['available_games'] = snap.get("events", [])
