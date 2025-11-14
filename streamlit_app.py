@@ -2554,7 +2554,6 @@ def validate_with_kalshi(kalshi_integrator, home_team: str, away_team: str,
         return {
             'kalshi_prob': None,
             'kalshi_available': False,
-            'discrepancy': 0,
             'validation': 'error',
             'edge': 0,
             'confidence_boost': 0,
@@ -2787,6 +2786,334 @@ def fetch_oddsapi_snapshot(api_key: str, sport_key: str) -> Dict[str, Any]:
 
 def calculate_profit(decimal_odds: float, stake: float = 100) -> float:
     return (decimal_odds - 1.0) * stake
+
+def _tokenize_name(name: str) -> List[str]:
+    return [token for token in re.split(r"[^a-z0-9]+", (name or "").lower()) if token]
+
+
+def _names_match(candidate: str, *targets: str) -> bool:
+    candidate = (candidate or "").lower().strip()
+    if not candidate:
+        return False
+    candidate_tokens = set(_tokenize_name(candidate))
+    for target in targets:
+        target_clean = (target or "").lower()
+        if not target_clean:
+            continue
+        if candidate in target_clean or target_clean in candidate:
+            return True
+        target_tokens = set(_tokenize_name(target_clean))
+        if candidate_tokens and candidate_tokens.issubset(target_tokens):
+            return True
+    return False
+
+
+LEAGUE_KEYWORDS: Dict[str, List[str]] = {
+    "nfl": ["nfl", "national football league"],
+    "nba": ["nba", "national basketball association"],
+    "nhl": ["nhl", "national hockey league"],
+    "mlb": ["mlb", "major league baseball"],
+    "ncaaf": ["ncaaf", "ncaa football", "college football"],
+    "ncaab": ["ncaab", "ncaa basketball", "college basketball"],
+}
+
+
+def _league_matches(leg_league: str, candidate_league: str) -> bool:
+    if not leg_league or not candidate_league:
+        return True
+
+    leg_norm = leg_league.lower().strip()
+    cand_norm = candidate_league.lower().strip()
+    if not cand_norm:
+        return True
+
+    if leg_norm in cand_norm:
+        return True
+
+    tokens = set(_tokenize_name(cand_norm))
+    keywords = LEAGUE_KEYWORDS.get(leg_norm, [leg_norm])
+    for keyword in keywords:
+        keyword_norm = keyword.lower()
+        if keyword_norm in cand_norm:
+            return True
+        keyword_tokens = set(_tokenize_name(keyword_norm))
+        if keyword_tokens and keyword_tokens.issubset(tokens):
+            return True
+    return False
+
+
+def _normalize_probability_value(value: Any) -> Optional[float]:
+    if value is None:
+        return None
+
+    raw = str(value).strip()
+    if not raw or raw.lower() in {"nan", "none", "null"}:
+        return None
+
+    raw = raw.replace("%", "")
+
+    try:
+        prob = float(raw)
+    except ValueError:
+        match = re.search(r"[-+]?\d*\.?\d+", raw)
+        if not match:
+            return None
+        try:
+            prob = float(match.group())
+        except ValueError:
+            return None
+
+    if prob < 0:
+        return None
+
+    if prob > 1:
+        prob = prob / 100.0
+    if prob > 1:
+        return None
+
+    return max(0.0, min(prob, 1.0))
+
+
+def _parse_moneyline_value(value: Any) -> Optional[int]:
+    if value is None:
+        return None
+
+    if isinstance(value, (int, float)):
+        try:
+            return int(value)
+        except Exception:
+            return None
+
+    match = re.search(r"[-+]?\d+", str(value))
+    if not match:
+        return None
+    try:
+        return int(match.group())
+    except Exception:
+        return None
+
+
+def _implied_probability_from_moneyline(odds: Optional[int]) -> Optional[float]:
+    if odds is None:
+        return None
+    if odds >= 0:
+        prob = 100.0 / (odds + 100.0)
+    else:
+        prob = (-odds) / ((-odds) + 100.0)
+    return max(0.0, min(prob, 1.0))
+
+
+def prepare_theover_dataset(theover_data: Optional[pd.DataFrame]) -> Optional[Dict[str, Any]]:
+    if theover_data is None:
+        return None
+
+    if isinstance(theover_data, dict) and theover_data.get('_prepared_theover'):
+        return theover_data
+
+    try:
+        df = theover_data.copy()
+    except Exception:
+        return None
+
+    try:
+        df.columns = [c.strip().lower() for c in df.columns]
+    except Exception:
+        return None
+
+    records: List[Dict[str, Any]] = []
+
+    probability_columns = [
+        'winprobability',
+        'win_probability',
+        'modelprobability',
+        'model_probability',
+        'probability',
+        'ai_probability',
+        'pick_probability',
+    ]
+
+    for idx, row in df.iterrows():
+        league_raw = str(row.get('league', '')).strip()
+        away_raw = str(row.get('awayteam', row.get('away_team', ''))).strip()
+        home_raw = str(row.get('hometeam', row.get('home_team', ''))).strip()
+        pick_raw = str(row.get('pick', '')).strip()
+        pick_ai_raw = str(row.get('pickainame', row.get('pick_ai_name', ''))).strip()
+        market_raw = str(row.get('market', row.get('markettype', row.get('picktype', '')))).strip().lower()
+        moneyline_raw = row.get('moneylineods', row.get('moneyline_odds'))
+
+        explicit_prob = None
+        prob_source = None
+        for col in probability_columns:
+            if col in df.columns:
+                candidate = _normalize_probability_value(row.get(col))
+                if candidate is not None:
+                    explicit_prob = candidate
+                    prob_source = col
+                    break
+
+        moneyline_odds = _parse_moneyline_value(moneyline_raw)
+        implied_prob = _implied_probability_from_moneyline(moneyline_odds)
+
+        predicted_team = pick_ai_raw or pick_raw
+        pick_lower = pick_raw.lower()
+        pick_type = 'total' if pick_lower in {'over', 'under'} else ''
+
+        records.append({
+            'index': idx,
+            'league': league_raw,
+            'league_norm': league_raw.lower(),
+            'away': away_raw,
+            'home': home_raw,
+            'pick': pick_raw,
+            'pick_type': pick_type,
+            'predicted_team': predicted_team,
+            'market_hint': market_raw,
+            'moneyline_odds': moneyline_odds,
+            'explicit_probability': explicit_prob,
+            'probability_source': prob_source,
+            'implied_probability': implied_prob,
+            'row': row,
+        })
+
+    return {
+        '_prepared_theover': True,
+        'dataframe': df,
+        'records': records,
+    }
+
+
+def _format_theover_source(source: Optional[str]) -> str:
+    if not source:
+        return 'model output'
+
+    source_norm = source.lower()
+    if 'moneyline' in source_norm:
+        return 'moneyline odds'
+    if 'winprob' in source_norm or 'model' in source_norm:
+        return 'model output'
+    if 'pick' in source_norm and 'prob' in source_norm:
+        return 'model output'
+    return source.replace('_', ' ')
+
+
+def match_theover_to_leg(leg, theover_data, prepared: Optional[Dict[str, Any]] = None):
+    """
+    Match a parlay leg with theover.ai data and validate direction, including ML probabilities.
+    Returns dict with theover pick details or None if no alignment is found.
+    """
+    dataset = prepared
+    if dataset is None:
+        if theover_data is None:
+            return None
+        if isinstance(theover_data, dict) and theover_data.get('_prepared_theover'):
+            dataset = theover_data
+        else:
+            dataset = prepare_theover_dataset(theover_data)
+
+    if not dataset:
+        return None
+
+    try:
+        records = dataset.get('records') if isinstance(dataset, dict) else None
+        if not records:
+            return None
+
+        leg_label = (leg.get('label') or '').lower()
+        team = (leg.get('team') or '').lower()
+        market_type = (leg.get('type') or '').lower()
+        leg_league = SPORT_KEY_TO_LEAGUE.get(leg.get('sport_key'), '').lower()
+        leg_home = (leg.get('home_team') or '').lower()
+        leg_away = (leg.get('away_team') or '').lower()
+        opponent = (leg.get('opponent') or '').lower()
+
+        for record in records:
+            if not _league_matches(leg_league, record.get('league_norm', '')):
+                continue
+
+            away_team = record.get('away', '')
+            home_team = record.get('home', '')
+            pick = (record.get('pick') or '').strip()
+            predicted_team = (record.get('predicted_team') or '').strip()
+            market_hint = record.get('market_hint') or ''
+
+            matchup_ok = True
+            if leg_home and leg_away:
+                direct = _names_match(home_team, leg_home) and _names_match(away_team, leg_away)
+                swapped = _names_match(home_team, leg_away) and _names_match(away_team, leg_home)
+                matchup_ok = direct or swapped
+            if not matchup_ok:
+                continue
+
+            explicit_prob = record.get('explicit_probability')
+            implied_prob = record.get('implied_probability')
+            probability_source = record.get('probability_source')
+            if explicit_prob is None and implied_prob is not None:
+                probability_source = 'moneyline_odds'
+
+            if market_type == 'total':
+                pick_lower = pick.lower()
+                if pick_lower not in {'over', 'under'} and record.get('pick_type') != 'total':
+                    continue
+
+                leg_direction = None
+                if 'over' in leg_label:
+                    leg_direction = 'over'
+                elif 'under' in leg_label:
+                    leg_direction = 'under'
+
+                matches = (leg_direction == pick_lower) if leg_direction else None
+                signal = '✅' if matches else ('⚠️' if matches is False else '🎯')
+
+                return {
+                    'pick': pick.capitalize() if pick else 'Total',
+                    'matches': matches,
+                    'signal': signal,
+                    'league': record.get('league'),
+                    'model_probability': explicit_prob,
+                    'implied_probability': implied_prob,
+                    'probability_source': probability_source,
+                    'moneyline_odds': record.get('moneyline_odds'),
+                    'predicted_team': pick.capitalize() if pick else None,
+                    'row_index': record.get('index'),
+                }
+
+            if not team:
+                continue
+
+            if predicted_team:
+                if _names_match(predicted_team, team):
+                    matches = True
+                elif opponent and _names_match(predicted_team, opponent):
+                    matches = False
+                else:
+                    matches = None
+            else:
+                matches = None
+
+            signal = '🎯'
+            if matches is True:
+                signal = '✅'
+            elif matches is False:
+                signal = '⚠️'
+
+            if matches is None and market_type in {'spread', 'moneyline'}:
+                if market_type == 'spread' and 'spread' not in market_hint:
+                    continue
+                if market_type == 'moneyline' and not any(token in market_hint for token in ['moneyline', 'ml', 'win']):
+                    continue
+
+            return {
+                'pick': predicted_team or pick or 'Pick',
+                'matches': matches,
+                'signal': signal,
+                'league': record.get('league'),
+                'model_probability': explicit_prob,
+                'implied_probability': implied_prob,
+                'probability_source': probability_source,
+                'moneyline_odds': record.get('moneyline_odds'),
+                'predicted_team': predicted_team or pick,
+                'row_index': record.get('index'),
+            }
 
 def _tokenize_name(name: str) -> List[str]:
     return [token for token in re.split(r"[^a-z0-9]+", (name or "").lower()) if token]
