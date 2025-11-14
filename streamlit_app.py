@@ -2554,7 +2554,6 @@ def validate_with_kalshi(kalshi_integrator, home_team: str, away_team: str,
         return {
             'kalshi_prob': None,
             'kalshi_available': False,
-            'discrepancy': 0,
             'validation': 'error',
             'edge': 0,
             'confidence_boost': 0,
@@ -2788,146 +2787,394 @@ def fetch_oddsapi_snapshot(api_key: str, sport_key: str) -> Dict[str, Any]:
 def calculate_profit(decimal_odds: float, stake: float = 100) -> float:
     return (decimal_odds - 1.0) * stake
 
-def match_theover_to_leg(leg, theover_data):
-    """
-    Match a parlay leg with theover.ai data and validate direction
-    Returns dict with: {'pick': str, 'matches': bool, 'signal': str} or None
-    - pick: theover.ai recommendation (Over/Under)
-    - matches: True if leg direction matches theover.ai pick
-    - signal: Visual indicator (✅/⚠️/—)
-    """
-    if theover_data is None or theover_data.empty:
-        return None
-    
-    try:
-        # Normalize column names
-        theover_df = theover_data.copy()
-        theover_df.columns = [c.strip().lower() for c in theover_df.columns]
+def _tokenize_name(name: str) -> List[str]:
+    return [token for token in re.split(r"[^a-z0-9]+", (name or "").lower()) if token]
 
-        # Extract info from leg
-        leg_label = leg.get('label', '').lower()
-        team = leg.get('team', '').lower()
-        market_type = leg.get('type', '').lower()
+
+def _names_match(candidate: str, *targets: str) -> bool:
+    candidate = (candidate or "").lower().strip()
+    if not candidate:
+        return False
+    candidate_tokens = set(_tokenize_name(candidate))
+    for target in targets:
+        target_clean = (target or "").lower()
+        if not target_clean:
+            continue
+        if candidate in target_clean or target_clean in candidate:
+            return True
+        target_tokens = set(_tokenize_name(target_clean))
+        if candidate_tokens and candidate_tokens.issubset(target_tokens):
+            return True
+    return False
+
+
+LEAGUE_KEYWORDS: Dict[str, List[str]] = {
+    "nfl": ["nfl", "national football league"],
+    "nba": ["nba", "national basketball association"],
+    "nhl": ["nhl", "national hockey league"],
+    "mlb": ["mlb", "major league baseball"],
+    "ncaaf": ["ncaaf", "ncaa football", "college football"],
+    "ncaab": ["ncaab", "ncaa basketball", "college basketball"],
+}
+
+
+def _league_matches(leg_league: str, candidate_league: str) -> bool:
+    if not leg_league or not candidate_league:
+        return True
+
+    leg_norm = leg_league.lower().strip()
+    cand_norm = candidate_league.lower().strip()
+    if not cand_norm:
+        return True
+
+    if leg_norm in cand_norm:
+        return True
+
+    tokens = set(_tokenize_name(cand_norm))
+    keywords = LEAGUE_KEYWORDS.get(leg_norm, [leg_norm])
+    for keyword in keywords:
+        keyword_norm = keyword.lower()
+        if keyword_norm in cand_norm:
+            return True
+        keyword_tokens = set(_tokenize_name(keyword_norm))
+        if keyword_tokens and keyword_tokens.issubset(tokens):
+            return True
+    return False
+
+
+def _normalize_probability_value(value: Any) -> Optional[float]:
+    if value is None:
+        return None
+
+    raw = str(value).strip()
+    if not raw or raw.lower() in {"nan", "none", "null"}:
+        return None
+
+    raw = raw.replace("%", "")
+
+    try:
+        prob = float(raw)
+    except ValueError:
+        match = re.search(r"[-+]?\d*\.?\d+", raw)
+        if not match:
+            return None
+        try:
+            prob = float(match.group())
+        except ValueError:
+            return None
+
+    if prob < 0:
+        return None
+
+    if prob > 1:
+        prob = prob / 100.0
+    if prob > 1:
+        return None
+
+    return max(0.0, min(prob, 1.0))
+
+
+def _parse_moneyline_value(value: Any) -> Optional[int]:
+    if value is None:
+        return None
+
+    if isinstance(value, (int, float)):
+        try:
+            return int(value)
+        except Exception:
+            return None
+
+    match = re.search(r"[-+]?\d+", str(value))
+    if not match:
+        return None
+    try:
+        return int(match.group())
+    except Exception:
+        return None
+
+
+def _implied_probability_from_moneyline(odds: Optional[int]) -> Optional[float]:
+    if odds is None:
+        return None
+    if odds >= 0:
+        prob = 100.0 / (odds + 100.0)
+    else:
+        prob = (-odds) / ((-odds) + 100.0)
+    return max(0.0, min(prob, 1.0))
+
+
+def prepare_theover_dataset(theover_data: Optional[pd.DataFrame]) -> Optional[Dict[str, Any]]:
+    if theover_data is None:
+        return None
+
+    if isinstance(theover_data, dict) and theover_data.get('_prepared_theover'):
+        return theover_data
+
+    try:
+        df = theover_data.copy()
+    except Exception:
+        return None
+
+    try:
+        df.columns = [c.strip().lower() for c in df.columns]
+    except Exception:
+        return None
+
+    records: List[Dict[str, Any]] = []
+
+    probability_columns = [
+        'winprobability',
+        'win_probability',
+        'modelprobability',
+        'model_probability',
+        'probability',
+        'ai_probability',
+        'pick_probability',
+    ]
+
+    for idx, row in df.iterrows():
+        league_raw = str(row.get('league', '')).strip()
+        away_raw = str(row.get('awayteam', row.get('away_team', ''))).strip()
+        home_raw = str(row.get('hometeam', row.get('home_team', ''))).strip()
+        pick_raw = str(row.get('pick', '')).strip()
+        pick_ai_raw = str(row.get('pickainame', row.get('pick_ai_name', ''))).strip()
+        market_raw = str(row.get('market', row.get('markettype', row.get('picktype', '')))).strip().lower()
+        moneyline_raw = row.get('moneylineods', row.get('moneyline_odds'))
+
+        explicit_prob = None
+        prob_source = None
+        for col in probability_columns:
+            if col in df.columns:
+                candidate = _normalize_probability_value(row.get(col))
+                if candidate is not None:
+                    explicit_prob = candidate
+                    prob_source = col
+                    break
+
+        moneyline_odds = _parse_moneyline_value(moneyline_raw)
+        implied_prob = _implied_probability_from_moneyline(moneyline_odds)
+
+        predicted_team = pick_ai_raw or pick_raw
+        pick_lower = pick_raw.lower()
+        pick_type = 'total' if pick_lower in {'over', 'under'} else ''
+
+        records.append({
+            'index': idx,
+            'league': league_raw,
+            'league_norm': league_raw.lower(),
+            'away': away_raw,
+            'home': home_raw,
+            'pick': pick_raw,
+            'pick_type': pick_type,
+            'predicted_team': predicted_team,
+            'market_hint': market_raw,
+            'moneyline_odds': moneyline_odds,
+            'explicit_probability': explicit_prob,
+            'probability_source': prob_source,
+            'implied_probability': implied_prob,
+            'row': row,
+        })
+
+    return {
+        '_prepared_theover': True,
+        'dataframe': df,
+        'records': records,
+    }
+
+
+def _format_theover_source(source: Optional[str]) -> str:
+    if not source:
+        return 'model output'
+
+    source_norm = source.lower()
+    if 'moneyline' in source_norm:
+        return 'moneyline odds'
+    if 'winprob' in source_norm or 'model' in source_norm:
+        return 'model output'
+    if 'pick' in source_norm and 'prob' in source_norm:
+        return 'model output'
+    return source.replace('_', ' ')
+
+
+def match_theover_to_leg(leg, theover_data, prepared: Optional[Dict[str, Any]] = None):
+    """
+    Match a parlay leg with theover.ai data and validate direction, including ML probabilities.
+    Returns dict with theover pick details or None if no alignment is found.
+    """
+    dataset = prepared
+    if dataset is None:
+        if theover_data is None:
+            return None
+        if isinstance(theover_data, dict) and theover_data.get('_prepared_theover'):
+            dataset = theover_data
+        else:
+            dataset = prepare_theover_dataset(theover_data)
+
+    if not dataset:
+        return None
+
+    try:
+        records = dataset.get('records') if isinstance(dataset, dict) else None
+        if not records:
+            return None
+
+        leg_label = (leg.get('label') or '').lower()
+        team = (leg.get('team') or '').lower()
+        market_type = (leg.get('type') or '').lower()
         leg_league = SPORT_KEY_TO_LEAGUE.get(leg.get('sport_key'), '').lower()
         leg_home = (leg.get('home_team') or '').lower()
         leg_away = (leg.get('away_team') or '').lower()
+        opponent = (leg.get('opponent') or '').lower()
 
-        def _tokenize(name: str) -> List[str]:
-            return [token for token in re.split(r"[^a-z0-9]+", name.lower()) if token]
+        for record in records:
+            if not _league_matches(leg_league, record.get('league_norm', '')):
+                continue
 
-        def _names_match(candidate: str, *targets: str) -> bool:
-            candidate = (candidate or '').lower().strip()
-            if not candidate:
-                return False
-            candidate_tokens = set(_tokenize(candidate))
-            for target in targets:
-                target_clean = (target or '').lower()
-                if not target_clean:
+            away_team = record.get('away', '')
+            home_team = record.get('home', '')
+            pick = (record.get('pick') or '').strip()
+            predicted_team = (record.get('predicted_team') or '').strip()
+            market_hint = record.get('market_hint') or ''
+
+            matchup_ok = True
+            if leg_home and leg_away:
+                direct = _names_match(home_team, leg_home) and _names_match(away_team, leg_away)
+                swapped = _names_match(home_team, leg_away) and _names_match(away_team, leg_home)
+                matchup_ok = direct or swapped
+            if not matchup_ok:
+                continue
+
+            explicit_prob = record.get('explicit_probability')
+            implied_prob = record.get('implied_probability')
+            probability_source = record.get('probability_source')
+            if explicit_prob is None and implied_prob is not None:
+                probability_source = 'moneyline_odds'
+
+            if market_type == 'total':
+                pick_lower = pick.lower()
+                if pick_lower not in {'over', 'under'} and record.get('pick_type') != 'total':
                     continue
-                if candidate in target_clean or target_clean in candidate:
-                    return True
-                target_tokens = set(_tokenize(target_clean))
-                if candidate_tokens and candidate_tokens.issubset(target_tokens):
-                    return True
-            return False
 
-        # Check if this is theover.ai format (has awayteam, hometeam, pick columns)
-        if 'awayteam' in theover_df.columns and 'hometeam' in theover_df.columns and 'pick' in theover_df.columns:
-            # theover.ai format - match by teams and pick type
-            for idx, row in theover_df.iterrows():
-                away_team = str(row.get('awayteam', '')).strip()
-                home_team = str(row.get('hometeam', '')).strip()
-                pick = str(row.get('pick', '')).strip().lower()
-                league_field = str(row.get('league', '')).strip().lower()
+                leg_direction = None
+                if 'over' in leg_label:
+                    leg_direction = 'over'
+                elif 'under' in leg_label:
+                    leg_direction = 'under'
 
-                if leg_league and league_field:
-                    if leg_league not in league_field and league_field not in leg_league:
-                        continue
+                matches = (leg_direction == pick_lower) if leg_direction else None
+                signal = '✅' if matches else ('⚠️' if matches is False else '🎯')
 
-                # Totals require the matchup to align on both teams
-                if market_type == 'total':
-                    if not (leg_home and leg_away):
-                        continue
+                return {
+                    'pick': pick.capitalize() if pick else 'Total',
+                    'matches': matches,
+                    'signal': signal,
+                    'league': record.get('league'),
+                    'model_probability': explicit_prob,
+                    'implied_probability': implied_prob,
+                    'probability_source': probability_source,
+                    'moneyline_odds': record.get('moneyline_odds'),
+                    'predicted_team': pick.capitalize() if pick else None,
+                    'row_index': record.get('index'),
+                }
 
-                    home_matches = _names_match(home_team, leg_home)
-                    away_matches = _names_match(away_team, leg_away)
+            if not team:
+                continue
 
-                    if not (home_matches and away_matches):
-                        # Try swapped order in case CSV labels are reversed
-                        home_matches = _names_match(home_team, leg_away)
-                        away_matches = _names_match(away_team, leg_home)
+            if predicted_team:
+                if _names_match(predicted_team, team):
+                    matches = True
+                elif opponent and _names_match(predicted_team, opponent):
+                    matches = False
+                else:
+                    matches = None
+            else:
+                matches = None
 
-                    if home_matches and away_matches and pick in {'over', 'under'}:
-                        leg_direction = None
-                        if 'over' in leg_label:
-                            leg_direction = 'over'
-                        elif 'under' in leg_label:
-                            leg_direction = 'under'
+            signal = '🎯'
+            if matches is True:
+                signal = '✅'
+            elif matches is False:
+                signal = '⚠️'
 
-                        matches = (leg_direction == pick) if leg_direction else None
+            if matches is None and market_type in {'spread', 'moneyline'}:
+                if market_type == 'spread' and 'spread' not in market_hint:
+                    continue
+                if market_type == 'moneyline' and not any(token in market_hint for token in ['moneyline', 'ml', 'win']):
+                    continue
 
-                        return {
-                            'pick': pick.capitalize(),
-                            'matches': matches,
-                            'signal': '✅' if matches else ('⚠️' if matches is False else '❓')
-                        }
+            return {
+                'pick': predicted_team or pick or 'Pick',
+                'matches': matches,
+                'signal': signal,
+                'league': record.get('league'),
+                'model_probability': explicit_prob,
+                'implied_probability': implied_prob,
+                'probability_source': probability_source,
+                'moneyline_odds': record.get('moneyline_odds'),
+                'predicted_team': predicted_team or pick,
+                'row_index': record.get('index'),
+            }
 
-                # Moneyline/spread picks should align to one team (and optionally opponent)
-                elif team:
-                    if not away_team and not home_team:
-                        continue
-
-                    team_matches_away = _names_match(team, away_team)
-                    team_matches_home = _names_match(team, home_team)
-
-                    if not (team_matches_away or team_matches_home):
-                        continue
-
-                    opponent = (leg.get('opponent') or '').lower()
-                    if opponent:
-                        if team_matches_away:
-                            other_side = home_team
-                        else:
-                            other_side = away_team
-                        if other_side and not _names_match(opponent, other_side):
-                            continue
-
-                    if pick and pick.lower() != 'nan':
-                        return {
-                            'pick': pick.capitalize(),
-                            'matches': None,  # Can't validate ML/spread direction yet
-                            'signal': '🎯'
-                        }
-
-        else:
-            # Standard format - original matching logic
-            for idx, row in theover_df.iterrows():
-                row_team = str(row.get('team', row.get('player', ''))).lower()
-                row_market = str(row.get('stat', row.get('market', ''))).lower()
-                
-                # Check for team match
-                if team in row_team or row_team in team:
-                    # Check for market type match
-                    if ('moneyline' in market_type and ('ml' in row_market or 'win' in row_market)) or \
-                       ('spread' in market_type and 'spread' in row_market) or \
-                       ('total' in market_type and ('total' in row_market or 'points' in row_market)):
-                        projection = row.get('projection', None)
-                        if projection is not None:
-                            return {
-                                'pick': float(projection),
-                                'matches': None,
-                                'signal': '🎯'
-                            }
-        
         return None
-    except Exception as e:
+    except Exception:
         return None
-
 def build_combos_ai(legs, k, allow_sgp, optimizer, theover_data=None, min_probability=0.25, max_probability=0.70):
     """Build parlay combinations with AI scoring - deduplicates and keeps best odds
     Now filters parlays to realistic probability range (default: 25-70%)"""
+    prepared_theover = prepare_theover_dataset(theover_data) if theover_data is not None else None
+    theover_cache: Dict[int, Dict[str, Any]] = {}
+
+    if prepared_theover:
+        for leg in legs:
+            try:
+                match_info = match_theover_to_leg(leg, None, prepared_theover)
+            except Exception:
+                match_info = None
+
+            if match_info:
+                theover_cache[id(leg)] = match_info
+                leg['theover_match'] = match_info
+                if match_info.get('predicted_team'):
+                    leg['theover_predicted_team'] = match_info.get('predicted_team')
+
+                base_ai_prob = leg.get('ai_prob_pre_theover', leg.get('ai_prob', leg.get('p', 0.5)))
+                leg['ai_prob_pre_theover'] = base_ai_prob
+
+                theover_prob = match_info.get('model_probability')
+                if theover_prob is None:
+                    theover_prob = match_info.get('implied_probability')
+
+                if theover_prob is not None and base_ai_prob is not None:
+                    blend_weight = 0.35
+                    blended_prob = base_ai_prob * (1 - blend_weight) + theover_prob * blend_weight
+                    leg['ai_prob'] = blended_prob
+                    leg['ai_prob_with_theover'] = blended_prob
+                    leg['theover_probability'] = theover_prob
+                    leg['theover_probability_source'] = match_info.get('probability_source') or 'moneyline_odds'
+                    leg['theover_probability_delta'] = theover_prob - base_ai_prob
+                    leg['theover_probability_weight'] = blend_weight
+                else:
+                    leg['ai_prob'] = base_ai_prob
+                    leg.pop('theover_probability', None)
+                    leg.pop('theover_probability_delta', None)
+            else:
+                if 'ai_prob_pre_theover' in leg:
+                    leg['ai_prob'] = leg['ai_prob_pre_theover']
+                leg.pop('theover_probability', None)
+                leg.pop('theover_probability_delta', None)
+                leg.pop('theover_match', None)
+                leg.pop('theover_predicted_team', None)
+    else:
+        for leg in legs:
+            if 'ai_prob_pre_theover' in leg:
+                leg['ai_prob'] = leg['ai_prob_pre_theover']
+            leg.pop('theover_probability', None)
+            leg.pop('theover_probability_delta', None)
+            leg.pop('theover_match', None)
+            leg.pop('theover_predicted_team', None)
+
     parlay_map = {}  # Maps parlay_key -> best parlay so far
-    
+
     for combo in itertools.combinations(legs, k):
         if not allow_sgp and len({c["event_id"] for c in combo}) < k:
             continue
@@ -2986,26 +3233,56 @@ def build_combos_ai(legs, k, allow_sgp, optimizer, theover_data=None, min_probab
         # Get AI score for this parlay
         ai_metrics = optimizer.score_parlay(list(combo))
         
-        # Calculate theover.ai validation bonus
+        # Calculate theover.ai validation bonus and probability deltas
         theover_bonus = 0.0
         theover_matches = 0
         theover_conflicts = 0
-        
-        if theover_data is not None:
+        theover_prob_deltas: List[float] = []
+        theover_prob_sources: set[str] = set()
+        theover_prob_count = 0
+
+        if prepared_theover:
             for leg in combo:
-                result = match_theover_to_leg(leg, theover_data)
-                if result and isinstance(result, dict):
-                    matches = result.get('matches')
-                    if matches == True:
-                        theover_matches += 1
-                        theover_bonus += 0.15  # 15% bonus per matching leg
-                    elif matches == False:
-                        theover_conflicts += 1
-                        theover_bonus -= 0.10  # 10% penalty per conflicting leg
-        
+                result = theover_cache.get(id(leg))
+                if result is None:
+                    try:
+                        result = match_theover_to_leg(leg, None, prepared_theover)
+                    except Exception:
+                        result = None
+                    if result:
+                        theover_cache[id(leg)] = result
+                        leg['theover_match'] = result
+                if not result or not isinstance(result, dict):
+                    continue
+
+                matches = result.get('matches')
+                if matches is True:
+                    theover_matches += 1
+                elif matches is False:
+                    theover_conflicts += 1
+
+                theover_prob = result.get('model_probability')
+                if theover_prob is None:
+                    theover_prob = result.get('implied_probability')
+
+                base_prob = leg.get('ai_prob_pre_theover', leg.get('ai_prob', leg.get('p', 0.5)))
+                if theover_prob is not None and base_prob is not None:
+                    theover_prob_deltas.append(theover_prob - base_prob)
+                    theover_prob_count += 1
+                    raw_source = result.get('probability_source')
+                    if not raw_source and result.get('implied_probability') is not None:
+                        raw_source = 'moneyline_odds'
+                    theover_prob_sources.add(_format_theover_source(raw_source))
+
+        avg_delta = sum(theover_prob_deltas) / len(theover_prob_deltas) if theover_prob_deltas else 0.0
+        consensus_bonus = 0.02 * (theover_matches - theover_conflicts)
+        raw_bonus = avg_delta + consensus_bonus
+        theover_bonus = max(-0.15, min(0.15, raw_bonus))
+        theover_probability_sources = sorted(theover_prob_sources)
+
         profit = calculate_profit(d, 100)
         market_ev = ev_rate(p_market, d)
-        
+
         # Apply theover.ai bonus to AI score
         base_ai_score = ai_metrics['score']
         boosted_ai_score = base_ai_score * (1.0 + theover_bonus)
@@ -3023,6 +3300,9 @@ def build_combos_ai(legs, k, allow_sgp, optimizer, theover_data=None, min_probab
             "theover_bonus": theover_bonus,
             "theover_matches": theover_matches,
             "theover_conflicts": theover_conflicts,
+            "theover_avg_delta": avg_delta,
+            "theover_probability_count": theover_prob_count,
+            "theover_probability_sources": theover_probability_sources,
             "ai_confidence": ai_metrics['confidence'],
             "ai_edge": ai_metrics['edge'],
             "kalshi_factor": ai_metrics.get('kalshi_factor', 1.0),
@@ -3082,7 +3362,9 @@ def render_parlay_section_ai(title, rows, theover_data=None, timezone_label: Opt
     if not rows:
         st.info("No combinations found with current filters")
         return
-    
+
+    prepared_theover = prepare_theover_dataset(theover_data) if theover_data is not None else None
+
     for i, row in enumerate(rows, start=1):
         # AI confidence indicator
         conf = row['ai_confidence']
@@ -3111,17 +3393,30 @@ def render_parlay_section_ai(title, rows, theover_data=None, timezone_label: Opt
         else:
             prob_warning = ""  # Good probability
         
-        # theover.ai boost indicator
+        # theover.ai boost indicator with ML delta context
         theover_boost = ""
-        if row.get('theover_matches', 0) > 0:
-            theover_boost = f" | 🎯 {row['theover_matches']} match"
-            if row['theover_matches'] > 1:
-                theover_boost += "es"
-        elif row.get('theover_conflicts', 0) > 0:
-            theover_boost = f" | ⚠️ {row['theover_conflicts']} conflict"
-            if row['theover_conflicts'] > 1:
-                theover_boost += "s"
-        
+        theover_segments: List[str] = []
+        match_count = row.get('theover_matches', 0)
+        conflict_count = row.get('theover_conflicts', 0)
+        if match_count:
+            label = "match" if match_count == 1 else "matches"
+            theover_segments.append(f"{match_count} {label}")
+        if conflict_count:
+            label = "conflict" if conflict_count == 1 else "conflicts"
+            theover_segments.append(f"⚠️ {conflict_count} {label}")
+        prob_count = row.get('theover_probability_count', 0)
+        if prob_count:
+            delta_pct = row.get('theover_avg_delta', 0.0) * 100
+            legs_label = "leg" if prob_count == 1 else "legs"
+            theover_segments.append(f"ML Δ{delta_pct:+.1f}pp ({prob_count} {legs_label})")
+            sources = row.get('theover_probability_sources') or []
+            if sources:
+                theover_segments.append("source: " + "/".join(sources))
+
+        if theover_segments:
+            details = " • ".join(theover_segments)
+            theover_boost = f" | 🎯 theover.ai {details}"
+
         # Kalshi validation indicator with INFLUENCE
         kalshi_boost = ""
         kalshi_legs = sum(
@@ -3470,16 +3765,34 @@ def render_parlay_section_ai(title, rows, theover_data=None, timezone_label: Opt
 
         # theover.ai boost info if available
         theover_bonus = row.get('theover_bonus', 0)
-        if theover_bonus:
-            theover_bonus_pct = theover_bonus * 100
-            if theover_bonus_pct > 0:
+        theover_prob_count = row.get('theover_probability_count', 0)
+        theover_avg_delta = row.get('theover_avg_delta', 0.0)
+
+        if theover_prob_count:
+            delta_pct = theover_avg_delta * 100
+            legs_label = "leg" if theover_prob_count == 1 else "legs"
+            base_msg = f"ML probabilities blended for {theover_prob_count} {legs_label} (avg Δ{delta_pct:+.1f}pp vs AI)."
+            bonus_pct = theover_bonus * 100
+            if bonus_pct > 0.1:
                 st.success(
-                    f"🎯 **theover.ai Boost:** +{theover_bonus_pct:.0f}% to AI score "
+                    f"🎯 **theover.ai Boost:** +{bonus_pct:.0f}% to AI score — {base_msg}"
+                )
+            elif bonus_pct < -0.1:
+                st.warning(
+                    f"⚠️ **theover.ai Conflict:** {bonus_pct:.0f}% penalty — {base_msg}"
+                )
+            else:
+                st.info(f"🎯 **theover.ai ML data applied:** {base_msg}")
+        elif theover_bonus:
+            bonus_pct = theover_bonus * 100
+            if bonus_pct > 0:
+                st.success(
+                    f"🎯 **theover.ai Boost:** +{bonus_pct:.0f}% to AI score "
                     f"({row.get('theover_matches', 0)} matching picks)"
                 )
             else:
                 st.warning(
-                    f"⚠️ **theover.ai Conflict:** {theover_bonus_pct:.0f}% penalty "
+                    f"⚠️ **theover.ai Conflict:** {bonus_pct:.0f}% penalty "
                     f"({row.get('theover_conflicts', 0)} conflicting picks)"
                 )
 
@@ -3526,31 +3839,56 @@ def render_parlay_section_ai(title, rows, theover_data=None, timezone_label: Opt
                 leg_summaries.append(f"- **{market_name}**")
 
             # Try to match with theover.ai data
-            theover_result = match_theover_to_leg(leg, theover_data)
+            theover_result = leg.get('theover_match')
+            if theover_result is None and prepared_theover is not None:
+                try:
+                    theover_result = match_theover_to_leg(leg, None, prepared_theover)
+                except Exception:
+                    theover_result = None
+                if theover_result:
+                    leg['theover_match'] = theover_result
+
             theover_display = "—"
+            theover_prob_display = '—'
+            theover_delta_display = '—'
 
             if theover_result is not None:
                 has_theover = True
 
-                # Handle dict result (new format with validation)
                 if isinstance(theover_result, dict):
                     pick = theover_result.get('pick', '')
                     matches = theover_result.get('matches')
                     signal = theover_result.get('signal', '🎯')
 
-                    # Count matches and conflicts for summary
                     if matches is True:
                         theover_matches += 1
-                        theover_display = f"{signal} {pick}"
                     elif matches is False:
                         theover_conflicts += 1
-                        theover_display = f"{signal} {pick}"
+
+                    probability = leg.get('theover_probability')
+                    if probability is None:
+                        probability = theover_result.get('model_probability') or theover_result.get('implied_probability')
+                    delta = leg.get('theover_probability_delta')
+                    if delta is None and isinstance(probability, (int, float)):
+                        base_prob = leg.get('ai_prob_pre_theover', leg.get('ai_prob', leg.get('p')))
+                        if isinstance(base_prob, (int, float)):
+                            delta = probability - base_prob
+
+                    if isinstance(probability, (int, float)):
+                        prob_pct = probability * 100
+                        theover_prob_display = f"{prob_pct:.1f}%"
+                        if isinstance(delta, (int, float)):
+                            theover_delta_display = f"{delta*100:+.1f}pp"
+                            theover_display = f"{signal} {pick} ({prob_pct:.1f}% | Δ{delta*100:+.1f}pp)"
+                        else:
+                            theover_display = f"{signal} {pick} ({prob_pct:.1f}%)"
                     else:
-                        theover_display = f"{signal} {pick}"
+                        theover_display = f"{signal} {pick}" if pick else signal
                 else:
-                    # Handle numeric or simple string values (backward compatibility)
                     if isinstance(theover_result, (int, float)):
-                        theover_display = f"🎯 {theover_result:.2f}"
+                        value = float(theover_result)
+                        theover_display = f"🎯 {value:.2f}"
+                        theover_prob_display = f"{value:.2f}"
                     else:
                         theover_display = f"🎯 {theover_result}"
             # Kalshi validation display
@@ -3686,6 +4024,8 @@ def render_parlay_section_ai(title, rows, theover_data=None, timezone_label: Opt
                 "Sentiment": leg.get('sentiment_trend', 'N/A'),
                 "API-Sports": apisports_display,
                 "theover.ai": theover_display,
+                "theover %": theover_prob_display,
+                "theover Δ": theover_delta_display,
             }
             legs_data.append(leg_entry)
 
@@ -3700,6 +4040,11 @@ def render_parlay_section_ai(title, rows, theover_data=None, timezone_label: Opt
             st.markdown("\n".join(leg_summaries))
 
         st.dataframe(pd.DataFrame(legs_data), use_container_width=True, hide_index=True)
+
+        if has_theover:
+            st.caption(
+                "**theover %** = ML probability from theover.ai; **theover Δ** = percentage-point change versus the AI model before blending."
+            )
 
         if any(leg.get('ai_model_source') for leg in row.get("legs", [])):
             st.caption(

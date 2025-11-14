@@ -18,6 +18,7 @@ AI-powered parlay finder with machine learning predictions trained on historical
 - ✅ Historical ML models trained automatically when Odds API + API-Sports keys are supplied
 - ✅ Sentiment, weather, social, and sharp money overlays
 - ✅ Kalshi prediction-market blending with fallback handling
+- ✅ Upload theover.ai CSV exports to blend their ML win probabilities directly into each leg
 - ✅ Custom parlay builder, EV calculators, and export tools
 - ✅ Save parlays for next-day tracking and refresh the hit/miss tracker with one click
 ## 📋 Requirements
@@ -70,6 +71,7 @@ streamlit run streamlit_app.py
 - 🛰️ API-Sports NFL & NHL live data integration
 - 🌐 Embedded API-Sports league widget for cross-sport research
 - 📈 Real-time odds from The Odds API blended with Kalshi validation
+- 🎯 League-aware theover.ai integration that fuses uploaded ML projections with the app's own models
 
 ### Advanced Extras
 - 🔁 *Legacy experiments:* toggle ML off to compare against the odds/sentiment-only baseline whenever you want.
