@@ -2016,6 +2016,48 @@ def validate_with_kalshi(kalshi_integrator, home_team: str, away_team: str,
             'market_scope': 'error',
             'data_source': 'error'
         }
+        return
+
+    try:
+        kalshi_data = validate_with_kalshi(kalshi, home_team, away_team, side, base_prob, sport)
+    except Exception:
+        leg_data['kalshi_validation'] = {
+            'kalshi_available': False,
+            'validation': 'error',
+            'edge': 0,
+            'confidence_boost': 0,
+            'market_scope': 'error',
+            'data_source': 'error'
+        }
+        return
+
+    leg_data['kalshi_validation'] = kalshi_data
+
+    if not kalshi_data.get('kalshi_available'):
+        return
+
+    original_ai_prob = leg_data.get('ai_prob', base_prob)
+    kalshi_prob = kalshi_data.get('kalshi_prob', base_prob)
+
+    blended_prob = (
+        original_ai_prob * 0.50 +  # AI model
+        kalshi_prob * 0.30 +       # Kalshi market
+        base_prob * 0.20           # Sportsbook baseline
+    )
+
+    alignment_delta = kalshi_prob - original_ai_prob
+
+    leg_data['ai_prob_before_kalshi'] = original_ai_prob
+    leg_data['ai_prob'] = blended_prob
+    leg_data['kalshi_influence'] = blended_prob - original_ai_prob
+    leg_data['kalshi_alignment_delta'] = alignment_delta
+    leg_data['kalshi_alignment_abs'] = abs(alignment_delta)
+    leg_data['kalshi_prob_raw'] = kalshi_prob
+    leg_data['kalshi_edge'] = kalshi_data.get('edge', 0)
+    leg_data['ai_confidence'] = min(
+        leg_data.get('ai_confidence', 0.5) + kalshi_data.get('confidence_boost', 0),
+        0.95
+    )
 
 # Helper to apply Kalshi validation to a betting leg in-place
 def integrate_kalshi_into_leg(
@@ -2999,10 +3041,15 @@ def render_parlay_section_ai(title, rows, theover_data=None):
                     apisports_display = " | ".join(parts) if parts else "Live data"
 
                 model_used = leg.get('ai_model_source')
-                if model_used == 'historical-logistic':
-                    model_display = 'Historical ML'
-                elif isinstance(model_used, str) and model_used:
-                    model_display = model_used.replace('-', ' ').title()
+                if isinstance(model_used, str) and model_used:
+                    if model_used.startswith('historical-logistic'):
+                        suffix = model_used[len('historical-logistic'):].lstrip('-')
+                        if suffix:
+                            model_display = f"Historical ML ({suffix.upper()})"
+                        else:
+                            model_display = 'Historical ML'
+                    else:
+                        model_display = model_used.replace('-', ' ').title()
                 else:
                     model_display = '—'
 
@@ -3638,6 +3685,7 @@ with main_tab1:
                             "last_trained": None,
                             "min_rows": getattr(ml_predictor_state, "min_rows", 25),
                             "error": None,
+                            "model_engine": None,
                         }
 
                         metadata = default_metadata.copy()
@@ -3666,6 +3714,13 @@ with main_tab1:
                             int(metadata.get('training_rows', 0)),
                             help="Rows consumed by the logistic model during the last training run.",
                         )
+
+                        engine_label = metadata.get('model_engine')
+                        if engine_label:
+                            if isinstance(engine_label, str) and engine_label.lower() == 'sklearn':
+                                st.caption("Engine: scikit-learn pipeline")
+                            elif isinstance(engine_label, str):
+                                st.caption("Engine: NumPy logistic fallback")
 
                         rows_needed = int(metadata.get('min_rows_target') or metadata.get('min_rows', 0) or 0)
                         if metadata.get('model_ready'):

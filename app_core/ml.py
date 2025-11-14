@@ -25,6 +25,85 @@ except Exception:  # noqa: BLE001 - surface gracefully
     SimpleImputer = None  # type: ignore[assignment]
     SKLEARN_AVAILABLE = False
 
+
+class _SimpleLogisticModel:
+    """Lightweight logistic regression fallback when scikit-learn is missing."""
+
+    def __init__(
+        self,
+        *,
+        learning_rate: float = 0.15,
+        epochs: int = 750,
+        l2_penalty: float = 0.01,
+    ) -> None:
+        self.learning_rate = learning_rate
+        self.epochs = epochs
+        self.l2_penalty = l2_penalty
+        self.medians: Optional[np.ndarray] = None
+        self.means: Optional[np.ndarray] = None
+        self.stds: Optional[np.ndarray] = None
+        self.weights: Optional[np.ndarray] = None
+        self.bias: float = 0.0
+
+    @staticmethod
+    def _sigmoid(values: np.ndarray) -> np.ndarray:
+        clipped = np.clip(values, -50.0, 50.0)
+        return 1.0 / (1.0 + np.exp(-clipped))
+
+    def _prepare_features(self, X: Any) -> np.ndarray:
+        matrix = np.asarray(X, dtype=float)
+        if matrix.ndim == 1:
+            matrix = matrix.reshape(1, -1)
+
+        if self.medians is None:
+            medians = np.nanmedian(matrix, axis=0)
+            medians = np.where(np.isnan(medians), 0.0, medians)
+            self.medians = medians
+        if self.means is None or self.stds is None:
+            filled = np.where(np.isnan(matrix), self.medians, matrix)
+            means = filled.mean(axis=0)
+            stds = filled.std(axis=0)
+            stds = np.where(stds == 0, 1.0, stds)
+            self.means = means
+            self.stds = stds
+
+        filled = np.where(np.isnan(matrix), self.medians, matrix)
+        normalized = (filled - self.means) / self.stds
+        return normalized
+
+    def fit(self, X: Any, y: Any) -> None:
+        # Reset learned parameters so retraining starts from scratch.
+        self.medians = None
+        self.means = None
+        self.stds = None
+        self.weights = None
+        self.bias = 0.0
+
+        features = self._prepare_features(X)
+        target = np.asarray(y, dtype=float).reshape(-1)
+        if self.weights is None:
+            rng = np.random.default_rng(42)
+            self.weights = rng.normal(scale=0.01, size=features.shape[1])
+            self.bias = 0.0
+
+        for _ in range(self.epochs):
+            logits = features @ self.weights + self.bias
+            predictions = self._sigmoid(logits)
+            error = predictions - target
+            grad_w = (features.T @ error) / len(features) + self.l2_penalty * self.weights
+            grad_b = error.mean()
+            self.weights -= self.learning_rate * grad_w
+            self.bias -= self.learning_rate * grad_b
+
+    def predict_proba(self, X: Any) -> np.ndarray:
+        if self.weights is None:
+            raise RuntimeError("Model has not been trained")
+        features = self._prepare_features(X)
+        logits = features @ self.weights + self.bias
+        probs = self._sigmoid(logits)
+        stacked = np.column_stack([1.0 - probs, probs])
+        return stacked.astype(float)
+
 ODDS_BASE_URL = "https://api.the-odds-api.com"
 
 
@@ -721,6 +800,7 @@ class HistoricalMLPredictor:
         self._models: Dict[str, Any] = {}
         self._model_timestamp: Dict[str, datetime] = {}
         self._training_rows: Dict[str, int] = {}
+        self._model_engine: Dict[str, str] = {}
         self.min_rows = 25
 
     def register_client(self, sport_key: str, client: Any) -> None:
@@ -739,6 +819,7 @@ class HistoricalMLPredictor:
             "training_rows": 0,
             "min_rows": self.min_rows,
             "error": None,
+            "model_engine": None,
         }
 
         if not sport_key:
@@ -761,19 +842,14 @@ class HistoricalMLPredictor:
             info["training_rows"] = int(len(dataset))
             info["model_ready"] = False
             info["last_trained"] = self._model_timestamp.get(sport_key)
-            return info
-
-        if not SKLEARN_AVAILABLE:
-            info["training_rows"] = int(len(dataset))
-            info["model_ready"] = False
-            info["error"] = info.get("error") or "sklearn_not_available"
-            info["last_trained"] = self._model_timestamp.get(sport_key)
+            info["model_engine"] = None
             return info
 
         model = self._ensure_model(sport_key)
         info["model_ready"] = model is not None and sport_key in self._models
         info["last_trained"] = self._model_timestamp.get(sport_key)
         info["training_rows"] = int(self._training_rows.get(sport_key, len(dataset)))
+        info["model_engine"] = self._model_engine.get(sport_key)
         return info
 
     # ------------------------------------------------------------------
@@ -783,10 +859,6 @@ class HistoricalMLPredictor:
 
         dataset = self.data_builder.get_dataset(sport_key)
         if dataset.empty or dataset["home_win"].nunique() < 2 or len(dataset) < self.min_rows:
-            return None
-
-        if not SKLEARN_AVAILABLE:
-            self._training_rows[sport_key] = len(dataset)
             return None
 
         needs_retrain = False
@@ -805,26 +877,50 @@ class HistoricalMLPredictor:
         X = dataset.reindex(columns=FEATURE_COLUMNS).to_numpy(dtype=float)
         y = dataset["home_win"].to_numpy(dtype=int)
 
-        pipeline = Pipeline(
-            steps=[
-                ("imputer", SimpleImputer(strategy="median")),
-                ("scaler", StandardScaler()),
-                (
-                    "model",
-                    LogisticRegression(
-                        max_iter=500,
-                        solver="lbfgs",
-                        class_weight="balanced",
-                    ),
-                ),
-            ]
-        )
-        pipeline.fit(X, y)
+        model: Optional[Any] = None
+        engine = ""
 
-        self._models[sport_key] = pipeline
+        if SKLEARN_AVAILABLE and Pipeline and SimpleImputer and StandardScaler and LogisticRegression:
+            try:
+                pipeline = Pipeline(
+                    steps=[
+                        ("imputer", SimpleImputer(strategy="median")),
+                        ("scaler", StandardScaler()),
+                        (
+                            "model",
+                            LogisticRegression(
+                                max_iter=500,
+                                solver="lbfgs",
+                                class_weight="balanced",
+                            ),
+                        ),
+                    ]
+                )
+                pipeline.fit(X, y)
+                model = pipeline
+                engine = "sklearn"
+            except Exception:
+                model = None
+
+        if model is None:
+            fallback = _SimpleLogisticModel()
+            try:
+                fallback.fit(X, y)
+                model = fallback
+                engine = "simple"
+            except Exception:
+                model = None
+
+        if model is None:
+            self._models.pop(sport_key, None)
+            self._model_engine.pop(sport_key, None)
+            return None
+
+        self._models[sport_key] = model
+        self._model_engine[sport_key] = engine or "simple"
         self._model_timestamp[sport_key] = datetime.utcnow()
         self._training_rows[sport_key] = len(dataset)
-        return pipeline
+        return model
 
     # ------------------------------------------------------------------
     def predict_game_outcome(
@@ -855,6 +951,7 @@ class HistoricalMLPredictor:
         )
 
         model = self._ensure_model(sport_key)
+        model_engine = self._model_engine.get(sport_key)
 
         market_home = feature_vector.get("home_ml_implied")
         market_away = feature_vector.get("away_ml_implied")
@@ -867,33 +964,53 @@ class HistoricalMLPredictor:
 
         sentiment_diff = feature_vector.get("sentiment_diff") or 0.0
 
+        feature_frame = pd.DataFrame([feature_vector], columns=FEATURE_COLUMNS)
+
         if model is not None:
             try:
-                probs = model.predict_proba(pd.DataFrame([feature_vector], columns=FEATURE_COLUMNS))[0]
-                home_prob_model = float(probs[1])
+                probs_raw = model.predict_proba(feature_frame)
+            except TypeError:
+                probs_raw = model.predict_proba(feature_frame.to_numpy(dtype=float))
             except Exception:
                 model = None
             else:
-                sentiment_adjustment = float(np.tanh(sentiment_diff) * 0.08)
-                blended_home = (
-                    home_prob_model * 0.65
-                    + market_home * 0.25
-                    + (0.5 + sentiment_adjustment) * 0.10
-                )
-                home_prob = float(np.clip(blended_home, 0.02, 0.98))
-                away_prob = 1.0 - home_prob
-                agreement = 1.0 - abs(home_prob_model - market_home)
-                confidence = float(np.clip(0.55 + 0.35 * agreement + 0.1 * (1 - abs(sentiment_adjustment) / 0.08), 0.45, 0.97))
-                edge = abs(home_prob - market_home)
-                return {
-                    "home_prob": home_prob,
-                    "away_prob": away_prob,
-                    "confidence": confidence,
-                    "edge": edge,
-                    "recommendation": "home" if home_prob >= away_prob else "away",
-                    "model_used": "historical-logistic",
-                    "training_rows": float(self._training_rows.get(sport_key, 0)),
-                }
+                try:
+                    probs = np.asarray(probs_raw, dtype=float)[0]
+                    home_prob_model = float(probs[1])
+                except Exception:
+                    model = None
+                else:
+                    sentiment_adjustment = float(np.tanh(sentiment_diff) * 0.08)
+                    blended_home = (
+                        home_prob_model * 0.65
+                        + market_home * 0.25
+                        + (0.5 + sentiment_adjustment) * 0.10
+                    )
+                    home_prob = float(np.clip(blended_home, 0.02, 0.98))
+                    away_prob = 1.0 - home_prob
+                    agreement = 1.0 - abs(home_prob_model - market_home)
+                    confidence = float(
+                        np.clip(
+                            0.55
+                            + 0.35 * agreement
+                            + 0.1 * (1 - abs(sentiment_adjustment) / 0.08),
+                            0.45,
+                            0.97,
+                        )
+                    )
+                    edge = abs(home_prob - market_home)
+                    model_label = "historical-logistic"
+                    if model_engine:
+                        model_label = f"{model_label}-{model_engine}"
+                    return {
+                        "home_prob": home_prob,
+                        "away_prob": away_prob,
+                        "confidence": confidence,
+                        "edge": edge,
+                        "recommendation": "home" if home_prob >= away_prob else "away",
+                        "model_used": model_label,
+                        "training_rows": float(self._training_rows.get(sport_key, 0)),
+                    }
 
         # Fallback heuristic when no model is available
         sentiment_adjustment = float(np.tanh(sentiment_diff) * 0.06)
