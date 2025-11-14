@@ -3805,6 +3805,35 @@ def _ingest_theover_total_row(
             'line': line_value,
             'row_index': idx,
         }
+        return
+
+    leg_data['kalshi_validation'] = kalshi_data
+
+    if not kalshi_data.get('kalshi_available'):
+        return
+
+    original_ai_prob = leg_data.get('ai_prob', base_prob)
+    kalshi_prob = kalshi_data.get('kalshi_prob', base_prob)
+
+    blended_prob = (
+        original_ai_prob * 0.50 +  # AI model
+        kalshi_prob * 0.30 +       # Kalshi market
+        base_prob * 0.20           # Sportsbook baseline
+    )
+
+    alignment_delta = kalshi_prob - original_ai_prob
+
+    leg_data['ai_prob_before_kalshi'] = original_ai_prob
+    leg_data['ai_prob'] = blended_prob
+    leg_data['kalshi_influence'] = blended_prob - original_ai_prob
+    leg_data['kalshi_alignment_delta'] = alignment_delta
+    leg_data['kalshi_alignment_abs'] = abs(alignment_delta)
+    leg_data['kalshi_prob_raw'] = kalshi_prob
+    leg_data['kalshi_edge'] = kalshi_data.get('edge', 0)
+    leg_data['ai_confidence'] = min(
+        leg_data.get('ai_confidence', 0.5) + kalshi_data.get('confidence_boost', 0),
+        0.95
+    )
 
 
 def _infer_theover_market(row: pd.Series, default: Optional[str] = None) -> str:
@@ -4610,6 +4639,197 @@ def render_parlay_section_ai(
                 
                 with col_k3:
                     kalshi_factor_val = row.get('kalshi_factor', 1.0)
+                    st.metric(
+                        "Score Multiplier",
+                        f"{kalshi_factor_val:.2f}x",
+                        delta=f"{(kalshi_factor_val-1)*100:+.0f}%" if kalshi_factor_val != 1.0 else None,
+                        help="How much Kalshi adjusted the AI score (1.0 = no change, >1.0 = boosted, <1.0 = reduced)"
+                    )
+                
+                with col_k4:
+                    # Calculate score change from Kalshi
+                    base_score = row['ai_score'] / kalshi_factor_val if kalshi_factor_val != 0 else row['ai_score']
+                    score_change = row['ai_score'] - base_score
+                    st.metric(
+                        "Score Impact",
+                        f"{score_change:+.1f} pts",
+                        help="How many points Kalshi added/subtracted from AI score"
+                    )
+
+                align_avg = row.get('kalshi_alignment_avg', 0.0)
+                align_abs = row.get('kalshi_alignment_abs_avg', 0.0)
+                align_pos = row.get('kalshi_alignment_positive', 0)
+                align_neg = row.get('kalshi_alignment_negative', 0)
+                align_count = row.get('kalshi_alignment_count', 0)
+                disagreement_display = f"{align_neg}/{align_count}" if align_count else "—"
+
+                col_align1, col_align2, col_align3 = st.columns(3)
+
+                with col_align1:
+                    st.metric(
+                        "Avg Kalshi vs ML",
+                        f"{align_avg*100:+.1f} pp",
+                        help="Average percentage-point difference between Kalshi pricing and the trained model before blending"
+                    )
+
+                with col_align2:
+                    st.metric(
+                        "Avg Absolute Gap",
+                        f"{align_abs*100:.1f} pp",
+                        help="Typical gap size between Kalshi prices and the model regardless of direction"
+                    )
+
+                with col_align3:
+                    st.metric(
+                        "Disagreement Legs",
+                        disagreement_display,
+                        help="Legs where Kalshi is ≥1 percentage point more bearish than the model"
+                    )
+
+                # Explanation of Kalshi influence
+                if kalshi_factor_val > 1.05:
+                    st.success(f"🟢 **Kalshi BOOSTED this parlay by {(kalshi_factor_val-1)*100:.0f}%** - Prediction markets confirm AI analysis!")
+                elif kalshi_factor_val < 0.95:
+                    st.warning(f"🟠 **Kalshi REDUCED this parlay by {(1-kalshi_factor_val)*100:.0f}%** - Prediction markets skeptical of AI picks.")
+                else:
+                    st.info("🟡 **Kalshi NEUTRAL** - Prediction markets neither strongly confirm nor contradict AI.")
+
+                if align_count:
+                    if align_avg <= -0.05:
+                        st.warning(
+                            f"⚠️ Kalshi is on average {abs(align_avg)*100:.1f} percentage points more bearish than the model. "
+                            "Final AI probabilities are being pulled toward Kalshi's price."
+                        )
+                    elif align_avg >= 0.05:
+                        st.success(
+                            f"🟢 Kalshi is on average {align_avg*100:.1f} percentage points more bullish than the model, giving "
+                            "the blended AI number an extra push."
+                        )
+
+                if align_neg > 0:
+                    st.warning(
+                        f"⚠️ Kalshi is more bearish than the model on {align_neg} of {align_count} leg(s)."
+                        " Expect the blended AI probability to drift toward the market price."
+                    )
+                elif align_pos > 0:
+                    st.success(
+                        f"✅ Kalshi prices {align_pos} leg(s) richer than the model, reinforcing the AI edge before blending."
+                    )
+            else:
+                # NO KALSHI DATA - Explain why
+                st.markdown("### 📊 Kalshi Prediction Market Status:")
+                legs = row.get('legs', [])
+                scopes = [leg.get('kalshi_validation', {}).get('market_scope') for leg in legs]
+                unsupported_labels = [
+                    leg.get('label')
+                    for leg in legs
+                    if leg.get('kalshi_validation', {}).get('market_scope') in {
+                        'total_market', 'unsupported_market', 'totals_not_supported'
+                    }
+                ]
+                error_labels = [
+                    leg.get('label')
+                    for leg in legs
+                    if leg.get('kalshi_validation', {}).get('market_scope') == 'error'
+                ]
+                not_initialized = any(scope == 'not_initialized' for scope in scopes)
+                disabled = (not st.session_state.get('kalshi_enabled', False)) or any(scope == 'disabled' for scope in scopes)
+
+                if disabled:
+                    st.info("Kalshi validation is turned off. Toggle the Kalshi checkbox above to blend prediction markets into the analysis.")
+                elif unsupported_labels:
+                    st.info("Kalshi does not publish totals/prop markets, so these leg(s) rely on AI + sentiment only:")
+                    for label in unsupported_labels:
+                        st.caption(f"• {label}")
+                    st.caption("Moneyline and spread legs will include Kalshi coverage whenever a market is available.")
+                elif not_initialized:
+                    st.info("Kalshi markets have not loaded yet. Add your Kalshi API key or retry to use the live/synthetic market data.")
+                elif error_labels:
+                    st.warning("Kalshi validation encountered an error for these legs (falling back to AI + sentiment):")
+                    for label in error_labels:
+                        st.caption(f"• {label}")
+                else:
+                    st.warning(f"""
+                    **⚠️ No Kalshi Data Available for this Parlay** ({kalshi_legs_with_data}/{total_legs} legs)
+
+                    **This means:**
+                    - ✅ Analysis still uses AI + Sentiment (2 of 3 sources)
+                    - ⚠️ Missing prediction market validation
+                    - 🔄 Kalshi Factor = 1.0x (neutral, no impact)
+                    - 📊 AI Score unchanged by Kalshi
+
+                    **Why no data?**
+                    - Kalshi doesn't have markets for these specific games
+                    - Kalshi focuses on season-long outcomes (playoffs, championships)
+                    - Individual game spreads/totals rarely have Kalshi markets
+
+                    **What this means:**
+                    - Bet based on AI + Sentiment confidence
+                    - Higher risk without 3rd source validation
+                    - Consider checking Tab 4 for available Kalshi markets
+
+                    💡 **Tip:** For Kalshi validation, focus on season futures, playoff odds, or major championships.
+                    """)
+
+            live_data_legs_with_data = row.get('live_data_legs', row.get('apisports_legs', 0))
+            live_data_factor = row.get('live_data_factor', row.get('apisports_factor', 1.0))
+            live_data_boost = row.get('live_data_boost', row.get('apisports_boost', 0))
+            apisports_legs = row.get('apisports_legs', 0)
+            apisports_boost = row.get('apisports_boost', 0)
+            sportsdata_legs = row.get('sportsdata_legs', 0)
+            sportsdata_boost = row.get('sportsdata_boost', 0)
+            live_data_sports = row.get('live_data_sports', row.get('apisports_sports', [])) or []
+
+            sport_icon_lookup = {
+                'americanfootball_nfl': '🏈',
+                'basketball_nba': '🏀',
+                'icehockey_nhl': '🏒',
+            }
+
+            if live_data_legs_with_data:
+                st.markdown("### 🛰️ Live Data Influence (API-Sports + SportsData.io):")
+
+                if live_data_sports:
+                    icons = " ".join(
+                        sport_icon_lookup.get(sport, '🛰️') for sport in sorted(set(live_data_sports))
+                    )
+                    st.caption(
+                        f"Live data applied from: {icons} {', '.join(sorted(set(live_data_sports)))}"
+                    )
+
+                col_a1, col_a2, col_a3, col_a4, col_a5 = st.columns(5)
+
+                with col_a1:
+                    st.metric(
+                        "Live Data Legs",
+                        f"{live_data_legs_with_data}/{len(row.get('legs', []))}",
+                        help="How many legs include live team context",
+                    )
+
+                with col_a2:
+                    delta_color = "normal" if apisports_boost >= 0 else "inverse"
+                    display_val = f"{apisports_boost:+.0f}" if apisports_legs else "—"
+                    st.metric(
+                        "API-Sports Points",
+                        display_val,
+                        delta=float(apisports_boost) if apisports_boost else None,
+                        delta_color=delta_color,
+                        help="Boost or penalty applied from API-Sports hot/cold team trends",
+                    )
+                
+                with col_k2:
+                    kalshi_boost_val = row.get('kalshi_boost', 0)
+                    delta_boost = float(kalshi_boost_val) if kalshi_boost_val else None
+                    delta_color = "normal" if kalshi_boost_val >= 0 else "inverse"
+                    st.metric(
+                        "Kalshi Boost Points",
+                        f"{kalshi_boost_val:+.0f}",
+                        delta=delta_boost,
+                        delta_color=delta_color,
+                        help="Raw boost points from Kalshi validation (+15 = strong confirmation, -10 = contradiction)"
+                    )
+
+                with col_a4:
                     st.metric(
                         "Score Multiplier",
                         f"{kalshi_factor_val:.2f}x",
