@@ -155,10 +155,26 @@ class SportsDataNFLClient:
         if date_key in self._scores_cache:
             return self._scores_cache[date_key]
 
-        payload = self._request(f"/scores/json/ScoresByDate/{date_key}")
+        # SportsData.io accepts multiple date formats (e.g., 2024NOV10, 2024-11-10).
+        # Try the documented variants instead of assuming ISO dates to ensure
+        # games load even when the API expects month abbreviations.
+        candidates = [
+            target_date.strftime("%Y-%m-%d"),
+            target_date.strftime("%Y%m%d"),
+            target_date.strftime("%Y%b%d").upper(),
+        ]
+
         games: List[Dict[str, Any]] = []
-        if isinstance(payload, list):
-            games = payload
+        for token in candidates:
+            payload = self._request(f"/scores/json/ScoresByDate/{token}")
+            if isinstance(payload, list) and payload:
+                games = payload
+                break
+            # If the API responded successfully but with an empty list we still
+            # keep searching the other formats before giving up.
+            if isinstance(payload, list):
+                games = payload
+
         self._scores_cache[date_key] = games
         return games
 
