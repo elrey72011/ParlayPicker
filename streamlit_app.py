@@ -26,6 +26,19 @@ from app_core import (
 
 logger = logging.getLogger(__name__)
 
+from app_core import (
+    APISportsBasketballClient,
+    APISportsFootballClient,
+    APISportsHockeyClient,
+    HistoricalDataBuilder,
+    HistoricalMLPredictor,
+    MLPredictor,
+    RealSentimentAnalyzer,
+    SentimentAnalyzer,
+)
+
+logger = logging.getLogger(__name__)
+
 # ============ HELPER FUNCTIONS ============
 def american_to_decimal_safe(odds) -> Optional[float]:
     """
@@ -2539,7 +2552,6 @@ def validate_with_kalshi(kalshi_integrator, home_team: str, away_team: str,
         return {
             'kalshi_prob': None,
             'kalshi_available': False,
-            'discrepancy': 0,
             'validation': 'error',
             'edge': 0,
             'confidence_boost': 0,
