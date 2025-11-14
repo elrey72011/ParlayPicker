@@ -620,6 +620,10 @@ class AIOptimizer:
                     # Track Kalshi vs. model alignment before blending probabilities.
                     ai_pre_kalshi = leg.get('ai_prob_before_kalshi')
                     if ai_pre_kalshi is None:
+                        delta_hint = leg.get('kalshi_alignment_delta')
+                        if isinstance(delta_hint, (int, float)):
+                            ai_pre_kalshi = leg.get('ai_prob', sportsbook_prob) - delta_hint
+                    if ai_pre_kalshi is None:
                         ai_pre_kalshi = leg.get('ai_prob', sportsbook_prob)
                     alignment_delta = kalshi_prob - ai_pre_kalshi
                     kalshi_alignment_total += alignment_delta
@@ -2012,30 +2016,6 @@ def validate_with_kalshi(kalshi_integrator, home_team: str, away_team: str,
             'market_scope': 'error',
             'data_source': 'error'
         }
-        return
-
-    leg_data['kalshi_validation'] = kalshi_data
-
-    if not kalshi_data.get('kalshi_available'):
-        return
-
-    original_ai_prob = leg_data.get('ai_prob', base_prob)
-    kalshi_prob = kalshi_data.get('kalshi_prob', base_prob)
-
-    blended_prob = (
-        original_ai_prob * 0.50 +  # AI model
-        kalshi_prob * 0.30 +       # Kalshi market
-        base_prob * 0.20           # Sportsbook baseline
-    )
-
-    leg_data['ai_prob_before_kalshi'] = original_ai_prob
-    leg_data['ai_prob'] = blended_prob
-    leg_data['kalshi_influence'] = blended_prob - original_ai_prob
-    leg_data['kalshi_edge'] = kalshi_data.get('edge', 0)
-    leg_data['ai_confidence'] = min(
-        leg_data.get('ai_confidence', 0.5) + kalshi_data.get('confidence_boost', 0),
-        0.95
-    )
 
 # Helper to apply Kalshi validation to a betting leg in-place
 def integrate_kalshi_into_leg(
@@ -2106,243 +2086,14 @@ def integrate_kalshi_into_leg(
         base_prob * 0.20           # Sportsbook baseline
     )
 
-    leg_data['ai_prob_before_kalshi'] = original_ai_prob
-    leg_data['ai_prob'] = blended_prob
-    leg_data['kalshi_influence'] = blended_prob - original_ai_prob
-    leg_data['kalshi_edge'] = kalshi_data.get('edge', 0)
-    leg_data['ai_confidence'] = min(
-        leg_data.get('ai_confidence', 0.5) + kalshi_data.get('confidence_boost', 0),
-        0.95
-    )
-
-# Helper to apply Kalshi validation to a betting leg in-place
-def integrate_kalshi_into_leg(
-    leg_data: Dict[str, Any],
-    home_team: str,
-    away_team: str,
-    side: str,
-    base_prob: float,
-    sport: str,
-    use_kalshi: bool,
-) -> None:
-    """Mutate a leg dictionary with Kalshi validation + probability blending."""
-
-    # Ensure downstream code sees the reason when Kalshi is not active
-    if not use_kalshi:
-        leg_data.setdefault('kalshi_validation', {
-            'kalshi_available': False,
-            'validation': 'disabled',
-            'edge': 0,
-            'confidence_boost': 0,
-            'market_scope': 'disabled',
-            'data_source': 'disabled'
-        })
-        return
-
-    kalshi = None
-    try:
-        kalshi = st.session_state.get('kalshi_integrator')
-    except Exception:
-        # When Streamlit session state isn't available (e.g. testing), skip gracefully
-        pass
-
-    if not kalshi:
-        leg_data['kalshi_validation'] = {
-            'kalshi_available': False,
-            'validation': 'unavailable',
-            'edge': 0,
-            'confidence_boost': 0,
-            'market_scope': 'not_initialized',
-            'data_source': 'unavailable'
-        }
-        return
-
-    try:
-        kalshi_data = validate_with_kalshi(kalshi, home_team, away_team, side, base_prob, sport)
-    except Exception:
-        leg_data['kalshi_validation'] = {
-            'kalshi_available': False,
-            'validation': 'error',
-            'edge': 0,
-            'confidence_boost': 0,
-            'market_scope': 'error',
-            'data_source': 'error'
-        }
-        return
-
-    leg_data['kalshi_validation'] = kalshi_data
-
-    if not kalshi_data.get('kalshi_available'):
-        return
-
-    original_ai_prob = leg_data.get('ai_prob', base_prob)
-    kalshi_prob = kalshi_data.get('kalshi_prob', base_prob)
-
-    blended_prob = (
-        original_ai_prob * 0.50 +  # AI model
-        kalshi_prob * 0.30 +       # Kalshi market
-        base_prob * 0.20           # Sportsbook baseline
-    )
+    alignment_delta = kalshi_prob - original_ai_prob
 
     leg_data['ai_prob_before_kalshi'] = original_ai_prob
     leg_data['ai_prob'] = blended_prob
     leg_data['kalshi_influence'] = blended_prob - original_ai_prob
-    leg_data['kalshi_edge'] = kalshi_data.get('edge', 0)
-    leg_data['ai_confidence'] = min(
-        leg_data.get('ai_confidence', 0.5) + kalshi_data.get('confidence_boost', 0),
-        0.95
-    )
-
-# Helper to apply Kalshi validation to a betting leg in-place
-def integrate_kalshi_into_leg(
-    leg_data: Dict[str, Any],
-    home_team: str,
-    away_team: str,
-    side: str,
-    base_prob: float,
-    sport: str,
-    use_kalshi: bool,
-) -> None:
-    """Mutate a leg dictionary with Kalshi validation + probability blending."""
-
-    # Ensure downstream code sees the reason when Kalshi is not active
-    if not use_kalshi:
-        leg_data.setdefault('kalshi_validation', {
-            'kalshi_available': False,
-            'validation': 'disabled',
-            'edge': 0,
-            'confidence_boost': 0,
-            'market_scope': 'disabled',
-            'data_source': 'disabled'
-        })
-        return
-
-    kalshi = None
-    try:
-        kalshi = st.session_state.get('kalshi_integrator')
-    except Exception:
-        # When Streamlit session state isn't available (e.g. testing), skip gracefully
-        pass
-
-    if not kalshi:
-        leg_data['kalshi_validation'] = {
-            'kalshi_available': False,
-            'validation': 'unavailable',
-            'edge': 0,
-            'confidence_boost': 0,
-            'market_scope': 'not_initialized',
-            'data_source': 'unavailable'
-        }
-        return
-
-    try:
-        kalshi_data = validate_with_kalshi(kalshi, home_team, away_team, side, base_prob, sport)
-    except Exception:
-        leg_data['kalshi_validation'] = {
-            'kalshi_available': False,
-            'validation': 'error',
-            'edge': 0,
-            'confidence_boost': 0,
-            'market_scope': 'error',
-            'data_source': 'error'
-        }
-        return
-
-    leg_data['kalshi_validation'] = kalshi_data
-
-    if not kalshi_data.get('kalshi_available'):
-        return
-
-    original_ai_prob = leg_data.get('ai_prob', base_prob)
-    kalshi_prob = kalshi_data.get('kalshi_prob', base_prob)
-
-    blended_prob = (
-        original_ai_prob * 0.50 +  # AI model
-        kalshi_prob * 0.30 +       # Kalshi market
-        base_prob * 0.20           # Sportsbook baseline
-    )
-
-    leg_data['ai_prob_before_kalshi'] = original_ai_prob
-    leg_data['ai_prob'] = blended_prob
-    leg_data['kalshi_influence'] = blended_prob - original_ai_prob
-    leg_data['kalshi_edge'] = kalshi_data.get('edge', 0)
-    leg_data['ai_confidence'] = min(
-        leg_data.get('ai_confidence', 0.5) + kalshi_data.get('confidence_boost', 0),
-        0.95
-    )
-
-# Helper to apply Kalshi validation to a betting leg in-place
-def integrate_kalshi_into_leg(
-    leg_data: Dict[str, Any],
-    home_team: str,
-    away_team: str,
-    side: str,
-    base_prob: float,
-    sport: str,
-    use_kalshi: bool,
-) -> None:
-    """Mutate a leg dictionary with Kalshi validation + probability blending."""
-
-    # Ensure downstream code sees the reason when Kalshi is not active
-    if not use_kalshi:
-        leg_data.setdefault('kalshi_validation', {
-            'kalshi_available': False,
-            'validation': 'disabled',
-            'edge': 0,
-            'confidence_boost': 0,
-            'market_scope': 'disabled',
-            'data_source': 'disabled'
-        })
-        return
-
-    kalshi = None
-    try:
-        kalshi = st.session_state.get('kalshi_integrator')
-    except Exception:
-        # When Streamlit session state isn't available (e.g. testing), skip gracefully
-        pass
-
-    if not kalshi:
-        leg_data['kalshi_validation'] = {
-            'kalshi_available': False,
-            'validation': 'unavailable',
-            'edge': 0,
-            'confidence_boost': 0,
-            'market_scope': 'not_initialized',
-            'data_source': 'unavailable'
-        }
-        return
-
-    try:
-        kalshi_data = validate_with_kalshi(kalshi, home_team, away_team, side, base_prob, sport)
-    except Exception:
-        leg_data['kalshi_validation'] = {
-            'kalshi_available': False,
-            'validation': 'error',
-            'edge': 0,
-            'confidence_boost': 0,
-            'market_scope': 'error',
-            'data_source': 'error'
-        }
-        return
-
-    leg_data['kalshi_validation'] = kalshi_data
-
-    if not kalshi_data.get('kalshi_available'):
-        return
-
-    original_ai_prob = leg_data.get('ai_prob', base_prob)
-    kalshi_prob = kalshi_data.get('kalshi_prob', base_prob)
-
-    blended_prob = (
-        original_ai_prob * 0.50 +  # AI model
-        kalshi_prob * 0.30 +       # Kalshi market
-        base_prob * 0.20           # Sportsbook baseline
-    )
-
-    leg_data['ai_prob_before_kalshi'] = original_ai_prob
-    leg_data['ai_prob'] = blended_prob
-    leg_data['kalshi_influence'] = blended_prob - original_ai_prob
+    leg_data['kalshi_alignment_delta'] = alignment_delta
+    leg_data['kalshi_alignment_abs'] = abs(alignment_delta)
+    leg_data['kalshi_prob_raw'] = kalshi_prob
     leg_data['kalshi_edge'] = kalshi_data.get('edge', 0)
     leg_data['ai_confidence'] = min(
         leg_data.get('ai_confidence', 0.5) + kalshi_data.get('confidence_boost', 0),
@@ -2780,7 +2531,11 @@ def render_parlay_section_ai(title, rows, theover_data=None):
         
         # Kalshi validation indicator with INFLUENCE
         kalshi_boost = ""
-        kalshi_legs = sum(1 for leg in row.get('legs', []) if leg.get('kalshi_validation', {}).get('kalshi_available', False))
+        kalshi_legs = sum(
+            1
+            for leg in row.get('legs', [])
+            if leg.get('kalshi_validation', {}).get('kalshi_available', False)
+        )
         kalshi_factor = row.get('kalshi_factor', 1.0)
 
         if kalshi_legs > 0:
@@ -2803,6 +2558,7 @@ def render_parlay_section_ai(title, rows, theover_data=None):
         if apisports_legs:
             sport_icon_lookup = {
                 "americanfootball_nfl": "🏈",
+                "basketball_nba": "🏀",
                 "icehockey_nhl": "🏒",
             }
             icon_sequence = "".join(
@@ -2945,6 +2701,18 @@ def render_parlay_section_ai(title, rows, theover_data=None):
                     st.warning(f"🟠 **Kalshi REDUCED this parlay by {(1-kalshi_factor_val)*100:.0f}%** - Prediction markets skeptical of AI picks.")
                 else:
                     st.info("🟡 **Kalshi NEUTRAL** - Prediction markets neither strongly confirm nor contradict AI.")
+
+                if align_count:
+                    if align_avg <= -0.05:
+                        st.warning(
+                            f"⚠️ Kalshi is on average {abs(align_avg)*100:.1f} percentage points more bearish than the model. "
+                            "Final AI probabilities are being pulled toward Kalshi's price."
+                        )
+                    elif align_avg >= 0.05:
+                        st.success(
+                            f"🟢 Kalshi is on average {align_avg*100:.1f} percentage points more bullish than the model, giving "
+                            "the blended AI number an extra push."
+                        )
 
                 if align_neg > 0:
                     st.warning(
@@ -3244,17 +3012,31 @@ def render_parlay_section_ai(title, rows, theover_data=None):
                 else:
                     training_display = '—'
 
+                ai_pre_kalshi = leg.get('ai_prob_before_kalshi')
+                if isinstance(ai_pre_kalshi, (int, float)):
+                    ai_pre_display = f"{ai_pre_kalshi*100:.1f}%"
+                else:
+                    ai_pre_display = '—'
+
+                alignment_delta = leg.get('kalshi_alignment_delta')
+                if isinstance(alignment_delta, (int, float)):
+                    alignment_display = f"{alignment_delta*100:+.1f}pp"
+                else:
+                    alignment_display = '—'
+
                 leg_entry = {
                     "Leg": j,
                     "Type": leg["market"],
                     "Selection": leg["label"],
                     "Odds": f"{leg['d']:.3f}",
                     "Market %": f"{leg['p']*100:.1f}%",
+                    "AI % (pre-Kalshi)": ai_pre_display,
                     "AI % (final)": f"{leg.get('ai_prob', leg['p'])*100:.1f}%",
                     "ML Model": model_display,
                     "Training Rows": training_display,
                     "Kalshi": kalshi_display,
                     "K Impact": kalshi_influence_display,
+                    "Kalshi vs ML": alignment_display,
                     "Sentiment": leg.get('sentiment_trend', 'N/A'),
                     "API-Sports": apisports_display,
                     "theover.ai": theover_display
@@ -3267,6 +3049,12 @@ def render_parlay_section_ai(title, rows, theover_data=None):
                 st.caption(
                     "**ML Model** = Historical ML uses logistic regression trained on API-Sports data;"
                     " **Training Rows** = number of historical games in the most recent fit."
+                )
+
+            if any(leg.get('kalshi_validation', {}).get('kalshi_available') for leg in row.get("legs", [])):
+                st.caption(
+                    "**AI % (pre-Kalshi)** = model probability before blending with Kalshi; "
+                    "**Kalshi vs ML** = percentage-point gap between Kalshi pricing and the model."
                 )
 
             # Kalshi impact legend
@@ -3366,13 +3154,27 @@ def render_parlay_section_ai(title, rows, theover_data=None):
                         kalshi_prob_pct = kalshi_prob * 100
                         discrepancy = abs(kalshi_prob - leg.get('p', 0)) * 100
                         
+                        ml_prob_pre = leg.get('ai_prob_before_kalshi')
+                        if isinstance(ml_prob_pre, (int, float)):
+                            ml_prob_display = f"{ml_prob_pre*100:.1f}%"
+                        else:
+                            ml_prob_display = "—"
+
+                        alignment_delta = leg.get('kalshi_alignment_delta')
+                        if isinstance(alignment_delta, (int, float)):
+                            alignment_display = f"{alignment_delta*100:+.1f}pp"
+                        else:
+                            alignment_display = "—"
+
                         kalshi_details.append({
                             'Leg': j,
                             'Pick': leg.get('team', 'N/A'),
                             'Status': f"{status_icon} {status_text}",
                             'Sportsbook': f"{sportsbook_prob:.1f}%",
+                            'ML (pre-Kalshi)': ml_prob_display,
                             'Kalshi': f"{kalshi_prob_pct:.1f}%",
-                            'Discrepancy': f"{discrepancy:.1f}%",
+                            'Kalshi vs ML': alignment_display,
+                            'Discrepancy vs Market': f"{discrepancy:.1f}%",
                             'Confidence Boost': f"{confidence_boost*100:+.0f}%",
                             'Edge': f"{edge*100:+.1f}%",
                             'Market': market_ticker[:20]
