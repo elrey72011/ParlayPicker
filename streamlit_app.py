@@ -1987,6 +1987,19 @@ def validate_with_kalshi(kalshi_integrator, home_team: str, away_team: str,
         }
         return
 
+    try:
+        kalshi_data = validate_with_kalshi(kalshi, home_team, away_team, side, base_prob, sport)
+    except Exception:
+        leg_data['kalshi_validation'] = {
+            'kalshi_available': False,
+            'validation': 'error',
+            'edge': 0,
+            'confidence_boost': 0,
+            'market_scope': 'error',
+            'data_source': 'error'
+        }
+        return
+
     leg_data['kalshi_validation'] = kalshi_data
 
     if not kalshi_data.get('kalshi_available'):
@@ -3797,11 +3810,18 @@ with main_tab1:
         client_key = client.api_key if client else ""
         current_value = st.session_state.get(session_key, client_key or "")
         st.session_state.setdefault(session_key, current_value or "")
+        if source_session_key and source_session_key not in st.session_state:
+            origin = client.key_origin() if client else None
+            st.session_state[source_session_key] = origin
+
         widget_key = f"{session_key}_{widget_suffix}"
-        widget_default = st.session_state.get(widget_key, current_value or "")
+        stored_value = st.session_state.get(session_key, "")
+        if widget_key in st.session_state and st.session_state.get(widget_key) != stored_value:
+            st.session_state[widget_key] = stored_value
+        default_value = stored_value or (client_key or "")
         new_value_raw = st.text_input(
             label,
-            value=widget_default,
+            value=default_value,
             key=widget_key,
             type="password",
             help=help_text,
@@ -3813,16 +3833,13 @@ with main_tab1:
             if source_session_key:
                 st.session_state[source_session_key] = "manual-entry" if new_value else None
             if client:
-                client.update_api_key(new_value, source="manual-entry" if new_value else None)
+                client.update_api_key(new_value or None, source="manual-entry" if new_value else None)
             if new_value:
                 st.success(success_message)
             else:
                 st.info(empty_message)
-        else:
-            if st.session_state.get(widget_key, "") != stored_value:
-                st.session_state[widget_key] = stored_value
-            if not stored_value:
-                st.caption(empty_message)
+        elif not stored_value:
+            st.caption(empty_message)
 
     render_api_sports_key_section(
         header="🏈 API-Sports NFL Data Integration",
