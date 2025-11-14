@@ -3421,416 +3421,434 @@ def render_parlay_section_ai(title, rows, theover_data=None, timezone_label: Opt
         st.caption("Saved parlays appear in the tracker above for next-day result checks.")
 
         # theover.ai boost info if available
-        if row.get('theover_bonus', 0) != 0:
-            theover_bonus_pct = row['theover_bonus'] * 100
+        theover_bonus = row.get('theover_bonus', 0)
+        if theover_bonus:
+            theover_bonus_pct = theover_bonus * 100
             if theover_bonus_pct > 0:
-                st.success(f"🎯 **theover.ai Boost:** +{theover_bonus_pct:.0f}% to AI score ({row.get('theover_matches', 0)} matching picks)")
+                st.success(
+                    f"🎯 **theover.ai Boost:** +{theover_bonus_pct:.0f}% to AI score "
+                    f"({row.get('theover_matches', 0)} matching picks)"
+                )
             else:
-                    st.warning(f"⚠️ **theover.ai Conflict:** {theover_bonus_pct:.0f}% penalty ({row.get('theover_conflicts', 0)} conflicting picks)")
-            
-            # Market vs AI comparison
-            st.markdown("**📊 Market vs AI Analysis:**")
-            comp_col1, comp_col2 = st.columns(2)
-            with comp_col1:
-                st.write(f"Market EV: {row['ev_market']*100:.2f}%")
-                st.write(f"Market Prob: {row['p']*100:.2f}%")
-            with comp_col2:
-                st.write(f"AI EV: {ai_ev_pct:.2f}%")
-                st.write(f"AI Edge: {row['ai_edge']*100:.2f}%")
-                
-                # Show sentiment impact
-                prob_diff = (row['p_ai'] - row['p']) * 100
-                if abs(prob_diff) > 1:
-                    if prob_diff > 0:
-                        st.success(f"↗️ Sentiment boosted by {prob_diff:.1f}%")
-                    else:
-                        st.warning(f"↘️ Sentiment reduced by {abs(prob_diff):.1f}%")
-            
-            # Legs breakdown with theover.ai integration
-            st.markdown("**🎯 Parlay Legs:**")
-            legs_data = []
-            has_theover = False
-            theover_matches = 0
-            theover_conflicts = 0
-            
-            for j, leg in enumerate(row["legs"], start=1):
-                # Try to match with theover.ai data
-                theover_result = match_theover_to_leg(leg, theover_data)
-                
-                if theover_result is not None:
-                    has_theover = True
-                    
-                    # Handle dict result (new format with validation)
-                    if isinstance(theover_result, dict):
-                        pick = theover_result.get('pick', '')
-                        matches = theover_result.get('matches')
-                        signal = theover_result.get('signal', '🎯')
-                        
-                        # Count matches and conflicts for summary
-                        if matches == True:
-                            theover_matches += 1
-                            theover_display = f"{signal} {pick}"
-                        elif matches == False:
-                            theover_conflicts += 1
-                            theover_display = f"{signal} {pick}"
-                        else:
-                            theover_display = f"{signal} {pick}"
-                    else:
-                        # Handle numeric or simple string values (backward compatibility)
-                        if isinstance(theover_result, (int, float)):
-                            theover_display = f"🎯 {theover_result:.2f}"
-                        else:
-                            theover_display = f"🎯 {theover_result}"
+                st.warning(
+                    f"⚠️ **theover.ai Conflict:** {theover_bonus_pct:.0f}% penalty "
+                    f"({row.get('theover_conflicts', 0)} conflicting picks)"
+                )
+
+        # Market vs AI comparison
+        st.markdown("**📊 Market vs AI Analysis:**")
+        comp_col1, comp_col2 = st.columns(2)
+        with comp_col1:
+            st.write(f"Market EV: {row['ev_market']*100:.2f}%")
+            st.write(f"Market Prob: {row['p']*100:.2f}%")
+        with comp_col2:
+            st.write(f"AI EV: {ai_ev_pct:.2f}%")
+            st.write(f"AI Edge: {row['ai_edge']*100:.2f}%")
+
+            # Show sentiment impact
+            prob_diff = (row['p_ai'] - row['p']) * 100
+            if abs(prob_diff) > 1:
+                if prob_diff > 0:
+                    st.success(f"↗️ Sentiment boosted by {prob_diff:.1f}%")
                 else:
-                    theover_display = "—"
-                
-                # Kalshi validation display
-                kalshi_display = "—"
-                kalshi_influence_display = ""
-                
-                if 'kalshi_validation' in leg:
-                    kv = leg['kalshi_validation']
-                    if kv.get('kalshi_available'):
-                        kalshi_prob = kv.get('kalshi_prob', 0) * 100
-                        validation = kv.get('validation', 'unavailable')
-                        data_source = kv.get('data_source', 'kalshi')
+                    st.warning(f"↘️ Sentiment reduced by {abs(prob_diff):.1f}%")
 
-                        source_prefix = "🧪 " if data_source and 'synthetic' in data_source else ""
+        # Legs breakdown with theover.ai integration
+        st.markdown("**🎯 Parlay Legs:**")
+        legs_data = []
+        leg_summaries: List[str] = []
+        has_theover = False
+        theover_matches = 0
+        theover_conflicts = 0
 
-                        # Show Kalshi probability
-                        if validation == 'confirms':
-                            kalshi_display = f"{source_prefix}✅ {kalshi_prob:.1f}%"
-                        elif validation == 'kalshi_higher':
-                            kalshi_display = f"{source_prefix}📈 {kalshi_prob:.1f}%"
-                        elif validation == 'strong_kalshi_higher':
-                            kalshi_display = f"{source_prefix}🟢 {kalshi_prob:.1f}%"
-                        elif validation == 'kalshi_lower':
-                            kalshi_display = f"{source_prefix}📉 {kalshi_prob:.1f}%"
-                        elif validation == 'strong_contradiction':
-                            kalshi_display = f"{source_prefix}⚠️ {kalshi_prob:.1f}%"
-                        else:
-                            kalshi_display = f"{source_prefix}{kalshi_prob:.1f}%"
+        for j, leg in enumerate(row["legs"], start=1):
+            # Summaries for quick leg glance
+            label_text = leg.get('label') or leg.get('selection')
+            if not label_text:
+                home = leg.get('home_team')
+                away = leg.get('away_team')
+                if home and away:
+                    label_text = f"{away} @ {home}"
+            market_name = leg.get('market')
+            if label_text and market_name:
+                leg_summaries.append(f"- **{label_text}** ({market_name})")
+            elif label_text:
+                leg_summaries.append(f"- **{label_text}**")
+            elif market_name:
+                leg_summaries.append(f"- **{market_name}**")
 
-                        # Show how Kalshi influenced AI probability
-                        if 'kalshi_influence' in leg:
-                            influence = leg['kalshi_influence'] * 100
-                            if abs(influence) > 0.1:
-                                kalshi_influence_display = f"{influence:+.1f}%"
-                            else:
-                                kalshi_influence_display = "—"
-                        else:
-                            kalshi_influence_display = "—"
+            # Try to match with theover.ai data
+            theover_result = match_theover_to_leg(leg, theover_data)
+            theover_display = "—"
+
+            if theover_result is not None:
+                has_theover = True
+
+                # Handle dict result (new format with validation)
+                if isinstance(theover_result, dict):
+                    pick = theover_result.get('pick', '')
+                    matches = theover_result.get('matches')
+                    signal = theover_result.get('signal', '🎯')
+
+                    # Count matches and conflicts for summary
+                    if matches is True:
+                        theover_matches += 1
+                        theover_display = f"{signal} {pick}"
+                    elif matches is False:
+                        theover_conflicts += 1
+                        theover_display = f"{signal} {pick}"
+                    else:
+                        theover_display = f"{signal} {pick}"
+                else:
+                    # Handle numeric or simple string values (backward compatibility)
+                    if isinstance(theover_result, (int, float)):
+                        theover_display = f"🎯 {theover_result:.2f}"
+                    else:
+                        theover_display = f"🎯 {theover_result}"
+            # Kalshi validation display
+            kalshi_display = "—"
+            kalshi_influence_display = ""
+
+            if 'kalshi_validation' in leg:
+                kv = leg['kalshi_validation']
+                if kv.get('kalshi_available'):
+                    kalshi_prob = kv.get('kalshi_prob', 0) * 100
+                    validation = kv.get('validation', 'unavailable')
+                    data_source = kv.get('data_source', 'kalshi')
+
+                    source_prefix = "🧪 " if data_source and 'synthetic' in data_source else ""
+
+                    if validation == 'confirms':
+                        kalshi_display = f"{source_prefix}✅ {kalshi_prob:.1f}%"
+                    elif validation == 'kalshi_higher':
+                        kalshi_display = f"{source_prefix}📈 {kalshi_prob:.1f}%"
+                    elif validation == 'strong_kalshi_higher':
+                        kalshi_display = f"{source_prefix}🟢 {kalshi_prob:.1f}%"
+                    elif validation == 'kalshi_lower':
+                        kalshi_display = f"{source_prefix}📉 {kalshi_prob:.1f}%"
+                    elif validation == 'strong_contradiction':
+                        kalshi_display = f"{source_prefix}⚠️ {kalshi_prob:.1f}%"
+                    else:
+                        kalshi_display = f"{source_prefix}{kalshi_prob:.1f}%"
+
+                    influence = leg.get('kalshi_influence')
+                    if isinstance(influence, (int, float)):
+                        influence_pct = influence * 100
+                        kalshi_influence_display = f"{influence_pct:+.1f}%" if abs(influence_pct) > 0.1 else "—"
                     else:
                         kalshi_influence_display = "—"
+                else:
+                    kalshi_influence_display = "—"
 
-                apisports_display = "—"
-                apisports_details = leg.get('apisports')
-                if isinstance(apisports_details, dict) and apisports_details:
-                    parts = []
-                    sport_name = apisports_details.get('sport_name')
-                    if sport_name:
-                        parts.append(f"{sport_name}")
-                    record = apisports_details.get('team_record')
-                    if record:
-                        parts.append(f"Record {record}")
-                    trend = apisports_details.get('trend')
-                    if trend:
-                        icon = {'hot': '🔥', 'cold': '🥶', 'neutral': '⚪️'}.get(trend, '📊')
-                        parts.append(f"{icon} {trend.capitalize()}")
-                    avg_for = apisports_details.get('team_avg_points_for')
-                    metric_label = apisports_details.get('scoring_metric') or 'points'
-                    metric_text = 'pts'
-                    if isinstance(metric_label, str):
-                        if metric_label.lower() in ('points', 'point'):
-                            metric_text = 'pts'
-                        else:
-                            metric_text = metric_label.lower()
-                    if isinstance(avg_for, (int, float)):
-                        parts.append(f"{avg_for:.1f} {metric_text} for")
-                    avg_against = apisports_details.get('team_avg_points_against')
-                    if isinstance(avg_against, (int, float)):
-                        parts.append(f"{avg_against:.1f} {metric_text} allowed")
-                    status = apisports_details.get('status')
-                    if status:
-                        parts.append(status)
-                    kickoff = apisports_details.get('kickoff')
-                    if kickoff:
-                        parts.append(kickoff)
-                    apisports_display = " | ".join(parts) if parts else "Live data"
+            if not kalshi_influence_display:
+                kalshi_influence_display = "—"
 
-                model_used = leg.get('ai_model_source')
-                if isinstance(model_used, str) and model_used:
-                    if model_used.startswith('historical-ensemble'):
-                        suffix = model_used[len('historical-ensemble'):].lstrip('-')
-                        if suffix:
-                            model_display = f"Historical Ensemble ({suffix.upper()})"
-                        else:
-                            model_display = 'Historical Ensemble'
-                    elif model_used.startswith('historical-logistic'):
-                        suffix = model_used[len('historical-logistic'):].lstrip('-')
-                        if suffix:
-                            model_display = f"Historical Logistic ({suffix.upper()})"
-                        else:
-                            model_display = 'Historical Logistic'
+            apisports_display = "—"
+            apisports_details = leg.get('apisports')
+            if isinstance(apisports_details, dict) and apisports_details:
+                parts = []
+                sport_name = apisports_details.get('sport_name')
+                if sport_name:
+                    parts.append(f"{sport_name}")
+                record = apisports_details.get('team_record')
+                if record:
+                    parts.append(f"Record {record}")
+                trend = apisports_details.get('trend')
+                if trend:
+                    icon = {'hot': '🔥', 'cold': '🥶', 'neutral': '⚪️'}.get(trend, '📊')
+                    parts.append(f"{icon} {trend.capitalize()}")
+                avg_for = apisports_details.get('team_avg_points_for')
+                metric_label = apisports_details.get('scoring_metric') or 'points'
+                metric_text = 'pts'
+                if isinstance(metric_label, str):
+                    if metric_label.lower() in ('points', 'point'):
+                        metric_text = 'pts'
                     else:
-                        model_display = model_used.replace('-', ' ').title()
+                        metric_text = metric_label.lower()
+                if isinstance(avg_for, (int, float)):
+                    parts.append(f"{avg_for:.1f} {metric_text} for")
+                avg_against = apisports_details.get('team_avg_points_against')
+                if isinstance(avg_against, (int, float)):
+                    parts.append(f"{avg_against:.1f} {metric_text} allowed")
+                status = apisports_details.get('status')
+                if status:
+                    parts.append(status)
+                kickoff = apisports_details.get('kickoff')
+                if kickoff:
+                    parts.append(kickoff)
+                apisports_display = " | ".join(parts) if parts else "Live data"
+
+            model_used = leg.get('ai_model_source')
+            if isinstance(model_used, str) and model_used:
+                if model_used.startswith('historical-ensemble'):
+                    suffix = model_used[len('historical-ensemble'):].lstrip('-')
+                    model_display = f"Historical Ensemble ({suffix.upper()})" if suffix else 'Historical Ensemble'
+                elif model_used.startswith('historical-logistic'):
+                    suffix = model_used[len('historical-logistic'):].lstrip('-')
+                    model_display = f"Historical Logistic ({suffix.upper()})" if suffix else 'Historical Logistic'
                 else:
-                    model_display = '—'
+                    model_display = model_used.replace('-', ' ').title()
+            else:
+                model_display = '—'
 
-                component_display = '—'
-                component_payload = leg.get('ai_component_probabilities')
-                if isinstance(component_payload, dict) and component_payload:
-                    breakdown = []
-                    for key, val in sorted(component_payload.items()):
-                        try:
-                            breakdown.append(f"{key.replace('_', ' ').title()}: {float(val)*100:.1f}%")
-                        except Exception:
-                            continue
-                    if breakdown:
-                        component_display = "; ".join(breakdown)
+            component_display = '—'
+            component_payload = leg.get('ai_component_probabilities')
+            if isinstance(component_payload, dict) and component_payload:
+                breakdown = []
+                for key, val in sorted(component_payload.items()):
+                    try:
+                        breakdown.append(f"{key.replace('_', ' ').title()}: {float(val)*100:.1f}%")
+                    except Exception:
+                        continue
+                if breakdown:
+                    component_display = "; ".join(breakdown)
 
-                training_rows_val = leg.get('ai_training_rows')
-                if isinstance(training_rows_val, (int, float)) and training_rows_val:
-                    training_display = f"{int(training_rows_val)}"
-                else:
-                    training_display = '—'
+            training_rows_val = leg.get('ai_training_rows')
+            if isinstance(training_rows_val, (int, float)) and training_rows_val:
+                training_display = f"{int(training_rows_val)}"
+            else:
+                training_display = '—'
 
-                ai_pre_kalshi = leg.get('ai_prob_before_kalshi')
-                if isinstance(ai_pre_kalshi, (int, float)):
-                    ai_pre_display = f"{ai_pre_kalshi*100:.1f}%"
-                else:
-                    ai_pre_display = '—'
+            ai_pre_kalshi = leg.get('ai_prob_before_kalshi')
+            if isinstance(ai_pre_kalshi, (int, float)):
+                ai_pre_display = f"{ai_pre_kalshi*100:.1f}%"
+            else:
+                ai_pre_display = '—'
 
-                alignment_delta = leg.get('kalshi_alignment_delta')
-                if isinstance(alignment_delta, (int, float)):
-                    alignment_display = f"{alignment_delta*100:+.1f}pp"
-                else:
-                    alignment_display = '—'
+            alignment_delta = leg.get('kalshi_alignment_delta')
+            if isinstance(alignment_delta, (int, float)):
+                alignment_display = f"{alignment_delta*100:+.1f}pp"
+            else:
+                alignment_display = '—'
 
-                leg_entry = {
-                    "Leg": j,
-                    "Type": leg["market"],
-                    "Selection": leg["label"],
-                    "Odds": f"{leg['d']:.3f}",
-                    "Market %": f"{leg['p']*100:.1f}%",
-                    "AI % (pre-Kalshi)": ai_pre_display,
-                    "AI % (final)": f"{leg.get('ai_prob', leg['p'])*100:.1f}%",
-                    "ML Model": model_display,
-                    "ML Breakdown": component_display,
-                    "Training Rows": training_display,
-                    "Kalshi": kalshi_display,
-                    "K Impact": kalshi_influence_display,
-                    "Kalshi vs ML": alignment_display,
-                    "Sentiment": leg.get('sentiment_trend', 'N/A'),
-                    "API-Sports": apisports_display,
-                    "theover.ai": theover_display
-                }
-                legs_data.append(leg_entry)
+            leg_entry = {
+                "Leg": j,
+                "Type": leg.get("market", "—"),
+                "Selection": leg.get("label", label_text or "—"),
+                "Odds": f"{leg['d']:.3f}",
+                "Market %": f"{leg['p']*100:.1f}%",
+                "AI % (pre-Kalshi)": ai_pre_display,
+                "AI % (final)": f"{leg.get('ai_prob', leg['p'])*100:.1f}%",
+                "ML Model": model_display,
+                "ML Breakdown": component_display,
+                "Training Rows": training_display,
+                "Kalshi": kalshi_display,
+                "K Impact": kalshi_influence_display,
+                "Kalshi vs ML": alignment_display,
+                "Sentiment": leg.get('sentiment_trend', 'N/A'),
+                "API-Sports": apisports_display,
+                "theover.ai": theover_display,
+            }
+            legs_data.append(leg_entry)
+
+        if leg_summaries:
+            st.markdown("**📝 Selected Legs:**")
+            st.markdown("\n".join(leg_summaries))
+
+        st.dataframe(pd.DataFrame(legs_data), use_container_width=True, hide_index=True)
+
+        if any(leg.get('ai_model_source') for leg in row.get("legs", [])):
+            st.caption(
+                "**ML Model** = Historical ML blends logistic regression with gradient boosting when available;"
+                " **ML Breakdown** = component probabilities from each estimator;"
+                " **Training Rows** = number of historical games in the most recent fit."
+            )
+
+        if any(leg.get('kalshi_validation', {}).get('kalshi_available') for leg in row.get("legs", [])):
+            st.caption(
+                "**AI % (pre-Kalshi)** = model probability before blending with Kalshi; "
+                "**Kalshi vs ML** = percentage-point gap between Kalshi pricing and the model."
+            )
+
+        # Kalshi impact legend
+        if any(leg.get('kalshi_validation', {}).get('kalshi_available') for leg in row.get("legs", [])):
+            st.caption("**K Impact** = How much Kalshi adjusted AI probability (blended 50% AI + 30% Kalshi + 20% Market)")
+        if any(leg.get('apisports') for leg in row.get("legs", [])):
+            st.caption("**API-Sports** = Live NFL/NHL data (records, form, kickoff) from api-sports.io")
+
+        # Show legend and summary
+        if has_theover:
+            col_legend1, col_legend2 = st.columns(2)
+            with col_legend1:
+                st.caption("✅ = Matches theover.ai pick | ⚠️ = Conflicts with theover.ai | 🎯 = theover.ai data available")
+            with col_legend2:
+                if theover_matches > 0:
+                    st.success(f"✅ {theover_matches} leg(s) match theover.ai recommendations")
+                if theover_conflicts > 0:
+                    st.warning(f"⚠️ {theover_conflicts} leg(s) conflict with theover.ai recommendations")
+        
+        # Kalshi validation legend and detailed influence
+        kalshi_available = sum(1 for leg in row.get("legs", []) if leg.get('kalshi_validation', {}).get('kalshi_available', False))
+        
+        # Show info if Kalshi enabled but no data found
+        if 'kalshi_validation' in row.get("legs", [{}])[0] and kalshi_available == 0:
+            st.info("""
+            **📊 Kalshi Validation Enabled** but no matching markets found for these games.
             
-            st.dataframe(pd.DataFrame(legs_data), use_container_width=True, hide_index=True)
-
-            if any(leg.get('ai_model_source') for leg in row.get("legs", [])):
-                st.caption(
-                    "**ML Model** = Historical ML blends logistic regression with gradient boosting when available;"
-                    " **ML Breakdown** = component probabilities from each estimator;"
-                    " **Training Rows** = number of historical games in the most recent fit."
-                )
-
-            if any(leg.get('kalshi_validation', {}).get('kalshi_available') for leg in row.get("legs", [])):
-                st.caption(
-                    "**AI % (pre-Kalshi)** = model probability before blending with Kalshi; "
-                    "**Kalshi vs ML** = percentage-point gap between Kalshi pricing and the model."
-                )
-
-            # Kalshi impact legend
-            if any(leg.get('kalshi_validation', {}).get('kalshi_available') for leg in row.get("legs", [])):
-                st.caption("**K Impact** = How much Kalshi adjusted AI probability (blended 50% AI + 30% Kalshi + 20% Market)")
-            if any(leg.get('apisports') for leg in row.get("legs", [])):
-                st.caption("**API-Sports** = Live NFL/NHL data (records, form, kickoff) from api-sports.io")
-
-            # Show legend and summary
-            if has_theover:
-                col_legend1, col_legend2 = st.columns(2)
-                with col_legend1:
-                    st.caption("✅ = Matches theover.ai pick | ⚠️ = Conflicts with theover.ai | 🎯 = theover.ai data available")
-                with col_legend2:
-                    if theover_matches > 0:
-                        st.success(f"✅ {theover_matches} leg(s) match theover.ai recommendations")
-                    if theover_conflicts > 0:
-                        st.warning(f"⚠️ {theover_conflicts} leg(s) conflict with theover.ai recommendations")
+            **This is normal because:**
+            - Kalshi may not have markets for all games
+            - Markets might be for season-long outcomes (playoffs, championships) rather than individual games
+            - Try checking Tab 4 to see what Kalshi markets are actually available
             
-            # Kalshi validation legend and detailed influence
-            kalshi_available = sum(1 for leg in row.get("legs", []) if leg.get('kalshi_validation', {}).get('kalshi_available', False))
+            **Note:** Parlay analysis still uses AI + Sentiment, just without Kalshi cross-validation.
+            """)
+        
+        if kalshi_available > 0:
+            kalshi_confirmed = sum(1 for leg in row.get("legs", []) if leg.get('kalshi_validation', {}).get('validation') == 'confirms')
+            kalshi_higher = sum(1 for leg in row.get("legs", []) if 'higher' in leg.get('kalshi_validation', {}).get('validation', ''))
+            kalshi_contradicts = sum(1 for leg in row.get("legs", []) if 'contradiction' in leg.get('kalshi_validation', {}).get('validation', ''))
             
-            # Show info if Kalshi enabled but no data found
-            if 'kalshi_validation' in row.get("legs", [{}])[0] and kalshi_available == 0:
-                st.info("""
-                **📊 Kalshi Validation Enabled** but no matching markets found for these games.
-                
-                **This is normal because:**
-                - Kalshi may not have markets for all games
-                - Markets might be for season-long outcomes (playoffs, championships) rather than individual games
-                - Try checking Tab 4 to see what Kalshi markets are actually available
-                
-                **Note:** Parlay analysis still uses AI + Sentiment, just without Kalshi cross-validation.
-                """)
+            st.markdown("---")
+            st.markdown("**📊 Kalshi Prediction Market Validation:**")
             
-            if kalshi_available > 0:
-                kalshi_confirmed = sum(1 for leg in row.get("legs", []) if leg.get('kalshi_validation', {}).get('validation') == 'confirms')
-                kalshi_higher = sum(1 for leg in row.get("legs", []) if 'higher' in leg.get('kalshi_validation', {}).get('validation', ''))
-                kalshi_contradicts = sum(1 for leg in row.get("legs", []) if 'contradiction' in leg.get('kalshi_validation', {}).get('validation', ''))
-                
-                st.markdown("---")
-                st.markdown("**📊 Kalshi Prediction Market Validation:**")
-                
-                col_k1, col_k2 = st.columns(2)
-                with col_k1:
-                    st.caption("**Legend:** ✅ = Confirms | 📈 = Kalshi higher | 📉 = Kalshi lower | 🟢 = Strong value | ⚠️ = Contradiction")
-                with col_k2:
-                    if kalshi_confirmed > 0:
-                        st.success(f"✅ {kalshi_confirmed} leg(s) confirmed by Kalshi")
-                    if kalshi_higher > 0:
-                        st.info(f"📈 {kalshi_higher} leg(s) show Kalshi value")
-                    if kalshi_contradicts > 0:
-                        st.warning(f"⚠️ {kalshi_contradicts} leg(s) contradicted by Kalshi")
-                
-                # Detailed Kalshi Influence Analysis
-                st.markdown("**🔍 How Kalshi Influenced This Parlay:**")
-                
-                total_confidence_boost = 0
-                total_kalshi_edge = 0
-                kalshi_details = []
-                
-                for j, leg in enumerate(row.get("legs", []), start=1):
-                    kv = leg.get('kalshi_validation', {})
-                    if kv.get('kalshi_available'):
-                        kalshi_prob = kv.get('kalshi_prob', 0)
-                        validation = kv.get('validation', 'unavailable')
-                        confidence_boost = kv.get('confidence_boost', 0)
-                        edge = kv.get('edge', 0)
-                        market_ticker = kv.get('market_ticker', 'N/A')
-                        
-                        total_confidence_boost += confidence_boost
-                        total_kalshi_edge += edge
-                        
-                        # Create status icon
-                        if validation == 'confirms':
-                            status_icon = "✅"
-                            status_text = "CONFIRMS"
-                            status_color = "green"
-                        elif validation == 'strong_kalshi_higher':
-                            status_icon = "🟢"
-                            status_text = "STRONG VALUE"
-                            status_color = "green"
-                        elif 'higher' in validation:
-                            status_icon = "📈"
-                            status_text = "KALSHI HIGHER"
-                            status_color = "blue"
-                        elif 'contradiction' in validation:
-                            status_icon = "⚠️"
-                            status_text = "CONTRADICTION"
-                            status_color = "red"
-                        else:
-                            status_icon = "📉"
-                            status_text = "KALSHI LOWER"
-                            status_color = "orange"
-                        
-                        sportsbook_prob = leg.get('p', 0) * 100
-                        kalshi_prob_pct = kalshi_prob * 100
-                        discrepancy = abs(kalshi_prob - leg.get('p', 0)) * 100
-                        
-                        ml_prob_pre = leg.get('ai_prob_before_kalshi')
-                        if isinstance(ml_prob_pre, (int, float)):
-                            ml_prob_display = f"{ml_prob_pre*100:.1f}%"
-                        else:
-                            ml_prob_display = "—"
-
-                        alignment_delta = leg.get('kalshi_alignment_delta')
-                        if isinstance(alignment_delta, (int, float)):
-                            alignment_display = f"{alignment_delta*100:+.1f}pp"
-                        else:
-                            alignment_display = "—"
-
-                        kalshi_details.append({
-                            'Leg': j,
-                            'Pick': leg.get('team', 'N/A'),
-                            'Status': f"{status_icon} {status_text}",
-                            'Sportsbook': f"{sportsbook_prob:.1f}%",
-                            'ML (pre-Kalshi)': ml_prob_display,
-                            'Kalshi': f"{kalshi_prob_pct:.1f}%",
-                            'Kalshi vs ML': alignment_display,
-                            'Discrepancy vs Market': f"{discrepancy:.1f}%",
-                            'Confidence Boost': f"{confidence_boost*100:+.0f}%",
-                            'Edge': f"{edge*100:+.1f}%",
-                            'Market': market_ticker[:20]
-                        })
-                
-                if kalshi_details:
-                    st.dataframe(pd.DataFrame(kalshi_details), use_container_width=True, hide_index=True)
+            col_k1, col_k2 = st.columns(2)
+            with col_k1:
+                st.caption("**Legend:** ✅ = Confirms | 📈 = Kalshi higher | 📉 = Kalshi lower | 🟢 = Strong value | ⚠️ = Contradiction")
+            with col_k2:
+                if kalshi_confirmed > 0:
+                    st.success(f"✅ {kalshi_confirmed} leg(s) confirmed by Kalshi")
+                if kalshi_higher > 0:
+                    st.info(f"📈 {kalshi_higher} leg(s) show Kalshi value")
+                if kalshi_contradicts > 0:
+                    st.warning(f"⚠️ {kalshi_contradicts} leg(s) contradicted by Kalshi")
+            
+            # Detailed Kalshi Influence Analysis
+            st.markdown("**🔍 How Kalshi Influenced This Parlay:**")
+            
+            total_confidence_boost = 0
+            total_kalshi_edge = 0
+            kalshi_details = []
+            
+            for j, leg in enumerate(row.get("legs", []), start=1):
+                kv = leg.get('kalshi_validation', {})
+                if kv.get('kalshi_available'):
+                    kalshi_prob = kv.get('kalshi_prob', 0)
+                    validation = kv.get('validation', 'unavailable')
+                    confidence_boost = kv.get('confidence_boost', 0)
+                    edge = kv.get('edge', 0)
+                    market_ticker = kv.get('market_ticker', 'N/A')
                     
-                    # Summary metrics
-                    st.markdown("**📈 Kalshi Impact Summary:**")
-                    col_impact1, col_impact2, col_impact3, col_impact4 = st.columns(4)
+                    total_confidence_boost += confidence_boost
+                    total_kalshi_edge += edge
                     
-                    with col_impact1:
-                        st.metric(
-                            "Legs Validated",
-                            f"{kalshi_available}/{len(row.get('legs', []))}",
-                            help="How many legs have Kalshi market data"
-                        )
-                    
-                    with col_impact2:
-                        st.metric(
-                            "Total Confidence Boost",
-                            f"{total_confidence_boost*100:+.0f}%",
-                            help="How much Kalshi boosted overall confidence"
-                        )
-                    
-                    with col_impact3:
-                        st.metric(
-                            "Additional Edge",
-                            f"{total_kalshi_edge*100:+.1f}%",
-                            help="Extra edge identified from Kalshi vs sportsbook"
-                        )
-                    
-                    with col_impact4:
-                        avg_discrepancy = sum(abs(leg.get('kalshi_validation', {}).get('discrepancy', 0)) 
-                                            for leg in row.get("legs", []) 
-                                            if leg.get('kalshi_validation', {}).get('kalshi_available')) / max(kalshi_available, 1)
-                        st.metric(
-                            "Avg Discrepancy",
-                            f"{avg_discrepancy*100:.1f}%",
-                            help="Average difference between Kalshi and sportsbook"
-                        )
-                    
-                    # Interpretation
-                    st.markdown("**💡 Interpretation:**")
-                    
-                    if total_confidence_boost >= 0.15:
-                        st.success("🟢 **STRONG KALSHI CONFIRMATION** - All sources strongly agree. High confidence bet!")
-                    elif total_confidence_boost >= 0.05:
-                        st.info("🟡 **MODERATE CONFIRMATION** - Kalshi generally agrees. Good bet with decent validation.")
-                    elif total_confidence_boost >= -0.05:
-                        st.warning("🟠 **NEUTRAL VALIDATION** - Kalshi shows mixed signals. Proceed with caution.")
+                    # Create status icon
+                    if validation == 'confirms':
+                        status_icon = "✅"
+                        status_text = "CONFIRMS"
+                        status_color = "green"
+                    elif validation == 'strong_kalshi_higher':
+                        status_icon = "🟢"
+                        status_text = "STRONG VALUE"
+                        status_color = "green"
+                    elif 'higher' in validation:
+                        status_icon = "📈"
+                        status_text = "KALSHI HIGHER"
+                        status_color = "blue"
+                    elif 'contradiction' in validation:
+                        status_icon = "⚠️"
+                        status_text = "CONTRADICTION"
+                        status_color = "red"
                     else:
-                        st.error("🔴 **KALSHI DISAGREES** - Prediction market contradicts this parlay. Consider skipping or investigating further.")
+                        status_icon = "📉"
+                        status_text = "KALSHI LOWER"
+                        status_color = "orange"
                     
-                    if total_kalshi_edge > 0.10:
-                        st.success(f"💰 **VALUE DETECTED**: Kalshi shows {total_kalshi_edge*100:.1f}% additional edge! This parlay may be underpriced by sportsbooks.")
-                    elif total_kalshi_edge < -0.10:
-                        st.warning(f"⚠️ **OVERPRICED WARNING**: Kalshi thinks this parlay is overpriced. Sportsbooks may be offering poor value.")
+                    sportsbook_prob = leg.get('p', 0) * 100
+                    kalshi_prob_pct = kalshi_prob * 100
+                    discrepancy = abs(kalshi_prob - leg.get('p', 0)) * 100
                     
-                    # Recommendation based on Kalshi
-                    kalshi_score = (total_confidence_boost * 50) + (total_kalshi_edge * 30) + (kalshi_confirmed / max(kalshi_available, 1) * 20)
-                    
-                    st.markdown("**🎯 Kalshi-Based Recommendation:**")
-                    if kalshi_score > 15:
-                        st.success("✅ **KALSHI APPROVES** - Strong validation from prediction markets. Excellent bet!")
-                    elif kalshi_score > 5:
-                        st.info("🟡 **KALSHI CAUTIOUS** - Some validation but mixed signals. Decent bet if AI score is high.")
+                    ml_prob_pre = leg.get('ai_prob_before_kalshi')
+                    if isinstance(ml_prob_pre, (int, float)):
+                        ml_prob_display = f"{ml_prob_pre*100:.1f}%"
                     else:
-                        st.warning("⚠️ **KALSHI SKEPTICAL** - Prediction market doesn't support this parlay. Bet with caution or skip.")
+                        ml_prob_display = "—"
+
+                    alignment_delta = leg.get('kalshi_alignment_delta')
+                    if isinstance(alignment_delta, (int, float)):
+                        alignment_display = f"{alignment_delta*100:+.1f}pp"
+                    else:
+                        alignment_display = "—"
+
+                    kalshi_details.append({
+                        'Leg': j,
+                        'Pick': leg.get('team', 'N/A'),
+                        'Status': f"{status_icon} {status_text}",
+                        'Sportsbook': f"{sportsbook_prob:.1f}%",
+                        'ML (pre-Kalshi)': ml_prob_display,
+                        'Kalshi': f"{kalshi_prob_pct:.1f}%",
+                        'Kalshi vs ML': alignment_display,
+                        'Discrepancy vs Market': f"{discrepancy:.1f}%",
+                        'Confidence Boost': f"{confidence_boost*100:+.0f}%",
+                        'Edge': f"{edge*100:+.1f}%",
+                        'Market': market_ticker[:20]
+                    })
             
+            if kalshi_details:
+                st.dataframe(pd.DataFrame(kalshi_details), use_container_width=True, hide_index=True)
+                
+                # Summary metrics
+                st.markdown("**📈 Kalshi Impact Summary:**")
+                col_impact1, col_impact2, col_impact3, col_impact4 = st.columns(4)
+                
+                with col_impact1:
+                    st.metric(
+                        "Legs Validated",
+                        f"{kalshi_available}/{len(row.get('legs', []))}",
+                        help="How many legs have Kalshi market data"
+                    )
+                
+                with col_impact2:
+                    st.metric(
+                        "Total Confidence Boost",
+                        f"{total_confidence_boost*100:+.0f}%",
+                        help="How much Kalshi boosted overall confidence"
+                    )
+                
+                with col_impact3:
+                    st.metric(
+                        "Additional Edge",
+                        f"{total_kalshi_edge*100:+.1f}%",
+                        help="Extra edge identified from Kalshi vs sportsbook"
+                    )
+                
+                with col_impact4:
+                    avg_discrepancy = sum(abs(leg.get('kalshi_validation', {}).get('discrepancy', 0)) 
+                                        for leg in row.get("legs", []) 
+                                        if leg.get('kalshi_validation', {}).get('kalshi_available')) / max(kalshi_available, 1)
+                    st.metric(
+                        "Avg Discrepancy",
+                        f"{avg_discrepancy*100:.1f}%",
+                        help="Average difference between Kalshi and sportsbook"
+                    )
+                
+                # Interpretation
+                st.markdown("**💡 Interpretation:**")
+                
+                if total_confidence_boost >= 0.15:
+                    st.success("🟢 **STRONG KALSHI CONFIRMATION** - All sources strongly agree. High confidence bet!")
+                elif total_confidence_boost >= 0.05:
+                    st.info("🟡 **MODERATE CONFIRMATION** - Kalshi generally agrees. Good bet with decent validation.")
+                elif total_confidence_boost >= -0.05:
+                    st.warning("🟠 **NEUTRAL VALIDATION** - Kalshi shows mixed signals. Proceed with caution.")
+                else:
+                    st.error("🔴 **KALSHI DISAGREES** - Prediction market contradicts this parlay. Consider skipping or investigating further.")
+                
+                if total_kalshi_edge > 0.10:
+                    st.success(f"💰 **VALUE DETECTED**: Kalshi shows {total_kalshi_edge*100:.1f}% additional edge! This parlay may be underpriced by sportsbooks.")
+                elif total_kalshi_edge < -0.10:
+                    st.warning(f"⚠️ **OVERPRICED WARNING**: Kalshi thinks this parlay is overpriced. Sportsbooks may be offering poor value.")
+                
+                # Recommendation based on Kalshi
+                kalshi_score = (total_confidence_boost * 50) + (total_kalshi_edge * 30) + (kalshi_confirmed / max(kalshi_available, 1) * 20)
+                
+                st.markdown("**🎯 Kalshi-Based Recommendation:**")
+                if kalshi_score > 15:
+                    st.success("✅ **KALSHI APPROVES** - Strong validation from prediction markets. Excellent bet!")
+                elif kalshi_score > 5:
+                    st.info("🟡 **KALSHI CAUTIOUS** - Some validation but mixed signals. Decent bet if AI score is high.")
+                else:
+                    st.warning("⚠️ **KALSHI SKEPTICAL** - Prediction market doesn't support this parlay. Bet with caution or skip.")
+        
             # Betting scenarios
             st.markdown("**💵 Betting Scenarios:**")
             for stake in [50, 100, 250, 500]:
