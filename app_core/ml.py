@@ -363,9 +363,18 @@ class HistoricalDataBuilder:
         max_offset_used = 0
         sample_rows_added = 0
 
+        # Stop fetching once we have a healthy buffer above the minimum
+        # required rows. Previously we iterated every day in the window which
+        # could translate into hundreds of API calls per rerun, quickly
+        # exhausting hosted resource limits. A modest cushion keeps the
+        # datasets stable without hammering the upstream services.
+        desired_rows = max(self.min_rows_target + 10, int(self.min_rows_target * 1.2))
+
         def collect_by_dates(start_offset: int, end_offset: int) -> None:
             nonlocal max_offset_used
             for offset in range(start_offset, end_offset + 1):
+                if len(rows) >= desired_rows:
+                    break
                 target_date = today - timedelta(days=offset)
                 max_offset_used = max(max_offset_used, offset)
                 try:
@@ -386,6 +395,11 @@ class HistoricalDataBuilder:
                         rows.append(feature_row)
                         if season_label:
                             seasons_used.add(str(season_label))
+                        if len(rows) >= desired_rows:
+                            break
+
+                if len(rows) >= desired_rows:
+                    break
 
         collect_by_dates(1, self.days_back)
 
@@ -416,7 +430,10 @@ class HistoricalDataBuilder:
                         rows.append(feature_row)
                         if season_used:
                             seasons_used.add(str(season_used))
-                if len(rows) >= self.min_rows_target:
+                    if len(rows) >= desired_rows:
+                        break
+
+                if len(rows) >= desired_rows:
                     break
 
         real_rows_before_samples = len(rows)
