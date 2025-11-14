@@ -58,6 +58,7 @@ class _APISportsBaseClient:
     SEASON_CUTOFF_MONTH: int = 1
     SEASON_FORMAT: str = "single"  # "single" -> "2024", "split" -> "2023-2024"
     MIN_BACKFILL_YEAR: Optional[int] = None
+    LEAGUE_SEARCH_TERM: Optional[str] = None
 
     def __init__(
         self,
@@ -85,6 +86,8 @@ class _APISportsBaseClient:
         self._season_games_cache: Dict[Tuple[str, str, int], List[Dict]] = {}
         self._team_cache: Dict[Tuple[int, str, int], Dict] = {}
         self.last_error: Optional[str] = None
+        self._resolved_league_id: Optional[int] = self.DEFAULT_LEAGUE_ID or None
+        self._league_lookup_attempted: bool = False
 
         if self.api_key:
             self.session.headers.update({"x-apisports-key": self.api_key})
@@ -108,6 +111,8 @@ class _APISportsBaseClient:
         self._season_games_cache.clear()
         self._team_cache.clear()
         self.last_error = None
+        self._resolved_league_id = self.DEFAULT_LEAGUE_ID or None
+        self._league_lookup_attempted = False
 
     def key_origin(self) -> Optional[str]:
         """Return a short description of where the API key came from."""
@@ -143,6 +148,65 @@ class _APISportsBaseClient:
 
     # ------------------------------------------------------------------
     # Networking helpers
+    def _resolve_league_id(self, override: Optional[int] = None) -> Optional[int]:
+        """Determine which league identifier to use for API calls."""
+
+        if override:
+            return override
+
+        if self._resolved_league_id is not None:
+            return self._resolved_league_id
+
+        if self._league_lookup_attempted:
+            return None
+
+        self._league_lookup_attempted = True
+
+        if not self.LEAGUE_SEARCH_TERM:
+            return None
+
+        payload = self._request(
+            "/leagues",
+            params={"search": self.LEAGUE_SEARCH_TERM},
+        )
+        if not payload:
+            self._league_lookup_attempted = False
+            return None
+
+        response = payload.get("response") or []
+        resolved: Optional[int] = None
+        search_term = (self.LEAGUE_SEARCH_TERM or "").lower()
+        sport_name = (self.SPORT_NAME or "").lower()
+
+        for entry in response:
+            league_info = entry.get("league") or {}
+            name = (league_info.get("name") or "").lower()
+            if not name:
+                continue
+
+            if search_term and search_term not in name:
+                continue
+            if sport_name and sport_name not in name:
+                continue
+
+            candidate = league_info.get("id")
+            country_name = (entry.get("country") or {}).get("name") or ""
+            if country_name:
+                country_name = country_name.lower()
+                if country_name not in {"usa", "united states", "world", "international"}:
+                    # Ignore leagues outside the primary region when possible.
+                    continue
+
+            if candidate is not None:
+                resolved = candidate
+                break
+
+        if resolved is None and response:
+            resolved = (response[0].get("league") or {}).get("id")
+
+        self._resolved_league_id = resolved
+        return self._resolved_league_id
+
     def _request(self, path: str, params: Optional[Dict] = None) -> Optional[Dict]:
         if not self.is_configured():
             self.last_error = "Missing API-Sports key"
@@ -217,7 +281,11 @@ class _APISportsBaseClient:
         if not self.is_configured():
             return []
 
-        league_id = league_id or self.DEFAULT_LEAGUE_ID
+        league_id = self._resolve_league_id(league_id)
+        if not league_id:
+            if not self.last_error:
+                self.last_error = "Unable to determine API-Sports league ID"
+            return []
         season_candidates = (
             [season]
             if season
@@ -259,7 +327,11 @@ class _APISportsBaseClient:
         if not self.is_configured():
             return []
 
-        league_id = league_id or self.DEFAULT_LEAGUE_ID
+        league_id = self._resolve_league_id(league_id)
+        if not league_id:
+            if not self.last_error:
+                self.last_error = "Unable to determine API-Sports league ID"
+            return []
         season_label = str(season)
         cache_key = (season_label, timezone, league_id)
         if cache_key in self._season_games_cache:
@@ -288,7 +360,11 @@ class _APISportsBaseClient:
         if not self.is_configured() or not team_id:
             return {}
 
-        league_id = league_id or self.DEFAULT_LEAGUE_ID
+        league_id = self._resolve_league_id(league_id)
+        if not league_id:
+            if not self.last_error:
+                self.last_error = "Unable to determine API-Sports league ID"
+            return {}
         season_str = str(season) if season is not None else None
         season_candidates = (
             [season_str]
@@ -488,7 +564,8 @@ class APISportsBasketballClient(_APISportsBaseClient):
     """Wrapper around the API-Sports basketball endpoints (NBA focus)."""
 
     BASE_URL = "https://v1.basketball.api-sports.io"
-    DEFAULT_LEAGUE_ID = 12  # NBA
+    DEFAULT_LEAGUE_ID = 0  # Resolved dynamically via league search
+    LEAGUE_SEARCH_TERM = "NBA"
     SECRET_ENV_PRIORITY = ("NBA_APISPORTS_API_KEY", "APISPORTS_API_KEY", "API_SPORTS_KEY")
     SPORT_KEY = "basketball_nba"
     SPORT_NAME = "NBA"
