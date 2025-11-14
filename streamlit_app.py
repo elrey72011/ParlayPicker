@@ -3314,6 +3314,7 @@ def build_combos_ai(
     allow_sgp,
     optimizer,
     theover_ml_data=None,
+    theover_spreads_data=None,
     theover_totals_data=None,
     min_probability=0.25,
     max_probability=0.70,
@@ -3324,6 +3325,11 @@ def build_combos_ai(
     prepared_theover_ml = (
         prepare_theover_dataset(theover_ml_data) if theover_ml_data is not None else None
     )
+    prepared_theover_spreads = (
+        prepare_theover_dataset(theover_spreads_data)
+        if theover_spreads_data is not None
+        else None
+    )
     prepared_theover_totals = (
         prepare_theover_dataset(theover_totals_data)
         if theover_totals_data is not None
@@ -3332,13 +3338,15 @@ def build_combos_ai(
 
     def _dataset_for_leg(leg_dict: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         leg_type = (leg_dict.get('type') or '').lower()
-        if leg_type == 'total':
+        if 'total' in leg_type:
             return prepared_theover_totals
+        if 'spread' in leg_type:
+            return prepared_theover_spreads or prepared_theover_ml
         return prepared_theover_ml
 
     theover_cache: Dict[int, Dict[str, Any]] = {}
 
-    if prepared_theover_ml or prepared_theover_totals:
+    if prepared_theover_ml or prepared_theover_spreads or prepared_theover_totals:
         for leg in legs:
             dataset = _dataset_for_leg(leg)
             if not dataset:
@@ -3465,7 +3473,7 @@ def build_combos_ai(
         theover_prob_sources: set[str] = set()
         theover_prob_count = 0
 
-        if prepared_theover_ml or prepared_theover_totals:
+        if prepared_theover_ml or prepared_theover_spreads or prepared_theover_totals:
             for leg in combo:
                 dataset = _dataset_for_leg(leg)
                 if not dataset:
@@ -3596,6 +3604,7 @@ def render_parlay_section_ai(
     title,
     rows,
     theover_ml_data=None,
+    theover_spreads_data=None,
     theover_totals_data=None,
     timezone_label: Optional[str] = None,
 ):
@@ -3608,6 +3617,11 @@ def render_parlay_section_ai(
     prepared_theover_ml = (
         prepare_theover_dataset(theover_ml_data) if theover_ml_data is not None else None
     )
+    prepared_theover_spreads = (
+        prepare_theover_dataset(theover_spreads_data)
+        if theover_spreads_data is not None
+        else None
+    )
     prepared_theover_totals = (
         prepare_theover_dataset(theover_totals_data)
         if theover_totals_data is not None
@@ -3616,8 +3630,10 @@ def render_parlay_section_ai(
 
     def _dataset_for_leg(leg_dict: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         leg_type = (leg_dict.get('type') or '').lower()
-        if leg_type == 'total':
+        if 'total' in leg_type:
             return prepared_theover_totals
+        if 'spread' in leg_type:
+            return prepared_theover_spreads or prepared_theover_ml
         return prepared_theover_ml
 
     for i, row in enumerate(rows, start=1):
@@ -4907,7 +4923,8 @@ with main_tab1:
 
         return dataset
 
-    theover_ml_data = _collect_theover_dataset("#### 🤖 Moneyline & Spread ML projections", "theover_ml")
+    theover_ml_data = _collect_theover_dataset("#### 🤖 Moneyline ML projections", "theover_ml")
+    theover_spreads_data = _collect_theover_dataset("#### 📐 Spread projections", "theover_spreads")
     theover_totals_data = _collect_theover_dataset("#### 📈 Totals (Over/Under) projections", "theover_totals")
     
     st.markdown("---")
@@ -5873,6 +5890,7 @@ with main_tab1:
                                 allow_sgp,
                                 ai_optimizer,
                                 theover_ml_data,
+                                theover_spreads_data,
                                 theover_totals_data,
                                 min_parlay_probability,
                                 max_parlay_probability,
@@ -5881,6 +5899,7 @@ with main_tab1:
                                 "2-Leg AI Parlays",
                                 combos_2,
                                 theover_ml_data,
+                                theover_spreads_data,
                                 theover_totals_data,
                                 timezone_label=user_timezone_label,
                             )
@@ -5897,6 +5916,7 @@ with main_tab1:
                                 allow_sgp,
                                 ai_optimizer,
                                 theover_ml_data,
+                                theover_spreads_data,
                                 theover_totals_data,
                                 min_parlay_probability,
                                 max_parlay_probability,
@@ -5905,6 +5925,7 @@ with main_tab1:
                                 "3-Leg AI Parlays",
                                 combos_3,
                                 theover_ml_data,
+                                theover_spreads_data,
                                 theover_totals_data,
                                 timezone_label=user_timezone_label,
                             )
@@ -5921,6 +5942,7 @@ with main_tab1:
                                 allow_sgp,
                                 ai_optimizer,
                                 theover_ml_data,
+                                theover_spreads_data,
                                 theover_totals_data,
                                 min_parlay_probability,
                                 max_parlay_probability,
@@ -5929,6 +5951,7 @@ with main_tab1:
                                 "4-Leg AI Parlays",
                                 combos_4,
                                 theover_ml_data,
+                                theover_spreads_data,
                                 theover_totals_data,
                                 timezone_label=user_timezone_label,
                             )
@@ -5945,6 +5968,7 @@ with main_tab1:
                                 allow_sgp,
                                 ai_optimizer,
                                 theover_ml_data,
+                                theover_spreads_data,
                                 theover_totals_data,
                                 min_parlay_probability,
                                 max_parlay_probability,
@@ -5953,6 +5977,7 @@ with main_tab1:
                                 "5-Leg AI Parlays",
                                 combos_5,
                                 theover_ml_data,
+                                theover_spreads_data,
                                 theover_totals_data,
                                 timezone_label=user_timezone_label,
                             )
