@@ -2074,6 +2074,30 @@ class SharpMoneyDetector:
         
         direction = 'reverse' if is_reverse else ('with_public' if public_bet_pct else 'neutral')
         
+        # Calculate base score
+        base_score = (edge_score * 0.45 +      # 45% edge
+                     ev_score * 0.30 +          # 30% EV
+                     confidence_score * 0.25)    # 25% confidence
+
+        # Apply Kalshi factor, correlation factor, and live data adjustments
+        apisports_factor = 1.0
+        if apisports_legs:
+            apisports_factor += apisports_boost / 100.0
+            apisports_factor = max(0.9, min(1.1, apisports_factor))
+
+        sportsdata_factor = 1.0
+        if sportsdata_legs:
+            sportsdata_factor += sportsdata_boost / 100.0
+            sportsdata_factor = max(0.9, min(1.1, sportsdata_factor))
+
+        combined_boost = apisports_boost + sportsdata_boost
+        live_data_factor = 1.0
+        if live_data_legs and combined_boost:
+            live_data_factor += combined_boost / 100.0
+            live_data_factor = max(0.85, min(1.15, live_data_factor))
+
+        final_score = base_score * correlation_factor * kalshi_factor * live_data_factor
+
         return {
             'movement': movement,
             'direction': direction,
@@ -2581,6 +2605,7 @@ class SocialMediaAnalyzer:
             'news_type': None,
             'urgency': 'low'
         }
+        enriched_legs.append(leg_metrics)
 
 # ============ KALSHI VALIDATION HELPER ============
 def validate_with_kalshi(kalshi_integrator, home_team: str, away_team: str,
@@ -6675,19 +6700,20 @@ if (
     )
 
 # Initialize advanced analyzers
-if 'sharp_detector' not in st.session_state:
-    st.session_state['sharp_detector'] = SharpMoneyDetector()
-if 'player_impact' not in st.session_state:
-    st.session_state['player_impact'] = PlayerImpactAnalyzer()
-if 'weather_analyzer' not in st.session_state:
-    weather_key = os.environ.get("WEATHER_API_KEY", "")
-    st.session_state['weather_analyzer'] = WeatherAnalyzer(weather_key)
-if 'kelly_calculator' not in st.session_state:
-    st.session_state['kelly_calculator'] = KellyCalculator()
-if 'matchup_analyzer' not in st.session_state:
-    st.session_state['matchup_analyzer'] = MatchupAnalyzer()
-if 'advanced_stats' not in st.session_state:
-    st.session_state['advanced_stats'] = AdvancedStatsIntegrator()
+# Note: Some advanced analyzers are disabled because their classes are not yet implemented
+# if 'sharp_detector' not in st.session_state:
+#     st.session_state['sharp_detector'] = SharpMoneyDetector()
+# if 'player_impact' not in st.session_state:
+#     st.session_state['player_impact'] = PlayerImpactAnalyzer()
+# if 'weather_analyzer' not in st.session_state:
+#     weather_key = os.environ.get("WEATHER_API_KEY", "")
+#     st.session_state['weather_analyzer'] = WeatherAnalyzer(weather_key)
+# if 'kelly_calculator' not in st.session_state:
+#     st.session_state['kelly_calculator'] = KellyCalculator()
+# if 'matchup_analyzer' not in st.session_state:
+#     st.session_state['matchup_analyzer'] = MatchupAnalyzer()
+# if 'advanced_stats' not in st.session_state:
+#     st.session_state['advanced_stats'] = AdvancedStatsIntegrator()
 if 'social_analyzer' not in st.session_state:
     twitter_key = os.environ.get("TWITTER_API_KEY", "")
     st.session_state['social_analyzer'] = SocialMediaAnalyzer(twitter_key)
