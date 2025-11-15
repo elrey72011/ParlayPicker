@@ -1910,6 +1910,28 @@ class KalshiIntegrator:
                 'expected_value': 0,
                 'recommendation': '🔴 NO EDGE - AI probability not better than Kalshi price'
             }
+        )
+    else:
+        team_payload = _team_payload(team_obj, opponent_obj)
+        payload.update(team_payload)
+
+    return {k: v for k, v in payload.items() if v not in (None, '')}
+
+
+def format_timestamp_utc(ts: Optional[datetime]) -> Optional[str]:
+    """Format a naive UTC timestamp for display."""
+
+    if isinstance(ts, datetime):
+        return ts.strftime("%Y-%m-%d %H:%M UTC")
+    return None
+
+def fetch_oddsapi_snapshot(api_key: str, sport_key: str) -> Dict[str, Any]:
+    url = f"{_odds_api_base()}/v4/sports/{sport_key}/odds"
+    params = {"apiKey": api_key, "regions": "us", "markets": "h2h,spreads,totals", "oddsFormat": "american"}
+    try:
+        r = requests.get(url, params=params, timeout=12)
+        r.raise_for_status()
+        data = r.json()
         
         # Edge calculation for binary market
         edge = ai_prob - kalshi_prob
@@ -3409,6 +3431,59 @@ def decimal_to_american(decimal_odds: Optional[float]) -> Optional[int]:
         return None
 
 
+def _blend_probability(base: float, new_value: float, weight: float) -> float:
+    """Blend two probability estimates using the provided weight."""
+
+    weight = max(0.0, min(weight, 1.0))
+    return max(0.0, min(1.0, base * (1 - weight) + new_value * weight))
+
+
+def _sportsdata_probability_for_leg(leg: Dict[str, Any]) -> Optional[float]:
+    """Derive a probability estimate for a leg using SportsData.io metrics."""
+
+    payload = leg.get('sportsdata') or {}
+    if not payload:
+        return None
+
+    market = (leg.get('type') or leg.get('market') or '').lower()
+    if not market:
+        return None
+
+    def _clamp(prob: float) -> float:
+        return max(0.05, min(0.95, prob))
+
+    strength_delta = _safe_float(payload.get('strength_delta'))
+
+    if 'moneyline' in market or market == 'ml':
+        if strength_delta is None:
+            return None
+        shift = max(-0.20, min(0.20, strength_delta / 40.0))
+        return _clamp(0.5 + shift)
+
+    if 'spread' in market:
+        net_points = _safe_float(payload.get('net_points_per_game'))
+        if net_points is None and strength_delta is None:
+            return None
+        baseline = strength_delta if strength_delta is not None else net_points
+        if baseline is None:
+            return None
+        shift = max(-0.18, min(0.18, baseline / 35.0))
+        return _clamp(0.5 + shift)
+
+    if 'total' in market:
+        combined_delta = _safe_float(payload.get('combined_strength_delta'))
+        if combined_delta is None:
+            return None
+        shift = max(-0.15, min(0.15, combined_delta / 45.0))
+        base_prob = _clamp(0.5 + shift)
+        side = str(leg.get('side') or '').lower()
+        if side == 'under':
+            return _clamp(1.0 - base_prob)
+        return base_prob
+
+    return None
+
+
 def build_best_bets_per_game(
     api_key: str,
     sport_keys: List[str],
@@ -3949,12 +4024,36 @@ def build_best_bets_per_game(
         except Exception:
             market_implied_prob = None
 
-        ai_prob = leg.get('ai_prob', leg.get('p'))
-        if ai_prob is None:
+        ai_prob_raw = leg.get('ai_prob', leg.get('p'))
+        if ai_prob_raw is None:
             continue
 
-        ai_ev = ev_rate(ai_prob, float(best_decimal)) if market_implied_prob is not None else None
-        ai_edge = ai_prob - market_implied_prob if market_implied_prob is not None else None
+        ml_prob = leg.get('ml_probability')
+        theover_prob = leg.get('theover_probability')
+        sportsdata_prob = _sportsdata_probability_for_leg(leg)
+
+        ai_prob_effective = ai_prob_raw
+        if ml_prob is not None and abs(ml_prob - ai_prob_effective) > 1e-3:
+            ai_prob_effective = _blend_probability(ai_prob_effective, ml_prob, 0.40)
+
+        if theover_prob is not None and abs(theover_prob - ai_prob_effective) > 1e-3:
+            ai_prob_effective = _blend_probability(ai_prob_effective, theover_prob, 0.30)
+
+        if sportsdata_prob is not None and abs(sportsdata_prob - ai_prob_effective) > 1e-3:
+            ai_prob_effective = _blend_probability(ai_prob_effective, sportsdata_prob, 0.25)
+
+        ai_prob_effective = max(0.01, min(0.99, ai_prob_effective))
+
+        ai_ev = (
+            ev_rate(ai_prob_effective, float(best_decimal))
+            if market_implied_prob is not None
+            else None
+        )
+        ai_edge = (
+            ai_prob_effective - market_implied_prob
+            if market_implied_prob is not None
+            else None
+        )
         best_edge = ai_ev if ai_ev is not None else ai_edge
 
         event_info = event_meta.get(event_id, {})
@@ -3991,7 +4090,8 @@ def build_best_bets_per_game(
             'best_decimal': best_decimal,
             'best_american': best_american,
             'implied_prob': market_implied_prob,
-            'ai_prob': ai_prob,
+            'ai_prob_raw': ai_prob_raw,
+            'ai_prob_effective': ai_prob_effective,
             'ai_ev': ai_ev,
             'ai_edge': ai_edge,
             'ai_confidence': leg.get('ai_confidence'),
@@ -4000,6 +4100,7 @@ def build_best_bets_per_game(
             'theover_probability': leg.get('theover_probability'),
             'theover_delta': leg.get('theover_probability_delta'),
             'theover_source': leg.get('theover_probability_source'),
+            'sportsdata_probability': sportsdata_prob,
             'kalshi_prob': (leg.get('kalshi_validation') or {}).get('kalshi_prob'),
             'kalshi_delta': leg.get('kalshi_alignment_delta'),
             'kalshi_edge': leg.get('kalshi_edge'),
@@ -4025,7 +4126,10 @@ def build_best_bets_per_game(
             continue
         best_option = max(
             ranked,
-            key=lambda item: (item.get('best_edge'), item.get('ai_prob', 0)),
+            key=lambda item: (
+                item.get('best_edge'),
+                item.get('ai_prob_effective', item.get('ai_prob_raw', 0)),
+            ),
         )
 
         row = {
@@ -4040,7 +4144,8 @@ def build_best_bets_per_game(
             'Best American': best_option['best_american'],
             'Best Decimal': best_option['best_decimal'],
             'Implied Prob %': best_option['implied_prob'] * 100 if best_option['implied_prob'] is not None else None,
-            'AI Prob %': best_option['ai_prob'] * 100 if best_option['ai_prob'] is not None else None,
+            'AI Prob %': best_option['ai_prob_effective'] * 100 if best_option['ai_prob_effective'] is not None else None,
+            'AI Raw %': best_option['ai_prob_raw'] * 100 if best_option['ai_prob_raw'] is not None else None,
             'AI EV %': best_option['ai_ev'] * 100 if best_option['ai_ev'] is not None else None,
             'AI Edge pp': best_option['ai_edge'] * 100 if best_option['ai_edge'] is not None else None,
             'AI Confidence %': best_option['ai_confidence'] * 100 if best_option['ai_confidence'] is not None else None,
@@ -4049,6 +4154,7 @@ def build_best_bets_per_game(
             'theover.ai %': best_option['theover_probability'] * 100 if best_option['theover_probability'] is not None else None,
             'theover Δ pp': best_option['theover_delta'] * 100 if best_option['theover_delta'] is not None else None,
             'theover Source': best_option['theover_source'],
+            'SportsData Prob %': best_option['sportsdata_probability'] * 100 if best_option['sportsdata_probability'] is not None else None,
             'Kalshi Prob %': best_option['kalshi_prob'] * 100 if best_option['kalshi_prob'] is not None else None,
             'Kalshi Δ pp': best_option['kalshi_delta'] * 100 if best_option['kalshi_delta'] is not None else None,
             'Kalshi Edge %': best_option['kalshi_edge'] * 100 if best_option['kalshi_edge'] is not None else None,
@@ -7026,12 +7132,14 @@ with main_tab1:
                 percent_columns = [
                     "Implied Prob %",
                     "AI Prob %",
+                    "AI Raw %",
                     "AI EV %",
                     "AI Edge pp",
                     "AI Confidence %",
                     "ML Prob %",
                     "theover.ai %",
                     "theover Δ pp",
+                    "SportsData Prob %",
                     "Kalshi Prob %",
                     "Kalshi Δ pp",
                     "Kalshi Edge %",
