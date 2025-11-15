@@ -3288,6 +3288,7 @@ def compute_best_overall_odds(
         return df
 
     df["decimal_odds"] = pd.to_numeric(df["decimal_odds"], errors="coerce")
+    df["american_odds"] = pd.to_numeric(df["american_odds"], errors="coerce")
     df = df.dropna(subset=["decimal_odds"])
     if df.empty:
         return df
@@ -7041,16 +7042,23 @@ with main_tab1:
                         )
 
                 if 'Best Decimal' in display_df.columns:
+                    display_df['Best Decimal'] = pd.to_numeric(
+                        display_df['Best Decimal'], errors='coerce'
+                    )
                     display_df['Best Decimal'] = display_df['Best Decimal'].map(
                         lambda x: f"{float(x):.3f}" if pd.notna(x) else "—"
                     )
 
                 if 'Best American' in display_df.columns:
+                    display_df['Best American'] = pd.to_numeric(
+                        display_df['Best American'], errors='coerce'
+                    )
                     display_df['Best American'] = display_df['Best American'].map(
-                        lambda x: f"{int(x):+d}" if pd.notna(x) else "—"
+                        lambda x: f"{int(round(float(x))):+d}" if pd.notna(x) else "—"
                     )
 
                 if 'Line' in display_df.columns:
+                    display_df['Line'] = pd.to_numeric(display_df['Line'], errors='coerce')
                     display_df['Line'] = display_df['Line'].map(
                         lambda x: f"{float(x):g}" if pd.notna(x) else "—"
                     )
