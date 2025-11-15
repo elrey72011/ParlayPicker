@@ -1782,19 +1782,20 @@ class KalshiIntegrator:
                 result['status'] = 'push'
         return result
 
-    if leg_type == 'spread':
-        point = _safe_float(leg.get('point'))
+   if leg_type == 'spread':
+    point = _safe_float(leg.get('point'))
     if point is None:
         result['status'] = 'no_data'
         result['reason'] = 'Spread point unavailable'
-    return result
-        
-        if leg.get('side') == 'home':
-            adjusted_home = home_score + point
-            adjusted_away = away_score
-        else:
-            adjusted_home = home_score
-            adjusted_away = away_score + point
+        return result
+
+    if leg.get('side') == 'home':
+        adjusted_home = home_score + point
+        adjusted_away = away_score
+    else:
+        adjusted_home = home_score
+        adjusted_away = away_score + point
+
         if adjusted_home > adjusted_away:
             result['status'] = 'win'
         elif adjusted_home < adjusted_away:
