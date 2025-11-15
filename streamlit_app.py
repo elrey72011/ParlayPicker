@@ -2605,6 +2605,7 @@ class SocialMediaAnalyzer:
             'news_type': None,
             'urgency': 'low'
         }
+        enriched_legs.append(leg_metrics)
 
 # ============ KALSHI VALIDATION HELPER ============
 def validate_with_kalshi(kalshi_integrator, home_team: str, away_team: str,
@@ -7632,18 +7633,28 @@ with main_tab1:
                         if not snap or not snap.get("events"):
                             continue  # Skip if no events
                         
-                        for ev in (snap.get("events") or [])[:per_sport_events]:
+                        events_for_sport = snap.get("events") or []
+                        processed_events = 0
+
+                        for ev in events_for_sport:
+                            if processed_events >= per_sport_events:
+                                break
+
                             try:
-                                if not is_within_date_window(ev.get("commence_time")):
+                                commence_time = ev.get("commence_time")
+
+                                if not is_within_date_window(commence_time):
                                     continue
                                 
                                 eid = ev.get("id")
                                 home = ev.get("home_team", "?")
                                 away = ev.get("away_team", "?")
                                 mkts = ev.get("markets") or {}
-                                
+
                                 if not eid or not home or not away:
                                     continue  # Skip invalid events
+
+                                legs_before_event = len(all_legs)
 
                                 apisports_summary = None
                                 apisports_payload_home = None
@@ -7676,7 +7687,10 @@ with main_tab1:
 
                                 if client_for_leg:
                                     try:
-                                        event_ts = pd.to_datetime(ev.get("commence_time"), utc=True)
+                                        if not commence_time:
+                                            raise ValueError("missing commence_time")
+
+                                        event_ts = pd.to_datetime(commence_time, utc=True)
                                         tz_label = st.session_state.get('user_timezone') or getattr(tz, 'zone', 'UTC') or 'UTC'
                                         try:
                                             target_tz = pytz.timezone(tz_label)
@@ -7859,7 +7873,7 @@ with main_tab1:
                                                     "sport_key": skey,
                                                     "home_team": home,
                                                     "away_team": away,
-                                                    "commence_time": ev.get('commence_time'),
+                                                "commence_time": commence_time,
                                                 }
 
                                                 if ml_prediction_result:
@@ -7936,7 +7950,7 @@ with main_tab1:
                                                     "sport_key": skey,
                                                     "home_team": home,
                                                     "away_team": away,
-                                                    "commence_time": ev.get('commence_time'),
+                                                "commence_time": commence_time,
                                                 }
 
                                                 if ml_prediction_result:
@@ -7999,7 +8013,7 @@ with main_tab1:
                                                 "sport_key": skey,
                                                 "home_team": home,
                                                 "away_team": away,
-                                                "commence_time": ev.get('commence_time'),
+                                                "commence_time": commence_time,
                                             }
 
                                             if nm == home and apisports_payload_home:
@@ -8060,7 +8074,7 @@ with main_tab1:
                                                 "sport_key": skey,
                                                 "home_team": home,
                                                 "away_team": away,
-                                                "commence_time": ev.get('commence_time'),
+                                                "commence_time": commence_time,
                                             }
 
                                             if apisports_payload_total:
@@ -8089,7 +8103,10 @@ with main_tab1:
                                                 }
 
                                             all_legs.append(leg_data)
-                            
+
+                                if len(all_legs) > legs_before_event:
+                                    processed_events += 1
+
                             except Exception as e:
                                 # Skip this event if there's an error processing it
                                 continue
