@@ -6691,29 +6691,27 @@ with main_tab1:
 
     ml_predictor = st.session_state.get('ml_predictor')
     if ml_predictor and use_ml_predictions:
+        def _register_sportsdata(sport_key: str) -> None:
+            client = sportsdata_clients.get(sport_key)
+            if client is not None:
+                ml_predictor.register_sportsdata_client(sport_key, client)
+
         if 'americanfootball_nfl' in active_sport_keys:
             ml_predictor.register_client('americanfootball_nfl', apisports_client)
-            ml_predictor.register_sportsdata_client(
-                'americanfootball_nfl', sportsdata_clients.get('americanfootball_nfl')
-            )
         if 'icehockey_nhl' in active_sport_keys:
             ml_predictor.register_client('icehockey_nhl', hockey_client)
-            ml_predictor.register_sportsdata_client(
-                'icehockey_nhl', sportsdata_clients.get('icehockey_nhl')
-            )
         if 'basketball_nba' in active_sport_keys:
             ml_predictor.register_client('basketball_nba', basketball_client)
-            ml_predictor.register_sportsdata_client(
-                'basketball_nba', sportsdata_clients.get('basketball_nba')
-            )
-        if 'americanfootball_ncaaf' in active_sport_keys:
-            ml_predictor.register_sportsdata_client(
-                'americanfootball_ncaaf', sportsdata_clients.get('americanfootball_ncaaf')
-            )
-        if 'basketball_ncaab' in active_sport_keys:
-            ml_predictor.register_sportsdata_client(
-                'basketball_ncaab', sportsdata_clients.get('basketball_ncaab')
-            )
+
+        # SportsData.io-driven leagues (including college football) feed the ML datasets
+        for sd_sport in (
+            'americanfootball_nfl',
+            'icehockey_nhl',
+            'basketball_nba',
+            'americanfootball_ncaaf',
+            'basketball_ncaab',
+        ):
+            _register_sportsdata(sd_sport)
 
     # Quick configuration summary to reinforce sidebar selections
     config_cols = st.columns(3)
@@ -6825,18 +6823,56 @@ with main_tab1:
             )
         else:
             ml_capable_rows = [
-                ("NFL", "americanfootball_nfl", apisports_client, "🏈"),
-                ("NBA", "basketball_nba", basketball_client, "🏀"),
-                ("NHL", "icehockey_nhl", hockey_client, "🏒"),
+                {
+                    "label": "NFL",
+                    "sport_key": "americanfootball_nfl",
+                    "icon": "🏈",
+                    "apisports_client": apisports_client,
+                    "sportsdata_client": sportsdata_clients.get('americanfootball_nfl'),
+                    "no_key_message": "Provide an NFL API-Sports key to enable historical ML training.",
+                },
+                {
+                    "label": "NBA",
+                    "sport_key": "basketball_nba",
+                    "icon": "🏀",
+                    "apisports_client": basketball_client,
+                    "sportsdata_client": sportsdata_clients.get('basketball_nba'),
+                    "no_key_message": "Provide an NBA API-Sports key to enable historical ML training.",
+                },
+                {
+                    "label": "NHL",
+                    "sport_key": "icehockey_nhl",
+                    "icon": "🏒",
+                    "apisports_client": hockey_client,
+                    "sportsdata_client": sportsdata_clients.get('icehockey_nhl'),
+                    "no_key_message": "Provide an NHL API-Sports key to enable historical ML training.",
+                },
+                {
+                    "label": "NCAAF",
+                    "sport_key": "americanfootball_ncaaf",
+                    "icon": "🎓🏈",
+                    "apisports_client": None,
+                    "sportsdata_client": sportsdata_clients.get('americanfootball_ncaaf'),
+                    "no_key_message": "Provide your SportsData.io NCAAF key to enable historical ML training.",
+                },
             ]
-            active_ml_rows = [row for row in ml_capable_rows if row[1] in active_sport_keys]
+            active_ml_rows = [
+                row for row in ml_capable_rows if row["sport_key"] in active_sport_keys
+            ]
 
             if not active_ml_rows:
-                st.info("Select an NFL, NBA, or NHL sport to enable historical ML training.")
+                st.info("Select an NFL, NBA, NHL, or NCAAF sport to enable historical ML training.")
             else:
                 status_cols = st.columns(min(2, len(active_ml_rows)))
 
-                for idx, (sport_label, sport_key, sport_client, sport_icon) in enumerate(active_ml_rows):
+                for idx, row_info in enumerate(active_ml_rows):
+                    sport_label = row_info["label"]
+                    sport_key = row_info["sport_key"]
+                    sport_icon = row_info["icon"]
+                    apisports_client_for_row = row_info.get("apisports_client")
+                    sportsdata_client_for_row = row_info.get("sportsdata_client")
+                    fallback_message = row_info.get("no_key_message") or "Provide an API key to enable historical ML training."
+
                     with status_cols[idx % len(status_cols)]:
                         st.markdown(f"**{sport_icon} {sport_label} Historical Model**")
 
@@ -6912,7 +6948,7 @@ with main_tab1:
                         error_code = metadata.get('error')
                         if error_code and metadata.get('dataset_rows', 0) == 0:
                             friendly = {
-                                'missing_api_key': 'Add your API-Sports key to fetch team history.',
+                                'missing_api_key': 'Add your API key (API-Sports or SportsData.io) to fetch team history.',
                                 'unregistered_client': 'Register this league with the ML builder.',
                                 'games_fetch_failed': 'API-Sports schedule request failed. Retry shortly.',
                                 'summary_build_failed': 'Could not assemble team summaries from API-Sports.',
@@ -6927,8 +6963,19 @@ with main_tab1:
                         elif status_lines:
                             for line in status_lines:
                                 st.caption(line)
-                        elif not sport_client or not getattr(sport_client, 'is_configured', lambda: False)():
-                            st.info("Provide an API-Sports key to enable historical ML training.")
+                        else:
+                            configured = False
+                            for candidate_client in (
+                                apisports_client_for_row,
+                                sportsdata_client_for_row,
+                            ):
+                                if candidate_client and getattr(
+                                    candidate_client, 'is_configured', lambda: False
+                                )():
+                                    configured = True
+                                    break
+                            if not configured:
+                                st.info(fallback_message)
 
                         seasons = metadata.get('dataset_seasons') or metadata.get('seasons')
                         if seasons:
