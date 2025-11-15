@@ -1870,6 +1870,8 @@ class KalshiIntegrator:
         
         # Compare with AI prediction
         kalshi_implied = yes_bid  # Using bid as market consensus
+        ai_edge = 0
+        ai_recommendation = "⚪️ No AI prediction available"
         
         if ml_probability:
             ai_edge = ml_probability - kalshi_implied
@@ -1881,60 +1883,40 @@ class KalshiIntegrator:
             elif abs(ai_edge) < 0.05:
                 ai_recommendation = "🟡 FAIR PRICE - AI agrees with market"
             else:
-                result['status'] = 'push'
-        return result
-
-    if leg_type == 'spread':
-        point = _safe_float(leg.get('point'))
-        if point is None:
-            result['status'] = 'no_data'
-            result['reason'] = 'Spread point unavailable'
-            return result
-
-        if leg.get('side') == 'home':
-            adjusted_home = home_score + point
-            adjusted_away = away_score
-        else:
-            adjusted_home = home_score
-            adjusted_away = away_score + point
-
-        if adjusted_home > adjusted_away:
-            result['status'] = 'win'
-        elif adjusted_home < adjusted_away:
-            result['status'] = 'loss'
-        else:
-            result['status'] = 'push'
-        return result
-
-    if leg_type == 'total':
-        point = _safe_float(leg.get('point'))
-        if point is None:
-            result['status'] = 'no_data'
-            result['reason'] = 'Total point unavailable'
-            return result
-        total_points = home_score + away_score
-        if side.startswith('over'):
-            if total_points > point:
-                result['status'] = 'win'
-            elif total_points < point:
-                result['status'] = 'loss'
-            else:
-                result['status'] = 'push'
-        elif side.startswith('under'):
-            if total_points < point:
-                result['status'] = 'win'
-            elif total_points > point:
-                result['status'] = 'loss'
-            else:
-                result['status'] = 'push'
-        else:
-            result['status'] = 'no_data'
-            result['reason'] = 'Unknown totals side'
-        return result
-
-    result['status'] = 'no_data'
-    result['reason'] = f"Unsupported leg type: {leg.get('type')}"
-    return result
+                ai_recommendation = f"🟡 MODERATE EDGE - AI sees {ai_edge*100:.1f}% edge"
+        
+        # Calculate overall score (0-100)
+        liquidity_score = min(100, (volume + open_interest) / 100)
+        efficiency_score = efficiency * 100
+        edge_score = max(0, abs(ai_edge) * 100) if ml_probability else 0
+        sentiment_factor = (sentiment_score + 1) / 2 * 100  # Normalize -1 to 1 range to 0-100
+        
+        overall_score = (
+            liquidity_score * 0.3 +
+            efficiency_score * 0.2 +
+            edge_score * 0.4 +
+            sentiment_factor * 0.1
+        )
+        
+        return {
+            'yes_bid': yes_bid,
+            'yes_ask': yes_ask,
+            'no_bid': no_bid,
+            'no_ask': no_ask,
+            'yes_spread': yes_spread,
+            'no_spread': no_spread,
+            'efficiency': efficiency,
+            'volume': volume,
+            'open_interest': open_interest,
+            'kalshi_implied': kalshi_implied,
+            'ai_edge': ai_edge,
+            'ai_recommendation': ai_recommendation,
+            'overall_score': overall_score,
+            'liquidity_score': liquidity_score,
+            'efficiency_score': efficiency_score,
+            'edge_score': edge_score,
+            'sentiment_score': sentiment_score,
+        }
 
 
 def evaluate_tracked_parlays(
@@ -10670,4 +10652,3 @@ with main_tab5:
             </div>
             """
             components.html(widget_html, height=widget_height, scrolling=True)
-
