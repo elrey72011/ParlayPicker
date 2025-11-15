@@ -1,6 +1,6 @@
 # ParlayDesk_AI_Enhanced.py - v9.1 FIXED
 # AI-Enhanced parlay finder with sentiment analysis, ML predictions, and live market data
-import os, io, json, itertools, re, copy, logging, hashlib
+import os, io, json, itertools, re, copy, logging, hashlib, math
 from html import escape
 from dataclasses import asdict
 from typing import Dict, Any, List, Tuple, Optional, Iterable
@@ -1925,8 +1925,7 @@ class KalshiIntegrator:
         kelly_fraction = kelly_fraction * 0.25
         kelly_fraction = max(0, min(kelly_fraction, 0.10))  # Cap at 10%
         
-        kelly_percentage = kelly_fraction * 100
-        recommended_stake = bankroll * kelly_fraction
+        efficiency = 1 - avg_spread  # Higher = more efficient
         
         # Expected value
         expected_payout = ai_prob * (1 / kalshi_prob)
@@ -3000,12 +2999,28 @@ def build_leg_sportsdata_payload(summary: Any, side: str, sport_key: Optional[st
             away_payload.get('strength_delta'), (int, float)
         ):
             combined_delta = float(home_payload['strength_delta']) - float(away_payload['strength_delta'])
+        home_pf = _safe_float(home_payload.get('points_for_per_game'))
+        away_pf = _safe_float(away_payload.get('points_for_per_game'))
+        home_pa = _safe_float(home_payload.get('points_against_per_game'))
+        away_pa = _safe_float(away_payload.get('points_against_per_game'))
+        avg_points_total = None
+        if home_pf is not None and away_pf is not None:
+            avg_points_total = home_pf + away_pf
+        avg_points_allowed = None
+        if home_pa is not None and away_pa is not None:
+            avg_points_allowed = home_pa + away_pa
         payload.update(
             {
                 'home_team': _get(summary, 'home').name if hasattr(_get(summary, 'home'), 'name') else _get(summary, 'home'),
                 'away_team': _get(summary, 'away').name if hasattr(_get(summary, 'away'), 'name') else _get(summary, 'away'),
                 'trend': home_payload.get('trend') or away_payload.get('trend'),
                 'combined_strength_delta': combined_delta,
+                'home_points_for_per_game': home_pf,
+                'away_points_for_per_game': away_pf,
+                'home_points_against_per_game': home_pa,
+                'away_points_against_per_game': away_pa,
+                'avg_points_total': avg_points_total,
+                'avg_points_allowed': avg_points_allowed,
             }
         )
     else:
@@ -3417,6 +3432,31 @@ def _blend_probability(base: float, new_value: float, weight: float) -> float:
     return max(0.0, min(1.0, base * (1 - weight) + new_value * weight))
 
 
+def _record_pct_from_text(record: Any) -> Optional[float]:
+    if not record:
+        return None
+    tokens = [tok for tok in re.split(r"[^0-9]", str(record)) if tok]
+    if not tokens:
+        return None
+    try:
+        wins = float(tokens[0])
+        losses = float(tokens[1]) if len(tokens) > 1 else 0.0
+        draws = float(tokens[2]) if len(tokens) > 2 else 0.0
+    except ValueError:
+        return None
+    total = wins + losses + draws
+    if total <= 0:
+        return None
+    return wins / total
+
+
+def _logistic_probability(score: float, *, scale: float = 1.0) -> float:
+    if scale <= 0:
+        scale = 1.0
+    scaled = max(-8.0, min(8.0, score / scale))
+    return 1.0 / (1.0 + math.exp(-scaled))
+
+
 def _sportsdata_probability_for_leg(leg: Dict[str, Any]) -> Optional[float]:
     """Derive a probability estimate for a leg using SportsData.io metrics."""
 
@@ -3428,37 +3468,88 @@ def _sportsdata_probability_for_leg(leg: Dict[str, Any]) -> Optional[float]:
     if not market:
         return None
 
-    def _clamp(prob: float) -> float:
-        return max(0.05, min(0.95, prob))
-
+    side = str(leg.get('side') or '').lower()
+    record_pct = _record_pct_from_text(payload.get('team_record'))
     strength_delta = _safe_float(payload.get('strength_delta'))
+    net_ppg = _safe_float(payload.get('net_points_per_game'))
+    turnover_margin = _safe_float(payload.get('turnover_margin'))
+    trend = str(payload.get('trend') or '').lower()
+
+    trend_boost = 0.0
+    if 'hot' in trend:
+        trend_boost = 0.18
+    elif 'cold' in trend:
+        trend_boost = -0.18
+
+    def _home_edge() -> float:
+        if side == 'home':
+            return 0.25
+        if side == 'away':
+            return -0.25
+        return 0.0
+
+    def _common_score_components() -> float:
+        score = 0.0
+        if strength_delta is not None:
+            score += max(-1.5, min(1.5, strength_delta / 10.0))
+        if net_ppg is not None:
+            score += max(-1.2, min(1.2, net_ppg / 6.0))
+        if turnover_margin is not None:
+            score += max(-0.9, min(0.9, turnover_margin / 5.0))
+        if record_pct is not None:
+            score += max(-1.0, min(1.0, (record_pct - 0.5) * 3.6))
+        score += trend_boost
+        score += _home_edge()
+        return score
 
     if 'moneyline' in market or market == 'ml':
-        if strength_delta is None:
+        if all(val is None for val in (strength_delta, net_ppg, record_pct, turnover_margin)):
             return None
-        shift = max(-0.20, min(0.20, strength_delta / 40.0))
-        return _clamp(0.5 + shift)
+        score = _common_score_components()
+        return _logistic_probability(score, scale=1.25)
 
     if 'spread' in market:
-        net_points = _safe_float(payload.get('net_points_per_game'))
-        if net_points is None and strength_delta is None:
-            return None
-        baseline = strength_delta if strength_delta is not None else net_points
-        if baseline is None:
-            return None
-        shift = max(-0.18, min(0.18, baseline / 35.0))
-        return _clamp(0.5 + shift)
+        line_val = _safe_float(leg.get('point'))
+        if line_val is None:
+            line_val = _safe_float(leg.get('line'))
+        score = _common_score_components()
+        if line_val is not None:
+            effective_line = line_val
+            if side == 'away':
+                effective_line = -line_val
+            score += max(-1.5, min(1.5, -effective_line / 6.5))
+        return _logistic_probability(score, scale=1.4)
 
     if 'total' in market:
-        combined_delta = _safe_float(payload.get('combined_strength_delta'))
-        if combined_delta is None:
+        line_val = _safe_float(leg.get('point'))
+        if line_val is None:
+            line_val = _safe_float(leg.get('line'))
+        if line_val is None:
             return None
-        shift = max(-0.15, min(0.15, combined_delta / 45.0))
-        base_prob = _clamp(0.5 + shift)
-        side = str(leg.get('side') or '').lower()
+
+        avg_total = _safe_float(payload.get('avg_points_total'))
+        if avg_total is None:
+            home_pf = _safe_float(payload.get('home_points_for_per_game'))
+            away_pf = _safe_float(payload.get('away_points_for_per_game'))
+            if home_pf is not None and away_pf is not None:
+                avg_total = home_pf + away_pf
+        if avg_total is None:
+            avg_allowed = _safe_float(payload.get('avg_points_allowed'))
+            if avg_allowed is not None:
+                avg_total = avg_allowed
+        if avg_total is None:
+            combined_delta = _safe_float(payload.get('combined_strength_delta'))
+            if combined_delta is not None:
+                avg_total = line_val + combined_delta
+        if avg_total is None:
+            return None
+
+        diff = avg_total - line_val
         if side == 'under':
-            return _clamp(1.0 - base_prob)
-        return base_prob
+            diff = -diff
+        if trend_boost:
+            diff += trend_boost * 1.2
+        return _logistic_probability(diff, scale=5.5)
 
     return None
 
@@ -3992,12 +4083,15 @@ def build_best_bets_per_game(
 
         if best_decimal is None:
             best_decimal = leg.get('d')
+        decimal_float = _safe_float(best_decimal)
+        if decimal_float is None or decimal_float <= 1:
+            continue
+        best_decimal = decimal_float
+
         if best_american is None and best_decimal is not None:
             best_american = decimal_to_american(best_decimal)
 
-        if best_decimal is None or best_decimal <= 1:
-            continue
-
+        market_implied_prob = None
         try:
             market_implied_prob = 1.0 / float(best_decimal)
         except Exception:
@@ -4019,7 +4113,7 @@ def build_best_bets_per_game(
             ai_prob_effective = _blend_probability(ai_prob_effective, theover_prob, 0.30)
 
         if sportsdata_prob is not None and abs(sportsdata_prob - ai_prob_effective) > 1e-3:
-            ai_prob_effective = _blend_probability(ai_prob_effective, sportsdata_prob, 0.25)
+            ai_prob_effective = _blend_probability(ai_prob_effective, sportsdata_prob, 0.35)
 
         ai_prob_effective = max(0.01, min(0.99, ai_prob_effective))
 
@@ -4033,7 +4127,39 @@ def build_best_bets_per_game(
             if market_implied_prob is not None
             else None
         )
-        best_edge = ai_ev if ai_ev is not None else ai_edge
+
+        sportsdata_delta = (
+            sportsdata_prob - market_implied_prob
+            if sportsdata_prob is not None and market_implied_prob is not None
+            else None
+        )
+        sportsdata_ev = (
+            ev_rate(sportsdata_prob, float(best_decimal))
+            if sportsdata_prob is not None
+            else None
+        )
+        theover_ev = (
+            ev_rate(theover_prob, float(best_decimal))
+            if theover_prob is not None
+            else None
+        )
+
+        edge_candidates: List[Tuple[str, float]] = []
+        if ai_ev is not None:
+            edge_candidates.append(("AI EV", ai_ev))
+        if sportsdata_ev is not None:
+            edge_candidates.append(("SportsData EV", sportsdata_ev))
+        if theover_ev is not None:
+            edge_candidates.append(("theover.ai EV", theover_ev))
+        if not edge_candidates and ai_edge is not None:
+            edge_candidates.append(("AI Edge", ai_edge))
+        if not edge_candidates and sportsdata_delta is not None:
+            edge_candidates.append(("SportsData Δ", sportsdata_delta))
+
+        best_edge = None
+        best_edge_source = None
+        if edge_candidates:
+            best_edge_source, best_edge = max(edge_candidates, key=lambda item: item[1])
 
         event_info = event_meta.get(event_id, {})
         league = event_info.get('league', format_sport_label(leg.get('sport_key')))
@@ -4080,11 +4206,14 @@ def build_best_bets_per_game(
             'theover_delta': leg.get('theover_probability_delta'),
             'theover_source': leg.get('theover_probability_source'),
             'sportsdata_probability': sportsdata_prob,
+            'sportsdata_delta': sportsdata_delta,
+            'sportsdata_ev': sportsdata_ev,
             'kalshi_prob': (leg.get('kalshi_validation') or {}).get('kalshi_prob'),
             'kalshi_delta': leg.get('kalshi_alignment_delta'),
             'kalshi_edge': leg.get('kalshi_edge'),
             'kalshi_verdict': (leg.get('kalshi_validation') or {}).get('validation'),
             'best_edge': best_edge,
+            'best_edge_source': best_edge_source,
             'commence_display': commence_display,
             'commence_sort': commence_sort,
             'commence_time': event_info.get('commence_time'),
@@ -4134,11 +4263,13 @@ def build_best_bets_per_game(
             'theover Δ pp': best_option['theover_delta'] * 100 if best_option['theover_delta'] is not None else None,
             'theover Source': best_option['theover_source'],
             'SportsData Prob %': best_option['sportsdata_probability'] * 100 if best_option['sportsdata_probability'] is not None else None,
+            'SportsData Δ pp': best_option['sportsdata_delta'] * 100 if best_option['sportsdata_delta'] is not None else None,
             'Kalshi Prob %': best_option['kalshi_prob'] * 100 if best_option['kalshi_prob'] is not None else None,
             'Kalshi Δ pp': best_option['kalshi_delta'] * 100 if best_option['kalshi_delta'] is not None else None,
             'Kalshi Edge %': best_option['kalshi_edge'] * 100 if best_option['kalshi_edge'] is not None else None,
             'Kalshi Verdict': best_option['kalshi_verdict'],
             'Best Edge %': best_option['best_edge'] * 100 if best_option['best_edge'] is not None else None,
+            'Best Edge Source': best_option['best_edge_source'],
             'Event ID': event_id,
             'Sport Key': best_option['sport_key'],
             'Commence (UTC)': best_option['commence_time'],
@@ -7119,6 +7250,7 @@ with main_tab1:
                     "theover.ai %",
                     "theover Δ pp",
                     "SportsData Prob %",
+                    "SportsData Δ pp",
                     "Kalshi Prob %",
                     "Kalshi Δ pp",
                     "Kalshi Edge %",
