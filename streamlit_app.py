@@ -1784,10 +1784,10 @@ class KalshiIntegrator:
 
     if leg_type == 'spread':
         point = _safe_float(leg.get('point'))
-            if point is None:
-                result['status'] = 'no_data'
-                result['reason'] = 'Spread point unavailable'
-            return result
+        if point is None:
+            result['status'] = 'no_data'
+            result['reason'] = 'Spread point unavailable'
+        return result
         if leg.get('side') == 'home':
             adjusted_home = home_score + point
             adjusted_away = away_score
