@@ -1780,24 +1780,22 @@ class KalshiIntegrator:
             "has_arbitrage": False,
         }
 
-        if sb_prob is None or kalshi_yes_price <= 0:
-            return result
+        if sb_prob is not None and kalshi_yes_price > 0:
+            discrepancy = abs(kalshi_yes_price - sb_prob)
+            edge = discrepancy
+            recommendation = "🟡 Prices aligned (no significant edge)"
 
-        discrepancy = abs(kalshi_yes_price - sb_prob)
-        edge = discrepancy
-        recommendation = "🟡 Prices aligned (no significant edge)"
+            if kalshi_yes_price < sb_prob - 0.05:
+                edge = sb_prob - kalshi_yes_price
+                recommendation = "🟢 BUY YES on Kalshi (underpriced vs sportsbook)"
+            elif kalshi_yes_price > sb_prob + 0.05:
+                edge = kalshi_yes_price - sb_prob
+                recommendation = "🟢 BUY NO on Kalshi (or take sportsbook)"
 
-        if kalshi_yes_price < sb_prob - 0.05:
-            edge = sb_prob - kalshi_yes_price
-            recommendation = "🟢 BUY YES on Kalshi (underpriced vs sportsbook)"
-        elif kalshi_yes_price > sb_prob + 0.05:
-            edge = kalshi_yes_price - sb_prob
-            recommendation = "🟢 BUY NO on Kalshi (or take sportsbook)"
-
-        result["discrepancy"] = discrepancy
-        result["edge"] = edge
-        result["recommendation"] = recommendation
-        result["has_arbitrage"] = discrepancy > 0.10
+            result["discrepancy"] = discrepancy
+            result["edge"] = edge
+            result["recommendation"] = recommendation
+            result["has_arbitrage"] = discrepancy > 0.10
 
         return result
     
@@ -3404,32 +3402,6 @@ def integrate_kalshi_into_leg(
         0.95
     )
 
-    if not kalshi_data.get('kalshi_available'):
-        return
-
-    original_ai_prob = leg_data.get('ai_prob', base_prob)
-    kalshi_prob = kalshi_data.get('kalshi_prob', base_prob)
-
-    blended_prob = (
-        original_ai_prob * 0.50 +  # AI model
-        kalshi_prob * 0.30 +       # Kalshi market
-        base_prob * 0.20           # Sportsbook baseline
-    )
-
-    alignment_delta = kalshi_prob - original_ai_prob
-
-    leg_data['ai_prob_before_kalshi'] = original_ai_prob
-    leg_data['ai_prob'] = blended_prob
-    leg_data['kalshi_influence'] = blended_prob - original_ai_prob
-    leg_data['kalshi_alignment_delta'] = alignment_delta
-    leg_data['kalshi_alignment_abs'] = abs(alignment_delta)
-    leg_data['kalshi_prob_raw'] = kalshi_prob
-    leg_data['kalshi_edge'] = kalshi_data.get('edge', 0)
-    leg_data['ai_confidence'] = min(
-        leg_data.get('ai_confidence', 0.5) + kalshi_data.get('confidence_boost', 0),
-        0.95
-    )
-
 # Helper to apply Kalshi validation to a betting leg in-place
 def integrate_kalshi_into_leg(
     leg_data: Dict[str, Any],
@@ -3609,6 +3581,113 @@ def integrate_kalshi_into_leg(
     )
 
     alignment_delta = kalshi_prob - original_ai_prob
+
+    leg_data['ai_prob_before_kalshi'] = original_ai_prob
+    leg_data['ai_prob'] = blended_prob
+    leg_data['kalshi_influence'] = blended_prob - original_ai_prob
+    leg_data['kalshi_alignment_delta'] = alignment_delta
+    leg_data['kalshi_alignment_abs'] = abs(alignment_delta)
+    leg_data['kalshi_prob_raw'] = kalshi_prob
+    leg_data['kalshi_edge'] = kalshi_data.get('edge', 0)
+    leg_data['ai_confidence'] = min(
+        leg_data.get('ai_confidence', 0.5) + kalshi_data.get('confidence_boost', 0),
+        0.95
+    )
+
+    if not kalshi_data.get('kalshi_available'):
+        return
+
+    original_ai_prob = leg_data.get('ai_prob', base_prob)
+    kalshi_prob = kalshi_data.get('kalshi_prob', base_prob)
+
+    blended_prob = (
+        original_ai_prob * 0.50 +  # AI model
+        kalshi_prob * 0.30 +       # Kalshi market
+        base_prob * 0.20           # Sportsbook baseline
+    )
+
+    alignment_delta = kalshi_prob - original_ai_prob
+
+    leg_data['ai_prob_before_kalshi'] = original_ai_prob
+    leg_data['ai_prob'] = blended_prob
+    leg_data['kalshi_influence'] = blended_prob - original_ai_prob
+    leg_data['kalshi_alignment_delta'] = alignment_delta
+    leg_data['kalshi_alignment_abs'] = abs(alignment_delta)
+    leg_data['kalshi_prob_raw'] = kalshi_prob
+    leg_data['kalshi_edge'] = kalshi_data.get('edge', 0)
+    leg_data['ai_confidence'] = min(
+        leg_data.get('ai_confidence', 0.5) + kalshi_data.get('confidence_boost', 0),
+        0.95
+    )
+
+# Helper to apply Kalshi validation to a betting leg in-place
+def integrate_kalshi_into_leg(
+    leg_data: Dict[str, Any],
+    home_team: str,
+    away_team: str,
+    side: str,
+    base_prob: float,
+    sport: str,
+    use_kalshi: bool,
+) -> None:
+    """Mutate a leg dictionary with Kalshi validation + probability blending."""
+
+    # Ensure downstream code sees the reason when Kalshi is not active
+    if not use_kalshi:
+        leg_data.setdefault('kalshi_validation', {
+            'kalshi_available': False,
+            'validation': 'disabled',
+            'edge': 0,
+            'confidence_boost': 0,
+            'market_scope': 'disabled',
+            'data_source': 'disabled'
+        })
+        return
+
+    kalshi = None
+    try:
+        kalshi = st.session_state.get('kalshi_integrator')
+    except Exception:
+        # When Streamlit session state isn't available (e.g. testing), skip gracefully
+        pass
+
+    if not kalshi:
+        leg_data['kalshi_validation'] = {
+            'kalshi_available': False,
+            'validation': 'unavailable',
+            'edge': 0,
+            'confidence_boost': 0,
+            'market_scope': 'not_initialized',
+            'data_source': 'unavailable'
+        }
+        return
+
+    try:
+        kalshi_data = validate_with_kalshi(kalshi, home_team, away_team, side, base_prob, sport)
+    except Exception:
+        leg_data['kalshi_validation'] = {
+            'kalshi_available': False,
+            'validation': 'error',
+            'edge': 0,
+            'confidence_boost': 0,
+            'market_scope': 'error',
+            'data_source': 'error'
+        }
+        return
+
+    leg_data['kalshi_validation'] = kalshi_data
+
+    if not kalshi_data.get('kalshi_available'):
+        return
+
+    original_ai_prob = leg_data.get('ai_prob', base_prob)
+    kalshi_prob = kalshi_data.get('kalshi_prob', base_prob)
+
+    blended_prob = (
+        original_ai_prob * 0.50 +  # AI model
+        kalshi_prob * 0.30 +       # Kalshi market
+        base_prob * 0.20           # Sportsbook baseline
+    )
 
 def _odds_api_base():
     return "https://api.the-odds-api.com"
@@ -3843,6 +3922,330 @@ def fetch_oddsapi_snapshot(api_key: str, sport_key: str) -> Dict[str, Any]:
         )
     return {"events": events}
 
+
+def convert_american_to_decimal(odds: Any) -> Optional[float]:
+    """Convert American odds to decimal odds with safety guards."""
+
+    try:
+        decimal = american_to_decimal_safe(odds)
+        if decimal is None:
+            return None
+        return float(decimal)
+    except Exception:
+        return None
+
+
+def filter_events_by_date_range(
+    events: Optional[List[Dict[str, Any]]],
+    start_date: Optional[datetime.date],
+    end_date: Optional[datetime.date],
+    tz_name: str = "UTC",
+) -> List[Dict[str, Any]]:
+    """Return events whose commence_time falls between the provided dates."""
+
+    if events is None:
+        return []
+
+    if start_date and end_date and start_date > end_date:
+        start_date, end_date = end_date, start_date
+
+    try:
+        tz_info = pytz.timezone(tz_name)
+    except Exception:
+        tz_info = pytz.timezone("UTC")
+
+    filtered: List[Dict[str, Any]] = []
+    for event in events:
+        commence = event.get("commence_time")
+        if not commence:
+            continue
+
+        ts = pd.to_datetime(commence, utc=True, errors="coerce")
+        if pd.isna(ts):
+            continue
+
+        local_ts = ts.tz_convert(tz_info)
+        event_date = local_ts.date()
+
+        if start_date and event_date < start_date:
+            continue
+        if end_date and event_date > end_date:
+            continue
+
+        event_copy = dict(event)
+        event_copy["event_date"] = event_date
+        event_copy["commence_local"] = local_ts
+        filtered.append(event_copy)
+
+    return filtered
+
+
+def compute_best_overall_odds(
+    events: Optional[List[Dict[str, Any]]],
+    tz_name: str = "UTC",
+) -> pd.DataFrame:
+    """Calculate the best available odds per game/side across bookmakers."""
+
+    if not events:
+        return pd.DataFrame(
+            columns=
+            [
+                "event_id",
+                "league",
+                "event_date",
+                "home_team",
+                "away_team",
+                "market",
+                "side",
+                "line",
+                "bookmaker",
+                "american_odds",
+                "decimal_odds",
+            ]
+        )
+
+    try:
+        tz_info = pytz.timezone(tz_name)
+    except Exception:
+        tz_info = pytz.timezone("UTC")
+
+    records: List[Dict[str, Any]] = []
+
+    for event in events:
+        event_id = event.get("id")
+        home = event.get("home_team")
+        away = event.get("away_team")
+        if not (event_id and home and away):
+            continue
+
+        league = event.get("league") or format_sport_label(event.get("sport_key"))
+        event_date = event.get("event_date")
+        if event_date is None:
+            commence = event.get("commence_time")
+            ts = pd.to_datetime(commence, utc=True, errors="coerce")
+            if not pd.isna(ts):
+                event_date = ts.tz_convert(tz_info).date()
+
+        bookmakers = event.get("bookmakers") or []
+        for bookmaker in bookmakers:
+            book_name = bookmaker.get("title") or bookmaker.get("key") or "Unknown"
+            for market in bookmaker.get("markets") or []:
+                market_key = (market.get("key") or "").lower()
+                if market_key not in {"h2h", "spreads", "totals"}:
+                    continue
+
+                outcomes = market.get("outcomes") or []
+                for outcome in outcomes:
+                    price = outcome.get("price")
+                    decimal_odds = convert_american_to_decimal(price)
+                    if decimal_odds is None:
+                        continue
+
+                    market_label = {
+                        "h2h": "Moneyline",
+                        "spreads": "Spread",
+                        "totals": "Total",
+                    }[market_key]
+
+                    side = None
+                    line_value: Optional[float] = None
+                    name = outcome.get("name")
+
+                    if market_key == "h2h":
+                        if _names_match(name, home):
+                            side = "home"
+                        elif _names_match(name, away):
+                            side = "away"
+                        else:
+                            continue
+                    elif market_key == "spreads":
+                        if _names_match(name, home):
+                            side = "home"
+                        elif _names_match(name, away):
+                            side = "away"
+                        else:
+                            continue
+                        line_value = _safe_float(outcome.get("point"))
+                    elif market_key == "totals":
+                        side = (name or "").strip().lower()
+                        if side not in {"over", "under"}:
+                            continue
+                        line_value = _safe_float(outcome.get("point"))
+
+                    records.append(
+                        {
+                            "event_id": event_id,
+                            "league": league,
+                            "event_date": event_date,
+                            "home_team": home,
+                            "away_team": away,
+                            "market": market_label,
+                            "side": side,
+                            "line": line_value if market_key != "h2h" else None,
+                            "bookmaker": book_name,
+                            "american_odds": price,
+                            "decimal_odds": decimal_odds,
+                        }
+                    )
+
+    if not records:
+        return pd.DataFrame(
+            columns=
+            [
+                "event_id",
+                "league",
+                "event_date",
+                "home_team",
+                "away_team",
+                "market",
+                "side",
+                "line",
+                "bookmaker",
+                "american_odds",
+                "decimal_odds",
+            ]
+        )
+
+    df = pd.DataFrame(records)
+    if df.empty:
+        return df
+
+    df["decimal_odds"] = pd.to_numeric(df["decimal_odds"], errors="coerce")
+    df["american_odds"] = pd.to_numeric(df["american_odds"], errors="coerce")
+    df = df.dropna(subset=["decimal_odds"])
+    if df.empty:
+        return df
+
+    def _normalize_line_value(row: pd.Series) -> Optional[float]:
+        """Convert spread/total lines to a comparable float if possible."""
+
+        market = row.get("market")
+        if market not in {"Spread", "Total"}:
+            return None
+
+        raw_line = row.get("line")
+        if raw_line is None or (isinstance(raw_line, float) and pd.isna(raw_line)):
+            return None
+
+        try:
+            if isinstance(raw_line, (int, float)):
+                return round(float(raw_line), 3)
+
+            text = str(raw_line).strip()
+            if not text:
+                return None
+
+            lowered = text.lower()
+            if lowered in {"pk", "pick", "pick'em", "pickem"}:
+                return 0.0
+
+            cleaned = (
+                text.replace("½", ".5")
+                .replace("–", "-")
+                .replace("—", "-")
+                .replace("−", "-")
+            )
+            return round(float(cleaned), 3)
+        except Exception:
+            return None
+
+    df["line_key"] = df.apply(_normalize_line_value, axis=1)
+
+    sort_cols = ["decimal_odds", "bookmaker"]
+    df_sorted = df.sort_values(sort_cols, ascending=[False, True])
+    group_cols = [
+        "event_id",
+        "league",
+        "event_date",
+        "home_team",
+        "away_team",
+        "market",
+        "side",
+        "line_key",
+    ]
+
+    best = df_sorted.groupby(group_cols, as_index=False).first()
+    if "line" in best.columns:
+        best.drop(columns=["line"], inplace=True)
+    best.rename(columns={"line_key": "line"}, inplace=True)
+    best.sort_values(["event_date", "league", "event_id", "market", "side"], inplace=True)
+
+    column_order = [
+        "event_id",
+        "league",
+        "event_date",
+        "home_team",
+        "away_team",
+        "market",
+        "side",
+        "line",
+        "bookmaker",
+        "american_odds",
+        "decimal_odds",
+    ]
+
+    for col in column_order:
+        if col not in best.columns:
+            best[col] = None
+
+    return best[column_order]
+
+
+def build_best_odds_report(
+    api_key: str,
+    sport_keys: List[str],
+    start_date: Optional[date],
+    end_date: Optional[date],
+    tz_name: str,
+) -> pd.DataFrame:
+    """Fetch odds snapshots and return the best book per market across sports."""
+
+    aggregated_events: List[Dict[str, Any]] = []
+    for sport in sport_keys:
+        snapshot = fetch_oddsapi_snapshot(api_key, sport)
+        events = snapshot.get("events", [])
+        if not events:
+            continue
+
+        filtered = filter_events_by_date_range(events, start_date, end_date, tz_name)
+        aggregated_events.extend(filtered)
+
+    return compute_best_overall_odds(aggregated_events, tz_name)
+
+def calculate_profit(decimal_odds: float, stake: float = 100) -> float:
+    return (decimal_odds - 1.0) * stake
+
+
+def decimal_to_american(decimal_odds: Optional[float]) -> Optional[int]:
+    """Convert decimal odds back to American format for display."""
+
+    try:
+        if decimal_odds is None:
+            return None
+        dec = float(decimal_odds)
+        if dec <= 1.0:
+            return None
+        if dec >= 2.0:
+            return int(round((dec - 1.0) * 100))
+        return int(round(-100 / (dec - 1.0)))
+    except Exception:
+        return None
+
+
+def _blend_probability(base: float, new_value: float, weight: float) -> float:
+    """Blend two probability estimates using the provided weight."""
+
+    weight = max(0.0, min(weight, 1.0))
+    return max(0.0, min(1.0, base * (1 - weight) + new_value * weight))
+
+
+def _record_pct_from_text(record: Any) -> Optional[float]:
+    if not record:
+        return None
+    tokens = [tok for tok in re.split(r"[^0-9]", str(record)) if tok]
+    if not tokens:
+        return None
+    try:
 
 def convert_american_to_decimal(odds: Any) -> Optional[float]:
     """Convert American odds to decimal odds with safety guards."""
@@ -5783,6 +6186,195 @@ def _match_theover_total_leg(leg: Dict[str, Any], entry: Dict[str, Any]) -> Opti
     if not payload or payload.get('prob') is None:
         return None
 
+        return None
+
+    try:
+        df.columns = [c.strip().lower().replace(' ', '_') for c in df.columns]
+    except Exception:
+        return None
+
+    records: List[Dict[str, Any]] = []
+    explicit_market = (market_hint or '').lower() or None
+
+    for idx, row in df.iterrows():
+        league_raw = str(row.get('league', row.get('sport', ''))).strip()
+        home_raw = str(row.get('home_team', row.get('hometeam', row.get('home', '')))).strip()
+        away_raw = str(row.get('away_team', row.get('awayteam', row.get('away', '')))).strip()
+        if not (home_raw and away_raw):
+            continue
+
+        entry, swapped = _resolve_theover_entry(records, league_raw, home_raw, away_raw)
+        market_type = _infer_theover_market(row, explicit_market)
+
+        if market_type == 'spread':
+            _ingest_theover_spread_row(entry, row, swapped, idx, home_raw, away_raw)
+        elif market_type == 'total':
+            _ingest_theover_total_row(entry, row, idx)
+        else:
+            _ingest_theover_ml_row(entry, row, swapped, idx, home_raw, away_raw)
+
+    return {
+        '_prepared_theover': True,
+        'dataframe': df,
+        'records': records,
+        'market_type': explicit_market,
+    }
+
+
+def _format_theover_source(source: Optional[str]) -> str:
+    if not source:
+        return 'model output'
+
+    source_norm = source.lower()
+    if source_norm.startswith('moneyline:'):
+        return 'moneyline odds'
+    if 'moneyline' in source_norm:
+        return 'moneyline odds'
+    if 'model' in source_norm or 'win_prob' in source_norm:
+        return 'model output'
+    if 'prob' in source_norm:
+        return 'model output'
+    return source.replace('_', ' ')
+
+
+def _match_theover_ml_leg(leg: Dict[str, Any], entry: Dict[str, Any], swapped: bool) -> Optional[Dict[str, Any]]:
+    section = entry.get('ml') or {}
+    side = (leg.get('side') or '').lower()
+    leg_team = leg.get('team')
+    if side not in {'home', 'away'}:
+        if leg_team and _names_match(leg_team, entry.get('home')):
+            side = 'home'
+        elif leg_team and _names_match(leg_team, entry.get('away')):
+            side = 'away'
+    mapped_side = _map_side(side or 'home', swapped)
+    payload = section.get(mapped_side)
+    if not payload or payload.get('prob') is None:
+        return None
+
+    probability = payload.get('prob')
+    home_payload = section.get('home')
+    away_payload = section.get('away')
+    entry_home_name = entry.get('home')
+    entry_away_name = entry.get('away')
+    if swapped:
+        home_prob_val = away_payload.get('prob') if isinstance(away_payload, dict) else None
+        away_prob_val = home_payload.get('prob') if isinstance(home_payload, dict) else None
+        entry_home_name, entry_away_name = entry_away_name, entry_home_name
+    else:
+        home_prob_val = home_payload.get('prob') if isinstance(home_payload, dict) else None
+        away_prob_val = away_payload.get('prob') if isinstance(away_payload, dict) else None
+
+    predicted_team = None
+    matches = None
+    if home_prob_val is not None and away_prob_val is not None:
+        if home_prob_val > away_prob_val:
+            predicted_team = entry_home_name
+            matches = _names_match(leg_team, entry_home_name)
+        elif away_prob_val > home_prob_val:
+            predicted_team = entry_away_name
+            matches = _names_match(leg_team, entry_away_name)
+        else:
+            matches = None
+    elif leg_team:
+        target_name = entry_home_name if (side or 'home') == 'home' else entry_away_name
+        matches = _names_match(leg_team, target_name)
+
+    signal = '🎯'
+    if matches is True:
+        signal = '✅'
+    elif matches is False:
+        signal = '⚠️'
+
+    return {
+        'pick': leg_team or predicted_team or entry_home_name,
+        'matches': matches,
+        'signal': signal,
+        'league': entry.get('league'),
+        'model_probability': probability,
+        'probability_source': payload.get('source'),
+        'moneyline_odds': payload.get('moneyline'),
+        'predicted_team': predicted_team,
+        'row_index': payload.get('row_index'),
+    }
+
+
+def _match_theover_spread_leg(leg: Dict[str, Any], entry: Dict[str, Any], swapped: bool) -> Optional[Dict[str, Any]]:
+    section = entry.get('spreads') or {}
+    target_line = _safe_float(leg.get('point'))
+    line_key, bucket = _find_line_bucket(section, target_line)
+    if bucket is None:
+        return None
+
+    side = (leg.get('side') or '').lower()
+    if side not in {'home', 'away'}:
+        team = leg.get('team')
+        if team and _names_match(team, entry.get('home')):
+            side = 'home'
+        elif team and _names_match(team, entry.get('away')):
+            side = 'away'
+    mapped_side = _map_side(side, swapped)
+    payload = bucket.get(mapped_side)
+    if not payload or payload.get('prob') is None:
+        return None
+
+    probability = payload.get('prob')
+    home_payload = bucket.get('home')
+    away_payload = bucket.get('away')
+    if swapped:
+        home_prob_val = away_payload.get('prob') if isinstance(away_payload, dict) else None
+        away_prob_val = home_payload.get('prob') if isinstance(home_payload, dict) else None
+    else:
+        home_prob_val = home_payload.get('prob') if isinstance(home_payload, dict) else None
+        away_prob_val = away_payload.get('prob') if isinstance(away_payload, dict) else None
+
+    recommended_side = None
+    if home_prob_val is not None and away_prob_val is not None:
+        if home_prob_val > away_prob_val:
+            recommended_side = 'home'
+        elif away_prob_val > home_prob_val:
+            recommended_side = 'away'
+
+    matches = None
+    if recommended_side is not None:
+        matches = (side == recommended_side)
+
+    signal = '🎯'
+    if matches is True:
+        signal = '✅'
+    elif matches is False:
+        signal = '⚠️'
+
+    return {
+        'pick': leg.get('team'),
+        'matches': matches,
+        'signal': signal,
+        'league': entry.get('league'),
+        'model_probability': probability,
+        'probability_source': payload.get('source'),
+        'predicted_team': entry.get('home') if recommended_side == 'home' else (entry.get('away') if recommended_side == 'away' else None),
+        'spread_line': payload.get('line') if payload.get('line') is not None else target_line,
+        'row_index': payload.get('row_index'),
+    }
+
+
+def _match_theover_total_leg(leg: Dict[str, Any], entry: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    section = entry.get('totals') or {}
+    target_line = _safe_float(leg.get('point'))
+    line_key, bucket = _find_line_bucket(section, target_line)
+    if bucket is None:
+        return None
+
+    direction = (leg.get('side') or '').strip().lower()
+    if direction not in {'over', 'under'}:
+        label_lower = (leg.get('label') or '').lower()
+        if 'over' in label_lower:
+            direction = 'over'
+        elif 'under' in label_lower:
+            direction = 'under'
+    payload = bucket.get(direction)
+    if not payload or payload.get('prob') is None:
+        return None
+
     probability = payload.get('prob')
     over_payload = bucket.get('over')
     under_payload = bucket.get('under')
@@ -7113,6 +7705,19 @@ def render_parlay_section_ai(
                     else:
                         alignment_display = "—"
 
+
+                    ml_prob_pre = leg.get('ai_prob_before_kalshi')
+                    if isinstance(ml_prob_pre, (int, float)):
+                        ml_prob_display = f"{ml_prob_pre*100:.1f}%"
+                    else:
+                        ml_prob_display = leg.get('ai_pre_prob_display', "—")
+
+                    alignment_delta = leg.get('kalshi_alignment_delta')
+                    if isinstance(alignment_delta, (int, float)):
+                        alignment_display = f"{alignment_delta*100:+.1f}pp"
+                    else:
+                        alignment_display = "—"
+
                     kalshi_details.append({
                         'Leg': j,
                         'Pick': leg.get('team', 'N/A'),
@@ -7179,6 +7784,12 @@ def render_parlay_section_ai(
                     st.warning("🟠 **NEUTRAL VALIDATION** - Kalshi shows mixed signals. Proceed with caution.")
                 else:
                     st.error("🔴 **KALSHI DISAGREES** - Prediction market contradicts this parlay. Consider skipping or investigating further.")
+                
+                if total_kalshi_edge > 0.10:
+                    st.success(f"💰 **VALUE DETECTED**: Kalshi shows {total_kalshi_edge*100:.1f}% additional edge! This parlay may be underpriced by sportsbooks.")
+                elif total_kalshi_edge < -0.10:
+                    st.warning(f"⚠️ **OVERPRICED WARNING**: Kalshi thinks this parlay is overpriced. Sportsbooks may be offering poor value.")
+                
                 
                 if total_kalshi_edge > 0.10:
                     st.success(f"💰 **VALUE DETECTED**: Kalshi shows {total_kalshi_edge*100:.1f}% additional edge! This parlay may be underpriced by sportsbooks.")
