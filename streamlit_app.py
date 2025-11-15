@@ -1785,22 +1785,24 @@ class KalshiIntegrator:
             "has_arbitrage": False,
         }
 
-        if sb_prob is not None and kalshi_yes_price > 0:
-            discrepancy = abs(kalshi_yes_price - sb_prob)
-            edge = discrepancy
-            recommendation = "🟡 Prices aligned (no significant edge)"
+        if sb_prob is None or kalshi_yes_price <= 0:
+            return result
 
-            if kalshi_yes_price < sb_prob - 0.05:
-                edge = sb_prob - kalshi_yes_price
-                recommendation = "🟢 BUY YES on Kalshi (underpriced vs sportsbook)"
-            elif kalshi_yes_price > sb_prob + 0.05:
-                edge = kalshi_yes_price - sb_prob
-                recommendation = "🟢 BUY NO on Kalshi (or take sportsbook)"
+        discrepancy = abs(kalshi_yes_price - sb_prob)
+        edge = discrepancy
+        recommendation = "🟡 Prices aligned (no significant edge)"
 
-            result["discrepancy"] = discrepancy
-            result["edge"] = edge
-            result["recommendation"] = recommendation
-            result["has_arbitrage"] = discrepancy > 0.10
+        if kalshi_yes_price < sb_prob - 0.05:
+            edge = sb_prob - kalshi_yes_price
+            recommendation = "🟢 BUY YES on Kalshi (underpriced vs sportsbook)"
+        elif kalshi_yes_price > sb_prob + 0.05:
+            edge = kalshi_yes_price - sb_prob
+            recommendation = "🟢 BUY NO on Kalshi (or take sportsbook)"
+
+        result["discrepancy"] = discrepancy
+        result["edge"] = edge
+        result["recommendation"] = recommendation
+        result["has_arbitrage"] = discrepancy > 0.10
 
         return result
     
@@ -3407,6 +3409,34 @@ def integrate_kalshi_into_leg(
         0.95
     )
 
+    leg_data['kalshi_validation'] = kalshi_data
+
+    if not kalshi_data.get('kalshi_available'):
+        return
+
+    original_ai_prob = leg_data.get('ai_prob', base_prob)
+    kalshi_prob = kalshi_data.get('kalshi_prob', base_prob)
+
+    blended_prob = (
+        original_ai_prob * 0.50 +  # AI model
+        kalshi_prob * 0.30 +       # Kalshi market
+        base_prob * 0.20           # Sportsbook baseline
+    )
+
+    alignment_delta = kalshi_prob - original_ai_prob
+
+    leg_data['ai_prob_before_kalshi'] = original_ai_prob
+    leg_data['ai_prob'] = blended_prob
+    leg_data['kalshi_influence'] = blended_prob - original_ai_prob
+    leg_data['kalshi_alignment_delta'] = alignment_delta
+    leg_data['kalshi_alignment_abs'] = abs(alignment_delta)
+    leg_data['kalshi_prob_raw'] = kalshi_prob
+    leg_data['kalshi_edge'] = kalshi_data.get('edge', 0)
+    leg_data['ai_confidence'] = min(
+        leg_data.get('ai_confidence', 0.5) + kalshi_data.get('confidence_boost', 0),
+        0.95
+    )
+
 # Helper to apply Kalshi validation to a betting leg in-place
 def integrate_kalshi_into_leg(
     leg_data: Dict[str, Any],
@@ -3515,61 +3545,6 @@ def integrate_kalshi_into_leg(
         leg_data.get('ai_confidence', 0.5) + kalshi_data.get('confidence_boost', 0),
         0.95
     )
-
-# Helper to apply Kalshi validation to a betting leg in-place
-def integrate_kalshi_into_leg(
-    leg_data: Dict[str, Any],
-    home_team: str,
-    away_team: str,
-    side: str,
-    base_prob: float,
-    sport: str,
-    use_kalshi: bool,
-) -> None:
-    """Mutate a leg dictionary with Kalshi validation + probability blending."""
-
-    # Ensure downstream code sees the reason when Kalshi is not active
-    if not use_kalshi:
-        leg_data.setdefault('kalshi_validation', {
-            'kalshi_available': False,
-            'validation': 'disabled',
-            'edge': 0,
-            'confidence_boost': 0,
-            'market_scope': 'disabled',
-            'data_source': 'disabled'
-        })
-        return
-
-    kalshi = None
-    try:
-        kalshi = st.session_state.get('kalshi_integrator')
-    except Exception:
-        # When Streamlit session state isn't available (e.g. testing), skip gracefully
-        pass
-
-    if not kalshi:
-        leg_data['kalshi_validation'] = {
-            'kalshi_available': False,
-            'validation': 'unavailable',
-            'edge': 0,
-            'confidence_boost': 0,
-            'market_scope': 'not_initialized',
-            'data_source': 'unavailable'
-        }
-        return
-
-    try:
-        kalshi_data = validate_with_kalshi(kalshi, home_team, away_team, side, base_prob, sport)
-    except Exception:
-        leg_data['kalshi_validation'] = {
-            'kalshi_available': False,
-            'validation': 'error',
-            'edge': 0,
-            'confidence_boost': 0,
-            'market_scope': 'error',
-            'data_source': 'error'
-        }
-        return
 
 def _odds_api_base():
     return "https://api.the-odds-api.com"
