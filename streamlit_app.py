@@ -3292,12 +3292,40 @@ def compute_best_overall_odds(
     if df.empty:
         return df
 
-    df["line_key"] = df.apply(
-        lambda row: round(float(row["line"]), 3)
-        if row["market"] in {"Spread", "Total"} and row["line"] is not None
-        else None,
-        axis=1,
-    )
+    def _normalize_line_value(row: pd.Series) -> Optional[float]:
+        """Convert spread/total lines to a comparable float if possible."""
+
+        market = row.get("market")
+        if market not in {"Spread", "Total"}:
+            return None
+
+        raw_line = row.get("line")
+        if raw_line is None or (isinstance(raw_line, float) and pd.isna(raw_line)):
+            return None
+
+        try:
+            if isinstance(raw_line, (int, float)):
+                return round(float(raw_line), 3)
+
+            text = str(raw_line).strip()
+            if not text:
+                return None
+
+            lowered = text.lower()
+            if lowered in {"pk", "pick", "pick'em", "pickem"}:
+                return 0.0
+
+            cleaned = (
+                text.replace("½", ".5")
+                .replace("–", "-")
+                .replace("—", "-")
+                .replace("−", "-")
+            )
+            return round(float(cleaned), 3)
+        except Exception:
+            return None
+
+    df["line_key"] = df.apply(_normalize_line_value, axis=1)
 
     sort_cols = ["decimal_odds", "bookmaker"]
     df_sorted = df.sort_values(sort_cols, ascending=[False, True])
