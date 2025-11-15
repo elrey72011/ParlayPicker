@@ -7607,7 +7607,7 @@ def compute_best_overall_odds(
             text = str(raw_line).strip()
             if not text:
                 return None
-0
+
             lowered = text.lower()
             if lowered in {"pk", "pick", "pick'em", "pickem"}:
                 return 0.0
