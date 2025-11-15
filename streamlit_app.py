@@ -2768,8 +2768,6 @@ class AIOptimizer:
             'sportsdata_sports': sorted(sportsdata_sports),
         }
 
-    status_text = _status_text(matched_game.get('status'))
-    result['game_status'] = status_text
 
 class KalshiIntegrator:
     """Integrates Kalshi prediction market odds and analysis"""
