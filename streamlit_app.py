@@ -1768,8 +1768,6 @@ class KalshiIntegrator:
         """Compare Kalshi prediction prices with a sportsbook listing."""
 
         kalshi_yes_price = (kalshi_market.get("yes_bid") or 0) / 100.0
-        kalshi_no_price = (kalshi_market.get("no_bid") or 0) / 100.0
-
         sb_odds = sportsbook_odds.get("price") if sportsbook_odds else None
         sb_prob = implied_p_from_american(sb_odds) if sb_odds else None
 
@@ -1782,27 +1780,24 @@ class KalshiIntegrator:
             "has_arbitrage": False,
         }
 
-        if sb_prob is not None and kalshi_yes_price:
-            discrepancy = abs(kalshi_yes_price - sb_prob)
+        if sb_prob is None or kalshi_yes_price <= 0:
+            return result
 
-            if kalshi_yes_price < sb_prob - 0.05:
-                recommendation = "🟢 BUY YES on Kalshi (underpriced vs sportsbook)"
-                edge = sb_prob - kalshi_yes_price
-            elif kalshi_yes_price > sb_prob + 0.05:
-                recommendation = "🟢 BUY NO on Kalshi (or take sportsbook)"
-                edge = kalshi_yes_price - sb_prob
-            else:
-                recommendation = "🟡 Prices aligned (no significant edge)"
-                edge = discrepancy
+        discrepancy = abs(kalshi_yes_price - sb_prob)
+        edge = discrepancy
+        recommendation = "🟡 Prices aligned (no significant edge)"
 
-            result.update(
-                {
-                    "discrepancy": discrepancy,
-                    "edge": edge,
-                    "recommendation": recommendation,
-                    "has_arbitrage": discrepancy > 0.10,
-                }
-            )
+        if kalshi_yes_price < sb_prob - 0.05:
+            edge = sb_prob - kalshi_yes_price
+            recommendation = "🟢 BUY YES on Kalshi (underpriced vs sportsbook)"
+        elif kalshi_yes_price > sb_prob + 0.05:
+            edge = kalshi_yes_price - sb_prob
+            recommendation = "🟢 BUY NO on Kalshi (or take sportsbook)"
+
+        result["discrepancy"] = discrepancy
+        result["edge"] = edge
+        result["recommendation"] = recommendation
+        result["has_arbitrage"] = discrepancy > 0.10
 
         return result
     
@@ -3409,89 +3404,6 @@ def integrate_kalshi_into_leg(
         0.95
     )
 
-# Helper to apply Kalshi validation to a betting leg in-place
-def integrate_kalshi_into_leg(
-    leg_data: Dict[str, Any],
-    home_team: str,
-    away_team: str,
-    side: str,
-    base_prob: float,
-    sport: str,
-    use_kalshi: bool,
-) -> None:
-    """Mutate a leg dictionary with Kalshi validation + probability blending."""
-
-    # Ensure downstream code sees the reason when Kalshi is not active
-    if not use_kalshi:
-        leg_data.setdefault('kalshi_validation', {
-            'kalshi_available': False,
-            'validation': 'disabled',
-            'edge': 0,
-            'confidence_boost': 0,
-            'market_scope': 'disabled',
-            'data_source': 'disabled'
-        })
-        return
-
-    kalshi = None
-    try:
-        kalshi = st.session_state.get('kalshi_integrator')
-    except Exception:
-        # When Streamlit session state isn't available (e.g. testing), skip gracefully
-        pass
-
-    if not kalshi:
-        leg_data['kalshi_validation'] = {
-            'kalshi_available': False,
-            'validation': 'unavailable',
-            'edge': 0,
-            'confidence_boost': 0,
-            'market_scope': 'not_initialized',
-            'data_source': 'unavailable'
-        }
-        return
-
-    try:
-        kalshi_data = validate_with_kalshi(kalshi, home_team, away_team, side, base_prob, sport)
-    except Exception:
-        leg_data['kalshi_validation'] = {
-            'kalshi_available': False,
-            'validation': 'error',
-            'edge': 0,
-            'confidence_boost': 0,
-            'market_scope': 'error',
-            'data_source': 'error'
-        }
-        return
-
-    leg_data['kalshi_validation'] = kalshi_data
-
-    if not kalshi_data.get('kalshi_available'):
-        return
-
-    original_ai_prob = leg_data.get('ai_prob', base_prob)
-    kalshi_prob = kalshi_data.get('kalshi_prob', base_prob)
-
-    blended_prob = (
-        original_ai_prob * 0.50 +  # AI model
-        kalshi_prob * 0.30 +       # Kalshi market
-        base_prob * 0.20           # Sportsbook baseline
-    )
-
-    alignment_delta = kalshi_prob - original_ai_prob
-
-    leg_data['ai_prob_before_kalshi'] = original_ai_prob
-    leg_data['ai_prob'] = blended_prob
-    leg_data['kalshi_influence'] = blended_prob - original_ai_prob
-    leg_data['kalshi_alignment_delta'] = alignment_delta
-    leg_data['kalshi_alignment_abs'] = abs(alignment_delta)
-    leg_data['kalshi_prob_raw'] = kalshi_prob
-    leg_data['kalshi_edge'] = kalshi_data.get('edge', 0)
-    leg_data['ai_confidence'] = min(
-        leg_data.get('ai_confidence', 0.5) + kalshi_data.get('confidence_boost', 0),
-        0.95
-    )
-
     if not kalshi_data.get('kalshi_available'):
         return
 
@@ -3601,50 +3513,102 @@ def integrate_kalshi_into_leg(
         0.95
     )
 
-    # --------------------- Time & sport filters ---------------------
-    sidebar.subheader("📅 Filters")
-    default_tz_name = st.session_state.get('user_timezone', 'America/New_York')
-    tz_input = sidebar.text_input(
-        "Timezone (IANA)",
-        value=default_tz_name,
-        help="Controls how kickoff times and date filters are interpreted.",
-    ).strip() or default_tz_name
+    if not kalshi_data.get('kalshi_available'):
+        return
+
+    original_ai_prob = leg_data.get('ai_prob', base_prob)
+    kalshi_prob = kalshi_data.get('kalshi_prob', base_prob)
+
+    blended_prob = (
+        original_ai_prob * 0.50 +  # AI model
+        kalshi_prob * 0.30 +       # Kalshi market
+        base_prob * 0.20           # Sportsbook baseline
+    )
+
+    alignment_delta = kalshi_prob - original_ai_prob
+
+    leg_data['ai_prob_before_kalshi'] = original_ai_prob
+    leg_data['ai_prob'] = blended_prob
+    leg_data['kalshi_influence'] = blended_prob - original_ai_prob
+    leg_data['kalshi_alignment_delta'] = alignment_delta
+    leg_data['kalshi_alignment_abs'] = abs(alignment_delta)
+    leg_data['kalshi_prob_raw'] = kalshi_prob
+    leg_data['kalshi_edge'] = kalshi_data.get('edge', 0)
+    leg_data['ai_confidence'] = min(
+        leg_data.get('ai_confidence', 0.5) + kalshi_data.get('confidence_boost', 0),
+        0.95
+    )
+
+# Helper to apply Kalshi validation to a betting leg in-place
+def integrate_kalshi_into_leg(
+    leg_data: Dict[str, Any],
+    home_team: str,
+    away_team: str,
+    side: str,
+    base_prob: float,
+    sport: str,
+    use_kalshi: bool,
+) -> None:
+    """Mutate a leg dictionary with Kalshi validation + probability blending."""
+
+    # Ensure downstream code sees the reason when Kalshi is not active
+    if not use_kalshi:
+        leg_data.setdefault('kalshi_validation', {
+            'kalshi_available': False,
+            'validation': 'disabled',
+            'edge': 0,
+            'confidence_boost': 0,
+            'market_scope': 'disabled',
+            'data_source': 'disabled'
+        })
+        return
+
+    kalshi = None
     try:
-        tz_obj = pytz.timezone(tz_input)
-        tz_name = getattr(tz_obj, 'zone', tz_input) or tz_input
+        kalshi = st.session_state.get('kalshi_integrator')
     except Exception:
-        tz_obj = pytz.timezone('UTC')
-        tz_name = 'UTC'
-        sidebar.warning("Invalid timezone entered. Defaulting to UTC.")
-    st.session_state['user_timezone'] = tz_name
+        # When Streamlit session state isn't available (e.g. testing), skip gracefully
+        pass
 
-    default_date = st.session_state.get('selected_date')
-    if not default_date:
-        default_date = datetime.now(tz_obj).date()
-    sel_date = sidebar.date_input(
-        "Focus date",
-        value=default_date,
-        help="Only bets within the selected window around this date are shown.",
-    )
-    st.session_state['selected_date'] = sel_date
+    if not kalshi:
+        leg_data['kalshi_validation'] = {
+            'kalshi_available': False,
+            'validation': 'unavailable',
+            'edge': 0,
+            'confidence_boost': 0,
+            'market_scope': 'not_initialized',
+            'data_source': 'unavailable'
+        }
+        return
 
-    day_window = sidebar.slider(
-        "Include events within ±N days",
-        0,
-        7,
-        int(st.session_state.get('day_window', 0) or 0),
-        1,
-    )
-    st.session_state['day_window'] = day_window
+    try:
+        kalshi_data = validate_with_kalshi(kalshi, home_team, away_team, side, base_prob, sport)
+    except Exception:
+        leg_data['kalshi_validation'] = {
+            'kalshi_available': False,
+            'validation': 'error',
+            'edge': 0,
+            'confidence_boost': 0,
+            'market_scope': 'error',
+            'data_source': 'error'
+        }
+        return
 
-    default_sports = st.session_state.setdefault('selected_sports', APP_CFG["sports_common"][:6])
-    sports = sidebar.multiselect(
-        "Sports",
-        options=APP_CFG["sports_common"],
-        default=default_sports,
-        format_func=format_sport_label,
-        key="selected_sports",
+    leg_data['kalshi_validation'] = kalshi_data
+
+    if not kalshi_data.get('kalshi_available'):
+        return
+
+    original_ai_prob = leg_data.get('ai_prob', base_prob)
+    kalshi_prob = kalshi_data.get('kalshi_prob', base_prob)
+
+    blended_prob = (
+        original_ai_prob * 0.50 +  # AI model
+        kalshi_prob * 0.30 +       # Kalshi market
+        base_prob * 0.20           # Sportsbook baseline
     )
+
+    alignment_delta = kalshi_prob - original_ai_prob
 
 def _odds_api_base():
     return "https://api.the-odds-api.com"
