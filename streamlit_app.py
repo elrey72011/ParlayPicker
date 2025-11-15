@@ -4117,6 +4117,42 @@ def build_best_bets_per_game(
 
         ai_prob_effective = max(0.01, min(0.99, ai_prob_effective))
 
+        probability_candidates: List[Tuple[str, float]] = []
+
+        def _append_prob(label: str, value: Any) -> None:
+            coerced = _safe_float(value)
+            if coerced is not None and not math.isnan(coerced):
+                probability_candidates.append((label, float(coerced)))
+
+        _append_prob("AI Blend", ai_prob_effective)
+        _append_prob("ML", ml_prob)
+        _append_prob("theover.ai", theover_prob)
+        _append_prob("SportsData", sportsdata_prob)
+
+        best_win_source: Optional[str] = None
+        best_win_prob: Optional[float] = None
+        if probability_candidates:
+            best_win_source, best_win_prob = max(
+                probability_candidates, key=lambda item: item[1]
+            )
+
+        win_metric = best_win_prob
+        if win_metric is None:
+            for fallback_prob in (
+                ai_prob_effective,
+                ai_prob_raw,
+                ml_prob,
+                theover_prob,
+                sportsdata_prob,
+            ):
+                coerced = _safe_float(fallback_prob)
+                if coerced is not None and not math.isnan(coerced):
+                    win_metric = float(coerced)
+                    break
+
+        if best_win_source is None and win_metric is not None:
+            best_win_source = "AI Blend"
+
         ai_ev = (
             ev_rate(ai_prob_effective, float(best_decimal))
             if market_implied_prob is not None
@@ -4214,6 +4250,9 @@ def build_best_bets_per_game(
             'kalshi_verdict': (leg.get('kalshi_validation') or {}).get('validation'),
             'best_edge': best_edge,
             'best_edge_source': best_edge_source,
+            'win_probability': win_metric,
+            'win_prob_source': best_win_source,
+            'win_metric': win_metric,
             'commence_display': commence_display,
             'commence_sort': commence_sort,
             'commence_time': event_info.get('commence_time'),
@@ -4229,14 +4268,15 @@ def build_best_bets_per_game(
 
     best_rows: List[Dict[str, Any]] = []
     for event_id, options in legs_by_event.items():
-        ranked = [opt for opt in options if opt.get('best_edge') is not None]
+        ranked = [opt for opt in options if opt.get('win_metric') is not None]
         if not ranked:
             continue
         best_option = max(
             ranked,
             key=lambda item: (
-                item.get('best_edge'),
-                item.get('ai_prob_effective', item.get('ai_prob_raw', 0)),
+                item.get('win_metric', 0.0),
+                item.get('ai_prob_effective', item.get('ai_prob_raw', 0.0)),
+                item.get('best_edge', float('-inf')) if item.get('best_edge') is not None else float('-inf'),
             ),
         )
 
@@ -4270,6 +4310,8 @@ def build_best_bets_per_game(
             'Kalshi Verdict': best_option['kalshi_verdict'],
             'Best Edge %': best_option['best_edge'] * 100 if best_option['best_edge'] is not None else None,
             'Best Edge Source': best_option['best_edge_source'],
+            'Best Win Prob %': best_option['win_metric'] * 100 if best_option['win_metric'] is not None else None,
+            'Win Prob Source': best_option['win_prob_source'],
             'Event ID': event_id,
             'Sport Key': best_option['sport_key'],
             'Commence (UTC)': best_option['commence_time'],
@@ -4284,16 +4326,26 @@ def build_best_bets_per_game(
     if 'Commence Sort' in best_df.columns:
         try:
             best_df.sort_values(
-                by=['Best Edge %', 'Commence Sort'],
-                ascending=[False, True],
+                by=['Best Win Prob %', 'Best Edge %', 'Commence Sort'],
+                ascending=[False, False, True],
                 inplace=True,
                 na_position='last',
             )
         except Exception:
-            best_df.sort_values(by='Best Edge %', ascending=False, inplace=True, na_position='last')
+            best_df.sort_values(
+                by=['Best Win Prob %', 'Best Edge %'],
+                ascending=[False, False],
+                inplace=True,
+                na_position='last',
+            )
         best_df.drop(columns=['Commence Sort'], inplace=True)
     else:
-        best_df.sort_values(by='Best Edge %', ascending=False, inplace=True, na_position='last')
+        best_df.sort_values(
+            by=['Best Win Prob %', 'Best Edge %'],
+            ascending=[False, False],
+            inplace=True,
+            na_position='last',
+        )
 
     return best_df.reset_index(drop=True), enriched_legs
 
@@ -7255,6 +7307,7 @@ with main_tab1:
                     "Kalshi Δ pp",
                     "Kalshi Edge %",
                     "Best Edge %",
+                    "Best Win Prob %",
                 ]
                 for col in percent_columns:
                     if col in display_df.columns:
