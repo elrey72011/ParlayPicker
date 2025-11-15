@@ -1886,10 +1886,12 @@ class KalshiIntegrator:
                 analysis = self.analyze_kalshi_market(market)
                 
                 if analysis['overall_score'] >= min_score:
-                    opportunities.append({
-                        'market': market,
-                        'analysis': analysis
-                    })
+                    opportunities.append(
+                        {
+                            'market': market,
+                            'analysis': analysis,
+                        }
+                    )
         
         # Sort by score
         opportunities.sort(key=lambda x: x['analysis']['overall_score'], reverse=True)
