@@ -1869,29 +1869,28 @@ class KalshiIntegrator:
         """
         markets = self.get_sports_markets()
         opportunities = []
-        
+
         for market in markets:
             # Get orderbook
             ticker = market.get('ticker')
             orderbook = self.get_orderbook(ticker)
-            
+
             if orderbook:
                 # Enhance market data with orderbook
                 market['yes_bid'] = orderbook.get('yes', [{}])[0].get('price', 0)
                 market['yes_ask'] = orderbook.get('yes', [{}])[-1].get('price', 100)
                 market['no_bid'] = orderbook.get('no', [{}])[0].get('price', 0)
                 market['no_ask'] = orderbook.get('no', [{}])[-1].get('price', 100)
-                
+
                 # Analyze
                 analysis = self.analyze_kalshi_market(market)
-                
+
                 if analysis['overall_score'] >= min_score:
-                    opportunities.append(
-                        {
-                            'market': market,
-                            'analysis': analysis,
-                        }
-                    )
+                    opportunity = {
+                        'market': market,
+                        'analysis': analysis,
+                    }
+                    opportunities.append(opportunity)
         
         # Sort by score
         opportunities.sort(key=lambda x: x['analysis']['overall_score'], reverse=True)
@@ -1912,28 +1911,6 @@ class KalshiIntegrator:
                 'expected_value': 0,
                 'recommendation': '🔴 NO EDGE - AI probability not better than Kalshi price'
             }
-        
-    else:
-        team_payload = _team_payload(team_obj, opponent_obj)
-        payload.update(team_payload)
-
-    return {k: v for k, v in payload.items() if v not in (None, '')}
-
-
-def format_timestamp_utc(ts: Optional[datetime]) -> Optional[str]:
-    """Format a naive UTC timestamp for display."""
-
-    if isinstance(ts, datetime):
-        return ts.strftime("%Y-%m-%d %H:%M UTC")
-    return None
-
-def fetch_oddsapi_snapshot(api_key: str, sport_key: str) -> Dict[str, Any]:
-    url = f"{_odds_api_base()}/v4/sports/{sport_key}/odds"
-    params = {"apiKey": api_key, "regions": "us", "markets": "h2h,spreads,totals", "oddsFormat": "american"}
-    try:
-        r = requests.get(url, params=params, timeout=12)
-        r.raise_for_status()
-        data = r.json()
         
         # Edge calculation for binary market
         edge = ai_prob - kalshi_prob
