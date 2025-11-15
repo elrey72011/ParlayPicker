@@ -1925,8 +1925,7 @@ class KalshiIntegrator:
         kelly_fraction = kelly_fraction * 0.25
         kelly_fraction = max(0, min(kelly_fraction, 0.10))  # Cap at 10%
         
-        kelly_percentage = kelly_fraction * 100
-        recommended_stake = bankroll * kelly_fraction
+        efficiency = 1 - avg_spread  # Higher = more efficient
         
         # Expected value
         expected_payout = ai_prob * (1 / kalshi_prob)
