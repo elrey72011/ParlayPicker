@@ -4097,23 +4097,43 @@ def build_best_bets_per_game(
         except Exception:
             market_implied_prob = None
 
-        ai_prob_raw = leg.get('ai_prob', leg.get('p'))
-        if ai_prob_raw is None:
+        ai_prob_post_kalshi = leg.get('ai_prob', leg.get('p'))
+        if ai_prob_post_kalshi is None:
             continue
 
+        ai_prob_pre_kalshi = leg.get('ai_prob_before_kalshi', ai_prob_post_kalshi)
         ml_prob = leg.get('ml_probability')
         theover_prob = leg.get('theover_probability')
         sportsdata_prob = _sportsdata_probability_for_leg(leg)
+        kalshi_validation = leg.get('kalshi_validation') or {}
+        kalshi_prob = _safe_float(
+            kalshi_validation.get('kalshi_prob')
+            if kalshi_validation.get('kalshi_available')
+            else None
+        )
 
-        ai_prob_effective = ai_prob_raw
+        ai_prob_effective = _safe_float(ai_prob_pre_kalshi)
+        if ai_prob_effective is None:
+            ai_prob_effective = _safe_float(ai_prob_post_kalshi)
+        if ai_prob_effective is None:
+            continue
+
         if ml_prob is not None and abs(ml_prob - ai_prob_effective) > 1e-3:
-            ai_prob_effective = _blend_probability(ai_prob_effective, ml_prob, 0.40)
+            ai_prob_effective = _blend_probability(ai_prob_effective, ml_prob, 0.45)
 
         if theover_prob is not None and abs(theover_prob - ai_prob_effective) > 1e-3:
-            ai_prob_effective = _blend_probability(ai_prob_effective, theover_prob, 0.30)
+            ai_prob_effective = _blend_probability(ai_prob_effective, theover_prob, 0.25)
 
         if sportsdata_prob is not None and abs(sportsdata_prob - ai_prob_effective) > 1e-3:
-            ai_prob_effective = _blend_probability(ai_prob_effective, sportsdata_prob, 0.35)
+            ai_prob_effective = _blend_probability(ai_prob_effective, sportsdata_prob, 0.30)
+
+        if kalshi_prob is not None and abs(kalshi_prob - ai_prob_effective) > 1e-3:
+            ai_prob_effective = _blend_probability(ai_prob_effective, kalshi_prob, 0.35)
+            alignment_delta = kalshi_prob - (ai_prob_pre_kalshi if ai_prob_pre_kalshi is not None else ai_prob_effective)
+            if alignment_delta < -0.08:
+                ai_prob_effective -= min(0.12, abs(alignment_delta) * 0.6)
+            elif alignment_delta > 0.08:
+                ai_prob_effective += min(0.08, alignment_delta * 0.5)
 
         ai_prob_effective = max(0.01, min(0.99, ai_prob_effective))
 
@@ -4124,34 +4144,40 @@ def build_best_bets_per_game(
             if coerced is not None and not math.isnan(coerced):
                 probability_candidates.append((label, float(coerced)))
 
-        _append_prob("AI Blend", ai_prob_effective)
+        _append_prob("Consensus", ai_prob_effective)
+        _append_prob("AI (pre-Kalshi)", ai_prob_pre_kalshi)
+        _append_prob("AI (post-Kalshi)", ai_prob_post_kalshi)
         _append_prob("ML", ml_prob)
         _append_prob("theover.ai", theover_prob)
         _append_prob("SportsData", sportsdata_prob)
+        _append_prob("Kalshi", kalshi_prob)
 
-        best_win_source: Optional[str] = None
-        best_win_prob: Optional[float] = None
+        primary_source: Optional[str] = None
         if probability_candidates:
-            best_win_source, best_win_prob = max(
+            primary_source, _ = max(
                 probability_candidates, key=lambda item: item[1]
             )
 
-        win_metric = best_win_prob
+        win_metric: Optional[float] = float(ai_prob_effective) if ai_prob_effective is not None else None
+
         if win_metric is None:
             for fallback_prob in (
-                ai_prob_effective,
-                ai_prob_raw,
+                ai_prob_post_kalshi,
                 ml_prob,
                 theover_prob,
                 sportsdata_prob,
+                kalshi_prob,
             ):
                 coerced = _safe_float(fallback_prob)
                 if coerced is not None and not math.isnan(coerced):
                     win_metric = float(coerced)
                     break
 
-        if best_win_source is None and win_metric is not None:
-            best_win_source = "AI Blend"
+        best_win_source = (
+            f"Consensus ({primary_source})"
+            if primary_source is not None and primary_source != "Consensus"
+            else "Consensus"
+        )
 
         ai_ev = (
             ev_rate(ai_prob_effective, float(best_decimal))
@@ -4231,7 +4257,8 @@ def build_best_bets_per_game(
             'best_decimal': best_decimal,
             'best_american': best_american,
             'implied_prob': market_implied_prob,
-            'ai_prob_raw': ai_prob_raw,
+            'ai_prob_raw': ai_prob_post_kalshi,
+            'ai_prob_pre_kalshi': ai_prob_pre_kalshi,
             'ai_prob_effective': ai_prob_effective,
             'ai_ev': ai_ev,
             'ai_edge': ai_edge,
@@ -4244,7 +4271,7 @@ def build_best_bets_per_game(
             'sportsdata_probability': sportsdata_prob,
             'sportsdata_delta': sportsdata_delta,
             'sportsdata_ev': sportsdata_ev,
-            'kalshi_prob': (leg.get('kalshi_validation') or {}).get('kalshi_prob'),
+            'kalshi_prob': kalshi_prob,
             'kalshi_delta': leg.get('kalshi_alignment_delta'),
             'kalshi_edge': leg.get('kalshi_edge'),
             'kalshi_verdict': (leg.get('kalshi_validation') or {}).get('validation'),
