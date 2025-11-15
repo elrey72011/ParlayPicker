@@ -1909,7 +1909,7 @@ class KalshiIntegrator:
                 'recommended_stake': 0,
                 'expected_value': 0,
                 'recommendation': '🔴 NO EDGE - AI probability not better than Kalshi price'
-            }
+            })
         
     else:
         team_payload = _team_payload(team_obj, opponent_obj)
