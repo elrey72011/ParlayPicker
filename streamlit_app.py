@@ -1774,10 +1774,110 @@ class KalshiIntegrator:
         if sb_odds:
             sb_prob = implied_p_from_american(sb_odds)
         else:
-            if away_score > home_score:
-                result['status'] = 'win'
-            elif away_score < home_score:
-                result['status'] = 'loss'
+            sb_prob = None
+        
+        result = {
+            'kalshi_prob': kalshi_yes_price,
+            'sportsbook_prob': sb_prob,
+            'discrepancy': 0.0,
+            'edge': 0.0,
+            'recommendation': '⚪ Insufficient data for comparison',
+            'has_arbitrage': False,
+        }
+
+        # Calculate discrepancy when both sources are available
+        if sb_prob and kalshi_yes_price:
+            discrepancy = abs(kalshi_yes_price - sb_prob)
+
+            # Determine which side is better value
+            if kalshi_yes_price < sb_prob - 0.05:  # Kalshi underpricing by 5%+
+                recommendation = "🟢 BUY YES on Kalshi (underpriced vs sportsbook)"
+                edge = sb_prob - kalshi_yes_price
+            elif kalshi_yes_price > sb_prob + 0.05:  # Kalshi overpricing by 5%+
+                recommendation = "🟢 BUY NO on Kalshi (or take sportsbook)"
+                edge = kalshi_yes_price - sb_prob
+            else:
+                recommendation = "🟡 Prices aligned (no significant edge)"
+                edge = discrepancy
+
+            result.update({
+                'discrepancy': discrepancy,
+                'edge': edge,
+                'recommendation': recommendation,
+                'has_arbitrage': discrepancy > 0.10,  # 10%+ difference
+            })
+
+        return result
+    
+    def find_arbitrage_opportunities(self, kalshi_markets: List[Dict], 
+                                     sportsbook_events: List[Dict]) -> List[Dict]:
+        """
+        Find arbitrage opportunities between Kalshi and traditional sportsbooks
+        
+        Returns list of arbitrage opportunities with expected profit
+        """
+        arbitrage_opps = []
+        
+        for kalshi_market in kalshi_markets:
+            title = kalshi_market.get('title', '')
+            
+            # Try to match with sportsbook events
+            for sb_event in sportsbook_events:
+                # Simple matching logic (can be enhanced)
+                home_team = sb_event.get('home_team', '')
+                away_team = sb_event.get('away_team', '')
+                
+                if home_team in title or away_team in title:
+                    comparison = self.compare_with_sportsbook(kalshi_market, sb_event)
+                    
+                    if comparison['has_arbitrage']:
+                        arbitrage_opps.append({
+                            'kalshi_market': title,
+                            'kalshi_ticker': kalshi_market.get('ticker'),
+                            'sportsbook_game': f"{away_team} @ {home_team}",
+                            'comparison': comparison
+                        })
+        
+        return arbitrage_opps
+    
+    def analyze_kalshi_market(self, market: Dict, sentiment_score: float = 0, 
+                             ml_probability: float = None) -> Dict:
+        """
+        Comprehensive analysis of a Kalshi market
+        
+        Combines:
+        - Kalshi orderbook data
+        - Sentiment analysis
+        - ML predictions
+        - Value assessment
+        """
+        yes_bid = market.get('yes_bid', 0) / 100
+        yes_ask = market.get('yes_ask', 100) / 100
+        no_bid = market.get('no_bid', 0) / 100
+        no_ask = market.get('no_ask', 100) / 100
+        
+        volume = market.get('volume', 0)
+        open_interest = market.get('open_interest', 0)
+        
+        # Market efficiency (tight spread = efficient)
+        yes_spread = yes_ask - yes_bid
+        no_spread = no_ask - no_bid
+        avg_spread = (yes_spread + no_spread) / 2
+        
+        efficiency = 1 - avg_spread  # Higher = more efficient
+        
+        # Compare with AI prediction
+        kalshi_implied = yes_bid  # Using bid as market consensus
+        
+        if ml_probability:
+            ai_edge = ml_probability - kalshi_implied
+            
+            if ai_edge > 0.10:
+                ai_recommendation = f"🟢 STRONG BUY YES - AI sees {ai_edge*100:.1f}% edge"
+            elif ai_edge < -0.10:
+                ai_recommendation = f"🟢 STRONG BUY NO - AI sees {abs(ai_edge)*100:.1f}% edge"
+            elif abs(ai_edge) < 0.05:
+                ai_recommendation = "🟡 FAIR PRICE - AI agrees with market"
             else:
                 result['status'] = 'push'
         return result
@@ -3285,6 +3385,32 @@ def integrate_kalshi_into_leg(
         return
 
     leg_data['kalshi_validation'] = kalshi_data
+
+    if not kalshi_data.get('kalshi_available'):
+        return
+
+    original_ai_prob = leg_data.get('ai_prob', base_prob)
+    kalshi_prob = kalshi_data.get('kalshi_prob', base_prob)
+
+    blended_prob = (
+        original_ai_prob * 0.50 +  # AI model
+        kalshi_prob * 0.30 +       # Kalshi market
+        base_prob * 0.20           # Sportsbook baseline
+    )
+
+    alignment_delta = kalshi_prob - original_ai_prob
+
+    leg_data['ai_prob_before_kalshi'] = original_ai_prob
+    leg_data['ai_prob'] = blended_prob
+    leg_data['kalshi_influence'] = blended_prob - original_ai_prob
+    leg_data['kalshi_alignment_delta'] = alignment_delta
+    leg_data['kalshi_alignment_abs'] = abs(alignment_delta)
+    leg_data['kalshi_prob_raw'] = kalshi_prob
+    leg_data['kalshi_edge'] = kalshi_data.get('edge', 0)
+    leg_data['ai_confidence'] = min(
+        leg_data.get('ai_confidence', 0.5) + kalshi_data.get('confidence_boost', 0),
+        0.95
+    )
 
     if not kalshi_data.get('kalshi_available'):
         return
