@@ -1910,6 +1910,28 @@ class KalshiIntegrator:
                 'expected_value': 0,
                 'recommendation': '🔴 NO EDGE - AI probability not better than Kalshi price'
             }
+        )
+    else:
+        team_payload = _team_payload(team_obj, opponent_obj)
+        payload.update(team_payload)
+
+    return {k: v for k, v in payload.items() if v not in (None, '')}
+
+
+def format_timestamp_utc(ts: Optional[datetime]) -> Optional[str]:
+    """Format a naive UTC timestamp for display."""
+
+    if isinstance(ts, datetime):
+        return ts.strftime("%Y-%m-%d %H:%M UTC")
+    return None
+
+def fetch_oddsapi_snapshot(api_key: str, sport_key: str) -> Dict[str, Any]:
+    url = f"{_odds_api_base()}/v4/sports/{sport_key}/odds"
+    params = {"apiKey": api_key, "regions": "us", "markets": "h2h,spreads,totals", "oddsFormat": "american"}
+    try:
+        r = requests.get(url, params=params, timeout=12)
+        r.raise_for_status()
+        data = r.json()
         
         # Edge calculation for binary market
         edge = ai_prob - kalshi_prob
