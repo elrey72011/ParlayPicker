@@ -3342,6 +3342,8 @@ def compute_best_overall_odds(
     ]
 
     best = df_sorted.groupby(group_cols, as_index=False).first()
+    if "line" in best.columns:
+        best.drop(columns=["line"], inplace=True)
     best.rename(columns={"line_key": "line"}, inplace=True)
     best.sort_values(["event_date", "league", "event_id", "market", "side"], inplace=True)
 
