@@ -2918,6 +2918,44 @@ class KalshiIntegrator:
                 result['status'] = 'push'
         return result
 
+# 7. SOCIAL MEDIA ANALYZER (Simplified)
+class SocialMediaAnalyzer:
+    """Analyzes Twitter/Reddit for real-time sentiment"""
+    
+    def __init__(self, twitter_api_key: str = None):
+        self.twitter_key = twitter_api_key or os.environ.get("TWITTER_API_KEY")
+        self.keywords = {
+            'positive': ['win', 'great', 'amazing', 'clutch', 'dominant', 'beast'],
+            'negative': ['lose', 'bad', 'terrible', 'bench', 'cut', 'injured']
+        }
+    
+    def analyze_social_sentiment(self, team: str, player: str = None) -> Dict:
+        """
+        Analyze social media sentiment
+        
+        Note: This is a simplified placeholder. Full implementation requires:
+        - Twitter API v2 access
+        - Reddit API (PRAW) integration
+        - Real-time data scraping
+        """
+        # Placeholder return
+        return {
+            'sentiment_score': 0.0,
+            'tweet_volume': 0,
+            'trending': False,
+            'confidence': 0.2,
+            'recommendation': '⚪ Social media analysis unavailable (API key needed)'
+        }
+    
+    def detect_breaking_news(self, team: str) -> Dict:
+        """Detect breaking news that might not be priced in yet"""
+        # Placeholder - would monitor Twitter for breaking news keywords
+        return {
+            'has_breaking_news': False,
+            'news_type': None,
+            'urgency': 'low'
+        }
+
 # ============ KALSHI VALIDATION HELPER ============
 def validate_with_kalshi(kalshi_integrator, home_team: str, away_team: str,
                         side: str, sportsbook_prob: float, sport: str) -> Dict:
@@ -3190,6 +3228,89 @@ def validate_with_kalshi(kalshi_integrator, home_team: str, away_team: str,
             'market_scope': 'error',
             'data_source': 'error'
         }
+
+# Helper to apply Kalshi validation to a betting leg in-place
+def integrate_kalshi_into_leg(
+    leg_data: Dict[str, Any],
+    home_team: str,
+    away_team: str,
+    side: str,
+    base_prob: float,
+    sport: str,
+    use_kalshi: bool,
+) -> None:
+    """Mutate a leg dictionary with Kalshi validation + probability blending."""
+
+    # Ensure downstream code sees the reason when Kalshi is not active
+    if not use_kalshi:
+        leg_data.setdefault('kalshi_validation', {
+            'kalshi_available': False,
+            'validation': 'disabled',
+            'edge': 0,
+            'confidence_boost': 0,
+            'market_scope': 'disabled',
+            'data_source': 'disabled'
+        })
+        return
+
+    kalshi = None
+    try:
+        kalshi = st.session_state.get('kalshi_integrator')
+    except Exception:
+        # When Streamlit session state isn't available (e.g. testing), skip gracefully
+        pass
+
+    if not kalshi:
+        leg_data['kalshi_validation'] = {
+            'kalshi_available': False,
+            'validation': 'unavailable',
+            'edge': 0,
+            'confidence_boost': 0,
+            'market_scope': 'not_initialized',
+            'data_source': 'unavailable'
+        }
+        return
+
+    try:
+        kalshi_data = validate_with_kalshi(kalshi, home_team, away_team, side, base_prob, sport)
+    except Exception:
+        leg_data['kalshi_validation'] = {
+            'kalshi_available': False,
+            'validation': 'error',
+            'edge': 0,
+            'confidence_boost': 0,
+            'market_scope': 'error',
+            'data_source': 'error'
+        }
+        return
+
+    leg_data['kalshi_validation'] = kalshi_data
+
+    if not kalshi_data.get('kalshi_available'):
+        return
+
+    original_ai_prob = leg_data.get('ai_prob', base_prob)
+    kalshi_prob = kalshi_data.get('kalshi_prob', base_prob)
+
+    blended_prob = (
+        original_ai_prob * 0.50 +  # AI model
+        kalshi_prob * 0.30 +       # Kalshi market
+        base_prob * 0.20           # Sportsbook baseline
+    )
+
+    alignment_delta = kalshi_prob - original_ai_prob
+
+    leg_data['ai_prob_before_kalshi'] = original_ai_prob
+    leg_data['ai_prob'] = blended_prob
+    leg_data['kalshi_influence'] = blended_prob - original_ai_prob
+    leg_data['kalshi_alignment_delta'] = alignment_delta
+    leg_data['kalshi_alignment_abs'] = abs(alignment_delta)
+    leg_data['kalshi_prob_raw'] = kalshi_prob
+    leg_data['kalshi_edge'] = kalshi_data.get('edge', 0)
+    leg_data['ai_confidence'] = min(
+        leg_data.get('ai_confidence', 0.5) + kalshi_data.get('confidence_boost', 0),
+        0.95
+    )
 
 # Helper to apply Kalshi validation to a betting leg in-place
 def integrate_kalshi_into_leg(
