@@ -1767,9 +1767,14 @@ class KalshiIntegrator:
     ) -> Dict:
         """Compare Kalshi prediction prices with a sportsbook listing."""
 
-        kalshi_yes_price = (kalshi_market.get("yes_bid") or 0) / 100.0
-        sb_odds = sportsbook_odds.get("price") if sportsbook_odds else None
-        sb_prob = implied_p_from_american(sb_odds) if sb_odds else None
+        kalshi_raw = kalshi_market.get("yes_bid") if kalshi_market else None
+        kalshi_yes_price = (float(kalshi_raw) if kalshi_raw is not None else 0.0) / 100.0
+
+        sb_prob: Optional[float] = None
+        if sportsbook_odds:
+            sb_price = sportsbook_odds.get("price")
+            if sb_price is not None:
+                sb_prob = implied_p_from_american(sb_price)
 
         result: Dict[str, Any] = {
             "kalshi_prob": kalshi_yes_price,
@@ -1780,23 +1785,24 @@ class KalshiIntegrator:
             "has_arbitrage": False,
         }
 
-        if sb_prob is not None and kalshi_yes_price > 0:
-            discrepancy = abs(kalshi_yes_price - sb_prob)
-            edge = discrepancy
-            recommendation = "🟡 Prices aligned (no significant edge)"
+        if sb_prob is None or kalshi_yes_price <= 0:
+            return result
 
-            if kalshi_yes_price < sb_prob - 0.05:
-                edge = sb_prob - kalshi_yes_price
-                recommendation = "🟢 BUY YES on Kalshi (underpriced vs sportsbook)"
-            elif kalshi_yes_price > sb_prob + 0.05:
-                edge = kalshi_yes_price - sb_prob
-                recommendation = "🟢 BUY NO on Kalshi (or take sportsbook)"
+        discrepancy = abs(kalshi_yes_price - sb_prob)
+        edge = discrepancy
+        recommendation = "🟡 Prices aligned (no significant edge)"
 
-            result["discrepancy"] = discrepancy
-            result["edge"] = edge
-            result["recommendation"] = recommendation
-            result["has_arbitrage"] = discrepancy > 0.10
+        if kalshi_yes_price < sb_prob - 0.05:
+            edge = sb_prob - kalshi_yes_price
+            recommendation = "🟢 BUY YES on Kalshi (underpriced vs sportsbook)"
+        elif kalshi_yes_price > sb_prob + 0.05:
+            edge = kalshi_yes_price - sb_prob
+            recommendation = "🟢 BUY NO on Kalshi (or take sportsbook)"
 
+        result["discrepancy"] = discrepancy
+        result["edge"] = edge
+        result["recommendation"] = recommendation
+        result["has_arbitrage"] = discrepancy > 0.10
         return result
     
     def find_arbitrage_opportunities(self, kalshi_markets: List[Dict], 
@@ -3375,6 +3381,32 @@ def integrate_kalshi_into_leg(
         return
 
     leg_data['kalshi_validation'] = kalshi_data
+
+    if not kalshi_data.get('kalshi_available'):
+        return
+
+    original_ai_prob = leg_data.get('ai_prob', base_prob)
+    kalshi_prob = kalshi_data.get('kalshi_prob', base_prob)
+
+    blended_prob = (
+        original_ai_prob * 0.50 +  # AI model
+        kalshi_prob * 0.30 +       # Kalshi market
+        base_prob * 0.20           # Sportsbook baseline
+    )
+
+    alignment_delta = kalshi_prob - original_ai_prob
+
+    leg_data['ai_prob_before_kalshi'] = original_ai_prob
+    leg_data['ai_prob'] = blended_prob
+    leg_data['kalshi_influence'] = blended_prob - original_ai_prob
+    leg_data['kalshi_alignment_delta'] = alignment_delta
+    leg_data['kalshi_alignment_abs'] = abs(alignment_delta)
+    leg_data['kalshi_prob_raw'] = kalshi_prob
+    leg_data['kalshi_edge'] = kalshi_data.get('edge', 0)
+    leg_data['ai_confidence'] = min(
+        leg_data.get('ai_confidence', 0.5) + kalshi_data.get('confidence_boost', 0),
+        0.95
+    )
 
     if not kalshi_data.get('kalshi_available'):
         return
