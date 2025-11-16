@@ -7030,7 +7030,7 @@ with main_tab1:
     def _collect_theover_dataset(title: str, key_prefix: str) -> Optional[pd.DataFrame]:
         st.markdown(title)
         st.caption(
-            "Include `League`, `Away Team`, and `Home Team` columns so matchups align across datasets."
+            "**Required columns:** `League`, `AwayTeam`, `HomeTeam`, `Pick`, `WinProbability`"
         )
 
         dataset: Optional[pd.DataFrame] = None
@@ -7042,21 +7042,95 @@ with main_tab1:
         )
         if uploaded_file is not None:
             try:
-                dataset = pd.read_csv(uploaded_file)
+                dataset = pd.read_csv(uploaded_file, encoding='utf-8-sig')
+                
+                # Validate required columns
+                required_cols = ['league', 'awayteam', 'hometeam', 'pick']
+                df_cols_lower = [str(c).strip().lower().replace(' ', '_') for c in dataset.columns]
+                
+                missing_cols = []
+                for req_col in required_cols:
+                    # Check various alternatives
+                    found = False
+                    alternatives = {
+                        'league': ['league', 'sport'],
+                        'awayteam': ['awayteam', 'away_team', 'away'],
+                        'hometeam': ['hometeam', 'home_team', 'home'],
+                        'pick': ['pick']
+                    }
+                    for alt in alternatives.get(req_col, [req_col]):
+                        if alt in df_cols_lower:
+                            found = True
+                            break
+                    if not found:
+                        missing_cols.append(req_col)
+                
+                # Check for probability column
+                prob_cols = ['winprobability', 'win_probability', 'probability', 'win_prob', 'model_probability']
+                has_prob = any(pc in df_cols_lower for pc in prob_cols)
+                
+                if missing_cols:
+                    st.error(f"❌ Missing required columns: {', '.join(missing_cols)}")
+                    st.info("💡 Your CSV must have: League, AwayTeam, HomeTeam, Pick")
+                    return None
+                
+                if not has_prob:
+                    st.warning(f"⚠️ Missing WinProbability column! Loaded {len(dataset)} rows but probabilities are required for integration.")
+                    st.info("""
+                    💡 **How to fix:**
+                    1. Add a `WinProbability` column to your CSV
+                    2. Values should be decimals (0.55 = 55%, not 55)
+                    3. Example: `League,AwayTeam,HomeTeam,Pick,WinProbability`
+                    
+                    Without probabilities, theover.ai data won't be used in analysis!
+                    """)
+                    with st.expander("📋 Preview uploaded data (missing probabilities)", expanded=True):
+                        st.dataframe(dataset.head(10), use_container_width=True)
+                    return None
+                
                 st.success(f"✅ Loaded {len(dataset)} rows from theover.ai")
+                
+                # Show sample of data
                 with st.expander("📋 Preview uploaded data", expanded=False):
                     st.dataframe(dataset.head(10), use_container_width=True)
+                    
+                # Check team name format
+                sample_away = str(dataset.iloc[0].get('AwayTeam', dataset.iloc[0].get('Away Team', dataset.iloc[0].get('away_team', '')))).strip()
+                sample_home = str(dataset.iloc[0].get('HomeTeam', dataset.iloc[0].get('Home Team', dataset.iloc[0].get('home_team', '')))).strip()
+                
+                if len(sample_away) <= 3 or len(sample_home) <= 3:
+                    st.warning(f"""
+                    ⚠️ **Team names look abbreviated!**
+                    
+                    Example from your CSV: "{sample_away}" vs "{sample_home}"
+                    
+                    💡 Use FULL team names for better matching:
+                    - ✅ "Baltimore Ravens" not "BAL"
+                    - ✅ "San Francisco 49ers" not "SF"
+                    
+                    Short names may not match with betting odds data.
+                    """)
+                    
             except Exception as exc:
-                st.error(f"Error loading CSV: {exc}")
+                st.error(f"❌ Error loading CSV: {exc}")
+                st.info("Make sure your file is a valid CSV with columns: League, AwayTeam, HomeTeam, Pick, WinProbability")
+                return None
 
         with st.expander("📋 Or paste theover.ai data", expanded=False):
             st.info(
                 """
-                **Paste Format (comma or tab-separated)**
+                **Required Format (comma or tab-separated):**
                 ```
                 League,AwayTeam,HomeTeam,Pick,WinProbability
-                NHL,Maple Leafs,Canadiens,Over,0.57
+                NFL,Baltimore Ravens,Cleveland Browns,Baltimore Ravens -8.5,0.650
+                NBA,Boston Celtics,Miami Heat,Over 225.5,0.585
                 ```
+                
+                **Critical:**
+                - League: NFL, NBA, NHL, NCAAF (exact names)
+                - Teams: Full names ("Baltimore Ravens" not "BAL")
+                - WinProbability: Decimal (0.65 = 65%, not 65)
+                - Pick: "TeamName +/-Spread" or "Over/Under Line"
                 """
             )
             pasted_data = st.text_area(
@@ -7073,16 +7147,81 @@ with main_tab1:
                     else:
                         dataset = pd.read_csv(StringIO(pasted_data))
 
+                    # Validate pasted data too
+                    df_cols_lower = [str(c).strip().lower().replace(' ', '_') for c in dataset.columns]
+                    prob_cols = ['winprobability', 'win_probability', 'probability', 'win_prob']
+                    has_prob = any(pc in df_cols_lower for pc in prob_cols)
+                    
+                    if not has_prob:
+                        st.warning("⚠️ Missing WinProbability column! Add this column with decimal probabilities (0.50-0.80)")
+                        st.dataframe(dataset.head(10), use_container_width=True)
+                        return None
+                    
                     st.success(f"✅ Loaded {len(dataset)} rows from pasted theover.ai data")
                     st.dataframe(dataset.head(10), use_container_width=True)
                 except Exception as exc:
-                    st.error(f"Error parsing data: {exc}")
+                    st.error(f"❌ Error parsing data: {exc}")
+                    st.info("Check format: League,AwayTeam,HomeTeam,Pick,WinProbability")
+                    return None
 
         return dataset
 
     theover_ml_data = _collect_theover_dataset("#### 🤖 Moneyline ML projections", "theover_ml")
     theover_spreads_data = _collect_theover_dataset("#### 📐 Spread projections", "theover_spreads")
     theover_totals_data = _collect_theover_dataset("#### 📈 Totals (Over/Under) projections", "theover_totals")
+    
+    # Show helpful format reminder
+    if not any([theover_ml_data is not None, theover_spreads_data is not None, theover_totals_data is not None]):
+        with st.expander("ℹ️ TheOver.ai CSV Format Help", expanded=False):
+            st.markdown("""
+            ### Required CSV Format
+            
+            Your CSV must have these columns:
+            ```
+            League,AwayTeam,HomeTeam,Pick,WinProbability
+            ```
+            
+            ### Example Rows
+            
+            **For Spreads:**
+            ```csv
+            NFL,Baltimore Ravens,Cleveland Browns,Baltimore Ravens -8.5,0.650
+            NBA,Boston Celtics,Miami Heat,Boston Celtics -5.5,0.620
+            ```
+            
+            **For Totals:**
+            ```csv
+            NFL,Baltimore Ravens,Cleveland Browns,Over 47.5,0.580
+            NBA,Boston Celtics,Miami Heat,Under 225.5,0.560
+            ```
+            
+            ### Critical Rules
+            
+            1. **League:** Use exact names
+               - ✅ NFL, NBA, NHL, NCAAF
+               - ❌ Football, Basketball, Hockey
+            
+            2. **Team Names:** Full names required
+               - ✅ Baltimore Ravens, San Francisco 49ers
+               - ❌ BAL, SF (abbreviations won't match)
+            
+            3. **WinProbability:** Decimal format (0 to 1)
+               - ✅ 0.65 (means 65%)
+               - ❌ 65 or 65%
+            
+            4. **Pick Format:**
+               - Spreads: "TeamName +/-Spread" (e.g., "Ravens -8.5")
+               - Totals: "Over/Under Line" (e.g., "Over 47.5")
+            
+            ### Most Common Issue
+            
+            **Missing WinProbability column** - Your theover.ai export might not include win probabilities. You need to add this column manually with estimated probabilities for each pick.
+            
+            If you have theover.ai exports without probabilities, you can estimate:
+            - Strong picks: 0.65-0.75
+            - Moderate picks: 0.55-0.65
+            - Slight edges: 0.50-0.55
+            """)
     
     st.markdown("---")
     
@@ -7126,6 +7265,23 @@ with main_tab1:
         
         if not theover_active:
             st.warning("💡 Upload TheOver.ai CSV files above to enable AI prediction blending")
+            st.info("""
+            **Required CSV format:**
+            ```
+            League,AwayTeam,HomeTeam,Pick,WinProbability
+            NFL,Baltimore Ravens,Cleveland Browns,Baltimore Ravens -8.5,0.650
+            ```
+            
+            **Common issues:**
+            - ❌ Missing WinProbability column
+            - ❌ Abbreviated team names (BAL instead of Baltimore Ravens)
+            - ❌ Wrong league name (Football instead of NFL)
+            - ❌ Probability as percentage (65 instead of 0.65)
+            
+            **Download sample files from the documentation to see correct format!**
+            """)
+        else:
+            st.success("✅ TheOver.ai data loaded and ready for integration")
         
         # API-Sports Status
         st.markdown("#### API-Sports (Live Stats)")
