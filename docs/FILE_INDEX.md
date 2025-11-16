@@ -1,5 +1,7 @@
 # 📦 Files Delivered - ParlayDesk Enhanced
 
+> **Update:** All enhanced capabilities now reside inside `streamlit_app.py`. The listings below reference `streamlit_app_enhanced.py` for historical tracking; treat those sections as archival.
+
 ## 🎯 Main Application Files
 
 ### 1. **streamlit_app.py** (47 KB)
