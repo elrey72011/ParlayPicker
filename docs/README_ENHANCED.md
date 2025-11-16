@@ -1,5 +1,7 @@
 # ParlayDesk AI Enhanced - v10.0 with Historical Data
 
+> **Update:** This document describes the legacy enhanced build. The primary `streamlit_app.py` now embeds all of these capabilities; use this README as a reference for how the merged features work under the hood.
+
 ## 🚀 What's New
 
 This enhanced version incorporates **real historical data** from The Odds API to train machine learning models for more accurate predictions.
