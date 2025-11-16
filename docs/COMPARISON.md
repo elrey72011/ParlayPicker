@@ -1,5 +1,7 @@
 # Feature Comparison: Original vs Enhanced with Historical Data
 
+> **Note:** The main Streamlit app now ships with the capabilities from both columns below. This comparison is preserved for historical reference so you can see what changed when the builds were merged.
+
 ## 🆚 Side-by-Side Comparison
 
 | Feature | Original Version | Enhanced Version (v10.0) |
