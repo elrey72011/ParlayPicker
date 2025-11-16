@@ -2797,6 +2797,13 @@ def validate_with_kalshi(kalshi_integrator, home_team: str, away_team: str,
 
     try:
         markets = kalshi_integrator.get_sports_markets()
+        if not markets:
+            try:
+                kalshi_integrator._using_synthetic_data = True
+                kalshi_integrator._ensure_synthetic_data()
+                markets = copy.deepcopy(getattr(kalshi_integrator, "_synthetic_markets", []))
+            except Exception:
+                markets = []
 
         bet_team = home_team if side == 'home' else away_team
         other_team = away_team if side == 'home' else home_team
@@ -4859,6 +4866,8 @@ def _map_side(side: str, swapped: bool) -> str:
 def _find_line_bucket(
     buckets: Dict[Optional[float], Dict[str, Any]],
     target_line: Optional[float],
+    *,
+    tolerance: float = 0.25,
 ) -> Tuple[Optional[float], Optional[Dict[str, Any]]]:
     if not buckets:
         return None, None
@@ -4881,7 +4890,6 @@ def _find_line_bucket(
             best_diff = diff
             best_key = key
 
-    tolerance = 0.25
     if best_key is not None and (best_diff is None or best_diff <= tolerance):
         return best_key, buckets.get(best_key)
 
@@ -5186,7 +5194,28 @@ def _match_theover_ml_leg(leg: Dict[str, Any], entry: Dict[str, Any], swapped: b
 def _match_theover_spread_leg(leg: Dict[str, Any], entry: Dict[str, Any], swapped: bool) -> Optional[Dict[str, Any]]:
     section = entry.get('spreads') or {}
     target_line = _safe_float(leg.get('point'))
-    line_key, bucket = _find_line_bucket(section, target_line)
+    line_key, bucket = _find_line_bucket(section, target_line, tolerance=1.5)
+    if bucket is None and section:
+        # Fall back to the closest available line even if it is outside tolerance
+        closest_key = None
+        closest_bucket = None
+        closest_diff = None
+        try:
+            target_val = round(abs(float(target_line)), 3) if target_line is not None else None
+        except Exception:
+            target_val = None
+        for key, candidate in section.items():
+            if key is None:
+                continue
+            diff = abs(key - (target_val if target_val is not None else key))
+            if closest_diff is None or diff < closest_diff:
+                closest_diff = diff
+                closest_key = key
+                closest_bucket = candidate
+        if closest_bucket is None and None in section:
+            closest_key = None
+            closest_bucket = section.get(None)
+        line_key, bucket = closest_key, closest_bucket
     if bucket is None:
         return None
 
@@ -5245,7 +5274,27 @@ def _match_theover_spread_leg(leg: Dict[str, Any], entry: Dict[str, Any], swappe
 def _match_theover_total_leg(leg: Dict[str, Any], entry: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     section = entry.get('totals') or {}
     target_line = _safe_float(leg.get('point'))
-    line_key, bucket = _find_line_bucket(section, target_line)
+    line_key, bucket = _find_line_bucket(section, target_line, tolerance=1.5)
+    if bucket is None and section:
+        closest_key = None
+        closest_bucket = None
+        closest_diff = None
+        try:
+            target_val = round(abs(float(target_line)), 3) if target_line is not None else None
+        except Exception:
+            target_val = None
+        for key, candidate in section.items():
+            if key is None:
+                continue
+            diff = abs(key - (target_val if target_val is not None else key))
+            if closest_diff is None or diff < closest_diff:
+                closest_diff = diff
+                closest_key = key
+                closest_bucket = candidate
+        if closest_bucket is None and None in section:
+            closest_key = None
+            closest_bucket = section.get(None)
+        line_key, bucket = closest_key, closest_bucket
     if bucket is None:
         return None
 
@@ -6492,7 +6541,11 @@ def render_parlay_section_ai(
         kalshi_available = sum(1 for leg in row.get("legs", []) if leg.get('kalshi_validation', {}).get('kalshi_available', False))
         
         # Show info if Kalshi enabled but no data found
-        if 'kalshi_validation' in row.get("legs", [{}])[0] and kalshi_available == 0:
+        if (
+            st.session_state.get('kalshi_enabled', False)
+            and 'kalshi_validation' in row.get("legs", [{}])[0]
+            and kalshi_available == 0
+        ):
             st.info("""
             **📊 Kalshi Validation Enabled** but no matching markets found for these games.
             
@@ -7249,7 +7302,7 @@ with main_tab1:
     st.subheader("📊 Kalshi Prediction Market Validation")
     use_kalshi = st.checkbox(
         "✅ Validate with Kalshi (Prediction Market Cross-Check)",
-        value=False,
+        value=st.session_state.get('kalshi_enabled', True),
         help="Compare sportsbook odds with Kalshi prediction markets to find discrepancies and boost confidence"
     )
 
