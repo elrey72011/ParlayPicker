@@ -3906,6 +3906,7 @@ def build_best_bets_per_game(
             sportsdata_payload_home = None
             sportsdata_payload_away = None
             sportsdata_payload_total = None
+            sportsdata_enrichment_status = None
 
             if (
                 sportsdata_client
@@ -3935,10 +3936,27 @@ def build_best_bets_per_game(
                             'total',
                             sport_key=sport_key,
                         )
-                except Exception:
+                        sportsdata_enrichment_status = "✅ SportsData enriched"
+                    else:
+                        sportsdata_enrichment_status = f"⚠️ SportsData: No match found for {away} @ {home}"
+                except Exception as e:
+                    sportsdata_enrichment_status = f"❌ SportsData error: {str(e)[:50]}"
+                    logger.debug(f"SportsData enrichment failed for {away} @ {home}: {e}", exc_info=True)
                     sportsdata_payload_home = None
                     sportsdata_payload_away = None
                     sportsdata_payload_total = None
+            else:
+                if not sportsdata_client:
+                    sportsdata_enrichment_status = "⚠️ SportsData client not available"
+                elif not getattr(sportsdata_client, 'is_configured', lambda: False)():
+                    sportsdata_enrichment_status = f"⚠️ SportsData {SPORTSDATA_CONFIG.get(sport_key, {}).get('label', sport_key)} API key not set"
+                else:
+                    sportsdata_enrichment_status = "⚠️ SportsData: Invalid commence time"
+            
+            # Store enrichment status for debugging
+            if sportsdata_enrichment_status and event_id:
+                if 'sportsdata_status' not in event_meta[event_id]:
+                    event_meta[event_id]['sportsdata_status'] = sportsdata_enrichment_status
 
             if use_sentiment and sentiment_analyzer:
                 try:
@@ -7008,6 +7026,68 @@ with main_tab1:
     # theover.ai Integration Section
     st.markdown("### 📊 theover.ai Integration (Optional)")
     st.caption("Upload separate datasets for ML picks and totals so each leg type can match correctly.")
+    
+    # Data Integration Status Panel
+    with st.expander("🔍 Data Integration Diagnostics", expanded=False):
+        st.markdown("### Data Sources Status")
+        
+        # SportsData.io Status
+        st.markdown("#### SportsData.io")
+        sportsdata_status = []
+        for sport_key, cfg in SPORTSDATA_CONFIG.items():
+            client = sportsdata_clients.get(sport_key)
+            if client and getattr(client, 'is_configured', lambda: False)():
+                sportsdata_status.append(f"✅ {cfg['label']}: Active")
+            else:
+                sportsdata_status.append(f"❌ {cfg['label']}: Not configured")
+        
+        for status in sportsdata_status:
+            st.text(status)
+        
+        # TheOver.ai Status  
+        st.markdown("#### TheOver.ai CSV Data")
+        theover_active = False
+        if theover_ml_data is not None and len(theover_ml_data) > 0:
+            st.text(f"✅ Moneyline: {len(theover_ml_data)} predictions loaded")
+            theover_active = True
+        else:
+            st.text("❌ Moneyline: No data uploaded")
+            
+        if theover_spreads_data is not None and len(theover_spreads_data) > 0:
+            st.text(f"✅ Spreads: {len(theover_spreads_data)} predictions loaded")
+            theover_active = True
+        else:
+            st.text("❌ Spreads: No data uploaded")
+            
+        if theover_totals_data is not None and len(theover_totals_data) > 0:
+            st.text(f"✅ Totals: {len(theover_totals_data)} predictions loaded")
+            theover_active = True
+        else:
+            st.text("❌ Totals: No data uploaded")
+        
+        if not theover_active:
+            st.warning("💡 Upload TheOver.ai CSV files above to enable AI prediction blending")
+        
+        # API-Sports Status
+        st.markdown("#### API-Sports (Live Stats)")
+        apisports_status = []
+        if apisports_client and getattr(apisports_client, 'is_configured', lambda: False)():
+            apisports_status.append("✅ NFL: Active")
+        else:
+            apisports_status.append("❌ NFL: Not configured")
+            
+        if basketball_client and getattr(basketball_client, 'is_configured', lambda: False)():
+            apisports_status.append("✅ NBA: Active")
+        else:
+            apisports_status.append("❌ NBA: Not configured")
+            
+        if hockey_client and getattr(hockey_client, 'is_configured', lambda: False)():
+            apisports_status.append("✅ NHL: Active")
+        else:
+            apisports_status.append("❌ NHL: Not configured")
+        
+        for status in apisports_status:
+            st.text(status)
 
     def _collect_theover_dataset(title: str, key_prefix: str) -> Optional[pd.DataFrame]:
         st.markdown(title)
@@ -10213,4 +10293,3 @@ with main_tab5:
             </div>
             """
             components.html(widget_html, height=widget_height, scrolling=True)
-
