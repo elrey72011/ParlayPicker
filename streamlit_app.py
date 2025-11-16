@@ -7026,6 +7026,65 @@ with main_tab1:
     # theover.ai Integration Section
     st.markdown("### 📊 theover.ai Integration (Optional)")
     st.caption("Upload separate datasets for ML picks and totals so each leg type can match correctly.")
+
+    def _collect_theover_dataset(title: str, key_prefix: str) -> Optional[pd.DataFrame]:
+        st.markdown(title)
+        st.caption(
+            "Include `League`, `Away Team`, and `Home Team` columns so matchups align across datasets."
+        )
+
+        dataset: Optional[pd.DataFrame] = None
+
+        uploaded_file = st.file_uploader(
+            "Upload theover.ai CSV export",
+            type=["csv"],
+            key=f"{key_prefix}_upload",
+        )
+        if uploaded_file is not None:
+            try:
+                dataset = pd.read_csv(uploaded_file)
+                st.success(f"✅ Loaded {len(dataset)} rows from theover.ai")
+                with st.expander("📋 Preview uploaded data", expanded=False):
+                    st.dataframe(dataset.head(10), use_container_width=True)
+            except Exception as exc:
+                st.error(f"Error loading CSV: {exc}")
+
+        with st.expander("📋 Or paste theover.ai data", expanded=False):
+            st.info(
+                """
+                **Paste Format (comma or tab-separated)**
+                ```
+                League,AwayTeam,HomeTeam,Pick,WinProbability
+                NHL,Maple Leafs,Canadiens,Over,0.57
+                ```
+                """
+            )
+            pasted_data = st.text_area(
+                "Paste data here",
+                height=150,
+                key=f"{key_prefix}_paste",
+            )
+            if dataset is None and pasted_data.strip():
+                try:
+                    from io import StringIO
+
+                    if "\t" in pasted_data and "," not in pasted_data:
+                        dataset = pd.read_csv(StringIO(pasted_data), sep="\t")
+                    else:
+                        dataset = pd.read_csv(StringIO(pasted_data))
+
+                    st.success(f"✅ Loaded {len(dataset)} rows from pasted theover.ai data")
+                    st.dataframe(dataset.head(10), use_container_width=True)
+                except Exception as exc:
+                    st.error(f"Error parsing data: {exc}")
+
+        return dataset
+
+    theover_ml_data = _collect_theover_dataset("#### 🤖 Moneyline ML projections", "theover_ml")
+    theover_spreads_data = _collect_theover_dataset("#### 📐 Spread projections", "theover_spreads")
+    theover_totals_data = _collect_theover_dataset("#### 📈 Totals (Over/Under) projections", "theover_totals")
+    
+    st.markdown("---")
     
     # Data Integration Status Panel
     with st.expander("🔍 Data Integration Diagnostics", expanded=False):
@@ -7088,63 +7147,6 @@ with main_tab1:
         
         for status in apisports_status:
             st.text(status)
-
-    def _collect_theover_dataset(title: str, key_prefix: str) -> Optional[pd.DataFrame]:
-        st.markdown(title)
-        st.caption(
-            "Include `League`, `Away Team`, and `Home Team` columns so matchups align across datasets."
-        )
-
-        dataset: Optional[pd.DataFrame] = None
-
-        uploaded_file = st.file_uploader(
-            "Upload theover.ai CSV export",
-            type=["csv"],
-            key=f"{key_prefix}_upload",
-        )
-        if uploaded_file is not None:
-            try:
-                dataset = pd.read_csv(uploaded_file)
-                st.success(f"✅ Loaded {len(dataset)} rows from theover.ai")
-                with st.expander("📋 Preview uploaded data", expanded=False):
-                    st.dataframe(dataset.head(10), use_container_width=True)
-            except Exception as exc:
-                st.error(f"Error loading CSV: {exc}")
-
-        with st.expander("📋 Or paste theover.ai data", expanded=False):
-            st.info(
-                """
-                **Paste Format (comma or tab-separated)**
-                ```
-                League,AwayTeam,HomeTeam,Pick,WinProbability
-                NHL,Maple Leafs,Canadiens,Over,0.57
-                ```
-                """
-            )
-            pasted_data = st.text_area(
-                "Paste data here",
-                height=150,
-                key=f"{key_prefix}_paste",
-            )
-            if dataset is None and pasted_data.strip():
-                try:
-                    from io import StringIO
-
-                    if "\t" in pasted_data and "," not in pasted_data:
-                        dataset = pd.read_csv(StringIO(pasted_data), sep="\t")
-                    else:
-                        dataset = pd.read_csv(StringIO(pasted_data))
-
-                    st.success(f"✅ Loaded {len(dataset)} rows from pasted theover.ai data")
-                    st.dataframe(dataset.head(10), use_container_width=True)
-                except Exception as exc:
-                    st.error(f"Error parsing data: {exc}")
-
-        return dataset
-
-    theover_ml_data = _collect_theover_dataset("#### 🤖 Moneyline ML projections", "theover_ml")
-    theover_spreads_data = _collect_theover_dataset("#### 📐 Spread projections", "theover_spreads")
-    theover_totals_data = _collect_theover_dataset("#### 📈 Totals (Over/Under) projections", "theover_totals")
     
     st.markdown("---")
 
