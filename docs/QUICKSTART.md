@@ -1,5 +1,7 @@
 # Quick Start Guide - 5 Minutes to AI Predictions
 
+> **Update:** The enhanced build has been merged into `streamlit_app.py`. Use the main app for both quick analysis and historical ML workflows; legacy references to `streamlit_app_enhanced.py` are for archival purposes only.
+
 ## ⚡ Super Fast Setup
 
 ### 1. Install Dependencies (30 seconds)
@@ -20,7 +22,7 @@ pip install streamlit pandas numpy requests pytz scikit-learn
 
 ### 3. Launch the App (10 seconds)
 ```bash
-streamlit run streamlit_app_enhanced.py
+streamlit run streamlit_app.py
 ```
 
 ### 4. Train Your First Model (2 minutes)
