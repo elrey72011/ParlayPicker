@@ -3907,6 +3907,9 @@ def build_best_bets_per_game(
             sportsdata_payload_away = None
             sportsdata_payload_total = None
             sportsdata_enrichment_status = None
+            
+            # Debug: Track SportsData enrichment status
+            sportsdata_debug = []
 
             if (
                 sportsdata_client
@@ -3915,12 +3918,16 @@ def build_best_bets_per_game(
             ):
                 try:
                     local_date_sd = commence_dt.tz_convert(tz_info).date()
+                    sportsdata_debug.append(f"Attempting SportsData fetch for {away} @ {home} on {local_date_sd}")
+                    
                     summary_sd = sportsdata_client.find_game_insight(
                         local_date_sd,
                         home,
                         away,
                     )
+                    
                     if summary_sd:
+                        sportsdata_debug.append(f"✅ SportsData game found!")
                         sportsdata_payload_home = build_leg_sportsdata_payload(
                             summary_sd,
                             'home',
@@ -3937,26 +3944,37 @@ def build_best_bets_per_game(
                             sport_key=sport_key,
                         )
                         sportsdata_enrichment_status = "✅ SportsData enriched"
+                        sportsdata_debug.append(f"✅ Payloads built: home={bool(sportsdata_payload_home)}, away={bool(sportsdata_payload_away)}")
                     else:
                         sportsdata_enrichment_status = f"⚠️ SportsData: No match found for {away} @ {home}"
+                        sportsdata_debug.append(f"❌ No game found in SportsData for {away} @ {home}")
                 except Exception as e:
                     sportsdata_enrichment_status = f"❌ SportsData error: {str(e)[:50]}"
-                    logger.debug(f"SportsData enrichment failed for {away} @ {home}: {e}", exc_info=True)
+                    sportsdata_debug.append(f"❌ Exception: {str(e)}")
+                    logger.error(f"SportsData enrichment failed for {away} @ {home}: {e}", exc_info=True)
                     sportsdata_payload_home = None
                     sportsdata_payload_away = None
                     sportsdata_payload_total = None
             else:
                 if not sportsdata_client:
                     sportsdata_enrichment_status = "⚠️ SportsData client not available"
+                    sportsdata_debug.append(f"❌ No SportsData client for {sport_key}")
                 elif not getattr(sportsdata_client, 'is_configured', lambda: False)():
                     sportsdata_enrichment_status = f"⚠️ SportsData {SPORTSDATA_CONFIG.get(sport_key, {}).get('label', sport_key)} API key not set"
+                    sportsdata_debug.append(f"❌ SportsData client not configured for {sport_key}")
                 else:
                     sportsdata_enrichment_status = "⚠️ SportsData: Invalid commence time"
+                    sportsdata_debug.append(f"❌ Invalid commence time for {away} @ {home}")
             
-            # Store enrichment status for debugging
+            # Store enrichment status and debug info for troubleshooting
             if sportsdata_enrichment_status and event_id:
                 if 'sportsdata_status' not in event_meta[event_id]:
                     event_meta[event_id]['sportsdata_status'] = sportsdata_enrichment_status
+                    event_meta[event_id]['sportsdata_debug'] = sportsdata_debug
+                    
+            # Log enrichment attempts for debugging
+            if sportsdata_debug:
+                logger.info(f"SportsData enrichment log for {event_id}: " + " | ".join(sportsdata_debug))
 
             if use_sentiment and sentiment_analyzer:
                 try:
@@ -7738,6 +7756,26 @@ with main_tab1:
             if best_bets_df.empty:
                 st.info("No qualifying legs found for the selected range and sports.")
             else:
+                # Add SportsData debug panel
+                with st.expander("🔍 SportsData.io Enrichment Status", expanded=False):
+                    st.markdown("### Debug Information")
+                    st.caption("Shows which games were enriched with SportsData.io")
+                    
+                    for sport_key in target_sports:
+                        sport_label = SPORTSDATA_CONFIG.get(sport_key, {}).get('label', sport_key)
+                        client = sportsdata_clients.get(sport_key)
+                        
+                        st.markdown(f"#### {sport_label}")
+                        if client and getattr(client, 'is_configured', lambda: False)():
+                            st.success(f"✅ API Key configured")
+                            # Show which games were attempted
+                            enriched_count = sum(1 for row in best_bets_df.to_dict('records') 
+                                               if row.get('SportsData Prob %') and row.get('SportsData Prob %') != '—')
+                            st.write(f"Enriched games: {enriched_count}/{len(best_bets_df)}")
+                        else:
+                            st.error(f"❌ API Key NOT configured")
+                            st.info(f"Add your SportsData.io {sport_label} key in the sidebar to enable enrichment")
+                
                 display_df = best_bets_df.copy()
 
                 percent_columns = [
