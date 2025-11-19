@@ -9686,9 +9686,9 @@ with main_tab1:
                     top_rows = ranked_exports[:2]
 
                     st.markdown("---")
-                    st.subheader("📤 Export Parlay Projections")
+                    st.subheader("🏆 Top 2 Parlays Preview")
                     st.caption(
-                        "Top two parlays ranked by AI confidence, plus a CSV export covering every generated projection."
+                        "The highest-ranked parlays by AI confidence. Scroll down for bulk export of all projections."
                     )
 
                     if top_rows:
@@ -9725,22 +9725,55 @@ with main_tab1:
 
                         top_csv = top_df.to_csv(index=False)
                         st.download_button(
-                            "💾 Download top 2 parlays (CSV)",
+                            "📥 Download Top 2 Only (CSV)",
                             data=top_csv,
                             file_name=f"top2_parlays_{sel_date.isoformat()}.csv",
                             mime="text/csv",
                             key="top2_parlays_download",
+                            use_container_width=True
                         )
 
                     full_df = pd.DataFrame(ranked_exports)
+                    
+                    # Create Excel file with openpyxl
+                    from io import BytesIO
+                    excel_buffer = BytesIO()
+                    with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
+                        full_df.to_excel(writer, sheet_name='All Parlays', index=False)
+                        if top_rows:
+                            top_df.to_excel(writer, sheet_name='Top 2 Parlays', index=False)
+                    excel_data = excel_buffer.getvalue()
+                    
+                    # CSV export
                     full_csv = full_df.to_csv(index=False)
-                    st.download_button(
-                        "⬇️ Download all parlay projections (CSV)",
-                        data=full_csv,
-                        file_name=f"parlay_projections_{sel_date.isoformat()}.csv",
-                        mime="text/csv",
-                        key="all_parlays_download",
-                    )
+                    
+                    st.markdown("---")
+                    st.markdown("## 📦 Bulk Export Options")
+                    st.markdown(f"**Export all {len(ranked_exports)} parlay projections** generated from this analysis.")
+                    
+                    col_exp1, col_exp2 = st.columns(2)
+                    
+                    with col_exp1:
+                        st.download_button(
+                            "📥 Download All Parlays (CSV)",
+                            data=full_csv,
+                            file_name=f"all_parlays_{sel_date.isoformat()}.csv",
+                            mime="text/csv",
+                            key="all_parlays_csv_download",
+                            help="Download all parlay combinations as CSV",
+                            use_container_width=True
+                        )
+                    
+                    with col_exp2:
+                        st.download_button(
+                            "📊 Download All Parlays (Excel)",
+                            data=excel_data,
+                            file_name=f"all_parlays_{sel_date.isoformat()}.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            key="all_parlays_excel_download",
+                            help="Download all parlay combinations as Excel with multiple sheets",
+                            use_container_width=True
+                        )
         
         except KeyError as e:
             st.error(f"Configuration error: Missing key {str(e)}. Please refresh the page.")
