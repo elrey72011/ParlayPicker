@@ -6972,6 +6972,68 @@ def render_parlay_section_ai(
     if not rows:
         st.info("No combinations found with current filters")
         return
+    
+    # Add export button at the top
+    st.markdown("---")
+    col_export1, col_export2, col_export3 = st.columns([2, 2, 2])
+    
+    with col_export1:
+        st.metric("Total Parlays", len(rows))
+    
+    with col_export2:
+        # Create CSV export data
+        export_data = []
+        for idx, row in enumerate(rows, 1):
+            legs_str = " | ".join([
+                f"{leg.get('label', 'Unknown')}" 
+                for leg in row.get('legs', [])
+            ])
+            export_data.append({
+                'Rank': idx,
+                'AI Score': row.get('ai_score', 0),
+                'Odds': row.get('d', 0),
+                'AI Probability': row.get('p_ai', 0),
+                'AI Confidence': row.get('ai_confidence', 0),
+                'Profit on $100': row.get('profit', 0),
+                'AI EV': row.get('ev_ai', 0),
+                'Legs': legs_str,
+                'Kalshi Legs': row.get('kalshi_legs', 0),
+                'API-Sports Legs': row.get('apisports_legs', 0),
+            })
+        
+        import pandas as pd
+        df_export = pd.DataFrame(export_data)
+        csv_export = df_export.to_csv(index=False)
+        
+        st.download_button(
+            f"📥 Export All {len(rows)} Parlays (CSV)",
+            data=csv_export,
+            file_name=f"{title.lower().replace(' ', '_')}_all_parlays.csv",
+            mime="text/csv",
+            key=f"export_all_{title}",
+            use_container_width=True,
+            help=f"Download all {len(rows)} parlay combinations as CSV"
+        )
+    
+    with col_export3:
+        # Excel export option
+        from io import BytesIO
+        excel_buffer = BytesIO()
+        with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
+            df_export.to_excel(writer, sheet_name='Parlays', index=False)
+        excel_data = excel_buffer.getvalue()
+        
+        st.download_button(
+            f"📊 Export All {len(rows)} Parlays (Excel)",
+            data=excel_data,
+            file_name=f"{title.lower().replace(' ', '_')}_all_parlays.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            key=f"export_all_excel_{title}",
+            use_container_width=True,
+            help=f"Download all {len(rows)} parlay combinations as Excel"
+        )
+    
+    st.markdown("---")
 
     prepared_theover_ml = (
         prepare_theover_dataset(theover_ml_data, 'ml') if theover_ml_data is not None else None
@@ -7092,20 +7154,25 @@ def render_parlay_section_ai(
 
         prob_pct = row['p_ai'] * 100
         
-        # Display as an expanded card by default
+        # Display parlay in a clean, open format
         st.markdown("---")
         st.markdown(f"### {conf_icon}{ev_icon}{prob_warning} Parlay #{i}")
         
-        # Key metrics always visible
-        metric_col1, metric_col2, metric_col3, metric_col4 = st.columns(4)
-        with metric_col1:
+        # Show all key metrics in a single row - no duplicates
+        col1, col2, col3, col4, col5, col6 = st.columns(6)
+        with col1:
             st.metric("AI Score", f"{row['ai_score']:.1f}")
-        with metric_col2:
+        with col2:
             st.metric("Odds", f"{row['d']:.2f}")
-        with metric_col3:
-            st.metric("AI Probability", f"{prob_pct:.1f}%")
-        with metric_col4:
-            st.metric("Profit on $100", f"${row['profit']:.2f}")
+        with col3:
+            st.metric("AI Prob", f"{prob_pct:.1f}%")
+        with col4:
+            st.metric("AI Confidence", f"{conf*100:.1f}%")
+        with col5:
+            st.metric("Profit ($100)", f"${row['profit']:.2f}")
+        with col6:
+            delta_color = "normal" if row['ev_ai'] > 0 else "inverse"
+            st.metric("AI EV", f"{ai_ev_pct:.1f}%", delta_color=delta_color)
         
         # Additional info as caption
         info_parts = []
@@ -7118,32 +7185,17 @@ def render_parlay_section_ai(
         if info_parts:
             st.caption(" • ".join(info_parts))
         
-        # Detailed metrics in columns
-        col_a, col_b, col_c, col_d, col_e, col_f = st.columns(6)
-        with col_a:
-            st.metric("Decimal Odds", f"{row['d']:.3f}")
-        with col_b:
-            st.metric("AI Probability", f"{prob_pct:.2f}%")
-        with col_c:
-            st.metric("AI Confidence", f"{conf*100:.1f}%")
-        with col_d:
-            st.metric("Profit on $100", f"${row['profit']:.2f}")
-        with col_e:
-            delta_color = "normal" if row['ev_ai'] > 0 else "inverse"
-            st.metric("AI Expected Value", f"{ai_ev_pct:.2f}%")
-        with col_f:
+        # Show API/Live Data summary
+        col_api1, col_api2, col_api3 = st.columns(3)
+        with col_api1:
             if apisports_legs:
-                st.metric(
-                    "API-Sports Legs",
-                    f"{apisports_legs}/{len(row['legs'])}",
-                    help="Number of legs with live API-Sports context",
-                )
-            else:
-                st.metric(
-                    "API-Sports Legs",
-                    "0",
-                    help="Provide an API-Sports key (NFL, NBA, or NHL) to enrich supported legs",
-                )
+                st.info(f"🛰️ API-Sports: {apisports_legs}/{len(row['legs'])} legs")
+        with col_api2:
+            if row.get('sportsdata_legs', 0) > 0:
+                st.info(f"📊 SportsData: {row.get('sportsdata_legs')}/{len(row['legs'])} legs")
+        with col_api3:
+            if row.get('kalshi_legs', 0) > 0:
+                st.info(f"📈 Kalshi: {row.get('kalshi_legs')}/{len(row['legs'])} legs")
             
         # KALSHI STATUS - ALWAYS SHOW (whether data exists or not)
         st.markdown("---")
