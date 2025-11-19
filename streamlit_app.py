@@ -1890,45 +1890,45 @@ class KalshiIntegrator:
         return arbitrage_opps
     
     def analyze_kalshi_market(self, market: Dict, sentiment_score: float = 0, 
-                             ml_probability: float = None) -> Dict:
-        """
-        Comprehensive analysis of a Kalshi market
+                         ml_probability: float = None) -> Dict:
+    """
+    Comprehensive analysis of a Kalshi market
+    
+    Combines:
+    - Kalshi orderbook data
+    - Sentiment analysis
+    - ML predictions
+    - Value assessment
+    """
+    yes_bid = market.get('yes_bid', 0) / 100
+    yes_ask = market.get('yes_ask', 100) / 100
+    no_bid = market.get('no_bid', 0) / 100
+    no_ask = market.get('no_ask', 100) / 100
+    
+    volume = market.get('volume', 0)
+    open_interest = market.get('open_interest', 0)
+    
+    # Market efficiency (tight spread = efficient)
+    yes_spread = yes_ask - yes_bid
+    no_spread = no_ask - no_bid
+    avg_spread = (yes_spread + no_spread) / 2
+    
+    efficiency = 1 - avg_spread  # Higher = more efficient
+    
+    # Compare with AI prediction
+    kalshi_implied = yes_bid  # Using bid as market consensus
+    
+    if ml_probability:
+        ai_edge = ml_probability - kalshi_implied
         
-        Combines:
-        - Kalshi orderbook data
-        - Sentiment analysis
-        - ML predictions
-        - Value assessment
-        """
-        yes_bid = market.get('yes_bid', 0) / 100
-        yes_ask = market.get('yes_ask', 100) / 100
-        no_bid = market.get('no_bid', 0) / 100
-        no_ask = market.get('no_ask', 100) / 100
-        
-        volume = market.get('volume', 0)
-        open_interest = market.get('open_interest', 0)
-        
-        # Market efficiency (tight spread = efficient)
-        yes_spread = yes_ask - yes_bid
-        no_spread = no_ask - no_bid
-        avg_spread = (yes_spread + no_spread) / 2
-        
-        efficiency = 1 - avg_spread  # Higher = more efficient
-        
-        # Compare with AI prediction
-        kalshi_implied = yes_bid  # Using bid as market consensus
-        
-        if ml_probability:
-            ai_edge = ml_probability - kalshi_implied
-            
-            if ai_edge > 0.10:
-                ai_recommendation = f"🟢 STRONG BUY YES - AI sees {ai_edge*100:.1f}% edge"
-            elif ai_edge < -0.10:
-                ai_recommendation = f"🟢 STRONG BUY NO - AI sees {abs(ai_edge)*100:.1f}% edge"
-            elif abs(ai_edge) < 0.05:
-                ai_recommendation = "🟡 FAIR PRICE - AI agrees with market"
-            else:
-                result['status'] = 'push'
+        if ai_edge > 0.10:
+            ai_recommendation = f"🟢 STRONG BUY YES - AI sees {ai_edge*100:.1f}% edge"
+        elif ai_edge < -0.10:
+            ai_recommendation = f"🟢 STRONG BUY NO - AI sees {abs(ai_edge)*100:.1f}% edge"
+        elif abs(ai_edge) < 0.05:
+            ai_recommendation = "🟡 FAIR PRICE - AI agrees with market"
+        else:
+            ai_recommendation = "⚪ SLIGHT EDGE - Monitor for better entry"  # Fixed this line
 
     elif leg_type == 'total':
         point = _safe_float(leg.get('point'))
