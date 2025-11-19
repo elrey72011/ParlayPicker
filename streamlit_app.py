@@ -1,4 +1,4 @@
-# ParlayDesk_AI_Enhanced.py - v9.2 FIXED - Better margins and data source display
+# ParlayDesk_AI_Enhanced.py - v9.1 FIXED
 # AI-Enhanced parlay finder with sentiment analysis, ML predictions, and live market data
 import os, io, json, itertools, re, copy, logging, hashlib, math
 from html import escape
@@ -33,99 +33,21 @@ from app_core import (
 
 logger = logging.getLogger(__name__)
 
-# ============ PAGE CONFIGURATION WITH BETTER MARGINS ============
-st.set_page_config(
-    page_title="ParlayDesk - AI-Enhanced Odds Finder",
-    page_icon="🎯",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+try:
+    st.set_page_config(page_title="ParlayDesk", page_icon="🎯", layout="wide")
+except: pass
 
-# Custom CSS for better margins and spacing
-st.markdown("""
-<style>
-    /* Main content padding - reduced for better space utilization */
-    .main .block-container {
-        padding-top: 1rem !important;
-        padding-right: 1.5rem !important;
-        padding-left: 1.5rem !important;
-        padding-bottom: 1rem !important;
-        max-width: 100% !important;
-    }
-    
-    /* Reduce excessive spacing between elements */
-    .stMarkdown {
-        margin-bottom: 0.3rem !important;
-    }
-    
-    /* Better table spacing */
-    .stDataFrame {
-        margin-top: 0.5rem !important;
-        margin-bottom: 0.5rem !important;
-    }
-    
-    /* Sidebar padding */
-    section[data-testid="stSidebar"] .block-container {
-        padding-top: 1.5rem !important;
-        padding-right: 1rem !important;
-        padding-left: 1rem !important;
-    }
-    
-    /* Metric cards */
-    [data-testid="stMetricValue"] {
-        font-size: 1.6rem !important;
-    }
-    
-    /* Column spacing */
-    [data-testid="column"] {
-        padding: 0.25rem !important;
-    }
-    
-    /* Button spacing */
-    .stButton {
-        margin-top: 0.25rem !important;
-        margin-bottom: 0.25rem !important;
-    }
-    
-    /* Expander spacing */
-    .streamlit-expanderHeader {
-        font-size: 1.05rem !important;
-        font-weight: 600 !important;
-        padding: 0.5rem 0 !important;
-    }
-    
-    /* Tab spacing */
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 0.5rem !important;
-        margin-bottom: 1rem !important;
-    }
-    
-    /* Info/warning/success box margins */
-    .stAlert {
-        margin-top: 0.5rem !important;
-        margin-bottom: 0.5rem !important;
-        padding: 0.75rem !important;
-    }
-    
-    /* Caption text */
-    .stCaption {
-        margin-top: 0.25rem !important;
-        margin-bottom: 0.25rem !important;
-    }
-    
-    /* Divider spacing */
-    hr {
-        margin-top: 1rem !important;
-        margin-bottom: 1rem !important;
-    }
-    
-    /* Subheader spacing */
-    .stSubheader, h2, h3 {
-        margin-top: 0.75rem !important;
-        margin-bottom: 0.5rem !important;
-    }
-</style>
-""", unsafe_allow_html=True)
+st.markdown("""<style>
+.main .block-container {padding: 1rem 1.5rem !important; max-width: 100% !important;}
+.stMarkdown {margin-bottom: 0.3rem !important;}
+.stDataFrame {margin: 0.5rem 0 !important;}
+section[data-testid="stSidebar"] .block-container {padding: 1.5rem 1rem !important;}
+[data-testid="column"] {padding: 0.25rem !important;}
+.stButton, .stAlert {margin: 0.5rem 0 !important;}
+hr {margin: 1rem 0 !important;}
+h2, h3 {margin: 0.75rem 0 0.5rem 0 !important;}
+</style>""", unsafe_allow_html=True)
+
 
 # ============ HELPER FUNCTIONS ============
 def american_to_decimal_safe(odds) -> Optional[float]:
@@ -6716,7 +6638,7 @@ def render_parlay_section_ai(
 
             col_k1, col_k2, col_k3, col_k4 = st.columns(4)
             
-            with col_impact1:
+            with col_k1:
                 st.metric(
                     "Legs Validated",
                     f"{kalshi_available}/{len(row.get('legs', []))}",
@@ -6815,159 +6737,6 @@ def render_parlay_section_ai(
                     st.caption(
                         f"SportsData.io coverage: {sportsdata_legs} leg(s), points {sportsdata_boost:+.0f}"
                     )
-            else:
-                st.markdown("### 🛰️ Live Data Status:")
-                apisports_client = _session_client_or_none('apisports_nfl_client', APISportsFootballClient)
-                hockey_client = _session_client_or_none('apisports_hockey_client', APISportsHockeyClient)
-                configured_apisports = any(
-                    client and client.is_configured()
-                    for client in (
-                        apisports_client,
-                        basketball_client,
-                        hockey_client,
-                    )
-                )
-                configured_sportsdata = any(
-                    client and getattr(client, "is_configured", lambda: False)()
-                    for client in sportsdata_clients.values()
-                )
-                if not (configured_apisports or configured_sportsdata):
-                    st.info(
-                        "Add your API-Sports and SportsData.io keys across the leagues you follow to blend live team trends into scoring."
-                    )
-
-                align_avg = row.get('kalshi_alignment_avg', 0.0)
-                align_abs = row.get('kalshi_alignment_abs_avg', 0.0)
-                align_pos = row.get('kalshi_alignment_positive', 0)
-                align_neg = row.get('kalshi_alignment_negative', 0)
-                align_count = row.get('kalshi_alignment_count', 0)
-                disagreement_display = f"{align_neg}/{align_count}" if align_count else "—"
-
-                col_align1, col_align2, col_align3 = st.columns(3)
-
-                with col_align1:
-                    st.metric(
-                        "Avg Kalshi vs ML",
-                        f"{align_avg*100:+.1f} pp",
-                        help="Average percentage-point difference between Kalshi pricing and the trained model before blending"
-                    )
-
-                with col_align2:
-                    st.metric(
-                        "Avg Absolute Gap",
-                        f"{align_abs*100:.1f} pp",
-                        help="Typical gap size between Kalshi prices and the model regardless of direction"
-                    )
-
-                with col_align3:
-                    st.metric(
-                        "Disagreement Legs",
-                        disagreement_display,
-                        help="Legs where Kalshi is ≥1 percentage point more bearish than the model"
-                    )
-
-                # Explanation of Kalshi influence
-                if kalshi_factor_val > 1.05:
-                    st.success(f"🟢 **Kalshi BOOSTED this parlay by {(kalshi_factor_val-1)*100:.0f}%** - Prediction markets confirm AI analysis!")
-                elif kalshi_factor_val < 0.95:
-                    st.warning(f"🟠 **Kalshi REDUCED this parlay by {(1-kalshi_factor_val)*100:.0f}%** - Prediction markets skeptical of AI picks.")
-                else:
-                    st.info("🟡 **Kalshi NEUTRAL** - Prediction markets neither strongly confirm nor contradict AI.")
-
-                if align_count:
-                    if align_avg <= -0.05:
-                        st.warning(
-                            f"⚠️ Kalshi is on average {abs(align_avg)*100:.1f} percentage points more bearish than the model. "
-                            "Final AI probabilities are being pulled toward Kalshi's price."
-                        )
-                    elif align_avg >= 0.05:
-                        st.success(
-                            f"🟢 Kalshi is on average {align_avg*100:.1f} percentage points more bullish than the model, giving "
-                            "the blended AI number an extra push."
-                        )
-
-                if align_neg > 0:
-                    st.warning(
-                        f"⚠️ Kalshi is more bearish than the model on {align_neg} of {align_count} leg(s)."
-                        " Expect the blended AI probability to drift toward the market price."
-                    )
-                elif align_pos > 0:
-                    st.success(
-                        f"✅ Kalshi prices {align_pos} leg(s) richer than the model, reinforcing the AI edge before blending."
-                    )
-            else:
-                # NO KALSHI DATA - Explain why
-                st.markdown("### 📊 Kalshi Prediction Market Status:")
-                legs = row.get('legs', [])
-                scopes = [leg.get('kalshi_validation', {}).get('market_scope') for leg in legs]
-                unsupported_labels = [
-                    leg.get('label')
-                    for leg in legs
-                    if leg.get('kalshi_validation', {}).get('market_scope') in {
-                        'total_market', 'unsupported_market', 'totals_not_supported'
-                    }
-                ]
-                error_labels = [
-                    leg.get('label')
-                    for leg in legs
-                    if leg.get('kalshi_validation', {}).get('market_scope') == 'error'
-                ]
-                not_initialized = any(scope == 'not_initialized' for scope in scopes)
-                disabled = (not st.session_state.get('kalshi_enabled', False)) or any(scope == 'disabled' for scope in scopes)
-
-                if disabled:
-                    st.info("Kalshi validation is turned off. Toggle the Kalshi checkbox above to blend prediction markets into the analysis.")
-                elif unsupported_labels:
-                    st.info("Kalshi does not publish totals/prop markets, so these leg(s) rely on AI + sentiment only:")
-                    for label in unsupported_labels:
-                        st.caption(f"• {label}")
-                    st.caption("Moneyline and spread legs will include Kalshi coverage whenever a market is available.")
-                elif not_initialized:
-                    st.info("Kalshi markets have not loaded yet. Add your Kalshi API key or retry to use the live/synthetic market data.")
-                elif error_labels:
-                    st.warning("Kalshi validation encountered an error for these legs (falling back to AI + sentiment):")
-                    for label in error_labels:
-                        st.caption(f"• {label}")
-                else:
-                    kalshi_notice = f"""
-**No Kalshi Data Available for this Parlay** ({kalshi_legs_with_data}/{total_legs} legs)
-
-**This means:**
-- Analysis still uses AI + Sentiment (2 of 3 sources)
-- Missing prediction market validation
-- Kalshi Factor = 1.0x (neutral, no impact)
-- AI Score unchanged by Kalshi
-
-**Why no data?**
-- Kalshi doesn't have markets for these specific games
-- Kalshi focuses on season-long outcomes (playoffs, championships)
-- Individual game spreads/totals rarely have Kalshi markets
-
-**What this means:**
-- Bet based on AI + Sentiment confidence
-- Higher risk without 3rd source validation
-- Consider checking Tab 4 for available Kalshi markets
-
-Tip: For Kalshi validation, focus on season futures, playoff odds, or major championships.
-"""
-
-                    st.warning(kalshi_notice.strip())
-
-            live_data_legs_with_data = row.get('live_data_legs', row.get('apisports_legs', 0))
-            live_data_factor = row.get('live_data_factor', row.get('apisports_factor', 1.0))
-            live_data_boost = row.get('live_data_boost', row.get('apisports_boost', 0))
-            apisports_legs = row.get('apisports_legs', 0)
-            apisports_boost = row.get('apisports_boost', 0)
-            sportsdata_legs = row.get('sportsdata_legs', 0)
-            sportsdata_boost = row.get('sportsdata_boost', 0)
-            live_data_sports = row.get('live_data_sports', row.get('apisports_sports', [])) or []
-
-            sport_icon_lookup = {
-                'americanfootball_nfl': '🏈',
-                'basketball_nba': '🏀',
-                'icehockey_nhl': '🏒',
-            }
-
             if live_data_legs_with_data:
                 st.markdown("### 🛰️ Live Data Influence (API-Sports + SportsData.io):")
 
@@ -7138,52 +6907,21 @@ Tip: For Kalshi validation, focus on season futures, playoff odds, or major cham
         # Legs breakdown with theover.ai integration
         st.markdown("**🎯 Parlay Legs:**")
         
-        # ============ DATA SOURCE VALIDATION SECTION ============
-        st.markdown("**🔍 Data Sources Used in Analysis:**")
-        data_sources_used = {
-            'Kalshi': False,
-            'theover.ai': False,
-            'API-Sports': False,
-            'SportsData.io': False
-        }
-        
-        # Check which data sources have actual data
+        # DATA SOURCES
+        st.markdown("**🔍 Data Sources:**")
+        ds = {'Kalshi': 0, 'theover.ai': 0, 'API-Sports': 0, 'SportsData.io': 0}
         for leg in row.get("legs", []):
-            if leg.get('kalshi_validation', {}).get('kalshi_available'):
-                data_sources_used['Kalshi'] = True
-            if leg.get('theover_match') or leg.get('theover_probability'):
-                data_sources_used['theover.ai'] = True
-            if leg.get('apisports'):
-                data_sources_used['API-Sports'] = True
-            if leg.get('sportsdata'):
-                data_sources_used['SportsData.io'] = True
-        
-        # Display data source status
-        ds_col1, ds_col2, ds_col3, ds_col4 = st.columns(4)
-        with ds_col1:
-            if data_sources_used['Kalshi']:
-                st.success("✅ Kalshi")
-            else:
-                st.warning("❌ Kalshi")
-        with ds_col2:
-            if data_sources_used['theover.ai']:
-                st.success("✅ theover.ai")
-            else:
-                st.warning("❌ theover.ai")
-        with ds_col3:
-            if data_sources_used['API-Sports']:
-                st.success("✅ API-Sports")
-            else:
-                st.warning("❌ API-Sports")
-        with ds_col4:
-            if data_sources_used['SportsData.io']:
-                st.success("✅ SportsData.io")
-            else:
-                st.warning("❌ SportsData.io")
-        
-        st.caption("Green checkmarks indicate data sources with active data for this parlay. Configure API keys in the sidebar to enable missing sources.")
+            if leg.get('kalshi_validation', {}).get('kalshi_available'): ds['Kalshi'] = 1
+            if leg.get('theover_match') or leg.get('theover_probability'): ds['theover.ai'] = 1
+            if leg.get('apisports'): ds['API-Sports'] = 1
+            if leg.get('sportsdata'): ds['SportsData.io'] = 1
+        c1,c2,c3,c4 = st.columns(4)
+        with c1: st.success("✅ Kalshi") if ds['Kalshi'] else st.warning("❌ Kalshi")
+        with c2: st.success("✅ theover.ai") if ds['theover.ai'] else st.warning("❌ theover.ai")
+        with c3: st.success("✅ API-Sports") if ds['API-Sports'] else st.warning("❌ API-Sports")
+        with c4: st.success("✅ SportsData.io") if ds['SportsData.io'] else st.warning("❌ SportsData.io")
+        st.caption("Enable APIs in sidebar.")
         st.markdown("---")
-        # ============ END DATA SOURCE VALIDATION ============
         
         legs_data = []
         leg_summaries: List[str] = []
@@ -7451,32 +7189,17 @@ Tip: For Kalshi validation, focus on season futures, playoff odds, or major cham
 
         legs_df_display = format_parlay_leg_dataframe(pd.DataFrame(legs_data))
         column_config = {
-            "Leg": st.column_config.NumberColumn(width="small"),
-            "Type": st.column_config.TextColumn(width="small"),
-            "Selection": st.column_config.TextColumn(width="large"),
-            "Odds": st.column_config.TextColumn(width="small"),
-            "Market %": st.column_config.TextColumn(width="small"),
-            "AI % (pre-Kalshi)": st.column_config.TextColumn(width="medium"),
-            "AI % (final)": st.column_config.TextColumn(width="medium"),
-            "ML Model": st.column_config.TextColumn(width="medium"),
+            "Selection": st.column_config.TextColumn(width="medium"),
             "ML Breakdown": st.column_config.TextColumn(width="large"),
-            "Training Rows": st.column_config.TextColumn(width="small"),
-            "Kalshi": st.column_config.TextColumn(width="medium"),
-            "K Impact": st.column_config.TextColumn(width="small"),
-            "Kalshi vs ML": st.column_config.TextColumn(width="small"),
-            "Sentiment": st.column_config.TextColumn(width="small"),
-            "API-Sports": st.column_config.TextColumn(width="large"),
-            "SportsData.io": st.column_config.TextColumn(width="large"),
+            "API-Sports": st.column_config.TextColumn(width="medium"),
+            "SportsData.io": st.column_config.TextColumn(width="medium"),
             "theover.ai": st.column_config.TextColumn(width="medium"),
-            "theover.ai %": st.column_config.TextColumn(width="small"),
-            "theover Δ": st.column_config.TextColumn(width="small"),
         }
         st.dataframe(
             legs_df_display,
             use_container_width=True,
             hide_index=True,
             column_config=column_config,
-            height=400  # Set a reasonable height for better scrolling
         )
 
         if has_theover:
@@ -7651,7 +7374,7 @@ Tip: For Kalshi validation, focus on season futures, playoff odds, or major cham
                 st.markdown("**📈 Kalshi Impact Summary:**")
                 col_impact1, col_impact2, col_impact3, col_impact4 = st.columns(4)
                 
-                with col_impact1:
+                with col_k1:
                     st.metric(
                         "Legs Validated",
                         f"{kalshi_available}/{len(row.get('legs', []))}",
