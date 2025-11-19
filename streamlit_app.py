@@ -3143,7 +3143,7 @@ class KalshiIntegrator:
             elif abs(ai_edge) < 0.05:
                 ai_recommendation = "🟡 FAIR PRICE - AI agrees with market"
             else:
-                result['status'] = 'push'
+                ai_recommendation = "⚪ SLIGHT EDGE - Monitor for better entry"
 
     elif leg_type == 'total':
         point = _safe_float(leg.get('point'))
