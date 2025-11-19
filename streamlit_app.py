@@ -1891,7 +1891,7 @@ class KalshiIntegrator:
     
     def analyze_kalshi_market(self, market: Dict, sentiment_score: float = 0, 
                          ml_probability: float = None) -> Dict:
-    """
+        """
     Comprehensive analysis of a Kalshi market
     
     Combines:
