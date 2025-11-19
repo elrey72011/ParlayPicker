@@ -1890,76 +1890,97 @@ class KalshiIntegrator:
         return arbitrage_opps
     
     def analyze_kalshi_market(self, market: Dict, sentiment_score: float = 0, 
-                         ml_probability: float = None) -> Dict:
+                             ml_probability: float = None) -> Dict:
         """
-    Comprehensive analysis of a Kalshi market
-    
-    Combines:
-    - Kalshi orderbook data
-    - Sentiment analysis
-    - ML predictions
-    - Value assessment
-    """
-    yes_bid = market.get('yes_bid', 0) / 100
-    yes_ask = market.get('yes_ask', 100) / 100
-    no_bid = market.get('no_bid', 0) / 100
-    no_ask = market.get('no_ask', 100) / 100
-    
-    volume = market.get('volume', 0)
-    open_interest = market.get('open_interest', 0)
-    
-    # Market efficiency (tight spread = efficient)
-    yes_spread = yes_ask - yes_bid
-    no_spread = no_ask - no_bid
-    avg_spread = (yes_spread + no_spread) / 2
-    
-    efficiency = 1 - avg_spread  # Higher = more efficient
-    
-    # Compare with AI prediction
-    kalshi_implied = yes_bid  # Using bid as market consensus
-    
-    if ml_probability:
-        ai_edge = ml_probability - kalshi_implied
+        Comprehensive analysis of a Kalshi market
         
-        if ai_edge > 0.10:
-            ai_recommendation = f"🟢 STRONG BUY YES - AI sees {ai_edge*100:.1f}% edge"
-        elif ai_edge < -0.10:
-            ai_recommendation = f"🟢 STRONG BUY NO - AI sees {abs(ai_edge)*100:.1f}% edge"
-        elif abs(ai_edge) < 0.05:
-            ai_recommendation = "🟡 FAIR PRICE - AI agrees with market"
-        else:
-            ai_recommendation = "⚪ SLIGHT EDGE - Monitor for better entry"  # Fixed this line
-
-    elif leg_type == 'total':
-        point = _safe_float(leg.get('point'))
-        if point is None:
-            result['status'] = 'no_data'
-            result['reason'] = 'Total point unavailable'
-        else:
-            total_points = home_score + away_score
-            if side.startswith('over'):
-                if total_points > point:
-                    result['status'] = 'win'
-                elif total_points < point:
-                    result['status'] = 'loss'
-                else:
-                    result['status'] = 'push'
-            elif side.startswith('under'):
-                if total_points < point:
-                    result['status'] = 'win'
-                elif total_points > point:
-                    result['status'] = 'loss'
-                else:
-                    result['status'] = 'push'
+        Combines:
+        - Kalshi orderbook data
+        - Sentiment analysis
+        - ML predictions
+        - Value assessment
+        """
+        yes_bid = market.get('yes_bid', 0) / 100
+        yes_ask = market.get('yes_ask', 100) / 100
+        no_bid = market.get('no_bid', 0) / 100
+        no_ask = market.get('no_ask', 100) / 100
+        
+        volume = market.get('volume', 0)
+        open_interest = market.get('open_interest', 0)
+        
+        # Market efficiency (tight spread = efficient)
+        yes_spread = yes_ask - yes_bid
+        no_spread = no_ask - no_bid
+        avg_spread = (yes_spread + no_spread) / 2
+        
+        efficiency = 1 - avg_spread  # Higher = more efficient
+        
+        # Compare with AI prediction
+        kalshi_implied = yes_bid  # Using bid as market consensus
+        
+        if ml_probability:
+            ai_edge = ml_probability - kalshi_implied
+            
+            if ai_edge > 0.10:
+                ai_recommendation = f"🟢 STRONG BUY YES - AI sees {ai_edge*100:.1f}% edge"
+            elif ai_edge < -0.10:
+                ai_recommendation = f"🟢 STRONG BUY NO - AI sees {abs(ai_edge)*100:.1f}% edge"
+            elif abs(ai_edge) < 0.05:
+                ai_recommendation = "🟡 FAIR PRICE - AI agrees with market"
             else:
+                ai_recommendation = "⚪ SLIGHT EDGE - Monitor for better entry"
+        else:
+            ai_recommendation = "⚪ NO AI PREDICTION - Use market data only"
+        
+        return {
+            'yes_bid': yes_bid,
+            'yes_ask': yes_ask,
+            'no_bid': no_bid,
+            'no_ask': no_ask,
+            'volume': volume,
+            'open_interest': open_interest,
+            'efficiency': efficiency,
+            'ai_recommendation': ai_recommendation,
+            'kalshi_implied': kalshi_implied,
+            'ml_probability': ml_probability,
+            'ai_edge': ai_edge if ml_probability else None
+        }
+
+    def _check_leg_result_old(self, leg, game_result):
+        """Check the result of a single parlay leg - OLD VERSION"""
+        result = {'status': 'pending', 'reason': ''}
+        leg_type = leg.get('type', '').lower()
+        
+        if leg_type == 'total':
+            point = _safe_float(leg.get('point'))
+            if point is None:
                 result['status'] = 'no_data'
-                result['reason'] = 'Unknown totals side'
+                result['reason'] = 'Total point unavailable'
+            else:
+                total_points = home_score + away_score
+                if side.startswith('over'):
+                    if total_points > point:
+                        result['status'] = 'win'
+                    elif total_points < point:
+                        result['status'] = 'loss'
+                    else:
+                        result['status'] = 'push'
+                elif side.startswith('under'):
+                    if total_points < point:
+                        result['status'] = 'win'
+                    elif total_points > point:
+                        result['status'] = 'loss'
+                    else:
+                        result['status'] = 'push'
+                else:
+                    result['status'] = 'no_data'
+                    result['reason'] = 'Unknown totals side'
 
-    else:
-        result['status'] = 'no_data'
-        result['reason'] = f"Unsupported leg type: {leg.get('type')}"
+        else:
+            result['status'] = 'no_data'
+            result['reason'] = f"Unsupported leg type: {leg.get('type')}"
 
-    return result
+        return result
 
 
 def evaluate_tracked_parlays(
@@ -3144,37 +3165,59 @@ class KalshiIntegrator:
                 ai_recommendation = "🟡 FAIR PRICE - AI agrees with market"
             else:
                 ai_recommendation = "⚪ SLIGHT EDGE - Monitor for better entry"
-
-    elif leg_type == 'total':
-        point = _safe_float(leg.get('point'))
-        if point is None:
-            result['status'] = 'no_data'
-            result['reason'] = 'Total point unavailable'
         else:
-            total_points = home_score + away_score
-            if side.startswith('over'):
-                if total_points > point:
-                    result['status'] = 'win'
-                elif total_points < point:
-                    result['status'] = 'loss'
-                else:
-                    result['status'] = 'push'
-            elif side.startswith('under'):
-                if total_points < point:
-                    result['status'] = 'win'
-                elif total_points > point:
-                    result['status'] = 'loss'
-                else:
-                    result['status'] = 'push'
-            else:
+            ai_recommendation = "⚪ NO AI PREDICTION - Use market data only"
+        
+        return {
+            'yes_bid': yes_bid,
+            'yes_ask': yes_ask,
+            'no_bid': no_bid,
+            'no_ask': no_ask,
+            'volume': volume,
+            'open_interest': open_interest,
+            'efficiency': efficiency,
+            'ai_recommendation': ai_recommendation,
+            'kalshi_implied': kalshi_implied,
+            'ml_probability': ml_probability,
+            'ai_edge': ai_edge if ml_probability else None
+        }
+
+    def _check_leg_result(self, leg, game_result):
+        """Check the result of a single parlay leg"""
+        result = {'status': 'pending', 'reason': ''}
+        
+        leg_type = leg.get('type', '').lower()
+        
+        if leg_type == 'total':
+            point = _safe_float(leg.get('point'))
+            if point is None:
                 result['status'] = 'no_data'
-                result['reason'] = 'Unknown totals side'
+                result['reason'] = 'Total point unavailable'
+            else:
+                total_points = home_score + away_score
+                if side.startswith('over'):
+                    if total_points > point:
+                        result['status'] = 'win'
+                    elif total_points < point:
+                        result['status'] = 'loss'
+                    else:
+                        result['status'] = 'push'
+                elif side.startswith('under'):
+                    if total_points < point:
+                        result['status'] = 'win'
+                    elif total_points > point:
+                        result['status'] = 'loss'
+                    else:
+                        result['status'] = 'push'
+                else:
+                    result['status'] = 'no_data'
+                    result['reason'] = 'Unknown totals side'
 
-    else:
-        result['status'] = 'no_data'
-        result['reason'] = f"Unsupported leg type: {leg.get('type')}"
+        else:
+            result['status'] = 'no_data'
+            result['reason'] = f"Unsupported leg type: {leg.get('type')}"
 
-    return result
+        return result
 
 
 def evaluate_tracked_parlays(
@@ -11499,4 +11542,3 @@ with main_tab5:
             </div>
             """
             components.html(widget_html, height=widget_height, scrolling=True)
-
