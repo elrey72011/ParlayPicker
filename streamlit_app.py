@@ -7932,7 +7932,7 @@ Tip: For Kalshi validation, focus on season futures, playoff odds, or major cham
                 payout = stake + profit_amt
                 exp_return = stake * (1 + row['ev_ai'])
                 st.write(f"${stake} bet → ${payout:.2f} payout | Expected return: ${exp_return:.2f}")
-            
+            ("""
             **When Kalshi DOES Match:**
             - You get extra confidence boost
             - Can spot market inefficiencies
