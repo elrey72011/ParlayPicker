@@ -7016,22 +7016,27 @@ def render_parlay_section_ai(
         )
     
     with col_export3:
-        # Excel export option
-        from io import BytesIO
-        excel_buffer = BytesIO()
-        with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
-            df_export.to_excel(writer, sheet_name='Parlays', index=False)
-        excel_data = excel_buffer.getvalue()
-        
-        st.download_button(
-            f"📊 Export All {len(rows)} Parlays (Excel)",
-            data=excel_data,
-            file_name=f"{title.lower().replace(' ', '_')}_all_parlays.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            key=f"export_all_excel_{title}",
-            use_container_width=True,
-            help=f"Download all {len(rows)} parlay combinations as Excel"
-        )
+        # Excel export option - only if openpyxl is available
+        try:
+            from io import BytesIO
+            import openpyxl
+            
+            excel_buffer = BytesIO()
+            with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
+                df_export.to_excel(writer, sheet_name='Parlays', index=False)
+            excel_data = excel_buffer.getvalue()
+            
+            st.download_button(
+                f"📊 Export All {len(rows)} Parlays (Excel)",
+                data=excel_data,
+                file_name=f"{title.lower().replace(' ', '_')}_all_parlays.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key=f"export_all_excel_{title}",
+                use_container_width=True,
+                help=f"Download all {len(rows)} parlay combinations as Excel"
+            )
+        except ImportError:
+            st.info("📊 Excel export requires openpyxl\n\nUse CSV export or add openpyxl to requirements.txt")
     
     st.markdown("---")
 
@@ -9811,25 +9816,56 @@ with main_tab1:
 
                     full_df = pd.DataFrame(ranked_exports)
                     
-                    # Create Excel file with openpyxl
-                    from io import BytesIO
-                    excel_buffer = BytesIO()
-                    with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
-                        full_df.to_excel(writer, sheet_name='All Parlays', index=False)
-                        if top_rows:
-                            top_df.to_excel(writer, sheet_name='Top 2 Parlays', index=False)
-                    excel_data = excel_buffer.getvalue()
-                    
-                    # CSV export
+                    # CSV export (always available)
                     full_csv = full_df.to_csv(index=False)
+                    
+                    # Try to create Excel file with openpyxl
+                    excel_data = None
+                    try:
+                        from io import BytesIO
+                        import openpyxl
+                        
+                        excel_buffer = BytesIO()
+                        with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
+                            full_df.to_excel(writer, sheet_name='All Parlays', index=False)
+                            if top_rows:
+                                top_df.to_excel(writer, sheet_name='Top 2 Parlays', index=False)
+                        excel_data = excel_buffer.getvalue()
+                    except ImportError:
+                        # openpyxl not available, skip Excel export
+                        pass
                     
                     st.markdown("---")
                     st.markdown("## 📦 Bulk Export Options")
                     st.markdown(f"**Export all {len(ranked_exports)} parlay projections** generated from this analysis.")
                     
-                    col_exp1, col_exp2 = st.columns(2)
-                    
-                    with col_exp1:
+                    if excel_data:
+                        # Both CSV and Excel available
+                        col_exp1, col_exp2 = st.columns(2)
+                        
+                        with col_exp1:
+                            st.download_button(
+                                "📥 Download All Parlays (CSV)",
+                                data=full_csv,
+                                file_name=f"all_parlays_{sel_date.isoformat()}.csv",
+                                mime="text/csv",
+                                key="all_parlays_csv_download",
+                                help="Download all parlay combinations as CSV",
+                                use_container_width=True
+                            )
+                        
+                        with col_exp2:
+                            st.download_button(
+                                "📊 Download All Parlays (Excel)",
+                                data=excel_data,
+                                file_name=f"all_parlays_{sel_date.isoformat()}.xlsx",
+                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                key="all_parlays_excel_download",
+                                help="Download all parlay combinations as Excel with multiple sheets",
+                                use_container_width=True
+                            )
+                    else:
+                        # Only CSV available
                         st.download_button(
                             "📥 Download All Parlays (CSV)",
                             data=full_csv,
@@ -9839,17 +9875,7 @@ with main_tab1:
                             help="Download all parlay combinations as CSV",
                             use_container_width=True
                         )
-                    
-                    with col_exp2:
-                        st.download_button(
-                            "📊 Download All Parlays (Excel)",
-                            data=excel_data,
-                            file_name=f"all_parlays_{sel_date.isoformat()}.xlsx",
-                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                            key="all_parlays_excel_download",
-                            help="Download all parlay combinations as Excel with multiple sheets",
-                            use_container_width=True
-                        )
+                        st.info("💡 To enable Excel export, add `openpyxl` to your requirements.txt file")
         
         except KeyError as e:
             st.error(f"Configuration error: Missing key {str(e)}. Please refresh the page.")
