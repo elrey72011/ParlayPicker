@@ -8052,23 +8052,24 @@ if (
         ml_predictor_state,
     )
 
-# Initialize advanced analyzers
-if 'sharp_detector' not in st.session_state:
-    st.session_state['sharp_detector'] = SharpMoneyDetector()
-if 'player_impact' not in st.session_state:
-    st.session_state['player_impact'] = PlayerImpactAnalyzer()
-if 'weather_analyzer' not in st.session_state:
-    weather_key = os.environ.get("WEATHER_API_KEY", "")
-    st.session_state['weather_analyzer'] = WeatherAnalyzer(weather_key)
-if 'kelly_calculator' not in st.session_state:
-    st.session_state['kelly_calculator'] = KellyCalculator()
-if 'matchup_analyzer' not in st.session_state:
-    st.session_state['matchup_analyzer'] = MatchupAnalyzer()
-if 'advanced_stats' not in st.session_state:
-    st.session_state['advanced_stats'] = AdvancedStatsIntegrator()
-if 'social_analyzer' not in st.session_state:
-    twitter_key = os.environ.get("TWITTER_API_KEY", "")
-    st.session_state['social_analyzer'] = SocialMediaAnalyzer(twitter_key)
+# Initialize advanced analyzers (COMMENTED OUT - classes not defined)
+# if 'sharp_detector' not in st.session_state:
+#     st.session_state['sharp_detector'] = SharpMoneyDetector()
+# if 'player_impact' not in st.session_state:
+#     st.session_state['player_impact'] = PlayerImpactAnalyzer()
+# if 'weather_analyzer' not in st.session_state:
+#     weather_key = os.environ.get("WEATHER_API_KEY", "")
+#     st.session_state['weather_analyzer'] = WeatherAnalyzer(weather_key)
+# if 'kelly_calculator' not in st.session_state:
+#     st.session_state['kelly_calculator'] = KellyCalculator()
+# if 'matchup_analyzer' not in st.session_state:
+#     st.session_state['matchup_analyzer'] = MatchupAnalyzer()
+# if 'advanced_stats' not in st.session_state:
+#     st.session_state['advanced_stats'] = AdvancedStatsIntegrator()
+# if 'social_analyzer' not in st.session_state:
+# if 'social_analyzer' not in st.session_state:
+#     twitter_key = os.environ.get("TWITTER_API_KEY", "")
+#     st.session_state['social_analyzer'] = SocialMediaAnalyzer(twitter_key)
 if 'kalshi_integrator' not in st.session_state:
     kalshi_key = os.environ.get("KALSHI_API_KEY", "")
     kalshi_secret = os.environ.get("KALSHI_API_SECRET", "")
