@@ -31,6 +31,28 @@ from app_core import (
     SportsDataNHLClient,
 )
 
+# Try to import optional classes if they exist
+try:
+    from app_core import SharpMoneyDetector
+except ImportError:
+    class SharpMoneyDetector:
+        def __init__(self):
+            pass
+
+try:
+    from app_core import KellyCalculator
+except ImportError:
+    class KellyCalculator:
+        def __init__(self):
+            pass
+
+try:
+    from app_core import KalshiIntegrator
+except ImportError:
+    class KalshiIntegrator:
+        def __init__(self):
+            pass
+
 logger = logging.getLogger(__name__)
 
 try:
@@ -7522,14 +7544,20 @@ if (
 
 # Initialize advanced analyzers
 if 'sharp_detector' not in st.session_state:
-    st.session_state['sharp_detector'] = SharpMoneyDetector()
+    try:
+        st.session_state['sharp_detector'] = SharpMoneyDetector()
+    except Exception:
+        st.session_state['sharp_detector'] = None  # Graceful fallback
 if 'player_impact' not in st.session_state:
     st.session_state['player_impact'] = PlayerImpactAnalyzer()
 if 'weather_analyzer' not in st.session_state:
     weather_key = os.environ.get("WEATHER_API_KEY", "")
     st.session_state['weather_analyzer'] = WeatherAnalyzer(weather_key)
 if 'kelly_calculator' not in st.session_state:
-    st.session_state['kelly_calculator'] = KellyCalculator()
+    try:
+        st.session_state['kelly_calculator'] = KellyCalculator()
+    except Exception:
+        st.session_state['kelly_calculator'] = None
 if 'matchup_analyzer' not in st.session_state:
     st.session_state['matchup_analyzer'] = MatchupAnalyzer()
 if 'advanced_stats' not in st.session_state:
