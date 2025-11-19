@@ -53,6 +53,27 @@ except ImportError:
         def __init__(self):
             pass
 
+try:
+    from app_core import PlayerImpactAnalyzer
+except ImportError:
+    class PlayerImpactAnalyzer:
+        def __init__(self):
+            pass
+
+try:
+    from app_core import MatchupAnalyzer
+except ImportError:
+    class MatchupAnalyzer:
+        def __init__(self):
+            pass
+
+try:
+    from app_core import AdvancedStatsIntegrator
+except ImportError:
+    class AdvancedStatsIntegrator:
+        def __init__(self):
+            pass
+
 logger = logging.getLogger(__name__)
 
 try:
@@ -914,11 +935,14 @@ def render_sidebar_controls() -> Dict[str, Any]:
     )
     st.session_state['day_window'] = day_window
 
-    default_sports = st.session_state.setdefault('selected_sports', APP_CFG["sports_common"][:6])
+    # Initialize selected_sports in session state if not present
+    if 'selected_sports' not in st.session_state:
+        st.session_state['selected_sports'] = APP_CFG["sports_common"][:6]
+    
     sports = sidebar.multiselect(
         "Sports",
         options=APP_CFG["sports_common"],
-        default=default_sports,
+        default=st.session_state['selected_sports'],
         format_func=format_sport_label,
         key="selected_sports",
     )
@@ -2149,11 +2173,14 @@ def evaluate_tracked_parlays(
     )
     st.session_state['day_window'] = day_window
 
-    default_sports = st.session_state.setdefault('selected_sports', APP_CFG["sports_common"][:6])
+    # Initialize selected_sports in session state if not present
+    if 'selected_sports' not in st.session_state:
+        st.session_state['selected_sports'] = APP_CFG["sports_common"][:6]
+    
     sports = sidebar.multiselect(
         "Sports",
         options=APP_CFG["sports_common"],
-        default=default_sports,
+        default=st.session_state['selected_sports'],
         format_func=format_sport_label,
         key="selected_sports",
     )
@@ -7549,7 +7576,10 @@ if 'sharp_detector' not in st.session_state:
     except Exception:
         st.session_state['sharp_detector'] = None  # Graceful fallback
 if 'player_impact' not in st.session_state:
-    st.session_state['player_impact'] = PlayerImpactAnalyzer()
+    try:
+        st.session_state['player_impact'] = PlayerImpactAnalyzer()
+    except Exception:
+        st.session_state['player_impact'] = None
 if 'weather_analyzer' not in st.session_state:
     weather_key = os.environ.get("WEATHER_API_KEY", "")
     st.session_state['weather_analyzer'] = WeatherAnalyzer(weather_key)
@@ -7559,9 +7589,15 @@ if 'kelly_calculator' not in st.session_state:
     except Exception:
         st.session_state['kelly_calculator'] = None
 if 'matchup_analyzer' not in st.session_state:
-    st.session_state['matchup_analyzer'] = MatchupAnalyzer()
+    try:
+        st.session_state['matchup_analyzer'] = MatchupAnalyzer()
+    except Exception:
+        st.session_state['matchup_analyzer'] = None
 if 'advanced_stats' not in st.session_state:
-    st.session_state['advanced_stats'] = AdvancedStatsIntegrator()
+    try:
+        st.session_state['advanced_stats'] = AdvancedStatsIntegrator()
+    except Exception:
+        st.session_state['advanced_stats'] = None
 if 'social_analyzer' not in st.session_state:
     twitter_key = os.environ.get("TWITTER_API_KEY", "")
     st.session_state['social_analyzer'] = SocialMediaAnalyzer(twitter_key)
