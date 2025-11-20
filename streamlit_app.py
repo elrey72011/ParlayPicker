@@ -6675,6 +6675,12 @@ def render_parlay_section_ai(
         kalshi_legs_with_data = row.get('kalshi_legs', 0)
         total_legs = len(row.get('legs', []))
         
+        # Define kalshi_available variable
+        kalshi_available = sum(
+            1 for leg in row.get('legs', []) 
+            if leg.get('kalshi_validation', {}).get('kalshi_available', False)
+        )
+        
         if kalshi_legs_with_data > 0:
             # HAS KALSHI DATA - Show influence
             st.markdown("### 📊 Kalshi Prediction Market Influence:")
