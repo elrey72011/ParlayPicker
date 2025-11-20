@@ -1912,32 +1912,32 @@ class KalshiIntegrator:
             ai_edge = ml_probability - kalshi_implied
             
             if ai_edge > 0.10:
-                ai_recommendation = f"🟢 STRONG BUY YES - AI sees {ai_edge*100:.1f}% edge"
+                ai_recommendation = f"STRONG BUY YES - AI sees {ai_edge*100:.1f}% edge"
             elif ai_edge < -0.10:
-                ai_recommendation = f"🟢 STRONG BUY NO - AI sees {abs(ai_edge)*100:.1f}% edge"
+                ai_recommendation = f"STRONG BUY NO - AI sees {abs(ai_edge)*100:.1f}% edge"
             elif abs(ai_edge) < 0.05:
-                ai_recommendation = "🟡 FAIR PRICE - AI agrees with market"
+                ai_recommendation = "FAIR PRICE - AI agrees with market"
             else:
-                ai_recommendation = f"🟡 SLIGHT EDGE - AI sees {ai_edge*100:.1f}% edge"
+                ai_recommendation = f"SLIGHT EDGE - AI sees {ai_edge*100:.1f}% edge"
         else:
             ai_edge = 0
-            ai_recommendation = "⚪ No AI prediction available"
-        
+            ai_recommendation = "No AI prediction available"
+
         # Sentiment alignment
         if sentiment_score > 0.3 and kalshi_implied < 0.6:
-            sentiment_signal = "🟢 Positive sentiment + underpriced = BUY YES"
+            sentiment_signal = "Positive sentiment + underpriced = BUY YES"
         elif sentiment_score < -0.3 and kalshi_implied > 0.4:
-            sentiment_signal = "🟢 Negative sentiment + overpriced = BUY NO"
+            sentiment_signal = "Negative sentiment + overpriced = BUY NO"
         else:
-            sentiment_signal = "🟡 Sentiment neutral or priced in"
-        
+            sentiment_signal = "Sentiment neutral or priced in"
+
         # Liquidity assessment
         if volume > 1000 and open_interest > 500:
-            liquidity = "🟢 High liquidity - easy to enter/exit"
+            liquidity = "High liquidity - easy to enter/exit"
         elif volume > 100 and open_interest > 50:
-            liquidity = "🟡 Moderate liquidity - tradeable"
+            liquidity = "Moderate liquidity - tradeable"
         else:
-            liquidity = "🔴 Low liquidity - be cautious"
+            liquidity = "Low liquidity - be cautious"
         
         return {
             'kalshi_probability': kalshi_implied,
