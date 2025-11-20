@@ -5474,12 +5474,18 @@ def _find_first_column(columns: Iterable[str], candidates: Iterable[str]) -> Opt
     return None
 
 
-def _coerce_probability(row: pd.Series, candidates: Iterable[str]) -> Tuple[Optional[float], Optional[str]]:
+def _coerce_probability(row: pd.Series, candidates: Iterable[str], default_prob: Optional[float] = 0.55) -> Tuple[Optional[float], Optional[str]]:
     column = _find_first_column(row.index, candidates)
     if column is None:
+        # For theover.ai data without probabilities, use default if we have a pick
+        if default_prob and any(col in row.index for col in ['pick', 'side', 'spread', 'total', 'spread_team']):
+            return default_prob, 'theover_implied'
         return None, None
     value = _normalize_probability_value(row.get(column))
     if value is None:
+        # Try with default if no valid value found
+        if default_prob and any(col in row.index for col in ['pick', 'side', 'spread', 'total']):
+            return default_prob, 'theover_implied'
         return None, None
     return value, column
 
@@ -5595,11 +5601,11 @@ def _ingest_theover_ml_row(
     home_key = _map_side('home', swapped)
     away_key = _map_side('away', swapped)
 
-    home_prob, home_source = _coerce_probability(row, THEOVER_HOME_PROB_CANDIDATES)
-    away_prob, away_source = _coerce_probability(row, THEOVER_AWAY_PROB_CANDIDATES)
+    home_prob, home_source = _coerce_probability(row, THEOVER_HOME_PROB_CANDIDATES, 0.55)
+    away_prob, away_source = _coerce_probability(row, THEOVER_AWAY_PROB_CANDIDATES, 0.55)
 
     if home_prob is None or away_prob is None:
-        generic_prob, generic_source = _coerce_probability(row, THEOVER_GENERIC_PROB_CANDIDATES)
+        generic_prob, generic_source = _coerce_probability(row, THEOVER_GENERIC_PROB_CANDIDATES, 0.55)
         pick_val = str(row.get('pick', '')).strip()
         if generic_prob is not None:
             if _names_match(pick_val, row_home) and home_prob is None:
@@ -5654,9 +5660,9 @@ def _ingest_theover_spread_row(
     line_key = round(abs(line_value), 3) if line_value is not None else None
     bucket = entry.setdefault('spreads', {}).setdefault(line_key, {'home': None, 'away': None})
 
-    prob_value, prob_source = _coerce_probability(row, THEOVER_SPREAD_PROB_CANDIDATES)
+    prob_value, prob_source = _coerce_probability(row, THEOVER_SPREAD_PROB_CANDIDATES, 0.55)
     if prob_value is None:
-        generic_prob, generic_source = _coerce_probability(row, THEOVER_GENERIC_PROB_CANDIDATES)
+        generic_prob, generic_source = _coerce_probability(row, THEOVER_GENERIC_PROB_CANDIDATES, 0.55)
         if generic_prob is not None:
             prob_value = generic_prob
             prob_source = generic_source
@@ -5705,11 +5711,11 @@ def _ingest_theover_total_row(
     line_key = round(abs(line_value), 3) if line_value is not None else None
     bucket = entry.setdefault('totals', {}).setdefault(line_key, {'over': None, 'under': None})
 
-    prob_over, source_over = _coerce_probability(row, THEOVER_TOTAL_OVER_CANDIDATES)
-    prob_under, source_under = _coerce_probability(row, THEOVER_TOTAL_UNDER_CANDIDATES)
+    prob_over, source_over = _coerce_probability(row, THEOVER_TOTAL_OVER_CANDIDATES, 0.55)
+    prob_under, source_under = _coerce_probability(row, THEOVER_TOTAL_UNDER_CANDIDATES, 0.55)
 
     if prob_over is None or prob_under is None:
-        generic_prob, generic_source = _coerce_probability(row, THEOVER_GENERIC_PROB_CANDIDATES)
+        generic_prob, generic_source = _coerce_probability(row, THEOVER_GENERIC_PROB_CANDIDATES, 0.55)
         pick_lower = str(row.get('pick', '')).lower()
         if generic_prob is not None:
             if 'over' in pick_lower and prob_over is None:
@@ -6693,35 +6699,20 @@ def render_parlay_section_ai(
                         help="Provide an API-Sports key (NFL, NBA, or NHL) to enrich supported legs",
                     )
             
-            with col_k1:
-                st.metric(
-                    "Legs Validated",
-                    f"{kalshi_available}/{len(row.get('legs', []))}",
-                    help="How many legs have Kalshi market data"
-                )
+            # KALSHI STATUS - PROPERLY STRUCTURED
+            st.markdown("---")
+            kalshi_legs_with_data = row.get('kalshi_legs', 0)
+            total_legs = len(row.get('legs', []))
             
-            with col_k2:
-                kalshi_boost_val = row.get('kalshi_boost', 0)
-                delta_boost = float(kalshi_boost_val) if kalshi_boost_val else None
-                delta_color = "normal" if kalshi_boost_val >= 0 else "inverse"
-                st.metric(
-                    "Kalshi Boost Points",
-                    f"{kalshi_boost_val:+.0f}",
-                    delta=delta_boost,
-                    delta_color=delta_color,
-                    help="Raw boost points from Kalshi validation (+15 = strong confirmation, -10 = contradiction)"
-                )
-
-                synthetic_legs = sum(
-                    1 for leg in row.get('legs', [])
-                    if 'synthetic' in leg.get('kalshi_validation', {}).get('data_source', '')
-                )
-
-                if synthetic_legs:
-                    st.info(
-                        f"🧪 Using simulated Kalshi fallback for {synthetic_legs} leg(s) "
-                        "because live market data was unavailable."
-                    )
+            # Define kalshi_available variable FIRST
+            kalshi_available = sum(
+                1 for leg in row.get('legs', []) 
+                if leg.get('kalshi_validation', {}).get('kalshi_available', False)
+            )
+            
+            if kalshi_legs_with_data > 0:
+                # HAS KALSHI DATA - Show influence
+                st.markdown("### 📊 Kalshi Prediction Market Influence:")
 
 
                 synthetic_legs = sum(
@@ -6740,9 +6731,9 @@ def render_parlay_section_ai(
                 
                 with col_k1:
                     st.metric(
-                        "Live Data Legs",
-                        f"{live_data_legs_with_data}/{len(row.get('legs', []))}",
-                        help="How many legs include live team context",
+                        "Legs Validated",
+                        f"{kalshi_available}/{len(row.get('legs', []))}",
+                        help="How many legs have Kalshi market data"
                     )
                 
                 with col_k2:
@@ -6757,32 +6748,21 @@ def render_parlay_section_ai(
                         help="Raw boost points from Kalshi validation (+15 = strong confirmation, -10 = contradiction)"
                     )
 
-                with col_a3:
-                    delta_color_sd = "normal" if sportsdata_boost >= 0 else "inverse"
-                    display_sd = f"{sportsdata_boost:+.0f}" if sportsdata_legs else "—"
+                with col_k3:
+                    kalshi_alignment_avg = row.get('kalshi_alignment_avg', 0.0)
                     st.metric(
-                        "SportsData.io Points",
-                        display_sd,
-                        delta=float(sportsdata_boost) if sportsdata_boost else None,
-                        delta_color=delta_color_sd,
-                        help="Power index and turnover margin boost from SportsData.io",
+                        "Avg Alignment",
+                        f"{kalshi_alignment_avg*100:+.1f}pp",
+                        help="Average probability difference vs sportsbook odds"
                     )
 
-                with col_a4:
+                with col_k4:
+                    kalshi_factor = row.get('kalshi_factor', 1.0)
                     st.metric(
                         "Score Multiplier",
-                        f"{live_data_factor:.2f}x",
-                        delta=f"{(live_data_factor-1)*100:+.0f}%" if live_data_factor != 1.0 else None,
-                        help="Overall adjustment to the AI score from live data feeds",
-                    )
-
-                with col_a5:
-                    baseline = row['ai_score'] / live_data_factor if live_data_factor else row['ai_score']
-                    live_delta = row['ai_score'] - baseline
-                    st.metric(
-                        "Score Impact",
-                        f"{live_delta:+.1f} pts",
-                        help="How many points live data added or removed",
+                        f"{kalshi_factor:.2f}x",
+                        delta=f"{(kalshi_factor-1)*100:+.0f}%" if kalshi_factor != 1.0 else None,
+                        help="Overall adjustment to the AI score from Kalshi data"
                     )
 
                 if live_data_factor >= 1.02:
@@ -11266,4 +11246,3 @@ def _resolve_kalshi_integrator() -> Optional["KalshiIntegrator"]:
         pass
 
     return integrator
-
