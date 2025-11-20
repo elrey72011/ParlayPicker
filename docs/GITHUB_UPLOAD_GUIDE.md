@@ -1,8 +1,10 @@
 # 📤 GitHub Upload Guide
 
+> **Update:** The repository now ships a single `streamlit_app.py` with all enhanced features. The instructions below mention two versions for archival purposes; follow the same Git workflow but commit the unified app instead of maintaining separate files.
+
 ## 🎯 Recommended Approach: Keep Both Versions
 
-**Keep your current `streamlit_app.py` AND add the enhanced version** so users can choose based on their needs and API subscription.
+> Legacy note: the unified repository only needs `streamlit_app.py`. The guidance in this section is preserved for teams who still manage historical branches with two separate files.
 
 ## 📁 Folder Structure
 
