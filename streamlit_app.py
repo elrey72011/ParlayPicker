@@ -74,6 +74,27 @@ except ImportError:
         def __init__(self):
             pass
 
+try:
+    from app_core import AIOptimizer
+except ImportError:
+    class AIOptimizer:
+        def __init__(self, *args, **kwargs):
+            pass
+
+try:
+    from app_core import WeatherAnalyzer
+except ImportError:
+    class WeatherAnalyzer:
+        def __init__(self, *args, **kwargs):
+            pass
+
+try:
+    from app_core import SocialMediaAnalyzer
+except ImportError:
+    class SocialMediaAnalyzer:
+        def __init__(self, *args, **kwargs):
+            pass
+
 logger = logging.getLogger(__name__)
 
 try:
@@ -7564,10 +7585,14 @@ if (
     or getattr(ai_optimizer, 'ml', None) is not ml_predictor_state
     or getattr(ai_optimizer, 'sentiment', None) is not st.session_state['sentiment_analyzer']
 ):
-    st.session_state['ai_optimizer'] = AIOptimizer(
-        st.session_state['sentiment_analyzer'],
-        ml_predictor_state,
-    )
+    try:
+        st.session_state['ai_optimizer'] = AIOptimizer(
+            st.session_state['sentiment_analyzer'],
+            ml_predictor_state,
+        )
+    except Exception:
+        st.session_state['ai_optimizer'] = None
+        st.session_state['ai_optimizer'] = None
 
 # Initialize advanced analyzers
 if 'sharp_detector' not in st.session_state:
@@ -7582,7 +7607,10 @@ if 'player_impact' not in st.session_state:
         st.session_state['player_impact'] = None
 if 'weather_analyzer' not in st.session_state:
     weather_key = os.environ.get("WEATHER_API_KEY", "")
-    st.session_state['weather_analyzer'] = WeatherAnalyzer(weather_key)
+    try:
+        st.session_state['weather_analyzer'] = WeatherAnalyzer(weather_key)
+    except Exception:
+        st.session_state['weather_analyzer'] = None
 if 'kelly_calculator' not in st.session_state:
     try:
         st.session_state['kelly_calculator'] = KellyCalculator()
@@ -7600,7 +7628,10 @@ if 'advanced_stats' not in st.session_state:
         st.session_state['advanced_stats'] = None
 if 'social_analyzer' not in st.session_state:
     twitter_key = os.environ.get("TWITTER_API_KEY", "")
-    st.session_state['social_analyzer'] = SocialMediaAnalyzer(twitter_key)
+    try:
+        st.session_state['social_analyzer'] = SocialMediaAnalyzer(twitter_key)
+    except Exception:
+        st.session_state['social_analyzer'] = None
 if 'kalshi_integrator' not in st.session_state:
     kalshi_key = os.environ.get("KALSHI_API_KEY", "")
     kalshi_secret = os.environ.get("KALSHI_API_SECRET", "")
