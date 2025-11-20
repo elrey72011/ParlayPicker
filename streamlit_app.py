@@ -4,7 +4,7 @@ import os, io, json, itertools, re, copy, logging, hashlib, math
 from html import escape
 from dataclasses import asdict
 from typing import Dict, Any, List, Tuple, Optional, Iterable, Sequence, Type
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta, date, timezone
 import pandas as pd
 import numpy as np
 import requests
@@ -283,7 +283,7 @@ def _parlay_signature(legs: List[Dict[str, Any]]) -> str:
             for key in ("event_id", "market", "side", "point", "team")
         )
         tokens.append(token)
-    base = "||".join(sorted(tokens)) if tokens else str(datetime.utcnow().timestamp())
+    base = "||".join(sorted(tokens)) if tokens else str(datetime.now(timezone.utc).timestamp())
     return hashlib.sha256(base.encode("utf-8")).hexdigest()
 
 
@@ -330,7 +330,7 @@ def save_parlay_for_tracking(
     signature = _parlay_signature(legs_payload)
     tracked = get_tracked_parlays_state()
     timezone_name = timezone_label or st.session_state.get('user_timezone') or 'UTC'
-    now_utc = datetime.utcnow().replace(tzinfo=pytz.UTC).isoformat()
+    now_utc = datetime.now(timezone.utc).replace(tzinfo=pytz.UTC).isoformat()
     target_commence = min(commence_candidates).isoformat() if commence_candidates else None
 
     analysis_payload = {
@@ -647,7 +647,7 @@ def evaluate_tracked_parlays(
         evaluation = {
             'status': _aggregate_leg_statuses(leg_results),
             'legs': leg_results,
-            'checked_at': datetime.utcnow().replace(tzinfo=pytz.UTC).isoformat(),
+            'checked_at': datetime.now(timezone.utc).replace(tzinfo=pytz.UTC).isoformat(),
         }
 
         if entry.get('evaluation') != evaluation:
@@ -729,7 +729,7 @@ def render_saved_parlay_tracker(clients: Dict[str, Any], timezone_label: str) ->
 
         if summary_rows:
             summary_df = pd.DataFrame(summary_rows)
-            st.dataframe(summary_df, use_container_width=True, hide_index=True)
+            st.dataframe(summary_df, width='stretch', hide_index=True)
 
         for entry in tracked:
             evaluation = entry.get('evaluation', {})
@@ -753,7 +753,7 @@ def render_saved_parlay_tracker(clients: Dict[str, Any], timezone_label: str) ->
                     })
 
                 if detail_rows:
-                    st.dataframe(pd.DataFrame(detail_rows), use_container_width=True, hide_index=True)
+                    st.dataframe(pd.DataFrame(detail_rows), width='stretch', hide_index=True)
                 else:
                     st.info("No leg details available.")
 
@@ -982,7 +982,7 @@ def render_sidebar_controls() -> Dict[str, Any]:
         if ai_expander.button(
             toggle_label,
             key="toggle_ml_predictions_button",
-            use_container_width=True,
+            width='stretch',
             help=toggle_help,
         ):
             use_ml_predictions = not use_ml_predictions
@@ -1722,7 +1722,7 @@ class KalshiIntegrator:
             return
 
         # Build synthetic markets for every team we know about so UI has coverage
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         expiry = (now + timedelta(days=30)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
         for team, abbrs in KALSHI_TEAM_ABBREVIATIONS.items():
@@ -2069,7 +2069,7 @@ def evaluate_tracked_parlays(
         evaluation = {
             'status': _aggregate_leg_statuses(leg_results),
             'legs': leg_results,
-            'checked_at': datetime.utcnow().replace(tzinfo=pytz.UTC).isoformat(),
+            'checked_at': datetime.now(timezone.utc).replace(tzinfo=pytz.UTC).isoformat(),
         }
     
     def _calculate_overall_score(self, ai_edge: float, sentiment: float, 
@@ -2217,7 +2217,7 @@ def evaluate_tracked_parlays(
         if ai_expander.button(
             toggle_label,
             key="toggle_ml_predictions_button",
-            use_container_width=True,
+            width='stretch',
             help=toggle_help,
         ):
             use_ml_predictions = not use_ml_predictions
@@ -2955,7 +2955,7 @@ class KalshiIntegrator:
             return
 
         # Build synthetic markets for every team we know about so UI has coverage
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         expiry = (now + timedelta(days=30)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
         for team, abbrs in KALSHI_TEAM_ABBREVIATIONS.items():
@@ -7235,7 +7235,7 @@ def render_parlay_section_ai(
         }
         st.dataframe(
             legs_df_display,
-            use_container_width=True,
+            width='stretch',
             hide_index=True,
             column_config=column_config,
         )
@@ -7406,7 +7406,7 @@ def render_parlay_section_ai(
                     })
             
             if kalshi_details:
-                st.dataframe(pd.DataFrame(kalshi_details), use_container_width=True, hide_index=True)
+                st.dataframe(pd.DataFrame(kalshi_details), width='stretch', hide_index=True)
                 
                 # Summary metrics
                 st.markdown("**📈 Kalshi Impact Summary:**")
@@ -7763,7 +7763,7 @@ with main_tab1:
                 dataset = pd.read_csv(uploaded_file)
                 st.success(f"✅ Loaded {len(dataset)} rows from theover.ai")
                 with st.expander("📋 Preview uploaded data", expanded=False):
-                    st.dataframe(dataset.head(10), use_container_width=True)
+                    st.dataframe(dataset.head(10), width='stretch')
             except Exception as exc:
                 st.error(f"Error loading CSV: {exc}")
 
@@ -7792,7 +7792,7 @@ with main_tab1:
                         dataset = pd.read_csv(StringIO(pasted_data))
 
                     st.success(f"✅ Loaded {len(dataset)} rows from pasted theover.ai data")
-                    st.dataframe(dataset.head(10), use_container_width=True)
+                    st.dataframe(dataset.head(10), width='stretch')
                 except Exception as exc:
                     st.error(f"Error parsing data: {exc}")
 
@@ -8258,7 +8258,7 @@ with main_tab1:
         fetch_best_odds = st.button(
             "Show Best Odds",
             key="best_odds_button",
-            use_container_width=True,
+            width='stretch',
         )
 
     if fetch_best_odds:
@@ -8288,7 +8288,7 @@ with main_tab1:
                         lambda x: f"{float(x):.1f}" if pd.notna(x) else "—"
                     )
 
-                st.dataframe(display_df, use_container_width=True, hide_index=True)
+                st.dataframe(display_df, width='stretch', hide_index=True)
 
                 csv_export = best_odds_df.to_csv(index=False)
                 file_name = (
@@ -8340,7 +8340,7 @@ with main_tab1:
     compute_best_bets = st.button(
         "Compute Best Bets",
         key="compute_best_bets",
-        use_container_width=True,
+        width='stretch',
     )
 
     if compute_best_bets:
@@ -8429,7 +8429,7 @@ with main_tab1:
                         lambda x: f"{float(x):g}" if pd.notna(x) else "—"
                     )
 
-                st.dataframe(display_df, use_container_width=True, hide_index=True)
+                st.dataframe(display_df, width='stretch', hide_index=True)
 
                 csv_export = best_bets_df.to_csv(index=False)
                 download_name = (
@@ -9228,7 +9228,7 @@ with main_tab1:
                                 lambda x: f"{x:.3f}" if pd.notna(x) else "—"
                             )
 
-                        st.dataframe(top_display, use_container_width=True, hide_index=True)
+                        st.dataframe(top_display, width='stretch', hide_index=True)
 
                         top_csv = top_df.to_csv(index=False)
                         st.download_button(
@@ -10245,7 +10245,7 @@ with main_tab3:
                                 "Sentiment": leg['sentiment_trend']
                             })
                         
-                        st.dataframe(pd.DataFrame(leg_data), use_container_width=True, hide_index=True)
+                        st.dataframe(pd.DataFrame(leg_data), width='stretch', hide_index=True)
                         
                         # Payout Scenarios
                         st.markdown("### 💰 Payout Scenarios")
