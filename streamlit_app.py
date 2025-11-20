@@ -31,7 +31,78 @@ from app_core import (
     SportsDataNHLClient,
 )
 
+# Optional classes with fallbacks
+try:
+    from app_core import SharpMoneyDetector
+except ImportError:
+    class SharpMoneyDetector:
+        def __init__(self): pass
+
+try:
+    from app_core import KellyCalculator
+except ImportError:
+    class KellyCalculator:
+        def __init__(self): pass
+
+try:
+    from app_core import KalshiIntegrator
+except ImportError:
+    class KalshiIntegrator:
+        def __init__(self, *args, **kwargs): pass
+
+try:
+    from app_core import PlayerImpactAnalyzer
+except ImportError:
+    class PlayerImpactAnalyzer:
+        def __init__(self): pass
+
+try:
+    from app_core import MatchupAnalyzer
+except ImportError:
+    class MatchupAnalyzer:
+        def __init__(self): pass
+
+try:
+    from app_core import AdvancedStatsIntegrator
+except ImportError:
+    class AdvancedStatsIntegrator:
+        def __init__(self): pass
+
+try:
+    from app_core import AIOptimizer
+except ImportError:
+    class AIOptimizer:
+        def __init__(self, *args, **kwargs): pass
+
+try:
+    from app_core import WeatherAnalyzer
+except ImportError:
+    class WeatherAnalyzer:
+        def __init__(self, *args, **kwargs): pass
+
+try:
+    from app_core import SocialMediaAnalyzer
+except ImportError:
+    class SocialMediaAnalyzer:
+        def __init__(self, *args, **kwargs): pass
+
 logger = logging.getLogger(__name__)
+
+try:
+    st.set_page_config(page_title="ParlayDesk", page_icon="🎯", layout="wide")
+except: pass
+
+st.markdown("""<style>
+.main .block-container {padding: 1rem 1.5rem !important; max-width: 100% !important;}
+.stMarkdown {margin-bottom: 0.3rem !important;}
+.stDataFrame {margin: 0.5rem 0 !important;}
+section[data-testid="stSidebar"] .block-container {padding: 1.5rem 1rem !important;}
+[data-testid="column"] {padding: 0.25rem !important;}
+.stButton, .stAlert {margin: 0.5rem 0 !important;}
+hr {margin: 1rem 0 !important;}
+h2, h3 {margin: 0.75rem 0 0.5rem 0 !important;}
+</style>""", unsafe_allow_html=True)
+
 
 # ============ HELPER FUNCTIONS ============
 def american_to_decimal_safe(odds) -> Optional[float]:
@@ -259,7 +330,7 @@ def save_parlay_for_tracking(
     signature = _parlay_signature(legs_payload)
     tracked = get_tracked_parlays_state()
     timezone_name = timezone_label or st.session_state.get('user_timezone') or 'UTC'
-    now_utc = datetime.now(timezone.utc).isoformat()
+    now_utc = datetime.now(timezone.utc).replace(tzinfo=pytz.UTC).isoformat()
     target_commence = min(commence_candidates).isoformat() if commence_candidates else None
 
     analysis_payload = {
@@ -576,7 +647,7 @@ def evaluate_tracked_parlays(
         evaluation = {
             'status': _aggregate_leg_statuses(leg_results),
             'legs': leg_results,
-            'checked_at': datetime.now(timezone.utc).isoformat(),
+            'checked_at': datetime.now(timezone.utc).replace(tzinfo=pytz.UTC).isoformat(),
         }
 
         if entry.get('evaluation') != evaluation:
@@ -658,7 +729,7 @@ def render_saved_parlay_tracker(clients: Dict[str, Any], timezone_label: str) ->
 
         if summary_rows:
             summary_df = pd.DataFrame(summary_rows)
-            st.dataframe(summary_df, width="stretch", hide_index=True)
+            st.dataframe(summary_df, width='stretch', hide_index=True)
 
         for entry in tracked:
             evaluation = entry.get('evaluation', {})
@@ -682,7 +753,7 @@ def render_saved_parlay_tracker(clients: Dict[str, Any], timezone_label: str) ->
                     })
 
                 if detail_rows:
-                    st.dataframe(pd.DataFrame(detail_rows), width="stretch", hide_index=True)
+                    st.dataframe(pd.DataFrame(detail_rows), width='stretch', hide_index=True)
                 else:
                     st.info("No leg details available.")
 
@@ -911,7 +982,7 @@ def render_sidebar_controls() -> Dict[str, Any]:
         if ai_expander.button(
             toggle_label,
             key="toggle_ml_predictions_button",
-            width="stretch",
+            width='stretch',
             help=toggle_help,
         ):
             use_ml_predictions = not use_ml_predictions
@@ -1410,7 +1481,7 @@ class AIOptimizer:
 
             # KALSHI INTEGRATION: Add Kalshi influence
             if 'kalshi_validation' in leg:
-                kv = leg.get('kalshi_validation') or {}
+                kv = leg['kalshi_validation']
                 if kv.get('kalshi_available'):
                     kalshi_legs += 1
                     # Kalshi provides additional probability estimate
@@ -1587,1183 +1658,7 @@ class AIOptimizer:
             'sportsdata_sports': sorted(sportsdata_sports),
         }
 
-    status_text = _status_text(matched_game.get('status'))
-    result['game_status'] = status_text
-
-class KalshiIntegrator:
-    """Integrates Kalshi prediction market odds and analysis"""
-    
-    def __init__(self, api_key: str = None, api_secret: str = None):
-        self.api_key = api_key or os.environ.get("KALSHI_API_KEY")
-        self.api_secret = api_secret or os.environ.get("KALSHI_API_SECRET")
-        self.base_url = "https://api.elections.kalshi.com/trade-api/v2"
-        self.demo_url = "https://demo-api.elections.kalshi.com/trade-api/v2"
-
-        # Use demo for testing, production for live
-        self.api_url = self.base_url if self.api_key else self.demo_url
-
-        self.headers = {
-            "Content-Type": "application/json"
-        }
-
-        if self.api_key:
-            self.headers["Authorization"] = f"Bearer {self.api_key}"
-
-        # Synthetic fallback cache when Kalshi API is unavailable (e.g., network blocks)
-        self._using_synthetic_data = False
-        self._synthetic_markets: List[Dict[str, Any]] = []
-        self._synthetic_orderbooks: Dict[str, Dict[str, List[Dict[str, Any]]]] = {}
-        self._synthetic_market_by_team: Dict[str, Dict[str, Any]] = {}
-        self.last_error: Optional[str] = None
-
-    # -------------------- Synthetic helpers --------------------
-    def _synthetic_probability(self, team: str, sport_key: Optional[str] = None,
-                               sportsbook_prob: Optional[float] = None) -> float:
-        """Generate a deterministic synthetic probability for a team."""
-
-        team_upper = team.upper()
-        base_prob = sportsbook_prob if sportsbook_prob is not None else 0.52
-
-        # Deterministic offset based on team characters (stable pseudo-random)
-        ordinal_sum = sum(ord(c) for c in team_upper if c.isalpha())
-        offset = ((ordinal_sum % 21) - 10) / 200.0  # -0.05 .. +0.05
-
-        league = KALSHI_TEAM_LEAGUE_MAP.get(team_upper)
-        if sport_key and sport_key in SPORT_KEY_TO_LEAGUE and not league:
-            league = SPORT_KEY_TO_LEAGUE[sport_key]
-
-        league_bias = {
-            "NFL": 0.015,
-            "NBA": 0.010,
-            "MLB": 0.005,
-            "NHL": 0.005,
-        }.get(league, 0.0)
-
-        synthetic = base_prob + offset + league_bias
-        return max(0.05, min(0.95, synthetic))
-
-    def _synthetic_ticker_for_team(self, team: str, league: Optional[str]) -> str:
-        team_key = re.sub(r"[^A-Z0-9]", "", team.upper())
-        league_key = league or "SPORTS"
-        return f"SIM.{league_key}.{team_key[:8]}"
-
-    def _ensure_synthetic_data(self) -> None:
-        if self._synthetic_markets:
-            return
-
-        # Build synthetic markets for every team we know about so UI has coverage
-        now = datetime.now(timezone.utc)
-        expiry = (now + timedelta(days=30)).strftime("%Y-%m-%dT%H:%M:%SZ")
-
-        for team, abbrs in KALSHI_TEAM_ABBREVIATIONS.items():
-            league = KALSHI_TEAM_LEAGUE_MAP.get(team)
-            ticker = self._synthetic_ticker_for_team(team, league)
-            prob = self._synthetic_probability(team)
-            price = int(round(prob * 100))
-
-            market = {
-                "ticker": ticker,
-                "title": f"{team.title()} confidence (synthetic Kalshi)",
-                "subtitle": "Synthetic fallback market generated locally",
-                "series_ticker": "SPORTS",
-                "status": "open",
-                "close_time": expiry,
-                "league": league,
-                "synthetic": True,
-                "team": team,
-                "abbreviation": abbrs[0] if abbrs else None,
-            }
-
-            self._synthetic_markets.append(market)
-            self._synthetic_orderbooks[ticker] = {
-                "yes": [{"price": price, "contracts": 100}],
-                "no": [{"price": 100 - price, "contracts": 100}],
-            }
-            self._synthetic_market_by_team[team] = market
-
-    def using_synthetic_data(self) -> bool:
-        return self._using_synthetic_data
-
-    def get_synthetic_market_for_team(self, team: str) -> Optional[Dict[str, Any]]:
-        self._ensure_synthetic_data()
-        return self._synthetic_market_by_team.get(team.upper())
-
-    def synthetic_probability(self, team: str, sport_key: Optional[str] = None,
-                               sportsbook_prob: Optional[float] = None) -> float:
-        """Public helper to compute synthetic probabilities for validation."""
-        self._ensure_synthetic_data()
-        return self._synthetic_probability(team, sport_key, sportsbook_prob)
-    
-    def get_markets(self, category: str = "sports", status: str = "open") -> List[Dict]:
-        """Fetch available Kalshi markets.
-
-        Args:
-            category: 'sports', 'politics', 'economics', etc.
-            status: 'open', 'closed', 'settled'
-
-        Returns:
-            List of market dictionaries.
-        """
-        if self._using_synthetic_data:
-            self._ensure_synthetic_data()
-            return copy.deepcopy(self._synthetic_markets)
-
-        try:
-            endpoint = f"{self.api_url}/markets"
-            params = {
-                "limit": 100,
-                "status": status
-            }
-
-            if category:
-                params["series_ticker"] = category.upper()
-
-            response = requests.get(endpoint, headers=self.headers, params=params, timeout=10)
-
-            if response.status_code == 200:
-                data = response.json()
-                markets = data.get("markets", [])
-                if markets:
-                    self.last_error = None
-                    return markets
-                else:
-                    self.last_error = "Kalshi API returned no markets"
-            else:
-                self.last_error = f"Kalshi API responded with status {response.status_code}"
-
-        except Exception as e:
-            self.last_error = str(e)
-            st.warning(f"Error fetching Kalshi markets: {str(e)}")
-
-        # Fallback to synthetic data when API fails or returns nothing
-        self._using_synthetic_data = True
-        self._ensure_synthetic_data()
-        return copy.deepcopy(self._synthetic_markets)
-    
-    def get_sports_markets(self) -> List[Dict]:
-        """Get all active sports betting markets"""
-        all_markets = self.get_markets()
-        
-        # Filter for sports-related markets
-        sports_keywords = ['NFL', 'NBA', 'MLB', 'NHL', 'UFC', 'SOCCER', 'TENNIS', 
-                          'GOLF', 'FOOTBALL', 'BASKETBALL', 'BASEBALL', 'HOCKEY']
-        
-        sports_markets = []
-        for market in all_markets:
-            title = market.get('title', '').upper()
-            ticker = market.get('ticker', '').upper()
-            
-            if any(keyword in title or keyword in ticker for keyword in sports_keywords):
-                sports_markets.append(market)
-        
-        return sports_markets
-    
-    def get_market_details(self, market_ticker: str) -> Dict:
-        """Get detailed information about a specific market"""
-        if self._using_synthetic_data:
-            self._ensure_synthetic_data()
-            market = next((m for m in self._synthetic_markets if m.get('ticker') == market_ticker), None)
-            return copy.deepcopy(market) if market else {}
-
-        try:
-            endpoint = f"{self.api_url}/markets/{market_ticker}"
-            response = requests.get(endpoint, headers=self.headers, timeout=10)
-
-            if response.status_code == 200:
-                return response.json().get("market", {})
-            else:
-                return {}
-
-        except Exception as e:
-            st.warning(f"Error fetching market details: {str(e)}")
-            return {}
-
-    def get_orderbook(self, market_ticker: str) -> Dict:
-        """Get current orderbook (bids/asks) for a market"""
-        if self._using_synthetic_data:
-            self._ensure_synthetic_data()
-            orderbook = self._synthetic_orderbooks.get(market_ticker)
-            return copy.deepcopy(orderbook) if orderbook else {}
-
-        try:
-            endpoint = f"{self.api_url}/markets/{market_ticker}/orderbook"
-            response = requests.get(endpoint, headers=self.headers, timeout=10)
-
-            if response.status_code == 200:
-                return response.json().get("orderbook", {})
-            else:
-                return {}
-
-        except Exception as e:
-            st.warning(f"Error fetching orderbook: {str(e)}")
-            return {}
-    
-    def compare_with_sportsbook(
-        self,
-        kalshi_market: Dict,
-        sportsbook_odds: Dict,
-    ) -> Dict:
-        """Compare Kalshi prediction prices with a sportsbook listing."""
-
-        result: Dict[str, Any] = {
-            "kalshi_prob": None,
-            "sportsbook_prob": None,
-            "discrepancy": 0.0,
-            "edge": 0.0,
-            "recommendation": "⚪ Insufficient data for comparison",
-            "has_arbitrage": False,
-        }
-
-        if not kalshi_market:
-            return result
-
-        kalshi_raw = kalshi_market.get("yes_bid")
-        if kalshi_raw is None:
-            return result
-
-        kalshi_yes_price = float(kalshi_raw) / 100.0
-        result["kalshi_prob"] = kalshi_yes_price
-
-        sb_prob: Optional[float] = None
-        if sportsbook_odds and sportsbook_odds.get("price") is not None:
-            sb_prob = implied_p_from_american(sportsbook_odds["price"])
-            result["sportsbook_prob"] = sb_prob
-
-        if sb_prob is None or kalshi_yes_price <= 0:
-            return result
-
-        discrepancy = abs(kalshi_yes_price - sb_prob)
-        edge = discrepancy
-        recommendation = "🟡 Prices aligned (no significant edge)"
-
-        if kalshi_yes_price < sb_prob - 0.05:
-            edge = sb_prob - kalshi_yes_price
-            recommendation = "🟢 BUY YES on Kalshi (underpriced vs sportsbook)"
-        elif kalshi_yes_price > sb_prob + 0.05:
-            edge = kalshi_yes_price - sb_prob
-            recommendation = "🟢 BUY NO on Kalshi (or take sportsbook)"
-
-        result["discrepancy"] = discrepancy
-        result["edge"] = edge
-        result["recommendation"] = recommendation
-        result["has_arbitrage"] = discrepancy > 0.10
-        return result
-    
-    def find_arbitrage_opportunities(self, kalshi_markets: List[Dict], 
-                                     sportsbook_events: List[Dict]) -> List[Dict]:
-        """
-        Find arbitrage opportunities between Kalshi and traditional sportsbooks
-        
-        Returns list of arbitrage opportunities with expected profit
-        """
-        arbitrage_opps = []
-        
-        for kalshi_market in kalshi_markets:
-            title = kalshi_market.get('title', '')
-            
-            # Try to match with sportsbook events
-            for sb_event in sportsbook_events:
-                # Simple matching logic (can be enhanced)
-                home_team = sb_event.get('home_team', '')
-                away_team = sb_event.get('away_team', '')
-                
-                if home_team in title or away_team in title:
-                    comparison = self.compare_with_sportsbook(kalshi_market, sb_event)
-                    
-                    if comparison['has_arbitrage']:
-                        arbitrage_opps.append({
-                            'kalshi_market': title,
-                            'kalshi_ticker': kalshi_market.get('ticker'),
-                            'sportsbook_game': f"{away_team} @ {home_team}",
-                            'comparison': comparison
-                        })
-        
-        return arbitrage_opps
-    
-    def analyze_kalshi_market(self, market: Dict, sentiment_score: float = 0, 
-                             ml_probability: float = None) -> Dict:
-        """
-        Comprehensive analysis of a Kalshi market
-        
-        Combines:
-        - Kalshi orderbook data
-        - Sentiment analysis
-        - ML predictions
-        - Value assessment
-        """
-        yes_bid = market.get('yes_bid', 0) / 100
-        yes_ask = market.get('yes_ask', 100) / 100
-        no_bid = market.get('no_bid', 0) / 100
-        no_ask = market.get('no_ask', 100) / 100
-        
-        volume = market.get('volume', 0)
-        open_interest = market.get('open_interest', 0)
-        
-        # Market efficiency (tight spread = efficient)
-        yes_spread = yes_ask - yes_bid
-        no_spread = no_ask - no_bid
-        avg_spread = (yes_spread + no_spread) / 2
-        
-        efficiency = 1 - avg_spread  # Higher = more efficient
-        
-        # Compare with AI prediction
-        kalshi_implied = yes_bid  # Using bid as market consensus
-        
-        if ml_probability is not None:
-            ai_edge = ml_probability - kalshi_implied
-            
-            if ai_edge > 0.10:
-                ai_recommendation = f"STRONG BUY YES - AI sees {ai_edge*100:.1f}% edge"
-            elif ai_edge < -0.10:
-                ai_recommendation = f"STRONG BUY NO - AI sees {abs(ai_edge)*100:.1f}% edge"
-            elif abs(ai_edge) < 0.05:
-                ai_recommendation = "FAIR PRICE - AI agrees with market"
-            else:
-                ai_recommendation = f"SLIGHT EDGE - AI sees {ai_edge*100:.1f}% edge"
-        else:
-            ai_edge = 0
-            ai_recommendation = "No AI prediction available"
-
-        # Sentiment alignment
-        if sentiment_score > 0.3 and kalshi_implied < 0.6:
-            sentiment_signal = "Positive sentiment + underpriced = BUY YES"
-        elif sentiment_score < -0.3 and kalshi_implied > 0.4:
-            sentiment_signal = "Negative sentiment + overpriced = BUY NO"
-        else:
-            sentiment_signal = "Sentiment neutral or priced in"
-
-        # Liquidity assessment
-        if volume > 1000 and open_interest > 500:
-            liquidity = "High liquidity - easy to enter/exit"
-        elif volume > 100 and open_interest > 50:
-            liquidity = "Moderate liquidity - tradeable"
-        else:
-            liquidity = "Low liquidity - be cautious"
-        
-        return {
-            'kalshi_probability': kalshi_implied,
-            'yes_bid': yes_bid,
-            'yes_ask': yes_ask,
-            'spread': avg_spread,
-            'efficiency': efficiency,
-            'volume': volume,
-            'open_interest': open_interest,
-            'liquidity': liquidity,
-            'ai_edge': ai_edge,
-            'ai_recommendation': ai_recommendation,
-            'sentiment_score': sentiment_score,
-            'sentiment_signal': sentiment_signal,
-            'overall_score': self._calculate_overall_score(
-                ai_edge, sentiment_score, efficiency, volume
-            )
-
-    # --------------------- Time & sport filters ---------------------
-    sidebar.subheader("📅 Filters")
-    default_tz_name = st.session_state.get('user_timezone', 'America/New_York')
-    tz_input = sidebar.text_input(
-        "Timezone (IANA)",
-        value=default_tz_name,
-        help="Controls how kickoff times and date filters are interpreted.",
-    ).strip() or default_tz_name
-    try:
-        tz_obj = pytz.timezone(tz_input)
-        tz_name = getattr(tz_obj, 'zone', tz_input) or tz_input
-    except Exception:
-        tz_obj = pytz.timezone('UTC')
-        tz_name = 'UTC'
-        sidebar.warning("Invalid timezone entered. Defaulting to UTC.")
-    st.session_state['user_timezone'] = tz_name
-
-    default_date = st.session_state.get('selected_date')
-    if not default_date:
-        default_date = datetime.now(tz_obj).date()
-    sel_date = sidebar.date_input(
-        "Focus date",
-        value=default_date,
-        help="Only bets within the selected window around this date are shown.",
-    )
-    st.session_state['selected_date'] = sel_date
-
-    day_window = sidebar.slider(
-        "Include events within ±N days",
-        0,
-        7,
-        int(st.session_state.get('day_window', 0) or 0),
-        1,
-    )
-    st.session_state['day_window'] = day_window
-
-    default_sports = st.session_state.setdefault('selected_sports', APP_CFG["sports_common"][:6])
-    sports = sidebar.multiselect(
-        "Sports",
-        options=APP_CFG["sports_common"],
-        default=default_sports,
-        format_func=format_sport_label,
-        key="selected_sports",
-    )
-
-    # --------------------- AI settings ---------------------
-    ai_expander = sidebar.expander("🤖 AI Settings", expanded=False)
-    with ai_expander:
-        use_sentiment = ai_expander.checkbox(
-            "Enable Sentiment Analysis",
-            value=st.session_state.get('use_sentiment', True),
-            help="Analyze news sentiment for each team when computing edges.",
-        )
-
-        current_ml_state = bool(st.session_state.get('use_ml_predictions', True))
-        use_ml_predictions = ai_expander.checkbox(
-            "Enable ML Predictions",
-            value=current_ml_state,
-            help="Blend trained historical models into probability estimates.",
-        )
-
-        toggle_label = "🔌 Disable ML for this session" if use_ml_predictions else "⚡ Re-enable ML predictions"
-        toggle_help = (
-            "Temporarily turn the historical machine-learning models off. "
-            "When disabled, the app falls back to odds + sentiment without training datasets."
-            if use_ml_predictions
-            else "Turn the historical machine-learning models back on for eligible sports."
-        )
-        if ai_expander.button(
-            toggle_label,
-            key="toggle_ml_predictions_button",
-            width="stretch",
-            help=toggle_help,
-        ):
-            use_ml_predictions = not use_ml_predictions
-            st.session_state['use_ml_predictions'] = use_ml_predictions
-
-        if not use_ml_predictions:
-            ai_expander.info(
-                "ML predictions are disabled. Odds, sentiment, Kalshi, and live data signals still run as usual."
-            )
-        min_ai_confidence = ai_expander.slider(
-            "Minimum AI Confidence",
-            0.0,
-            1.0,
-            float(st.session_state.get('min_ai_confidence', 0.60) or 0.60),
-            0.05,
-        )
-        min_parlay_probability = ai_expander.slider(
-            "Minimum Parlay Probability",
-            0.20,
-            0.60,
-            float(st.session_state.get('min_parlay_probability', 0.30) or 0.30),
-            0.05,
-        )
-        max_parlay_probability = ai_expander.slider(
-            "Maximum Parlay Probability",
-            0.45,
-            0.85,
-            float(st.session_state.get('max_parlay_probability', 0.65) or 0.65),
-            0.05,
-        )
-
-    st.session_state['use_sentiment'] = use_sentiment
-    st.session_state['use_ml_predictions'] = use_ml_predictions
-    st.session_state['min_ai_confidence'] = min_ai_confidence
-    st.session_state['min_parlay_probability'] = min_parlay_probability
-    st.session_state['max_parlay_probability'] = max_parlay_probability
-
-    return {
-        "tz": tz_obj,
-        "timezone_name": tz_name,
-        "selected_date": sel_date,
-        "day_window": day_window,
-        "sports": sports,
-        "use_sentiment": use_sentiment,
-        "use_ml_predictions": use_ml_predictions,
-        "min_ai_confidence": min_ai_confidence,
-        "min_parlay_probability": min_parlay_probability,
-        "max_parlay_probability": max_parlay_probability,
-    }
-
-
-def resolve_nfl_apisports_key() -> Tuple[str, Optional[str]]:
-    """Locate the NFL API-Sports key from Streamlit secrets or the environment."""
-
-    secret_container = getattr(st, "secrets", None)
-    if secret_container is not None:
-        for secret_name in ("NFL_APISPORTS_API_KEY", "APISPORTS_API_KEY", "API_SPORTS_KEY"):
-            try:
-                secret_value = secret_container.get(secret_name)
-            except Exception:
-                secret_value = None
-            if secret_value:
-                return str(secret_value), f"secret:{secret_name}"
-
-    for env_name in ("NFL_APISPORTS_API_KEY", "APISPORTS_API_KEY", "API_SPORTS_KEY"):
-        env_value = os.environ.get(env_name)
-        if env_value:
-            return env_value, f"env:{env_name}"
-
-    return "", None
-
-
-def resolve_nhl_apisports_key() -> Tuple[str, Optional[str]]:
-    """Locate the NHL API-Sports key from Streamlit secrets or the environment."""
-
-    secret_container = getattr(st, "secrets", None)
-    if secret_container is not None:
-        for secret_name in ("NHL_APISPORTS_API_KEY", "APISPORTS_API_KEY", "API_SPORTS_KEY"):
-            try:
-                secret_value = secret_container.get(secret_name)
-            except Exception:
-                secret_value = None
-            if secret_value:
-                return str(secret_value), f"secret:{secret_name}"
-
-    for env_name in ("NHL_APISPORTS_API_KEY", "APISPORTS_API_KEY", "API_SPORTS_KEY"):
-        env_value = os.environ.get(env_name)
-        if env_value:
-            return env_value, f"env:{env_name}"
-
-    return "", None
-
-
-def resolve_nba_apisports_key() -> Tuple[str, Optional[str]]:
-    """Locate the NBA API-Sports key from Streamlit secrets or the environment."""
-
-    secret_container = getattr(st, "secrets", None)
-    if secret_container is not None:
-        for secret_name in ("NBA_APISPORTS_API_KEY", "APISPORTS_API_KEY", "API_SPORTS_KEY"):
-            try:
-                secret_value = secret_container.get(secret_name)
-            except Exception:
-                secret_value = None
-            if secret_value:
-                return str(secret_value), f"secret:{secret_name}"
-
-    for env_name in ("NBA_APISPORTS_API_KEY", "APISPORTS_API_KEY", "API_SPORTS_KEY"):
-        env_value = os.environ.get(env_name)
-        if env_value:
-            return env_value, f"env:{env_name}"
-
-    return "", None
-
-
-def resolve_sportsdata_key(sport_key: str) -> Tuple[str, Optional[str]]:
-    """Locate the SportsData.io key for a specific sport."""
-
-    config = SPORTSDATA_CONFIG.get(sport_key, {})
-    secret_priority: List[str] = list(dict.fromkeys(config.get("secret_names", ())))
-    for fallback_name in ("SPORTSDATA_API_KEY", "SPORTSDATA_KEY"):
-        if fallback_name not in secret_priority:
-            secret_priority.append(fallback_name)
-
-    secret_container = getattr(st, "secrets", None)
-    if secret_container is not None:
-        for secret_name in secret_priority:
-            try:
-                secret_value = secret_container.get(secret_name)
-            except Exception:
-                secret_value = None
-            if secret_value:
-                return str(secret_value), f"secret:{secret_name}"
-
-    for env_name in secret_priority:
-        env_value = os.environ.get(env_name)
-        if env_value:
-            return env_value, f"env:{env_name}"
-
-    return "", None
-
-
-def ensure_sportsdata_clients() -> Dict[str, Any]:
-    """Instantiate and synchronize SportsData.io clients for all configured sports."""
-
-    clients: Dict[str, Any] = st.session_state.get('sportsdata_clients', {}) or {}
-
-    for sport_key, cfg in SPORTSDATA_CONFIG.items():
-        session_key = f"{sport_key}_sportsdata_api_key"
-        source_session_key = f"{sport_key}_sportsdata_key_source"
-        api_key = st.session_state.get(session_key, "")
-        source = st.session_state.get(source_session_key)
-
-        client = clients.get(sport_key)
-        if client is None:
-            client = cfg["client_class"](api_key or None, key_source=source)
-            clients[sport_key] = client
-        else:
-            if getattr(client, "api_key", "") != (api_key or ""):
-                client.update_api_key(api_key or None, source=source or "user")
-
-    st.session_state['sportsdata_clients'] = clients
-    return clients
-
-# Comprehensive mapping of Kalshi team abbreviations → canonical team names.
-# The Kalshi markets often reference tickers like "NBA.LAL_GSW" or subtitles using
-# short-hands. By centralizing these variations we can translate between
-# sportsbook-style names ("Los Angeles Lakers") and Kalshi identifiers ("LAL").
-# This dramatically increases the likelihood that we locate the correct Kalshi
-# market when validating a parlay leg.
-KALSHI_TEAM_ABBREVIATIONS: Dict[str, List[str]] = {
-    # ========================= NFL =========================
-    "ARIZONA CARDINALS": ["ARI", "ARZ", "AZ"],
-    "ATLANTA FALCONS": ["ATL"],
-    "BALTIMORE RAVENS": ["BAL"],
-    "BUFFALO BILLS": ["BUF"],
-    "CAROLINA PANTHERS": ["CAR", "CLT"],
-    "CHICAGO BEARS": ["CHI", "CHB"],
-    "CINCINNATI BENGALS": ["CIN", "CINC"],
-    "CLEVELAND BROWNS": ["CLE"],
-    "DALLAS COWBOYS": ["DAL"],
-    "DENVER BRONCOS": ["DEN"],
-    "DETROIT LIONS": ["DET"],
-    "GREEN BAY PACKERS": ["GB", "GBP", "GBE"],
-    "HOUSTON TEXANS": ["HOU", "HTX"],
-    "INDIANAPOLIS COLTS": ["IND"],
-    "JACKSONVILLE JAGUARS": ["JAX", "JAC"],
-    "KANSAS CITY CHIEFS": ["KC", "KCC"],
-    "LAS VEGAS RAIDERS": ["LV", "LVR"],
-    "LOS ANGELES CHARGERS": ["LAC", "LA CHARGERS"],
-    "LOS ANGELES RAMS": ["LAR", "LA RAMS"],
-    "MIAMI DOLPHINS": ["MIA"],
-    "MINNESOTA VIKINGS": ["MIN", "MINN"],
-    "NEW ENGLAND PATRIOTS": ["NE", "NEP"],
-    "NEW ORLEANS SAINTS": ["NO", "NOS"],
-    "NEW YORK GIANTS": ["NYG", "NY GIANTS"],
-    "NEW YORK JETS": ["NYJ", "NY JETS"],
-    "PHILADELPHIA EAGLES": ["PHI", "PHL", "PHI EAGLES"],
-    "PITTSBURGH STEELERS": ["PIT", "PITTSBURGH"],
-    "SAN FRANCISCO 49ERS": ["SF", "SFO", "SF 49ERS"],
-    "SEATTLE SEAHAWKS": ["SEA", "SEA HAWKS"],
-    "TAMPA BAY BUCCANEERS": ["TB", "TBB"],
-    "TENNESSEE TITANS": ["TEN", "TENN"],
-    "WASHINGTON COMMANDERS": ["WAS", "WSH"],
-
-    # ========================= NBA =========================
-    "ATLANTA HAWKS": ["ATL"],
-    "BOSTON CELTICS": ["BOS"],
-    "BROOKLYN NETS": ["BKN", "BRK"],
-    "CHARLOTTE HORNETS": ["CHA", "CHH", "CLT"],
-    "CHICAGO BULLS": ["CHI"],
-    "CLEVELAND CAVALIERS": ["CLE", "CAVS"],
-    "DALLAS MAVERICKS": ["DAL", "MAVS"],
-    "DENVER NUGGETS": ["DEN"],
-    "DETROIT PISTONS": ["DET"],
-    "GOLDEN STATE WARRIORS": ["GSW", "GS"],
-    "HOUSTON ROCKETS": ["HOU"],
-    "INDIANA PACERS": ["IND"],
-    "LOS ANGELES CLIPPERS": ["LAC", "LA CLIPPERS"],
-    "LOS ANGELES LAKERS": ["LAL", "LA LAKERS"],
-    "MEMPHIS GRIZZLIES": ["MEM"],
-    "MIAMI HEAT": ["MIA"],
-    "MILWAUKEE BUCKS": ["MIL"],
-    "MINNESOTA TIMBERWOLVES": ["MIN", "MINN"],
-    "NEW ORLEANS PELICANS": ["NOP", "NO PELICANS"],
-    "NEW YORK KNICKS": ["NYK", "NY KNICKS"],
-    "OKLAHOMA CITY THUNDER": ["OKC"],
-    "ORLANDO MAGIC": ["ORL"],
-    "PHILADELPHIA 76ERS": ["PHI", "PHL", "SIXERS"],
-    "PHOENIX SUNS": ["PHX"],
-    "PORTLAND TRAIL BLAZERS": ["POR", "PTB", "PDX"],
-    "SACRAMENTO KINGS": ["SAC"],
-    "SAN ANTONIO SPURS": ["SAS", "SA SPURS"],
-    "TORONTO RAPTORS": ["TOR"],
-    "UTAH JAZZ": ["UTA"],
-    "WASHINGTON WIZARDS": ["WAS", "WSH"],
-
-    # ========================= MLB =========================
-    "ARIZONA DIAMONDBACKS": ["ARI", "ARZ", "AZ"],
-    "ATLANTA BRAVES": ["ATL"],
-    "BALTIMORE ORIOLES": ["BAL"],
-    "BOSTON RED SOX": ["BOS"],
-    "CHICAGO CUBS": ["CHC"],
-    "CHICAGO WHITE SOX": ["CWS", "CHW"],
-    "CINCINNATI REDS": ["CIN", "CINC"],
-    "CLEVELAND GUARDIANS": ["CLE", "CLV"],
-    "COLORADO ROCKIES": ["COL"],
-    "DETROIT TIGERS": ["DET"],
-    "HOUSTON ASTROS": ["HOU"],
-    "KANSAS CITY ROYALS": ["KC", "KCR"],
-    "LOS ANGELES ANGELS": ["LAA", "LA ANGELS"],
-    "LOS ANGELES DODGERS": ["LAD", "LA DODGERS"],
-    "MIAMI MARLINS": ["MIA"],
-    "MILWAUKEE BREWERS": ["MIL"],
-    "MINNESOTA TWINS": ["MIN", "MINN"],
-    "NEW YORK METS": ["NYM", "NY METS"],
-    "NEW YORK YANKEES": ["NYY", "NY YANKEES"],
-    "OAKLAND ATHLETICS": ["OAK"],
-    "PHILADELPHIA PHILLIES": ["PHI", "PHL", "PHILS"],
-    "PITTSBURGH PIRATES": ["PIT"],
-    "SAN DIEGO PADRES": ["SD", "SDP"],
-    "SAN FRANCISCO GIANTS": ["SF", "SFG"],
-    "SEATTLE MARINERS": ["SEA"],
-    "ST. LOUIS CARDINALS": ["STL", "SLC"],
-    "TAMPA BAY RAYS": ["TB", "TBR"],
-    "TEXAS RANGERS": ["TEX"],
-    "TORONTO BLUE JAYS": ["TOR"],
-    "WASHINGTON NATIONALS": ["WSH", "WAS"],
-
-    # ========================= NHL =========================
-    "ANAHEIM DUCKS": ["ANA"],
-    "ARIZONA COYOTES": ["ARI", "ARZ", "AZ"],
-    "BOSTON BRUINS": ["BOS"],
-    "BUFFALO SABRES": ["BUF"],
-    "CALGARY FLAMES": ["CGY"],
-    "CAROLINA HURRICANES": ["CAR", "CLT"],
-    "CHICAGO BLACKHAWKS": ["CHI"],
-    "COLORADO AVALANCHE": ["COL"],
-    "COLUMBUS BLUE JACKETS": ["CBJ"],
-    "DALLAS STARS": ["DAL"],
-    "DETROIT RED WINGS": ["DET"],
-    "EDMONTON OILERS": ["EDM"],
-    "FLORIDA PANTHERS": ["FLA"],
-    "LOS ANGELES KINGS": ["LAK", "LA KINGS"],
-    "MINNESOTA WILD": ["MIN", "MINN"],
-    "MONTREAL CANADIENS": ["MTL"],
-    "NASHVILLE PREDATORS": ["NSH"],
-    "NEW JERSEY DEVILS": ["NJD"],
-    "NEW YORK ISLANDERS": ["NYI"],
-    "NEW YORK RANGERS": ["NYR"],
-    "OTTAWA SENATORS": ["OTT"],
-    "PHILADELPHIA FLYERS": ["PHI", "PHL"],
-    "PITTSBURGH PENGUINS": ["PIT"],
-    "SAN JOSE SHARKS": ["SJS"],
-    "SEATTLE KRAKEN": ["SEA"],
-    "ST. LOUIS BLUES": ["STL"],
-    "TAMPA BAY LIGHTNING": ["TB", "TBL"],
-    "TORONTO MAPLE LEAFS": ["TOR"],
-    "VANCOUVER CANUCKS": ["VAN"],
-    "VEGAS GOLDEN KNIGHTS": ["VGK", "VEGAS"],
-    "WASHINGTON CAPITALS": ["WSH", "WAS"],
-    "WINNIPEG JETS": ["WPG"],
-}
-
-# Map teams back to their primary league so we can build league-aware fallbacks
-KALSHI_LEAGUE_TEAM_SETS: Dict[str, List[str]] = {
-    "NFL": [
-        "ARIZONA CARDINALS", "ATLANTA FALCONS", "BALTIMORE RAVENS", "BUFFALO BILLS",
-        "CAROLINA PANTHERS", "CHICAGO BEARS", "CINCINNATI BENGALS", "CLEVELAND BROWNS",
-        "DALLAS COWBOYS", "DENVER BRONCOS", "DETROIT LIONS", "GREEN BAY PACKERS",
-        "HOUSTON TEXANS", "INDIANAPOLIS COLTS", "JACKSONVILLE JAGUARS", "KANSAS CITY CHIEFS",
-        "LAS VEGAS RAIDERS", "LOS ANGELES CHARGERS", "LOS ANGELES RAMS", "MIAMI DOLPHINS",
-        "MINNESOTA VIKINGS", "NEW ENGLAND PATRIOTS", "NEW ORLEANS SAINTS", "NEW YORK GIANTS",
-        "NEW YORK JETS", "PHILADELPHIA EAGLES", "PITTSBURGH STEELERS", "SAN FRANCISCO 49ERS",
-        "SEATTLE SEAHAWKS", "TAMPA BAY BUCCANEERS", "TENNESSEE TITANS", "WASHINGTON COMMANDERS"
-    ],
-    "NBA": [
-        "ATLANTA HAWKS", "BOSTON CELTICS", "BROOKLYN NETS", "CHARLOTTE HORNETS",
-        "CHICAGO BULLS", "CLEVELAND CAVALIERS", "DALLAS MAVERICKS", "DENVER NUGGETS",
-        "DETROIT PISTONS", "GOLDEN STATE WARRIORS", "HOUSTON ROCKETS", "INDIANA PACERS",
-        "LOS ANGELES CLIPPERS", "LOS ANGELES LAKERS", "MEMPHIS GRIZZLIES", "MIAMI HEAT",
-        "MILWAUKEE BUCKS", "MINNESOTA TIMBERWOLVES", "NEW ORLEANS PELICANS", "NEW YORK KNICKS",
-        "OKLAHOMA CITY THUNDER", "ORLANDO MAGIC", "PHILADELPHIA 76ERS", "PHOENIX SUNS",
-        "PORTLAND TRAIL BLAZERS", "SACRAMENTO KINGS", "SAN ANTONIO SPURS", "TORONTO RAPTORS",
-        "UTAH JAZZ", "WASHINGTON WIZARDS"
-    ],
-    "MLB": [
-        "ARIZONA DIAMONDBACKS", "ATLANTA BRAVES", "BALTIMORE ORIOLES", "BOSTON RED SOX",
-        "CHICAGO CUBS", "CHICAGO WHITE SOX", "CINCINNATI REDS", "CLEVELAND GUARDIANS",
-        "COLORADO ROCKIES", "DETROIT TIGERS", "HOUSTON ASTROS", "KANSAS CITY ROYALS",
-        "LOS ANGELES ANGELS", "LOS ANGELES DODGERS", "MIAMI MARLINS", "MILWAUKEE BREWERS",
-        "MINNESOTA TWINS", "NEW YORK METS", "NEW YORK YANKEES", "OAKLAND ATHLETICS",
-        "PHILADELPHIA PHILLIES", "PITTSBURGH PIRATES", "SAN DIEGO PADRES", "SAN FRANCISCO GIANTS",
-        "SEATTLE MARINERS", "ST. LOUIS CARDINALS", "TAMPA BAY RAYS", "TEXAS RANGERS",
-        "TORONTO BLUE JAYS", "WASHINGTON NATIONALS"
-    ],
-    "NHL": [
-        "ANAHEIM DUCKS", "ARIZONA COYOTES", "BOSTON BRUINS", "BUFFALO SABRES",
-        "CALGARY FLAMES", "CAROLINA HURRICANES", "CHICAGO BLACKHAWKS", "COLORADO AVALANCHE",
-        "COLUMBUS BLUE JACKETS", "DALLAS STARS", "DETROIT RED WINGS", "EDMONTON OILERS",
-        "FLORIDA PANTHERS", "LOS ANGELES KINGS", "MINNESOTA WILD", "MONTREAL CANADIENS",
-        "NASHVILLE PREDATORS", "NEW JERSEY DEVILS", "NEW YORK ISLANDERS", "NEW YORK RANGERS",
-        "OTTAWA SENATORS", "PHILADELPHIA FLYERS", "PITTSBURGH PENGUINS", "SAN JOSE SHARKS",
-        "SEATTLE KRAKEN", "ST. LOUIS BLUES", "TAMPA BAY LIGHTNING", "TORONTO MAPLE LEAFS",
-        "VANCOUVER CANUCKS", "VEGAS GOLDEN KNIGHTS", "WASHINGTON CAPITALS", "WINNIPEG JETS"
-    ],
-}
-
-KALSHI_TEAM_LEAGUE_MAP: Dict[str, str] = {
-    team: league
-    for league, teams in KALSHI_LEAGUE_TEAM_SETS.items()
-    for team in teams
-}
-
-SPORT_KEY_TO_LEAGUE: Dict[str, str] = {
-    "americanfootball_nfl": "NFL",
-    "americanfootball_ncaaf": "NCAAF",
-    "basketball_nba": "NBA",
-    "basketball_ncaab": "NCAAB",
-    "baseball_mlb": "MLB",
-    "icehockey_nhl": "NHL",
-    "mma_mixed_martial_arts": "MMA",
-    "soccer_epl": "EPL",
-    "soccer_uefa_champs_league": "UEFA",
-    "tennis_atp_singles": "TENNIS",
-}
-
-
-def format_sport_label(sport_key: Any) -> str:
-    """Return a user-friendly league label for an Odds API sport key."""
-
-    if not isinstance(sport_key, str):
-        return str(sport_key)
-
-    if sport_key in SPORT_KEY_TO_LEAGUE:
-        return SPORT_KEY_TO_LEAGUE[sport_key]
-
-    if "_" in sport_key:
-        return sport_key.split("_")[-1].upper()
-
-    return sport_key.upper()
-
-# ============ REAL SENTIMENT ANALYSIS ENGINE ============
-# (moved to app_core.sentiment so it can be reused without importing the
-# Streamlit UI. RealSentimentAnalyzer and SentimentAnalyzer are imported above.)
-
-# ============ AI PARLAY OPTIMIZER ============
-class AIOptimizer:
-    """Optimizes parlay selection using AI insights"""
-
-    def __init__(
-        self,
-        sentiment_analyzer: SentimentAnalyzer,
-        ml_predictor: Optional[MLPredictor],
-    ):
-        self.sentiment = sentiment_analyzer
-        self.ml = ml_predictor
-    
-    def _calculate_overall_score(self, ai_edge: float, sentiment: float, 
-                                 efficiency: float, volume: int) -> float:
-        """Calculate overall opportunity score 0-100"""
-        # Weight different factors
-        edge_score = min(abs(ai_edge) * 200, 50)  # Max 50 points
-        sentiment_score = min(abs(sentiment) * 50, 20)  # Max 20 points
-        efficiency_score = efficiency * 15  # Max 15 points
-        liquidity_score = min(volume / 100, 15)  # Max 15 points
-        
-        total = edge_score + sentiment_score + efficiency_score + liquidity_score
-        return min(total, 100)
-    
-    def get_best_opportunities(self, min_score: float = 60) -> List[Dict]:
-        """
-        Find the best Kalshi betting opportunities
-        
-        Returns markets with high overall scores
-        """
-        markets = self.get_sports_markets()
-        opportunities = []
-
-        for market in markets:
-            # Get orderbook
-            ticker = market.get('ticker')
-            orderbook = self.get_orderbook(ticker)
-
-            if orderbook:
-                # Enhance market data with orderbook
-                market['yes_bid'] = orderbook.get('yes', [{}])[0].get('price', 0)
-                market['yes_ask'] = orderbook.get('yes', [{}])[-1].get('price', 100)
-                market['no_bid'] = orderbook.get('no', [{}])[0].get('price', 0)
-                market['no_ask'] = orderbook.get('no', [{}])[-1].get('price', 100)
-
-                # Analyze
-                analysis = self.analyze_kalshi_market(market)
-
-                if analysis['overall_score'] >= min_score:
-                    opportunity = {
-                        'market': market,
-                        'analysis': analysis,
-                    }
-                    opportunities.append(opportunity)
-        
-        # Sort by score
-        opportunities.sort(key=lambda x: x['analysis']['overall_score'], reverse=True)
-        
-        return opportunities
-    
-    def calculate_kelly_for_kalshi(self, kalshi_prob: float, ai_prob: float, 
-                                   bankroll: float = 1000) -> Dict:
-        """
-        Score a parlay combination using AI
-        Higher scores = better opportunity
-        NOW INCLUDES KALSHI VALIDATION
-        """
-        def _empty_score() -> Dict[str, Any]:
-            return {
-                'score': 0.0,
-                'ai_ev': 0.0,
-                'confidence': 0.0,
-                'edge': 0.0,
-                'correlation_factor': 1.0,
-                'kalshi_factor': 1.0,
-                'kalshi_legs': 0,
-                'kalshi_boost': 0.0,
-                'kalshi_alignment_avg': 0.0,
-                'kalshi_alignment_abs_avg': 0.0,
-                'kalshi_alignment_positive': 0,
-                'kalshi_alignment_negative': 0,
-                'kalshi_alignment_count': 0,
-                'live_data_factor': 1.0,
-                'live_data_boost': 0.0,
-                'live_data_legs': 0,
-                'live_data_sports': [],
-                'apisports_factor': 1.0,
-                'apisports_legs': 0,
-                'apisports_boost': 0.0,
-                'apisports_sports': [],
-                'sportsdata_factor': 1.0,
-                'sportsdata_legs': 0,
-                'sportsdata_boost': 0.0,
-                'sportsdata_sports': [],
-            }
-
-        if not legs:
-            return _empty_score()
-
-        valid_legs: List[Dict[str, Any]] = []
-        for leg in legs:
-            if not isinstance(leg, dict):
-                logger.debug("Skipping non-dict parlay leg: %r", leg)
-                continue
-            decimal_odds = _safe_float(leg.get('d'))
-            base_prob = _safe_float(leg.get('p'))
-            if decimal_odds is None or decimal_odds <= 1 or base_prob is None:
-                logger.debug(
-                    "Skipping parlay leg missing odds/probability: %s",
-                    leg.get('label', leg.get('team', 'unknown')),
-                )
-                continue
-            valid_legs.append(leg)
-
-        if not valid_legs:
-            return _empty_score()
-
-        legs = valid_legs
-
-        # Calculate combined probability (AI-adjusted)
-        combined_prob = 1.0
-        combined_confidence = 1.0
-        total_edge = 0
-        kalshi_boost = 0
-        kalshi_legs = 0
-        kalshi_alignment_total = 0.0
-        kalshi_alignment_abs_total = 0.0
-        kalshi_alignment_positive = 0
-        kalshi_alignment_negative = 0
-        kalshi_alignment_count = 0
-        apisports_boost = 0
-        apisports_legs = 0
-        apisports_sports: set[str] = set()
-        sportsdata_boost = 0
-        sportsdata_legs = 0
-        sportsdata_sports: set[str] = set()
-        live_data_legs = 0
-        live_data_sports: set[str] = set()
-
-        for leg in legs:
-            ai_prob_val = _safe_float(leg.get('ai_prob'))
-            if ai_prob_val is None:
-                ai_prob_val = _safe_float(leg.get('p'))
-            if ai_prob_val is None:
-                logger.debug(
-                    "Skipping AI probability blend for leg with missing prob: %s",
-                    leg.get('label', leg.get('team', 'unknown')),
-                )
-                continue
-            combined_prob *= ai_prob_val
-
-            confidence_val = _safe_float(leg.get('ai_confidence'))
-            if confidence_val is None:
-                confidence_val = 0.5
-            combined_confidence *= max(0.01, min(1.0, confidence_val))
-
-            total_edge += _safe_float(leg.get('ai_edge')) or 0.0
-
-            has_live_context = False
-
-            # KALSHI INTEGRATION: Add Kalshi influence
-            if 'kalshi_validation' in leg:
-                kv = leg.get('kalshi_validation') or {}
-                if kv.get('kalshi_available'):
-                    kalshi_legs += 1
-                    # Kalshi provides additional probability estimate
-                    kalshi_prob = kv.get('kalshi_prob', 0)
-                    sportsbook_prob = leg.get('p', 0)
-                    data_source = kv.get('data_source', 'kalshi')
-                    source_weight = 0.6 if data_source and 'synthetic' in data_source else 1.0
-
-                    # Track Kalshi vs. model alignment before blending probabilities.
-                    ai_pre_kalshi = leg.get('ai_prob_before_kalshi')
-                    if ai_pre_kalshi is None:
-                        delta_hint = leg.get('kalshi_alignment_delta')
-                        if isinstance(delta_hint, (int, float)):
-                            ai_pre_kalshi = leg.get('ai_prob', sportsbook_prob) - delta_hint
-                    if ai_pre_kalshi is None:
-                        ai_pre_kalshi = leg.get('ai_prob', sportsbook_prob)
-                    alignment_delta = kalshi_prob - ai_pre_kalshi
-                    kalshi_alignment_total += alignment_delta
-                    kalshi_alignment_abs_total += abs(alignment_delta)
-                    kalshi_alignment_count += 1
-                    if alignment_delta >= 0.01:
-                        kalshi_alignment_positive += 1
-                    elif alignment_delta <= -0.01:
-                        kalshi_alignment_negative += 1
-
-                    # If Kalshi and AI both disagree with sportsbook in same direction
-                    # that's a strong signal
-                    ai_prob = leg.get('ai_prob', sportsbook_prob)
-
-                    if kalshi_prob > sportsbook_prob and ai_prob > sportsbook_prob:
-                        # Both Kalshi and AI see value
-                        kalshi_boost += 15 * source_weight  # Strong boost
-                    elif kalshi_prob < sportsbook_prob and ai_prob < sportsbook_prob:
-                        # Both Kalshi and AI skeptical
-                        kalshi_boost -= 10 * source_weight  # Penalty
-                    elif abs(kalshi_prob - ai_prob) < 0.05:
-                        # Kalshi and AI agree (regardless of sportsbook)
-                        kalshi_boost += 10 * source_weight  # Agreement boost
-                    elif abs(kalshi_prob - sportsbook_prob) < 0.03:
-                        # Kalshi confirms market
-                        kalshi_boost += 5 * source_weight  # Small boost for confirmation
-                    else:
-                        # Kalshi contradicts both AI and market
-                        kalshi_boost -= 5 * source_weight  # Small penalty for confusion
-
-            apisports_info = leg.get('apisports')
-            if apisports_info:
-                has_live_context = True
-                apisports_legs += 1
-                sport_key = apisports_info.get('sport_key') if isinstance(apisports_info, dict) else None
-                if sport_key:
-                    apisports_sports.add(sport_key)
-                    live_data_sports.add(sport_key)
-                trend = apisports_info.get('trend')
-                if trend == 'hot':
-                    apisports_boost += 5
-                elif trend == 'cold':
-                    apisports_boost -= 5
-
-            sportsdata_info = leg.get('sportsdata')
-            if sportsdata_info:
-                has_live_context = True
-                sportsdata_legs += 1
-                sport_key = sportsdata_info.get('sport_key') if isinstance(sportsdata_info, dict) else None
-                if sport_key:
-                    sportsdata_sports.add(sport_key)
-                    live_data_sports.add(sport_key)
-                trend = sportsdata_info.get('trend')
-                if trend == 'hot':
-                    sportsdata_boost += 4
-                elif trend == 'cold':
-                    sportsdata_boost -= 4
-                strength_delta = sportsdata_info.get('strength_delta')
-                if isinstance(strength_delta, (int, float)):
-                    if strength_delta >= 2.0:
-                        sportsdata_boost += 6
-                    elif strength_delta <= -2.0:
-                        sportsdata_boost -= 6
-                turnover_margin = sportsdata_info.get('turnover_margin')
-                if isinstance(turnover_margin, (int, float)):
-                    if turnover_margin >= 0.5:
-                        sportsdata_boost += 2
-                    elif turnover_margin <= -0.5:
-                        sportsdata_boost -= 2
-
-            if has_live_context:
-                live_data_legs += 1
-
-        # Calculate combined decimal odds
-        combined_odds = 1.0
-        for leg in legs:
-            decimal_val = _safe_float(leg.get('d'))
-            if decimal_val is None or decimal_val <= 1:
-                logger.debug(
-                    "Skipping leg with invalid decimal odds in multiplier: %s",
-                    leg.get('label', leg.get('team', 'unknown')),
-                )
-                continue
-            combined_odds *= decimal_val
-
-        # AI-enhanced EV
-        ai_ev = (combined_prob * combined_odds) - 1.0
-
-        # Correlation penalty (same-game parlays are correlated)
-        unique_event_ids = [leg.get('event_id') for leg in legs if leg.get('event_id')]
-        unique_games = len(set(unique_event_ids)) if unique_event_ids else len(legs)
-        correlation_factor = unique_games / len(legs)
-        
-        # Kalshi validation factor (0.8 to 1.2 multiplier)
-        if kalshi_legs > 0:
-            kalshi_factor = 1.0 + (kalshi_boost / 100)
-            kalshi_factor = max(0.8, min(1.2, kalshi_factor))  # Clamp between 0.8 and 1.2
-        else:
-            kalshi_factor = 1.0  # No Kalshi data = neutral
-        
-        # Final score components with KALSHI integration
-        ev_score = ai_ev * 100  # EV contribution
-        confidence_score = combined_confidence * 50  # Confidence contribution
-        edge_score = total_edge * 150  # Edge is most important
-        
-        # Calculate base score
-        base_score = (edge_score * 0.45 +      # 45% edge
-                     ev_score * 0.30 +          # 30% EV
-                     confidence_score * 0.25)    # 25% confidence
-
-        # Apply Kalshi factor, correlation factor, and live data adjustments
-        apisports_factor = 1.0
-        if apisports_legs:
-            apisports_factor += apisports_boost / 100.0
-            apisports_factor = max(0.9, min(1.1, apisports_factor))
-
-        sportsdata_factor = 1.0
-        if sportsdata_legs:
-            sportsdata_factor += sportsdata_boost / 100.0
-            sportsdata_factor = max(0.9, min(1.1, sportsdata_factor))
-
-        combined_boost = apisports_boost + sportsdata_boost
-        live_data_factor = 1.0
-        if live_data_legs and combined_boost:
-            live_data_factor += combined_boost / 100.0
-            live_data_factor = max(0.85, min(1.15, live_data_factor))
-
-        final_score = base_score * correlation_factor * kalshi_factor * live_data_factor
-
-        return {
-            'score': final_score,
-            'ai_ev': ai_ev,
-            'confidence': combined_confidence,
-            'edge': total_edge,
-            'correlation_factor': correlation_factor,
-            'kalshi_factor': kalshi_factor,
-            'kalshi_legs': kalshi_legs,
-            'kalshi_boost': kalshi_boost,
-            'kalshi_alignment_avg': (kalshi_alignment_total / kalshi_alignment_count)
-            if kalshi_alignment_count
-            else 0.0,
-            'kalshi_alignment_abs_avg': (kalshi_alignment_abs_total / kalshi_alignment_count)
-            if kalshi_alignment_count
-            else 0.0,
-            'kalshi_alignment_positive': kalshi_alignment_positive,
-            'kalshi_alignment_negative': kalshi_alignment_negative,
-            'kalshi_alignment_count': kalshi_alignment_count,
-            'live_data_factor': live_data_factor,
-            'live_data_boost': combined_boost,
-            'live_data_legs': live_data_legs,
-            'live_data_sports': sorted(live_data_sports),
-            'apisports_factor': apisports_factor,
-            'apisports_legs': apisports_legs,
-            'apisports_boost': apisports_boost,
-            'apisports_sports': sorted(apisports_sports),
-            'sportsdata_factor': sportsdata_factor,
-            'sportsdata_legs': sportsdata_legs,
-            'sportsdata_boost': sportsdata_boost,
-            'sportsdata_sports': sorted(sportsdata_sports),
-        }
-
-FINAL_STATUS_TOKENS = {
-    "finished",
-    "final",
-    "after extra time",
-    "after overtime",
-    "completed",
-    "ended",
-    "ft",
-    "aet",
-    "aot",
-}
+# ============ KALSHI INTEGRATION ============
 
 class KalshiIntegrator:
     """Integrates Kalshi prediction market odds and analysis"""
@@ -3094,38 +1989,59 @@ class KalshiIntegrator:
             elif abs(ai_edge) < 0.05:
                 ai_recommendation = "🟡 FAIR PRICE - AI agrees with market"
             else:
-                result['status'] = 'push'
-
-    elif leg_type == 'total':
-        point = _safe_float(leg.get('point'))
-        if point is None:
-            result['status'] = 'no_data'
-            result['reason'] = 'Total point unavailable'
+                ai_recommendation = "⚪ SLIGHT EDGE - Monitor for better entry"
         else:
-            total_points = home_score + away_score
-            if side.startswith('over'):
-                if total_points > point:
-                    result['status'] = 'win'
-                elif total_points < point:
-                    result['status'] = 'loss'
-                else:
-                    result['status'] = 'push'
-            elif side.startswith('under'):
-                if total_points < point:
-                    result['status'] = 'win'
-                elif total_points > point:
-                    result['status'] = 'loss'
-                else:
-                    result['status'] = 'push'
-            else:
+            ai_recommendation = "⚪ NO AI PREDICTION - Use market data only"
+        
+        return {
+            'yes_bid': yes_bid,
+            'yes_ask': yes_ask,
+            'no_bid': no_bid,
+            'no_ask': no_ask,
+            'volume': volume,
+            'open_interest': open_interest,
+            'efficiency': efficiency,
+            'ai_recommendation': ai_recommendation,
+            'kalshi_implied': kalshi_implied,
+            'ml_probability': ml_probability,
+            'ai_edge': ai_edge if ml_probability else None
+        }
+
+    def _check_leg_result_old(self, leg, game_result):
+        """Check the result of a single parlay leg - OLD VERSION"""
+        result = {'status': 'pending', 'reason': ''}
+        leg_type = leg.get('type', '').lower()
+        
+        if leg_type == 'total':
+            point = _safe_float(leg.get('point'))
+            if point is None:
                 result['status'] = 'no_data'
-                result['reason'] = 'Unknown totals side'
+                result['reason'] = 'Total point unavailable'
+            else:
+                total_points = home_score + away_score
+                if side.startswith('over'):
+                    if total_points > point:
+                        result['status'] = 'win'
+                    elif total_points < point:
+                        result['status'] = 'loss'
+                    else:
+                        result['status'] = 'push'
+                elif side.startswith('under'):
+                    if total_points < point:
+                        result['status'] = 'win'
+                    elif total_points > point:
+                        result['status'] = 'loss'
+                    else:
+                        result['status'] = 'push'
+                else:
+                    result['status'] = 'no_data'
+                    result['reason'] = 'Unknown totals side'
 
-    else:
-        result['status'] = 'no_data'
-        result['reason'] = f"Unsupported leg type: {leg.get('type')}"
+        else:
+            result['status'] = 'no_data'
+            result['reason'] = f"Unsupported leg type: {leg.get('type')}"
 
-    return result
+        return result
 
 
 def evaluate_tracked_parlays(
@@ -3153,7 +2069,7 @@ def evaluate_tracked_parlays(
         evaluation = {
             'status': _aggregate_leg_statuses(leg_results),
             'legs': leg_results,
-            'checked_at': datetime.utcnow().replace(tzinfo=pytz.UTC).isoformat(),
+            'checked_at': datetime.now(timezone.utc).replace(tzinfo=pytz.UTC).isoformat(),
         }
     
     def _calculate_overall_score(self, ai_edge: float, sentiment: float, 
@@ -3203,6 +2119,501 @@ def evaluate_tracked_parlays(
         opportunities.sort(key=lambda x: x['analysis']['overall_score'], reverse=True)
         
         return opportunities
+    
+    def calculate_kelly_for_kalshi(self, kalshi_prob: float, ai_prob: float, 
+                                   bankroll: float = 1000) -> Dict:
+        """
+        Calculate Kelly Criterion for Kalshi market
+        
+        Kalshi uses probability pricing (0-100 cents), not traditional odds
+        """
+        if ai_prob <= kalshi_prob:
+            return {
+                'kelly_percentage': 0,
+                'recommended_stake': 0,
+                'expected_value': 0,
+                'recommendation': '🔴 NO EDGE - AI probability not better than Kalshi price'
+            }
+        
+        # Edge calculation for binary market
+        edge = ai_prob - kalshi_prob
+        
+        # Kelly formula for binary outcome: f = edge / (1 - kalshi_prob)
+        if kalshi_prob < 0.95:  # Avoid division issues
+            kelly_fraction = edge / (1 - kalshi_prob)
+        else:
+            sidebar.caption(
+                f"ℹ️ Add your SportsData.io {cfg['label']} key to enrich live metrics and ML features"
+            )
+
+    # --------------------- Time & sport filters ---------------------
+    sidebar.subheader("📅 Filters")
+    default_tz_name = st.session_state.get('user_timezone', 'America/New_York')
+    tz_input = sidebar.text_input(
+        "Timezone (IANA)",
+        value=default_tz_name,
+        help="Controls how kickoff times and date filters are interpreted.",
+    ).strip() or default_tz_name
+    try:
+        tz_obj = pytz.timezone(tz_input)
+        tz_name = getattr(tz_obj, 'zone', tz_input) or tz_input
+    except Exception:
+        tz_obj = pytz.timezone('UTC')
+        tz_name = 'UTC'
+        sidebar.warning("Invalid timezone entered. Defaulting to UTC.")
+    st.session_state['user_timezone'] = tz_name
+
+    default_date = st.session_state.get('selected_date')
+    if not default_date:
+        default_date = datetime.now(tz_obj).date()
+    sel_date = sidebar.date_input(
+        "Focus date",
+        value=default_date,
+        help="Only bets within the selected window around this date are shown.",
+    )
+    st.session_state['selected_date'] = sel_date
+
+    day_window = sidebar.slider(
+        "Include events within ±N days",
+        0,
+        7,
+        int(st.session_state.get('day_window', 0) or 0),
+        1,
+    )
+    st.session_state['day_window'] = day_window
+
+    default_sports = st.session_state.setdefault('selected_sports', APP_CFG["sports_common"][:6])
+    sports = sidebar.multiselect(
+        "Sports",
+        options=APP_CFG["sports_common"],
+        default=default_sports,
+        format_func=format_sport_label,
+        key="selected_sports",
+    )
+
+    # --------------------- AI settings ---------------------
+    ai_expander = sidebar.expander("🤖 AI Settings", expanded=False)
+    with ai_expander:
+        use_sentiment = ai_expander.checkbox(
+            "Enable Sentiment Analysis",
+            value=st.session_state.get('use_sentiment', True),
+            help="Analyze news sentiment for each team when computing edges.",
+        )
+
+        current_ml_state = bool(st.session_state.get('use_ml_predictions', True))
+        use_ml_predictions = ai_expander.checkbox(
+            "Enable ML Predictions",
+            value=current_ml_state,
+            help="Blend trained historical models into probability estimates.",
+        )
+
+        toggle_label = "🔌 Disable ML for this session" if use_ml_predictions else "⚡ Re-enable ML predictions"
+        toggle_help = (
+            "Temporarily turn the historical machine-learning models off. "
+            "When disabled, the app falls back to odds + sentiment without training datasets."
+            if use_ml_predictions
+            else "Turn the historical machine-learning models back on for eligible sports."
+        )
+        if ai_expander.button(
+            toggle_label,
+            key="toggle_ml_predictions_button",
+            width='stretch',
+            help=toggle_help,
+        ):
+            use_ml_predictions = not use_ml_predictions
+            st.session_state['use_ml_predictions'] = use_ml_predictions
+
+        if not use_ml_predictions:
+            ai_expander.info(
+                "ML predictions are disabled. Odds, sentiment, Kalshi, and live data signals still run as usual."
+            )
+        min_ai_confidence = ai_expander.slider(
+            "Minimum AI Confidence",
+            0.0,
+            1.0,
+            float(st.session_state.get('min_ai_confidence', 0.60) or 0.60),
+            0.05,
+        )
+        min_parlay_probability = ai_expander.slider(
+            "Minimum Parlay Probability",
+            0.20,
+            0.60,
+            float(st.session_state.get('min_parlay_probability', 0.30) or 0.30),
+            0.05,
+        )
+        max_parlay_probability = ai_expander.slider(
+            "Maximum Parlay Probability",
+            0.45,
+            0.85,
+            float(st.session_state.get('max_parlay_probability', 0.65) or 0.65),
+            0.05,
+        )
+
+    st.session_state['use_sentiment'] = use_sentiment
+    st.session_state['use_ml_predictions'] = use_ml_predictions
+    st.session_state['min_ai_confidence'] = min_ai_confidence
+    st.session_state['min_parlay_probability'] = min_parlay_probability
+    st.session_state['max_parlay_probability'] = max_parlay_probability
+
+    return {
+        "tz": tz_obj,
+        "timezone_name": tz_name,
+        "selected_date": sel_date,
+        "day_window": day_window,
+        "sports": sports,
+        "use_sentiment": use_sentiment,
+        "use_ml_predictions": use_ml_predictions,
+        "min_ai_confidence": min_ai_confidence,
+        "min_parlay_probability": min_parlay_probability,
+        "max_parlay_probability": max_parlay_probability,
+    }
+
+
+def resolve_nfl_apisports_key() -> Tuple[str, Optional[str]]:
+    """Locate the NFL API-Sports key from Streamlit secrets or the environment."""
+
+    secret_container = getattr(st, "secrets", None)
+    if secret_container is not None:
+        for secret_name in ("NFL_APISPORTS_API_KEY", "APISPORTS_API_KEY", "API_SPORTS_KEY"):
+            try:
+                secret_value = secret_container.get(secret_name)
+            except Exception:
+                secret_value = None
+            if secret_value:
+                return str(secret_value), f"secret:{secret_name}"
+
+    for env_name in ("NFL_APISPORTS_API_KEY", "APISPORTS_API_KEY", "API_SPORTS_KEY"):
+        env_value = os.environ.get(env_name)
+        if env_value:
+            return env_value, f"env:{env_name}"
+
+    return "", None
+
+
+def resolve_nhl_apisports_key() -> Tuple[str, Optional[str]]:
+    """Locate the NHL API-Sports key from Streamlit secrets or the environment."""
+
+    secret_container = getattr(st, "secrets", None)
+    if secret_container is not None:
+        for secret_name in ("NHL_APISPORTS_API_KEY", "APISPORTS_API_KEY", "API_SPORTS_KEY"):
+            try:
+                secret_value = secret_container.get(secret_name)
+            except Exception:
+                secret_value = None
+            if secret_value:
+                return str(secret_value), f"secret:{secret_name}"
+
+    for env_name in ("NHL_APISPORTS_API_KEY", "APISPORTS_API_KEY", "API_SPORTS_KEY"):
+        env_value = os.environ.get(env_name)
+        if env_value:
+            return env_value, f"env:{env_name}"
+
+    return "", None
+
+
+def resolve_nba_apisports_key() -> Tuple[str, Optional[str]]:
+    """Locate the NBA API-Sports key from Streamlit secrets or the environment."""
+
+    secret_container = getattr(st, "secrets", None)
+    if secret_container is not None:
+        for secret_name in ("NBA_APISPORTS_API_KEY", "APISPORTS_API_KEY", "API_SPORTS_KEY"):
+            try:
+                secret_value = secret_container.get(secret_name)
+            except Exception:
+                secret_value = None
+            if secret_value:
+                return str(secret_value), f"secret:{secret_name}"
+
+    for env_name in ("NBA_APISPORTS_API_KEY", "APISPORTS_API_KEY", "API_SPORTS_KEY"):
+        env_value = os.environ.get(env_name)
+        if env_value:
+            return env_value, f"env:{env_name}"
+
+    return "", None
+
+
+def resolve_sportsdata_key(sport_key: str) -> Tuple[str, Optional[str]]:
+    """Locate the SportsData.io key for a specific sport."""
+
+    config = SPORTSDATA_CONFIG.get(sport_key, {})
+    secret_priority: List[str] = list(dict.fromkeys(config.get("secret_names", ())))
+    for fallback_name in ("SPORTSDATA_API_KEY", "SPORTSDATA_KEY"):
+        if fallback_name not in secret_priority:
+            secret_priority.append(fallback_name)
+
+    secret_container = getattr(st, "secrets", None)
+    if secret_container is not None:
+        for secret_name in secret_priority:
+            try:
+                secret_value = secret_container.get(secret_name)
+            except Exception:
+                secret_value = None
+            if secret_value:
+                return str(secret_value), f"secret:{secret_name}"
+
+    for env_name in secret_priority:
+        env_value = os.environ.get(env_name)
+        if env_value:
+            return env_value, f"env:{env_name}"
+
+    return "", None
+
+
+def ensure_sportsdata_clients() -> Dict[str, Any]:
+    """Instantiate and synchronize SportsData.io clients for all configured sports."""
+
+    clients: Dict[str, Any] = st.session_state.get('sportsdata_clients', {}) or {}
+
+    for sport_key, cfg in SPORTSDATA_CONFIG.items():
+        session_key = f"{sport_key}_sportsdata_api_key"
+        source_session_key = f"{sport_key}_sportsdata_key_source"
+        api_key = st.session_state.get(session_key, "")
+        source = st.session_state.get(source_session_key)
+
+        client = clients.get(sport_key)
+        if client is None:
+            client = cfg["client_class"](api_key or None, key_source=source)
+            clients[sport_key] = client
+        else:
+            if getattr(client, "api_key", "") != (api_key or ""):
+                client.update_api_key(api_key or None, source=source or "user")
+
+    st.session_state['sportsdata_clients'] = clients
+    return clients
+
+# Comprehensive mapping of Kalshi team abbreviations → canonical team names.
+# The Kalshi markets often reference tickers like "NBA.LAL_GSW" or subtitles using
+# short-hands. By centralizing these variations we can translate between
+# sportsbook-style names ("Los Angeles Lakers") and Kalshi identifiers ("LAL").
+# This dramatically increases the likelihood that we locate the correct Kalshi
+# market when validating a parlay leg.
+KALSHI_TEAM_ABBREVIATIONS: Dict[str, List[str]] = {
+    # ========================= NFL =========================
+    "ARIZONA CARDINALS": ["ARI", "ARZ", "AZ"],
+    "ATLANTA FALCONS": ["ATL"],
+    "BALTIMORE RAVENS": ["BAL"],
+    "BUFFALO BILLS": ["BUF"],
+    "CAROLINA PANTHERS": ["CAR", "CLT"],
+    "CHICAGO BEARS": ["CHI", "CHB"],
+    "CINCINNATI BENGALS": ["CIN", "CINC"],
+    "CLEVELAND BROWNS": ["CLE"],
+    "DALLAS COWBOYS": ["DAL"],
+    "DENVER BRONCOS": ["DEN"],
+    "DETROIT LIONS": ["DET"],
+    "GREEN BAY PACKERS": ["GB", "GBP", "GBE"],
+    "HOUSTON TEXANS": ["HOU", "HTX"],
+    "INDIANAPOLIS COLTS": ["IND"],
+    "JACKSONVILLE JAGUARS": ["JAX", "JAC"],
+    "KANSAS CITY CHIEFS": ["KC", "KCC"],
+    "LAS VEGAS RAIDERS": ["LV", "LVR"],
+    "LOS ANGELES CHARGERS": ["LAC", "LA CHARGERS"],
+    "LOS ANGELES RAMS": ["LAR", "LA RAMS"],
+    "MIAMI DOLPHINS": ["MIA"],
+    "MINNESOTA VIKINGS": ["MIN", "MINN"],
+    "NEW ENGLAND PATRIOTS": ["NE", "NEP"],
+    "NEW ORLEANS SAINTS": ["NO", "NOS"],
+    "NEW YORK GIANTS": ["NYG", "NY GIANTS"],
+    "NEW YORK JETS": ["NYJ", "NY JETS"],
+    "PHILADELPHIA EAGLES": ["PHI", "PHL", "PHI EAGLES"],
+    "PITTSBURGH STEELERS": ["PIT", "PITTSBURGH"],
+    "SAN FRANCISCO 49ERS": ["SF", "SFO", "SF 49ERS"],
+    "SEATTLE SEAHAWKS": ["SEA", "SEA HAWKS"],
+    "TAMPA BAY BUCCANEERS": ["TB", "TBB"],
+    "TENNESSEE TITANS": ["TEN", "TENN"],
+    "WASHINGTON COMMANDERS": ["WAS", "WSH"],
+
+    # ========================= NBA =========================
+    "ATLANTA HAWKS": ["ATL"],
+    "BOSTON CELTICS": ["BOS"],
+    "BROOKLYN NETS": ["BKN", "BRK"],
+    "CHARLOTTE HORNETS": ["CHA", "CHH", "CLT"],
+    "CHICAGO BULLS": ["CHI"],
+    "CLEVELAND CAVALIERS": ["CLE", "CAVS"],
+    "DALLAS MAVERICKS": ["DAL", "MAVS"],
+    "DENVER NUGGETS": ["DEN"],
+    "DETROIT PISTONS": ["DET"],
+    "GOLDEN STATE WARRIORS": ["GSW", "GS"],
+    "HOUSTON ROCKETS": ["HOU"],
+    "INDIANA PACERS": ["IND"],
+    "LOS ANGELES CLIPPERS": ["LAC", "LA CLIPPERS"],
+    "LOS ANGELES LAKERS": ["LAL", "LA LAKERS"],
+    "MEMPHIS GRIZZLIES": ["MEM"],
+    "MIAMI HEAT": ["MIA"],
+    "MILWAUKEE BUCKS": ["MIL"],
+    "MINNESOTA TIMBERWOLVES": ["MIN", "MINN"],
+    "NEW ORLEANS PELICANS": ["NOP", "NO PELICANS"],
+    "NEW YORK KNICKS": ["NYK", "NY KNICKS"],
+    "OKLAHOMA CITY THUNDER": ["OKC"],
+    "ORLANDO MAGIC": ["ORL"],
+    "PHILADELPHIA 76ERS": ["PHI", "PHL", "SIXERS"],
+    "PHOENIX SUNS": ["PHX"],
+    "PORTLAND TRAIL BLAZERS": ["POR", "PTB", "PDX"],
+    "SACRAMENTO KINGS": ["SAC"],
+    "SAN ANTONIO SPURS": ["SAS", "SA SPURS"],
+    "TORONTO RAPTORS": ["TOR"],
+    "UTAH JAZZ": ["UTA"],
+    "WASHINGTON WIZARDS": ["WAS", "WSH"],
+
+    # ========================= MLB =========================
+    "ARIZONA DIAMONDBACKS": ["ARI", "ARZ", "AZ"],
+    "ATLANTA BRAVES": ["ATL"],
+    "BALTIMORE ORIOLES": ["BAL"],
+    "BOSTON RED SOX": ["BOS"],
+    "CHICAGO CUBS": ["CHC"],
+    "CHICAGO WHITE SOX": ["CWS", "CHW"],
+    "CINCINNATI REDS": ["CIN", "CINC"],
+    "CLEVELAND GUARDIANS": ["CLE", "CLV"],
+    "COLORADO ROCKIES": ["COL"],
+    "DETROIT TIGERS": ["DET"],
+    "HOUSTON ASTROS": ["HOU"],
+    "KANSAS CITY ROYALS": ["KC", "KCR"],
+    "LOS ANGELES ANGELS": ["LAA", "LA ANGELS"],
+    "LOS ANGELES DODGERS": ["LAD", "LA DODGERS"],
+    "MIAMI MARLINS": ["MIA"],
+    "MILWAUKEE BREWERS": ["MIL"],
+    "MINNESOTA TWINS": ["MIN", "MINN"],
+    "NEW YORK METS": ["NYM", "NY METS"],
+    "NEW YORK YANKEES": ["NYY", "NY YANKEES"],
+    "OAKLAND ATHLETICS": ["OAK"],
+    "PHILADELPHIA PHILLIES": ["PHI", "PHL", "PHILS"],
+    "PITTSBURGH PIRATES": ["PIT"],
+    "SAN DIEGO PADRES": ["SD", "SDP"],
+    "SAN FRANCISCO GIANTS": ["SF", "SFG"],
+    "SEATTLE MARINERS": ["SEA"],
+    "ST. LOUIS CARDINALS": ["STL", "SLC"],
+    "TAMPA BAY RAYS": ["TB", "TBR"],
+    "TEXAS RANGERS": ["TEX"],
+    "TORONTO BLUE JAYS": ["TOR"],
+    "WASHINGTON NATIONALS": ["WSH", "WAS"],
+
+    # ========================= NHL =========================
+    "ANAHEIM DUCKS": ["ANA"],
+    "ARIZONA COYOTES": ["ARI", "ARZ", "AZ"],
+    "BOSTON BRUINS": ["BOS"],
+    "BUFFALO SABRES": ["BUF"],
+    "CALGARY FLAMES": ["CGY"],
+    "CAROLINA HURRICANES": ["CAR", "CLT"],
+    "CHICAGO BLACKHAWKS": ["CHI"],
+    "COLORADO AVALANCHE": ["COL"],
+    "COLUMBUS BLUE JACKETS": ["CBJ"],
+    "DALLAS STARS": ["DAL"],
+    "DETROIT RED WINGS": ["DET"],
+    "EDMONTON OILERS": ["EDM"],
+    "FLORIDA PANTHERS": ["FLA"],
+    "LOS ANGELES KINGS": ["LAK", "LA KINGS"],
+    "MINNESOTA WILD": ["MIN", "MINN"],
+    "MONTREAL CANADIENS": ["MTL"],
+    "NASHVILLE PREDATORS": ["NSH"],
+    "NEW JERSEY DEVILS": ["NJD"],
+    "NEW YORK ISLANDERS": ["NYI"],
+    "NEW YORK RANGERS": ["NYR"],
+    "OTTAWA SENATORS": ["OTT"],
+    "PHILADELPHIA FLYERS": ["PHI", "PHL"],
+    "PITTSBURGH PENGUINS": ["PIT"],
+    "SAN JOSE SHARKS": ["SJS"],
+    "SEATTLE KRAKEN": ["SEA"],
+    "ST. LOUIS BLUES": ["STL"],
+    "TAMPA BAY LIGHTNING": ["TB", "TBL"],
+    "TORONTO MAPLE LEAFS": ["TOR"],
+    "VANCOUVER CANUCKS": ["VAN"],
+    "VEGAS GOLDEN KNIGHTS": ["VGK", "VEGAS"],
+    "WASHINGTON CAPITALS": ["WSH", "WAS"],
+    "WINNIPEG JETS": ["WPG"],
+}
+
+# Map teams back to their primary league so we can build league-aware fallbacks
+KALSHI_LEAGUE_TEAM_SETS: Dict[str, List[str]] = {
+    "NFL": [
+        "ARIZONA CARDINALS", "ATLANTA FALCONS", "BALTIMORE RAVENS", "BUFFALO BILLS",
+        "CAROLINA PANTHERS", "CHICAGO BEARS", "CINCINNATI BENGALS", "CLEVELAND BROWNS",
+        "DALLAS COWBOYS", "DENVER BRONCOS", "DETROIT LIONS", "GREEN BAY PACKERS",
+        "HOUSTON TEXANS", "INDIANAPOLIS COLTS", "JACKSONVILLE JAGUARS", "KANSAS CITY CHIEFS",
+        "LAS VEGAS RAIDERS", "LOS ANGELES CHARGERS", "LOS ANGELES RAMS", "MIAMI DOLPHINS",
+        "MINNESOTA VIKINGS", "NEW ENGLAND PATRIOTS", "NEW ORLEANS SAINTS", "NEW YORK GIANTS",
+        "NEW YORK JETS", "PHILADELPHIA EAGLES", "PITTSBURGH STEELERS", "SAN FRANCISCO 49ERS",
+        "SEATTLE SEAHAWKS", "TAMPA BAY BUCCANEERS", "TENNESSEE TITANS", "WASHINGTON COMMANDERS"
+    ],
+    "NBA": [
+        "ATLANTA HAWKS", "BOSTON CELTICS", "BROOKLYN NETS", "CHARLOTTE HORNETS",
+        "CHICAGO BULLS", "CLEVELAND CAVALIERS", "DALLAS MAVERICKS", "DENVER NUGGETS",
+        "DETROIT PISTONS", "GOLDEN STATE WARRIORS", "HOUSTON ROCKETS", "INDIANA PACERS",
+        "LOS ANGELES CLIPPERS", "LOS ANGELES LAKERS", "MEMPHIS GRIZZLIES", "MIAMI HEAT",
+        "MILWAUKEE BUCKS", "MINNESOTA TIMBERWOLVES", "NEW ORLEANS PELICANS", "NEW YORK KNICKS",
+        "OKLAHOMA CITY THUNDER", "ORLANDO MAGIC", "PHILADELPHIA 76ERS", "PHOENIX SUNS",
+        "PORTLAND TRAIL BLAZERS", "SACRAMENTO KINGS", "SAN ANTONIO SPURS", "TORONTO RAPTORS",
+        "UTAH JAZZ", "WASHINGTON WIZARDS"
+    ],
+    "MLB": [
+        "ARIZONA DIAMONDBACKS", "ATLANTA BRAVES", "BALTIMORE ORIOLES", "BOSTON RED SOX",
+        "CHICAGO CUBS", "CHICAGO WHITE SOX", "CINCINNATI REDS", "CLEVELAND GUARDIANS",
+        "COLORADO ROCKIES", "DETROIT TIGERS", "HOUSTON ASTROS", "KANSAS CITY ROYALS",
+        "LOS ANGELES ANGELS", "LOS ANGELES DODGERS", "MIAMI MARLINS", "MILWAUKEE BREWERS",
+        "MINNESOTA TWINS", "NEW YORK METS", "NEW YORK YANKEES", "OAKLAND ATHLETICS",
+        "PHILADELPHIA PHILLIES", "PITTSBURGH PIRATES", "SAN DIEGO PADRES", "SAN FRANCISCO GIANTS",
+        "SEATTLE MARINERS", "ST. LOUIS CARDINALS", "TAMPA BAY RAYS", "TEXAS RANGERS",
+        "TORONTO BLUE JAYS", "WASHINGTON NATIONALS"
+    ],
+    "NHL": [
+        "ANAHEIM DUCKS", "ARIZONA COYOTES", "BOSTON BRUINS", "BUFFALO SABRES",
+        "CALGARY FLAMES", "CAROLINA HURRICANES", "CHICAGO BLACKHAWKS", "COLORADO AVALANCHE",
+        "COLUMBUS BLUE JACKETS", "DALLAS STARS", "DETROIT RED WINGS", "EDMONTON OILERS",
+        "FLORIDA PANTHERS", "LOS ANGELES KINGS", "MINNESOTA WILD", "MONTREAL CANADIENS",
+        "NASHVILLE PREDATORS", "NEW JERSEY DEVILS", "NEW YORK ISLANDERS", "NEW YORK RANGERS",
+        "OTTAWA SENATORS", "PHILADELPHIA FLYERS", "PITTSBURGH PENGUINS", "SAN JOSE SHARKS",
+        "SEATTLE KRAKEN", "ST. LOUIS BLUES", "TAMPA BAY LIGHTNING", "TORONTO MAPLE LEAFS",
+        "VANCOUVER CANUCKS", "VEGAS GOLDEN KNIGHTS", "WASHINGTON CAPITALS", "WINNIPEG JETS"
+    ],
+}
+
+KALSHI_TEAM_LEAGUE_MAP: Dict[str, str] = {
+    team: league
+    for league, teams in KALSHI_LEAGUE_TEAM_SETS.items()
+    for team in teams
+}
+
+SPORT_KEY_TO_LEAGUE: Dict[str, str] = {
+    "americanfootball_nfl": "NFL",
+    "americanfootball_ncaaf": "NCAAF",
+    "basketball_nba": "NBA",
+    "basketball_ncaab": "NCAAB",
+    "baseball_mlb": "MLB",
+    "icehockey_nhl": "NHL",
+    "mma_mixed_martial_arts": "MMA",
+    "soccer_epl": "EPL",
+    "soccer_uefa_champs_league": "UEFA",
+    "tennis_atp_singles": "TENNIS",
+}
+
+
+def format_sport_label(sport_key: Any) -> str:
+    """Return a user-friendly league label for an Odds API sport key."""
+
+    if not isinstance(sport_key, str):
+        return str(sport_key)
+
+    if sport_key in SPORT_KEY_TO_LEAGUE:
+        return SPORT_KEY_TO_LEAGUE[sport_key]
+
+    if "_" in sport_key:
+        return sport_key.split("_")[-1].upper()
+
+    return sport_key.upper()
+
+# ============ REAL SENTIMENT ANALYSIS ENGINE ============
+# (moved to app_core.sentiment so it can be reused without importing the
+# Streamlit UI. RealSentimentAnalyzer and SentimentAnalyzer are imported above.)
+
+# ============ AI PARLAY OPTIMIZER ============
+class AIOptimizer:
+    """Optimizes parlay selection using AI insights"""
+
+    def __init__(
+        self,
+        sentiment_analyzer: SentimentAnalyzer,
+        ml_predictor: Optional[MLPredictor],
+    ):
+        self.sentiment = sentiment_analyzer
+        self.ml = ml_predictor
     
     def score_parlay(self, legs: List[Dict]) -> Dict[str, float]:
         """
@@ -3305,7 +2716,7 @@ def evaluate_tracked_parlays(
 
             # KALSHI INTEGRATION: Add Kalshi influence
             if 'kalshi_validation' in leg:
-                kv = leg.get('kalshi_validation') or {}
+                kv = leg['kalshi_validation']
                 if kv.get('kalshi_available'):
                     kalshi_legs += 1
                     # Kalshi provides additional probability estimate
@@ -3482,16 +2893,8 @@ def evaluate_tracked_parlays(
             'sportsdata_sports': sorted(sportsdata_sports),
         }
 
-# ============ KALSHI VALIDATION HELPER ============
-def validate_with_kalshi(kalshi_integrator, home_team: str, away_team: str,
-                        side: str, sportsbook_prob: float, sport: str) -> Dict:
-    """
-    IMPROVED: Validate sportsbook odds with Kalshi prediction market
-    
-    Now handles team name variations like:
-    - "Memphis Grizzlies" matches "Memphis"
-    - "New York Knicks" matches "New York K"  
-    - "Los Angeles Lakers" matches "LA Lakers"
+class KalshiIntegrator:
+    """Integrates Kalshi prediction market odds and analysis"""
     
     def __init__(self, api_key: str = None, api_secret: str = None):
         self.api_key = api_key or os.environ.get("KALSHI_API_KEY")
@@ -3521,6 +2924,280 @@ def validate_with_kalshi(kalshi_integrator, home_team: str, away_team: str,
                                sportsbook_prob: Optional[float] = None) -> float:
         """Generate a deterministic synthetic probability for a team."""
 
+        team_upper = team.upper()
+        base_prob = sportsbook_prob if sportsbook_prob is not None else 0.52
+
+        # Deterministic offset based on team characters (stable pseudo-random)
+        ordinal_sum = sum(ord(c) for c in team_upper if c.isalpha())
+        offset = ((ordinal_sum % 21) - 10) / 200.0  # -0.05 .. +0.05
+
+        league = KALSHI_TEAM_LEAGUE_MAP.get(team_upper)
+        if sport_key and sport_key in SPORT_KEY_TO_LEAGUE and not league:
+            league = SPORT_KEY_TO_LEAGUE[sport_key]
+
+        league_bias = {
+            "NFL": 0.015,
+            "NBA": 0.010,
+            "MLB": 0.005,
+            "NHL": 0.005,
+        }.get(league, 0.0)
+
+        synthetic = base_prob + offset + league_bias
+        return max(0.05, min(0.95, synthetic))
+
+    def _synthetic_ticker_for_team(self, team: str, league: Optional[str]) -> str:
+        team_key = re.sub(r"[^A-Z0-9]", "", team.upper())
+        league_key = league or "SPORTS"
+        return f"SIM.{league_key}.{team_key[:8]}"
+
+    def _ensure_synthetic_data(self) -> None:
+        if self._synthetic_markets:
+            return
+
+        # Build synthetic markets for every team we know about so UI has coverage
+        now = datetime.now(timezone.utc)
+        expiry = (now + timedelta(days=30)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+        for team, abbrs in KALSHI_TEAM_ABBREVIATIONS.items():
+            league = KALSHI_TEAM_LEAGUE_MAP.get(team)
+            ticker = self._synthetic_ticker_for_team(team, league)
+            prob = self._synthetic_probability(team)
+            price = int(round(prob * 100))
+
+            market = {
+                "ticker": ticker,
+                "title": f"{team.title()} confidence (synthetic Kalshi)",
+                "subtitle": "Synthetic fallback market generated locally",
+                "series_ticker": "SPORTS",
+                "status": "open",
+                "close_time": expiry,
+                "league": league,
+                "synthetic": True,
+                "team": team,
+                "abbreviation": abbrs[0] if abbrs else None,
+            }
+
+            self._synthetic_markets.append(market)
+            self._synthetic_orderbooks[ticker] = {
+                "yes": [{"price": price, "contracts": 100}],
+                "no": [{"price": 100 - price, "contracts": 100}],
+            }
+            self._synthetic_market_by_team[team] = market
+
+    def using_synthetic_data(self) -> bool:
+        return self._using_synthetic_data
+
+    def get_synthetic_market_for_team(self, team: str) -> Optional[Dict[str, Any]]:
+        self._ensure_synthetic_data()
+        return self._synthetic_market_by_team.get(team.upper())
+
+    def synthetic_probability(self, team: str, sport_key: Optional[str] = None,
+                               sportsbook_prob: Optional[float] = None) -> float:
+        """Public helper to compute synthetic probabilities for validation."""
+        self._ensure_synthetic_data()
+        return self._synthetic_probability(team, sport_key, sportsbook_prob)
+    
+    def get_markets(self, category: str = "sports", status: str = "open") -> List[Dict]:
+        """Fetch available Kalshi markets.
+
+        Args:
+            category: 'sports', 'politics', 'economics', etc.
+            status: 'open', 'closed', 'settled'
+
+        Returns:
+            List of market dictionaries.
+        """
+        if self._using_synthetic_data:
+            self._ensure_synthetic_data()
+            return copy.deepcopy(self._synthetic_markets)
+
+        try:
+            endpoint = f"{self.api_url}/markets"
+            params = {
+                "limit": 100,
+                "status": status
+            }
+
+            if category:
+                params["series_ticker"] = category.upper()
+
+            response = requests.get(endpoint, headers=self.headers, params=params, timeout=10)
+
+            if response.status_code == 200:
+                data = response.json()
+                markets = data.get("markets", [])
+                if markets:
+                    self.last_error = None
+                    return markets
+                else:
+                    self.last_error = "Kalshi API returned no markets"
+            else:
+                self.last_error = f"Kalshi API responded with status {response.status_code}"
+
+        except Exception as e:
+            self.last_error = str(e)
+            st.warning(f"Error fetching Kalshi markets: {str(e)}")
+
+        # Fallback to synthetic data when API fails or returns nothing
+        self._using_synthetic_data = True
+        self._ensure_synthetic_data()
+        return copy.deepcopy(self._synthetic_markets)
+    
+    def get_sports_markets(self) -> List[Dict]:
+        """Get all active sports betting markets"""
+        all_markets = self.get_markets()
+        
+        # Filter for sports-related markets
+        sports_keywords = ['NFL', 'NBA', 'MLB', 'NHL', 'UFC', 'SOCCER', 'TENNIS', 
+                          'GOLF', 'FOOTBALL', 'BASKETBALL', 'BASEBALL', 'HOCKEY']
+        
+        sports_markets = []
+        for market in all_markets:
+            title = market.get('title', '').upper()
+            ticker = market.get('ticker', '').upper()
+            
+            if any(keyword in title or keyword in ticker for keyword in sports_keywords):
+                sports_markets.append(market)
+        
+        return sports_markets
+    
+    def get_market_details(self, market_ticker: str) -> Dict:
+        """Get detailed information about a specific market"""
+        if self._using_synthetic_data:
+            self._ensure_synthetic_data()
+            market = next((m for m in self._synthetic_markets if m.get('ticker') == market_ticker), None)
+            return copy.deepcopy(market) if market else {}
+
+        try:
+            endpoint = f"{self.api_url}/markets/{market_ticker}"
+            response = requests.get(endpoint, headers=self.headers, timeout=10)
+
+            if response.status_code == 200:
+                return response.json().get("market", {})
+            else:
+                return {}
+
+        except Exception as e:
+            st.warning(f"Error fetching market details: {str(e)}")
+            return {}
+
+    def get_orderbook(self, market_ticker: str) -> Dict:
+        """Get current orderbook (bids/asks) for a market"""
+        if self._using_synthetic_data:
+            self._ensure_synthetic_data()
+            orderbook = self._synthetic_orderbooks.get(market_ticker)
+            return copy.deepcopy(orderbook) if orderbook else {}
+
+        try:
+            endpoint = f"{self.api_url}/markets/{market_ticker}/orderbook"
+            response = requests.get(endpoint, headers=self.headers, timeout=10)
+
+            if response.status_code == 200:
+                return response.json().get("orderbook", {})
+            else:
+                return {}
+
+        except Exception as e:
+            st.warning(f"Error fetching orderbook: {str(e)}")
+            return {}
+    
+    def compare_with_sportsbook(
+        self,
+        kalshi_market: Dict,
+        sportsbook_odds: Dict,
+    ) -> Dict:
+        """Compare Kalshi prediction prices with a sportsbook listing."""
+
+        result: Dict[str, Any] = {
+            "kalshi_prob": None,
+            "sportsbook_prob": None,
+            "discrepancy": 0.0,
+            "edge": 0.0,
+            "recommendation": "⚪ Insufficient data for comparison",
+            "has_arbitrage": False,
+        }
+
+        if not kalshi_market:
+            return result
+
+        kalshi_raw = kalshi_market.get("yes_bid")
+        if kalshi_raw is None:
+            return result
+
+        kalshi_yes_price = float(kalshi_raw) / 100.0
+        result["kalshi_prob"] = kalshi_yes_price
+
+        sb_prob: Optional[float] = None
+        if sportsbook_odds and sportsbook_odds.get("price") is not None:
+            sb_prob = implied_p_from_american(sportsbook_odds["price"])
+            result["sportsbook_prob"] = sb_prob
+
+        if sb_prob is None or kalshi_yes_price <= 0:
+            return result
+
+        discrepancy = abs(kalshi_yes_price - sb_prob)
+        edge = discrepancy
+        recommendation = "🟡 Prices aligned (no significant edge)"
+
+        if kalshi_yes_price < sb_prob - 0.05:
+            edge = sb_prob - kalshi_yes_price
+            recommendation = "🟢 BUY YES on Kalshi (underpriced vs sportsbook)"
+        elif kalshi_yes_price > sb_prob + 0.05:
+            edge = kalshi_yes_price - sb_prob
+            recommendation = "🟢 BUY NO on Kalshi (or take sportsbook)"
+
+        result["discrepancy"] = discrepancy
+        result["edge"] = edge
+        result["recommendation"] = recommendation
+        result["has_arbitrage"] = discrepancy > 0.10
+        return result
+    
+    def find_arbitrage_opportunities(self, kalshi_markets: List[Dict], 
+                                     sportsbook_events: List[Dict]) -> List[Dict]:
+        """
+        Find arbitrage opportunities between Kalshi and traditional sportsbooks
+        
+        Returns list of arbitrage opportunities with expected profit
+        """
+        # Placeholder return
+        return {
+            'sentiment_score': 0.0,
+            'tweet_volume': 0,
+            'trending': False,
+            'confidence': 0.2,
+            'recommendation': '⚪ Social media analysis unavailable (API key needed)'
+        }
+    
+    def detect_breaking_news(self, team: str) -> Dict:
+        """Detect breaking news that might not be priced in yet"""
+        # Placeholder - would monitor Twitter for breaking news keywords
+        return {
+            'has_breaking_news': False,
+            'news_type': None,
+            'urgency': 'low'
+        }
+
+# ============ KALSHI VALIDATION HELPER ============
+def validate_with_kalshi(kalshi_integrator, home_team: str, away_team: str,
+                        side: str, sportsbook_prob: float, sport: str) -> Dict:
+    """
+    IMPROVED: Validate sportsbook odds with Kalshi prediction market
+    
+    Now handles team name variations like:
+    - "Memphis Grizzlies" matches "Memphis"
+    - "New York Knicks" matches "New York K"  
+    - "Los Angeles Lakers" matches "LA Lakers"
+    
+    Returns:
+        'kalshi_prob': Kalshi market probability
+        'discrepancy': Difference between markets
+        'validation': 'confirms', 'contradicts', or 'unavailable'
+        'edge': Additional edge from Kalshi vs sportsbook
+        'confidence_boost': How much to boost confidence (0-0.20)
+    """
+    
+    def normalize_team_name(team: str) -> List[str]:
+        """Generate multiple variations of a team name for flexible matching"""
         team_upper = team.upper()
         variations = [team_upper, team_upper.replace(" ", "")]
 
@@ -3804,7 +3481,12 @@ def integrate_kalshi_into_leg(
         })
         return
 
-    kalshi = _resolve_kalshi_integrator()
+    kalshi = None
+    try:
+        kalshi = st.session_state.get('kalshi_integrator')
+    except Exception:
+        # When Streamlit session state isn't available (e.g. testing), skip gracefully
+        pass
 
     if not kalshi:
         leg_data['kalshi_validation'] = {
@@ -4987,16 +4669,7 @@ def build_best_bets_per_game(
                 home_sentiment = default_sentiment.copy()
                 away_sentiment = default_sentiment.copy()
 
-            mkts_raw = event.get("markets") or {}
-            mkts = mkts_raw if isinstance(mkts_raw, dict) else {}
-
-            # Normalize expected market containers to avoid KeyErrors when odds feeds are sparse
-            if "h2h" not in mkts or not isinstance(mkts.get("h2h"), dict):
-                mkts["h2h"] = {}
-            if "spreads" not in mkts or not isinstance(mkts.get("spreads"), list):
-                mkts["spreads"] = []
-            if "totals" not in mkts or not isinstance(mkts.get("totals"), list):
-                mkts["totals"] = []
+            mkts = event.get("markets") or {}
 
             ml_prediction_result = None
             if (
@@ -5270,48 +4943,12 @@ def build_best_bets_per_game(
     if not legs:
         return pd.DataFrame(), []
 
-    theover_context = apply_theover_probabilities_to_legs(
+    apply_theover_probabilities_to_legs(
         legs,
         theover_ml_data=theover_ml_data,
         theover_spreads_data=theover_spreads_data,
         theover_totals_data=theover_totals_data,
     )
-
-    def _ensure_theover_for_leg(leg_dict: Dict[str, Any]) -> None:
-        """Attach theover.ai probabilities if the initial blend missed."""
-
-        if leg_dict.get("theover_probability") is not None:
-            return
-
-        dataset_fn = None
-        if isinstance(theover_context, dict):
-            dataset_fn = theover_context.get("dataset_for_leg")
-        dataset = dataset_fn(leg_dict) if dataset_fn else None
-        try:
-            match_info = match_theover_to_leg(leg_dict, None, dataset)
-        except Exception:
-            match_info = None
-
-        if not match_info:
-            return
-
-        leg_dict["theover_match"] = match_info
-        theover_prob = match_info.get("model_probability")
-        if theover_prob is None:
-            theover_prob = match_info.get("implied_probability")
-
-        base_prob = leg_dict.get("ai_prob_pre_theover", leg_dict.get("ai_prob", leg_dict.get("p")))
-        if theover_prob is None or base_prob is None:
-            return
-
-        leg_dict["theover_probability"] = theover_prob
-        leg_dict["theover_probability_source"] = match_info.get("probability_source") or "model output"
-        leg_dict["theover_probability_delta"] = theover_prob - base_prob
-        leg_dict["ai_prob_with_theover"] = base_prob * 0.65 + theover_prob * 0.35
-        leg_dict["ai_prob"] = leg_dict.get("ai_prob", base_prob)
-
-    for leg in legs:
-        _ensure_theover_for_leg(leg)
 
     best_odds_df = compute_best_overall_odds(aggregated_events, timezone_label) if aggregated_events else pd.DataFrame()
 
@@ -6463,58 +6100,6 @@ def match_theover_to_leg(
     selected_entry = None
     swapped = False
 
-    leg_home_tokens = set(_tokenize_name(leg_home))
-    leg_away_tokens = set(_tokenize_name(leg_away))
-
-    def _best_fuzzy_entry() -> Tuple[Optional[Dict[str, Any]], bool]:
-        """Pick the closest entry when exact home/away matches fail.
-
-        We score entries by token overlap on home and away sides separately so
-        city-only team names (common in theover uploads) can still align with
-        full team names from the odds feed. Swapped matches are considered when
-        the away tokens align better with an entry's home tokens.
-        """
-
-        best_score = 0
-        best_entry: Optional[Dict[str, Any]] = None
-        best_swapped = False
-
-        for entry in records:
-            if _league_matches(leg_league, entry.get('league_norm', '')):
-                league_bonus = 1
-            else:
-                league_bonus = 0
-
-            entry_home_tokens = set(_tokenize_name(entry.get('home', '')))
-            entry_away_tokens = set(_tokenize_name(entry.get('away', '')))
-
-            score_normal = (
-                len(leg_home_tokens & entry_home_tokens)
-                + len(leg_away_tokens & entry_away_tokens)
-                + league_bonus
-            )
-
-            score_swapped = (
-                len(leg_home_tokens & entry_away_tokens)
-                + len(leg_away_tokens & entry_home_tokens)
-                + league_bonus
-            )
-
-            if score_normal > best_score:
-                best_score = score_normal
-                best_entry = entry
-                best_swapped = False
-
-            if score_swapped > best_score:
-                best_score = score_swapped
-                best_entry = entry
-                best_swapped = True
-
-        if best_score <= 0:
-            return None, False
-
-        return best_entry, best_swapped
-
     def _attempt_match(ignore_league: bool = False) -> Tuple[Optional[Dict[str, Any]], bool]:
         for entry in records:
             if not ignore_league and not _league_matches(leg_league, entry.get('league_norm', '')):
@@ -6528,8 +6113,6 @@ def match_theover_to_leg(
     selected_entry, swapped = _attempt_match(False)
     if not selected_entry:
         selected_entry, swapped = _attempt_match(True)
-    if not selected_entry:
-        selected_entry, swapped = _best_fuzzy_entry()
 
     if not selected_entry:
         return None
@@ -6962,12 +6545,6 @@ def render_parlay_section_ai(
         return prepared_theover_ml
 
     for i, row in enumerate(rows, start=1):
-        kalshi_available_count = sum(
-            1
-            for leg in row.get("legs", [])
-            if leg.get('kalshi_validation', {}).get('kalshi_available', False)
-        )
-
         # AI confidence indicator
         conf = row['ai_confidence']
         if conf > 0.7:
@@ -7093,20 +6670,47 @@ def render_parlay_section_ai(
                         help="Provide an API-Sports key (NFL, NBA, or NHL) to enrich supported legs",
                     )
             
-            # KALSHI STATUS - ALWAYS SHOW (whether data exists or not)
-            st.markdown("---")
-            kalshi_legs_with_data = row.get('kalshi_legs', 0)
-            total_legs = len(row.get('legs', []))
-            
-            # Define kalshi_available variable
-            kalshi_available = sum(
+        # KALSHI STATUS - ALWAYS SHOW (whether data exists or not)
+        st.markdown("---")
+        kalshi_legs_with_data = row.get('kalshi_legs', 0)
+        total_legs = len(row.get('legs', []))
+        
+        if kalshi_legs_with_data > 0:
+            # HAS KALSHI DATA - Show influence
+            st.markdown("### 📊 Kalshi Prediction Market Influence:")
+
+            synthetic_legs = sum(
                 1 for leg in row.get('legs', [])
-                if leg.get('kalshi_validation', {}).get('kalshi_available', False)
+                if 'synthetic' in leg.get('kalshi_validation', {}).get('data_source', '')
             )
+
+            if synthetic_legs:
+                st.info(
+                    f"🧪 Using simulated Kalshi fallback for {synthetic_legs} leg(s) "
+                    "because live market data was unavailable."
+                )
+
+
+            col_k1, col_k2, col_k3, col_k4 = st.columns(4)
             
-            if kalshi_legs_with_data > 0:
-                # HAS KALSHI DATA - Show influence
-                st.markdown("### 📊 Kalshi Prediction Market Influence:")
+            with col_k1:
+                st.metric(
+                    "Legs Validated",
+                    f"{kalshi_available}/{len(row.get('legs', []))}",
+                    help="How many legs have Kalshi market data"
+                )
+            
+            with col_k2:
+                kalshi_boost_val = row.get('kalshi_boost', 0)
+                delta_boost = float(kalshi_boost_val) if kalshi_boost_val else None
+                delta_color = "normal" if kalshi_boost_val >= 0 else "inverse"
+                st.metric(
+                    "Kalshi Boost Points",
+                    f"{kalshi_boost_val:+.0f}",
+                    delta=delta_boost,
+                    delta_color=delta_color,
+                    help="Raw boost points from Kalshi validation (+15 = strong confirmation, -10 = contradiction)"
+                )
 
                 synthetic_legs = sum(
                     1 for leg in row.get('legs', [])
@@ -7124,9 +6728,9 @@ def render_parlay_section_ai(
                 
                 with col_k1:
                     st.metric(
-                        "Legs Validated",
-                        f"{kalshi_available}/{len(row.get('legs', []))}",
-                        help="How many legs have Kalshi market data"
+                        "Live Data Legs",
+                        f"{live_data_legs_with_data}/{len(row.get('legs', []))}",
+                        help="How many legs include live team context",
                     )
                 
                 with col_k2:
@@ -7141,155 +6745,53 @@ def render_parlay_section_ai(
                         help="Raw boost points from Kalshi validation (+15 = strong confirmation, -10 = contradiction)"
                     )
 
-                with col_k3:
-                    kalshi_alignment_avg = row.get('kalshi_alignment_avg', 0.0)
+                with col_a3:
+                    delta_color_sd = "normal" if sportsdata_boost >= 0 else "inverse"
+                    display_sd = f"{sportsdata_boost:+.0f}" if sportsdata_legs else "—"
                     st.metric(
-                        "Avg Alignment",
-                        f"{kalshi_alignment_avg*100:+.1f}pp",
-                        help="Average probability difference vs sportsbook odds"
+                        "SportsData.io Points",
+                        display_sd,
+                        delta=float(sportsdata_boost) if sportsdata_boost else None,
+                        delta_color=delta_color_sd,
+                        help="Power index and turnover margin boost from SportsData.io",
                     )
 
-                with col_k4:
-                    kalshi_factor = row.get('kalshi_factor', 1.0)
+                with col_a4:
                     st.metric(
-                        "Score Multiplier",  
-                        f"{kalshi_factor:.2f}x",
-                        delta=f"{(kalshi_factor-1)*100:+.0f}%" if kalshi_factor != 1.0 else None,
-                        help="Overall adjustment to the AI score from Kalshi data"
+                        "Score Multiplier",
+                        f"{live_data_factor:.2f}x",
+                        delta=f"{(live_data_factor-1)*100:+.0f}%" if live_data_factor != 1.0 else None,
+                        help="Overall adjustment to the AI score from live data feeds",
                     )
 
-                align_avg = row.get('kalshi_alignment_avg', 0.0)
-                align_abs = row.get('kalshi_alignment_abs_avg', 0.0)
-                align_pos = row.get('kalshi_alignment_positive', 0)
-                align_neg = row.get('kalshi_alignment_negative', 0)
-                align_count = row.get('kalshi_alignment_count', 0)
-                disagreement_display = f"{align_neg}/{align_count}" if align_count else "—"
-
-                col_align1, col_align2, col_align3 = st.columns(3)
-
-                with col_align1:
+                with col_a5:
+                    baseline = row['ai_score'] / live_data_factor if live_data_factor else row['ai_score']
+                    live_delta = row['ai_score'] - baseline
                     st.metric(
-                        "Avg Kalshi vs ML",
-                        f"{align_avg*100:+.1f} pp",
-                        help="Average percentage-point difference between Kalshi pricing and the trained model before blending"
+                        "Score Impact",
+                        f"{live_delta:+.1f} pts",
+                        help="How many points live data added or removed",
                     )
 
-                with col_align2:
-                    st.metric(
-                        "Avg Absolute Gap",
-                        f"{align_abs*100:.1f} pp",
-                        help="Typical gap size between Kalshi prices and the model regardless of direction"
-                    )
-
-                with col_align3:
-                    st.metric(
-                        "Disagreement Legs",
-                        disagreement_display,
-                        help="Legs where Kalshi is ≥1 percentage point more bearish than the model"
-                    )
-
-                # Explanation of Kalshi influence
-                if kalshi_factor_val > 1.05:
-                    st.success(f"🟢 **Kalshi BOOSTED this parlay by {(kalshi_factor_val-1)*100:.0f}%** - Prediction markets confirm AI analysis!")
-                elif kalshi_factor_val < 0.95:
-                    st.warning(f"🟠 **Kalshi REDUCED this parlay by {(1-kalshi_factor_val)*100:.0f}%** - Prediction markets skeptical of AI picks.")
-                else:
-                    st.info("🟡 **Kalshi NEUTRAL** - Prediction markets neither strongly confirm nor contradict AI.")
-
-                if align_count:
-                    if align_avg <= -0.05:
-                        st.warning(
-                            f"⚠️ Kalshi is on average {abs(align_avg)*100:.1f} percentage points more bearish than the model. "
-                            "Final AI probabilities are being pulled toward Kalshi's price."
-                        )
-                    elif align_avg >= 0.05:
-                        st.success(
-                            f"🟢 Kalshi is on average {align_avg*100:.1f} percentage points more bullish than the model, giving "
-                            "the blended AI number an extra push."
-                        )
-
-                if align_neg > 0:
-                    st.warning(
-                        f"⚠️ Kalshi is more bearish than the model on {align_neg} of {align_count} leg(s)."
-                        " Expect the blended AI probability to drift toward the market price."
-                    )
-                elif align_pos > 0:
+                if live_data_factor >= 1.02:
                     st.success(
-                        f"✅ Kalshi prices {align_pos} leg(s) richer than the model, reinforcing the AI edge before blending."
+                        f"🟢 **Live data boosted this parlay by {(live_data_factor-1)*100:.0f}%** thanks to favorable team trends."
                     )
-            else:
-                # NO KALSHI DATA - Explain why
-                st.markdown("### 📊 Kalshi Prediction Market Status:")
-                legs = row.get('legs', [])
-                scopes = [leg.get('kalshi_validation', {}).get('market_scope') for leg in legs]
-                unsupported_labels = [
-                    leg.get('label')
-                    for leg in legs
-                    if leg.get('kalshi_validation', {}).get('market_scope') in {
-                        'total_market', 'unsupported_market', 'totals_not_supported'
-                    }
-                ]
-                error_labels = [
-                    leg.get('label')
-                    for leg in legs
-                    if leg.get('kalshi_validation', {}).get('market_scope') == 'error'
-                ]
-                not_initialized = any(scope == 'not_initialized' for scope in scopes)
-                disabled = (not st.session_state.get('kalshi_enabled', False)) or any(scope == 'disabled' for scope in scopes)
-
-                if disabled:
-                    st.info("Kalshi validation is turned off. Toggle the Kalshi checkbox above to blend prediction markets into the analysis.")
-                elif unsupported_labels:
-                    st.info("Kalshi does not publish totals/prop markets, so these leg(s) rely on AI + sentiment only:")
-                    for label in unsupported_labels:
-                        st.caption(f"• {label}")
-                    st.caption("Moneyline and spread legs will include Kalshi coverage whenever a market is available.")
-                elif not_initialized:
-                    st.info("Kalshi markets have not loaded yet. Add your Kalshi API key or retry to use the live/synthetic market data.")
-                elif error_labels:
-                    st.warning("Kalshi validation encountered an error for these legs (falling back to AI + sentiment):")
-                    for label in error_labels:
-                        st.caption(f"• {label}")
+                elif live_data_factor <= 0.98:
+                    st.warning(
+                        f"🟠 **Live data reduced this parlay by {(1-live_data_factor)*100:.0f}%** due to cold or negative trends."
+                    )
                 else:
-                    kalshi_notice = f"""
-**No Kalshi Data Available for this Parlay** ({kalshi_legs_with_data}/{total_legs} legs)
+                    st.info("🟡 **Live data neutral** – trends across API-Sports and SportsData.io are balanced.")
 
-**This means:**
-- Analysis still uses AI + Sentiment (2 of 3 sources)
-- Missing prediction market validation
-- Kalshi Factor = 1.0x (neutral, no impact)
-- AI Score unchanged by Kalshi
-
-**Why no data?**
-- Kalshi doesn't have markets for these specific games
-- Kalshi focuses on season-long outcomes (playoffs, championships)
-- Individual game spreads/totals rarely have Kalshi markets
-
-**What this means:**
-- Bet based on AI + Sentiment confidence
-- Higher risk without 3rd source validation
-- Consider checking Tab 4 for available Kalshi markets
-
-Tip: For Kalshi validation, focus on season futures, playoff odds, or major championships.
-"""
-
-                    st.warning(kalshi_notice.strip())
-
-            live_data_legs_with_data = row.get('live_data_legs', row.get('apisports_legs', 0))
-            live_data_factor = row.get('live_data_factor', row.get('apisports_factor', 1.0))
-            live_data_boost = row.get('live_data_boost', row.get('apisports_boost', 0))
-            apisports_legs = row.get('apisports_legs', 0)
-            apisports_boost = row.get('apisports_boost', 0)
-            sportsdata_legs = row.get('sportsdata_legs', 0)
-            sportsdata_boost = row.get('sportsdata_boost', 0)
-            live_data_sports = row.get('live_data_sports', row.get('apisports_sports', [])) or []
-
-            sport_icon_lookup = {
-                'americanfootball_nfl': '🏈',
-                'basketball_nba': '🏀',
-                'icehockey_nhl': '🏒',
-            }
-
+                if apisports_legs:
+                    st.caption(
+                        f"API-Sports coverage: {apisports_legs} leg(s), points {apisports_boost:+.0f}"
+                    )
+                if sportsdata_legs:
+                    st.caption(
+                        f"SportsData.io coverage: {sportsdata_legs} leg(s), points {sportsdata_boost:+.0f}"
+                    )
             if live_data_legs_with_data:
                 st.markdown("### 🛰️ Live Data Influence (API-Sports + SportsData.io):")
 
@@ -7733,7 +7235,7 @@ Tip: For Kalshi validation, focus on season futures, playoff odds, or major cham
         }
         st.dataframe(
             legs_df_display,
-            width="stretch",
+            width='stretch',
             hide_index=True,
             column_config=column_config,
         )
@@ -7776,11 +7278,13 @@ Tip: For Kalshi validation, focus on season futures, playoff odds, or major cham
                     st.warning(f"⚠️ {theover_conflicts} leg(s) conflict with theover.ai recommendations")
         
         # Kalshi validation legend and detailed influence
+        kalshi_available = sum(1 for leg in row.get("legs", []) if leg.get('kalshi_validation', {}).get('kalshi_available', False))
+        
         # Show info if Kalshi enabled but no data found
         if (
             st.session_state.get('kalshi_enabled', False)
             and 'kalshi_validation' in row.get("legs", [{}])[0]
-            and kalshi_available_count == 0
+            and kalshi_available == 0
         ):
             st.info("""
             **📊 Kalshi Validation Enabled** but no matching markets found for these games.
@@ -7793,7 +7297,7 @@ Tip: For Kalshi validation, focus on season futures, playoff odds, or major cham
             **Note:** Parlay analysis still uses AI + Sentiment, just without Kalshi cross-validation.
             """)
         
-        if kalshi_available_count > 0:
+        if kalshi_available > 0:
             kalshi_confirmed = sum(1 for leg in row.get("legs", []) if leg.get('kalshi_validation', {}).get('validation') == 'confirms')
             kalshi_higher = sum(1 for leg in row.get("legs", []) if 'higher' in leg.get('kalshi_validation', {}).get('validation', ''))
             kalshi_contradicts = sum(1 for leg in row.get("legs", []) if 'contradiction' in leg.get('kalshi_validation', {}).get('validation', ''))
@@ -7902,39 +7406,37 @@ Tip: For Kalshi validation, focus on season futures, playoff odds, or major cham
                     })
             
             if kalshi_details:
-                st.dataframe(pd.DataFrame(kalshi_details), width="stretch", hide_index=True)
-
+                st.dataframe(pd.DataFrame(kalshi_details), width='stretch', hide_index=True)
+                
                 # Summary metrics
                 st.markdown("**📈 Kalshi Impact Summary:**")
                 col_impact1, col_impact2, col_impact3, col_impact4 = st.columns(4)
-
-                with col_impact1:
+                
+                with col_k1:
                     st.metric(
                         "Legs Validated",
-                        f"{kalshi_available_count}/{len(row.get('legs', []))}",
+                        f"{kalshi_available}/{len(row.get('legs', []))}",
                         help="How many legs have Kalshi market data"
                     )
-
+                
                 with col_impact2:
                     st.metric(
                         "Total Confidence Boost",
                         f"{total_confidence_boost*100:+.0f}%",
                         help="How much Kalshi boosted overall confidence"
                     )
-
+                
                 with col_impact3:
                     st.metric(
                         "Additional Edge",
                         f"{total_kalshi_edge*100:+.1f}%",
                         help="Extra edge identified from Kalshi vs sportsbook"
                     )
-
+                
                 with col_impact4:
-                    avg_discrepancy = sum(
-                        abs(leg.get('kalshi_validation', {}).get('discrepancy', 0))
-                        for leg in row.get("legs", [])
-                        if leg.get('kalshi_validation', {}).get('kalshi_available')
-                    ) / max(kalshi_available_count, 1)
+                    avg_discrepancy = sum(abs(leg.get('kalshi_validation', {}).get('discrepancy', 0)) 
+                                        for leg in row.get("legs", []) 
+                                        if leg.get('kalshi_validation', {}).get('kalshi_available')) / max(kalshi_available, 1)
                     st.metric(
                         "Avg Discrepancy",
                         f"{avg_discrepancy*100:.1f}%",
@@ -7959,7 +7461,7 @@ Tip: For Kalshi validation, focus on season futures, playoff odds, or major cham
                     st.warning(f"⚠️ **OVERPRICED WARNING**: Kalshi thinks this parlay is overpriced. Sportsbooks may be offering poor value.")
                 
                 # Recommendation based on Kalshi
-                kalshi_score = (total_confidence_boost * 50) + (total_kalshi_edge * 30) + (kalshi_confirmed / max(kalshi_available_count, 1) * 20)
+                kalshi_score = (total_confidence_boost * 50) + (total_kalshi_edge * 30) + (kalshi_confirmed / max(kalshi_available, 1) * 20)
                 
                 st.markdown("**🎯 Kalshi-Based Recommendation:**")
                 if kalshi_score > 15:
@@ -8261,7 +7763,7 @@ with main_tab1:
                 dataset = pd.read_csv(uploaded_file)
                 st.success(f"✅ Loaded {len(dataset)} rows from theover.ai")
                 with st.expander("📋 Preview uploaded data", expanded=False):
-                    st.dataframe(dataset.head(10), width="stretch")
+                    st.dataframe(dataset.head(10), width='stretch')
             except Exception as exc:
                 st.error(f"Error loading CSV: {exc}")
 
@@ -8290,7 +7792,7 @@ with main_tab1:
                         dataset = pd.read_csv(StringIO(pasted_data))
 
                     st.success(f"✅ Loaded {len(dataset)} rows from pasted theover.ai data")
-                    st.dataframe(dataset.head(10), width="stretch")
+                    st.dataframe(dataset.head(10), width='stretch')
                 except Exception as exc:
                     st.error(f"Error parsing data: {exc}")
 
@@ -8756,7 +8258,7 @@ with main_tab1:
         fetch_best_odds = st.button(
             "Show Best Odds",
             key="best_odds_button",
-            width="stretch",
+            width='stretch',
         )
 
     if fetch_best_odds:
@@ -8786,7 +8288,7 @@ with main_tab1:
                         lambda x: f"{float(x):.1f}" if pd.notna(x) else "—"
                     )
 
-                st.dataframe(display_df, width="stretch", hide_index=True)
+                st.dataframe(display_df, width='stretch', hide_index=True)
 
                 csv_export = best_odds_df.to_csv(index=False)
                 file_name = (
@@ -8838,7 +8340,7 @@ with main_tab1:
     compute_best_bets = st.button(
         "Compute Best Bets",
         key="compute_best_bets",
-        width="stretch",
+        width='stretch',
     )
 
     if compute_best_bets:
@@ -8927,7 +8429,7 @@ with main_tab1:
                         lambda x: f"{float(x):g}" if pd.notna(x) else "—"
                     )
 
-                st.dataframe(display_df, width="stretch", hide_index=True)
+                st.dataframe(display_df, width='stretch', hide_index=True)
 
                 csv_export = best_bets_df.to_csv(index=False)
                 download_name = (
@@ -9726,7 +9228,7 @@ with main_tab1:
                                 lambda x: f"{x:.3f}" if pd.notna(x) else "—"
                             )
 
-                        st.dataframe(top_display, width="stretch", hide_index=True)
+                        st.dataframe(top_display, width='stretch', hide_index=True)
 
                         top_csv = top_df.to_csv(index=False)
                         st.download_button(
@@ -10743,7 +10245,7 @@ with main_tab3:
                                 "Sentiment": leg['sentiment_trend']
                             })
                         
-                        st.dataframe(pd.DataFrame(leg_data), width="stretch", hide_index=True)
+                        st.dataframe(pd.DataFrame(leg_data), width='stretch', hide_index=True)
                         
                         # Payout Scenarios
                         st.markdown("### 💰 Payout Scenarios")
@@ -11606,28 +11108,3 @@ with main_tab5:
             </div>
             """
             components.html(widget_html, height=widget_height, scrolling=True)
-
-# Ensure Kalshi integrator access with a synthetic fallback
-def _resolve_kalshi_integrator() -> Optional["KalshiIntegrator"]:
-    try:
-        integrator = st.session_state.get('kalshi_integrator')
-    except Exception:
-        integrator = None
-
-    if not isinstance(integrator, KalshiIntegrator):
-        integrator = KalshiIntegrator(
-            os.environ.get("KALSHI_API_KEY", ""),
-            os.environ.get("KALSHI_API_SECRET", ""),
-        )
-        try:
-            st.session_state['kalshi_integrator'] = integrator
-        except Exception:
-            pass
-
-    try:
-        integrator._ensure_synthetic_data()
-    except Exception:
-        pass
-
-    return integrator
-
