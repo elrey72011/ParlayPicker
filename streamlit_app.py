@@ -31,87 +31,7 @@ from app_core import (
     SportsDataNHLClient,
 )
 
-# Try to import optional classes if they exist
-try:
-    from app_core import SharpMoneyDetector
-except ImportError:
-    class SharpMoneyDetector:
-        def __init__(self):
-            pass
-
-try:
-    from app_core import KellyCalculator
-except ImportError:
-    class KellyCalculator:
-        def __init__(self):
-            pass
-
-try:
-    from app_core import KalshiIntegrator
-except ImportError:
-    class KalshiIntegrator:
-        def __init__(self):
-            pass
-
-try:
-    from app_core import PlayerImpactAnalyzer
-except ImportError:
-    class PlayerImpactAnalyzer:
-        def __init__(self):
-            pass
-
-try:
-    from app_core import MatchupAnalyzer
-except ImportError:
-    class MatchupAnalyzer:
-        def __init__(self):
-            pass
-
-try:
-    from app_core import AdvancedStatsIntegrator
-except ImportError:
-    class AdvancedStatsIntegrator:
-        def __init__(self):
-            pass
-
-try:
-    from app_core import AIOptimizer
-except ImportError:
-    class AIOptimizer:
-        def __init__(self, *args, **kwargs):
-            pass
-
-try:
-    from app_core import WeatherAnalyzer
-except ImportError:
-    class WeatherAnalyzer:
-        def __init__(self, *args, **kwargs):
-            pass
-
-try:
-    from app_core import SocialMediaAnalyzer
-except ImportError:
-    class SocialMediaAnalyzer:
-        def __init__(self, *args, **kwargs):
-            pass
-
 logger = logging.getLogger(__name__)
-
-try:
-    st.set_page_config(page_title="ParlayDesk", page_icon="🎯", layout="wide")
-except: pass
-
-st.markdown("""<style>
-.main .block-container {padding: 1rem 1.5rem !important; max-width: 100% !important;}
-.stMarkdown {margin-bottom: 0.3rem !important;}
-.stDataFrame {margin: 0.5rem 0 !important;}
-section[data-testid="stSidebar"] .block-container {padding: 1.5rem 1rem !important;}
-[data-testid="column"] {padding: 0.25rem !important;}
-.stButton, .stAlert {margin: 0.5rem 0 !important;}
-hr {margin: 1rem 0 !important;}
-h2, h3 {margin: 0.75rem 0 0.5rem 0 !important;}
-</style>""", unsafe_allow_html=True)
-
 
 # ============ HELPER FUNCTIONS ============
 def american_to_decimal_safe(odds) -> Optional[float]:
@@ -956,14 +876,11 @@ def render_sidebar_controls() -> Dict[str, Any]:
     )
     st.session_state['day_window'] = day_window
 
-    # Initialize selected_sports in session state if not present
-    if 'selected_sports' not in st.session_state:
-        st.session_state['selected_sports'] = APP_CFG["sports_common"][:6]
-    
+    default_sports = st.session_state.setdefault('selected_sports', APP_CFG["sports_common"][:6])
     sports = sidebar.multiselect(
         "Sports",
         options=APP_CFG["sports_common"],
-        default=st.session_state['selected_sports'],
+        default=default_sports,
         format_func=format_sport_label,
         key="selected_sports",
     )
@@ -4958,12 +4875,48 @@ def build_best_bets_per_game(
     if not legs:
         return pd.DataFrame(), []
 
-    apply_theover_probabilities_to_legs(
+    theover_context = apply_theover_probabilities_to_legs(
         legs,
         theover_ml_data=theover_ml_data,
         theover_spreads_data=theover_spreads_data,
         theover_totals_data=theover_totals_data,
     )
+
+    def _ensure_theover_for_leg(leg_dict: Dict[str, Any]) -> None:
+        """Attach theover.ai probabilities if the initial blend missed."""
+
+        if leg_dict.get("theover_probability") is not None:
+            return
+
+        dataset_fn = None
+        if isinstance(theover_context, dict):
+            dataset_fn = theover_context.get("dataset_for_leg")
+        dataset = dataset_fn(leg_dict) if dataset_fn else None
+        try:
+            match_info = match_theover_to_leg(leg_dict, None, dataset)
+        except Exception:
+            match_info = None
+
+        if not match_info:
+            return
+
+        leg_dict["theover_match"] = match_info
+        theover_prob = match_info.get("model_probability")
+        if theover_prob is None:
+            theover_prob = match_info.get("implied_probability")
+
+        base_prob = leg_dict.get("ai_prob_pre_theover", leg_dict.get("ai_prob", leg_dict.get("p")))
+        if theover_prob is None or base_prob is None:
+            return
+
+        leg_dict["theover_probability"] = theover_prob
+        leg_dict["theover_probability_source"] = match_info.get("probability_source") or "model output"
+        leg_dict["theover_probability_delta"] = theover_prob - base_prob
+        leg_dict["ai_prob_with_theover"] = base_prob * 0.65 + theover_prob * 0.35
+        leg_dict["ai_prob"] = leg_dict.get("ai_prob", base_prob)
+
+    for leg in legs:
+        _ensure_theover_for_leg(leg)
 
     best_odds_df = compute_best_overall_odds(aggregated_events, timezone_label) if aggregated_events else pd.DataFrame()
 
@@ -6745,6 +6698,18 @@ def render_parlay_section_ai(
                     )
 
 
+                synthetic_legs = sum(
+                    1 for leg in row.get('legs', [])
+                    if 'synthetic' in leg.get('kalshi_validation', {}).get('data_source', '')
+                )
+
+                if synthetic_legs:
+                    st.info(
+                        f"🧪 Using simulated Kalshi fallback for {synthetic_legs} leg(s) "
+                        "because live market data was unavailable."
+                    )
+
+
                 col_k1, col_k2, col_k3, col_k4 = st.columns(4)
                 
                 with col_k1:
@@ -6813,6 +6778,206 @@ def render_parlay_section_ai(
                     st.caption(
                         f"SportsData.io coverage: {sportsdata_legs} leg(s), points {sportsdata_boost:+.0f}"
                     )
+            if live_data_legs_with_data:
+                st.markdown("### 🛰️ Live Data Influence (API-Sports + SportsData.io):")
+
+                if live_data_sports:
+                    icons = " ".join(
+                        sport_icon_lookup.get(sport, '🛰️') for sport in sorted(set(live_data_sports))
+                    )
+                    st.caption(
+                        f"Live data applied from: {icons} {', '.join(sorted(set(live_data_sports)))}"
+                    )
+
+                col_a1, col_a2, col_a3, col_a4, col_a5 = st.columns(5)
+
+                with col_a1:
+                    st.metric(
+                        "Live Data Legs",
+                        f"{live_data_legs_with_data}/{len(row.get('legs', []))}",
+                        help="How many legs include live team context",
+                    )
+
+                with col_a2:
+                    delta_color = "normal" if apisports_boost >= 0 else "inverse"
+                    display_val = f"{apisports_boost:+.0f}" if apisports_legs else "—"
+                    st.metric(
+                        "API-Sports Points",
+                        display_val,
+                        delta=float(apisports_boost) if apisports_boost else None,
+                        delta_color=delta_color,
+                        help="Boost or penalty applied from API-Sports hot/cold team trends",
+                    )
+
+                with col_a3:
+                    delta_color_sd = "normal" if sportsdata_boost >= 0 else "inverse"
+                    display_sd = f"{sportsdata_boost:+.0f}" if sportsdata_legs else "—"
+                    st.metric(
+                        "SportsData.io Points",
+                        display_sd,
+                        delta=float(sportsdata_boost) if sportsdata_boost else None,
+                        delta_color=delta_color_sd,
+                        help="Power index and turnover margin boost from SportsData.io",
+                    )
+
+                with col_a4:
+                    st.metric(
+                        "Score Multiplier",
+                        f"{live_data_factor:.2f}x",
+                        delta=f"{(live_data_factor-1)*100:+.0f}%" if live_data_factor != 1.0 else None,
+                        help="Overall adjustment to the AI score from live data feeds",
+                    )
+
+                with col_a5:
+                    baseline = row['ai_score'] / live_data_factor if live_data_factor else row['ai_score']
+                    live_delta = row['ai_score'] - baseline
+                    st.metric(
+                        "Score Impact",
+                        f"{live_delta:+.1f} pts",
+                        help="How many points live data added or removed",
+                    )
+
+                if live_data_factor >= 1.02:
+                    st.success(
+                        f"🟢 **Live data boosted this parlay by {(live_data_factor-1)*100:.0f}%** thanks to favorable team trends."
+                    )
+                elif live_data_factor <= 0.98:
+                    st.warning(
+                        f"🟠 **Live data reduced this parlay by {(1-live_data_factor)*100:.0f}%** due to cold or negative trends."
+                    )
+
+                align_avg = row.get('kalshi_alignment_avg', 0.0)
+                align_abs = row.get('kalshi_alignment_abs_avg', 0.0)
+                align_pos = row.get('kalshi_alignment_positive', 0)
+                align_neg = row.get('kalshi_alignment_negative', 0)
+                align_count = row.get('kalshi_alignment_count', 0)
+                disagreement_display = f"{align_neg}/{align_count}" if align_count else "—"
+
+                col_align1, col_align2, col_align3 = st.columns(3)
+
+                with col_align1:
+                    st.metric(
+                        "Avg Kalshi vs ML",
+                        f"{align_avg*100:+.1f} pp",
+                        help="Average percentage-point difference between Kalshi pricing and the trained model before blending"
+                    )
+
+                with col_align2:
+                    st.metric(
+                        "Avg Absolute Gap",
+                        f"{align_abs*100:.1f} pp",
+                        help="Typical gap size between Kalshi prices and the model regardless of direction"
+                    )
+
+                with col_align3:
+                    st.metric(
+                        "Disagreement Legs",
+                        disagreement_display,
+                        help="Legs where Kalshi is ≥1 percentage point more bearish than the model"
+                    )
+
+                # Explanation of Kalshi influence
+                if kalshi_factor_val > 1.05:
+                    st.success(f"🟢 **Kalshi BOOSTED this parlay by {(kalshi_factor_val-1)*100:.0f}%** - Prediction markets confirm AI analysis!")
+                elif kalshi_factor_val < 0.95:
+                    st.warning(f"🟠 **Kalshi REDUCED this parlay by {(1-kalshi_factor_val)*100:.0f}%** - Prediction markets skeptical of AI picks.")
+                else:
+                    st.info("🟡 **Kalshi NEUTRAL** - Prediction markets neither strongly confirm nor contradict AI.")
+
+                if align_count:
+                    if align_avg <= -0.05:
+                        st.warning(
+                            f"⚠️ Kalshi is on average {abs(align_avg)*100:.1f} percentage points more bearish than the model. "
+                            "Final AI probabilities are being pulled toward Kalshi's price."
+                        )
+                    elif align_avg >= 0.05:
+                        st.success(
+                            f"🟢 Kalshi is on average {align_avg*100:.1f} percentage points more bullish than the model, giving "
+                            "the blended AI number an extra push."
+                        )
+
+                if align_neg > 0:
+                    st.warning(
+                        f"⚠️ Kalshi is more bearish than the model on {align_neg} of {align_count} leg(s)."
+                        " Expect the blended AI probability to drift toward the market price."
+                    )
+                elif align_pos > 0:
+                    st.success(
+                        f"✅ Kalshi prices {align_pos} leg(s) richer than the model, reinforcing the AI edge before blending."
+                    )
+            else:
+                # NO KALSHI DATA - Explain why
+                st.markdown("### 📊 Kalshi Prediction Market Status:")
+                legs = row.get('legs', [])
+                scopes = [leg.get('kalshi_validation', {}).get('market_scope') for leg in legs]
+                unsupported_labels = [
+                    leg.get('label')
+                    for leg in legs
+                    if leg.get('kalshi_validation', {}).get('market_scope') in {
+                        'total_market', 'unsupported_market', 'totals_not_supported'
+                    }
+                ]
+                error_labels = [
+                    leg.get('label')
+                    for leg in legs
+                    if leg.get('kalshi_validation', {}).get('market_scope') == 'error'
+                ]
+                not_initialized = any(scope == 'not_initialized' for scope in scopes)
+                disabled = (not st.session_state.get('kalshi_enabled', False)) or any(scope == 'disabled' for scope in scopes)
+
+                if disabled:
+                    st.info("Kalshi validation is turned off. Toggle the Kalshi checkbox above to blend prediction markets into the analysis.")
+                elif unsupported_labels:
+                    st.info("Kalshi does not publish totals/prop markets, so these leg(s) rely on AI + sentiment only:")
+                    for label in unsupported_labels:
+                        st.caption(f"• {label}")
+                    st.caption("Moneyline and spread legs will include Kalshi coverage whenever a market is available.")
+                elif not_initialized:
+                    st.info("Kalshi markets have not loaded yet. Add your Kalshi API key or retry to use the live/synthetic market data.")
+                elif error_labels:
+                    st.warning("Kalshi validation encountered an error for these legs (falling back to AI + sentiment):")
+                    for label in error_labels:
+                        st.caption(f"• {label}")
+                else:
+                    kalshi_notice = f"""
+**No Kalshi Data Available for this Parlay** ({kalshi_legs_with_data}/{total_legs} legs)
+
+**This means:**
+- Analysis still uses AI + Sentiment (2 of 3 sources)
+- Missing prediction market validation
+- Kalshi Factor = 1.0x (neutral, no impact)
+- AI Score unchanged by Kalshi
+
+**Why no data?**
+- Kalshi doesn't have markets for these specific games
+- Kalshi focuses on season-long outcomes (playoffs, championships)
+- Individual game spreads/totals rarely have Kalshi markets
+
+**What this means:**
+- Bet based on AI + Sentiment confidence
+- Higher risk without 3rd source validation
+- Consider checking Tab 4 for available Kalshi markets
+
+Tip: For Kalshi validation, focus on season futures, playoff odds, or major championships.
+"""
+
+                    st.warning(kalshi_notice.strip())
+
+            live_data_legs_with_data = row.get('live_data_legs', row.get('apisports_legs', 0))
+            live_data_factor = row.get('live_data_factor', row.get('apisports_factor', 1.0))
+            live_data_boost = row.get('live_data_boost', row.get('apisports_boost', 0))
+            apisports_legs = row.get('apisports_legs', 0)
+            apisports_boost = row.get('apisports_boost', 0)
+            sportsdata_legs = row.get('sportsdata_legs', 0)
+            sportsdata_boost = row.get('sportsdata_boost', 0)
+            live_data_sports = row.get('live_data_sports', row.get('apisports_sports', [])) or []
+
+            sport_icon_lookup = {
+                'americanfootball_nfl': '🏈',
+                'basketball_nba': '🏀',
+                'icehockey_nhl': '🏒',
+            }
+
             if live_data_legs_with_data:
                 st.markdown("### 🛰️ Live Data Influence (API-Sports + SportsData.io):")
 
@@ -6982,23 +7147,6 @@ def render_parlay_section_ai(
 
         # Legs breakdown with theover.ai integration
         st.markdown("**🎯 Parlay Legs:**")
-        
-        # DATA SOURCES
-        st.markdown("**🔍 Data Sources:**")
-        ds = {'Kalshi': 0, 'theover.ai': 0, 'API-Sports': 0, 'SportsData.io': 0}
-        for leg in row.get("legs", []):
-            if leg.get('kalshi_validation', {}).get('kalshi_available'): ds['Kalshi'] = 1
-            if leg.get('theover_match') or leg.get('theover_probability'): ds['theover.ai'] = 1
-            if leg.get('apisports'): ds['API-Sports'] = 1
-            if leg.get('sportsdata'): ds['SportsData.io'] = 1
-        c1,c2,c3,c4 = st.columns(4)
-        with c1: st.success("✅ Kalshi") if ds['Kalshi'] else st.warning("❌ Kalshi")
-        with c2: st.success("✅ theover.ai") if ds['theover.ai'] else st.warning("❌ theover.ai")
-        with c3: st.success("✅ API-Sports") if ds['API-Sports'] else st.warning("❌ API-Sports")
-        with c4: st.success("✅ SportsData.io") if ds['SportsData.io'] else st.warning("❌ SportsData.io")
-        st.caption("Enable APIs in sidebar.")
-        st.markdown("---")
-        
         legs_data = []
         leg_summaries: List[str] = []
         has_theover = False
@@ -7450,7 +7598,7 @@ def render_parlay_section_ai(
                 st.markdown("**📈 Kalshi Impact Summary:**")
                 col_impact1, col_impact2, col_impact3, col_impact4 = st.columns(4)
                 
-                with col_k1:
+                with col_impact1:
                     st.metric(
                         "Legs Validated",
                         f"{kalshi_available}/{len(row.get('legs', []))}",
@@ -7591,14 +7739,10 @@ if (
     or getattr(ai_optimizer, 'ml', None) is not ml_predictor_state
     or getattr(ai_optimizer, 'sentiment', None) is not st.session_state['sentiment_analyzer']
 ):
-    try:
-        st.session_state['ai_optimizer'] = AIOptimizer(
-            st.session_state['sentiment_analyzer'],
-            ml_predictor_state,
-        )
-    except Exception:
-        st.session_state['ai_optimizer'] = None
-        st.session_state['ai_optimizer'] = None
+    st.session_state['ai_optimizer'] = AIOptimizer(
+        st.session_state['sentiment_analyzer'],
+        ml_predictor_state,
+    )
 
 # Initialize advanced analyzers
 if 'sharp_detector' not in st.session_state:
@@ -11171,3 +11315,4 @@ with main_tab5:
             </div>
             """
             components.html(widget_html, height=widget_height, scrolling=True)
+
