@@ -6694,6 +6694,12 @@ def render_parlay_section_ai(
             # HAS KALSHI DATA - Show influence
             st.markdown("### 📊 Kalshi Prediction Market Influence:")
 
+            # Calculate kalshi_available
+            kalshi_available = sum(
+                1 for leg in row.get('legs', [])
+                if leg.get('kalshi_validation', {}).get('kalshi_available', False)
+            )
+
             synthetic_legs = sum(
                 1 for leg in row.get('legs', [])
                 if 'synthetic' in leg.get('kalshi_validation', {}).get('data_source', '')
