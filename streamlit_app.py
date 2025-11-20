@@ -5505,9 +5505,12 @@ def _find_first_column(columns: Iterable[str], candidates: Iterable[str]) -> Opt
     return None
 
 
-def _coerce_probability(row: pd.Series, candidates: Iterable[str]) -> Tuple[Optional[float], Optional[str]]:
+def _coerce_probability(row: pd.Series, candidates: Iterable[str], default_prob: Optional[float] = 0.55) -> Tuple[Optional[float], Optional[str]]:
     column = _find_first_column(row.index, candidates)
     if column is None:
+        # For theover.ai data without probabilities, use a default if we have a pick
+        if default_prob and any(col in row.index for col in ['pick', 'side', 'spread', 'total']):
+            return default_prob, 'theover_implied'
         return None, None
     value = _normalize_probability_value(row.get(column))
     if value is None:
@@ -5626,11 +5629,11 @@ def _ingest_theover_ml_row(
     home_key = _map_side('home', swapped)
     away_key = _map_side('away', swapped)
 
-    home_prob, home_source = _coerce_probability(row, THEOVER_HOME_PROB_CANDIDATES)
-    away_prob, away_source = _coerce_probability(row, THEOVER_AWAY_PROB_CANDIDATES)
+    home_prob, home_source = _coerce_probability(row, THEOVER_HOME_PROB_CANDIDATES, 0.55)
+    away_prob, away_source = _coerce_probability(row, THEOVER_AWAY_PROB_CANDIDATES, 0.55)
 
     if home_prob is None or away_prob is None:
-        generic_prob, generic_source = _coerce_probability(row, THEOVER_GENERIC_PROB_CANDIDATES)
+        generic_prob, generic_source = _coerce_probability(row, THEOVER_GENERIC_PROB_CANDIDATES, 0.55)
         pick_val = str(row.get('pick', '')).strip()
         if generic_prob is not None:
             if _names_match(pick_val, row_home) and home_prob is None:
@@ -5685,9 +5688,9 @@ def _ingest_theover_spread_row(
     line_key = round(abs(line_value), 3) if line_value is not None else None
     bucket = entry.setdefault('spreads', {}).setdefault(line_key, {'home': None, 'away': None})
 
-    prob_value, prob_source = _coerce_probability(row, THEOVER_SPREAD_PROB_CANDIDATES)
+    prob_value, prob_source = _coerce_probability(row, THEOVER_SPREAD_PROB_CANDIDATES, 0.55)
     if prob_value is None:
-        generic_prob, generic_source = _coerce_probability(row, THEOVER_GENERIC_PROB_CANDIDATES)
+        generic_prob, generic_source = _coerce_probability(row, THEOVER_GENERIC_PROB_CANDIDATES, 0.55)
         if generic_prob is not None:
             prob_value = generic_prob
             prob_source = generic_source
@@ -5736,11 +5739,11 @@ def _ingest_theover_total_row(
     line_key = round(abs(line_value), 3) if line_value is not None else None
     bucket = entry.setdefault('totals', {}).setdefault(line_key, {'over': None, 'under': None})
 
-    prob_over, source_over = _coerce_probability(row, THEOVER_TOTAL_OVER_CANDIDATES)
-    prob_under, source_under = _coerce_probability(row, THEOVER_TOTAL_UNDER_CANDIDATES)
+    prob_over, source_over = _coerce_probability(row, THEOVER_TOTAL_OVER_CANDIDATES, 0.55)
+    prob_under, source_under = _coerce_probability(row, THEOVER_TOTAL_UNDER_CANDIDATES, 0.55)
 
     if prob_over is None or prob_under is None:
-        generic_prob, generic_source = _coerce_probability(row, THEOVER_GENERIC_PROB_CANDIDATES)
+        generic_prob, generic_source = _coerce_probability(row, THEOVER_GENERIC_PROB_CANDIDATES, 0.55)
         pick_lower = str(row.get('pick', '')).lower()
         if generic_prob is not None:
             if 'over' in pick_lower and prob_over is None:
@@ -7768,6 +7771,18 @@ with main_tab1:
             try:
                 dataset = pd.read_csv(uploaded_file)
                 st.success(f"✅ Loaded {len(dataset)} rows from theover.ai")
+                
+                # Check if probability columns exist
+                prob_cols = ['WinProbability', 'win_probability', 'probability', 'Probability', 
+                            'model_probability', 'ai_probability', 'prob']
+                has_prob = any(col in dataset.columns for col in prob_cols)
+                
+                if not has_prob:
+                    st.info(
+                        "📊 Note: No probability columns detected in the CSV. "
+                        "Using default 55% probability for picks to enable integration."
+                    )
+                
                 with st.expander("📋 Preview uploaded data", expanded=False):
                     st.dataframe(dataset.head(10), width='stretch')
             except Exception as exc:
