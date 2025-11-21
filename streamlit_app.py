@@ -5449,24 +5449,36 @@ THEOVER_AWAY_PROB_CANDIDATES = [
     'prob_away',
 ]
 THEOVER_GENERIC_PROB_CANDIDATES = [
+    'theover_ai',  # Matches "theover.ai %" column from CSV export (normalized)
     'model_probability',
     'win_probability',
     'ai_probability',
+    'ai_prob',  # Matches "AI Prob %" column from CSV export (normalized)
     'probability',
     'pick_probability',
+    'sports_data_prob',  # Matches "SportsData Prob %" column from CSV export (normalized)
 ]
 THEOVER_SPREAD_PROB_CANDIDATES = [
+    'theover_ai',  # Matches "theover.ai %" column from CSV export (normalized)
     'prob_cover',
     'cover_probability',
     'spread_probability',
+    'ai_prob',  # Matches "AI Prob %" column (normalized)
+    'sports_data_prob',  # Matches "SportsData Prob %" column (normalized)
 ]
 THEOVER_TOTAL_OVER_CANDIDATES = [
+    'theover_ai',  # Matches "theover.ai %" column when Side is "over" (normalized)
     'prob_over',
     'over_probability',
+    'ai_prob',  # Matches "AI Prob %" column (normalized)
+    'sports_data_prob',  # Matches "SportsData Prob %" column (normalized)
 ]
 THEOVER_TOTAL_UNDER_CANDIDATES = [
+    'theover_ai',  # Matches "theover.ai %" column when Side is "under" (normalized)
     'prob_under',
     'under_probability',
+    'ai_prob',  # Matches "AI Prob %" column (normalized)
+    'sports_data_prob',  # Matches "SportsData Prob %" column (normalized)
 ]
 THEOVER_LINE_CANDIDATES = [
     'line',
@@ -5631,7 +5643,7 @@ def _ingest_theover_ml_row(
 
     if home_prob is None or away_prob is None:
         generic_prob, generic_source = _coerce_probability(row, THEOVER_GENERIC_PROB_CANDIDATES)
-        pick_val = str(row.get('pick', '')).strip()
+        pick_val = str(row.get('selection', row.get('pick', ''))).strip()
         if generic_prob is not None:
             if _names_match(pick_val, row_home) and home_prob is None:
                 home_prob = generic_prob
@@ -5695,9 +5707,14 @@ def _ingest_theover_spread_row(
     if prob_value is None:
         return
 
-    pick_val = str(row.get('pick', '')).strip()
+    pick_val = str(row.get('selection', row.get('pick', ''))).strip()
     side = None
-    if pick_val:
+    
+    # First check the "side" column directly (from CSV exports)
+    side_val = str(row.get('side', '')).strip().lower()
+    if side_val in ('home', 'away'):
+        side = side_val
+    elif pick_val:
         if _names_match(pick_val, row_home):
             side = 'home'
         elif _names_match(pick_val, row_away):
@@ -5741,7 +5758,10 @@ def _ingest_theover_total_row(
 
     if prob_over is None or prob_under is None:
         generic_prob, generic_source = _coerce_probability(row, THEOVER_GENERIC_PROB_CANDIDATES)
-        pick_lower = str(row.get('pick', '')).lower()
+        
+        # Check both "selection" and "side" columns (from CSV exports) and "pick" column
+        pick_lower = str(row.get('selection', row.get('side', row.get('pick', '')))).lower()
+        
         if generic_prob is not None:
             if 'over' in pick_lower and prob_over is None:
                 prob_over = generic_prob
@@ -5815,6 +5835,16 @@ def prepare_theover_dataset(
         league_raw = str(row.get('league', row.get('sport', ''))).strip()
         home_raw = str(row.get('home_team', row.get('hometeam', row.get('home', '')))).strip()
         away_raw = str(row.get('away_team', row.get('awayteam', row.get('away', '')))).strip()
+        
+        # Parse "Game" column format: "Away Team @ Home Team" (from CSV exports)
+        if not (home_raw and away_raw):
+            game_raw = str(row.get('game', '')).strip()
+            if '@' in game_raw:
+                parts = game_raw.split('@')
+                if len(parts) == 2:
+                    away_raw = parts[0].strip()
+                    home_raw = parts[1].strip()
+        
         if not (home_raw and away_raw):
             continue
 
