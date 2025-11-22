@@ -15,7 +15,6 @@ import streamlit as st
 import streamlit.components.v1 as components
 import pytz
 from pathlib import Path
-import re
 from collections import defaultdict
 
 from app_core import (
@@ -141,7 +140,7 @@ def get_cached_ml_predictor(sport_key: str, cache_key: str):
     try:
         ml_predictor = get_ml_predictor_smart(sport_key)
         ml_predictor.train()
-        return predictor
+        return ml_predictor
     except Exception as e:
         logger.warning(f"Could not train {sport_key} model: {e}")
         return None
@@ -153,7 +152,7 @@ def get_ml_predictor_smart(sport_key: str):
     """
     today = date.today().isoformat()
     cache_key = f"{sport_key}_{today}"
-    return get_cached_ml_predictor(sport_key, cache_key)
+        return get_cached_ml_predictor(sport_key, cache_key)
 
 
 def calculate_parlay_metrics_vectorized(legs: List[Dict]) -> Dict[str, float]:
@@ -4334,14 +4333,14 @@ def build_best_odds_report(
     perf_monitor = st.session_state.perf_monitor
     start_time = time.time()
 
-    odds_data = fetch_all_sports_parallel(api_key, selected_sports)
+    odds_data = fetch_all_sports_parallel(api_key, sport_keys)
 
     fetch_duration = time.time() - start_time
     perf_monitor.log('api_fetch', fetch_duration, len(selected_sports))
     st.success(f"✅ Fetched {len(odds_data)} sports in {fetch_duration:.2f}s")
     events = snapshot.get("events", [])
     if not events:
-    continue
+        continue
 
         filtered = filter_events_by_date_range(events, start_date, end_date, tz_name)
         aggregated_events.extend(filtered)
