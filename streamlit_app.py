@@ -4340,10 +4340,10 @@ def build_best_odds_report(
     st.success(f"✅ Fetched {len(odds_data)} sports in {fetch_duration:.2f}s")
     events = snapshot.get("events", [])
     if not events:
-        continue
+    continue
 
-        filtered = filter_events_by_date_range(events, start_date, end_date, tz_name)
-        aggregated_events.extend(filtered)
+    filtered = filter_events_by_date_range(events, start_date, end_date, tz_name)
+    aggregated_events.extend(filtered)
 
     return compute_best_overall_odds(aggregated_events, tz_name)
 
