@@ -4339,7 +4339,7 @@ def build_best_odds_report(
     fetch_duration = time.time() - start_time
     perf_monitor.log('api_fetch', fetch_duration, len(selected_sports))
     st.success(f"✅ Fetched {len(odds_data)} sports in {fetch_duration:.2f}s")
-        events = snapshot.get("events", [])
+    events = snapshot.get("events", [])
         if not events:
             continue
 
