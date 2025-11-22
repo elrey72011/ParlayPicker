@@ -152,7 +152,7 @@ def get_ml_predictor_smart(sport_key: str):
     """
     today = date.today().isoformat()
     cache_key = f"{sport_key}_{today}"
-        return get_cached_ml_predictor(sport_key, cache_key)
+    return get_cached_ml_predictor(sport_key, cache_key)
 
 
 def calculate_parlay_metrics_vectorized(legs: List[Dict]) -> Dict[str, float]:
