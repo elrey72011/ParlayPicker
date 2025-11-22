@@ -4330,8 +4330,15 @@ def build_best_odds_report(
     """Fetch odds snapshots and return the best book per market across sports."""
 
     aggregated_events: List[Dict[str, Any]] = []
-    for sport in sport_keys:
-        snapshot = fetch_oddsapi_snapshot(api_key, sport)
+    # New parallel approach (FAST)
+    perf_monitor = st.session_state.perf_monitor
+    start_time = time.time()
+
+    odds_data = fetch_all_sports_parallel(api_key, selected_sports)
+
+    fetch_duration = time.time() - start_time
+    perf_monitor.log('api_fetch', fetch_duration, len(selected_sports))
+    st.success(f"✅ Fetched {len(odds_data)} sports in {fetch_duration:.2f}s")
         events = snapshot.get("events", [])
         if not events:
             continue
