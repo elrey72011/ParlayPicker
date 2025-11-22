@@ -4329,23 +4329,30 @@ def build_best_odds_report(
     """Fetch odds snapshots and return the best book per market across sports."""
 
     aggregated_events: List[Dict[str, Any]] = []
+
     # New parallel approach (FAST)
     perf_monitor = st.session_state.perf_monitor
     start_time = time.time()
 
+    # odds_data: dict[sport_key -> snapshot]
     odds_data = fetch_all_sports_parallel(api_key, sport_keys)
 
     fetch_duration = time.time() - start_time
-    perf_monitor.log('api_fetch', fetch_duration, len(selected_sports))
+    # Use len(odds_data) or len(sport_keys) instead of undefined selected_sports
+    perf_monitor.log("api_fetch", fetch_duration, len(odds_data))
     st.success(f"✅ Fetched {len(odds_data)} sports in {fetch_duration:.2f}s")
-    events = snapshot.get("events", [])
-    if not events:
-        continue
+
+    # Iterate over each snapshot and aggregate events
+    for snapshot in odds_data.values():
+        events = snapshot.get("events") or []
+        if not events:
+            continue
 
         filtered = filter_events_by_date_range(events, start_date, end_date, tz_name)
         aggregated_events.extend(filtered)
 
     return compute_best_overall_odds(aggregated_events, tz_name)
+
 
 def calculate_profit(decimal_odds: float, stake: float = 100) -> float:
     return (decimal_odds - 1.0) * stake
