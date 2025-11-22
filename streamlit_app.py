@@ -16,6 +16,13 @@ import streamlit.components.v1 as components
 import pytz
 from pathlib import Path
 from collections import defaultdict
+from ml_speedup import (
+    BatchMLPredictor,
+    get_cached_predictions,
+    hash_games,
+    predict_games_parallel,
+    EmbeddingCachePredictor
+)
 
 from app_core import (
     APISportsBasketballClient,
@@ -8911,15 +8918,14 @@ with main_tab1:
                                     ml_prediction_result = None
                                     if use_ml_predictions and hp is not None and ap is not None:
                                         try:
-                                            ml_prediction_result = ml_predictor.predict_game_outcome(
-                                                home,
-                                                away,
-                                                hp,
-                                                ap,
-                                                home_sentiment['score'],
-                                                away_sentiment['score'],
-                                                context=ml_context,
-                                            )
+                                            games_to_predict = []
+                                            for game in games:
+                                                games_to_predict.append({
+                                                    'id': game.get('id'),
+                                                    'home_team': game['home'],
+                                                    'away_team': game['away'],
+                                                    'sport_key': sport_key
+                                                })
                                         except Exception:
                                             ml_prediction_result = None
 
@@ -8932,15 +8938,14 @@ with main_tab1:
                                         if use_ml_predictions and ap is not None:
                                             if ml_prediction_result is None:
                                                 try:
-                                                    ml_prediction_result = ml_predictor.predict_game_outcome(
-                                                        home,
-                                                        away,
-                                                        hp,
-                                                        ap,
-                                                        home_sentiment['score'],
-                                                        away_sentiment['score'],
-                                                        context=ml_context,
-                                                    )
+                                                    games_to_predict = []
+                                                    for game in games:
+                                                        games_to_predict.append({
+                                                            'id': game.get('id'),
+                                                            'home_team': game['home'],
+                                                            'away_team': game['away'],
+                                                            'sport_key': sport_key
+                                                        })
                                                 except Exception:
                                                     ml_prediction_result = None
                                             if ml_prediction_result:
@@ -9009,15 +9014,14 @@ with main_tab1:
                                         if use_ml_predictions and hp is not None:
                                             if ml_prediction_result is None:
                                                 try:
-                                                    ml_prediction_result = ml_predictor.predict_game_outcome(
-                                                        home,
-                                                        away,
-                                                        hp,
-                                                        ap,
-                                                        home_sentiment['score'],
-                                                        away_sentiment['score'],
-                                                        context=ml_context,
-                                                    )
+                                                    games_to_predict = []
+                                                    for game in games:
+                                                        games_to_predict.append({
+                                                            'id': game.get('id'),
+                                                            'home_team': game['home'],
+                                                            'away_team': game['away'],
+                                                            'sport_key': sport_key
+                                                        })
                                                 except Exception:
                                                     ml_prediction_result = None
                                             if ml_prediction_result:
@@ -10337,15 +10341,14 @@ with main_tab3:
                                             ml_context['sportsdata_home'] = sportsdata_payload
                                         elif leg['side'] == 'away':
                                             ml_context['sportsdata_away'] = sportsdata_payload
-                                    ml_prediction = ml_predictor.predict_game_outcome(
-                                        leg['home_team'],
-                                        leg['away_team'],
-                                        home_price,
-                                        away_price,
-                                        home_sentiment['score'],
-                                        away_sentiment['score'],
-                                        context=ml_context,
-                                    )
+                                    games_to_predict = []
+                                    for game in games:
+                                        games_to_predict.append({
+                                            'id': game.get('id'),
+                                            'home_team': game['home'],
+                                            'away_team': game['away'],
+                                            'sport_key': sport_key
+                                        })
                                     ai_prob = ml_prediction[f"{leg['side']}_prob"]
                                     ai_confidence = ml_prediction['confidence']
                                     ai_edge = ml_prediction['edge']
