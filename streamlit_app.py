@@ -8797,6 +8797,8 @@ if is_vertex_ai_enabled():
     else:
         st.warning("⚠️ Vertex AI analysis not run yet. Best bets will use legacy method. Run 'Vertex AI Master Analysis' first for better results!")
     
+    best_bets_df = st.session_state.get('best_bets_df', pd.DataFrame())
+
     compute_best_bets = st.button(
         "🚀 Generate Best Bets" + (" (with Vertex AI)" if use_vertex_results else " (Legacy Mode)"),
         key="compute_best_bets",
@@ -9044,6 +9046,8 @@ if is_vertex_ai_enabled():
                         sportsdata_clients=sportsdata_clients,
                         apisports_clients=apisports_map,
                     )
+
+            st.session_state['best_bets_df'] = best_bets_df
 
 
             if best_bets_df.empty:
