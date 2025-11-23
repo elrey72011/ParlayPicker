@@ -1,6 +1,6 @@
 """
 Analyze theover.ai CSV uploads with Vertex AI predictions
-Integrates directly into your existing Streamlit app
+FIXED VERSION - Shows ALL results, not just positive EV
 """
 import pandas as pd
 import numpy as np
@@ -127,6 +127,14 @@ def calculate_expected_value(ai_prob: float, line: float, pick: str) -> Dict:
     kelly = (ai_prob * (100/110) - (1 - ai_prob)) / (100/110)
     kelly_pct = max(0, kelly) * 100
     
+    # Confidence level based on edge
+    if abs(edge) > 0.15:
+        confidence_level = 'High'
+    elif abs(edge) > 0.08:
+        confidence_level = 'Medium'
+    else:
+        confidence_level = 'Low'
+    
     return {
         'ai_probability': ai_prob,
         'expected_value': ev,
@@ -134,8 +142,9 @@ def calculate_expected_value(ai_prob: float, line: float, pick: str) -> Dict:
         'edge': edge,
         'edge_percentage': edge * 100,
         'kelly_percentage': kelly_pct,
-        'recommendation': 'BET' if ev_pct > 2 else 'PASS',
-        'confidence': abs(edge)
+        'recommendation': 'BET' if ev_pct > 2 else 'PASS',  # Still calculate but don't filter
+        'confidence': abs(edge),
+        'confidence_level': confidence_level
     }
 
 
@@ -152,6 +161,7 @@ def analyze_theover_spreads_with_vertex(
         return pd.DataFrame()
     
     results = []
+    errors = []
     
     progress_bar = st.progress(0)
     status_text = st.empty()
@@ -181,10 +191,14 @@ def analyze_theover_spreads_with_vertex(
                 enriched.update(ev_data)
                 results.append(enriched)
             else:
-                logger.warning(f"Prediction failed for {home_team} vs {away_team}")
+                error_msg = f"Prediction returned None for {home_team} vs {away_team}"
+                errors.append(error_msg)
+                logger.warning(error_msg)
                 
         except Exception as e:
-            logger.error(f"Error analyzing row {idx}: {e}")
+            error_msg = f"Error analyzing {home_team} vs {away_team}: {str(e)}"
+            errors.append(error_msg)
+            logger.error(error_msg, exc_info=True)
             continue
         
         progress_bar.progress((idx + 1) / len(spreads_df))
@@ -193,41 +207,102 @@ def analyze_theover_spreads_with_vertex(
     progress_bar.empty()
     status_text.empty()
     
+    # Show error summary if any
+    if errors:
+        with st.expander(f"⚠️ {len(errors)} Prediction Errors", expanded=False):
+            for error in errors[:10]:  # Show first 10
+                st.write(f"- {error}")
+    
     results_df = pd.DataFrame(results)
     
-    # Sort by EV (best bets first)
-    if 'ev_percentage' in results_df.columns and len(results_df) > 0:
-        results_df = results_df.sort_values('ev_percentage', ascending=False)
+    # Sort by AI probability (most confident first) instead of just EV
+    if 'confidence' in results_df.columns and len(results_df) > 0:
+        results_df = results_df.sort_values('confidence', ascending=False)
     
     return results_df
 
 
 def show_best_bets_table(results_df: pd.DataFrame):
-    """Display best bets in a nice table"""
+    """Display ALL analysis results with ML predictions - NOT filtered by EV"""
     
-    st.subheader("🎯 Best Betting Opportunities")
-    st.caption("Ranked by Expected Value")
+    st.subheader("🎯 AI Prediction Analysis Results")
+    st.caption("All analyzed games - sorted by prediction confidence")
     
-    # Filter to only positive EV bets
-    good_bets = results_df[results_df['recommendation'] == 'BET'].copy()
-    
-    if len(good_bets) == 0:
-        st.info("No positive EV opportunities found in this set.")
-        st.write("This could mean:")
-        st.write("- The market odds are efficient")
-        st.write("- The AI model needs more training data")
-        st.write("- Current model is using placeholder team stats")
+    if len(results_df) == 0:
+        st.warning("No results from analysis. Check errors above.")
         return
     
-    st.success(f"✅ Found {len(good_bets)} positive EV bets!")
+    st.success(f"✅ Analyzed {len(results_df)} games with AI predictions")
     
-    # Show top 10
-    for idx, bet in good_bets.head(10).iterrows():
+    # Show filtering options
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        show_all = st.checkbox("Show all predictions", value=True, key="show_all_preds")
+        if not show_all:
+            min_confidence = st.select_slider(
+                "Minimum confidence",
+                options=['Low', 'Medium', 'High'],
+                value='Low',
+                key="min_conf"
+            )
+    
+    with col2:
+        show_positive_ev_only = st.checkbox("Show only positive EV", value=False, key="pos_ev_only")
+    
+    # Apply filters
+    display_df = results_df.copy()
+    
+    if not show_all:
+        conf_map = {'Low': 0, 'Medium': 0.08, 'High': 0.15}
+        min_conf_value = conf_map[min_confidence]
+        display_df = display_df[display_df['confidence'] >= min_conf_value]
+    
+    if show_positive_ev_only:
+        display_df = display_df[display_df['recommendation'] == 'BET']
+    
+    if len(display_df) == 0:
+        st.info("No games match the selected filters. Adjust filters above.")
+        return
+    
+    # Summary metrics
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.metric("Total Games", len(display_df))
+    
+    with col2:
+        positive_ev_count = len(display_df[display_df['recommendation'] == 'BET'])
+        st.metric("Positive EV", positive_ev_count)
+    
+    with col3:
+        high_conf = len(display_df[display_df['confidence_level'] == 'High'])
+        st.metric("High Confidence", high_conf)
+    
+    with col4:
+        avg_confidence = display_df['confidence'].mean() * 100
+        st.metric("Avg Edge", f"{avg_confidence:.1f}%")
+    
+    st.markdown("---")
+    
+    # Show detailed cards for each game
+    for idx, bet in display_df.head(20).iterrows():  # Show top 20
+        # Color code based on EV and confidence
+        if bet['ev_percentage'] > 5:
+            icon = '🟢'
+            color = 'green'
+        elif bet['ev_percentage'] > 0:
+            icon = '🟡'
+            color = 'orange'
+        else:
+            icon = '🔴'
+            color = 'red'
+        
         with st.expander(
-            f"{'🟢' if bet['ev_percentage'] > 5 else '🟡'} "
-            f"{bet['away_team']} @ {bet['home_team']} - "
-            f"Pick: {bet['pick']} {bet['line']:+.1f} - "
-            f"EV: {bet['ev_percentage']:+.2f}%",
+            f"{icon} {bet['away_team']} @ {bet['home_team']} - "
+            f"AI: {bet['ai_probability']*100:.1f}% - "
+            f"EV: {bet['ev_percentage']:+.2f}% - "
+            f"{bet['confidence_level']} Confidence",
             expanded=(idx < 3)
         ):
             col1, col2, col3, col4 = st.columns(4)
@@ -235,19 +310,20 @@ def show_best_bets_table(results_df: pd.DataFrame):
             with col1:
                 st.metric(
                     "AI Win Probability",
-                    f"{bet['ai_probability'] * 100:.1f}%"
+                    f"{bet['ai_probability'] * 100:.1f}%",
+                    delta=f"{(bet['ai_probability'] - 0.5) * 100:+.1f}% vs 50/50"
                 )
             
             with col2:
                 st.metric(
                     "Expected Value",
                     f"{bet['ev_percentage']:+.2f}%",
-                    delta=f"{bet['ev_percentage']:+.2f}%"
+                    delta="Bet" if bet['ev_percentage'] > 0 else "Pass"
                 )
             
             with col3:
                 st.metric(
-                    "Edge",
+                    "Edge vs Market",
                     f"{bet['edge_percentage']:+.2f}%"
                 )
             
@@ -262,43 +338,85 @@ def show_best_bets_table(results_df: pd.DataFrame):
             st.write(f"**League:** {bet['league']}")
             st.write(f"**Matchup:** {bet['away_team']} @ {bet['home_team']}")
             st.write(f"**theover.ai Pick:** {bet['pick']} {bet['line']:+.1f}")
+            st.write(f"**Confidence Level:** {bet['confidence_level']}")
+            
+            # Show that these are placeholder stats
+            st.info("ℹ️ **Note:** Currently using placeholder team statistics. "
+                   "Connect real SportsData/API-Sports clients for accurate predictions.")
             
             # Stats
-            with st.expander("📊 Team Stats Used"):
+            with st.expander("📊 Team Stats Used (Placeholder)", expanded=False):
                 col_a, col_b = st.columns(2)
                 with col_a:
                     st.write(f"**{bet['home_team']}**")
                     st.write(f"Win %: {bet['home_win_pct']:.1%}")
                     st.write(f"Avg Points: {bet['home_avg_points']:.1f}")
-                    st.write(f"Last 5: {bet['home_last_5']}-{5-bet['home_last_5']}")
+                    st.write(f"Last 5: {bet['home_last_5']:.0f}-{5-bet['home_last_5']:.0f}")
                 with col_b:
                     st.write(f"**{bet['away_team']}**")
                     st.write(f"Win %: {bet['away_win_pct']:.1%}")
                     st.write(f"Avg Points: {bet['away_avg_points']:.1f}")
-                    st.write(f"Last 5: {bet['away_last_5']}-{5-bet['away_last_5']}")
+                    st.write(f"Last 5: {bet['away_last_5']:.0f}-{5-bet['away_last_5']:.0f}")
+    
+    if len(display_df) > 20:
+        st.info(f"Showing top 20 of {len(display_df)} results. "
+               f"Download full results below.")
     
     # Full table
-    st.subheader("📊 All Positive EV Bets")
+    st.markdown("---")
+    st.subheader("📊 Full Results Table")
     
-    display_df = good_bets[[
+    display_cols = [
         'league', 'home_team', 'away_team', 'pick', 'line',
         'ai_probability', 'ev_percentage', 'edge_percentage', 
-        'kelly_percentage', 'recommendation'
-    ]].copy()
+        'confidence_level', 'recommendation'
+    ]
+    
+    table_df = display_df[display_cols].copy()
     
     # Format for display
-    display_df['ai_probability'] = display_df['ai_probability'].apply(lambda x: f"{x*100:.1f}%")
-    display_df['ev_percentage'] = display_df['ev_percentage'].apply(lambda x: f"{x:+.2f}%")
-    display_df['edge_percentage'] = display_df['edge_percentage'].apply(lambda x: f"{x:+.2f}%")
-    display_df['kelly_percentage'] = display_df['kelly_percentage'].apply(lambda x: f"{x:.1f}%")
+    table_df['ai_probability'] = table_df['ai_probability'].apply(lambda x: f"{x*100:.1f}%")
+    table_df['ev_percentage'] = table_df['ev_percentage'].apply(lambda x: f"{x:+.2f}%")
+    table_df['edge_percentage'] = table_df['edge_percentage'].apply(lambda x: f"{x:+.2f}%")
     
-    st.dataframe(display_df, use_container_width=True)
+    # Rename columns for display
+    table_df.columns = [
+        'League', 'Home', 'Away', 'Pick', 'Line',
+        'AI Win %', 'EV %', 'Edge %', 'Confidence', 'Rec'
+    ]
+    
+    st.dataframe(table_df, use_container_width=True, height=400)
     
     # Download
     csv = results_df.to_csv(index=False)
     st.download_button(
-        "📥 Download Full Analysis",
+        "📥 Download Full Analysis CSV",
         csv,
         f"vertex_ai_analysis_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}.csv",
-        "text/csv"
+        "text/csv",
+        key="download_analysis"
     )
+    
+    # Explanation
+    with st.expander("ℹ️ Understanding the Results"):
+        st.write("""
+        **AI Win Probability:** The model's predicted chance of the pick winning
+        
+        **Expected Value (EV):** Expected profit/loss per $100 bet
+        - Positive = Model thinks bet has value
+        - Negative = Model says pass
+        
+        **Edge:** How much the model differs from 50/50
+        - Higher edge = More confident prediction
+        
+        **Confidence Level:**
+        - High: Edge > 15%
+        - Medium: Edge 8-15%
+        - Low: Edge < 8%
+        
+        **⚠️ Important:** Currently using placeholder team statistics. 
+        For real predictions, connect to:
+        1. SportsData.io API (for actual team stats)
+        2. Your sentiment analyzer (for news/social data)
+        3. Trained ML models (from the pipeline)
+        """)
