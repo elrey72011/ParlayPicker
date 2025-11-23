@@ -8271,6 +8271,8 @@ with main_tab1:
     # After "Best Overall Odds for Date Range" section
 
 # VERTEX AI MASTER ANALYSIS
+
+# VERTEX AI MASTER ANALYSIS
 if is_vertex_ai_enabled():
     st.markdown("---")
     st.markdown("---")
@@ -8280,7 +8282,6 @@ if is_vertex_ai_enabled():
     if st.button("🌟 Run Vertex AI Master Analysis", key="vertex_master_btn", type="primary"):
         with st.spinner("Running comprehensive AI analysis... Consolidating all data sources..."):
             try:
-                # Get games from The Odds API
                 selected_sports = []
                 if 'NCAAF' in st.session_state.get('selected_sports', []):
                     selected_sports.append('americanfootball_ncaaf')
@@ -8291,20 +8292,17 @@ if is_vertex_ai_enabled():
                 if 'NHL' in st.session_state.get('selected_sports', []):
                     selected_sports.append('icehockey_nhl')
                 
-                # Default to all if none selected
                 if not selected_sports:
                     selected_sports = ['basketball_nba', 'americanfootball_ncaaf', 'basketball_ncaab', 'icehockey_nhl']
                 
-    ## Fetch games - FIXED VERSION
-        all_games = []
+                all_games = []
                 
-        # Initialize odds_client if it doesn't exist
-        if 'odds_client' not in locals():
-            try:
-                from app_core import TheOddsAPIClient
-                    odds_api_key = resolve_odds_api_key()
-                    if odds_api_key:
-                        odds_client = TheOddsAPIClient(odds_api_key)
+                if 'odds_client' not in locals():
+                    try:
+                        from app_core import TheOddsAPIClient
+                        odds_api_key = resolve_odds_api_key()
+                        if odds_api_key:
+                            odds_client = TheOddsAPIClient(odds_api_key)
                             logger.info("✅ The Odds API client initialized")
                         else:
                             odds_client = None
@@ -8312,41 +8310,40 @@ if is_vertex_ai_enabled():
                     except Exception as e:
                         logger.warning(f"Could not initialize odds client: {e}")
                         odds_client = None
-
-# Now safely use odds_client
-if odds_client:
-    st.info("📥 Fetching games from The Odds API...")
-    for sport in selected_sports:
-        try:
-            games = odds_client.get_odds(sport)
-            for game in games:
-                game['sport_key'] = sport
-            all_games.extend(games)
-            st.success(f"✅ Fetched {len(games)} {sport} games")
-        except Exception as e:
-            st.warning(f"⚠️ Error fetching {sport}: {e}")
-            logger.error(f"Error fetching {sport}: {e}")
-else:
-    st.warning("⚠️ The Odds API not configured")
-    st.info("💡 Using theover.ai data if available...")
-    
-    # Fallback: try to use theover.ai data
-    if 'theover_spreads_data' in locals() and theover_spreads_data is not None:
-        for _, row in theover_spreads_data.iterrows():
-            all_games.append({
-                'home_team': row.get('home_team') or row.get('HomeTeam'),
-                'away_team': row.get('away_team') or row.get('AwayTeam'),
-                'sport_key': row.get('league', 'NBA').lower(),
-                'commence_time': None,
-            })
-        st.info(f"📊 Loaded {len(all_games)} games from theover.ai")
+                
+                if odds_client:
+                    st.info("📥 Fetching games from The Odds API...")
+                    for sport in selected_sports:
+                        try:
+                            games = odds_client.get_odds(sport)
+                            for game in games:
+                                game['sport_key'] = sport
+                            all_games.extend(games)
+                            st.success(f"✅ Fetched {len(games)} {sport} games")
+                        except Exception as e:
+                            st.warning(f"⚠️ Error fetching {sport}: {e}")
+                            logger.error(f"Error fetching {sport}: {e}")
+                else:
+                    st.warning("⚠️ The Odds API not configured")
+                    st.info("💡 Using theover.ai data if available...")
+                    
+                    if 'theover_spreads_data' in locals() and theover_spreads_data is not None:
+                        for _, row in theover_spreads_data.iterrows():
+                            all_games.append({
+                                'home_team': row.get('home_team') or row.get('HomeTeam'),
+                                'away_team': row.get('away_team') or row.get('AwayTeam'),
+                                'sport_key': row.get('league', 'NBA').lower(),
+                                'commence_time': None,
+                            })
+                        st.info(f"📊 Loaded {len(all_games)} games from theover.ai")
                 
                 if not all_games:
-                    st.error("No games found. Make sure The Odds API key is configured.")
+                    st.error("❌ No games found. Either:")
+                    st.write("- Configure The Odds API key in settings")
+                    st.write("- Upload theover.ai CSV files above")
                 else:
-                    st.info(f"Analyzing {len(all_games)} games across all selected sports...")
+                    st.info(f"🤖 Analyzing {len(all_games)} games across all selected sports...")
                     
-                    # Initialize master analyzer with ALL your clients
                     analyzer = VertexMasterAnalyzer(
                         odds_api_client=odds_client if 'odds_client' in locals() else None,
                         sportsdata_clients=sportsdata_clients if 'sportsdata_clients' in locals() else {},
@@ -8364,20 +8361,21 @@ else:
                         }
                     )
                     
-                    # Analyze all games
                     results_df = analyzer.analyze_all_games(all_games, league='multi')
                     
-                    # Show results
                     if not results_df.empty:
+                        st.success(f"✅ Analysis complete! Found {len(results_df)} opportunities")
                         show_vertex_master_analysis(results_df)
                     else:
-                        st.warning("No results from analysis")
+                        st.warning("⚠️ No results from analysis. Try adjusting your filters.")
                 
             except Exception as e:
-                st.error(f"Error in master analysis: {e}")
+                st.error(f"❌ Error in master analysis: {str(e)}")
                 logger.error(f"Vertex master analysis error: {e}", exc_info=True)
-                import traceback
-                st.code(traceback.format_exc())
+                
+                with st.expander("🔍 Debug Information"):
+                    import traceback
+                    st.code(traceback.format_exc())
     
     st.caption(
         "AI filters applied: sentiment {sentiment_state}, ML {ml_state}, confidence ≥ {conf:.0%}, parlay probability {min_prob:.0%}-{max_prob:.0%}".format(
