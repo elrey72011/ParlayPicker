@@ -1398,8 +1398,8 @@ def render_sidebar_controls() -> Dict[str, Any]:
         if ai_expander.button(
             toggle_label,
             key="toggle_ml_predictions_button",
-            width='stretch',
             help=toggle_help,
+            use_container_width=True,
         ):
             use_ml_predictions = not use_ml_predictions
             st.session_state['use_ml_predictions'] = use_ml_predictions
