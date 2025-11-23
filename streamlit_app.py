@@ -8243,32 +8243,32 @@ if is_vertex_ai_enabled():
         st.info("💡 Enable Vertex AI in settings to get AI-powered bet analysis")
     with st.expander("📋 Or paste theover.ai data", expanded=False):
         st.info(
-                """
-                **Paste Format (comma or tab-separated)**
-                ```
-                League,AwayTeam,HomeTeam,Pick,WinProbability
-                NHL,Maple Leafs,Canadiens,Over,0.57
-                ```
-                """
+            """
+            **Paste Format (comma or tab-separated)**
+            ```
+            League,AwayTeam,HomeTeam,Pick,WinProbability
+            NHL,Maple Leafs,Canadiens,Over,0.57
+            ```
+            """
         )
         pasted_data = st.text_area(
             "Paste data here",
             height=150,
             key=f"{key_prefix}_paste",
         )
-            if dataset is None and pasted_data.strip():
-                try:
-                    from io import StringIO
+        if dataset is None and pasted_data.strip():
+            try:
+                from io import StringIO
 
-                    if "\t" in pasted_data and "," not in pasted_data:
-                        dataset = pd.read_csv(StringIO(pasted_data), sep="\t")
-                    else:
-                        dataset = pd.read_csv(StringIO(pasted_data))
+                if "\t" in pasted_data and "," not in pasted_data:
+                    dataset = pd.read_csv(StringIO(pasted_data), sep="\t")
+                else:
+                    dataset = pd.read_csv(StringIO(pasted_data))
 
-                    st.success(f"✅ Loaded {len(dataset)} rows from pasted theover.ai data")
-                    st.dataframe(dataset.head(10), width='stretch')
-                except Exception as exc:
-                    st.error(f"Error parsing data: {exc}")
+                st.success(f"✅ Loaded {len(dataset)} rows from pasted theover.ai data")
+                st.dataframe(dataset.head(10), width='stretch')
+            except Exception as exc:
+                st.error(f"Error parsing data: {exc}")
 
         return dataset
 
