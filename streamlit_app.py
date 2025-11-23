@@ -1357,13 +1357,20 @@ def render_sidebar_controls() -> Dict[str, Any]:
     st.session_state['day_window'] = day_window
 
     default_sports = st.session_state.setdefault('selected_sports', APP_CFG["sports_common"][:6])
-    sports = sidebar.multiselect(
-        "Sports",
-        options=APP_CFG["sports_common"],
-        default=default_sports,
-        format_func=format_sport_label,
-        key="selected_sports",
-    )
+    try:
+        sports = sidebar.multiselect(
+            "Sports",
+            options=APP_CFG["sports_common"],
+            default=default_sports,
+            format_func=format_sport_label,
+            key="selected_sports",
+        )
+    except TypeError as exc:
+        logger.exception("Sidebar sports selector failed; falling back to default sports", exc_info=exc)
+        sidebar.warning(
+            "⚠️ Sports selector failed to format options. Using default sports list instead."
+        )
+        sports = default_sports
 
     # --------------------- AI settings ---------------------
     ai_expander = sidebar.expander("🤖 AI Settings", expanded=False)
@@ -1391,8 +1398,8 @@ def render_sidebar_controls() -> Dict[str, Any]:
         if ai_expander.button(
             toggle_label,
             key="toggle_ml_predictions_button",
-            width='stretch',
             help=toggle_help,
+            use_container_width=True,
         ):
             use_ml_predictions = not use_ml_predictions
             st.session_state['use_ml_predictions'] = use_ml_predictions
