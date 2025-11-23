@@ -330,39 +330,48 @@ class VertexMasterAnalyzer:
         Build numerical feature vector for Vertex AI
         
         Returns: List of 20-30 key features in consistent order
+        
+        FIXED: Handles None values properly to prevent division errors
         """
+        
+        # Helper function to safely get values, handling None
+        def safe_get(key, default):
+            """Get value, returning default if None or missing"""
+            value = comprehensive_features.get(key, default)
+            return value if value is not None else default
+        
         features = [
             # Team strength
-            comprehensive_features.get('home_win_pct', 0.5),
-            comprehensive_features.get('away_win_pct', 0.5),
-            comprehensive_features.get('win_pct_diff', 0),
+            safe_get('home_win_pct', 0.5),
+            safe_get('away_win_pct', 0.5),
+            safe_get('win_pct_diff', 0),
             
             # Offense/Defense
-            comprehensive_features.get('home_avg_points', 100) / 100,
-            comprehensive_features.get('away_avg_points', 100) / 100,
-            comprehensive_features.get('home_avg_points_allowed', 100) / 100,
-            comprehensive_features.get('away_avg_points_allowed', 100) / 100,
-            comprehensive_features.get('off_def_matchup_home', 0) / 20,
-            comprehensive_features.get('off_def_matchup_away', 0) / 20,
+            safe_get('home_avg_points', 100) / 100,
+            safe_get('away_avg_points', 100) / 100,
+            safe_get('home_avg_points_allowed', 100) / 100,
+            safe_get('away_avg_points_allowed', 100) / 100,
+            safe_get('off_def_matchup_home', 0) / 20,
+            safe_get('off_def_matchup_away', 0) / 20,
             
             # Recent form
-            comprehensive_features.get('home_last_5_wins', 0) / 5,
-            comprehensive_features.get('away_last_5_wins', 0) / 5,
-            comprehensive_features.get('form_momentum_diff', 0) / 5,
+            safe_get('home_last_5_wins', 0) / 5,
+            safe_get('away_last_5_wins', 0) / 5,
+            safe_get('form_momentum_diff', 0) / 5,
             
             # Market data
-            comprehensive_features.get('implied_home_prob', 0.5),
-            comprehensive_features.get('home_spread', 0) / 20,
-            comprehensive_features.get('total_line', 0) / 200,
+            safe_get('implied_home_prob', 0.5),
+            safe_get('home_spread', 0) / 20,  # FIXED: Now handles None
+            safe_get('total_line', 0) / 200,
             
             # Sentiment
-            comprehensive_features.get('sentiment_diff', 0),
+            safe_get('sentiment_diff', 0),
             
             # Other models
-            comprehensive_features.get('local_ml_prob', 0.5),
-            comprehensive_features.get('local_ml_confidence', 0),
-            comprehensive_features.get('theover_probability', 0.5),
-            comprehensive_features.get('consensus_prob', 0.5),
+            safe_get('local_ml_prob', 0.5),
+            safe_get('local_ml_confidence', 0),
+            safe_get('theover_probability', 0.5),
+            safe_get('consensus_prob', 0.5),
         ]
         
         return features
