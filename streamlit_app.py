@@ -8798,7 +8798,7 @@ if is_vertex_ai_enabled():
         fetch_best_odds = st.button(
             "Show Best Odds",
             key="best_odds_button",
-            width='stretch',
+            use_container_width=True,
         )
 
     if fetch_best_odds:
