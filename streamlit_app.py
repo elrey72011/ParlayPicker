@@ -8241,8 +8241,8 @@ if is_vertex_ai_enabled():
                 show_best_bets_table(results_df)
 else:
     st.info("💡 Enable Vertex AI in settings to get AI-powered bet analysis")
-        with st.expander("📋 Or paste theover.ai data", expanded=False):
-            st.info(
+with st.expander("📋 Or paste theover.ai data", expanded=False):
+    st.info(
                 """
                 **Paste Format (comma or tab-separated)**
                 ```
