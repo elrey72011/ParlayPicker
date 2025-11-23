@@ -8211,6 +8211,36 @@ with main_tab1:
             except Exception as exc:
                 st.error(f"Error loading CSV: {exc}")
 
+
+        # After: ✅ Loaded 65 rows from theover.ai
+
+from theover_vertex_analyzer import (
+    analyze_theover_spreads_with_vertex,
+    show_best_bets_table
+)
+
+# Add Vertex AI analysis button
+if is_vertex_ai_enabled():
+    st.markdown("---")
+    
+    if st.button("🤖 Analyze with Vertex AI", key="analyze_spreads_vertex"):
+        with st.spinner("Running AI analysis on all picks..."):
+            # Get your clients
+            sportsdata_client = sportsdata_clients.get('nba') if 'sportsdata_clients' in globals() else None
+            apisports_client = apisports_client if 'apisports_client' in globals() else None
+            
+            # Analyze
+            results_df = analyze_theover_spreads_with_vertex(
+                spreads_df,  # Your uploaded DataFrame
+                sportsdata_client,
+                apisports_client
+            )
+            
+            # Show results
+            if not results_df.empty:
+                show_best_bets_table(results_df)
+else:
+    st.info("💡 Enable Vertex AI in settings to get AI-powered bet analysis")
         with st.expander("📋 Or paste theover.ai data", expanded=False):
             st.info(
                 """
