@@ -8295,17 +8295,51 @@ if is_vertex_ai_enabled():
                 if not selected_sports:
                     selected_sports = ['basketball_nba', 'americanfootball_ncaaf', 'basketball_ncaab', 'icehockey_nhl']
                 
-                # Fetch games
+        ## Fetch games - FIXED VERSION
                 all_games = []
-                if odds_client:
-                    for sport in selected_sports:
-                        try:
-                            games = odds_client.get_odds(sport)
-                            for game in games:
-                                game['sport_key'] = sport
-                            all_games.extend(games)
-                        except Exception as e:
-                            logger.error(f"Error fetching {sport}: {e}")
+                
+                # Initialize odds_client if it doesn't exist
+                if 'odds_client' not in locals():
+                    try:
+                        from app_core import TheOddsAPIClient
+                        odds_api_key = resolve_odds_api_key()
+                        if odds_api_key:
+                            odds_client = TheOddsAPIClient(odds_api_key)
+                            logger.info("✅ The Odds API client initialized")
+                        else:
+                            odds_client = None
+                            logger.warning("⚠️ No Odds API key found")
+                    except Exception as e:
+                        logger.warning(f"Could not initialize odds client: {e}")
+                        odds_client = None
+
+# Now safely use odds_client
+if odds_client:
+    st.info("📥 Fetching games from The Odds API...")
+    for sport in selected_sports:
+        try:
+            games = odds_client.get_odds(sport)
+            for game in games:
+                game['sport_key'] = sport
+            all_games.extend(games)
+            st.success(f"✅ Fetched {len(games)} {sport} games")
+        except Exception as e:
+            st.warning(f"⚠️ Error fetching {sport}: {e}")
+            logger.error(f"Error fetching {sport}: {e}")
+else:
+    st.warning("⚠️ The Odds API not configured")
+    st.info("💡 Using theover.ai data if available...")
+    
+    # Fallback: try to use theover.ai data
+    if 'theover_spreads_data' in locals() and theover_spreads_data is not None:
+        for _, row in theover_spreads_data.iterrows():
+            all_games.append({
+                'home_team': row.get('home_team') or row.get('HomeTeam'),
+                'away_team': row.get('away_team') or row.get('AwayTeam'),
+                'sport_key': row.get('league', 'NBA').lower(),
+                'commence_time': None,
+            })
+        st.info(f"📊 Loaded {len(all_games)} games from theover.ai")
                 
                 if not all_games:
                     st.error("No games found. Make sure The Odds API key is configured.")
