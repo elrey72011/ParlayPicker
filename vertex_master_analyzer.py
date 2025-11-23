@@ -638,33 +638,34 @@ def show_vertex_master_analysis(results_df: pd.DataFrame):
                 st.write(f"**Vertex AI**")
                 st.write(f"**{game['vertex_ai_prob']*100:.0f}%**")
             
-            # Fourth row - team analysis
-            with st.expander("📈 Detailed Team Analysis", expanded=False):
-                team_cols = st.columns(2)
-                
-                with team_cols[0]:
-                    st.markdown(f"**🏠 {game['home_team']}**")
-                    st.write(f"Win %: {game['home_win_pct']:.1%}")
-                    st.write(f"Avg Points: {game['home_avg_points']:.1f}")
-                    st.write(f"Avg Points Allowed: {game['home_avg_points_allowed']:.1f}")
-                    st.write(f"Last 5: {game['home_last_5_wins']}-{5-game['home_last_5_wins']}")
-                    st.write(f"Form: {game.get('home_trend', 'neutral').capitalize()}")
-                    st.write(f"Sentiment: {game['home_sentiment']:+.2f}")
-                
-                with team_cols[1]:
-                    st.markdown(f"**✈️ {game['away_team']}**")
-                    st.write(f"Win %: {game['away_win_pct']:.1%}")
-                    st.write(f"Avg Points: {game['away_avg_points']:.1f}")
-                    st.write(f"Avg Points Allowed: {game['away_avg_points_allowed']:.1f}")
-                    st.write(f"Last 5: {game['away_last_5_wins']}-{5-game['away_last_5_wins']}")
-                    st.write(f"Form: {game.get('away_trend', 'neutral').capitalize()}")
-                    st.write(f"Sentiment: {game['away_sentiment']:+.2f}")
-                
-                # Matchup analysis
-                st.markdown("**⚔️ Matchup Analysis:**")
-                st.write(f"Win% Differential: {game['win_pct_diff']:+.1%}")
-                st.write(f"Form Momentum: {game.get('form_momentum_diff', 0):+.1f}")
-                st.write(f"Sentiment Differential: {game.get('sentiment_diff', 0):+.2f}")
+            # Fourth row - team analysis (NO NESTED EXPANDER!)
+            st.markdown("---")
+            st.markdown("**📈 Detailed Team Analysis**")
+            team_cols = st.columns(2)
+            
+            with team_cols[0]:
+                st.markdown(f"**🏠 {game['home_team']}**")
+                st.write(f"Win %: {game['home_win_pct']:.1%}")
+                st.write(f"Avg Points: {game['home_avg_points']:.1f}")
+                st.write(f"Avg Points Allowed: {game['home_avg_points_allowed']:.1f}")
+                st.write(f"Last 5: {game['home_last_5_wins']}-{5-game['home_last_5_wins']}")
+                st.write(f"Form: {game.get('home_trend', 'neutral').capitalize()}")
+                st.write(f"Sentiment: {game['home_sentiment']:+.2f}")
+            
+            with team_cols[1]:
+                st.markdown(f"**✈️ {game['away_team']}**")
+                st.write(f"Win %: {game['away_win_pct']:.1%}")
+                st.write(f"Avg Points: {game['away_avg_points']:.1f}")
+                st.write(f"Avg Points Allowed: {game['away_avg_points_allowed']:.1f}")
+                st.write(f"Last 5: {game['away_last_5_wins']}-{5-game['away_last_5_wins']}")
+                st.write(f"Form: {game.get('away_trend', 'neutral').capitalize()}")
+                st.write(f"Sentiment: {game['away_sentiment']:+.2f}")
+            
+            # Matchup analysis
+            st.markdown("**⚔️ Matchup Analysis:**")
+            st.write(f"Win% Differential: {game['win_pct_diff']:+.1%}")
+            st.write(f"Form Momentum: {game.get('form_momentum_diff', 0):+.1f}")
+            st.write(f"Sentiment Differential: {game.get('sentiment_diff', 0):+.2f}")
             
             # Fifth row - theover.ai pick if available
             if game.get('theover_has_pick', 0) == 1:
