@@ -443,105 +443,370 @@ class VertexMasterAnalyzer:
 
 
 def show_vertex_master_analysis(results_df: pd.DataFrame):
-    """Display Vertex AI Master Analysis results"""
+    """Display ALL games ranked by Vertex AI - complete ranked list from 1 to N"""
     
-    st.header("🏆 Vertex AI Master Analysis")
-    st.caption("Ultimate best bets powered by ALL data sources + Vertex AI")
+    st.header("🏆 Vertex AI Master Analysis - Complete Rankings")
+    st.caption("ALL games ranked by expected value - powered by comprehensive data sources")
     
     if results_df.empty:
         st.info("No games analyzed yet")
         return
     
-    # Filter to positive EV
-    best_bets = results_df[results_df['recommendation'] == 'BET'].copy()
+    # Add rank column
+    results_df['rank'] = range(1, len(results_df) + 1)
     
-    if len(best_bets) == 0:
-        st.warning("No positive EV bets found by Vertex AI")
-        st.write("Market appears efficient for these games")
+    # Summary stats
+    total_games = len(results_df)
+    positive_ev = len(results_df[results_df['expected_value'] > 0])
+    best_ev = results_df.iloc[0]['expected_value'] if len(results_df) > 0 else 0
+    
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("Total Games Analyzed", total_games)
+    with col2:
+        st.metric("Positive EV Opportunities", positive_ev)
+    with col3:
+        st.metric("Best EV", f"${best_ev:.2f}")
+    with col4:
+        avg_edge = results_df['vertex_ai_edge'].mean() * 100
+        st.metric("Avg Vertex AI Edge", f"{avg_edge:+.2f}%")
+    
+    st.markdown("---")
+    
+    # COMPLETE RANKED LIST - ALL GAMES
+    st.subheader(f"📊 Complete Rankings (1-{total_games})")
+    
+    # Add filter options
+    col_filter1, col_filter2, col_filter3 = st.columns(3)
+    
+    with col_filter1:
+        show_only_positive = st.checkbox("Show only positive EV bets", value=False)
+    
+    with col_filter2:
+        min_edge = st.slider("Minimum edge %", -50.0, 50.0, -50.0, 0.5)
+    
+    with col_filter3:
+        expand_top_n = st.number_input("Auto-expand top N", min_value=0, max_value=20, value=3)
+    
+    # Filter dataframe
+    filtered_df = results_df.copy()
+    if show_only_positive:
+        filtered_df = filtered_df[filtered_df['expected_value'] > 0]
+    
+    filtered_df = filtered_df[filtered_df['vertex_ai_edge'] * 100 >= min_edge]
+    
+    if len(filtered_df) == 0:
+        st.warning("No games match your filters")
         return
     
-    st.success(f"✅ Vertex AI found {len(best_bets)} positive EV opportunities!")
+    st.write(f"Showing {len(filtered_df)} of {total_games} games")
     
-    # Top 5 bets
-    st.subheader("🎯 Top 5 Best Bets (Vertex AI)")
-    
-    for idx, bet in best_bets.head(5).iterrows():
+    # Display ALL games ranked
+    for idx, (_, game) in enumerate(filtered_df.iterrows(), 1):
+        rank = game['rank']
+        ev = game['expected_value']
+        edge = game['vertex_ai_edge'] * 100
+        
+        # Color coding
+        if ev > 10:
+            emoji = "🌟"  # Excellent bet
+            color = "🟢"
+        elif ev > 5:
+            emoji = "💚"  # Great bet
+            color = "🟢"
+        elif ev > 0:
+            emoji = "🟡"  # Good bet
+            color = "🟡"
+        elif ev > -5:
+            emoji = "⚪"  # Neutral
+            color = "⚪"
+        else:
+            emoji = "🔴"  # Avoid
+            color = "🔴"
+        
+        # Expandable for each game
         with st.expander(
-            f"🌟 #{idx+1}: {bet['away_team']} @ {bet['home_team']} - "
-            f"EV: ${bet['expected_value']:.2f} | Edge: {bet['vertex_ai_edge']*100:+.1f}%",
-            expanded=(idx == 0)
+            f"{color} **#{rank}** | {emoji} {game['away_team']} @ {game['home_team']} | "
+            f"EV: ${ev:+.2f} | Edge: {edge:+.1f}% | Vertex AI: {game['vertex_ai_prob']*100:.0f}%",
+            expanded=(idx <= expand_top_n)
         ):
-            # Main metrics
-            col1, col2, col3, col4 = st.columns(4)
+            # Top row - main metrics
+            metric_cols = st.columns(5)
             
-            with col1:
+            with metric_cols[0]:
                 st.metric(
-                    "Vertex AI Probability",
-                    f"{bet['vertex_ai_prob']*100:.1f}%",
-                    help="Ultimate AI prediction"
+                    "Vertex AI Win %",
+                    f"{game['vertex_ai_prob']*100:.1f}%",
+                    help="Ultimate AI prediction combining all sources"
                 )
             
-            with col2:
+            with metric_cols[1]:
                 st.metric(
-                    "Market Implied Prob",
-                    f"{bet['implied_home_prob']*100:.1f}%",
-                    help="What the odds imply"
+                    "Market Implied %",
+                    f"{game['implied_home_prob']*100:.1f}%",
+                    help="What the betting market thinks"
                 )
             
-            with col3:
+            with metric_cols[2]:
                 st.metric(
                     "Edge",
-                    f"{bet['vertex_ai_edge']*100:+.2f}%",
-                    delta=f"{bet['vertex_ai_edge']*100:+.2f}%"
+                    f"{edge:+.2f}%",
+                    delta=f"{edge:+.2f}%",
+                    help="Vertex AI advantage over market"
                 )
             
-            with col4:
+            with metric_cols[3]:
                 st.metric(
                     "Expected Value",
-                    f"${bet['expected_value']:.2f}",
+                    f"${ev:+.2f}",
+                    delta=f"${ev:+.2f}",
                     help="Expected profit per $100 bet"
                 )
             
-            # All data sources
-            st.write("**📊 Data Source Consensus:**")
-            cols = st.columns(4)
+            with metric_cols[4]:
+                recommendation = "✅ BET" if ev > 5 else "⚠️ SMALL BET" if ev > 0 else "❌ PASS"
+                st.metric("Recommendation", recommendation)
             
-            with cols[0]:
-                st.write(f"**Market:** {bet['implied_home_prob']*100:.0f}%")
-            with cols[1]:
-                st.write(f"**Your ML:** {bet.get('local_ml_prob', 0.5)*100:.0f}%")
-            with cols[2]:
-                st.write(f"**theover.ai:** {bet.get('theover_probability', 0.5)*100:.0f}%")
-            with cols[3]:
-                st.write(f"**Vertex AI:** {bet['vertex_ai_prob']*100:.0f}%")
+            # Second row - odds information
+            st.markdown("**📊 Market Odds:**")
+            odds_cols = st.columns(4)
             
-            # Team stats
-            with st.expander("📈 Full Analysis"):
-                st.write(f"**Home:** {bet['home_team']}")
-                st.write(f"  Win%: {bet['home_win_pct']:.1%} | Avg Points: {bet['home_avg_points']:.1f}")
-                st.write(f"  Last 5: {bet['home_last_5_wins']}-{5-bet['home_last_5_wins']}")
-                st.write(f"  Sentiment: {bet['home_sentiment']:+.2f}")
+            with odds_cols[0]:
+                ml_odds = game.get('home_ml_odds', 'N/A')
+                st.write(f"**Moneyline:** {ml_odds}")
+            
+            with odds_cols[1]:
+                spread = game.get('home_spread', 'N/A')
+                st.write(f"**Spread:** {spread}")
+            
+            with odds_cols[2]:
+                total = game.get('total_line', 'N/A')
+                st.write(f"**Total:** {total}")
+            
+            with odds_cols[3]:
+                bookies = game.get('num_bookmakers', 0)
+                st.write(f"**Bookmakers:** {bookies}")
+            
+            # Third row - data source consensus
+            st.markdown("**🤖 AI Model Consensus:**")
+            consensus_cols = st.columns(5)
+            
+            with consensus_cols[0]:
+                st.write(f"**Market**")
+                st.write(f"{game['implied_home_prob']*100:.0f}%")
+            
+            with consensus_cols[1]:
+                local_ml = game.get('local_ml_prob', 0.5)
+                st.write(f"**Your ML**")
+                st.write(f"{local_ml*100:.0f}%")
+            
+            with consensus_cols[2]:
+                theover = game.get('theover_probability', 0.5)
+                has_theover = game.get('theover_has_pick', 0)
+                st.write(f"**theover.ai**")
+                st.write(f"{theover*100:.0f}%" if has_theover else "N/A")
+            
+            with consensus_cols[3]:
+                consensus = game.get('consensus_prob', 0.5)
+                st.write(f"**Consensus**")
+                st.write(f"{consensus*100:.0f}%")
+            
+            with consensus_cols[4]:
+                st.write(f"**Vertex AI**")
+                st.write(f"**{game['vertex_ai_prob']*100:.0f}%**")
+            
+            # Fourth row - team analysis
+            with st.expander("📈 Detailed Team Analysis", expanded=False):
+                team_cols = st.columns(2)
                 
-                st.write(f"**Away:** {bet['away_team']}")
-                st.write(f"  Win%: {bet['away_win_pct']:.1%} | Avg Points: {bet['away_avg_points']:.1f}")
-                st.write(f"  Last 5: {bet['away_last_5_wins']}-{5-bet['away_last_5_wins']}")
-                st.write(f"  Sentiment: {bet['away_sentiment']:+.2f}")
+                with team_cols[0]:
+                    st.markdown(f"**🏠 {game['home_team']}**")
+                    st.write(f"Win %: {game['home_win_pct']:.1%}")
+                    st.write(f"Avg Points: {game['home_avg_points']:.1f}")
+                    st.write(f"Avg Points Allowed: {game['home_avg_points_allowed']:.1f}")
+                    st.write(f"Last 5: {game['home_last_5_wins']}-{5-game['home_last_5_wins']}")
+                    st.write(f"Form: {game.get('home_trend', 'neutral').capitalize()}")
+                    st.write(f"Sentiment: {game['home_sentiment']:+.2f}")
+                
+                with team_cols[1]:
+                    st.markdown(f"**✈️ {game['away_team']}**")
+                    st.write(f"Win %: {game['away_win_pct']:.1%}")
+                    st.write(f"Avg Points: {game['away_avg_points']:.1f}")
+                    st.write(f"Avg Points Allowed: {game['away_avg_points_allowed']:.1f}")
+                    st.write(f"Last 5: {game['away_last_5_wins']}-{5-game['away_last_5_wins']}")
+                    st.write(f"Form: {game.get('away_trend', 'neutral').capitalize()}")
+                    st.write(f"Sentiment: {game['away_sentiment']:+.2f}")
+                
+                # Matchup analysis
+                st.markdown("**⚔️ Matchup Analysis:**")
+                st.write(f"Win% Differential: {game['win_pct_diff']:+.1%}")
+                st.write(f"Form Momentum: {game.get('form_momentum_diff', 0):+.1f}")
+                st.write(f"Sentiment Differential: {game.get('sentiment_diff', 0):+.2f}")
+            
+            # Fifth row - theover.ai pick if available
+            if game.get('theover_has_pick', 0) == 1:
+                st.info(f"💡 theover.ai pick: **{game['theover_pick']}** ({game['theover_probability']*100:.0f}%)")
     
-    # Full table
-    st.subheader("📋 All Positive EV Bets")
+    st.markdown("---")
     
-    display_cols = ['home_team', 'away_team', 'vertex_ai_prob', 'implied_home_prob', 
-                   'vertex_ai_edge', 'expected_value', 'recommendation']
+    # Summary table - compact view of ALL games
+    st.subheader("📋 Quick Reference Table - All Games")
     
-    if all(col in best_bets.columns for col in display_cols):
-        display_df = best_bets[display_cols].copy()
-        st.dataframe(display_df, use_container_width=True)
+    table_df = filtered_df[[
+        'rank', 'home_team', 'away_team', 
+        'vertex_ai_prob', 'implied_home_prob', 'vertex_ai_edge',
+        'expected_value', 'recommendation'
+    ]].copy()
     
-    # Download
-    csv = results_df.to_csv(index=False)
-    st.download_button(
-        "📥 Download Complete Analysis",
-        csv,
-        f"vertex_master_analysis_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}.csv",
-        "text/csv"
+    # Format for display
+    table_df['vertex_ai_prob'] = table_df['vertex_ai_prob'].apply(lambda x: f"{x*100:.1f}%")
+    table_df['implied_home_prob'] = table_df['implied_home_prob'].apply(lambda x: f"{x*100:.1f}%")
+    table_df['vertex_ai_edge'] = table_df['vertex_ai_edge'].apply(lambda x: f"{x*100:+.2f}%")
+    table_df['expected_value'] = table_df['expected_value'].apply(lambda x: f"${x:+.2f}")
+    
+    table_df.columns = ['Rank', 'Home', 'Away', 'Vertex AI', 'Market', 'Edge', 'EV', 'Rec']
+    
+    st.dataframe(
+        table_df,
+        use_container_width=True,
+        height=400  # Scrollable table
     )
+    
+    # Export options
+    st.markdown("---")
+    st.subheader("📥 Export Data")
+    
+    export_cols = st.columns(3)
+    
+    with export_cols[0]:
+        # Full detailed CSV
+        csv_full = results_df.to_csv(index=False)
+        st.download_button(
+            "📊 Download Full Analysis (CSV)",
+            csv_full,
+            f"vertex_master_full_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}.csv",
+            "text/csv",
+            use_container_width=True
+        )
+    
+    with export_cols[1]:
+        # Positive EV only
+        positive_df = results_df[results_df['expected_value'] > 0]
+        csv_positive = positive_df.to_csv(index=False)
+        st.download_button(
+            "✅ Download Positive EV Only (CSV)",
+            csv_positive,
+            f"vertex_positive_ev_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}.csv",
+            "text/csv",
+            use_container_width=True
+        )
+    
+    with export_cols[2]:
+        # Top 10 only
+        top10_df = results_df.head(10)
+        csv_top10 = top10_df.to_csv(index=False)
+        st.download_button(
+            "🌟 Download Top 10 (CSV)",
+            csv_top10,
+            f"vertex_top10_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}.csv",
+            "text/csv",
+            use_container_width=True
+        )
+    
+    # Statistical summary
+    st.markdown("---")
+    st.subheader("📈 Statistical Summary")
+    
+    summary_cols = st.columns(4)
+    
+    with summary_cols[0]:
+        st.metric("Best EV", f"${results_df['expected_value'].max():.2f}")
+        st.metric("Worst EV", f"${results_df['expected_value'].min():.2f}")
+    
+    with summary_cols[1]:
+        st.metric("Avg EV", f"${results_df['expected_value'].mean():.2f}")
+        st.metric("Median EV", f"${results_df['expected_value'].median():.2f}")
+    
+    with summary_cols[2]:
+        st.metric("Avg Vertex AI Prob", f"{results_df['vertex_ai_prob'].mean()*100:.1f}%")
+        st.metric("Avg Market Prob", f"{results_df['implied_home_prob'].mean()*100:.1f}%")
+    
+    with summary_cols[3]:
+        st.metric("Avg Edge", f"{results_df['vertex_ai_edge'].mean()*100:+.2f}%")
+        st.metric("Max Edge", f"{results_df['vertex_ai_edge'].max()*100:+.2f}%")
+```
+
+---
+
+## 🎯 NEW FEATURES
+
+**Complete 1-N Rankings with:**
+
+1. **📊 All Games Listed** - Every single game ranked
+2. **🎚️ Filters:**
+   - Show only positive EV
+   - Minimum edge slider
+   - Auto-expand top N games
+3. **🌈 Color Coding:**
+   - 🌟 Green = Excellent (EV > $10)
+   - 💚 Green = Great (EV > $5)
+   - 🟡 Yellow = Good (EV > $0)
+   - ⚪ White = Neutral
+   - 🔴 Red = Avoid (EV < -$5)
+4. **📋 Quick Reference Table** - See all games at a glance
+5. **📊 Full Details** - Expandable analysis for each game
+6. **📥 Multiple Export Options:**
+   - Full analysis
+   - Positive EV only
+   - Top 10 only
+7. **📈 Statistical Summary** - Overview of all games
+
+---
+
+## 🎮 USER EXPERIENCE
+
+**After clicking "Run Vertex AI Master Analysis":**
+```
+🏆 Vertex AI Master Analysis - Complete Rankings
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Total Games: 47 | Positive EV: 12 | Best EV: $8.50 | Avg Edge: +2.3%
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📊 Complete Rankings (1-47)
+
+[Filters]
+☐ Show only positive EV bets
+Min edge: -50% ━━━●━━━━━━━━━━━━━ +50%
+Auto-expand top: 3
+
+Showing 47 of 47 games
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🟢 #1 | 🌟 Lakers @ Celtics | EV: $8.50 | Edge: +5.2% | Vertex: 58%
+  [EXPANDED - Full analysis shown]
+
+🟢 #2 | 💚 Warriors @ Nets | EV: $6.20 | Edge: +4.1% | Vertex: 56%
+  [EXPANDED - Full analysis shown]
+
+🟢 #3 | 💚 Bucks @ Heat | EV: $5.80 | Edge: +3.8% | Vertex: 54%
+  [EXPANDED - Full analysis shown]
+
+🟡 #4 | 🟡 Suns @ Mavs | EV: $2.10 | Edge: +1.5% | Vertex: 52%
+  [Click to expand]
+
+⚪ #5 | ⚪ Nuggets @ Clippers | EV: -$0.50 | Edge: -0.3% | Vertex: 49%
+  [Click to expand]
+
+...
+
+🔴 #47 | 🔴 Hornets @ Pistons | EV: -$12.30 | Edge: -8.1% | Vertex: 38%
+  [Click to expand]
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📋 Quick Reference Table - All Games
+
+[Scrollable table with all 47 games]
