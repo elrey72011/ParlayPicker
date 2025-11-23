@@ -344,19 +344,19 @@ def show_best_bets_table(results_df: pd.DataFrame):
             st.info("ℹ️ **Note:** Currently using placeholder team statistics. "
                    "Connect real SportsData/API-Sports clients for accurate predictions.")
             
-            # Stats
-            with st.expander("📊 Team Stats Used (Placeholder)", expanded=False):
-                col_a, col_b = st.columns(2)
-                with col_a:
-                    st.write(f"**{bet['home_team']}**")
-                    st.write(f"Win %: {bet['home_win_pct']:.1%}")
-                    st.write(f"Avg Points: {bet['home_avg_points']:.1f}")
-                    st.write(f"Last 5: {bet['home_last_5']:.0f}-{5-bet['home_last_5']:.0f}")
-                with col_b:
-                    st.write(f"**{bet['away_team']}**")
-                    st.write(f"Win %: {bet['away_win_pct']:.1%}")
-                    st.write(f"Avg Points: {bet['away_avg_points']:.1f}")
-                    st.write(f"Last 5: {bet['away_last_5']:.0f}-{5-bet['away_last_5']:.0f}")
+            # Stats (NOT nested in expander to avoid Streamlit error)
+            st.markdown("**📊 Team Stats Used (Placeholder)**")
+            col_a, col_b = st.columns(2)
+            with col_a:
+                st.write(f"**{bet['home_team']}**")
+                st.write(f"Win %: {bet['home_win_pct']:.1%}")
+                st.write(f"Avg Points: {bet['home_avg_points']:.1f}")
+                st.write(f"Last 5: {bet['home_last_5']:.0f}-{5-bet['home_last_5']:.0f}")
+            with col_b:
+                st.write(f"**{bet['away_team']}**")
+                st.write(f"Win %: {bet['away_win_pct']:.1%}")
+                st.write(f"Avg Points: {bet['away_avg_points']:.1f}")
+                st.write(f"Last 5: {bet['away_last_5']:.0f}-{5-bet['away_last_5']:.0f}")
     
     if len(display_df) > 20:
         st.info(f"Showing top 20 of {len(display_df)} results. "
