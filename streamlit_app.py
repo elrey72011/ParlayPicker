@@ -11813,13 +11813,15 @@ import json
 from datetime import datetime
 
 anthropic_spec = importlib.util.find_spec("anthropic")
-if anthropic_spec is None:
-    st.error(
-        "Anthropic dependency missing. Please install the `anthropic` package from requirements."
-    )
-    st.stop()
+anthropic_available = anthropic_spec is not None
 
-import anthropic
+if not anthropic_available:
+    st.warning(
+        "Anthropic dependency missing. Vertex AI analysis is disabled until the `anthropic`"
+        " package from requirements is installed."
+    )
+else:
+    import anthropic
 
 # ============================================================================
 # VERTEX AI MASTER ANALYZER (RUNS FIRST)
@@ -11827,6 +11829,12 @@ import anthropic
 
 st.header("🧠 Vertex AI Master Analysis")
 st.write("**Run this FIRST to calculate probabilities for all games**")
+
+if not anthropic_available:
+    st.info(
+        "Install the `anthropic` package to enable Vertex AI analysis. Other app features will"
+        " continue to work without it."
+    )
 
 with st.expander("ℹ️ About Vertex-First Architecture", expanded=False):
     st.markdown("""
@@ -11843,7 +11851,19 @@ with st.expander("ℹ️ About Vertex-First Architecture", expanded=False):
     - Consistent probabilities across all features
     """)
 
-if st.button("🚀 Run Vertex AI Master Analysis", type="primary", key="vertex_master"):
+if st.button(
+    "🚀 Run Vertex AI Master Analysis",
+    type="primary",
+    key="vertex_master",
+    disabled=not anthropic_available,
+):
+
+    if not anthropic_available:
+        st.error(
+            "Anthropic dependency missing. Install the `anthropic` package from requirements"
+            " to run Vertex AI analysis."
+        )
+        st.stop()
     
     # Check for odds data
     if 'odds_data' not in st.session_state or not st.session_state['odds_data']:
