@@ -8270,7 +8270,7 @@ if is_vertex_ai_enabled():
             except Exception as exc:
                 st.error(f"Error parsing data: {exc}")
 
-        return dataset
+            return dataset
 
     theover_ml_data = _collect_theover_dataset("#### 🤖 Moneyline ML projections", "theover_ml")
     theover_spreads_data = _collect_theover_dataset("#### 📐 Spread projections", "theover_spreads")
