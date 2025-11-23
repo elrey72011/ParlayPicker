@@ -11692,6 +11692,344 @@ if st.sidebar.checkbox("🧪 Show Vertex AI Test", value=False):
         if test_home and test_away:
             show_vertex_ai_prediction_section(test_home, test_away)
 
+# ============================================================================
+# PASTE THIS INTO YOUR STREAMLIT_APP.PY
+# Location: BEFORE your "Generate Best Bets" section
+# ============================================================================
+
+import anthropic
+import json
+from datetime import datetime
+
+# ============================================================================
+# VERTEX AI MASTER ANALYZER (RUNS FIRST)
+# ============================================================================
+
+st.header("🧠 Vertex AI Master Analysis")
+st.write("**Run this FIRST to calculate probabilities for all games**")
+
+with st.expander("ℹ️ About Vertex-First Architecture", expanded=False):
+    st.markdown("""
+    **New Workflow:**
+    1. ✅ Vertex AI analyzes ALL games with ALL data sources
+    2. ✅ Stores comprehensive results in session state
+    3. ✅ Best Bets generator uses Vertex probabilities
+    4. ✅ Parlay Optimizer uses Vertex probabilities
+    
+    **Benefits:**
+    - Single source of truth
+    - All data consolidated upfront
+    - No post-processing enrichment needed
+    - Consistent probabilities across all features
+    """)
+
+if st.button("🚀 Run Vertex AI Master Analysis", type="primary", key="vertex_master"):
+    
+    # Check for odds data
+    if 'odds_data' not in st.session_state or not st.session_state['odds_data']:
+        st.error("❌ No odds data found! Please fetch odds first.")
+        st.stop()
+    
+    odds_data = st.session_state['odds_data']
+    
+    st.write("📊 Found odds data for games:")
+    st.info(f"**{len(odds_data)} games** ready for analysis")
+    
+    # Load available data sources
+    st.write("---")
+    st.write("🔍 **Checking available data sources...**")
+    
+    data_sources = {}
+    
+    # 1. theover.ai data
+    try:
+        spreads_df = pd.read_csv('23_Nov_Spreads.csv')
+        totals_df = pd.read_csv('23_Nov_Totals.csv')
+        theover_df = pd.concat([spreads_df, totals_df], ignore_index=True)
+        data_sources['theover'] = theover_df
+        st.success(f"✅ **theover.ai**: {len(theover_df)} games loaded")
+    except FileNotFoundError:
+        st.warning("⚠️ theover.ai CSV not found (upload 23_Nov_Spreads.csv and 23_Nov_Totals.csv)")
+    except Exception as e:
+        st.warning(f"⚠️ Could not load theover.ai data: {e}")
+    
+    # 2. ML predictions
+    if 'ml_predictions' in st.session_state:
+        data_sources['ml'] = st.session_state['ml_predictions']
+        st.success(f"✅ **ML Predictions**: {len(data_sources['ml'])} games")
+    else:
+        st.warning("⚠️ ML predictions not loaded")
+    
+    # 3. SportsData
+    if 'sportsdata_stats' in st.session_state:
+        data_sources['sportsdata'] = st.session_state['sportsdata_stats']
+        st.success(f"✅ **SportsData**: {len(data_sources['sportsdata'])} records")
+    else:
+        st.warning("⚠️ SportsData not loaded")
+    
+    st.write("---")
+    st.write("🧠 **Running Vertex AI analysis...**")
+    
+    # Get Anthropic API key
+    anthropic_api_key = st.session_state.get('anthropic_api_key', '')
+    if not anthropic_api_key:
+        st.error("❌ Anthropic API key not found! Please enter it in the sidebar.")
+        st.stop()
+    
+    client = anthropic.Anthropic(api_key=anthropic_api_key)
+    
+    # Analyze each game
+    vertex_results = []
+    
+    progress_bar = st.progress(0)
+    status_text = st.empty()
+    
+    for idx, game in enumerate(odds_data):
+        game_name = f"{game['away_team']} @ {game['home_team']}"
+        status_text.write(f"**Analyzing {idx+1}/{len(odds_data)}**: {game_name}")
+        
+        # Gather all available data for this game
+        home_team = game['home_team']
+        away_team = game['away_team']
+        
+        # Find matching data from sources
+        context_data = {
+            'theover': None,
+            'ml': None,
+            'sportsdata': None
+        }
+        
+        # Match theover.ai data
+        if 'theover' in data_sources:
+            def normalize_team(team):
+                return team.lower().replace('.', '').replace(' ', '')
+            
+            home_norm = normalize_team(home_team)
+            away_norm = normalize_team(away_team)
+            
+            for _, row in data_sources['theover'].iterrows():
+                t_home = normalize_team(str(row.get('HomeTeam', '')))
+                t_away = normalize_team(str(row.get('AwayTeam', '')))
+                
+                # Flexible matching
+                if (home_norm in t_home or t_home in home_norm) and \
+                   (away_norm in t_away or t_away in away_norm):
+                    context_data['theover'] = {
+                        'Pick': row.get('Pick'),
+                        'Line': row.get('Line'),
+                        'Market': row.get('Market')
+                    }
+                    break
+        
+        # Match ML predictions (implement your matching logic)
+        if 'ml' in data_sources:
+            # Add your ML matching logic here
+            pass
+        
+        # Match SportsData (implement your matching logic)
+        if 'sportsdata' in data_sources:
+            # Add your SportsData matching logic here
+            pass
+        
+        # Get best odds
+        best_moneyline = None
+        best_spread = None
+        
+        for bookmaker in game.get('bookmakers', []):
+            for market in bookmaker.get('markets', []):
+                if market['key'] == 'h2h':
+                    for outcome in market.get('outcomes', []):
+                        if outcome['name'] == home_team:
+                            best_moneyline = outcome['price']
+                elif market['key'] == 'spreads':
+                    for outcome in market.get('outcomes', []):
+                        if outcome['name'] == home_team:
+                            best_spread = outcome.get('point')
+        
+        # Build Vertex AI prompt
+        prompt = f"""You are an expert sports betting analyst. Analyze this game and provide a comprehensive probability assessment.
+
+**Game Details:**
+- Away Team: {away_team}
+- Home Team: {home_team}
+- Sport: {game.get('sport_key')}
+- Date: {game.get('commence_time')}
+
+**Market Odds:**
+- Moneyline (home): {best_moneyline}
+- Spread (home): {best_spread}
+
+**Available Data Sources:**
+"""
+        
+        sources_used = []
+        
+        if context_data['theover']:
+            prompt += f"\n- **theover.ai**: Pick={context_data['theover']['Pick']}, Line={context_data['theover']['Line']}, Market={context_data['theover']['Market']}"
+            sources_used.append('theover.ai')
+        
+        if context_data['ml']:
+            prompt += f"\n- **ML Model**: {context_data['ml']}"
+            sources_used.append('ML')
+        
+        if context_data['sportsdata']:
+            prompt += f"\n- **SportsData**: {context_data['sportsdata']}"
+            sources_used.append('SportsData')
+        
+        prompt += """
+
+**Task:**
+Analyze all available data and provide:
+
+1. **Win Probability** for the home team (0-100%)
+2. **Confidence Level** (0-100%) - how confident are you in this prediction?
+3. **Key Factors** - what drove your analysis?
+4. **Edge vs Market** - is there value compared to the odds?
+
+Return ONLY a JSON object with this exact structure:
+{
+    "home_win_probability": <float 0-100>,
+    "confidence": <float 0-100>,
+    "key_factors": "<string>",
+    "has_edge": <boolean>,
+    "edge_explanation": "<string>"
+}
+"""
+        
+        try:
+            # Call Vertex AI (Claude)
+            response = client.messages.create(
+                model="claude-sonnet-4-20250514",
+                max_tokens=1000,
+                messages=[{"role": "user", "content": prompt}]
+            )
+            
+            # Parse response
+            response_text = response.content[0].text.strip()
+            
+            # Extract JSON
+            if '```json' in response_text:
+                response_text = response_text.split('```json')[1].split('```')[0].strip()
+            elif '```' in response_text:
+                response_text = response_text.split('```')[1].split('```')[0].strip()
+            
+            vertex_analysis = json.loads(response_text)
+            
+            # Store result
+            result = {
+                'game_id': game['id'],
+                'sport': game['sport_key'],
+                'home_team': home_team,
+                'away_team': away_team,
+                'commence_time': game['commence_time'],
+                'vertex_probability': vertex_analysis['home_win_probability'],
+                'confidence': vertex_analysis['confidence'],
+                'key_factors': vertex_analysis['key_factors'],
+                'has_edge': vertex_analysis['has_edge'],
+                'edge_explanation': vertex_analysis['edge_explanation'],
+                'sources_used': ', '.join(sources_used) if sources_used else 'market odds only',
+                'best_moneyline': best_moneyline,
+                'best_spread': best_spread
+            }
+            
+            vertex_results.append(result)
+            
+        except Exception as e:
+            st.error(f"❌ Error analyzing {game_name}: {e}")
+            # Add fallback result
+            vertex_results.append({
+                'game_id': game['id'],
+                'sport': game['sport_key'],
+                'home_team': home_team,
+                'away_team': away_team,
+                'commence_time': game['commence_time'],
+                'vertex_probability': 50.0,
+                'confidence': 50.0,
+                'key_factors': 'Error in analysis',
+                'has_edge': False,
+                'edge_explanation': f'Error: {str(e)}',
+                'sources_used': 'error',
+                'best_moneyline': best_moneyline,
+                'best_spread': best_spread
+            })
+        
+        progress_bar.progress((idx + 1) / len(odds_data))
+    
+    progress_bar.empty()
+    status_text.empty()
+    
+    # Store results in session state
+    st.session_state['vertex_results'] = vertex_results
+    st.session_state['vertex_analysis_complete'] = True
+    st.session_state['vertex_timestamp'] = datetime.now()
+    
+    st.success(f"✅ **Vertex AI analysis complete!** {len(vertex_results)} games analyzed")
+    
+    # Display summary
+    st.write("---")
+    st.write("### 📊 Analysis Summary")
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.metric("Games Analyzed", len(vertex_results))
+    
+    with col2:
+        avg_confidence = sum(r['confidence'] for r in vertex_results) / len(vertex_results)
+        st.metric("Avg Confidence", f"{avg_confidence:.1f}%")
+    
+    with col3:
+        with_edge = sum(1 for r in vertex_results if r['has_edge'])
+        st.metric("Games with Edge", with_edge)
+    
+    # Display results table
+    st.write("### 📋 Vertex AI Results")
+    
+    results_df = pd.DataFrame([{
+        'Game': f"{r['away_team']} @ {r['home_team']}",
+        'Vertex Prob %': f"{r['vertex_probability']:.1f}%",
+        'Confidence %': f"{r['confidence']:.0f}%",
+        'Has Edge': '✅' if r['has_edge'] else '❌',
+        'Sources': r['sources_used']
+    } for r in vertex_results])
+    
+    st.dataframe(results_df, use_container_width=True)
+    
+    # Download option
+    csv = results_df.to_csv(index=False)
+    st.download_button(
+        "📥 Download Vertex Results CSV",
+        csv,
+        f"vertex_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+        "text/csv"
+    )
+
+# ============================================================================
+# DISPLAY VERTEX STATUS (for other sections to check)
+# ============================================================================
+
+if 'vertex_analysis_complete' in st.session_state:
+    vertex_count = len(st.session_state.get('vertex_results', []))
+    vertex_time = st.session_state.get('vertex_timestamp', datetime.now())
+    
+    st.info(f"""
+    ✅ **Vertex AI analysis available**
+    - {vertex_count} games analyzed
+    - Analyzed at: {vertex_time.strftime('%I:%M %p')}
+    - Ready to use for Best Bets and Parlays
+    """)
+
+st.markdown("---")
+
+# ============================================================================
+# NOW YOUR EXISTING BEST BETS SECTION CAN USE VERTEX RESULTS
+# ============================================================================
+
+# Your existing Best Bets section should check for vertex_results:
+# if 'vertex_results' in st.session_state:
+#     # Use Vertex probabilities instead of recalculating
+#     vertex_results = st.session_state['vertex_results']
+
 # ============================================================
 # BEST BET FINDER (Vertex AI)
 # ============================================================
