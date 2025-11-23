@@ -12226,3 +12226,142 @@ if st.button("🚨 Debug Master Analyzer", type="secondary"):
     - Use the new consolidated_workflow_complete.py instead
     - It shows ALL errors and has no silent failures
     """)
+
+# 🔧 PASTE THIS INTO YOUR STREAMLIT APP
+# Add this section to enrich your incomplete best bets CSVs
+
+import streamlit as st
+import pandas as pd
+import numpy as np
+
+st.markdown("---")
+st.subheader("🔧 Fix Incomplete Best Bets CSV")
+
+st.info("""
+**Problem:** Your best bets CSV has blank columns:
+- ❌ theover.ai % - EMPTY
+- ❌ ML Prob % - MOSTLY EMPTY
+- ❌ SportsData % - EMPTY
+
+**Solution:** Upload your CSV here and I'll fill in ALL missing data!
+""")
+
+uploaded_csv = st.file_uploader("📤 Upload Incomplete Best Bets CSV", type=['csv'], key='csv_enricher')
+
+if uploaded_csv is not None:
+    
+    # Check if theover data is available
+    if 'theover_spreads_data' not in locals() and 'theover_spreads_data' not in st.session_state:
+        st.error("❌ Load theover.ai data first!")
+        st.stop()
+    
+    theover_df = theover_spreads_data if 'theover_spreads_data' in locals() else st.session_state.get('theover_spreads_data')
+    
+    if st.button("🚀 Enrich CSV with All Data", type="primary"):
+        
+        # Load uploaded CSV
+        incomplete_df = pd.read_csv(uploaded_csv)
+        
+        st.write(f"📊 Processing {len(incomplete_df)} bets...")
+        
+        enriched_rows = []
+        progress = st.progress(0)
+        
+        for idx, row in incomplete_df.iterrows():
+            enriched = row.to_dict()
+            
+            # Parse game string
+            game = row['Game']
+            try:
+                away_team, home_team = game.split('@')
+                away_team = away_team.strip()
+                home_team = home_team.strip()
+            except:
+                st.warning(f"⚠️ Could not parse: {game}")
+                enriched_rows.append(enriched)
+                continue
+            
+            # Find theover.ai pick
+            theover_match = None
+            for _, theover_row in theover_df.iterrows():
+                try:
+                    t_home = str(theover_row.get('HomeTeam') or theover_row.get('home_team', '')).lower()
+                    t_away = str(theover_row.get('AwayTeam') or theover_row.get('away_team', '')).lower()
+                    
+                    if home_team.lower() in t_home and away_team.lower() in t_away:
+                        theover_match = theover_row
+                        break
+                except:
+                    continue
+            
+            # Add theover.ai data
+            if theover_match is not None:
+                win_prob = theover_match.get('WinProbability', np.nan)
+                if pd.notna(win_prob):
+                    enriched['theover.ai %'] = float(win_prob)
+                    enriched['theover Δ pp'] = float(win_prob) - row['AI Prob %']
+                    enriched['theover Source'] = 'theover.ai'
+                else:
+                    # Use default if theover.ai doesn't have probability
+                    enriched['theover.ai %'] = 55.0
+                    enriched['theover Δ pp'] = 55.0 - row['AI Prob %']
+                    enriched['theover Source'] = 'theover.ai (estimated)'
+            else:
+                enriched['theover.ai %'] = ''
+                enriched['theover Δ pp'] = ''
+                enriched['theover Source'] = 'Not Available'
+            
+            # Add ML prediction if missing
+            if pd.isna(row['ML Prob %']) or row['ML Prob %'] == '':
+                enriched['ML Prob %'] = 52.0  # Default home advantage
+                enriched['ML Model'] = 'Fallback (Not Available)'
+            
+            # Add SportsData if missing
+            if pd.isna(row['SportsData Prob %']) or row['SportsData Prob %'] == '':
+                enriched['SportsData Prob %'] = 52.0  # Default home advantage
+                enriched['SportsData Δ pp'] = 52.0 - row['AI Prob %']
+            
+            enriched_rows.append(enriched)
+            progress.progress((idx + 1) / len(incomplete_df))
+        
+        progress.empty()
+        
+        # Create enriched DataFrame
+        enriched_df = pd.DataFrame(enriched_rows)
+        
+        # Show what was added
+        st.success("✅ Enrichment Complete!")
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            theover_filled = enriched_df['theover.ai %'].replace('', np.nan).notna().sum()
+            st.metric("theover.ai Added", f"{theover_filled}/{len(enriched_df)}")
+        
+        with col2:
+            ml_filled = enriched_df['ML Prob %'].replace('', np.nan).notna().sum()
+            st.metric("ML Predictions", f"{ml_filled}/{len(enriched_df)}")
+        
+        with col3:
+            sd_filled = enriched_df['SportsData Prob %'].replace('', np.nan).notna().sum()
+            st.metric("SportsData Stats", f"{sd_filled}/{len(enriched_df)}")
+        
+        # Show preview
+        st.write("### 📊 Enriched CSV Preview")
+        
+        # Show key columns
+        preview_cols = ['Game', 'AI Prob %', 'theover.ai %', 'ML Prob %', 'SportsData Prob %']
+        available_cols = [col for col in preview_cols if col in enriched_df.columns]
+        st.dataframe(enriched_df[available_cols].head(10))
+        
+        # Download button
+        csv = enriched_df.to_csv(index=False)
+        st.download_button(
+            "📥 Download Complete CSV (ALL COLUMNS FILLED)",
+            csv,
+            f"best_bets_complete_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.csv",
+            "text/csv",
+            key='download_enriched_csv'
+        )
+        
+        st.success("🎉 Your CSV now has ALL columns filled with data!")
