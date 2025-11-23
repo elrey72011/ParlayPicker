@@ -34,6 +34,15 @@ from app_core import (
 )
 from ml_predictions import show_vertex_ai_prediction_section, is_vertex_ai_enabled
 
+try:
+    from theover_vertex_analyzer import (
+        analyze_theover_spreads_with_vertex,
+        show_best_bets_table
+    )
+except ImportError:
+    analyze_theover_spreads_with_vertex = None
+    show_best_bets_table = None
+
 # Optional classes with fallbacks
 try:
     from app_core import SharpMoneyDetector
@@ -8211,70 +8220,43 @@ with main_tab1:
             except Exception as exc:
                 st.error(f"Error loading CSV: {exc}")
 
-
-        # After: ✅ Loaded 65 rows from theover.ai
-
-from theover_vertex_analyzer import (
-    analyze_theover_spreads_with_vertex,
-    show_best_bets_table
-)
-
-# Add Vertex AI analysis button
-if is_vertex_ai_enabled():
-    st.markdown("---")
-    
-    if st.button("🤖 Analyze with Vertex AI", key="analyze_spreads_vertex"):
-        with st.spinner("Running AI analysis on all picks..."):
-            # Get your clients
-            sportsdata_client = sportsdata_clients.get('nba') if 'sportsdata_clients' in globals() else None
-            apisports_client = apisports_client if 'apisports_client' in globals() else None
-            
-            # Analyze
-            results_df = analyze_theover_spreads_with_vertex(
-                spreads_df,  # Your uploaded DataFrame
-                sportsdata_client,
-                apisports_client
-            )
-            
-            # Show results
-            if not results_df.empty:
-                show_best_bets_table(results_df)
-    else:
-        st.info("💡 Enable Vertex AI in settings to get AI-powered bet analysis")
-    with st.expander("📋 Or paste theover.ai data", expanded=False):
-        st.info(
-            """
-            **Paste Format (comma or tab-separated)**
-            ```
-            League,AwayTeam,HomeTeam,Pick,WinProbability
-            NHL,Maple Leafs,Canadiens,Over,0.57
-            ```
-            """
-        )
-        pasted_data = st.text_area(
-            "Paste data here",
-            height=150,
-            key=f"{key_prefix}_paste",
-        )
-        if dataset is None and pasted_data.strip():
-            try:
-                from io import StringIO
-
-                if "\t" in pasted_data and "," not in pasted_data:
-                    dataset = pd.read_csv(StringIO(pasted_data), sep="\t")
-                else:
-                    dataset = pd.read_csv(StringIO(pasted_data))
-
-                st.success(f"✅ Loaded {len(dataset)} rows from pasted theover.ai data")
-                st.dataframe(dataset.head(10), width='stretch')
-            except Exception as exc:
-                st.error(f"Error parsing data: {exc}")
-
-            return dataset
+        return dataset
 
     theover_ml_data = _collect_theover_dataset("#### 🤖 Moneyline ML projections", "theover_ml")
     theover_spreads_data = _collect_theover_dataset("#### 📐 Spread projections", "theover_spreads")
     theover_totals_data = _collect_theover_dataset("#### 📈 Totals (Over/Under) projections", "theover_totals")
+    
+    # Vertex AI Analysis Integration
+    if is_vertex_ai_enabled() and analyze_theover_spreads_with_vertex is not None:
+        if theover_spreads_data is not None and len(theover_spreads_data) > 0:
+            st.markdown("---")
+            st.subheader("🤖 Vertex AI Best Bet Analysis")
+            st.caption("AI-powered analysis of your theover.ai spread picks")
+            
+            if st.button("🎯 Analyze Spreads with Vertex AI", key="vertex_analyze_spreads_btn"):
+                with st.spinner("Running AI analysis on all picks... This may take a minute..."):
+                    try:
+                        # Get available clients
+                        sportsdata_client = sportsdata_clients.get('nba') if 'sportsdata_clients' in locals() else None
+                        apisports_client = basketball_client if 'basketball_client' in locals() else None
+                        
+                        # Run analysis
+                        results_df = analyze_theover_spreads_with_vertex(
+                            theover_spreads_data,
+                            sportsdata_client,
+                            apisports_client
+                        )
+                        
+                        # Show results
+                        if not results_df.empty:
+                            show_best_bets_table(results_df)
+                        else:
+                            st.warning("No results from Vertex AI analysis")
+                    except Exception as e:
+                        st.error(f"Error during Vertex AI analysis: {e}")
+                        logger.error(f"Vertex AI analysis error: {e}", exc_info=True)
+        elif theover_spreads_data is None:
+            st.info("💡 Upload spread picks above to enable Vertex AI analysis")
     
     st.markdown("---")
     st.subheader("🏆 Best Overall Odds for Date Range")
