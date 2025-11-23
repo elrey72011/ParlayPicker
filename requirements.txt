@@ -28,6 +28,9 @@ pyyaml==6.0.1
 # Data Validation
 jsonschema==4.20.0
 
+# Typed data models (wheel available for Python 3.13)
+pydantic==2.10.4
+
 # Visualization (optional, for analysis)
 matplotlib==3.9.2
 seaborn==0.13.2
