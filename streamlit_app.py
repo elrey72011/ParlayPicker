@@ -8250,12 +8250,12 @@ if is_vertex_ai_enabled():
                 NHL,Maple Leafs,Canadiens,Over,0.57
                 ```
                 """
-            )
-            pasted_data = st.text_area(
-                "Paste data here",
-                height=150,
-                key=f"{key_prefix}_paste",
-            )
+        )
+        pasted_data = st.text_area(
+            "Paste data here",
+            height=150,
+            key=f"{key_prefix}_paste",
+        )
             if dataset is None and pasted_data.strip():
                 try:
                     from io import StringIO
