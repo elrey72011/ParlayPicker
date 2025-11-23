@@ -8239,10 +8239,10 @@ if is_vertex_ai_enabled():
             # Show results
             if not results_df.empty:
                 show_best_bets_table(results_df)
-        else:
-            st.info("💡 Enable Vertex AI in settings to get AI-powered bet analysis")
-        with st.expander("📋 Or paste theover.ai data", expanded=False):
-            st.info(
+    else:
+        st.info("💡 Enable Vertex AI in settings to get AI-powered bet analysis")
+    with st.expander("📋 Or paste theover.ai data", expanded=False):
+        st.info(
                 """
                 **Paste Format (comma or tab-separated)**
                 ```
