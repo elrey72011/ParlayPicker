@@ -11563,3 +11563,31 @@ if st.sidebar.checkbox("🧪 Show Vertex AI Test", value=False):
         
         if test_home and test_away:
             show_vertex_ai_prediction_section(test_home, test_away)
+
+# ============================================================
+# BEST BET FINDER (Vertex AI)
+# ============================================================
+from best_bet_analyzer import BestBetAnalyzer, show_best_bets_analysis
+
+if is_vertex_ai_enabled():
+    st.markdown("---")
+    st.header("🎯 Best Bet Finder - AI Analysis")
+    
+    uploaded_file = st.file_uploader(
+        "Upload your odds CSV file",
+        type=['csv'],
+        key="best_bet_csv_upload",
+        help="CSV should have columns: home_team, away_team, home_odds, away_odds, total"
+    )
+    
+    if uploaded_file is not None:
+        # Initialize analyzer with your existing clients
+        analyzer = BestBetAnalyzer(
+            odds_api_client=odds_api_client if 'odds_api_client' in globals() else None,
+            sportsdata_client=sportsdata_clients.get('nfl') if 'sportsdata_clients' in globals() else None,
+            apisports_client=apisports_client if 'apisports_client' in globals() else None,
+            sentiment_analyzer=sentiment_analyzer if 'sentiment_analyzer' in globals() else None,
+            ml_predictor=st.session_state.get('ml_predictor')
+        )
+        
+        show_best_bets_analysis(uploaded_file, analyzer)
