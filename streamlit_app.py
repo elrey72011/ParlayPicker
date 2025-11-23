@@ -11550,25 +11550,16 @@ with main_tab5:
             components.html(widget_html, height=widget_height, scrolling=True)
 
 # ============================================================
-# VERTEX AI TEST SECTION
+# VERTEX AI TEST (OPTIONAL - only shows if debug mode enabled)
 # ============================================================
-if is_vertex_ai_enabled():
-    st.markdown("---")
-    st.header("🤖 Google Cloud Vertex AI Test")
-    st.caption("Quick test of Vertex AI predictions")
-    
-    test_home = st.text_input("Home Team (test)", value="Lakers", key="vertex_test_home")
-    test_away = st.text_input("Away Team (test)", value="Celtics", key="vertex_test_away")
-    
-    if test_home and test_away:
-        show_vertex_ai_prediction_section(test_home, test_away)
-
-st.write("🔍 Vertex AI Debug Info")
-st.write(f"Enabled: {is_vertex_ai_enabled()}")
-
-try:
-    st.write(f"Project ID: {st.secrets['vertex_ai']['project_id']}")
-    st.write(f"Endpoint ID: {st.secrets['vertex_ai']['endpoint_id']}")
-    st.write("✅ Secrets configured correctly")
-except Exception as e:
-    st.error(f"❌ Secrets error: {e}")
+if st.sidebar.checkbox("🧪 Show Vertex AI Test", value=False):
+    if is_vertex_ai_enabled():
+        st.markdown("---")
+        st.header("🤖 Google Cloud Vertex AI Test")
+        st.caption("Quick test of Vertex AI predictions")
+        
+        test_home = st.text_input("Home Team (test)", value="Lakers", key="vertex_test_home")
+        test_away = st.text_input("Away Team (test)", value="Celtics", key="vertex_test_away")
+        
+        if test_home and test_away:
+            show_vertex_ai_prediction_section(test_home, test_away)
