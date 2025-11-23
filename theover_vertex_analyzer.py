@@ -24,19 +24,26 @@ def enrich_spread_pick_with_stats(row: pd.Series, sportsdata_client=None, apispo
     Returns:
         Dict with enriched features
     """
+    # Handle both column naming conventions
+    home_team = row.get('home_team') or row.get('HomeTeam', '')
+    away_team = row.get('away_team') or row.get('AwayTeam', '')
+    league = row.get('league') or row.get('League', 'NBA')
+    pick = row.get('pick') or row.get('Pick', '')
+    line = float(row.get('line') or row.get('Line', 0))
+    
     features = {
-        'league': row.get('league', 'NBA'),
-        'home_team': row.get('home_team', ''),
-        'away_team': row.get('away_team', ''),
-        'pick': row.get('pick', ''),
-        'line': float(row.get('line', 0)),
-        'is_home_favorite': float(row.get('line', 0)) < 0,
-        'spread_abs': abs(float(row.get('line', 0))),
+        'league': league,
+        'home_team': home_team,
+        'away_team': away_team,
+        'pick': pick,
+        'line': line,
+        'is_home_favorite': line < 0,
+        'spread_abs': abs(line),
     }
     
-    # Get team stats (placeholder - customize based on your clients)
-    home_stats = get_team_stats(features['home_team'], features['league'], sportsdata_client)
-    away_stats = get_team_stats(features['away_team'], features['league'], sportsdata_client)
+    # Get team stats
+    home_stats = get_team_stats(home_team, league, sportsdata_client)
+    away_stats = get_team_stats(away_team, league, sportsdata_client)
     
     features.update({
         'home_win_pct': home_stats.get('win_pct', 0.5),
