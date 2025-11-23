@@ -8273,33 +8273,70 @@ if is_vertex_ai_enabled():
     if st.button("🌟 Run Vertex AI Master Analysis", key="vertex_master_btn", type="primary"):
         with st.spinner("Running comprehensive AI analysis... Consolidating all data sources..."):
             try:
-                # Initialize master analyzer with ALL your clients
-                analyzer = VertexMasterAnalyzer(
-                    odds_api_client=odds_client if 'odds_client' in locals() else None,
-                    sportsdata_clients=sportsdata_clients if 'sportsdata_clients' in locals() else {},
-                    apisports_clients={
-                        'nba': basketball_client if 'basketball_client' in locals() else None,
-                        'nfl': apisports_client if 'apisports_client' in locals() else None,
-                    },
-                    sentiment_analyzer=sentiment_analyzer if 'sentiment_analyzer' in locals() else None,
-                    local_ml_predictor=st.session_state.get('ml_predictor'),
-                    theover_data={
-                        'spreads': theover_spreads_data,
-                        'totals': theover_totals_data,
-                        'ml': theover_ml_data,
-                    }
-                )
+                # Get games from The Odds API
+                selected_sports = []
+                if 'NCAAF' in st.session_state.get('selected_sports', []):
+                    selected_sports.append('americanfootball_ncaaf')
+                if 'NBA' in st.session_state.get('selected_sports', []):
+                    selected_sports.append('basketball_nba')
+                if 'NCAAB' in st.session_state.get('selected_sports', []):
+                    selected_sports.append('basketball_ncaab')
+                if 'NHL' in st.session_state.get('selected_sports', []):
+                    selected_sports.append('icehockey_nhl')
                 
-                # Get all games from your current display
-                # (You'll need to expose the filtered_games variable)
-                results_df = analyzer.analyze_all_games(filtered_games, selected_sport)
+                # Default to all if none selected
+                if not selected_sports:
+                    selected_sports = ['basketball_nba', 'americanfootball_ncaaf', 'basketball_ncaab', 'icehockey_nhl']
                 
-                # Show results
-                show_vertex_master_analysis(results_df)
+                # Fetch games
+                all_games = []
+                if odds_client:
+                    for sport in selected_sports:
+                        try:
+                            games = odds_client.get_odds(sport)
+                            for game in games:
+                                game['sport_key'] = sport
+                            all_games.extend(games)
+                        except Exception as e:
+                            logger.error(f"Error fetching {sport}: {e}")
+                
+                if not all_games:
+                    st.error("No games found. Make sure The Odds API key is configured.")
+                else:
+                    st.info(f"Analyzing {len(all_games)} games across all selected sports...")
+                    
+                    # Initialize master analyzer with ALL your clients
+                    analyzer = VertexMasterAnalyzer(
+                        odds_api_client=odds_client if 'odds_client' in locals() else None,
+                        sportsdata_clients=sportsdata_clients if 'sportsdata_clients' in locals() else {},
+                        apisports_clients={
+                            'nba': basketball_client if 'basketball_client' in locals() else None,
+                            'nfl': apisports_client if 'apisports_client' in locals() else None,
+                            'nhl': hockey_client if 'hockey_client' in locals() else None,
+                        },
+                        sentiment_analyzer=sentiment_analyzer if 'sentiment_analyzer' in locals() else None,
+                        local_ml_predictor=st.session_state.get('ml_predictor'),
+                        theover_data={
+                            'spreads': theover_spreads_data if 'theover_spreads_data' in locals() else None,
+                            'totals': theover_totals_data if 'theover_totals_data' in locals() else None,
+                            'ml': theover_ml_data if 'theover_ml_data' in locals() else None,
+                        }
+                    )
+                    
+                    # Analyze all games
+                    results_df = analyzer.analyze_all_games(all_games, league='multi')
+                    
+                    # Show results
+                    if not results_df.empty:
+                        show_vertex_master_analysis(results_df)
+                    else:
+                        st.warning("No results from analysis")
                 
             except Exception as e:
                 st.error(f"Error in master analysis: {e}")
                 logger.error(f"Vertex master analysis error: {e}", exc_info=True)
+                import traceback
+                st.code(traceback.format_exc())
     
     st.caption(
         "AI filters applied: sentiment {sentiment_state}, ML {ml_state}, confidence ≥ {conf:.0%}, parlay probability {min_prob:.0%}-{max_prob:.0%}".format(
