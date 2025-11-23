@@ -11562,3 +11562,13 @@ if is_vertex_ai_enabled():
     
     if test_home and test_away:
         show_vertex_ai_prediction_section(test_home, test_away)
+
+st.write("🔍 Vertex AI Debug Info")
+st.write(f"Enabled: {is_vertex_ai_enabled()}")
+
+try:
+    st.write(f"Project ID: {st.secrets['vertex_ai']['project_id']}")
+    st.write(f"Endpoint ID: {st.secrets['vertex_ai']['endpoint_id']}")
+    st.write("✅ Secrets configured correctly")
+except Exception as e:
+    st.error(f"❌ Secrets error: {e}")
