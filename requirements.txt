@@ -47,5 +47,5 @@ ipykernel==6.27.1
 # Performance
 joblib==1.3.2
 
-# Type hints
-typing-extensions==4.9.0
+# Type hints (compatible with Streamlit and Pydantic)
+typing-extensions>=4.12.2,<5
