@@ -32,6 +32,7 @@ from app_core import (
     SportsDataNFLClient,
     SportsDataNHLClient,
 )
+from ml_predictions import show_vertex_ai_prediction_section, is_vertex_ai_enabled
 
 # Optional classes with fallbacks
 try:
@@ -3013,6 +3014,12 @@ class AIOptimizer:
     ):
         self.sentiment = sentiment_analyzer
         self.ml = ml_predictor
+
+if is_vertex_ai_enabled():
+    show_vertex_ai_prediction_section(
+        home_team=home_team_name,  # Use your actual variable
+        away_team=away_team_name   # Use your actual variable
+    )    
     
     def score_parlay(self, legs: List[Dict]) -> Dict[str, float]:
         """
