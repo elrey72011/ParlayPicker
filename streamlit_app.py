@@ -11719,3 +11719,113 @@ if is_vertex_ai_enabled():
         )
         
         show_best_bets_analysis(uploaded_file, analyzer)
+
+# ============ DIAGNOSTIC BUTTON ============
+import streamlit as st
+
+st.sidebar.markdown("---")
+if st.sidebar.button("🔍 Diagnose Problem"):
+    st.header("🔍 Master Analyzer Diagnostic")
+    
+    # Test 1: Check data
+    st.write("**1. Checking data...**")
+    if 'theover_spreads_data' in locals():
+        spreads = theover_spreads_data
+    elif 'theover_spreads_data' in st.session_state:
+        spreads = st.session_state['theover_spreads_data']
+    else:
+        st.error("❌ No data - upload CSV first!")
+        st.stop()
+    
+    st.success(f"✅ Found {len(spreads)} games")
+    
+    # Test 2: Check predictions
+    st.write("**2. Testing predictions...**")
+    from ml_predictions import get_vertex_ai_prediction
+    
+    test = [0.55, 0.45, 110, 105, 105, 108, 0.15, 0.6, 0.4]
+    result = get_vertex_ai_prediction(test)
+    
+    if result:
+        st.success(f"✅ Predictions work: {result:.3f}")
+    else:
+        st.error("❌ PROBLEM FOUND: Predictions return None!")
+        st.write("**Fix:** Download latest ml_predictions.py")
+        st.stop()
+    
+    # Test 3: Try one game
+    st.write("**3. Testing single game analysis...**")
+    from vertex_master_analyzer import VertexMasterAnalyzer
+    
+    analyzer = VertexMasterAnalyzer()
+    
+    first_game = {
+        'home_team': spreads.iloc[0].get('home_team') or spreads.iloc[0].get('HomeTeam'),
+        'away_team': spreads.iloc[0].get('away_team') or spreads.iloc[0].get('AwayTeam'),
+        'sport_key': 'nba',
+        'bookmakers': []
+    }
+    
+    try:
+        features = analyzer.build_comprehensive_features(first_game, 'NBA')
+        st.success("✅ Feature building works")
+        
+        vertex_features = analyzer.build_vertex_feature_vector(features)
+        st.success("✅ Feature vector works")
+        
+        prediction = get_vertex_ai_prediction(vertex_features)
+        if prediction:
+            st.success(f"✅ Full pipeline works! Result: {prediction:.3f}")
+        else:
+            st.error("❌ Pipeline works but prediction is None")
+            
+    except Exception as e:
+        st.error(f"❌ PROBLEM FOUND: {e}")
+        st.code(str(e))
+        import traceback
+        st.code(traceback.format_exc())
+    
+    st.write("---")
+    st.write("**✅ If all tests passed, the analyzer should work**")
+    st.write("**❌ If a test failed, that's your problem - fix it first**")
+```
+
+**Then:**
+1. Save your app
+2. Refresh browser
+3. Look for "🔍 Diagnose Problem" button in sidebar
+4. Click it
+5. It will show you EXACTLY what's broken
+
+---
+
+## 📚 Files Created
+
+I've created several diagnostic tools:
+
+1. **[one_button_diagnostic.py](computer:///mnt/user-data/outputs/one_button_diagnostic.py)** ⭐ **Simplest** - Paste in sidebar
+2. **[master_analyzer_debug_complete.py](computer:///mnt/user-data/outputs/master_analyzer_debug_complete.py)** - Full diagnostic page
+3. **[MASTER_ANALYZER_SHOW_ERRORS.md](computer:///mnt/user-data/outputs/MASTER_ANALYZER_SHOW_ERRORS.md)** - How to make it show errors
+
+---
+
+## 🎯 Most Likely Issues
+
+Based on your symptoms (25% threshold, still no results), it's one of these:
+
+### Issue 1: Predictions Returning None (90% likely)
+```
+Test will show: ❌ Predictions return None
+Fix: Update ml_predictions.py
+```
+
+### Issue 2: Feature Building Fails (5% likely)
+```
+Test will show: ❌ build_comprehensive_features() failed
+Fix: Check team stat methods
+```
+
+### Issue 3: Data Format Wrong (5% likely)
+```
+Test will show: ❌ KeyError: 'home_team'
+Fix: Check CSV column names
