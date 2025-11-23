@@ -11853,9 +11853,18 @@ if st.sidebar.checkbox("🧪 Show Vertex AI Test", value=False):
 # Location: BEFORE your "Generate Best Bets" section
 # ============================================================================
 
-import anthropic
+import importlib.util
 import json
 from datetime import datetime
+
+anthropic_spec = importlib.util.find_spec("anthropic")
+if anthropic_spec is None:
+    st.error(
+        "Anthropic dependency missing. Please install the `anthropic` package from requirements."
+    )
+    st.stop()
+
+import anthropic
 
 # ============================================================================
 # VERTEX AI MASTER ANALYZER (RUNS FIRST)
