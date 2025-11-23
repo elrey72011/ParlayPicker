@@ -1138,7 +1138,7 @@ def render_saved_parlay_tracker(clients: Dict[str, Any], timezone_label: str) ->
 
         if summary_rows:
             summary_df = pd.DataFrame(summary_rows)
-            st.dataframe(summary_df, width='stretch', hide_index=True)
+            st.dataframe(summary_df, use_container_width=True, hide_index=True)
 
         for entry in tracked:
             evaluation = entry.get('evaluation', {})
@@ -1162,7 +1162,7 @@ def render_saved_parlay_tracker(clients: Dict[str, Any], timezone_label: str) ->
                     })
 
                 if detail_rows:
-                    st.dataframe(pd.DataFrame(detail_rows), width='stretch', hide_index=True)
+                    st.dataframe(pd.DataFrame(detail_rows), use_container_width=True, hide_index=True)
                 else:
                     st.info("No leg details available.")
 
@@ -1357,13 +1357,20 @@ def render_sidebar_controls() -> Dict[str, Any]:
     st.session_state['day_window'] = day_window
 
     default_sports = st.session_state.setdefault('selected_sports', APP_CFG["sports_common"][:6])
-    sports = sidebar.multiselect(
-        "Sports",
-        options=APP_CFG["sports_common"],
-        default=default_sports,
-        format_func=format_sport_label,
-        key="selected_sports",
-    )
+    try:
+        sports = sidebar.multiselect(
+            "Sports",
+            options=APP_CFG["sports_common"],
+            default=default_sports,
+            format_func=format_sport_label,
+            key="selected_sports",
+        )
+    except TypeError as exc:
+        logger.exception("Sidebar sports selector failed; falling back to default sports", exc_info=exc)
+        sidebar.warning(
+            "⚠️ Sports selector failed to format options. Using default sports list instead."
+        )
+        sports = default_sports
 
     # --------------------- AI settings ---------------------
     ai_expander = sidebar.expander("🤖 AI Settings", expanded=False)
@@ -1391,8 +1398,8 @@ def render_sidebar_controls() -> Dict[str, Any]:
         if ai_expander.button(
             toggle_label,
             key="toggle_ml_predictions_button",
-            width='stretch',
             help=toggle_help,
+            use_container_width=True,
         ):
             use_ml_predictions = not use_ml_predictions
             st.session_state['use_ml_predictions'] = use_ml_predictions
@@ -2626,7 +2633,7 @@ def evaluate_tracked_parlays(
         if ai_expander.button(
             toggle_label,
             key="toggle_ml_predictions_button",
-            width='stretch',
+            use_container_width=True,
             help=toggle_help,
         ):
             use_ml_predictions = not use_ml_predictions
@@ -7688,7 +7695,7 @@ def render_parlay_section_ai(
         }
         st.dataframe(
             legs_df_display,
-            width='stretch',
+            use_container_width=True,
             hide_index=True,
             column_config=column_config,
         )
@@ -7859,7 +7866,7 @@ def render_parlay_section_ai(
                     })
             
             if kalshi_details:
-                st.dataframe(pd.DataFrame(kalshi_details), width='stretch', hide_index=True)
+                st.dataframe(pd.DataFrame(kalshi_details), use_container_width=True, hide_index=True)
                 
                 # Summary metrics
                 st.markdown("**📈 Kalshi Impact Summary:**")
@@ -8216,7 +8223,7 @@ with main_tab1:
                 dataset = pd.read_csv(uploaded_file)
                 st.success(f"✅ Loaded {len(dataset)} rows from theover.ai")
                 with st.expander("📋 Preview uploaded data", expanded=False):
-                    st.dataframe(dataset.head(10), width='stretch')
+                    st.dataframe(dataset.head(10), use_container_width=True)
             except Exception as exc:
                 st.error(f"Error loading CSV: {exc}")
 
@@ -8791,7 +8798,7 @@ if is_vertex_ai_enabled():
         fetch_best_odds = st.button(
             "Show Best Odds",
             key="best_odds_button",
-            width='stretch',
+            use_container_width=True,
         )
 
     if fetch_best_odds:
@@ -8821,7 +8828,7 @@ if is_vertex_ai_enabled():
                         lambda x: f"{float(x):.1f}" if pd.notna(x) else "—"
                     )
 
-                st.dataframe(display_df, width='stretch', hide_index=True)
+                st.dataframe(display_df, use_container_width=True, hide_index=True)
 
                 csv_export = best_odds_df.to_csv(index=False)
                 file_name = (
@@ -8873,7 +8880,7 @@ if is_vertex_ai_enabled():
     compute_best_bets = st.button(
         "Compute Best Bets",
         key="compute_best_bets",
-        width='stretch',
+        use_container_width=True,
     )
 
     if compute_best_bets:
@@ -8962,7 +8969,7 @@ if is_vertex_ai_enabled():
                         lambda x: f"{float(x):g}" if pd.notna(x) else "—"
                     )
 
-                st.dataframe(display_df, width='stretch', hide_index=True)
+                st.dataframe(display_df, use_container_width=True, hide_index=True)
 
                 csv_export = best_bets_df.to_csv(index=False)
                 download_name = (
@@ -9758,7 +9765,7 @@ if is_vertex_ai_enabled():
                                 lambda x: f"{x:.3f}" if pd.notna(x) else "—"
                             )
 
-                        st.dataframe(top_display, width='stretch', hide_index=True)
+                        st.dataframe(top_display, use_container_width=True, hide_index=True)
 
                         top_csv = top_df.to_csv(index=False)
                         st.download_button(
@@ -10774,7 +10781,7 @@ with main_tab3:
                                 "Sentiment": leg['sentiment_trend']
                             })
                         
-                        st.dataframe(pd.DataFrame(leg_data), width='stretch', hide_index=True)
+                        st.dataframe(pd.DataFrame(leg_data), use_container_width=True, hide_index=True)
                         
                         # Payout Scenarios
                         st.markdown("### 💰 Payout Scenarios")

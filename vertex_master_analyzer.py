@@ -368,92 +368,92 @@ class VertexMasterAnalyzer:
         return features
     
     def analyze_all_games(self, games: List[Dict], league: str = 'NBA') -> pd.DataFrame:
-    """
-    Analyze all games with Vertex AI
-    
-    Args:
-        games: List of games from The Odds API
-        league: Sport league (or 'multi' for mixed sports)
-        
-    Returns:
-        DataFrame with comprehensive analysis and Vertex AI recommendations
-    """
-    if not is_vertex_ai_enabled():
-        st.warning("⚠️ Vertex AI is disabled")
-        return pd.DataFrame()
-    
-    results = []
-    
-    st.write(f"🤖 Analyzing {len(games)} games with Vertex AI Master Analyzer...")
-    progress = st.progress(0)
-    
-    for idx, game in enumerate(games):
-        try:
-            # Determine league from sport_key
-            sport_key = game.get('sport_key', 'basketball_nba')
-            
-            if 'basketball_nba' in sport_key:
-                game_league = 'NBA'
-            elif 'basketball_ncaab' in sport_key:
-                game_league = 'NCAAB'
-            elif 'americanfootball' in sport_key:
-                game_league = 'NFL' if 'nfl' in sport_key else 'NCAAF'
-            elif 'icehockey' in sport_key:
-                game_league = 'NHL'
-            else:
-                game_league = league
-            
-            # Build comprehensive features from ALL sources
-            comp_features = self.build_comprehensive_features(game, game_league)
-            
-            # Build Vertex AI feature vector
-            vertex_features = self.build_vertex_feature_vector(comp_features)
-            
-            # Get Vertex AI ultimate prediction
-            vertex_prob = get_vertex_ai_prediction(vertex_features)
-            
-            if vertex_prob is not None:
-                # Calculate expected value
-                implied_prob = comp_features.get('implied_home_prob', 0.5)
-                edge = vertex_prob - implied_prob
-                
-                # Store everything
-                result = comp_features.copy()
-                result['vertex_ai_prob'] = vertex_prob
-                result['vertex_ai_edge'] = edge
-                result['vertex_ai_confidence'] = abs(edge)
-                
-                # Calculate EV
-                home_ml = comp_features.get('home_ml_odds', 100)
-                if home_ml and home_ml != 0:
-                    if home_ml > 0:
-                        ev = (vertex_prob * home_ml) - ((1 - vertex_prob) * 100)
-                    else:
-                        ev = (vertex_prob * 100) - ((1 - vertex_prob) * abs(home_ml))
-                    
-                    result['expected_value'] = ev
-                    result['recommendation'] = 'BET' if ev > 5 else 'PASS'
+        """
+        Analyze all games with Vertex AI
+
+        Args:
+            games: List of games from The Odds API
+            league: Sport league (or 'multi' for mixed sports)
+
+        Returns:
+            DataFrame with comprehensive analysis and Vertex AI recommendations
+        """
+        if not is_vertex_ai_enabled():
+            st.warning("⚠️ Vertex AI is disabled")
+            return pd.DataFrame()
+
+        results = []
+
+        st.write(f"🤖 Analyzing {len(games)} games with Vertex AI Master Analyzer...")
+        progress = st.progress(0)
+
+        for idx, game in enumerate(games):
+            try:
+                # Determine league from sport_key
+                sport_key = game.get('sport_key', 'basketball_nba')
+
+                if 'basketball_nba' in sport_key:
+                    game_league = 'NBA'
+                elif 'basketball_ncaab' in sport_key:
+                    game_league = 'NCAAB'
+                elif 'americanfootball' in sport_key:
+                    game_league = 'NFL' if 'nfl' in sport_key else 'NCAAF'
+                elif 'icehockey' in sport_key:
+                    game_league = 'NHL'
                 else:
-                    result['expected_value'] = 0
-                    result['recommendation'] = 'PASS'
-                
-                results.append(result)
-            
-        except Exception as e:
-            logger.error(f"Error analyzing game {idx}: {e}")
-            continue
-        
-        progress.progress((idx + 1) / len(games))
-    
-    progress.empty()
-    
-    results_df = pd.DataFrame(results)
-    
-    # Sort by expected value (best bets first)
-    if len(results_df) > 0 and 'expected_value' in results_df.columns:
-        results_df = results_df.sort_values('expected_value', ascending=False)
-    
-    return results_df
+                    game_league = league
+
+                # Build comprehensive features from ALL sources
+                comp_features = self.build_comprehensive_features(game, game_league)
+
+                # Build Vertex AI feature vector
+                vertex_features = self.build_vertex_feature_vector(comp_features)
+
+                # Get Vertex AI ultimate prediction
+                vertex_prob = get_vertex_ai_prediction(vertex_features)
+
+                if vertex_prob is not None:
+                    # Calculate expected value
+                    implied_prob = comp_features.get('implied_home_prob', 0.5)
+                    edge = vertex_prob - implied_prob
+
+                    # Store everything
+                    result = comp_features.copy()
+                    result['vertex_ai_prob'] = vertex_prob
+                    result['vertex_ai_edge'] = edge
+                    result['vertex_ai_confidence'] = abs(edge)
+
+                    # Calculate EV
+                    home_ml = comp_features.get('home_ml_odds', 100)
+                    if home_ml and home_ml != 0:
+                        if home_ml > 0:
+                            ev = (vertex_prob * home_ml) - ((1 - vertex_prob) * 100)
+                        else:
+                            ev = (vertex_prob * 100) - ((1 - vertex_prob) * abs(home_ml))
+
+                        result['expected_value'] = ev
+                        result['recommendation'] = 'BET' if ev > 5 else 'PASS'
+                    else:
+                        result['expected_value'] = 0
+                        result['recommendation'] = 'PASS'
+
+                    results.append(result)
+
+            except Exception as e:
+                logger.error(f"Error analyzing game {idx}: {e}")
+                continue
+
+            progress.progress((idx + 1) / len(games))
+
+        progress.empty()
+
+        results_df = pd.DataFrame(results)
+
+        # Sort by expected value (best bets first)
+        if len(results_df) > 0 and 'expected_value' in results_df.columns:
+            results_df = results_df.sort_values('expected_value', ascending=False)
+
+        return results_df
 
 
 def show_vertex_master_analysis(results_df: pd.DataFrame):
@@ -744,83 +744,7 @@ def show_vertex_master_analysis(results_df: pd.DataFrame):
     with summary_cols[2]:
         st.metric("Avg Vertex AI Prob", f"{results_df['vertex_ai_prob'].mean()*100:.1f}%")
         st.metric("Avg Market Prob", f"{results_df['implied_home_prob'].mean()*100:.1f}%")
-    
+
     with summary_cols[3]:
         st.metric("Avg Edge", f"{results_df['vertex_ai_edge'].mean()*100:+.2f}%")
         st.metric("Max Edge", f"{results_df['vertex_ai_edge'].max()*100:+.2f}%")
-```
-
----
-
-## 🎯 NEW FEATURES
-
-**Complete 1-N Rankings with:**
-
-1. **📊 All Games Listed** - Every single game ranked
-2. **🎚️ Filters:**
-   - Show only positive EV
-   - Minimum edge slider
-   - Auto-expand top N games
-3. **🌈 Color Coding:**
-   - 🌟 Green = Excellent (EV > $10)
-   - 💚 Green = Great (EV > $5)
-   - 🟡 Yellow = Good (EV > $0)
-   - ⚪ White = Neutral
-   - 🔴 Red = Avoid (EV < -$5)
-4. **📋 Quick Reference Table** - See all games at a glance
-5. **📊 Full Details** - Expandable analysis for each game
-6. **📥 Multiple Export Options:**
-   - Full analysis
-   - Positive EV only
-   - Top 10 only
-7. **📈 Statistical Summary** - Overview of all games
-
----
-
-## 🎮 USER EXPERIENCE
-
-**After clicking "Run Vertex AI Master Analysis":**
-```
-🏆 Vertex AI Master Analysis - Complete Rankings
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-Total Games: 47 | Positive EV: 12 | Best EV: $8.50 | Avg Edge: +2.3%
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-📊 Complete Rankings (1-47)
-
-[Filters]
-☐ Show only positive EV bets
-Min edge: -50% ━━━●━━━━━━━━━━━━━ +50%
-Auto-expand top: 3
-
-Showing 47 of 47 games
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-🟢 #1 | 🌟 Lakers @ Celtics | EV: $8.50 | Edge: +5.2% | Vertex: 58%
-  [EXPANDED - Full analysis shown]
-
-🟢 #2 | 💚 Warriors @ Nets | EV: $6.20 | Edge: +4.1% | Vertex: 56%
-  [EXPANDED - Full analysis shown]
-
-🟢 #3 | 💚 Bucks @ Heat | EV: $5.80 | Edge: +3.8% | Vertex: 54%
-  [EXPANDED - Full analysis shown]
-
-🟡 #4 | 🟡 Suns @ Mavs | EV: $2.10 | Edge: +1.5% | Vertex: 52%
-  [Click to expand]
-
-⚪ #5 | ⚪ Nuggets @ Clippers | EV: -$0.50 | Edge: -0.3% | Vertex: 49%
-  [Click to expand]
-
-...
-
-🔴 #47 | 🔴 Hornets @ Pistons | EV: -$12.30 | Edge: -8.1% | Vertex: 38%
-  [Click to expand]
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-📋 Quick Reference Table - All Games
-
-[Scrollable table with all 47 games]
