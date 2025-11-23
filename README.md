@@ -1,270 +1,365 @@
-# 🎯 ParlayDesk - AI-Enhanced Sports Betting Analysis
+# Sports Betting ML Pipeline - Parlay Optimizer
 
-AI-powered parlay finder with machine learning predictions trained on historical data from The Odds API, Kalshi market validation, and live NFL, NBA, NHL, and college (NCAAF/NCAAB) context from API-Sports plus SportsData.io power metrics.
+A complete end-to-end machine learning pipeline for sports betting analysis, from data collection through parlay optimization. Uses historical data from sportsdata.io, trains custom ML models on Vertex AI, and generates optimal betting recommendations.
 
-> **What's new:** the primary Streamlit app now bundles the historical-machine-learning workflow that previously lived in the "enhanced" build. Provide your The Odds API, API-Sports, and optional SportsData.io keys and the app will auto-build an ensemble (logistic regression + gradient boosting) from recent schedules, layer on SportsData.io streak/turnover metrics, blend everything with Kalshi + sentiment signals, and surface the combined analysis throughout the UI.
+## 🏈 Supported Sports
+- **NFL** - National Football League
+- **NBA** - National Basketball Association  
+- **NCAAB** - NCAA Men's Basketball
+- **NCAAF** - NCAA Football
+- **NHL** - National Hockey League
 
-![Python](https://img.shields.io/badge/python-3.9+-blue.svg)
-![Streamlit](https://img.shields.io/badge/streamlit-1.28+-red.svg)
-![scikit-learn](https://img.shields.io/badge/scikit--learn-1.3+-orange.svg)
+## 📋 Features
 
-## 🚀 One Unified Streamlit App
+- **Historical Data Pipeline**: Automated collection from sportsdata.io API
+- **Advanced Feature Engineering**: 50+ betting-specific features including:
+  - ELO ratings
+  - Recent form and rolling statistics
+  - Rest days and back-to-back analysis
+  - Head-to-head records
+  - Pace/tempo metrics
+  - Strength of schedule
+  - Line movement and public betting percentages
+  
+- **ML Model Training**: 
+  - XGBoost classifiers for moneyline, spread, and totals
+  - XGBoost regressors for margin and total points prediction
+  - Time-series cross-validation
+  - Hyperparameter optimization
+  - Vertex AI integration
 
-`streamlit_app.py` now includes the full feature set—live odds exploration, Kalshi validation, API-Sports insights, and on-demand historical machine learning. Enable or disable components from the sidebar without switching builds.
+- **Parlay Optimization**:
+  - Expected value calculation
+  - Correlation detection
+  - Kelly Criterion bet sizing
+  - Multi-leg parlay generation
 
-**Highlights**
+## 🚀 Quick Start
 
-- ✅ Real-time odds aggregation across supported books
-- ✅ Historical ML models trained automatically when Odds API + API-Sports keys are supplied
-- ✅ Sentiment, weather, social, and sharp money overlays
-- ✅ Kalshi prediction-market blending with fallback handling
-- ✅ Upload theover.ai CSV exports to blend their ML win probabilities directly into each leg
-- ✅ Custom parlay builder, EV calculators, and export tools
-- ✅ Save parlays for next-day tracking and refresh the hit/miss tracker with one click
-## 📋 Requirements
-
-### Base Installation
-```bash
-pip install -r requirements.txt
-```
-
-> 💡 **Tip:** scikit-learn remains optional—the app defaults to a scikit-learn ensemble, but ships with a lightweight
-> NumPy-powered logistic regression fallback, so historical ML predictions still
-> train even in minimal environments (including Streamlit Cloud) without the
-> extra dependency.
-
-### Optional Data Sources
-- ✅ The Odds API key with **historical data access** for ML training
-  - Get yours at: https://the-odds-api.com
-- ✅ API-Sports tokens for NFL, NBA, NHL, and (optionally) college football/basketball live data overlays
-- ✅ SportsData.io keys for NFL, NBA, NHL, NCAAF, and NCAAB streaks, turnover margin, and power indices
-- ✅ NewsAPI, weather, social, or Kalshi credentials for deeper context
-
-## ⚡ Quick Start
-
-### Run the App
-```bash
-# Install dependencies
-pip install -r requirements.txt
-
-# Launch Streamlit
-streamlit run streamlit_app.py
-
-# Configure API keys from the sidebar or .streamlit/secrets.toml
-```
-
-## 📚 Documentation
-
-- **[Quick Start Guide](docs/QUICKSTART.md)** – Step-by-step setup for the unified app
-- **[Enhanced README](docs/README_ENHANCED.md)** – Archived deep dive into the historical ML pipeline
-- **[Feature Comparison](docs/COMPARISON.md)** – Legacy breakdown of pre-merge builds (kept for reference)
-- **[File Index](docs/FILE_INDEX.md)** – What each file does
-
-## 🎯 Features
-
-### Core Features
-- 🎲 Multi-sport odds aggregation (NFL, NBA, MLB, NHL, etc.)
-- 🤖 Automatic ensemble predictions (logistic + gradient boosting) trained on recent API-Sports schedules (no manual training step)
-- 🗂️ Multi-season backfill automatically taps prior campaigns (e.g., 2024 data) whenever the latest window is sparse
-- 📊 Parlay combination builder (2-leg, 3-leg, 4-leg)
-- 💰 Expected Value (EV) calculations
-- 📌 Parlay tracker saves picks and checks results against API-Sports scoreboards the next day
-- 🛰️ API-Sports NFL/NBA/NHL live data integration plus SportsData.io power metrics for NFL, NBA, NHL, NCAAF, and NCAAB
-- 🌐 Embedded API-Sports league widget for cross-sport research
-- 📈 Real-time odds from The Odds API blended with Kalshi validation
-- 🎯 League-aware theover.ai integration that fuses uploaded ML projections with the app's own models
-
-### Advanced Extras
-- 🔁 *Legacy experiments:* toggle ML off to compare against the odds/sentiment-only baseline whenever you want.
-- 🧪 Optional notebooks for trying alternative models or wider historical windows
-- 🧮 Advanced feature-engineering templates to extend the ML pipeline further
-
-## 🔬 How the ML Works
-
-```
-API-Sports Schedules + The Odds API → Feature Engineering → Ensemble Trainer → Blended Probabilities
-              ↓                               ↓                        ↓                      ↓
-     (Records, form, trends)        (11 numerical features)   Logistic + HistGB blend   60% ML • 25% market • 15% sentiment
-              ↓                               ↓                        ↓                      ↓
- Current Odds → Build Feature Vector → Predict → Compare to Market → Edge!
-```
-
-When the current season hasn't produced enough completed games (such as early in the offseason), the builder automatically
-backfills with earlier campaigns—including the full 2024 schedules for NFL and NHL—so the ensemble still trains on a
-balanced dataset before influencing the parlay analysis. If the live feeds remain sparse even after those backfills, the
-trainer tops up the dataset with a small synthetic sample so the ensemble stays calibrated; the Streamlit status panel
-calls out how many "booster" rows were injected alongside the real games.
-
-If scikit-learn isn't installed the builder seamlessly drops to an internal
-logistic regression trainer that mirrors the same feature engineering pipeline
-using NumPy. You'll still see the model source and training-row counts in the UI
-so it's clear when the simplified engine is in play.
-
-**Example Pattern Learned:**
-```
-"Home favorites at -300 with -7.5 spread in NFL:
- Market says 75%, ML model says 78% based on 147 similar games
- → 3% edge detected!"
-```
-
-## 📊 Sample Output
-
-```
-🟢 💰 #1 | AI Score: 45.2 | AI EV: +8.5%
-
-AI Metrics:
-├─ Confidence: 72% (high)
-├─ AI EV: +8.5% (excellent value)
-├─ Model Source: Historical ML (276 training rows)
-└─ Edge: +7% over market
-
-Parlay Legs:
-├─ Lakers ML: Market 58% → AI 65% (7% edge!)
-├─ Bills -3.5: Market 52% → AI 59% (7% edge!)
-└─ Over 225: Market 50% → AI 53% (3% edge!)
-
-Payout: +280 ($100 → $380)
-Expected Value: +$23.80 per $100 wagered
-```
-
-## 🎓 Understanding Results
-
-### Confidence Icons
-- 🟢 **High (>70%)**: Strong ML signal, model very confident
-- 🟡 **Moderate (50-70%)**: Good opportunity, reasonable confidence
-- 🟠 **Lower (<50%)**: Higher risk, less certain
-
-### Expected Value
-- 💰 **High +EV (>10%)**: Excellent value
-- 📈 **Positive +EV (0-10%)**: Good value, profitable long-term
-- 📉 **Negative -EV (<0%)**: Poor value, avoid
-
-## ⚙️ Configuration
-
-Create a `.streamlit/secrets.toml` file (optional):
-```toml
-[odds_api]
-api_key = "your-api-key-here"
-```
-
-Or enter your API key directly in the sidebar.
-
-To enable NFL live data integration, add your API-Sports token under the `NFL_APISPORTS_API_KEY` secret:
-
-```toml
-# .streamlit/secrets.toml
-NFL_APISPORTS_API_KEY = "your-nfl-api-sports-token"
-```
-
-To layer in SportsData.io streaks, turnover margin, and power indices, add the per-league secrets (the same master key works across sports if your subscription covers multiple leagues):
-
-```toml
-# .streamlit/secrets.toml
-NFL_SPORTSDATA_API_KEY = "your-nfl-sportsdata-token"
-NBA_SPORTSDATA_API_KEY = "your-nba-sportsdata-token"
-NHL_SPORTSDATA_API_KEY = "your-nhl-sportsdata-token"
-NCAAF_SPORTSDATA_API_KEY = "your-ncaaf-sportsdata-token"
-NCAAB_SPORTSDATA_API_KEY = "your-ncaab-sportsdata-token"
-```
-
-### Temporarily disabling ML
-
-Open the **AI Settings** expander in the sidebar and click **“🔌 Disable ML for this session”** to turn off the historical
-machine-learning models. The app will immediately fall back to odds, sentiment, Kalshi, and live data signals without
-building training datasets. Click **“⚡ Re-enable ML predictions”** at any time to bring the models back.
-
-To enable NHL live data integration, add your hockey token under the `NHL_APISPORTS_API_KEY` secret:
-
-```toml
-# .streamlit/secrets.toml
-NHL_APISPORTS_API_KEY = "your-nhl-api-sports-token"
-```
-
-To stream NBA context, supply the basketball token under `NBA_APISPORTS_API_KEY`:
-
-```toml
-# .streamlit/secrets.toml
-NBA_APISPORTS_API_KEY = "your-nba-api-sports-token"
-```
-
-The app automatically picks up those keys from Streamlit secrets. If the secrets
-aren't defined it falls back to the `NFL_APISPORTS_API_KEY`, `NBA_APISPORTS_API_KEY`,
-`NHL_APISPORTS_API_KEY`, `APISPORTS_API_KEY`, or `API_SPORTS_KEY` environment variables so existing deployments
-keep working without additional configuration.
-
-## 🛠️ Development
+### 1. Installation
 
 ```bash
-# Clone the repo
-git clone https://github.com/yourusername/parlaydesk.git
-cd parlaydesk
+# Clone the repository
+git clone <your-repo>
+cd parlay-app
 
 # Install dependencies
 pip install -r requirements.txt
-
-# Run the unified app
-streamlit run streamlit_app.py
 ```
 
-## ⚠️ Important Notes
+### 2. Configuration
 
-### API Costs
-- Odds API calls scale with the number of sports you request (≈1 per sport per refresh)
-- Historical training triggers additional Odds API + API-Sports calls during the first build or when caches expire
-- Historical data costs extra—check The Odds API pricing before enabling ML
+Edit `config.py` to set your API keys:
 
-### Model Performance
-- **58% accuracy is good!** (vs 50% random guessing)
-- Even 60% accuracy means 40% losses
-- Edge detection helps find value, not guarantees
-- Always use proper bankroll management
+```python
+API_KEYS = {
+    'NFL': 'your-nfl-api-key',
+    'NBA': 'your-nba-api-key',
+    'NCAAB': 'your-ncaab-api-key',
+    'NCAAF': 'your-ncaaf-api-key',
+    'NHL': 'your-nhl-api-key'
+}
 
-### Responsible Gambling
-- ⚠️ Never bet more than you can afford to lose
-- ⚠️ ML predictions are estimates, not certainties
-- ⚠️ Past performance doesn't guarantee future results
-- ⚠️ Use for education and entertainment
+GCP_CONFIG = {
+    'project_id': 'your-gcp-project-id',
+    'location': 'us-central1',
+    'staging_bucket': 'your-bucket-name'
+}
+```
 
-## 📈 Roadmap
+Or use environment variables:
+```bash
+export SPORTSDATA_NFL_KEY="your-key"
+export SPORTSDATA_NBA_KEY="your-key"
+export GCP_PROJECT_ID="your-project"
+```
 
-- [ ] Live odds tracking with WebSocket
-- [ ] Player injury data integration
-- [ ] Weather data for outdoor sports
-- [ ] Advanced bankroll management tools
-- [ ] Portfolio tracking and analytics
-- [ ] Automated bet slip generation
-- [ ] Discord/Telegram bot integration
-- [ ] Deep learning models (LSTM for sequences)
+### 3. Initial Model Training
 
-## 🤝 Contributing
+First time setup - train models on historical data:
 
-Contributions welcome! Please:
-1. Fork the repo
-2. Create a feature branch
-3. Make your changes
-4. Add tests if applicable
-5. Submit a pull request
+```bash
+# Train models for all sports
+python main.py --train
 
-## 📄 License
+# Or train specific sports
+python main.py --train --sports NFL NBA
+```
 
-MIT License - See LICENSE file for details
+This will:
+1. Collect 3+ years of historical data
+2. Engineer 50+ features per sport
+3. Train XGBoost models for each bet type
+4. Save models locally to `./models/`
 
-## 🙏 Acknowledgments
+### 4. Daily Usage
 
-- **The Odds API** - For comprehensive sports betting data
-- **Streamlit** - For the amazing web app framework
-- **scikit-learn** - For ML capabilities
+Once models are trained, run daily predictions:
+
+```bash
+# Generate today's picks
+python main.py
+
+# Or for specific sports
+python main.py --sports NFL
+```
+
+## 📁 Project Structure
+
+```
+parlay-app/
+├── main.py                     # Main orchestration script
+├── sports_data_pipeline.py     # Data collection from APIs
+├── betting_features.py         # Feature engineering
+├── vertex_training.py          # ML model training
+├── parlay_optimizer.py         # Parlay generation and optimization
+├── config.py                   # Configuration settings
+├── requirements.txt            # Python dependencies
+│
+├── data/                       # Raw data and theover.ai CSVs
+│   └── theover/               # Place theover.ai picks here
+│       ├── theover_nfl_2024-11-23.csv
+│       └── theover_nba_2024-11-23.csv
+│
+├── training_data/             # Processed training data
+│   ├── nfl_raw.csv
+│   ├── nfl_ml_ready.csv
+│   └── ...
+│
+├── models/                    # Trained models
+│   ├── nfl/
+│   │   ├── NFL_moneyline.pkl
+│   │   ├── NFL_spread.pkl
+│   │   └── ...
+│   └── ...
+│
+└── output/                    # Betting recommendations
+    └── betting_card_2024-11-23.csv
+```
+
+## 🔄 Pipeline Workflow
+
+### Training Phase (Run Initially or Weekly)
+
+```bash
+python main.py --train --sports NFL NBA
+```
+
+**Step 1: Collect Historical Data**
+- Fetches games, team stats, and odds from sportsdata.io
+- Stores in `training_data/`
+
+**Step 2: Engineer Features**
+- Calculates ELO ratings
+- Creates rolling statistics
+- Analyzes head-to-head records
+- Adds betting-specific features
+
+**Step 3: Train Models**
+- Trains XGBoost models for each bet type
+- Performs cross-validation
+- Saves models to `models/`
+
+### Prediction Phase (Run Daily)
+
+```bash
+python main.py
+```
+
+**Step 4: Load theover.ai Data**
+- Reads today's picks from `data/theover/`
+- Expected format: `theover_{sport}_{date}.csv`
+
+**Step 5: Apply ML Probabilities**
+- Runs games through trained models
+- Generates win probabilities
+
+**Step 6: Generate Recommendations**
+- Analyzes expected value
+- Identifies +EV bets
+- Constructs optimal parlays
+- Outputs to `output/betting_card_{date}.csv`
+
+## 📊 theover.ai CSV Format
+
+Place your theover.ai CSV files in `data/theover/` with this format:
+
+```csv
+GameID,DateTime,HomeTeam,AwayTeam,HomeMoneyLine,AwayMoneyLine,PointSpread,HomeSpreadOdds,AwaySpreadOdds,OverUnder,OverOdds,UnderOdds
+12345,2024-11-23T13:00:00,Patriots,Jets,-150,+130,-3.5,-110,-110,42.5,-110,-110
+```
+
+Required columns:
+- `GameID`: Unique game identifier
+- `HomeTeam`, `AwayTeam`: Team names
+- `HomeMoneyLine`, `AwayMoneyLine`: Moneyline odds
+- `PointSpread`: Spread (from home team perspective)
+- `HomeSpreadOdds`, `AwaySpreadOdds`: Spread odds
+- `OverUnder`: Total points line
+- `OverOdds`, `UnderOdds`: Total odds
+
+## 🎯 Running Specific Steps
+
+```bash
+# Step 1: Collect data only
+python main.py --step 1
+
+# Step 2: Engineer features only
+python main.py --step 2
+
+# Step 3: Train models only
+python main.py --step 3
+
+# Step 6: Generate recommendations only
+python main.py --step 6
+```
+
+## ⚙️ Configuration Options
+
+### Betting Strategy (`config.py`)
+
+```python
+BETTING_CONFIG = {
+    'min_edge': 0.03,              # 3% minimum edge
+    'high_confidence_ev': 0.10,    # 10% for high confidence
+    'parlay_sizes': [2, 3, 4, 5],  # Parlay leg counts
+    'max_parlays_per_size': 10,    # Max parlays per size
+    'kelly_fraction': 0.25,        # Use 1/4 Kelly
+    'max_bet_size': 0.10,          # Max 10% of bankroll
+}
+```
+
+### Model Parameters
+
+```python
+TRAINING_CONFIG = {
+    'xgboost_params': {
+        'max_depth': 6,
+        'learning_rate': 0.05,
+        'n_estimators': 200,
+        # ... more parameters
+    }
+}
+```
+
+## 📈 Output Format
+
+### Betting Card (`output/betting_card_YYYY-MM-DD.csv`)
+
+**Single Bets Section:**
+```csv
+Sport,GameID,HomeTeam,AwayTeam,BetType,Selection,ModelProb,Odds,Edge,ExpectedValue,Confidence
+NFL,12345,Patriots,Jets,Moneyline,Patriots,0.58,-150,0.07,0.12,High
+NBA,67890,Lakers,Celtics,Spread,Lakers -5.5,0.62,-110,0.09,0.15,High
+```
+
+**Parlays Section:**
+- Each parlay with legs, combined odds, win probability, and expected value
+- Kelly Criterion recommended bet size
+
+## 🔧 Troubleshooting
+
+### API Rate Limits
+If you hit rate limits, adjust the sleep time in `sports_data_pipeline.py`:
+```python
+time.sleep(0.5)  # Increase to 1.0 or higher
+```
+
+### Missing Models
+If you see "Models not found", run training first:
+```bash
+python main.py --train --sports NFL
+```
+
+### GCP Authentication
+For Vertex AI, authenticate:
+```bash
+gcloud auth application-default login
+```
+
+### Memory Issues
+For large datasets, process sports individually:
+```bash
+python main.py --train --sports NFL
+python main.py --train --sports NBA
+```
+
+## 📝 Best Practices
+
+1. **Train Weekly**: Retrain models weekly during season to capture recent trends
+2. **Bankroll Management**: Always use Kelly Criterion sizing (configured at 1/4 Kelly)
+3. **Edge Threshold**: Start with 3-5% minimum edge
+4. **Correlation**: Avoid same-game parlays unless specifically analyzed
+5. **Record Keeping**: Track all bets for model validation
+
+## 🧪 Model Performance
+
+Models are evaluated on:
+- **Accuracy**: Win rate on test set
+- **Log Loss**: Calibration quality
+- **ROI**: Simulated betting returns
+- **AUC**: Discrimination ability
+
+Check `models/metrics_{sport}.json` for detailed performance metrics.
+
+## 🔐 Security Notes
+
+- Never commit API keys to git
+- Use environment variables for sensitive data
+- Keep `config.py` in `.gitignore`
+- Secure your GCP credentials
+
+## 📚 Advanced Usage
+
+### Custom Feature Engineering
+
+Edit `betting_features.py` to add sport-specific features:
+
+```python
+def add_custom_features(self, df: pd.DataFrame) -> pd.DataFrame:
+    # Your custom features here
+    df['CustomFeature'] = ...
+    return df
+```
+
+### Hyperparameter Tuning
+
+Use Vertex AI for automated tuning:
+
+```python
+from google.cloud import aiplatform
+
+job = aiplatform.HyperparameterTuningJob(...)
+```
+
+### Different Models
+
+Try different algorithms in `vertex_training.py`:
+
+```python
+from sklearn.ensemble import RandomForestClassifier
+model = RandomForestClassifier(...)
+```
 
 ## 📞 Support
 
-- **Issues**: Open a GitHub issue
-- **Docs**: Check the `/docs` folder
-- **API Help**: https://the-odds-api.com/liveapi/guides/
+For issues:
+1. Check logs in `pipeline.log`
+2. Verify API keys in config
+3. Ensure theover.ai CSVs are formatted correctly
+4. Check model files exist in `models/`
 
-## ⭐ Star This Repo!
+## 📄 License
 
-If you find this useful, please star the repo! It helps others discover the project.
+[Your License Here]
+
+## 🙏 Acknowledgments
+
+- Data from sportsdata.io
+- Predictions from theover.ai
+- ML framework using XGBoost and scikit-learn
+- Cloud infrastructure via Google Cloud Platform
 
 ---
 
-**Disclaimer**: This tool is for educational and entertainment purposes only. Sports betting involves risk. Never bet more than you can afford to lose. Not financial advice.
+**Disclaimer**: This tool is for educational purposes. Always gamble responsibly and within your means. Past performance does not guarantee future results.
