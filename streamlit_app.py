@@ -3014,12 +3014,6 @@ class AIOptimizer:
     ):
         self.sentiment = sentiment_analyzer
         self.ml = ml_predictor
-
-if is_vertex_ai_enabled():
-    show_vertex_ai_prediction_section(
-        home_team=home_team_name,  # Use your actual variable
-        away_team=away_team_name   # Use your actual variable
-    )    
     
     def score_parlay(self, legs: List[Dict]) -> Dict[str, float]:
         """
@@ -11554,3 +11548,17 @@ with main_tab5:
             </div>
             """
             components.html(widget_html, height=widget_height, scrolling=True)
+
+# ============================================================
+# VERTEX AI TEST SECTION
+# ============================================================
+if is_vertex_ai_enabled():
+    st.markdown("---")
+    st.header("🤖 Google Cloud Vertex AI Test")
+    st.caption("Quick test of Vertex AI predictions")
+    
+    test_home = st.text_input("Home Team (test)", value="Lakers", key="vertex_test_home")
+    test_away = st.text_input("Away Team (test)", value="Celtics", key="vertex_test_away")
+    
+    if test_home and test_away:
+        show_vertex_ai_prediction_section(test_home, test_away)
