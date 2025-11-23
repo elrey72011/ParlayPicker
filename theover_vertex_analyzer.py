@@ -15,14 +15,7 @@ logger = logging.getLogger(__name__)
 def enrich_spread_pick_with_stats(row: pd.Series, sportsdata_client=None, apisports_client=None) -> Dict:
     """
     Enrich a single spread pick with team stats
-    
-    Args:
-        row: Row from theover.ai spreads CSV
-        sportsdata_client: Your SportsData client
-        apisports_client: Your API-Sports client
-        
-    Returns:
-        Dict with enriched features
+    Handles both column naming conventions (home_team and HomeTeam)
     """
     # Handle both column naming conventions
     home_team = row.get('home_team') or row.get('HomeTeam', '')
@@ -64,21 +57,40 @@ def get_team_stats(team_name: str, league: str, client=None) -> Dict:
     Get team statistics
     TODO: Implement with your actual SportsData/API-Sports clients
     """
-    # Placeholder - return estimated stats
-    # In production, fetch from your APIs
-    
-    return {
-        'win_pct': 0.55,  # Default to 55% win rate
-        'avg_points': 110 if league == 'NBA' else 25,
-        'def_rating': 105,
-        'last_5_wins': 3,
-    }
+    # Placeholder - return estimated stats based on league
+    if league == 'NBA':
+        return {
+            'win_pct': 0.55,
+            'avg_points': 110,
+            'def_rating': 105,
+            'last_5_wins': 3,
+        }
+    elif league == 'NFL' or league == 'NCAAF':
+        return {
+            'win_pct': 0.55,
+            'avg_points': 24,
+            'def_rating': 20,
+            'last_5_wins': 3,
+        }
+    elif league == 'NHL':
+        return {
+            'win_pct': 0.55,
+            'avg_points': 3,
+            'def_rating': 2.5,
+            'last_5_wins': 3,
+        }
+    else:
+        return {
+            'win_pct': 0.50,
+            'avg_points': 100,
+            'def_rating': 100,
+            'last_5_wins': 2.5,
+        }
 
 
 def build_vertex_features(enriched_data: Dict) -> List[float]:
     """
     Build feature vector for Vertex AI prediction
-    
     Returns list of features in same order as training
     """
     features = [
@@ -99,18 +111,8 @@ def build_vertex_features(enriched_data: Dict) -> List[float]:
 def calculate_expected_value(ai_prob: float, line: float, pick: str) -> Dict:
     """
     Calculate expected value of a bet
-    
-    Args:
-        ai_prob: AI predicted probability of outcome
-        line: Betting line (spread or odds)
-        pick: Team/side picked by theover.ai
-        
-    Returns:
-        Dict with EV calculations
     """
-    # For spreads, line is typically around -110 for both sides
-    # For simplicity, assume -110 odds (risk $110 to win $100)
-    
+    # For spreads, assume -110 odds (risk $110 to win $100)
     bet_to_win = 100
     bet_to_risk = 110
     
@@ -121,11 +123,9 @@ def calculate_expected_value(ai_prob: float, line: float, pick: str) -> Dict:
     # Edge = how much better AI thinks it is than 50/50
     edge = ai_prob - 0.5
     
-    # Kelly criterion (fraction of bankroll to bet)
-    # Kelly = (probability * odds - (1 - probability)) / odds
-    # Assuming -110 odds
+    # Kelly criterion
     kelly = (ai_prob * (100/110) - (1 - ai_prob)) / (100/110)
-    kelly_pct = max(0, kelly) * 100  # Don't bet if negative
+    kelly_pct = max(0, kelly) * 100
     
     return {
         'ai_probability': ai_prob,
@@ -134,7 +134,7 @@ def calculate_expected_value(ai_prob: float, line: float, pick: str) -> Dict:
         'edge': edge,
         'edge_percentage': edge * 100,
         'kelly_percentage': kelly_pct,
-        'recommendation': 'BET' if ev_pct > 2 else 'PASS',  # Need >2% EV
+        'recommendation': 'BET' if ev_pct > 2 else 'PASS',
         'confidence': abs(edge)
     }
 
@@ -146,18 +146,10 @@ def analyze_theover_spreads_with_vertex(
 ) -> pd.DataFrame:
     """
     Analyze theover.ai spreads with Vertex AI predictions
-    
-    Args:
-        spreads_df: DataFrame from uploaded CSV
-        sportsdata_client: Optional stats client
-        apisports_client: Optional stats client
-        
-    Returns:
-        DataFrame with AI predictions and recommendations
     """
     if not is_vertex_ai_enabled():
         st.warning("⚠️ Vertex AI is disabled. Enable in Settings.")
-        return spreads_df
+        return pd.DataFrame()
     
     results = []
     
@@ -165,7 +157,11 @@ def analyze_theover_spreads_with_vertex(
     status_text = st.empty()
     
     for idx, row in spreads_df.iterrows():
-        status_text.text(f"Analyzing {row['home_team']} vs {row['away_team']}...")
+        # Get team names (handle both column formats)
+        home_team = row.get('home_team') or row.get('HomeTeam', 'Unknown')
+        away_team = row.get('away_team') or row.get('AwayTeam', 'Unknown')
+        
+        status_text.text(f"Analyzing {away_team} @ {home_team}... ({idx+1}/{len(spreads_df)})")
         
         try:
             # Enrich with stats
@@ -185,7 +181,7 @@ def analyze_theover_spreads_with_vertex(
                 enriched.update(ev_data)
                 results.append(enriched)
             else:
-                st.warning(f"Prediction failed for {enriched['home_team']} vs {enriched['away_team']}")
+                logger.warning(f"Prediction failed for {home_team} vs {away_team}")
                 
         except Exception as e:
             logger.error(f"Error analyzing row {idx}: {e}")
@@ -193,14 +189,14 @@ def analyze_theover_spreads_with_vertex(
         
         progress_bar.progress((idx + 1) / len(spreads_df))
     
-    status_text.text("Analysis complete!")
+    status_text.text("✅ Analysis complete!")
     progress_bar.empty()
     status_text.empty()
     
     results_df = pd.DataFrame(results)
     
     # Sort by EV (best bets first)
-    if 'ev_percentage' in results_df.columns:
+    if 'ev_percentage' in results_df.columns and len(results_df) > 0:
         results_df = results_df.sort_values('ev_percentage', ascending=False)
     
     return results_df
@@ -217,6 +213,10 @@ def show_best_bets_table(results_df: pd.DataFrame):
     
     if len(good_bets) == 0:
         st.info("No positive EV opportunities found in this set.")
+        st.write("This could mean:")
+        st.write("- The market odds are efficient")
+        st.write("- The AI model needs more training data")
+        st.write("- Current model is using placeholder team stats")
         return
     
     st.success(f"✅ Found {len(good_bets)} positive EV bets!")
@@ -225,9 +225,10 @@ def show_best_bets_table(results_df: pd.DataFrame):
     for idx, bet in good_bets.head(10).iterrows():
         with st.expander(
             f"{'🟢' if bet['ev_percentage'] > 5 else '🟡'} "
-            f"{bet['pick']} {bet['line']:+.1f} - "
-            f"EV: {bet['ev_percentage']:.2f}%",
-            expanded=(idx < 3)  # Expand top 3
+            f"{bet['away_team']} @ {bet['home_team']} - "
+            f"Pick: {bet['pick']} {bet['line']:+.1f} - "
+            f"EV: {bet['ev_percentage']:+.2f}%",
+            expanded=(idx < 3)
         ):
             col1, col2, col3, col4 = st.columns(4)
             
@@ -240,14 +241,14 @@ def show_best_bets_table(results_df: pd.DataFrame):
             with col2:
                 st.metric(
                     "Expected Value",
-                    f"{bet['ev_percentage']:.2f}%",
-                    delta=f"+{bet['ev_percentage']:.2f}%"
+                    f"{bet['ev_percentage']:+.2f}%",
+                    delta=f"{bet['ev_percentage']:+.2f}%"
                 )
             
             with col3:
                 st.metric(
                     "Edge",
-                    f"{bet['edge_percentage']:.2f}%"
+                    f"{bet['edge_percentage']:+.2f}%"
                 )
             
             with col4:
@@ -258,12 +259,12 @@ def show_best_bets_table(results_df: pd.DataFrame):
                 )
             
             # Game details
-            st.write(f"**{bet['away_team']} @ {bet['home_team']}**")
-            st.write(f"League: {bet['league']}")
-            st.write(f"Pick: **{bet['pick']} {bet['line']:+.1f}**")
+            st.write(f"**League:** {bet['league']}")
+            st.write(f"**Matchup:** {bet['away_team']} @ {bet['home_team']}")
+            st.write(f"**theover.ai Pick:** {bet['pick']} {bet['line']:+.1f}")
             
             # Stats
-            with st.expander("📊 Team Stats"):
+            with st.expander("📊 Team Stats Used"):
                 col_a, col_b = st.columns(2)
                 with col_a:
                     st.write(f"**{bet['home_team']}**")
@@ -277,7 +278,7 @@ def show_best_bets_table(results_df: pd.DataFrame):
                     st.write(f"Last 5: {bet['away_last_5']}-{5-bet['away_last_5']}")
     
     # Full table
-    st.subheader("📊 All Bets Ranked by EV")
+    st.subheader("📊 All Positive EV Bets")
     
     display_df = good_bets[[
         'league', 'home_team', 'away_team', 'pick', 'line',
@@ -287,8 +288,8 @@ def show_best_bets_table(results_df: pd.DataFrame):
     
     # Format for display
     display_df['ai_probability'] = display_df['ai_probability'].apply(lambda x: f"{x*100:.1f}%")
-    display_df['ev_percentage'] = display_df['ev_percentage'].apply(lambda x: f"{x:.2f}%")
-    display_df['edge_percentage'] = display_df['edge_percentage'].apply(lambda x: f"{x:.2f}%")
+    display_df['ev_percentage'] = display_df['ev_percentage'].apply(lambda x: f"{x:+.2f}%")
+    display_df['edge_percentage'] = display_df['edge_percentage'].apply(lambda x: f"{x:+.2f}%")
     display_df['kelly_percentage'] = display_df['kelly_percentage'].apply(lambda x: f"{x:.1f}%")
     
     st.dataframe(display_df, use_container_width=True)
