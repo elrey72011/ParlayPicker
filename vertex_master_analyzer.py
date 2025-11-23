@@ -368,78 +368,92 @@ class VertexMasterAnalyzer:
         return features
     
     def analyze_all_games(self, games: List[Dict], league: str = 'NBA') -> pd.DataFrame:
-        """
-        Analyze all games with Vertex AI
+    """
+    Analyze all games with Vertex AI
+    
+    Args:
+        games: List of games from The Odds API
+        league: Sport league (or 'multi' for mixed sports)
         
-        Args:
-            games: List of games from The Odds API
-            league: Sport league
+    Returns:
+        DataFrame with comprehensive analysis and Vertex AI recommendations
+    """
+    if not is_vertex_ai_enabled():
+        st.warning("⚠️ Vertex AI is disabled")
+        return pd.DataFrame()
+    
+    results = []
+    
+    st.write(f"🤖 Analyzing {len(games)} games with Vertex AI Master Analyzer...")
+    progress = st.progress(0)
+    
+    for idx, game in enumerate(games):
+        try:
+            # Determine league from sport_key
+            sport_key = game.get('sport_key', 'basketball_nba')
             
-        Returns:
-            DataFrame with comprehensive analysis and Vertex AI recommendations
-        """
-        if not is_vertex_ai_enabled():
-            st.warning("⚠️ Vertex AI is disabled")
-            return pd.DataFrame()
-        
-        results = []
-        
-        st.write(f"🤖 Analyzing {len(games)} games with Vertex AI Master Analyzer...")
-        progress = st.progress(0)
-        
-        for idx, game in enumerate(games):
-            try:
-                # Build comprehensive features from ALL sources
-                comp_features = self.build_comprehensive_features(game, league)
+            if 'basketball_nba' in sport_key:
+                game_league = 'NBA'
+            elif 'basketball_ncaab' in sport_key:
+                game_league = 'NCAAB'
+            elif 'americanfootball' in sport_key:
+                game_league = 'NFL' if 'nfl' in sport_key else 'NCAAF'
+            elif 'icehockey' in sport_key:
+                game_league = 'NHL'
+            else:
+                game_league = league
+            
+            # Build comprehensive features from ALL sources
+            comp_features = self.build_comprehensive_features(game, game_league)
+            
+            # Build Vertex AI feature vector
+            vertex_features = self.build_vertex_feature_vector(comp_features)
+            
+            # Get Vertex AI ultimate prediction
+            vertex_prob = get_vertex_ai_prediction(vertex_features)
+            
+            if vertex_prob is not None:
+                # Calculate expected value
+                implied_prob = comp_features.get('implied_home_prob', 0.5)
+                edge = vertex_prob - implied_prob
                 
-                # Build Vertex AI feature vector
-                vertex_features = self.build_vertex_feature_vector(comp_features)
+                # Store everything
+                result = comp_features.copy()
+                result['vertex_ai_prob'] = vertex_prob
+                result['vertex_ai_edge'] = edge
+                result['vertex_ai_confidence'] = abs(edge)
                 
-                # Get Vertex AI ultimate prediction
-                vertex_prob = get_vertex_ai_prediction(vertex_features)
-                
-                if vertex_prob is not None:
-                    # Calculate expected value
-                    implied_prob = comp_features.get('implied_home_prob', 0.5)
-                    edge = vertex_prob - implied_prob
-                    
-                    # Store everything
-                    result = comp_features.copy()
-                    result['vertex_ai_prob'] = vertex_prob
-                    result['vertex_ai_edge'] = edge
-                    result['vertex_ai_confidence'] = abs(edge)
-                    
-                    # Calculate EV
-                    home_ml = comp_features.get('home_ml_odds', 100)
-                    if home_ml and home_ml != 0:
-                        if home_ml > 0:
-                            ev = (vertex_prob * home_ml) - ((1 - vertex_prob) * 100)
-                        else:
-                            ev = (vertex_prob * 100) - ((1 - vertex_prob) * abs(home_ml))
-                        
-                        result['expected_value'] = ev
-                        result['recommendation'] = 'BET' if ev > 5 else 'PASS'
+                # Calculate EV
+                home_ml = comp_features.get('home_ml_odds', 100)
+                if home_ml and home_ml != 0:
+                    if home_ml > 0:
+                        ev = (vertex_prob * home_ml) - ((1 - vertex_prob) * 100)
                     else:
-                        result['expected_value'] = 0
-                        result['recommendation'] = 'PASS'
+                        ev = (vertex_prob * 100) - ((1 - vertex_prob) * abs(home_ml))
                     
-                    results.append(result)
+                    result['expected_value'] = ev
+                    result['recommendation'] = 'BET' if ev > 5 else 'PASS'
+                else:
+                    result['expected_value'] = 0
+                    result['recommendation'] = 'PASS'
                 
-            except Exception as e:
-                logger.error(f"Error analyzing game {idx}: {e}")
-                continue
+                results.append(result)
             
-            progress.progress((idx + 1) / len(games))
+        except Exception as e:
+            logger.error(f"Error analyzing game {idx}: {e}")
+            continue
         
-        progress.empty()
-        
-        results_df = pd.DataFrame(results)
-        
-        # Sort by Vertex AI edge (best opportunities first)
-        if len(results_df) > 0 and 'expected_value' in results_df.columns:
-            results_df = results_df.sort_values('expected_value', ascending=False)
-        
-        return results_df
+        progress.progress((idx + 1) / len(games))
+    
+    progress.empty()
+    
+    results_df = pd.DataFrame(results)
+    
+    # Sort by expected value (best bets first)
+    if len(results_df) > 0 and 'expected_value' in results_df.columns:
+        results_df = results_df.sort_values('expected_value', ascending=False)
+    
+    return results_df
 
 
 def show_vertex_master_analysis(results_df: pd.DataFrame):
