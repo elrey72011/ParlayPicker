@@ -176,3 +176,121 @@ def analyze_theover_spreads_with_vertex(
                 
                 # Combine everything
                 enriched.update(ev_data)
+                results.append(enriched)
+            else:
+                st.warning(f"Prediction failed for {enriched['home_team']} vs {enriched['away_team']}")
+                
+        except Exception as e:
+            logger.error(f"Error analyzing row {idx}: {e}")
+            continue
+        
+        progress_bar.progress((idx + 1) / len(spreads_df))
+    
+    status_text.text("Analysis complete!")
+    progress_bar.empty()
+    status_text.empty()
+    
+    results_df = pd.DataFrame(results)
+    
+    # Sort by EV (best bets first)
+    if 'ev_percentage' in results_df.columns:
+        results_df = results_df.sort_values('ev_percentage', ascending=False)
+    
+    return results_df
+
+
+def show_best_bets_table(results_df: pd.DataFrame):
+    """Display best bets in a nice table"""
+    
+    st.subheader("🎯 Best Betting Opportunities")
+    st.caption("Ranked by Expected Value")
+    
+    # Filter to only positive EV bets
+    good_bets = results_df[results_df['recommendation'] == 'BET'].copy()
+    
+    if len(good_bets) == 0:
+        st.info("No positive EV opportunities found in this set.")
+        return
+    
+    st.success(f"✅ Found {len(good_bets)} positive EV bets!")
+    
+    # Show top 10
+    for idx, bet in good_bets.head(10).iterrows():
+        with st.expander(
+            f"{'🟢' if bet['ev_percentage'] > 5 else '🟡'} "
+            f"{bet['pick']} {bet['line']:+.1f} - "
+            f"EV: {bet['ev_percentage']:.2f}%",
+            expanded=(idx < 3)  # Expand top 3
+        ):
+            col1, col2, col3, col4 = st.columns(4)
+            
+            with col1:
+                st.metric(
+                    "AI Win Probability",
+                    f"{bet['ai_probability'] * 100:.1f}%"
+                )
+            
+            with col2:
+                st.metric(
+                    "Expected Value",
+                    f"{bet['ev_percentage']:.2f}%",
+                    delta=f"+{bet['ev_percentage']:.2f}%"
+                )
+            
+            with col3:
+                st.metric(
+                    "Edge",
+                    f"{bet['edge_percentage']:.2f}%"
+                )
+            
+            with col4:
+                st.metric(
+                    "Kelly %",
+                    f"{bet['kelly_percentage']:.1f}%",
+                    help="Suggested % of bankroll"
+                )
+            
+            # Game details
+            st.write(f"**{bet['away_team']} @ {bet['home_team']}**")
+            st.write(f"League: {bet['league']}")
+            st.write(f"Pick: **{bet['pick']} {bet['line']:+.1f}**")
+            
+            # Stats
+            with st.expander("📊 Team Stats"):
+                col_a, col_b = st.columns(2)
+                with col_a:
+                    st.write(f"**{bet['home_team']}**")
+                    st.write(f"Win %: {bet['home_win_pct']:.1%}")
+                    st.write(f"Avg Points: {bet['home_avg_points']:.1f}")
+                    st.write(f"Last 5: {bet['home_last_5']}-{5-bet['home_last_5']}")
+                with col_b:
+                    st.write(f"**{bet['away_team']}**")
+                    st.write(f"Win %: {bet['away_win_pct']:.1%}")
+                    st.write(f"Avg Points: {bet['away_avg_points']:.1f}")
+                    st.write(f"Last 5: {bet['away_last_5']}-{5-bet['away_last_5']}")
+    
+    # Full table
+    st.subheader("📊 All Bets Ranked by EV")
+    
+    display_df = good_bets[[
+        'league', 'home_team', 'away_team', 'pick', 'line',
+        'ai_probability', 'ev_percentage', 'edge_percentage', 
+        'kelly_percentage', 'recommendation'
+    ]].copy()
+    
+    # Format for display
+    display_df['ai_probability'] = display_df['ai_probability'].apply(lambda x: f"{x*100:.1f}%")
+    display_df['ev_percentage'] = display_df['ev_percentage'].apply(lambda x: f"{x:.2f}%")
+    display_df['edge_percentage'] = display_df['edge_percentage'].apply(lambda x: f"{x:.2f}%")
+    display_df['kelly_percentage'] = display_df['kelly_percentage'].apply(lambda x: f"{x:.1f}%")
+    
+    st.dataframe(display_df, use_container_width=True)
+    
+    # Download
+    csv = results_df.to_csv(index=False)
+    st.download_button(
+        "📥 Download Full Analysis",
+        csv,
+        f"vertex_ai_analysis_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}.csv",
+        "text/csv"
+    )
