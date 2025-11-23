@@ -1,0 +1,150 @@
+"""
+DEBUG VERSION: Vertex Analyzer with detailed logging
+Add this to troubleshoot why you're getting no results
+"""
+import pandas as pd
+import numpy as np
+import streamlit as st
+from typing import Dict, List, Optional
+import logging
+from ml_predictions import get_vertex_ai_prediction, is_vertex_ai_enabled
+
+logger = logging.getLogger(__name__)
+
+
+def analyze_theover_spreads_with_vertex_DEBUG(
+    spreads_df: pd.DataFrame,
+    sportsdata_client=None,
+    apisports_client=None
+) -> pd.DataFrame:
+    """
+    DEBUG VERSION - Shows what's happening at each step
+    """
+    
+    st.write("### 🔍 DEBUG: Analysis Starting")
+    st.write(f"**Input:** {len(spreads_df)} games to analyze")
+    
+    # Check if Vertex AI is enabled
+    ai_enabled = is_vertex_ai_enabled()
+    st.write(f"**Vertex AI Enabled:** {ai_enabled}")
+    
+    if not ai_enabled:
+        st.error("❌ Vertex AI is disabled!")
+        return pd.DataFrame()
+    
+    results = []
+    errors = []
+    
+    st.write("---")
+    st.write("### 📊 Processing Each Game:")
+    
+    for idx, row in spreads_df.iterrows():
+        # Get team names
+        home_team = row.get('home_team') or row.get('HomeTeam', 'Unknown')
+        away_team = row.get('away_team') or row.get('AwayTeam', 'Unknown')
+        
+        st.write(f"\n**Game {idx+1}: {away_team} @ {home_team}**")
+        
+        try:
+            # Step 1: Enrich with stats
+            from theover_vertex_analyzer import enrich_spread_pick_with_stats, build_vertex_features, calculate_expected_value
+            
+            enriched = enrich_spread_pick_with_stats(row, sportsdata_client, apisports_client)
+            st.write(f"  ✅ Got team stats")
+            st.write(f"    - Home win %: {enriched.get('home_win_pct', 0):.1%}")
+            st.write(f"    - Away win %: {enriched.get('away_win_pct', 0):.1%}")
+            
+            # Step 2: Build features
+            features = build_vertex_features(enriched)
+            st.write(f"  ✅ Built feature vector (9 features)")
+            st.write(f"    - First 3 features: {features[:3]}")
+            
+            # Step 3: Get prediction
+            st.write(f"  🤖 Calling get_vertex_ai_prediction()...")
+            ai_prob = get_vertex_ai_prediction(features)
+            
+            if ai_prob is not None:
+                st.success(f"  ✅ Got prediction: {ai_prob:.3f} ({ai_prob*100:.1f}%)")
+                
+                # Step 4: Calculate EV
+                ev_data = calculate_expected_value(ai_prob, enriched['line'], enriched['pick'])
+                st.write(f"    - Expected Value: {ev_data['ev_percentage']:+.2f}%")
+                st.write(f"    - Recommendation: {ev_data['recommendation']}")
+                
+                # Add to results
+                enriched.update(ev_data)
+                results.append(enriched)
+                
+            else:
+                st.error(f"  ❌ Prediction returned None!")
+                st.write(f"    - This game will be skipped")
+                errors.append(f"{home_team} vs {away_team}: Prediction returned None")
+                
+        except Exception as e:
+            st.error(f"  ❌ Error: {str(e)}")
+            errors.append(f"{home_team} vs {away_team}: {str(e)}")
+            logger.error(f"Error analyzing {home_team} vs {away_team}: {e}", exc_info=True)
+            continue
+    
+    st.write("---")
+    st.write("### 📈 Results Summary:")
+    st.write(f"**Total games processed:** {len(spreads_df)}")
+    st.write(f"**Successful predictions:** {len(results)}")
+    st.write(f"**Failed predictions:** {len(errors)}")
+    
+    if errors:
+        st.write("\n**Errors:**")
+        for error in errors:
+            st.write(f"  - {error}")
+    
+    results_df = pd.DataFrame(results)
+    
+    if len(results_df) > 0:
+        st.success(f"✅ Returning {len(results_df)} results")
+        
+        # Show what's in the results
+        st.write("\n**Results columns:**", list(results_df.columns))
+        st.write("\n**Sample result:**")
+        st.json(results_df.iloc[0].to_dict())
+    else:
+        st.error("❌ No results to return!")
+        
+        st.write("\n**Why this might happen:**")
+        st.write("1. `get_vertex_ai_prediction()` is returning None for all games")
+        st.write("2. Check if ml_predictions.py is working correctly")
+        st.write("3. Try running this test:")
+        
+        st.code("""
+# Test prediction function directly
+from ml_predictions import get_vertex_ai_prediction
+
+test_features = [0.55, 0.45, 110, 105, 105, 108, 0.15, 0.6, 0.4]
+result = get_vertex_ai_prediction(test_features)
+
+if result:
+    print(f"✅ Prediction works: {result}")
+else:
+    print("❌ Prediction returns None")
+        """)
+    
+    return results_df
+
+
+# Add this to your Streamlit app to test:
+"""
+# In your app, replace the analyze button with this:
+
+if st.button("🔍 DEBUG: Analyze Spreads"):
+    from theover_vertex_analyzer_debug import analyze_theover_spreads_with_vertex_DEBUG
+    
+    results_df = analyze_theover_spreads_with_vertex_DEBUG(
+        theover_spreads_data,
+        sportsdata_client=None,
+        apisports_client=None
+    )
+    
+    if not results_df.empty:
+        st.write("Debug complete - results returned!")
+    else:
+        st.write("Debug complete - no results!")
+"""
