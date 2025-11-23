@@ -1,188 +1,389 @@
 """
-Vertex AI ML Predictions for Parlay Desk
-Adds Google Cloud Vertex AI predictions to your existing ML features
+ML Predictions Module
+Provides Vertex AI and local ML predictions for Streamlit app
 """
+
 import streamlit as st
-from google.cloud import aiplatform
-from google.oauth2 import service_account
+from typing import Optional, List, Dict, Any
 import logging
-import time
+import numpy as np
 
 logger = logging.getLogger(__name__)
 
 
-@st.cache_resource
-def get_endpoint_connection():
+def is_vertex_ai_enabled() -> bool:
     """
-    Cache the endpoint connection (huge speedup!)
-    This runs once and reuses the connection
+    Check if Vertex AI is enabled
+    
+    Returns:
+        True if Vertex AI is enabled in session state
     """
-    try:
-        credentials = service_account.Credentials.from_service_account_info(
-            st.secrets["gcp_service_account"]
-        )
-        
-        aiplatform.init(
-            project=st.secrets["vertex_ai"]["project_id"],
-            location=st.secrets["vertex_ai"]["location"],
-            credentials=credentials
-        )
-        
-        endpoint_name = (
-            f"projects/{st.secrets['vertex_ai']['project_id']}"
-            f"/locations/{st.secrets['vertex_ai']['location']}"
-            f"/endpoints/{st.secrets['vertex_ai']['endpoint_id']}"
-        )
-        
-        return aiplatform.Endpoint(endpoint_name=endpoint_name)
-    except Exception as e:
-        logger.error(f"Failed to connect to Vertex AI endpoint: {e}")
-        return None
+    return st.session_state.get('use_vertex_ai', False)
 
 
-@st.cache_data(ttl=300)  # Cache for 5 minutes
-def get_vertex_ai_prediction_cached(features_tuple):
+def get_vertex_ai_prediction(features: List[float]) -> Optional[float]:
     """
-    Cached predictions - instant for repeated requests
+    Get prediction from Vertex AI or local model
     
     Args:
-        features_tuple: Tuple of features (must be hashable for caching)
+        features: List of feature values (must match training data format)
         
     Returns:
-        float: Prediction probability or None if failed
+        Probability between 0 and 1, or None if prediction fails
     """
-    endpoint = get_endpoint_connection()
-    
-    if endpoint is None:
+    if not is_vertex_ai_enabled():
+        logger.info("Vertex AI not enabled in settings")
         return None
     
-    try:
-        features = list(features_tuple)
-        prediction = endpoint.predict(instances=[features])
-        return float(prediction.predictions[0])
-    except Exception as e:
-        logger.error(f"Vertex AI prediction error: {e}")
-        return None
+    # Try Vertex AI endpoint first
+    vertex_result = _try_vertex_ai_endpoint(features)
+    if vertex_result is not None:
+        return vertex_result
+    
+    # Fall back to local model
+    logger.info("Falling back to local model prediction")
+    return _try_local_model_prediction(features)
 
 
-def get_vertex_ai_prediction(features):
+def _try_vertex_ai_endpoint(features: List[float]) -> Optional[float]:
     """
-    Get prediction from Vertex AI endpoint (with caching)
+    Try to get prediction from Vertex AI endpoint
     
     Args:
-        features: List of feature values
+        features: Feature values
         
     Returns:
-        float: Prediction probability (0.0 to 1.0) or None if failed
+        Probability or None
     """
-    return get_vertex_ai_prediction_cached(tuple(features))
-
-
-def is_vertex_ai_enabled():
-    """Check if Vertex AI predictions are enabled"""
     try:
-        return st.secrets.get("vertex_ai", {}).get("enabled", False)
-    except:
-        return False
+        from google.cloud import aiplatform
+        
+        # Get configuration from session state
+        project_id = st.session_state.get('gcp_project_id')
+        location = st.session_state.get('gcp_location', 'us-central1')
+        endpoint_id = st.session_state.get('vertex_endpoint_id')
+        
+        if not project_id:
+            logger.warning("GCP Project ID not configured")
+            return None
+        
+        if not endpoint_id:
+            logger.warning("Vertex AI Endpoint ID not configured")
+            return None
+        
+        # Initialize Vertex AI
+        aiplatform.init(project=project_id, location=location)
+        
+        # Get endpoint
+        endpoint = aiplatform.Endpoint(endpoint_id)
+        
+        # Format instances for prediction
+        # Adjust this based on your model's expected input format
+        instances = [{"features": features}]
+        
+        # Make prediction
+        response = endpoint.predict(instances=instances)
+        
+        # Extract probability from response
+        if response and response.predictions:
+            # Assuming model returns probability as first element
+            prob = float(response.predictions[0])
+            
+            # Ensure probability is valid
+            if 0 <= prob <= 1:
+                logger.info(f"Vertex AI prediction: {prob:.3f}")
+                return prob
+            else:
+                logger.warning(f"Invalid probability from Vertex AI: {prob}")
+                return None
+        
+        logger.warning("No predictions in Vertex AI response")
+        return None
+        
+    except ImportError:
+        logger.info("Google Cloud SDK not installed")
+        return None
+    except Exception as e:
+        logger.error(f"Vertex AI prediction failed: {e}")
+        return None
 
 
-def show_vertex_ai_prediction_section(home_team, away_team, home_stats=None, away_stats=None):
+def _try_local_model_prediction(features: List[float]) -> Optional[float]:
     """
-    Display Vertex AI prediction section in Streamlit
+    Try to get prediction from local XGBoost model
+    
+    Args:
+        features: Feature values
+        
+    Returns:
+        Probability or None
+    """
+    try:
+        import pickle
+        from pathlib import Path
+        
+        # Try to find a trained model
+        # Check multiple possible locations and sports
+        possible_models = [
+            Path('./models/nfl/NFL_spread.pkl'),
+            Path('./models/nba/NBA_spread.pkl'),
+            Path('./models/spread_model.pkl'),
+            Path('../models/nfl/NFL_spread.pkl'),
+        ]
+        
+        model = None
+        scaler = None
+        model_path = None
+        
+        for path in possible_models:
+            if path.exists():
+                model_path = path
+                logger.info(f"Found model at {path}")
+                break
+        
+        if not model_path:
+            logger.warning("No trained model found locally")
+            return None
+        
+        # Load model
+        with open(model_path, 'rb') as f:
+            model = pickle.load(f)
+        
+        # Try to load scaler
+        scaler_path = model_path.parent / f"{model_path.stem}_scaler.pkl"
+        if scaler_path.exists():
+            with open(scaler_path, 'rb') as f:
+                scaler = pickle.load(f)
+            logger.info("Loaded feature scaler")
+        
+        # Prepare features
+        features_array = np.array(features).reshape(1, -1)
+        
+        # Scale if scaler available
+        if scaler is not None:
+            features_array = scaler.transform(features_array)
+        
+        # Make prediction
+        if hasattr(model, 'predict_proba'):
+            # Classification model
+            prob = model.predict_proba(features_array)[0][1]
+        else:
+            # Regression model - convert to probability
+            prediction = model.predict(features_array)[0]
+            # Assume prediction is margin, convert to probability using sigmoid
+            prob = 1 / (1 + np.exp(-prediction / 10))
+        
+        # Ensure valid probability
+        prob = float(np.clip(prob, 0.0, 1.0))
+        
+        logger.info(f"Local model prediction: {prob:.3f}")
+        return prob
+        
+    except ImportError as e:
+        logger.error(f"Required library not available: {e}")
+        return None
+    except Exception as e:
+        logger.error(f"Local prediction failed: {e}")
+        return None
+
+
+def get_batch_predictions(features_list: List[List[float]]) -> List[Optional[float]]:
+    """
+    Get predictions for multiple games at once
+    
+    Args:
+        features_list: List of feature vectors
+        
+    Returns:
+        List of probabilities (None for failed predictions)
+    """
+    if not is_vertex_ai_enabled():
+        return [None] * len(features_list)
+    
+    results = []
+    for features in features_list:
+        prob = get_vertex_ai_prediction(features)
+        results.append(prob)
+    
+    return results
+
+
+def show_vertex_ai_prediction_section(home_team: str, away_team: str):
+    """
+    Display Vertex AI prediction for a single game
     
     Args:
         home_team: Home team name
         away_team: Away team name
-        home_stats: Optional dict with home team stats (win_pct, avg_points, etc.)
-        away_stats: Optional dict with away team stats
     """
+    st.subheader(f"🤖 AI Prediction: {away_team} @ {home_team}")
+    
     if not is_vertex_ai_enabled():
+        st.warning("⚠️ Vertex AI is not enabled. Enable in AI Settings to see predictions.")
+        
+        with st.expander("📖 How to Enable Vertex AI"):
+            st.write("**Option 1: Use Vertex AI (Google Cloud)**")
+            st.write("1. Go to AI Settings in sidebar")
+            st.write("2. Check 'Enable Vertex AI'")
+            st.write("3. Enter your GCP Project ID")
+            st.write("4. Enter your Vertex AI Endpoint ID")
+            st.write("5. Set GCP Location (e.g., us-central1)")
+            
+            st.write("\n**Option 2: Use Local Models**")
+            st.write("1. Train models using the ML pipeline:")
+            st.code("python main.py --train --sports NFL NBA", language="bash")
+            st.write("2. Models will be saved to ./models/")
+            st.write("3. Enable Vertex AI in settings")
+            st.write("4. Local models will be used automatically")
+        
         return
     
-    st.markdown("---")
-    st.subheader("🤖 Google Cloud Vertex AI Prediction")
-    st.caption("Advanced ML prediction powered by Google Cloud")
+    # Generate demo features (replace with real features)
+    demo_features = [
+        0.55,   # home_win_pct
+        0.45,   # away_win_pct
+        110.0,  # home_avg_points
+        105.0,  # away_avg_points
+        105.0,  # home_def_rating
+        108.0,  # away_def_rating
+        0.15,   # spread_abs / 20
+        0.6,    # home_last_5 / 5
+        0.4,    # away_last_5 / 5
+    ]
     
-    # BUILD FEATURES
-    # TODO: Replace with your actual feature extraction logic
-    if home_stats and away_stats:
-        features = [
-            home_stats.get('win_pct', 0.5),     # Home team win %
-            away_stats.get('win_pct', 0.5),     # Away team win %
-            # Add more features as needed for your model
-        ]
-        st.info("✅ Using real team statistics")
+    with st.spinner("Getting AI prediction..."):
+        prob = get_vertex_ai_prediction(demo_features)
+    
+    if prob is not None:
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.metric(
+                label=f"{home_team} Win Probability",
+                value=f"{prob * 100:.1f}%",
+                delta=f"{(prob - 0.5) * 100:+.1f}% vs 50/50"
+            )
+        
+        with col2:
+            st.metric(
+                label=f"{away_team} Win Probability",
+                value=f"{(1 - prob) * 100:.1f}%",
+                delta=f"{(0.5 - prob) * 100:+.1f}% vs 50/50"
+            )
+        
+        # Show confidence
+        confidence = abs(prob - 0.5) * 2  # 0 to 1 scale
+        
+        if confidence > 0.3:
+            confidence_label = "🟢 High"
+        elif confidence > 0.15:
+            confidence_label = "🟡 Medium"
+        else:
+            confidence_label = "🔴 Low"
+        
+        st.write(f"**Confidence:** {confidence_label} ({confidence * 100:.1f}%)")
+        
+        # Show features used
+        with st.expander("📊 Features Used in Prediction"):
+            st.write("**Feature Values:**")
+            feature_names = [
+                "Home Win %",
+                "Away Win %",
+                "Home Avg Points",
+                "Away Avg Points",
+                "Home Def Rating",
+                "Away Def Rating",
+                "Spread (normalized)",
+                "Home Last 5",
+                "Away Last 5"
+            ]
+            
+            for name, value in zip(feature_names, demo_features):
+                st.write(f"- {name}: {value:.3f}")
     else:
-        # Fallback to dummy features
-        features = [1, 1]
-        st.warning("⚠️ Using dummy features - pass real stats for accurate predictions")
-    
-    if st.button("Get Vertex AI Prediction", key=f"vertex_ai_predict_{home_team}_{away_team}"):
-        start_time = time.time()
+        st.error("❌ Prediction failed. Check configuration and logs.")
         
-        with st.spinner("Getting prediction from Vertex AI..."):
-            prediction = get_vertex_ai_prediction(features)
-        
-        elapsed_time = time.time() - start_time
-        
-        if prediction is not None:
-            st.success(f"✅ Prediction received in {elapsed_time:.2f}s")
+        # Show debugging info
+        with st.expander("🔍 Debug Information"):
+            st.write(f"**Vertex AI Enabled:** {is_vertex_ai_enabled()}")
+            st.write(f"**GCP Project ID:** {st.session_state.get('gcp_project_id', 'Not set')}")
+            st.write(f"**Endpoint ID:** {st.session_state.get('vertex_endpoint_id', 'Not set')}")
+            st.write(f"**Location:** {st.session_state.get('gcp_location', 'Not set')}")
             
-            # Show if cached
-            if elapsed_time < 0.5:
-                st.info("⚡ Cached result (instant)")
-            
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                st.metric(
-                    "Win Probability",
-                    f"{prediction * 100:.1f}%",
-                    help="Vertex AI predicted win probability"
-                )
-            
-            with col2:
-                confidence = abs(prediction - 0.5) * 2  # Convert to 0-1 scale
-                st.metric(
-                    "Confidence",
-                    f"{confidence * 100:.1f}%",
-                    help="How confident the model is"
-                )
-            
-            # Show recommendation
-            if prediction > 0.5:
-                st.info(f"📈 Model favors: **{home_team}** ({prediction * 100:.1f}% win probability)")
-            else:
-                st.info(f"📈 Model favors: **{away_team}** ({(1-prediction) * 100:.1f}% win probability)")
-            
-            # Show features used (for debugging)
-            with st.expander("🔍 Debug: Features Used"):
-                st.json({
-                    "features": features,
-                    "prediction_raw": float(prediction),
-                    "elapsed_time": f"{elapsed_time:.2f}s"
-                })
-                
-        else:
-            st.error("❌ Vertex AI prediction failed. Check your configuration and logs.")
+            st.write("\n**Possible Issues:**")
+            st.write("- Vertex AI credentials not configured")
+            st.write("- No trained models found locally")
+            st.write("- Feature format doesn't match model")
+            st.write("- Google Cloud SDK not installed")
 
 
-def show_vertex_ai_debug_info():
-    """Show debug information about Vertex AI configuration"""
-    st.markdown("---")
-    st.subheader("🔍 Vertex AI Debug Info")
+def validate_vertex_ai_configuration() -> Dict[str, Any]:
+    """
+    Validate Vertex AI configuration
     
+    Returns:
+        Dictionary with validation results
+    """
+    results = {
+        'enabled': is_vertex_ai_enabled(),
+        'has_project_id': bool(st.session_state.get('gcp_project_id')),
+        'has_endpoint_id': bool(st.session_state.get('vertex_endpoint_id')),
+        'has_location': bool(st.session_state.get('gcp_location')),
+        'has_google_cloud': False,
+        'has_local_models': False,
+        'errors': []
+    }
+    
+    # Check Google Cloud SDK
     try:
-        enabled = is_vertex_ai_enabled()
-        st.write(f"**Enabled:** {enabled}")
-        
-        if enabled:
-            st.write(f"**Project ID:** {st.secrets['vertex_ai']['project_id']}")
-            st.write(f"**Endpoint ID:** {st.secrets['vertex_ai']['endpoint_id']}")
-            st.write(f"**Region:** {st.secrets['vertex_ai']['location']}")
-            st.success("✅ Secrets configured correctly")
-        else:
-            st.warning("⚠️ Vertex AI is disabled in secrets")
-            
-    except Exception as e:
-        st.error(f"❌ Configuration error: {e}")
+        from google.cloud import aiplatform
+        results['has_google_cloud'] = True
+    except ImportError:
+        results['errors'].append("Google Cloud SDK not installed")
+    
+    # Check for local models
+    from pathlib import Path
+    model_dirs = Path('./models').glob('*/') if Path('./models').exists() else []
+    results['has_local_models'] = any(
+        (d / f'{d.name.upper()}_spread.pkl').exists() 
+        for d in model_dirs if d.is_dir()
+    )
+    
+    # Overall status
+    results['can_use_vertex'] = (
+        results['enabled'] and 
+        results['has_project_id'] and 
+        results['has_endpoint_id'] and
+        results['has_google_cloud']
+    )
+    
+    results['can_use_local'] = (
+        results['enabled'] and 
+        results['has_local_models']
+    )
+    
+    results['ready'] = results['can_use_vertex'] or results['can_use_local']
+    
+    return results
+
+
+# Example usage in Streamlit
+if __name__ == "__main__":
+    print("ML Predictions Module")
+    print("=" * 50)
+    
+    # Test configuration
+    print("\nConfiguration Check:")
+    print(f"- Vertex AI enabled: {is_vertex_ai_enabled()}")
+    
+    # Test prediction
+    print("\nTest Prediction:")
+    test_features = [0.55, 0.45, 110, 105, 105, 108, 0.15, 0.6, 0.4]
+    result = get_vertex_ai_prediction(test_features)
+    
+    if result is not None:
+        print(f"✅ Prediction successful: {result:.3f}")
+    else:
+        print("❌ Prediction failed")
+    
+    print("\n" + "=" * 50)
