@@ -8675,131 +8675,9 @@ if is_vertex_ai_enabled():
 
     st.markdown("---")
 
-    def render_api_sports_key_section(
-        header: str,
-        label: str,
-        session_key: str,
-        source_session_key: Optional[str],
-        client,
-        help_text: str,
-        success_message: str,
-        empty_message: str,
-        widget_suffix: str,
-    ) -> None:
-        st.subheader(header)
-        client_key = client.api_key if client else ""
-        stored_value = st.session_state.get(session_key)
-        if stored_value is None:
-            stored_value = client_key or ""
-            st.session_state[session_key] = stored_value
-
-        if source_session_key and source_session_key not in st.session_state:
-            origin = client.key_origin() if client else None
-            st.session_state[source_session_key] = origin
-
-        widget_key = f"{session_key}_{widget_suffix}"
-        st.session_state.setdefault(widget_key, stored_value)
-
-        new_value_raw = st.text_input(
-            label,
-            key=widget_key,
-            type="password",
-            help=help_text,
-        )
-        new_value = (new_value_raw or "").strip()
-        if new_value != st.session_state.get(session_key, ""):
-            st.session_state[session_key] = new_value
-            if source_session_key:
-                st.session_state[source_session_key] = "manual-entry" if new_value else None
-            if client:
-                client.update_api_key(new_value or None, source="manual-entry" if new_value else None)
-            if new_value:
-                st.success(success_message)
-            else:
-                st.info(empty_message)
-        elif not st.session_state.get(session_key):
-            st.caption(empty_message)
-
-    render_api_sports_key_section(
-        header="🏈 API-Sports NFL Data Integration",
-        label="NFL API-Sports Key",
-        session_key='nfl_apisports_api_key',
-        source_session_key='nfl_apisports_key_source',
-        client=apisports_client,
-        help_text="Set the NFL_APISPORTS_API_KEY secret or request an NFL token from https://api-sports.io/",
-        success_message="✅ NFL API-Sports key saved for this session.",
-        empty_message="API-Sports integration disabled until an NFL key is provided.",
-        widget_suffix="main",
+    st.caption(
+        "API-Sports configuration lives in the sidebar settings. Update keys there to power live context and training."
     )
-
-    render_api_sports_key_section(
-        header="🏀 API-Sports NBA Data Integration",
-        label="NBA API-Sports Key",
-        session_key='nba_apisports_api_key',
-        source_session_key='nba_apisports_key_source',
-        client=basketball_client,
-        help_text="Set the NBA_APISPORTS_API_KEY secret or request an NBA token from https://api-sports.io/",
-        success_message="✅ NBA API-Sports key saved for this session.",
-        empty_message="NBA live data disabled until an API-Sports key is provided.",
-        widget_suffix="main",
-    )
-
-    def describe_key_origin(origin: Optional[str]) -> str:
-        if not origin:
-            return "no configured source"
-        if origin.startswith("secret:"):
-            return f"Streamlit secret `{origin.split(':', 1)[1]}`"
-        if origin.startswith("env:"):
-            return f"environment variable `{origin.split(':', 1)[1]}`"
-        if origin == "manual-entry":
-            return "manual entry"
-        if origin == "runtime":
-            return "runtime configuration"
-        return origin
-
-    if apisports_client and apisports_client.is_configured():
-        st.caption(
-            f"Using NFL API-Sports key from {describe_key_origin(apisports_client.key_origin())}."
-        )
-    else:
-        st.caption("No NFL API-Sports key detected; live data calls will be skipped.")
-
-    for sport_key, cfg in SPORTSDATA_CONFIG.items():
-        client = sportsdata_clients.get(sport_key)
-        if client and client.is_configured():
-            st.caption(
-                f"SportsData.io {cfg['label']} key from {describe_key_origin(client.key_origin())}."
-            )
-        else:
-            st.caption(
-                f"No SportsData.io {cfg['label']} key detected; {cfg['label']} power metrics fall back to sportsbook + sentiment only."
-            )
-
-    if basketball_client and basketball_client.is_configured():
-        st.caption(
-            f"Using NBA API-Sports key from {describe_key_origin(basketball_client.key_origin())}."
-        )
-    else:
-        st.caption("No NBA API-Sports key detected; NBA live data will be skipped.")
-
-    render_api_sports_key_section(
-        header="🏒 API-Sports NHL Data Integration",
-        label="NHL API-Sports Key",
-        session_key='nhl_apisports_api_key',
-        source_session_key='nhl_apisports_key_source',
-        client=hockey_client,
-        help_text="Set the NHL_APISPORTS_API_KEY secret or request an NHL token from https://api-sports.io/",
-        success_message="✅ NHL API-Sports key saved for this session.",
-        empty_message="NHL live data integration disabled until a key is provided.",
-        widget_suffix="main",
-    )
-
-    if hockey_client and hockey_client.is_configured():
-        st.caption(
-            f"Using NHL API-Sports key from {describe_key_origin(hockey_client.key_origin())}."
-        )
-    else:
-        st.caption("No NHL API-Sports key detected; NHL live data will be skipped.")
 
     tracker_clients = {
         'americanfootball_nfl': apisports_client,
@@ -8919,6 +8797,8 @@ if is_vertex_ai_enabled():
     else:
         st.warning("⚠️ Vertex AI analysis not run yet. Best bets will use legacy method. Run 'Vertex AI Master Analysis' first for better results!")
     
+    best_bets_df = st.session_state.get('best_bets_df', pd.DataFrame())
+
     compute_best_bets = st.button(
         "🚀 Generate Best Bets" + (" (with Vertex AI)" if use_vertex_results else " (Legacy Mode)"),
         key="compute_best_bets",
@@ -8934,16 +8814,17 @@ if is_vertex_ai_enabled():
             # VERTEX AI PATH
             if use_vertex_results:
                 st.write("🎯 **Generating Best Bets from Vertex AI Analysis...**")
-                
+
                 vertex_results = st.session_state['vertex_results']
                 odds_data = st.session_state.get('odds_data', [])
-                
+
                 if not odds_data:
                     st.error("❌ No odds data available. Please fetch odds first.")
                     st.stop()
-                
-                best_bets_rows = []
-                
+
+                best_bets_rows: List[Dict[str, Any]] = []
+                vertex_leg_rows: List[Dict[str, Any]] = []
+
                 # Filter controls (already set above)
                 for vertex_result in vertex_results:
                     matching_game = None
@@ -8951,106 +8832,178 @@ if is_vertex_ai_enabled():
                         if game['id'] == vertex_result['game_id']:
                             matching_game = game
                             break
-                    
+
                     if not matching_game:
                         continue
-                    
+
                     home_team = vertex_result['home_team']
                     away_team = vertex_result['away_team']
-                    vertex_prob = vertex_result['vertex_probability']
-                    confidence = vertex_result['confidence']
-                    
+
+                    raw_vertex_prob = _safe_float(vertex_result.get('vertex_probability'))
+                    raw_confidence = _safe_float(vertex_result.get('confidence'))
+                    vertex_prob_pct = raw_vertex_prob * 100 if raw_vertex_prob is not None and raw_vertex_prob <= 1 else raw_vertex_prob
+                    confidence_pct = raw_confidence * 100 if raw_confidence is not None and raw_confidence <= 1 else raw_confidence
+                    confidence_fraction = confidence_pct / 100 if confidence_pct is not None else None
+
                     # Process each market type
                     for bookmaker in matching_game.get('bookmakers', []):
                         bookmaker_name = bookmaker['title']
-                        
+
                         for market in bookmaker.get('markets', []):
                             market_key = market['key']
-                            
+                            market_label = market_key.replace('_', ' ').title()
+
                             for outcome in market.get('outcomes', []):
                                 team_or_side = outcome['name']
                                 odds = outcome['price']
                                 line = outcome.get('point', None)
-                                
+
                                 # Calculate implied probability
                                 if odds > 0:
-                                    implied_prob = 100 / (odds + 100) * 100
+                                    implied_prob_pct = 100 / (odds + 100) * 100
                                 else:
-                                    implied_prob = abs(odds) / (abs(odds) + 100) * 100
-                                
-                                # Determine actual probability
+                                    implied_prob_pct = abs(odds) / (abs(odds) + 100) * 100
+
+                                implied_prob_dec = implied_prob_pct / 100 if implied_prob_pct is not None else None
+
+                                # Determine actual probability (use Vertex for both ML/Spread/Total)
                                 if market_key == 'h2h':
-                                    if team_or_side == home_team:
-                                        actual_prob = vertex_prob
-                                    else:
-                                        actual_prob = 100 - vertex_prob
+                                    actual_prob_pct = vertex_prob_pct if team_or_side == home_team else (100 - vertex_prob_pct if vertex_prob_pct is not None else None)
+                                    side_value = 'home' if team_or_side == home_team else 'away'
+                                    leg_type = 'Moneyline'
                                 elif market_key == 'spreads':
-                                    if team_or_side == home_team:
-                                        actual_prob = vertex_prob
-                                    else:
-                                        actual_prob = 100 - vertex_prob
+                                    actual_prob_pct = vertex_prob_pct if team_or_side == home_team else (100 - vertex_prob_pct if vertex_prob_pct is not None else None)
+                                    side_value = 'home' if team_or_side == home_team else 'away'
+                                    leg_type = 'Spread'
                                 else:
-                                    actual_prob = 50.0
-                                
-                                # Calculate edge
-                                edge_pp = actual_prob - implied_prob
-                                
+                                    actual_prob_pct = vertex_prob_pct
+                                    side_value = str(team_or_side).lower()
+                                    leg_type = 'Total'
+
+                                ai_prob_dec = actual_prob_pct / 100 if actual_prob_pct is not None else None
+
                                 # Apply minimum confidence filter
-                                if confidence < min_ai_confidence:
+                                if confidence_fraction is not None and confidence_fraction < min_ai_confidence:
                                     continue
-                                
+
                                 # Format decimal odds
                                 if odds > 0:
                                     decimal_odds = (odds / 100) + 1
                                 else:
                                     decimal_odds = (100 / abs(odds)) + 1
-                                
-                                # Add to best bets
-                                best_bets_rows.append({
-                                    'League': vertex_result['sport'].upper(),
-                                    'Game': f"{away_team} @ {home_team}",
-                                    'Commence (Local)': vertex_result['commence_time'],
-                                    'Market': market_key.replace('_', ' ').title(),
-                                    'Side': team_or_side,
-                                    'Selection': team_or_side,
-                                    'Line': line if line is not None else '—',
-                                    'Best Book': bookmaker_name,
-                                    'Best American': odds,
-                                    'Best Decimal': round(decimal_odds, 3),
-                                    'Implied Prob %': implied_prob,
-                                    'AI Prob %': actual_prob,
-                                    'AI Raw %': actual_prob,
-                                    'AI EV %': edge_pp,
-                                    'AI Edge pp': edge_pp,
-                                    'AI Confidence %': confidence,
-                                    'ML Prob %': actual_prob,
-                                    'ML Model': 'Vertex AI',
-                                    'theover.ai %': '—',
-                                    'theover Δ pp': '—',
-                                    'theover Source': 'Vertex AI',
-                                    'SportsData Prob %': '—',
-                                    'SportsData Δ pp': '—',
-                                    'Kalshi Prob %': '—',
-                                    'Kalshi Δ pp': '—',
-                                    'Kalshi Edge %': '—',
-                                    'Kalshi Verdict': '—',
-                                    'Best Edge %': edge_pp,
-                                    'Best Edge Source': 'Vertex AI',
-                                    'Best Win Prob %': actual_prob,
-                                    'Win Prob Source': 'Vertex AI',
-                                    'Event ID': vertex_result['game_id'],
-                                    'Sport Key': vertex_result['sport'],
-                                    'Commence (UTC)': vertex_result['commence_time'],
-                                })
-                
+
+                                if decimal_odds is None:
+                                    continue
+
+                                leg_entry = {
+                                    'event_id': vertex_result['game_id'],
+                                    'type': leg_type,
+                                    'team': team_or_side,
+                                    'side': side_value,
+                                    'point': line,
+                                    'market': market_label,
+                                    'p': implied_prob_dec,
+                                    'ai_prob': ai_prob_dec,
+                                    'ai_prob_pre_theover': ai_prob_dec,
+                                    'ai_confidence': confidence_fraction,
+                                    'd': decimal_odds,
+                                    'sport_key': vertex_result['sport'],
+                                    'home_team': home_team,
+                                    'away_team': away_team,
+                                    'commence_time': vertex_result['commence_time'],
+                                    'ml_probability': ai_prob_dec,
+                                    'bookmaker': bookmaker_name,
+                                    'best_american': odds,
+                                }
+
+                                vertex_leg_rows.append(leg_entry)
+
+                if theover_ml_data is not None or theover_spreads_data is not None or theover_totals_data is not None:
+                    apply_theover_probabilities_to_legs(
+                        vertex_leg_rows,
+                        theover_ml_data=theover_ml_data,
+                        theover_spreads_data=theover_spreads_data,
+                        theover_totals_data=theover_totals_data,
+                    )
+
+                for leg in vertex_leg_rows:
+                    implied_prob_dec = _safe_float(leg.get('p'))
+                    ai_prob_final = _safe_float(leg.get('ai_prob'))
+                    ai_raw_prob = _safe_float(leg.get('ai_prob_pre_theover', ai_prob_final))
+                    ml_prob = _safe_float(leg.get('ml_probability', ai_prob_final))
+                    theover_prob = _safe_float(leg.get('theover_probability'))
+                    theover_delta = _safe_float(leg.get('theover_probability_delta'))
+
+                    ai_edge_pp = None
+                    ai_ev_pct = None
+                    if ai_prob_final is not None and implied_prob_dec is not None:
+                        ai_edge_pp = (ai_prob_final - implied_prob_dec) * 100
+                        try:
+                            ai_ev_pct = ev_rate(ai_prob_final, float(leg.get('d'))) * 100
+                        except Exception:
+                            ai_ev_pct = None
+
+                    best_edge_pp = ai_edge_pp
+                    best_edge_source = 'AI'
+                    if theover_prob is not None and implied_prob_dec is not None:
+                        theover_edge = (theover_prob - implied_prob_dec) * 100
+                        if best_edge_pp is None or theover_edge > best_edge_pp:
+                            best_edge_pp = theover_edge
+                            best_edge_source = 'theover.ai'
+
+                    confidence_pct_display = leg.get('ai_confidence') * 100 if leg.get('ai_confidence') is not None else None
+
+                    sport_key = leg.get('sport_key')
+                    try:
+                        league_label = format_sport_label(sport_key)
+                    except Exception:
+                        league_label = str(sport_key).upper() if sport_key else None
+
+                    best_bets_rows.append({
+                        'League': league_label,
+                        'Game': f"{leg.get('away_team')} @ {leg.get('home_team')}",
+                        'Commence (Local)': leg.get('commence_time'),
+                        'Market': leg.get('market'),
+                        'Side': leg.get('side'),
+                        'Selection': leg.get('team'),
+                        'Line': leg.get('point') if leg.get('point') is not None else '—',
+                        'Best Book': leg.get('bookmaker'),
+                        'Best American': leg.get('best_american'),
+                        'Best Decimal': _safe_float(leg.get('d')),
+                        'Implied Prob %': implied_prob_dec * 100 if implied_prob_dec is not None else None,
+                        'AI Prob %': ai_prob_final * 100 if ai_prob_final is not None else None,
+                        'AI Raw %': ai_raw_prob * 100 if ai_raw_prob is not None else None,
+                        'AI EV %': ai_ev_pct,
+                        'AI Edge pp': ai_edge_pp,
+                        'AI Confidence %': confidence_pct_display,
+                        'ML Prob %': ml_prob * 100 if ml_prob is not None else None,
+                        'ML Model': 'Vertex AI',
+                        'theover.ai %': theover_prob * 100 if theover_prob is not None else None,
+                        'theover Δ pp': theover_delta * 100 if theover_delta is not None else None,
+                        'theover Source': leg.get('theover_probability_source'),
+                        'SportsData Prob %': None,
+                        'SportsData Δ pp': None,
+                        'Kalshi Prob %': None,
+                        'Kalshi Δ pp': None,
+                        'Kalshi Edge %': None,
+                        'Kalshi Verdict': None,
+                        'Best Edge %': best_edge_pp,
+                        'Best Edge Source': best_edge_source,
+                        'Best Win Prob %': ai_prob_final * 100 if ai_prob_final is not None else None,
+                        'Win Prob Source': 'Vertex AI',
+                        'Event ID': leg.get('event_id'),
+                        'Sport Key': sport_key,
+                        'Commence (UTC)': leg.get('commence_time'),
+                    })
+
                 if not best_bets_rows:
                     st.info("No qualifying bets found matching your criteria.")
                 else:
                     best_bets_df = pd.DataFrame(best_bets_rows)
                     best_bets_df = best_bets_df.sort_values('AI Edge pp', ascending=False)
-                    
+
                     st.success(f"✅ Generated {len(best_bets_df)} best bets using Vertex AI!")
-                    
+
                     # Display metrics
                     col1, col2, col3 = st.columns(3)
                     with col1:
@@ -9093,6 +9046,8 @@ if is_vertex_ai_enabled():
                         sportsdata_clients=sportsdata_clients,
                         apisports_clients=apisports_map,
                     )
+
+            st.session_state['best_bets_df'] = best_bets_df
 
 
             if best_bets_df.empty:
@@ -11853,9 +11808,18 @@ if st.sidebar.checkbox("🧪 Show Vertex AI Test", value=False):
 # Location: BEFORE your "Generate Best Bets" section
 # ============================================================================
 
-import anthropic
+import importlib.util
 import json
 from datetime import datetime
+
+anthropic_spec = importlib.util.find_spec("anthropic")
+if anthropic_spec is None:
+    st.error(
+        "Anthropic dependency missing. Please install the `anthropic` package from requirements."
+    )
+    st.stop()
+
+import anthropic
 
 # ============================================================================
 # VERTEX AI MASTER ANALYZER (RUNS FIRST)
