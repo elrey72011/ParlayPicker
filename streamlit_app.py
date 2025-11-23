@@ -12085,3 +12085,144 @@ This debug script will show you exactly where the Master Analyzer fails:
 - build_vertex_feature_vector() failing
 - get_vertex_ai_prediction() returning None
 """)
+
+# 🚨 IMMEDIATE DIAGNOSTIC - Paste this into your streamlit_app.py
+
+import streamlit as st
+import pandas as pd
+
+# Add this button RIGHT BEFORE the "Run Vertex AI Master Analysis" button
+st.markdown("---")
+st.subheader("🔍 Debug: What's Failing?")
+
+if st.button("🚨 Debug Master Analyzer", type="secondary"):
+    st.header("🔍 Master Analyzer Diagnostic")
+    
+    # Step 1: Check if we have data
+    st.write("**Step 1: Check Data**")
+    if 'theover_spreads_data' not in locals() and 'theover_spreads_data' not in st.session_state:
+        st.error("❌ No theover.ai data found!")
+        st.stop()
+    
+    spreads_data = theover_spreads_data if 'theover_spreads_data' in locals() else st.session_state.get('theover_spreads_data')
+    st.success(f"✅ Found {len(spreads_data)} games")
+    
+    # Step 2: Test get_vertex_ai_prediction
+    st.write("**Step 2: Test Prediction Function**")
+    try:
+        from ml_predictions import get_vertex_ai_prediction, is_vertex_ai_enabled
+        
+        # Check if enabled
+        ai_enabled = is_vertex_ai_enabled()
+        if not ai_enabled:
+            st.error("❌ Vertex AI is disabled!")
+            st.write("Enable it in settings or update ml_predictions.py")
+            st.stop()
+        else:
+            st.success("✅ Vertex AI is enabled")
+        
+        # Test prediction
+        test_features = [0.55, 0.45, 110, 105, 105, 108, 0.15, 0.6, 0.4]
+        test_result = get_vertex_ai_prediction(test_features)
+        
+        if test_result is None:
+            st.error("❌ PROBLEM FOUND: get_vertex_ai_prediction() returns None!")
+            st.write("**This is why you're getting no results!**")
+            st.write("")
+            st.write("**Fix:**")
+            st.write("1. Update ml_predictions.py to latest version")
+            st.write("2. Or use the new consolidated_workflow_complete.py")
+            st.stop()
+        else:
+            st.success(f"✅ Prediction works: {test_result:.3f}")
+    
+    except Exception as e:
+        st.error(f"❌ Import failed: {e}")
+        st.code(str(e))
+        st.stop()
+    
+    # Step 3: Test Master Analyzer on ONE game
+    st.write("**Step 3: Test Master Analyzer on Single Game**")
+    try:
+        from vertex_master_analyzer import VertexMasterAnalyzer
+        
+        # Create analyzer
+        analyzer = VertexMasterAnalyzer(
+            odds_api_client=None,
+            sportsdata_clients={},
+            apisports_clients={},
+            sentiment_analyzer=None,
+            local_ml_predictor=None,
+            theover_data={'spreads': spreads_data}
+        )
+        st.success("✅ Analyzer created")
+        
+        # Convert first row to game format
+        first_row = spreads_data.iloc[0]
+        test_game = {
+            'home_team': first_row.get('home_team') or first_row.get('HomeTeam', 'Unknown'),
+            'away_team': first_row.get('away_team') or first_row.get('AwayTeam', 'Unknown'),
+            'sport_key': (first_row.get('league') or first_row.get('League', 'NBA')).lower(),
+            'commence_time': None,
+            'bookmakers': []
+        }
+        
+        st.write(f"**Testing:** {test_game['away_team']} @ {test_game['home_team']}")
+        
+        # Try to analyze
+        try:
+            # Build features
+            comp_features = analyzer.build_comprehensive_features(test_game, 'NBA')
+            st.success(f"✅ Built {len(comp_features)} comprehensive features")
+            
+            # Build vertex features
+            vertex_features = analyzer.build_vertex_feature_vector(comp_features)
+            st.success(f"✅ Built {len(vertex_features)} vertex features")
+            st.write(f"Feature vector sample: {vertex_features[:5]}")
+            
+            # Get prediction
+            from ml_predictions import get_vertex_ai_prediction
+            vertex_prob = get_vertex_ai_prediction(vertex_features)
+            
+            if vertex_prob is None:
+                st.error("❌ PROBLEM FOUND: Vertex prediction returned None for this game!")
+                st.write("**Even though the test prediction worked, this one failed.**")
+                st.write("**Possible causes:**")
+                st.write("- Feature vector format is wrong")
+                st.write("- Some feature values are invalid (NaN, infinity)")
+                st.write("")
+                st.write("**Feature vector:**")
+                st.write(vertex_features)
+            else:
+                st.success(f"✅ Got prediction: {vertex_prob:.3f}")
+                st.write("**The analyzer CAN work - but something is wrong with the full batch**")
+        
+        except Exception as e:
+            st.error(f"❌ Error during analysis: {e}")
+            st.code(str(e))
+            
+            import traceback
+            st.write("**Full traceback:**")
+            st.code(traceback.format_exc())
+    
+    except Exception as e:
+        st.error(f"❌ Could not test analyzer: {e}")
+        st.code(str(e))
+    
+    # Step 4: Summary
+    st.write("---")
+    st.write("### 💡 What to Do Next")
+    st.write("""
+    **If prediction test failed:**
+    - Update ml_predictions.py to latest version
+    - Restart Streamlit
+    
+    **If single game test failed:**
+    - Check the error message above
+    - Feature building or prediction has an issue
+    
+    **If everything passed but still no results:**
+    - The Master Analyzer is catching errors silently
+    - Use the new consolidated_workflow_complete.py instead
+    - It shows ALL errors and has no silent failures
+    """)
