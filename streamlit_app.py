@@ -8295,23 +8295,23 @@ if is_vertex_ai_enabled():
                 if not selected_sports:
                     selected_sports = ['basketball_nba', 'americanfootball_ncaaf', 'basketball_ncaab', 'icehockey_nhl']
                 
-        ## Fetch games - FIXED VERSION
-                all_games = []
+    ## Fetch games - FIXED VERSION
+    all_games = []
                 
-                # Initialize odds_client if it doesn't exist
-                if 'odds_client' not in locals():
-                    try:
-                        from app_core import TheOddsAPIClient
-                        odds_api_key = resolve_odds_api_key()
-                        if odds_api_key:
-                            odds_client = TheOddsAPIClient(odds_api_key)
-                            logger.info("✅ The Odds API client initialized")
-                        else:
-                            odds_client = None
-                            logger.warning("⚠️ No Odds API key found")
-                    except Exception as e:
-                        logger.warning(f"Could not initialize odds client: {e}")
+    # Initialize odds_client if it doesn't exist
+    if 'odds_client' not in locals():
+        try:
+            from app_core import TheOddsAPIClient
+                odds_api_key = resolve_odds_api_key()
+                if odds_api_key:
+                    odds_client = TheOddsAPIClient(odds_api_key)
+                        logger.info("✅ The Odds API client initialized")
+                    else:
                         odds_client = None
+                        logger.warning("⚠️ No Odds API key found")
+                except Exception as e:
+                    logger.warning(f"Could not initialize odds client: {e}")
+                    odds_client = None
 
 # Now safely use odds_client
 if odds_client:
