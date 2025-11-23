@@ -1,5 +1,7 @@
-# ParlayDesk_AI_Enhanced.py - v9.1 FIXED
+# ParlayDesk_AI_Enhanced.py - v9.2 VERTEX-FIRST
 # AI-Enhanced parlay finder with sentiment analysis, ML predictions, and live market data
+# v9.2 Update: Integrated Vertex-first architecture - Vertex AI now calculates probabilities
+# BEFORE Best Bets and Parlays are generated for consistent, high-quality predictions
 import os, io, json, itertools, re, copy, logging, hashlib, math
 import concurrent.futures  # For parallel API calls
 from functools import lru_cache  # For caching
@@ -8909,10 +8911,19 @@ if is_vertex_ai_enabled():
         if label in sport_display_map
     ]
 
+    # Check if Vertex AI analysis is available
+    use_vertex_results = False
+    if 'vertex_results' in st.session_state and st.session_state.get('vertex_analysis_complete'):
+        use_vertex_results = True
+        st.success(f"✅ Using Vertex AI probabilities from {len(st.session_state['vertex_results'])} analyzed games")
+    else:
+        st.warning("⚠️ Vertex AI analysis not run yet. Best bets will use legacy method. Run 'Vertex AI Master Analysis' first for better results!")
+    
     compute_best_bets = st.button(
-        "Compute Best Bets",
+        "🚀 Generate Best Bets" + (" (with Vertex AI)" if use_vertex_results else " (Legacy Mode)"),
         key="compute_best_bets",
         use_container_width=True,
+        type="primary" if use_vertex_results else "secondary",
     )
 
     if compute_best_bets:
@@ -8920,35 +8931,169 @@ if is_vertex_ai_enabled():
         if not odds_key:
             st.error("Configure your The Odds API key to evaluate best bets.")
         else:
-            sentiment_analyzer = st.session_state.get('sentiment_analyzer')
-            ml_predictor_state = st.session_state.get('ml_predictor') if use_ml_predictions else None
-            apisports_map = {
-                'americanfootball_nfl': apisports_client,
-                'basketball_nba': basketball_client,
-                'icehockey_nhl': hockey_client,
-            }
+            # VERTEX AI PATH
+            if use_vertex_results:
+                st.write("🎯 **Generating Best Bets from Vertex AI Analysis...**")
+                
+                vertex_results = st.session_state['vertex_results']
+                odds_data = st.session_state.get('odds_data', [])
+                
+                if not odds_data:
+                    st.error("❌ No odds data available. Please fetch odds first.")
+                    st.stop()
+                
+                best_bets_rows = []
+                
+                # Filter controls (already set above)
+                for vertex_result in vertex_results:
+                    matching_game = None
+                    for game in odds_data:
+                        if game['id'] == vertex_result['game_id']:
+                            matching_game = game
+                            break
+                    
+                    if not matching_game:
+                        continue
+                    
+                    home_team = vertex_result['home_team']
+                    away_team = vertex_result['away_team']
+                    vertex_prob = vertex_result['vertex_probability']
+                    confidence = vertex_result['confidence']
+                    
+                    # Process each market type
+                    for bookmaker in matching_game.get('bookmakers', []):
+                        bookmaker_name = bookmaker['title']
+                        
+                        for market in bookmaker.get('markets', []):
+                            market_key = market['key']
+                            
+                            for outcome in market.get('outcomes', []):
+                                team_or_side = outcome['name']
+                                odds = outcome['price']
+                                line = outcome.get('point', None)
+                                
+                                # Calculate implied probability
+                                if odds > 0:
+                                    implied_prob = 100 / (odds + 100) * 100
+                                else:
+                                    implied_prob = abs(odds) / (abs(odds) + 100) * 100
+                                
+                                # Determine actual probability
+                                if market_key == 'h2h':
+                                    if team_or_side == home_team:
+                                        actual_prob = vertex_prob
+                                    else:
+                                        actual_prob = 100 - vertex_prob
+                                elif market_key == 'spreads':
+                                    if team_or_side == home_team:
+                                        actual_prob = vertex_prob
+                                    else:
+                                        actual_prob = 100 - vertex_prob
+                                else:
+                                    actual_prob = 50.0
+                                
+                                # Calculate edge
+                                edge_pp = actual_prob - implied_prob
+                                
+                                # Apply minimum confidence filter
+                                if confidence < min_ai_confidence:
+                                    continue
+                                
+                                # Format decimal odds
+                                if odds > 0:
+                                    decimal_odds = (odds / 100) + 1
+                                else:
+                                    decimal_odds = (100 / abs(odds)) + 1
+                                
+                                # Add to best bets
+                                best_bets_rows.append({
+                                    'League': vertex_result['sport'].upper(),
+                                    'Game': f"{away_team} @ {home_team}",
+                                    'Commence (Local)': vertex_result['commence_time'],
+                                    'Market': market_key.replace('_', ' ').title(),
+                                    'Side': team_or_side,
+                                    'Selection': team_or_side,
+                                    'Line': line if line is not None else '—',
+                                    'Best Book': bookmaker_name,
+                                    'Best American': odds,
+                                    'Best Decimal': round(decimal_odds, 3),
+                                    'Implied Prob %': implied_prob,
+                                    'AI Prob %': actual_prob,
+                                    'AI Raw %': actual_prob,
+                                    'AI EV %': edge_pp,
+                                    'AI Edge pp': edge_pp,
+                                    'AI Confidence %': confidence,
+                                    'ML Prob %': actual_prob,
+                                    'ML Model': 'Vertex AI',
+                                    'theover.ai %': '—',
+                                    'theover Δ pp': '—',
+                                    'theover Source': 'Vertex AI',
+                                    'SportsData Prob %': '—',
+                                    'SportsData Δ pp': '—',
+                                    'Kalshi Prob %': '—',
+                                    'Kalshi Δ pp': '—',
+                                    'Kalshi Edge %': '—',
+                                    'Kalshi Verdict': '—',
+                                    'Best Edge %': edge_pp,
+                                    'Best Edge Source': 'Vertex AI',
+                                    'Best Win Prob %': actual_prob,
+                                    'Win Prob Source': 'Vertex AI',
+                                    'Event ID': vertex_result['game_id'],
+                                    'Sport Key': vertex_result['sport'],
+                                    'Commence (UTC)': vertex_result['commence_time'],
+                                })
+                
+                if not best_bets_rows:
+                    st.info("No qualifying bets found matching your criteria.")
+                else:
+                    best_bets_df = pd.DataFrame(best_bets_rows)
+                    best_bets_df = best_bets_df.sort_values('AI Edge pp', ascending=False)
+                    
+                    st.success(f"✅ Generated {len(best_bets_df)} best bets using Vertex AI!")
+                    
+                    # Display metrics
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.metric("Total Bets", len(best_bets_df))
+                    with col2:
+                        avg_edge = best_bets_df['AI Edge pp'].mean()
+                        st.metric("Avg Edge", f"{avg_edge:+.1f}pp")
+                    with col3:
+                        avg_conf = best_bets_df['AI Confidence %'].mean()
+                        st.metric("Avg Confidence", f"{avg_conf:.0f}%")
+            
+            # LEGACY PATH
+            else:
+                sentiment_analyzer = st.session_state.get('sentiment_analyzer')
+                ml_predictor_state = st.session_state.get('ml_predictor') if use_ml_predictions else None
+                apisports_map = {
+                    'americanfootball_nfl': apisports_client,
+                    'basketball_nba': basketball_client,
+                    'icehockey_nhl': hockey_client,
+                }
 
-            target_sports = selected_sport_keys or active_sports_list
+                target_sports = selected_sport_keys or active_sports_list
 
-            with st.spinner("Blending AI, ML, and market data across each game..."):
-                best_bets_df, _ = build_best_bets_per_game(
-                    odds_key,
-                    target_sports,
-                    best_leg_start,
-                    best_leg_end,
-                    sidebar_state["timezone_name"],
-                    sentiment_analyzer=sentiment_analyzer,
-                    ml_predictor=ml_predictor_state,
-                    use_sentiment=use_sentiment,
-                    use_ml_predictions=use_ml_predictions,
-                    min_ai_confidence=min_ai_confidence,
-                    use_kalshi=use_kalshi,
-                    theover_ml_data=theover_ml_data,
-                    theover_spreads_data=theover_spreads_data,
-                    theover_totals_data=theover_totals_data,
-                    sportsdata_clients=sportsdata_clients,
-                    apisports_clients=apisports_map,
-                )
+                with st.spinner("Blending AI, ML, and market data across each game..."):
+                    best_bets_df, _ = build_best_bets_per_game(
+                        odds_key,
+                        target_sports,
+                        best_leg_start,
+                        best_leg_end,
+                        sidebar_state["timezone_name"],
+                        sentiment_analyzer=sentiment_analyzer,
+                        ml_predictor=ml_predictor_state,
+                        use_sentiment=use_sentiment,
+                        use_ml_predictions=use_ml_predictions,
+                        min_ai_confidence=min_ai_confidence,
+                        use_kalshi=use_kalshi,
+                        theover_ml_data=theover_ml_data,
+                        theover_spreads_data=theover_spreads_data,
+                        theover_totals_data=theover_totals_data,
+                        sportsdata_clients=sportsdata_clients,
+                        apisports_clients=apisports_map,
+                    )
+
 
             if best_bets_df.empty:
                 st.info("No qualifying legs found for the selected range and sports.")
@@ -9027,6 +9172,17 @@ if is_vertex_ai_enabled():
             return -_day_window <= delta_days <= _day_window
         except Exception:
             return False
+
+    # Check if Vertex AI analysis is available for parlays
+    vertex_available_for_parlays = 'vertex_results' in st.session_state and st.session_state.get('vertex_analysis_complete')
+    if vertex_available_for_parlays:
+        st.info(f"""
+        💡 **Vertex AI Available**: {len(st.session_state['vertex_results'])} games analyzed
+        
+        Parlays will use Vertex AI probabilities for better accuracy!
+        """)
+    else:
+        st.warning("⚠️ Run 'Vertex AI Master Analysis' first for AI-powered parlay optimization with better probabilities")
 
     if st.button("🤖 Find AI-Optimized Parlays", type="primary"):
         # Get API key from session state or environment only
