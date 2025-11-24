@@ -8719,31 +8719,31 @@ if is_vertex_ai_enabled():
                 st.info(empty_message)
         elif not st.session_state.get(session_key):
             st.caption(empty_message)
-    # 
-    #     render_api_sports_key_section(
-    #         header="🏈 API-Sports NFL Data Integration",
-    #         label="NFL API-Sports Key",
-    #         session_key='nfl_apisports_api_key',
-    #         source_session_key='nfl_apisports_key_source',
-    #         client=apisports_client,
-    #         help_text="Set the NFL_APISPORTS_API_KEY secret or request an NFL token from https://api-sports.io/",
-    #         success_message="✅ NFL API-Sports key saved for this session.",
-    #         empty_message="API-Sports integration disabled until an NFL key is provided.",
-    #         widget_suffix="main",
-    #     )
-    # 
-    #     render_api_sports_key_section(
-    #         header="🏀 API-Sports NBA Data Integration",
-    #         label="NBA API-Sports Key",
-    #         session_key='nba_apisports_api_key',
-    #         source_session_key='nba_apisports_key_source',
-    #         client=basketball_client,
-    #         help_text="Set the NBA_APISPORTS_API_KEY secret or request an NBA token from https://api-sports.io/",
-    #         success_message="✅ NBA API-Sports key saved for this session.",
-    #         empty_message="NBA live data disabled until an API-Sports key is provided.",
-    #         widget_suffix="main",
-    #     )
-    # 
+
+    render_api_sports_key_section(
+        header="🏈 API-Sports NFL Data Integration",
+        label="NFL API-Sports Key",
+        session_key='nfl_apisports_api_key',
+        source_session_key='nfl_apisports_key_source',
+        client=apisports_client,
+        help_text="Set the NFL_APISPORTS_API_KEY secret or request an NFL token from https://api-sports.io/",
+        success_message="✅ NFL API-Sports key saved for this session.",
+        empty_message="API-Sports integration disabled until an NFL key is provided.",
+        widget_suffix="main",
+    )
+
+    render_api_sports_key_section(
+        header="🏀 API-Sports NBA Data Integration",
+        label="NBA API-Sports Key",
+        session_key='nba_apisports_api_key',
+        source_session_key='nba_apisports_key_source',
+        client=basketball_client,
+        help_text="Set the NBA_APISPORTS_API_KEY secret or request an NBA token from https://api-sports.io/",
+        success_message="✅ NBA API-Sports key saved for this session.",
+        empty_message="NBA live data disabled until an API-Sports key is provided.",
+        widget_suffix="main",
+    )
+
     def describe_key_origin(origin: Optional[str]) -> str:
         if not origin:
             return "no configured source"
@@ -8757,57 +8757,57 @@ if is_vertex_ai_enabled():
             return "runtime configuration"
         return origin
 
-    # if apisports_client and apisports_client.is_configured():
-        # st.caption(
-            # f"Using NFL API-Sports key from {describe_key_origin(apisports_client.key_origin())}."
-        # )
-    # else:
-        # st.caption("No NFL API-Sports key detected; live data calls will be skipped.")
+    if apisports_client and apisports_client.is_configured():
+        st.caption(
+            f"Using NFL API-Sports key from {describe_key_origin(apisports_client.key_origin())}."
+        )
+    else:
+        st.caption("No NFL API-Sports key detected; live data calls will be skipped.")
 
-    # for sport_key, cfg in SPORTSDATA_CONFIG.items():
-        # client = sportsdata_clients.get(sport_key)
-        # if client and client.is_configured():
-            # st.caption(
-                # f"SportsData.io {cfg['label']} key from {describe_key_origin(client.key_origin())}."
-            # )
-        # else:
-            # st.caption(
-                # f"No SportsData.io {cfg['label']} key detected; {cfg['label']} power metrics fall back to sportsbook + sentiment only."
-            # )
+    for sport_key, cfg in SPORTSDATA_CONFIG.items():
+        client = sportsdata_clients.get(sport_key)
+        if client and client.is_configured():
+            st.caption(
+                f"SportsData.io {cfg['label']} key from {describe_key_origin(client.key_origin())}."
+            )
+        else:
+            st.caption(
+                f"No SportsData.io {cfg['label']} key detected; {cfg['label']} power metrics fall back to sportsbook + sentiment only."
+            )
 
-    # if basketball_client and basketball_client.is_configured():
-        # st.caption(
-            # f"Using NBA API-Sports key from {describe_key_origin(basketball_client.key_origin())}."
-        # )
-    # else:
-        # st.caption("No NBA API-Sports key detected; NBA live data will be skipped.")
+    if basketball_client and basketball_client.is_configured():
+        st.caption(
+            f"Using NBA API-Sports key from {describe_key_origin(basketball_client.key_origin())}."
+        )
+    else:
+        st.caption("No NBA API-Sports key detected; NBA live data will be skipped.")
 
-    # render_api_sports_key_section(
-        # header="🏒 API-Sports NHL Data Integration",
-        # label="NHL API-Sports Key",
-        # session_key='nhl_apisports_api_key',
-        # source_session_key='nhl_apisports_key_source',
-        # client=hockey_client,
-        # help_text="Set the NHL_APISPORTS_API_KEY secret or request an NHL token from https://api-sports.io/",
-        # success_message="✅ NHL API-Sports key saved for this session.",
-        # empty_message="NHL live data integration disabled until a key is provided.",
-        # widget_suffix="main",
-    # )
+    render_api_sports_key_section(
+        header="🏒 API-Sports NHL Data Integration",
+        label="NHL API-Sports Key",
+        session_key='nhl_apisports_api_key',
+        source_session_key='nhl_apisports_key_source',
+        client=hockey_client,
+        help_text="Set the NHL_APISPORTS_API_KEY secret or request an NHL token from https://api-sports.io/",
+        success_message="✅ NHL API-Sports key saved for this session.",
+        empty_message="NHL live data integration disabled until a key is provided.",
+        widget_suffix="main",
+    )
 
-    # if hockey_client and hockey_client.is_configured():
-        # st.caption(
-            # f"Using NHL API-Sports key from {describe_key_origin(hockey_client.key_origin())}."
-        # )
-    # else:
-        # st.caption("No NHL API-Sports key detected; NHL live data will be skipped.")
+    if hockey_client and hockey_client.is_configured():
+        st.caption(
+            f"Using NHL API-Sports key from {describe_key_origin(hockey_client.key_origin())}."
+        )
+    else:
+        st.caption("No NHL API-Sports key detected; NHL live data will be skipped.")
 
-    # tracker_clients = {
-        # 'americanfootball_nfl': apisports_client,
-        # 'basketball_nba': basketball_client,
-        # 'icehockey_nhl': hockey_client,
-    # }
-    # user_timezone_label = st.session_state.get('user_timezone', 'UTC')
-    # render_saved_parlay_tracker(tracker_clients, user_timezone_label)
+    tracker_clients = {
+        'americanfootball_nfl': apisports_client,
+        'basketball_nba': basketball_client,
+        'icehockey_nhl': hockey_client,
+    }
+    user_timezone_label = st.session_state.get('user_timezone', 'UTC')
+    render_saved_parlay_tracker(tracker_clients, user_timezone_label)
 
     st.markdown("---")
     st.subheader("🏆 Best Overall Odds for Date Range")
@@ -9189,7 +9189,7 @@ if is_vertex_ai_enabled():
 
     if st.button("🤖 Find AI-Optimized Parlays", type="primary"):
         # Get API key from session state or environment only
-        api_key = st.session_state.get('api_key', "") or os.environ.get("ODDS_API_KEY", "") or st.secrets.get("ODDS_API_KEY", "")
+        odds_key = st.session_state.get('api_key', "") or os.environ.get("ODDS_API_KEY", "") or st.secrets.get("ODDS_API_KEY", "")
         
         if not api_key:
             st.error("No API key provided. Please enter your API key above.")
@@ -10469,7 +10469,7 @@ with main_tab3:
     st.caption("Select 2-4 legs, then get comprehensive AI/ML analysis with sentiment, probability, and edge calculations")
     
     # API key check
-    api_key = st.session_state.get('api_key', "") or os.environ.get("ODDS_API_KEY", "") or st.secrets.get("ODDS_API_KEY", "")
+    odds_key = st.session_state.get('api_key', "") or os.environ.get("ODDS_API_KEY", "") or st.secrets.get("ODDS_API_KEY", "")
     
     if not api_key:
         st.warning("⚠️ Please enter your Odds API key in the 'Sports Betting Parlays' tab first")
@@ -12988,3 +12988,4 @@ if uploaded_csv is not None:
             )
             
             st.success("🎉 Your uploaded CSV has been enriched!")
+
