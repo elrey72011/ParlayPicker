@@ -1252,6 +1252,26 @@ def render_sidebar_controls() -> Dict[str, Any]:
     else:
         sidebar.caption("ℹ️ Using neutral fallback sentiment")
 
+    # --------------------- Anthropic API key ---------------------
+        st.session_state.setdefault('anthropic_api_key', 
+            os.environ.get("ANTHROPIC_API_KEY", "") or 
+            os.environ.get("anthropic_api_key", "") or
+            st.secrets.get("anthropic_api_key", "") or
+            st.secrets.get("ANTHROPIC_API_KEY", "")
+        )
+        anthropic_api_input = sidebar.text_input(
+            "Anthropic API key",
+            value=st.session_state.get('anthropic_api_key', ""),
+            type="password",
+            help="Required for Vertex AI analysis. Get from console.anthropic.com",
+        ).strip()
+        if anthropic_api_input != st.session_state.get('anthropic_api_key', ""):
+            st.session_state['anthropic_api_key'] = anthropic_api_input
+        if st.session_state.get('anthropic_api_key'):
+            sidebar.caption("🤖 Anthropic API key configured")
+        else:
+            sidebar.caption("❌ Enter Anthropic API key for AI analysis")
+    
     # --------------------- API-Sports keys ---------------------
     nfl_key_default, nfl_source_default = resolve_nfl_apisports_key()
     st.session_state.setdefault('nfl_apisports_api_key', nfl_key_default)
