@@ -1271,7 +1271,23 @@ def render_sidebar_controls() -> Dict[str, Any]:
         sidebar.caption("🤖 Anthropic API key configured")
     else:
         sidebar.caption("❌ Enter Anthropic API key for AI analysis")
+
+    # --------------------- GCP Vertex AI Config ---------------------
+    st.session_state.setdefault('gcp_project_id', 
+        os.environ.get("GCP_PROJECT_ID", "") or
+        st.secrets.get("gcp_project_id", "")
+    )
+    st.session_state.setdefault('vertex_endpoint_id', 
+        os.environ.get("VERTEX_ENDPOINT_ID", "") or
+        st.secrets.get("vertex_endpoint_id", "")
+    )
+    st.session_state.setdefault('gcp_location', 
+        os.environ.get("GCP_LOCATION", "") or
+        st.secrets.get("gcp_location", "us-central1")
+    )
     
+    if st.session_state.get('gcp_project_id'):
+        sidebar.caption(f"☁️ GCP Project: {st.session_state['gcp_project_id'][:20]}...")
     # --------------------- API-Sports keys ---------------------
     nfl_key_default, nfl_source_default = resolve_nfl_apisports_key()
     st.session_state.setdefault('nfl_apisports_api_key', nfl_key_default)
