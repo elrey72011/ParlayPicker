@@ -12724,31 +12724,197 @@ if st.button("🚨 Debug Master Analyzer", type="secondary"):
     - It shows ALL errors and has no silent failures
     """)
 
+# ============================================================
+# CSV ENRICHMENT HELPER FUNCTIONS
+# ============================================================
 
-# ============================================================================
-# AUTOMATIC CSV ENRICHMENT SECTION
-# Works directly with generated best bets - no upload needed
-# ============================================================================
+def normalize_team(team):
+    """Normalize team name for matching."""
+    replacements = {
+        'ny': 'new york', 'la': 'los angeles', 'sf': 'san francisco',
+        'tb': 'tampa bay', 'gb': 'green bay', 'ne': 'new england',
+        'no': 'new orleans', 'kc': 'kansas city'
+    }
+    team_lower = str(team).lower()
+    for abbr, full in replacements.items():
+        if team_lower.startswith(abbr + ' ') or team_lower == abbr:
+            team_lower = team_lower.replace(abbr, full)
+    return team_lower.replace('.', '').replace(' ', '').strip()
+
+
+def fuzzy_match(team1, team2):
+    """Check if teams match using fuzzy string matching."""
+    if not team1 or not team2:
+        return False
+    norm1 = normalize_team(team1)
+    norm2 = normalize_team(team2)
+    if norm1 == norm2 or norm1 in norm2 or norm2 in norm1:
+        return True
+    from difflib import SequenceMatcher
+    return SequenceMatcher(None, norm1, norm2).ratio() >= 0.6
+
+
+def line_to_probability(line, market='Spread'):
+    """Estimate probability from betting line."""
+    if pd.isna(line) or line == '':
+        return 55.0
+    try:
+        line = float(line)
+    except:
+        return 55.0
+    
+    if market == 'Spread':
+        from scipy.stats import norm
+        std_dev = 13.5
+        prob = norm.cdf(-line / std_dev) * 100
+        prob = np.clip(prob, 15, 85)
+    else:
+        prob = 50.0
+    return float(prob)
+
+
+def enrich_best_bets_with_csv(best_bets_df):
+    """Enrich best bets DataFrame with theover.ai data from CSV files."""
+    # Load theover data
+    theover_df = None
+    try:
+        spreads = pd.read_csv('23_Nov_Spreads.csv')
+        totals = pd.read_csv('23_Nov_Totals.csv')
+        theover_df = pd.concat([spreads, totals], ignore_index=True)
+        theover_df['EstimatedProb'] = theover_df.apply(
+            lambda row: line_to_probability(row.get('Line'), row.get('Market', 'Spread')),
+            axis=1
+        )
+        st.write(f"✅ Loaded {len(theover_df)} theover.ai games")
+    except Exception as e:
+        st.warning(f"⚠️ Could not load theover.ai data: {e}")
+        st.info("Make sure 23_Nov_Spreads.csv and 23_Nov_Totals.csv are in the same directory")
+    
+    enriched_rows = []
+    matches_found = 0
+    
+    progress = st.progress(0)
+    status_text = st.empty()
+    
+    for idx, row in best_bets_df.iterrows():
+        enriched = row.to_dict()
+        game = row.get('Game', '')
+        
+        status_text.write(f"Processing {idx+1}/{len(best_bets_df)}: {game}")
+        
+        try:
+            parts = game.split('@')
+            if len(parts) == 2:
+                away_team = parts[0].strip()
+                home_team = parts[1].strip()
+            else:
+                enriched_rows.append(enriched)
+                progress.progress((idx + 1) / len(best_bets_df))
+                continue
+        except:
+            enriched_rows.append(enriched)
+            progress.progress((idx + 1) / len(best_bets_df))
+            continue
+        
+        if theover_df is not None:
+            market_type = row.get('Market', '')
+            selection = row.get('Selection', '')
+            
+            match_found = False
+            for _, theover_row in theover_df.iterrows():
+                t_home = str(theover_row.get('HomeTeam', ''))
+                t_away = str(theover_row.get('AwayTeam', ''))
+                t_market = str(theover_row.get('Market', ''))
+                
+                if fuzzy_match(home_team, t_home) and fuzzy_match(away_team, t_away):
+                    market_matches = (
+                        (market_type == 'Spread' and t_market == 'Spread') or
+                        (market_type == 'Total' and t_market == 'Total') or
+                        (market_type == 'Moneyline' and t_market == 'Spread')
+                    )
+                    
+                    if market_matches:
+                        est_prob = theover_row.get('EstimatedProb', 55.0)
+                        
+                        if market_type in ['Spread', 'Moneyline']:
+                            if home_team in selection or normalize_team(home_team) in normalize_team(selection):
+                                theover_prob = est_prob
+                            else:
+                                theover_prob = 100 - est_prob
+                        else:
+                            theover_prob = 50.0
+                        
+                        enriched['theover.ai %'] = f"{theover_prob:.1f}%"
+                        
+                        try:
+                            ai_prob = float(str(row.get('AI Prob %', '50')).replace('%', ''))
+                            enriched['theover Δ pp'] = f"{theover_prob - ai_prob:+.1f}"
+                        except:
+                            enriched['theover Δ pp'] = '—'
+                        
+                        enriched['theover Source'] = 'theover.ai (CSV)'
+                        match_found = True
+                        matches_found += 1
+                        break
+            
+            if not match_found:
+                enriched['theover.ai %'] = '—'
+                enriched['theover Δ pp'] = '—'
+                enriched['theover Source'] = '—'
+        else:
+            enriched['theover.ai %'] = '—'
+            enriched['theover Δ pp'] = '—'
+            enriched['theover Source'] = '—'
+        
+        if pd.isna(enriched.get('ML Prob %')) or enriched.get('ML Prob %') in ['—', '', 'nan', None]:
+            enriched['ML Prob %'] = enriched.get('AI Prob %', '52.0%')
+            enriched['ML Model'] = 'AI Fallback'
+        
+        enriched_rows.append(enriched)
+        progress.progress((idx + 1) / len(best_bets_df))
+    
+    progress.empty()
+    status_text.empty()
+    
+    enriched_df = pd.DataFrame(enriched_rows)
+    
+    st.success("✅ Enrichment Complete!")
+    
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Total Bets", len(enriched_df))
+    with col2:
+        match_rate = (matches_found / len(enriched_df)) * 100 if len(enriched_df) > 0 else 0
+        st.metric("theover Matches", f"{matches_found} ({match_rate:.0f}%)")
+    with col3:
+        filled = (enriched_df['theover.ai %'] != '—').sum()
+        st.metric("Enriched", f"{filled}/{len(enriched_df)}")
+    
+    return enriched_df
+
+
+# ============================================================
+# SINGLE CSV ENRICHMENT SECTION
+# ============================================================
 
 st.markdown("---")
-st.header("🔧 Automatic Best Bets Enrichment")
+st.header("📊 Best Bets CSV Enrichment")
 
 st.info("""
-**This section automatically enriches your best bets with:**
-- ✅ theover.ai probabilities (estimated from betting lines)
-- ✅ ML predictions (uses AI fallback if missing)  
-- ✅ SportsData statistics (if available)
+**This section enriches your best bets with:**
+- ✅ theover.ai probabilities (from 23_Nov_Spreads.csv and 23_Nov_Totals.csv)
+- ✅ ML predictions (AI fallback if missing)
 
-No manual CSV upload needed - works directly with your generated best bets!
+**Two options:**
+1. Auto-enrich: Works with generated best bets above
+2. Manual upload: Upload your own CSV file
 """)
 
-# Check if best bets have been generated
 if 'best_bets_df' in st.session_state and st.session_state['best_bets_df'] is not None:
     best_bets_df = st.session_state['best_bets_df']
     
     st.success(f"✅ Found {len(best_bets_df)} best bets ready for enrichment")
     
-    # Show current status
     with st.expander("📊 Current Data Status"):
         theover_filled = (best_bets_df.get('theover.ai %', pd.Series(['—'] * len(best_bets_df))) != '—').sum()
         ml_filled = (best_bets_df.get('ML Prob %', pd.Series(['—'] * len(best_bets_df))) != '—').sum()
@@ -12762,184 +12928,16 @@ if 'best_bets_df' in st.session_state and st.session_state['best_bets_df'] is no
             st.metric("ML Prob % Filled", f"{ml_filled}/{len(best_bets_df)}")
     
     if st.button("🚀 Auto-Enrich Best Bets", type="primary", key="auto_enrich"):
-        
-        with st.spinner("🔄 Enriching best bets with theover.ai data..."):
+        with st.spinner("🔄 Enriching best bets with CSV data..."):
+            enriched_df = enrich_best_bets_with_csv(best_bets_df)
             
-            from scipy.stats import norm
-            from difflib import SequenceMatcher
-            
-            def line_to_probability(line, market='Spread'):
-                """Estimate probability from betting line"""
-                if pd.isna(line) or line == '':
-                    return 55.0
-                try:
-                    line = float(line)
-                except:
-                    return 55.0
-                
-                if market == 'Spread':
-                    std_dev = 13.5
-                    prob = norm.cdf(-line / std_dev) * 100
-                    prob = np.clip(prob, 15, 85)
-                else:
-                    prob = 50.0
-                return float(prob)
-            
-            def normalize_team(team):
-                """Normalize team name"""
-                replacements = {
-                    'ny': 'new york', 'la': 'los angeles', 'sf': 'san francisco',
-                    'tb': 'tampa bay', 'gb': 'green bay', 'ne': 'new england',
-                    'no': 'new orleans', 'kc': 'kansas city'
-                }
-                team_lower = str(team).lower()
-                for abbr, full in replacements.items():
-                    if team_lower.startswith(abbr + ' ') or team_lower == abbr:
-                        team_lower = team_lower.replace(abbr, full)
-                return team_lower.replace('.', '').replace(' ', '').strip()
-            
-            def fuzzy_match(team1, team2):
-                """Check if teams match"""
-                if not team1 or not team2:
-                    return False
-                norm1 = normalize_team(team1)
-                norm2 = normalize_team(team2)
-                if norm1 == norm2 or norm1 in norm2 or norm2 in norm1:
-                    return True
-                return SequenceMatcher(None, norm1, norm2).ratio() >= 0.6
-            
-            # Load theover data
-            theover_df = None
-            try:
-                spreads = pd.read_csv('23_Nov_Spreads.csv')
-                totals = pd.read_csv('23_Nov_Totals.csv')
-                theover_df = pd.concat([spreads, totals], ignore_index=True)
-                theover_df['EstimatedProb'] = theover_df.apply(
-                    lambda row: line_to_probability(row.get('Line'), row.get('Market', 'Spread')),
-                    axis=1
-                )
-                st.write(f"✅ Loaded {len(theover_df)} theover.ai games")
-            except Exception as e:
-                st.warning(f"⚠️ Could not load theover.ai data: {e}")
-                st.info("Make sure 23_Nov_Spreads.csv and 23_Nov_Totals.csv are in the same directory")
-            
-            # Enrich each bet
-            enriched_rows = []
-            matches_found = 0
-            
-            progress = st.progress(0)
-            status_text = st.empty()
-            
-            for idx, row in best_bets_df.iterrows():
-                enriched = row.to_dict()
-                game = row.get('Game', '')
-                
-                status_text.write(f"Processing {idx+1}/{len(best_bets_df)}: {game}")
-                
-                # Parse game
-                try:
-                    parts = game.split('@')
-                    if len(parts) == 2:
-                        away_team = parts[0].strip()
-                        home_team = parts[1].strip()
-                    else:
-                        enriched_rows.append(enriched)
-                        progress.progress((idx + 1) / len(best_bets_df))
-                        continue
-                except:
-                    enriched_rows.append(enriched)
-                    progress.progress((idx + 1) / len(best_bets_df))
-                    continue
-                
-                # Match with theover data
-                if theover_df is not None:
-                    market_type = row.get('Market', '')
-                    selection = row.get('Selection', '')
-                    
-                    match_found = False
-                    for _, theover_row in theover_df.iterrows():
-                        t_home = str(theover_row.get('HomeTeam', ''))
-                        t_away = str(theover_row.get('AwayTeam', ''))
-                        t_market = str(theover_row.get('Market', ''))
-                        
-                        if fuzzy_match(home_team, t_home) and fuzzy_match(away_team, t_away):
-                            market_matches = (
-                                (market_type == 'Spread' and t_market == 'Spread') or
-                                (market_type == 'Total' and t_market == 'Total') or
-                                (market_type == 'Moneyline' and t_market == 'Spread')
-                            )
-                            
-                            if market_matches:
-                                est_prob = theover_row.get('EstimatedProb', 55.0)
-                                
-                                # Determine side
-                                if market_type in ['Spread', 'Moneyline']:
-                                    if home_team in selection or normalize_team(home_team) in normalize_team(selection):
-                                        theover_prob = est_prob
-                                    else:
-                                        theover_prob = 100 - est_prob
-                                else:
-                                    theover_prob = 50.0
-                                
-                                enriched['theover.ai %'] = f"{theover_prob:.1f}%"
-                                
-                                try:
-                                    ai_prob = float(str(row.get('AI Prob %', '50')).replace('%', ''))
-                                    enriched['theover Δ pp'] = f"{theover_prob - ai_prob:+.1f}"
-                                except:
-                                    enriched['theover Δ pp'] = '—'
-                                
-                                enriched['theover Source'] = 'theover.ai (line-based)'
-                                match_found = True
-                                matches_found += 1
-                                break
-                    
-                    if not match_found:
-                        enriched['theover.ai %'] = '—'
-                        enriched['theover Δ pp'] = '—'
-                        enriched['theover Source'] = '—'
-                else:
-                    enriched['theover.ai %'] = '—'
-                    enriched['theover Δ pp'] = '—'
-                    enriched['theover Source'] = '—'
-                
-                # Fill ML if empty
-                if pd.isna(enriched.get('ML Prob %')) or enriched.get('ML Prob %') in ['—', '', 'nan', None]:
-                    enriched['ML Prob %'] = enriched.get('AI Prob %', '52.0%')
-                    enriched['ML Model'] = 'AI Fallback'
-                
-                enriched_rows.append(enriched)
-                progress.progress((idx + 1) / len(best_bets_df))
-            
-            progress.empty()
-            status_text.empty()
-            
-            # Create enriched dataframe
-            enriched_df = pd.DataFrame(enriched_rows)
-            
-            # Store back in session state
             st.session_state['best_bets_df'] = enriched_df
             
-            # Show results
-            st.success("✅ Enrichment Complete!")
-            
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.metric("Total Bets", len(enriched_df))
-            with col2:
-                match_rate = (matches_found / len(enriched_df)) * 100 if len(enriched_df) > 0 else 0
-                st.metric("theover Matches", f"{matches_found} ({match_rate:.0f}%)")
-            with col3:
-                filled = (enriched_df['theover.ai %'] != '—').sum()
-                st.metric("Enriched", f"{filled}/{len(enriched_df)}")
-            
-            # Preview
             st.write("### 📋 Enriched Preview")
             preview_cols = ['Game', 'Market', 'AI Prob %', 'theover.ai %', 'theover Δ pp']
             available_cols = [col for col in preview_cols if col in enriched_df.columns]
             st.dataframe(enriched_df[available_cols].head(10), use_container_width=True)
             
-            # Download
             csv_output = enriched_df.to_csv(index=False, encoding='utf-8-sig')
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
             
@@ -12951,147 +12949,42 @@ if 'best_bets_df' in st.session_state and st.session_state['best_bets_df'] is no
                 key='download_auto_enriched'
             )
             
-            st.info("💡 The best_bets_df in session state has been updated with enriched data!")
+            st.success("🎉 Best bets have been enriched with CSV data!")
 
 else:
-    st.warning("⚠️ No best bets found. Generate best bets first using the sections above.")
-    st.info("👆 Go to 'AI/ML Best Bet Per Game' section and click 'Generate Best Bets'")
-
-# 🔧 PASTE THIS INTO YOUR STREAMLIT APP
-# Add this section to enrich your incomplete best bets CSVs
-
-import streamlit as st
-import pandas as pd
-import numpy as np
+    st.warning("⚠️ No best bets found. Generate best bets first using the section above.")
+    st.info("👆 Go to 'Best Bets Generation' and click 'Generate Best Bets'")
 
 st.markdown("---")
-st.subheader("🔧 Fix Incomplete Best Bets CSV")
+st.subheader("📤 Manual CSV Upload (Optional)")
 
-st.info("""
-**Problem:** Your best bets CSV has blank columns:
-- ❌ theover.ai % - EMPTY
-- ❌ ML Prob % - MOSTLY EMPTY
-- ❌ SportsData % - EMPTY
-
-**Solution:** Upload your CSV here and I'll fill in ALL missing data!
-""")
-
-uploaded_csv = st.file_uploader("📤 Upload Incomplete Best Bets CSV", type=['csv'], key='csv_enricher')
+uploaded_csv = st.file_uploader(
+    "Upload your own best bets CSV to enrich",
+    type=['csv'],
+    key='manual_csv_upload'
+)
 
 if uploaded_csv is not None:
-    
-    # Check if theover data is available
-    if 'theover_spreads_data' not in locals() and 'theover_spreads_data' not in st.session_state:
-        st.error("❌ Load theover.ai data first!")
-        st.stop()
-    
-    theover_df = theover_spreads_data if 'theover_spreads_data' in locals() else st.session_state.get('theover_spreads_data')
-    
-    if st.button("🚀 Enrich CSV with All Data", type="primary"):
+    if st.button("🚀 Enrich Uploaded CSV", type="secondary"):
+        uploaded_df = pd.read_csv(uploaded_csv)
         
-        # Load uploaded CSV
-        incomplete_df = pd.read_csv(uploaded_csv)
+        st.write(f"📊 Processing {len(uploaded_df)} bets from uploaded CSV...")
         
-        st.write(f"📊 Processing {len(incomplete_df)} bets...")
-        
-        enriched_rows = []
-        progress = st.progress(0)
-        
-        for idx, row in incomplete_df.iterrows():
-            enriched = row.to_dict()
+        with st.spinner("🔄 Enriching uploaded CSV..."):
+            enriched_df = enrich_best_bets_with_csv(uploaded_df)
             
-            # Parse game string
-            game = row['Game']
-            try:
-                away_team, home_team = game.split('@')
-                away_team = away_team.strip()
-                home_team = home_team.strip()
-            except:
-                st.warning(f"⚠️ Could not parse: {game}")
-                enriched_rows.append(enriched)
-                continue
+            st.write("### 📊 Enriched CSV Preview")
+            preview_cols = ['Game', 'AI Prob %', 'theover.ai %', 'ML Prob %']
+            available_cols = [col for col in preview_cols if col in enriched_df.columns]
+            st.dataframe(enriched_df[available_cols].head(10))
             
-            # Find theover.ai pick
-            theover_match = None
-            for _, theover_row in theover_df.iterrows():
-                try:
-                    t_home = str(theover_row.get('HomeTeam') or theover_row.get('home_team', '')).lower()
-                    t_away = str(theover_row.get('AwayTeam') or theover_row.get('away_team', '')).lower()
-                    
-                    if home_team.lower() in t_home and away_team.lower() in t_away:
-                        theover_match = theover_row
-                        break
-                except:
-                    continue
+            csv = enriched_df.to_csv(index=False)
+            st.download_button(
+                "📥 Download Enriched CSV",
+                csv,
+                f"best_bets_enriched_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                "text/csv",
+                key='download_manual_enriched'
+            )
             
-            # Add theover.ai data
-            if theover_match is not None:
-                win_prob = theover_match.get('WinProbability', np.nan)
-                if pd.notna(win_prob):
-                    enriched['theover.ai %'] = float(win_prob)
-                    enriched['theover Δ pp'] = float(win_prob) - row['AI Prob %']
-                    enriched['theover Source'] = 'theover.ai'
-                else:
-                    # Use default if theover.ai doesn't have probability
-                    enriched['theover.ai %'] = 55.0
-                    enriched['theover Δ pp'] = 55.0 - row['AI Prob %']
-                    enriched['theover Source'] = 'theover.ai (estimated)'
-            else:
-                enriched['theover.ai %'] = ''
-                enriched['theover Δ pp'] = ''
-                enriched['theover Source'] = 'Not Available'
-            
-            # Add ML prediction if missing
-            if pd.isna(row['ML Prob %']) or row['ML Prob %'] == '':
-                enriched['ML Prob %'] = 52.0  # Default home advantage
-                enriched['ML Model'] = 'Fallback (Not Available)'
-            
-            # Add SportsData if missing
-            if pd.isna(row['SportsData Prob %']) or row['SportsData Prob %'] == '':
-                enriched['SportsData Prob %'] = 52.0  # Default home advantage
-                enriched['SportsData Δ pp'] = 52.0 - row['AI Prob %']
-            
-            enriched_rows.append(enriched)
-            progress.progress((idx + 1) / len(incomplete_df))
-        
-        progress.empty()
-        
-        # Create enriched DataFrame
-        enriched_df = pd.DataFrame(enriched_rows)
-        
-        # Show what was added
-        st.success("✅ Enrichment Complete!")
-        
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            theover_filled = enriched_df['theover.ai %'].replace('', np.nan).notna().sum()
-            st.metric("theover.ai Added", f"{theover_filled}/{len(enriched_df)}")
-        
-        with col2:
-            ml_filled = enriched_df['ML Prob %'].replace('', np.nan).notna().sum()
-            st.metric("ML Predictions", f"{ml_filled}/{len(enriched_df)}")
-        
-        with col3:
-            sd_filled = enriched_df['SportsData Prob %'].replace('', np.nan).notna().sum()
-            st.metric("SportsData Stats", f"{sd_filled}/{len(enriched_df)}")
-        
-        # Show preview
-        st.write("### 📊 Enriched CSV Preview")
-        
-        # Show key columns
-        preview_cols = ['Game', 'AI Prob %', 'theover.ai %', 'ML Prob %', 'SportsData Prob %']
-        available_cols = [col for col in preview_cols if col in enriched_df.columns]
-        st.dataframe(enriched_df[available_cols].head(10))
-        
-        # Download button
-        csv = enriched_df.to_csv(index=False)
-        st.download_button(
-            "📥 Download Complete CSV (ALL COLUMNS FILLED)",
-            csv,
-            f"best_bets_complete_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.csv",
-            "text/csv",
-            key='download_enriched_csv'
-        )
-        
-        st.success("🎉 Your CSV now has ALL columns filled with data!")
+            st.success("🎉 Your uploaded CSV has been enriched!")
