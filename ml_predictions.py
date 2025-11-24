@@ -1,12 +1,14 @@
 """
 ML Predictions Module
-Provides Vertex AI and local ML predictions for Streamlit app
+Provides Vertex AI, Anthropic Claude, and local ML predictions for Streamlit app
 """
 
 import streamlit as st
 from typing import Optional, List, Dict, Any
 import logging
 import numpy as np
+import json
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +37,12 @@ def is_vertex_ai_enabled() -> bool:
             logger.info(f"AI enabled via session key: {key}")
             return True
     
-    # Method 2: Auto-detect based on GCP configuration
+    # Method 2: Auto-detect based on Anthropic API key (NEW!)
+    if st.session_state.get('anthropic_api_key'):
+        logger.info("AI auto-enabled: found Anthropic API key")
+        return True
+    
+    # Method 3: Auto-detect based on GCP configuration
     has_gcp_config = bool(
         st.session_state.get('gcp_project_id') or
         st.session_state.get('vertex_endpoint_id')
@@ -45,7 +52,7 @@ def is_vertex_ai_enabled() -> bool:
         logger.info("AI auto-enabled: found GCP configuration")
         return True
     
-    # Method 3: Auto-detect based on local models
+    # Method 4: Auto-detect based on local models
     try:
         from pathlib import Path
         if Path('./models').exists():
@@ -56,18 +63,19 @@ def is_vertex_ai_enabled() -> bool:
     except Exception as e:
         logger.debug(f"Could not check for local models: {e}")
     
-    # Method 4: Default to True if nothing explicitly disables it
+    # Method 5: Default to True if nothing explicitly disables it
     # This makes the sections visible by default
     logger.info("AI enabled by default (no explicit disable)")
     return True
 
 
-def get_vertex_ai_prediction(features: List[float]) -> Optional[float]:
+def get_vertex_ai_prediction(features: List[float], game_context: Dict = None) -> Optional[float]:
     """
-    Get prediction from Vertex AI or local model
+    Get prediction from Vertex AI, Anthropic Claude, or local model
     
     Args:
         features: List of feature values (must match training data format)
+        game_context: Optional dict with game details for Claude analysis
         
     Returns:
         Probability between 0 and 1, or None if prediction fails
@@ -76,10 +84,15 @@ def get_vertex_ai_prediction(features: List[float]) -> Optional[float]:
         logger.info("AI predictions not enabled")
         return None
     
-    # Try Vertex AI endpoint first
+    # Try Vertex AI endpoint first (Google Cloud)
     vertex_result = _try_vertex_ai_endpoint(features)
     if vertex_result is not None:
         return vertex_result
+    
+    # Try Anthropic Claude (NEW!)
+    anthropic_result = _try_anthropic_claude_prediction(features, game_context)
+    if anthropic_result is not None:
+        return anthropic_result
     
     # Fall back to local model
     logger.info("Trying local model prediction")
@@ -90,6 +103,115 @@ def get_vertex_ai_prediction(features: List[float]) -> Optional[float]:
     # Ultimate fallback: use feature-based heuristic for demo purposes
     logger.warning("No model available, using feature-based heuristic")
     return _calculate_heuristic_prediction(features)
+
+
+def _try_anthropic_claude_prediction(features: List[float], game_context: Dict = None) -> Optional[float]:
+    """
+    Get prediction from Anthropic Claude API
+    
+    Args:
+        features: Feature values
+        game_context: Optional game details dict
+        
+    Returns:
+        Probability or None
+    """
+    try:
+        import anthropic
+        
+        # Get API key from session state
+        api_key = st.session_state.get('anthropic_api_key', '')
+        
+        if not api_key:
+            logger.info("No Anthropic API key configured")
+            return None
+        
+        client = anthropic.Anthropic(api_key=api_key)
+        
+        # Build context from features
+        feature_names = [
+            "home_win_pct", "away_win_pct", "home_avg_points", "away_avg_points",
+            "home_def_rating", "away_def_rating", "spread_normalized", 
+            "home_last_5", "away_last_5"
+        ]
+        
+        feature_dict = {}
+        for i, val in enumerate(features):
+            if i < len(feature_names):
+                feature_dict[feature_names[i]] = val
+            else:
+                feature_dict[f"feature_{i}"] = val
+        
+        # Add game context if available
+        context_str = ""
+        if game_context:
+            context_str = f"""
+GAME DETAILS:
+- Home Team: {game_context.get('home_team', 'Unknown')}
+- Away Team: {game_context.get('away_team', 'Unknown')}
+- Sport: {game_context.get('sport', 'Unknown')}
+- Spread: {game_context.get('spread', 'N/A')}
+- Total: {game_context.get('total', 'N/A')}
+"""
+        
+        prompt = f"""You are a sports betting AI analyst. Based on the following statistical features, predict the HOME TEAM win probability.
+
+{context_str}
+
+STATISTICAL FEATURES:
+{json.dumps(feature_dict, indent=2)}
+
+FEATURE EXPLANATIONS:
+- home_win_pct/away_win_pct: Season win percentages (0-1 scale)
+- home_avg_points/away_avg_points: Average points scored per game
+- home_def_rating/away_def_rating: Defensive efficiency (lower is better)
+- spread_normalized: Point spread normalized (positive favors home)
+- home_last_5/away_last_5: Win rate in last 5 games (0-1 scale)
+
+Based on these features and your sports knowledge, provide:
+1. Your estimated HOME TEAM win probability (between 0.30 and 0.70 - be decisive, don't default to 0.50)
+2. Brief reasoning
+
+RESPOND WITH ONLY THIS JSON (no other text):
+{{
+  "home_win_probability": 0.XX,
+  "confidence": "high/medium/low",
+  "reasoning": "Brief 1-2 sentence explanation"
+}}"""
+
+        message = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=500,
+            messages=[{"role": "user", "content": prompt}],
+            timeout=15.0
+        )
+        
+        response_text = message.content[0].text
+        
+        # Parse JSON response
+        json_match = re.search(r'\{[\s\S]*\}', response_text)
+        if json_match:
+            analysis = json.loads(json_match.group())
+            prob = float(analysis.get('home_win_probability', 0))
+            
+            # Validate probability
+            if 0.25 <= prob <= 0.75:
+                logger.info(f"Anthropic Claude prediction: {prob:.3f}")
+                return prob
+            else:
+                logger.warning(f"Claude returned out-of-range probability: {prob}")
+                # Clip to valid range
+                return float(np.clip(prob, 0.30, 0.70))
+        
+        logger.warning("Could not parse Claude response")
+        return None
+        
+    except ImportError:
+        logger.info("Anthropic library not installed")
+        return None
+    except Exception as e:
+        logger.error(f"Anthropic prediction failed: {e}")
+        return None
 
 
 def _try_vertex_ai_endpoint(features: List[float]) -> Optional[float]:
@@ -234,12 +356,13 @@ def _try_local_model_prediction(features: List[float]) -> Optional[float]:
         return None
 
 
-def get_batch_predictions(features_list: List[List[float]]) -> List[Optional[float]]:
+def get_batch_predictions(features_list: List[List[float]], game_contexts: List[Dict] = None) -> List[Optional[float]]:
     """
     Get predictions for multiple games at once
     
     Args:
         features_list: List of feature vectors
+        game_contexts: Optional list of game context dicts
         
     Returns:
         List of probabilities (None for failed predictions)
@@ -248,8 +371,9 @@ def get_batch_predictions(features_list: List[List[float]]) -> List[Optional[flo
         return [None] * len(features_list)
     
     results = []
-    for features in features_list:
-        prob = get_vertex_ai_prediction(features)
+    for i, features in enumerate(features_list):
+        context = game_contexts[i] if game_contexts and i < len(game_contexts) else None
+        prob = get_vertex_ai_prediction(features, context)
         results.append(prob)
     
     return results
@@ -268,15 +392,20 @@ def show_vertex_ai_prediction_section(home_team: str, away_team: str):
     if not is_vertex_ai_enabled():
         st.warning("⚠️ Vertex AI is not enabled. Enable in AI Settings to see predictions.")
         
-        with st.expander("📖 How to Enable Vertex AI"):
-            st.write("**Option 1: Use Vertex AI (Google Cloud)**")
+        with st.expander("📖 How to Enable AI Predictions"):
+            st.write("**Option 1: Use Anthropic Claude (Recommended)**")
+            st.write("1. Get API key from console.anthropic.com")
+            st.write("2. Enter in sidebar under 'Anthropic API key'")
+            st.write("3. AI predictions will work automatically!")
+            
+            st.write("\n**Option 2: Use Vertex AI (Google Cloud)**")
             st.write("1. Go to AI Settings in sidebar")
             st.write("2. Check 'Enable Vertex AI'")
             st.write("3. Enter your GCP Project ID")
             st.write("4. Enter your Vertex AI Endpoint ID")
             st.write("5. Set GCP Location (e.g., us-central1)")
             
-            st.write("\n**Option 2: Use Local Models**")
+            st.write("\n**Option 3: Use Local Models**")
             st.write("1. Train models using the ML pipeline:")
             st.code("python main.py --train --sports NFL NBA", language="bash")
             st.write("2. Models will be saved to ./models/")
@@ -298,8 +427,15 @@ def show_vertex_ai_prediction_section(home_team: str, away_team: str):
         0.4,    # away_last_5 / 5
     ]
     
+    # Create game context for better Claude predictions
+    game_context = {
+        'home_team': home_team,
+        'away_team': away_team,
+        'sport': 'Unknown'
+    }
+    
     with st.spinner("Getting AI prediction..."):
-        prob = get_vertex_ai_prediction(demo_features)
+        prob = get_vertex_ai_prediction(demo_features, game_context)
     
     if prob is not None:
         col1, col2 = st.columns(2)
@@ -330,6 +466,14 @@ def show_vertex_ai_prediction_section(home_team: str, away_team: str):
         
         st.write(f"**Confidence:** {confidence_label} ({confidence * 100:.1f}%)")
         
+        # Show AI source
+        if st.session_state.get('anthropic_api_key'):
+            st.caption("🤖 Powered by Anthropic Claude")
+        elif st.session_state.get('gcp_project_id'):
+            st.caption("☁️ Powered by Google Vertex AI")
+        else:
+            st.caption("📊 Using local model/heuristics")
+        
         # Show features used
         with st.expander("📊 Features Used in Prediction"):
             st.write("**Feature Values:**")
@@ -353,15 +497,16 @@ def show_vertex_ai_prediction_section(home_team: str, away_team: str):
         # Show debugging info
         with st.expander("🔍 Debug Information"):
             st.write(f"**Vertex AI Enabled:** {is_vertex_ai_enabled()}")
+            st.write(f"**Anthropic API Key:** {'✅ Configured' if st.session_state.get('anthropic_api_key') else '❌ Not set'}")
             st.write(f"**GCP Project ID:** {st.session_state.get('gcp_project_id', 'Not set')}")
             st.write(f"**Endpoint ID:** {st.session_state.get('vertex_endpoint_id', 'Not set')}")
             st.write(f"**Location:** {st.session_state.get('gcp_location', 'Not set')}")
             
             st.write("\n**Possible Issues:**")
+            st.write("- No Anthropic API key configured")
             st.write("- Vertex AI credentials not configured")
             st.write("- No trained models found locally")
             st.write("- Feature format doesn't match model")
-            st.write("- Google Cloud SDK not installed")
 
 
 def validate_vertex_ai_configuration() -> Dict[str, Any]:
@@ -373,13 +518,22 @@ def validate_vertex_ai_configuration() -> Dict[str, Any]:
     """
     results = {
         'enabled': is_vertex_ai_enabled(),
+        'has_anthropic_key': bool(st.session_state.get('anthropic_api_key')),
         'has_project_id': bool(st.session_state.get('gcp_project_id')),
         'has_endpoint_id': bool(st.session_state.get('vertex_endpoint_id')),
         'has_location': bool(st.session_state.get('gcp_location')),
         'has_google_cloud': False,
+        'has_anthropic': False,
         'has_local_models': False,
         'errors': []
     }
+    
+    # Check Anthropic (NEW!)
+    try:
+        import anthropic
+        results['has_anthropic'] = True
+    except ImportError:
+        results['errors'].append("Anthropic library not installed")
     
     # Check Google Cloud SDK
     try:
@@ -397,6 +551,12 @@ def validate_vertex_ai_configuration() -> Dict[str, Any]:
     )
     
     # Overall status
+    results['can_use_anthropic'] = (
+        results['enabled'] and 
+        results['has_anthropic_key'] and 
+        results['has_anthropic']
+    )
+    
     results['can_use_vertex'] = (
         results['enabled'] and 
         results['has_project_id'] and 
@@ -409,7 +569,7 @@ def validate_vertex_ai_configuration() -> Dict[str, Any]:
         results['has_local_models']
     )
     
-    results['ready'] = results['can_use_vertex'] or results['can_use_local']
+    results['ready'] = results['can_use_anthropic'] or results['can_use_vertex'] or results['can_use_local']
     
     return results
 
