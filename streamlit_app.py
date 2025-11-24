@@ -13352,6 +13352,381 @@ if uploaded_csv is not None:
 
 
 # ═══════════════════════════════════════════════════════════════
+# COMPLETE API VERIFICATION TOOL
+# Tests ALL APIs with real calls and shows exactly what works
+# ═══════════════════════════════════════════════════════════════
+
+import streamlit as st
+import requests
+import json
+from datetime import datetime
+
+def test_odds_api(api_key):
+    """Test The Odds API with real call"""
+    if not api_key:
+        return False, "❌ No API key provided"
+    
+    try:
+        url = "https://api.the-odds-api.com/v4/sports"
+        params = {'apiKey': api_key}
+        
+        response = requests.get(url, params=params, timeout=10)
+        
+        if response.status_code == 200:
+            sports = response.json()
+            return True, f"✅ Working! Found {len(sports)} sports. Remaining requests: {response.headers.get('x-requests-remaining', 'Unknown')}"
+        elif response.status_code == 401:
+            return False, "❌ Invalid API key (401 Unauthorized)"
+        elif response.status_code == 429:
+            return False, "❌ Rate limit exceeded (429)"
+        else:
+            return False, f"❌ Error: Status {response.status_code}"
+    
+    except requests.exceptions.Timeout:
+        return False, "❌ Timeout (>10s)"
+    except Exception as e:
+        return False, f"❌ Error: {str(e)[:100]}"
+
+
+def test_anthropic_api(api_key):
+    """Test Anthropic API (Vertex AI) with real call"""
+    if not api_key:
+        return False, "❌ No API key provided"
+    
+    try:
+        import anthropic
+        
+        client = anthropic.Anthropic(api_key=api_key)
+        
+        # Make a simple test call
+        message = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=100,
+            messages=[{
+                "role": "user",
+                "content": "Reply with just the number 42"
+            }],
+            timeout=15.0
+        )
+        
+        response_text = message.content[0].text
+        
+        # Check if we got a real response (not default/error)
+        if response_text and len(response_text) > 0:
+            return True, f"✅ Working! Response: '{response_text[:50]}...'"
+        else:
+            return False, "❌ Got empty response"
+    
+    except anthropic.AuthenticationError:
+        return False, "❌ Invalid API key (Authentication failed)"
+    except anthropic.RateLimitError:
+        return False, "❌ Rate limit exceeded"
+    except anthropic.APITimeoutError:
+        return False, "❌ Timeout (>15s)"
+    except anthropic.APIError as e:
+        return False, f"❌ API Error: {str(e)[:100]}"
+    except Exception as e:
+        return False, f"❌ Error: {str(e)[:100]}"
+
+
+def test_news_api(api_key):
+    """Test News API with real call"""
+    if not api_key:
+        return False, "❌ No API key provided"
+    
+    try:
+        url = "https://newsapi.org/v2/top-headlines"
+        params = {
+            'apiKey': api_key,
+            'category': 'sports',
+            'language': 'en',
+            'pageSize': 5
+        }
+        
+        response = requests.get(url, params=params, timeout=10)
+        
+        if response.status_code == 200:
+            data = response.json()
+            articles = data.get('articles', [])
+            total = data.get('totalResults', 0)
+            return True, f"✅ Working! Found {len(articles)} recent articles (Total: {total})"
+        elif response.status_code == 401:
+            return False, "❌ Invalid API key (401 Unauthorized)"
+        elif response.status_code == 429:
+            return False, "❌ Rate limit exceeded (429)"
+        else:
+            return False, f"❌ Error: Status {response.status_code}"
+    
+    except requests.exceptions.Timeout:
+        return False, "❌ Timeout (>10s)"
+    except Exception as e:
+        return False, f"❌ Error: {str(e)[:100]}"
+
+
+def test_anthropic_sports_analysis(api_key):
+    """Test Anthropic with actual sports analysis (like CSV workflow uses)"""
+    if not api_key:
+        return False, "❌ No API key provided", None
+    
+    try:
+        import anthropic
+        
+        client = anthropic.Anthropic(api_key=api_key)
+        
+        # Test with a real sports analysis prompt
+        prompt = """Analyze this game:
+
+Game: Lakers @ Celtics
+Sport: basketball_nba
+Date: 2024-11-24
+Home Odds: -150
+Away Odds: +130
+
+Provide analysis as JSON:
+{
+  "home_win_probability": 65.0,
+  "away_win_probability": 35.0,
+  "confidence_level": 78,
+  "risk_assessment": "Low",
+  "recommendation": "Home team moneyline"
+}
+
+Respond ONLY with valid JSON."""
+        
+        message = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=500,
+            messages=[{"role": "user", "content": prompt}],
+            timeout=20.0
+        )
+        
+        response_text = message.content[0].text
+        
+        # Try to parse JSON
+        import re
+        json_match = re.search(r'\{[\s\S]*\}', response_text)
+        
+        if json_match:
+            try:
+                analysis = json.loads(json_match.group())
+                home_prob = float(analysis.get('home_win_probability', 0))
+                
+                # Check if we got real analysis (not default 50%)
+                if home_prob > 0 and home_prob != 50.0 and home_prob != 50.5:
+                    return True, f"✅ Sports analysis working! Home win prob: {home_prob}%", analysis
+                else:
+                    return False, f"⚠️ Got default probability ({home_prob}%), might not be analyzing properly", analysis
+            except json.JSONDecodeError as e:
+                return False, f"❌ JSON parse error: {str(e)[:50]}", None
+        else:
+            return False, f"❌ No JSON found in response: {response_text[:200]}", None
+    
+    except Exception as e:
+        return False, f"❌ Error: {str(e)[:100]}", None
+
+
+# ═══════════════════════════════════════════════════════════════
+# STREAMLIT UI
+# ═══════════════════════════════════════════════════════════════
+
+st.write("---")
+st.write("---")
+st.header("🔍 Complete API Verification Tool")
+
+st.info("""
+**This tool tests ALL your APIs with REAL calls:**
+- ✅ = API working correctly
+- ❌ = API not working (see error)
+- ⚠️ = API responds but might have issues
+
+Run this to verify everything before analyzing games!
+""")
+
+# Collect API keys
+st.subheader("📋 Step 1: Collect API Keys")
+
+col1, col2 = st.columns(2)
+
+with col1:
+    st.write("**From Session State:**")
+    odds_key_session = st.session_state.get('api_key', '')
+    anthropic_key_session = st.session_state.get('anthropic_api_key', '')
+    news_key_session = st.session_state.get('news_api_key', '')
+    
+    st.write(f"- Odds API: {'✅' if odds_key_session else '❌'} {odds_key_session[:10] + '...' if odds_key_session else 'Not found'}")
+    st.write(f"- Anthropic: {'✅' if anthropic_key_session else '❌'} {anthropic_key_session[:10] + '...' if anthropic_key_session else 'Not found'}")
+    st.write(f"- News API: {'✅' if news_key_session else '❌'} {news_key_session[:10] + '...' if news_key_session else 'Not found'}")
+
+with col2:
+    st.write("**From Environment/Secrets:**")
+    import os
+    
+    odds_key_env = os.environ.get('ODDS_API_KEY', '') or st.secrets.get('ODDS_API_KEY', '')
+    anthropic_key_env = os.environ.get('anthropic_api_key', '') or st.secrets.get('anthropic_api_key', '')
+    news_key_env = os.environ.get('NEWS_API_KEY', '') or st.secrets.get('NEWS_API_KEY', '')
+    
+    st.write(f"- Odds API: {'✅' if odds_key_env else '❌'} {odds_key_env[:10] + '...' if odds_key_env else 'Not found'}")
+    st.write(f"- Anthropic: {'✅' if anthropic_key_env else '❌'} {anthropic_key_env[:10] + '...' if anthropic_key_env else 'Not found'}")
+    st.write(f"- News API: {'✅' if news_key_env else '❌'} {news_key_env[:10] + '...' if news_key_env else 'Not found'}")
+
+# Use best available keys
+final_odds_key = odds_key_session or odds_key_env
+final_anthropic_key = anthropic_key_session or anthropic_key_env
+final_news_key = news_key_session or news_key_env
+
+st.write("---")
+
+# Test APIs
+st.subheader("🧪 Step 2: Test APIs with Real Calls")
+
+if st.button("🚀 Run Complete API Test", type="primary"):
+    
+    results = {}
+    
+    # Test 1: The Odds API
+    st.write("### 1️⃣ Testing The Odds API")
+    with st.spinner("Testing..."):
+        success, message = test_odds_api(final_odds_key)
+        results['odds_api'] = (success, message)
+        
+        if success:
+            st.success(message)
+        else:
+            st.error(message)
+    
+    st.write("---")
+    
+    # Test 2: Anthropic API (Basic)
+    st.write("### 2️⃣ Testing Anthropic API (Basic)")
+    with st.spinner("Testing..."):
+        success, message = test_anthropic_api(final_anthropic_key)
+        results['anthropic_basic'] = (success, message)
+        
+        if success:
+            st.success(message)
+        else:
+            st.error(message)
+    
+    st.write("---")
+    
+    # Test 3: Anthropic API (Sports Analysis)
+    st.write("### 3️⃣ Testing Anthropic API (Sports Analysis)")
+    st.caption("This is the REAL test - simulates CSV workflow")
+    
+    with st.spinner("Testing sports analysis..."):
+        success, message, analysis = test_anthropic_sports_analysis(final_anthropic_key)
+        results['anthropic_sports'] = (success, message)
+        
+        if success:
+            st.success(message)
+            if analysis:
+                with st.expander("📊 View Full Analysis"):
+                    st.json(analysis)
+        else:
+            st.error(message)
+            if analysis:
+                with st.expander("⚠️ View Response (might show issue)"):
+                    st.json(analysis)
+    
+    st.write("---")
+    
+    # Test 4: News API
+    st.write("### 4️⃣ Testing News API (Sentiment)")
+    with st.spinner("Testing..."):
+        success, message = test_news_api(final_news_key)
+        results['news_api'] = (success, message)
+        
+        if success:
+            st.success(message)
+        else:
+            st.error(message)
+    
+    st.write("---")
+    st.write("---")
+    
+    # Summary
+    st.write("## 📊 Test Summary")
+    
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        status = "✅" if results.get('odds_api', (False,))[0] else "❌"
+        st.metric("Odds API", status)
+    
+    with col2:
+        status = "✅" if results.get('anthropic_basic', (False,))[0] else "❌"
+        st.metric("Anthropic (Basic)", status)
+    
+    with col3:
+        status = "✅" if results.get('anthropic_sports', (False,))[0] else "❌"
+        st.metric("Anthropic (Sports)", status)
+    
+    with col4:
+        status = "✅" if results.get('news_api', (False,))[0] else "❌"
+        st.metric("News API", status)
+    
+    # Diagnosis
+    st.write("---")
+    st.write("## 🔍 Diagnosis")
+    
+    all_working = all(result[0] for result in results.values())
+    
+    if all_working:
+        st.success("🎉 **ALL APIS WORKING!** You're ready to analyze games!")
+    else:
+        st.error("⚠️ **SOME APIS NOT WORKING** - See issues above")
+        
+        # Specific recommendations
+        if not results.get('odds_api', (False,))[0]:
+            st.warning("**The Odds API Issue:**")
+            st.write("- Check API key is correct")
+            st.write("- Verify you have remaining requests")
+            st.write("- Get key from: https://the-odds-api.com/")
+        
+        if not results.get('anthropic_basic', (False,))[0]:
+            st.warning("**Anthropic API Issue (Basic):**")
+            st.write("- Check API key is correct (starts with 'sk-ant-')")
+            st.write("- Verify account has credits")
+            st.write("- Get key from: https://console.anthropic.com/")
+        
+        if not results.get('anthropic_sports', (False,))[0]:
+            st.warning("**Anthropic Sports Analysis Issue:**")
+            st.write("- Basic API works but sports analysis doesn't")
+            st.write("- This is why you see 50.5% for everything!")
+            st.write("- Check error message above")
+            st.write("- Might be prompt issue or JSON parsing")
+        
+        if not results.get('news_api', (False,))[0]:
+            st.warning("**News API Issue (Sentiment):**")
+            st.write("- Check API key is correct")
+            st.write("- Sentiment analysis won't work")
+            st.write("- Get key from: https://newsapi.org/")
+    
+    st.write("---")
+    
+    # What to do next
+    st.write("## ✅ What To Do Next")
+    
+    if all_working:
+        st.info("""
+        **All APIs working! Now you can:**
+        1. Upload your CSV in the CSV workflow section
+        2. Run analysis with confidence
+        3. Get real probabilities (not 50.5%)
+        """)
+    else:
+        st.info("""
+        **Fix the failing APIs:**
+        1. Add/fix API keys as shown above
+        2. Re-run this test
+        3. Once all ✅, proceed to CSV analysis
+        """)
+
+st.write("---")
+st.write("---")
+
+
+# ═══════════════════════════════════════════════════════════════
 # CSV UPLOAD → VERTEX-POWERED ANALYSIS (FIXED WITH DEBUGGING)
 # Now with proper error handling and visible status messages
 # ═══════════════════════════════════════════════════════════════
