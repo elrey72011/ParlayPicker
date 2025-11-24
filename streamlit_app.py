@@ -8875,7 +8875,607 @@ if is_vertex_ai_enabled():
                     mime="text/csv",
                     key="best_odds_download",
                 )
+# NEW 4-STEP WORKFLOW IMPLEMENTATION
+# Insert this into streamlit_app__32_.py
 
+# ============================================================
+# STEP 1: RUN ML ANALYSIS
+# ============================================================
+
+def run_ml_analysis(odds_key, sports_list):
+    """
+    Step 1: Run ML analysis on all games
+    Fetches odds and runs ML predictions
+    """
+    st.write("### 🤖 Step 1: ML Analysis")
+    st.write("Fetching odds and running ML predictions...")
+    
+    progress_bar = st.progress(0)
+    status_text = st.empty()
+    
+    all_ml_results = []
+    odds_data = []
+    
+    total_sports = len(sports_list)
+    
+    for idx, sport in enumerate(sports_list):
+        status_text.write(f"📊 Analyzing {sport}... ({idx+1}/{total_sports})")
+        
+        # Fetch odds for this sport
+        try:
+            snapshot = fetch_oddsapi_snapshot(odds_key, sport)
+            if snapshot and snapshot.get('events'):
+                sport_odds = snapshot['events']
+                odds_data.extend(sport_odds)
+                
+                # Run ML on each game
+                for game in sport_odds:
+                    home_team = game.get('home_team', '')
+                    away_team = game.get('away_team', '')
+                    game_id = game.get('id', '')
+                    
+                    # Get ML predictor
+                    ml_predictor = st.session_state.get('ml_predictor')
+                    if ml_predictor:
+                        try:
+                            # Run ML prediction
+                            prediction = ml_predictor.predict_game(home_team, away_team)
+                            
+                            ml_results.append({
+                                'game_id': game_id,
+                                'sport': sport,
+                                'home_team': home_team,
+                                'away_team': away_team,
+                                'ml_home_prob': prediction.get('home_win_prob', 50.0),
+                                'ml_away_prob': prediction.get('away_win_prob', 50.0),
+                                'ml_confidence': prediction.get('confidence', 50.0),
+                                'ml_model': prediction.get('model', 'Unknown'),
+                                'commence_time': game.get('commence_time', '')
+                            })
+                        except Exception as e:
+                            st.warning(f"ML prediction failed for {home_team} @ {away_team}: {e}")
+        
+        except Exception as e:
+            st.warning(f"Failed to fetch odds for {sport}: {e}")
+        
+        progress_bar.progress((idx + 1) / total_sports)
+    
+    progress_bar.empty()
+    status_text.empty()
+    
+    # Store in session state
+    st.session_state['ml_results'] = all_ml_results
+    st.session_state['odds_data'] = odds_data
+    st.session_state['ml_analysis_complete'] = True
+    
+    st.success(f"✅ **Step 1 Complete:** ML analyzed {len(all_ml_results)} games")
+    
+    # Show summary
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Total Games", len(all_ml_results))
+    with col2:
+        avg_conf = np.mean([r['ml_confidence'] for r in all_ml_results])
+        st.metric("Avg ML Confidence", f"{avg_conf:.1f}%")
+    with col3:
+        st.metric("Sports Analyzed", len(sports_list))
+    
+    return all_ml_results, odds_data
+
+
+# ============================================================
+# STEP 2: RUN VERTEX AI ANALYZER
+# ============================================================
+
+def run_vertex_analyzer(ml_results, anthropic_api_key):
+    """
+    Step 2: Run Vertex AI analysis on ML results
+    Enhances ML predictions with Vertex AI insights
+    """
+    st.write("### 🧠 Step 2: Vertex AI Analysis")
+    st.write("Analyzing ML results with Vertex AI...")
+    
+    if not anthropic_api_key:
+        st.error("❌ Anthropic API key required for Vertex AI analysis")
+        return None
+    
+    import anthropic
+    client = anthropic.Anthropic(api_key=anthropic_api_key)
+    
+    vertex_enhanced = []
+    progress_bar = st.progress(0)
+    status_text = st.empty()
+    
+    total_games = len(ml_results)
+    
+    for idx, ml_result in enumerate(ml_results):
+        game_desc = f"{ml_result['away_team']} @ {ml_result['home_team']}"
+        status_text.write(f"🔍 Analyzing {idx+1}/{total_games}: {game_desc}")
+        
+        # Create Vertex AI prompt
+        prompt = f"""Analyze this sports betting opportunity:
+
+Game: {ml_result['away_team']} @ {ml_result['home_team']}
+Sport: {ml_result['sport']}
+ML Prediction: Home {ml_result['ml_home_prob']:.1f}%, Away {ml_result['ml_away_prob']:.1f}%
+ML Confidence: {ml_result['ml_confidence']:.1f}%
+
+Provide a comprehensive analysis with:
+1. confidence: Your confidence in the ML prediction (0-100)
+2. risk: Risk assessment (Low, Medium, High)
+3. stars: Overall rating (1-5)
+4. factors: Key factors supporting or contradicting the ML prediction (max 150 chars)
+5. sentiment: Overall sentiment (Positive, Neutral, Negative)
+6. adjusted_home_prob: Your adjusted home win probability (0-100)
+
+Respond ONLY with valid JSON:
+{{"confidence": 75, "risk": "Medium", "stars": 3, "factors": "key points", "sentiment": "Neutral", "adjusted_home_prob": 55}}"""
+        
+        try:
+            message = client.messages.create(
+                model="claude-sonnet-4-20250514",
+                max_tokens=400,
+                messages=[{"role": "user", "content": prompt}]
+            )
+            
+            response_text = message.content[0].text
+            
+            # Parse JSON
+            import json
+            import re
+            json_match = re.search(r'\{[^}]+\}', response_text, re.DOTALL)
+            if json_match:
+                vertex_analysis = json.loads(json_match.group())
+                
+                # Combine ML + Vertex
+                enhanced = {
+                    **ml_result,  # All ML data
+                    'vertex_confidence': float(vertex_analysis.get('confidence', 75)),
+                    'vertex_risk': str(vertex_analysis.get('risk', 'Medium')),
+                    'vertex_stars': int(vertex_analysis.get('stars', 3)),
+                    'vertex_factors': str(vertex_analysis.get('factors', ''))[:150],
+                    'vertex_sentiment': str(vertex_analysis.get('sentiment', 'Neutral')),
+                    'vertex_adjusted_home_prob': float(vertex_analysis.get('adjusted_home_prob', ml_result['ml_home_prob'])),
+                    'vertex_adjusted_away_prob': 100 - float(vertex_analysis.get('adjusted_home_prob', ml_result['ml_home_prob']))
+                }
+                
+                vertex_enhanced.append(enhanced)
+            else:
+                # Fallback if parsing fails
+                vertex_enhanced.append({
+                    **ml_result,
+                    'vertex_confidence': 75.0,
+                    'vertex_risk': 'Medium',
+                    'vertex_stars': 3,
+                    'vertex_factors': 'Parse error',
+                    'vertex_sentiment': 'Neutral',
+                    'vertex_adjusted_home_prob': ml_result['ml_home_prob'],
+                    'vertex_adjusted_away_prob': ml_result['ml_away_prob']
+                })
+        
+        except Exception as e:
+            st.warning(f"Vertex analysis failed for {game_desc}: {e}")
+            # Add with defaults
+            vertex_enhanced.append({
+                **ml_result,
+                'vertex_confidence': 75.0,
+                'vertex_risk': 'Medium',
+                'vertex_stars': 3,
+                'vertex_factors': f'Error: {str(e)[:50]}',
+                'vertex_sentiment': 'Neutral',
+                'vertex_adjusted_home_prob': ml_result['ml_home_prob'],
+                'vertex_adjusted_away_prob': ml_result['ml_away_prob']
+            })
+        
+        progress_bar.progress((idx + 1) / total_games)
+    
+    progress_bar.empty()
+    status_text.empty()
+    
+    # Store in session state
+    st.session_state['vertex_enhanced_results'] = vertex_enhanced
+    st.session_state['vertex_analysis_complete'] = True
+    
+    st.success(f"✅ **Step 2 Complete:** Vertex AI analyzed {len(vertex_enhanced)} games")
+    
+    # Show summary
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("Games Analyzed", len(vertex_enhanced))
+    with col2:
+        avg_vertex_conf = np.mean([r['vertex_confidence'] for r in vertex_enhanced])
+        st.metric("Avg Vertex Confidence", f"{avg_vertex_conf:.1f}%")
+    with col3:
+        high_stars = sum(1 for r in vertex_enhanced if r['vertex_stars'] >= 4)
+        st.metric("4-5 Star Games", high_stars)
+    with col4:
+        low_risk = sum(1 for r in vertex_enhanced if r['vertex_risk'] == 'Low')
+        st.metric("Low Risk Games", low_risk)
+    
+    return vertex_enhanced
+
+
+# ============================================================
+# STEP 3: GENERATE BEST BETS
+# ============================================================
+
+def generate_best_bets_with_sentiment(vertex_enhanced_results, odds_data, sentiment_analyzer, 
+                                       min_edge=2.0, min_confidence=70.0):
+    """
+    Step 3: Generate best bets using ML + Vertex + Sentiment
+    Combines all three analysis methods for optimal picks
+    """
+    st.write("### 🎯 Step 3: Generating Best Bets")
+    st.write("Combining ML + Vertex AI + Sentiment Analysis...")
+    
+    best_bets = []
+    progress_bar = st.progress(0)
+    status_text = st.empty()
+    
+    total_results = len(vertex_enhanced_results)
+    
+    for idx, enhanced in enumerate(vertex_enhanced_results):
+        game_desc = f"{enhanced['away_team']} @ {enhanced['home_team']}"
+        status_text.write(f"🔍 Evaluating {idx+1}/{total_results}: {game_desc}")
+        
+        # Find matching odds data
+        matching_game = None
+        for game in odds_data:
+            if game['id'] == enhanced['game_id']:
+                matching_game = game
+                break
+        
+        if not matching_game:
+            continue
+        
+        # Process each market
+        for bookmaker in matching_game.get('bookmakers', []):
+            for market in bookmaker.get('markets', []):
+                market_key = market['key']
+                
+                for outcome in market.get('outcomes', []):
+                    team = outcome['name']
+                    odds = outcome['price']
+                    line = outcome.get('point')
+                    
+                    # Calculate implied probability
+                    if odds > 0:
+                        implied_prob = 100 / (odds + 100) * 100
+                    else:
+                        implied_prob = abs(odds) / (abs(odds) + 100) * 100
+                    
+                    # Determine actual probability (from Vertex-adjusted)
+                    if team == enhanced['home_team']:
+                        vertex_prob = enhanced['vertex_adjusted_home_prob']
+                        ml_prob = enhanced['ml_home_prob']
+                    else:
+                        vertex_prob = enhanced['vertex_adjusted_away_prob']
+                        ml_prob = enhanced['ml_away_prob']
+                    
+                    # Calculate edge
+                    edge = vertex_prob - implied_prob
+                    
+                    # Filter by edge and confidence
+                    if edge < min_edge:
+                        continue
+                    if enhanced['vertex_confidence'] < min_confidence:
+                        continue
+                    
+                    # Run sentiment analysis
+                    sentiment_score = 50.0  # Default neutral
+                    sentiment_label = 'Neutral'
+                    
+                    if sentiment_analyzer:
+                        try:
+                            sentiment_result = sentiment_analyzer.analyze_game(
+                                enhanced['home_team'],
+                                enhanced['away_team'],
+                                enhanced['sport']
+                            )
+                            sentiment_score = sentiment_result.get('score', 50.0)
+                            sentiment_label = sentiment_result.get('label', 'Neutral')
+                        except:
+                            pass
+                    
+                    # Calculate composite score
+                    # ML 30% + Vertex 35% + Sentiment 25% + Edge 10%
+                    composite_score = (
+                        ml_prob * 0.30 +
+                        enhanced['vertex_confidence'] * 0.35 +
+                        sentiment_score * 0.25 +
+                        (edge / 10) * 10 * 0.10  # Normalize edge
+                    )
+                    
+                    # Apply risk penalty
+                    risk_penalty = {'Low': 0, 'Medium': -3, 'High': -7}
+                    final_score = composite_score + risk_penalty.get(enhanced['vertex_risk'], -3)
+                    
+                    # Create bet entry
+                    best_bets.append({
+                        'Game': game_desc,
+                        'Sport': enhanced['sport'],
+                        'Market': market_key,
+                        'Selection': f"{team} {line if line else ''}".strip(),
+                        'Odds': odds,
+                        'ML Prob %': f"{ml_prob:.1f}%",
+                        'Vertex Prob %': f"{vertex_prob:.1f}%",
+                        'Vertex Confidence': f"{enhanced['vertex_confidence']:.1f}%",
+                        'Vertex Risk': enhanced['vertex_risk'],
+                        'Vertex Stars': enhanced['vertex_stars'],
+                        'Sentiment Score': f"{sentiment_score:.1f}",
+                        'Sentiment': sentiment_label,
+                        'Implied Prob %': f"{implied_prob:.1f}%",
+                        'Edge pp': f"{edge:.1f}",
+                        'Composite Score': f"{composite_score:.1f}",
+                        'Final Score': f"{final_score:.1f}",
+                        'Vertex Factors': enhanced['vertex_factors']
+                    })
+        
+        progress_bar.progress((idx + 1) / total_results)
+    
+    progress_bar.empty()
+    status_text.empty()
+    
+    # Sort by final score
+    best_bets_df = pd.DataFrame(best_bets)
+    best_bets_df = best_bets_df.sort_values('Final Score', ascending=False).reset_index(drop=True)
+    best_bets_df.insert(0, 'Rank', range(1, len(best_bets_df) + 1))
+    
+    # Store in session state
+    st.session_state['best_bets_df'] = best_bets_df
+    st.session_state['best_bets_complete'] = True
+    
+    st.success(f"✅ **Step 3 Complete:** Generated {len(best_bets_df)} best bets")
+    
+    # Show summary
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("Total Best Bets", len(best_bets_df))
+    with col2:
+        high_score = len(best_bets_df[best_bets_df['Final Score'].str.replace('%', '').astype(float) >= 75])
+        st.metric("High Score Bets (>=75)", high_score)
+    with col3:
+        positive_sentiment = len(best_bets_df[best_bets_df['Sentiment'] == 'Positive'])
+        st.metric("Positive Sentiment", positive_sentiment)
+    with col4:
+        five_star = len(best_bets_df[best_bets_df['Vertex Stars'] >= 4])
+        st.metric("4-5 Star Bets", five_star)
+    
+    return best_bets_df
+
+
+# ============================================================
+# STEP 4: GENERATE PARLAYS
+# ============================================================
+
+def generate_smart_parlays(best_bets_df, min_legs=2, max_legs=5, min_score=75):
+    """
+    Step 4: Generate optimal parlays from best bets
+    Uses composite scores + sentiment + vertex risk
+    """
+    st.write("### 🎲 Step 4: Generating Smart Parlays")
+    st.write("Building optimal parlays from best bets...")
+    
+    # Filter qualified bets
+    qualified = best_bets_df[
+        (best_bets_df['Final Score'].str.replace('%', '').astype(float) >= min_score) &
+        (best_bets_df['Vertex Risk'].isin(['Low', 'Medium'])) &
+        (best_bets_df['Sentiment'].isin(['Positive', 'Neutral']))
+    ].copy()
+    
+    st.info(f"📊 {len(qualified)} bets qualified for parlays (Score>={min_score}, Low/Medium risk, Positive/Neutral sentiment)")
+    
+    if len(qualified) < min_legs:
+        st.warning(f"⚠️ Need at least {min_legs} qualified bets for parlays")
+        return []
+    
+    parlays = []
+    
+    # Generate parlays for each size
+    for num_legs in range(min_legs, min(max_legs + 1, len(qualified) + 1)):
+        st.write(f"Evaluating {num_legs}-leg parlays...")
+        
+        # Try top combinations
+        for combo in itertools.combinations(qualified.head(15).iterrows(), num_legs):
+            legs = [row for idx, row in combo]
+            
+            # Check for same-game conflicts
+            games = [leg['Game'] for leg in legs]
+            if len(games) != len(set(games)):
+                continue  # Skip if same game appears twice
+            
+            # Calculate parlay odds and score
+            total_odds = 1.0
+            avg_score = 0.0
+            risk_levels = []
+            
+            for leg in legs:
+                # Convert American odds to decimal
+                odds = leg['Odds']
+                if odds > 0:
+                    decimal_odds = (odds / 100) + 1
+                else:
+                    decimal_odds = (100 / abs(odds)) + 1
+                
+                total_odds *= decimal_odds
+                avg_score += float(leg['Final Score'].replace('%', ''))
+                risk_levels.append(leg['Vertex Risk'])
+            
+            avg_score /= num_legs
+            american_odds = (total_odds - 1) * 100 if total_odds >= 2 else -100 / (total_odds - 1)
+            
+            # Overall risk assessment
+            if all(r == 'Low' for r in risk_levels):
+                parlay_risk = 'Low'
+            elif any(r == 'High' for r in risk_levels):
+                parlay_risk = 'High'
+            else:
+                parlay_risk = 'Medium'
+            
+            parlays.append({
+                'Legs': num_legs,
+                'Games': ' | '.join([leg['Game'] for leg in legs]),
+                'Selections': ' | '.join([leg['Selection'] for leg in legs]),
+                'Combined Odds': f"{american_odds:+.0f}",
+                'Avg Score': f"{avg_score:.1f}",
+                'Risk': parlay_risk,
+                'Details': legs
+            })
+    
+    # Sort by average score
+    parlays_df = pd.DataFrame(parlays)
+    parlays_df = parlays_df.sort_values('Avg Score', ascending=False).reset_index(drop=True)
+    
+    st.success(f"✅ **Step 4 Complete:** Generated {len(parlays_df)} optimal parlays")
+    
+    return parlays_df
+
+
+# ============================================================
+# UI SECTION FOR 4-STEP WORKFLOW
+# ============================================================
+
+st.header("🎯 4-Step Betting Analysis Workflow")
+
+st.info("""
+**New Workflow:**
+1. 🤖 Run ML Analysis (fetch odds + ML predictions)
+2. 🧠 Run Vertex AI Analyzer (enhance with Vertex AI)
+3. 🎯 Generate Best Bets (ML + Vertex + Sentiment)
+4. 🎲 Generate Parlays (optimal combinations)
+""")
+
+# Step indicators
+col1, col2, col3, col4 = st.columns(4)
+with col1:
+    if st.session_state.get('ml_analysis_complete'):
+        st.success("✅ Step 1")
+    else:
+        st.warning("⏳ Step 1")
+with col2:
+    if st.session_state.get('vertex_analysis_complete'):
+        st.success("✅ Step 2")
+    else:
+        st.warning("⏳ Step 2")
+with col3:
+    if st.session_state.get('best_bets_complete'):
+        st.success("✅ Step 3")
+    else:
+        st.warning("⏳ Step 3")
+with col4:
+    if st.session_state.get('parlays_complete'):
+        st.success("✅ Step 4")
+    else:
+        st.warning("⏳ Step 4")
+
+st.write("---")
+
+# STEP 1: Run ML Analysis
+st.subheader("Step 1: ML Analysis")
+selected_sports_step1 = st.multiselect(
+    "Select sports to analyze",
+    options=list(sport_display_map.keys()),
+    default=list(sport_display_map.keys())[:3],
+    key="step1_sports"
+)
+
+if st.button("🤖 Run ML Analysis", type="primary", key="run_ml_btn"):
+    odds_key = st.session_state.get('api_key', "") or os.environ.get("ODDS_API_KEY", "") or st.secrets.get("ODDS_API_KEY", "")
+    if not odds_key:
+        st.error("❌ The Odds API key required")
+    else:
+        sport_keys = [sport_display_map[s] for s in selected_sports_step1]
+        ml_results, odds_data = run_ml_analysis(odds_key, sport_keys)
+
+st.write("---")
+
+# STEP 2: Run Vertex AI Analyzer
+st.subheader("Step 2: Vertex AI Analysis")
+
+if not st.session_state.get('ml_analysis_complete'):
+    st.info("⚠️ Complete Step 1 first")
+else:
+    if st.button("🧠 Run Vertex AI Analyzer", type="primary", key="run_vertex_btn"):
+        anthropic_key = st.session_state.get('anthropic_api_key', '')
+        if not anthropic_key:
+            st.error("❌ Anthropic API key required")
+        else:
+            ml_results = st.session_state.get('ml_results', [])
+            vertex_enhanced = run_vertex_analyzer(ml_results, anthropic_key)
+
+st.write("---")
+
+# STEP 3: Generate Best Bets
+st.subheader("Step 3: Best Bets Generation")
+
+if not st.session_state.get('vertex_analysis_complete'):
+    st.info("⚠️ Complete Steps 1 & 2 first")
+else:
+    min_edge_step3 = st.slider("Minimum Edge (pp)", 0.0, 10.0, 2.0, 0.5, key="step3_edge")
+    min_conf_step3 = st.slider("Minimum Vertex Confidence", 50.0, 90.0, 70.0, 5.0, key="step3_conf")
+    
+    if st.button("🎯 Generate Best Bets", type="primary", key="gen_bets_btn"):
+        vertex_enhanced = st.session_state.get('vertex_enhanced_results', [])
+        odds_data = st.session_state.get('odds_data', [])
+        sentiment_analyzer = st.session_state.get('sentiment_analyzer')
+        
+        best_bets_df = generate_best_bets_with_sentiment(
+            vertex_enhanced, odds_data, sentiment_analyzer,
+            min_edge=min_edge_step3, min_confidence=min_conf_step3
+        )
+        
+        # Display results
+        st.write("### 📊 Best Bets Table")
+        st.dataframe(best_bets_df.head(20), use_container_width=True)
+        
+        # Download
+        csv = best_bets_df.to_csv(index=False)
+        st.download_button(
+            "📥 Download Best Bets CSV",
+            csv,
+            "best_bets.csv",
+            "text/csv"
+        )
+
+st.write("---")
+
+# STEP 4: Generate Parlays
+st.subheader("Step 4: Parlay Generation")
+
+if not st.session_state.get('best_bets_complete'):
+    st.info("⚠️ Complete Steps 1-3 first")
+else:
+    col1, col2 = st.columns(2)
+    with col1:
+        min_legs = st.number_input("Min Legs", 2, 5, 2, key="parlay_min_legs")
+    with col2:
+        max_legs = st.number_input("Max Legs", 2, 5, 5, key="parlay_max_legs")
+    
+    min_score_parlay = st.slider("Min Score for Parlay Legs", 60.0, 90.0, 75.0, 5.0, key="parlay_min_score")
+    
+    if st.button("🎲 Generate Parlays", type="primary", key="gen_parlays_btn"):
+        best_bets_df = st.session_state.get('best_bets_df')
+        
+        parlays_df = generate_smart_parlays(
+            best_bets_df,
+            min_legs=min_legs,
+            max_legs=max_legs,
+            min_score=min_score_parlay
+        )
+        
+        st.session_state['parlays_complete'] = True
+        
+        # Display results
+        st.write("### 🎲 Optimal Parlays")
+        st.dataframe(parlays_df, use_container_width=True)
+        
+        # Show details for top parlays
+        for idx, row in parlays_df.head(5).iterrows():
+            with st.expander(f"Parlay #{idx+1}: {row['Legs']} legs, {row['Combined Odds']} odds"):
+                st.write(f"**Games:** {row['Games']}")
+                st.write(f"**Selections:** {row['Selections']}")
+                st.write(f"**Average Score:** {row['Avg Score']}")
+                st.write(f"**Risk:** {row['Risk']}")
 
     st.subheader("🤖 AI/ML Best Bet Per Game (Parlay View)")
 
