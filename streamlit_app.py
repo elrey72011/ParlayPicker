@@ -9048,6 +9048,8 @@ if is_vertex_ai_enabled():
                 else:
                     best_bets_df = pd.DataFrame(best_bets_rows)
                     best_bets_df = best_bets_df.sort_values('AI Edge pp', ascending=False)
+
+                    st.session_state['best_bets_df'] = best_bets_df
                     
                     st.success(f"✅ Generated {len(best_bets_df)} best bets using Vertex AI!")
                     
@@ -9094,6 +9096,7 @@ if is_vertex_ai_enabled():
                         apisports_clients=apisports_map,
                     )
 
+                st.session_state['best_bets_df'] = best_bets_df
 
             if best_bets_df.empty:
                 st.info("No qualifying legs found for the selected range and sports.")
