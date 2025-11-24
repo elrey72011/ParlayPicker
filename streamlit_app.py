@@ -13146,20 +13146,100 @@ Respond ONLY with valid JSON in this exact format:
         five_star = (enriched_df['Vertex Stars'] >= 4).sum()
         st.metric("4+ Star Bets", five_star)
     
-    # Show top ranked bets
+
+    # Show top ranked bets with DETAILED ANALYSIS
     st.write("---")
-    st.write("### 🏆 Top Ranked Opportunities")
+    st.write("### 🏆 Top Ranked Opportunities (with Full Analysis)")
+    
+    # Display top 10 bets with expandable details
+    for idx, row in enriched_df.head(10).iterrows():
+        rank = row['Rank']
+        game = row['Game']
+        market = row.get('Market', 'N/A')
+        selection = row.get('Selection', 'N/A')
+        
+        # Get all the scores
+        ml_prob = row.get('AI Prob %', 'N/A')
+        vertex_conf = row.get('Vertex Confidence', 75)
+        vertex_risk = row.get('Vertex Risk', 'Medium')
+        vertex_stars = row.get('Vertex Stars', 3)
+        vertex_factors = row.get('Vertex Factors', 'No details')
+        theover_prob = row.get('theover.ai %', '—')
+        consensus = row.get('Consensus Score', 0)
+        final_score = row.get('Final Score', 0)
+        
+        # Create star display
+        star_display = '⭐' * int(vertex_stars)
+        
+        # Color-code risk
+        risk_color = {'Low': '🟢', 'Medium': '🟡', 'High': '🔴'}.get(vertex_risk, '⚪')
+        
+        # Create expandable section for each bet
+        with st.expander(f"**Rank #{rank}: {game}** | Score: {final_score:.1f} | {star_display}", expanded=(rank <= 3)):
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.markdown("### 📊 Bet Details")
+                st.write(f"**Market:** {market}")
+                st.write(f"**Pick:** {selection}")
+                st.write("")
+                
+                st.markdown("### 🤖 Model Probabilities")
+                st.metric("ML Probability", ml_prob)
+                st.metric("Vertex AI Confidence", f"{vertex_conf:.1f}%")
+                st.metric("theover.ai Probability", theover_prob)
+                st.metric("Consensus Score", f"{consensus:.1f}")
+                
+            with col2:
+                st.markdown("### 🧠 Vertex AI Analysis")
+                st.write(f"**Confidence:** {vertex_conf:.1f}%")
+                st.write(f"**Risk Level:** {risk_color} {vertex_risk}")
+                st.write(f"**Rating:** {star_display} ({vertex_stars}/5)")
+                st.write("")
+                
+                st.markdown("**Key Factors:**")
+                st.info(vertex_factors if vertex_factors else "No detailed analysis available")
+                
+                st.write("")
+                st.markdown("**Multi-Model Consensus:**")
+                if consensus >= 90:
+                    st.success(f"✅ **Excellent** ({consensus:.1f}/100) - All models strongly agree!")
+                elif consensus >= 80:
+                    st.success(f"✅ **Good** ({consensus:.1f}/100) - Strong model agreement")
+                elif consensus >= 70:
+                    st.info(f"ℹ️ **Moderate** ({consensus:.1f}/100) - Models mostly agree")
+                else:
+                    st.warning(f"⚠️ **Low** ({consensus:.1f}/100) - Models disagree - review carefully")
+            
+            # Add recommendation strength
+            st.write("---")
+            st.markdown("### 💡 Recommendation Strength")
+            
+            # Calculate overall recommendation
+            if final_score >= 75 and vertex_risk == 'Low' and vertex_stars >= 4:
+                st.success("🔥 **STRONG BET** - High score, low risk, excellent rating")
+            elif final_score >= 70 and vertex_risk in ['Low', 'Medium'] and vertex_stars >= 3:
+                st.success("✅ **GOOD BET** - Solid score with manageable risk")
+            elif final_score >= 65:
+                st.info("📊 **CONSIDER** - Decent opportunity, evaluate carefully")
+            else:
+                st.warning("⚠️ **CAUTION** - Lower confidence, higher risk")
+    
+    # Also show compact table for quick reference
+    st.write("---")
+    st.write("### 📋 Quick Reference Table (All Ranked Bets)")
     
     display_cols = ['Rank', 'Game', 'Market', 'Selection', 'AI Prob %', 
-                    'Vertex Confidence', 'Vertex Stars', 'theover.ai %', 
-                    'Consensus Score', 'Final Score']
+                    'Vertex Confidence', 'Vertex Stars', 'Vertex Risk',
+                    'theover.ai %', 'Consensus Score', 'Final Score']
     available_cols = [col for col in display_cols if col in enriched_df.columns]
     
     st.dataframe(
-        enriched_df[available_cols].head(10),
+        enriched_df[available_cols],
         use_container_width=True,
         hide_index=True
     )
+
     
     # Provide download
     csv_output = enriched_df.to_csv(index=False, encoding='utf-8-sig')
