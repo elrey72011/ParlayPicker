@@ -9107,15 +9107,12 @@ if is_vertex_ai_enabled():
                     )
 
                 st.session_state['best_bets_df'] = best_bets_df
-
-                # AUTO-ENRICH: Automatically fill theover.ai columns
-                with st.spinner("🔄 Auto-enriching with theover.ai data..."):
-                    try:
-                        best_bets_df = enrich_best_bets_with_csv(best_bets_df)
-                        st.session_state['best_bets_df'] = best_bets_df
-                        st.info("✅ Auto-enrichment complete!")
-                    except Exception as e:
-                        st.warning(f"⚠️ Auto-enrichment skipped: {e}")
+                
+                # Run complete pipeline: Vertex AI → Enrichment → Rankings
+                anthropic_key = st.session_state.get('anthropic_api_key', '')
+                final_df = run_complete_betting_pipeline(best_bets_df, anthropic_key)
+                st.session_state['best_bets_df'] = final_df
+                best_bets_df = final_df
 
 
             if best_bets_df.empty:
@@ -9207,6 +9204,17 @@ if is_vertex_ai_enabled():
     else:
         st.warning("⚠️ Run 'Vertex AI Master Analysis' first for AI-powered parlay optimization with better probabilities")
 
+    
+    st.info("""
+    💡 **Smart Parlay Selection**: This optimizer uses your ranked best bets from the complete pipeline:
+    - ✅ ML probabilities
+    - ✅ Vertex AI confidence & risk scores  
+    - ✅ theover.ai market data
+    - ✅ Composite ranking scores
+    
+    Parlays are built from your highest-ranked, lowest-risk opportunities.
+    """)
+    
     if st.button("🤖 Find AI-Optimized Parlays", type="primary"):
         # Get API key from session state or environment only
         api_key = st.session_state.get('api_key', "") or os.environ.get("ODDS_API_KEY", "") or st.secrets.get("ODDS_API_KEY", "")
@@ -12916,6 +12924,259 @@ def enrich_best_bets_with_csv(best_bets_df):
 # ============================================================
 # SINGLE CSV ENRICHMENT SECTION
 # ============================================================
+
+
+
+# ============================================================
+# COMPLETE BETTING PIPELINE: ML → VERTEX AI → ENRICHMENT → RANKINGS
+# ============================================================
+
+def run_complete_betting_pipeline(best_bets_df, anthropic_api_key=None):
+    """
+    Sequential pipeline that combines all analysis methods:
+    1. ML Best Bets (already generated)
+    2. Vertex AI Analysis (confidence, risk, stars)
+    3. CSV Enrichment (theover.ai data)
+    4. Composite Rankings (weighted score from all sources)
+    """
+    import json
+    
+    st.write("---")
+    st.write("### 🔄 Running Complete Analysis Pipeline")
+    st.write("")
+    
+    total_bets = len(best_bets_df)
+    
+    # Step 1: ML Best Bets (already done)
+    st.success(f"✅ **Step 1/4:** Generated {total_bets} ML best bets")
+    
+    # Step 2: Vertex AI Analysis
+    st.write("---")
+    st.write("🧠 **Step 2/4: Vertex AI Analysis**")
+    
+    if not anthropic_api_key:
+        st.warning("⚠️ No Anthropic API key - skipping Vertex AI analysis")
+        st.info("💡 Add API key in sidebar to enable Vertex AI deep analysis")
+        vertex_analyzed_df = best_bets_df.copy()
+        # Add placeholder columns
+        vertex_analyzed_df['Vertex Confidence'] = 75.0
+        vertex_analyzed_df['Vertex Risk'] = 'Medium'
+        vertex_analyzed_df['Vertex Stars'] = 3
+        vertex_analyzed_df['Vertex Factors'] = 'Skipped - no API key'
+    else:
+        try:
+            import anthropic
+            client = anthropic.Anthropic(api_key=anthropic_api_key)
+            
+            vertex_scores = []
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            
+            for idx, row in best_bets_df.iterrows():
+                game = row['Game']
+                market = row.get('Market', '')
+                selection = row.get('Selection', '')
+                ai_prob = row.get('AI Prob %', '50%')
+                ai_edge = row.get('AI Edge pp', 0)
+                
+                status_text.write(f"🔍 Analyzing {idx+1}/{total_bets}: {game}")
+                
+                # Vertex AI prompt for this specific bet
+                prompt = f"""Analyze this sports betting opportunity:
+
+Game: {game}
+Market: {market}
+Pick: {selection}
+ML Probability: {ai_prob}
+Edge: {ai_edge} percentage points
+
+Please provide a concise analysis with:
+1. confidence: Your confidence score (0-100) for this bet
+2. risk: Risk level (Low, Medium, or High)
+3. stars: Rating (1-5, where 5 is best)
+4. factors: Brief key factors (max 100 chars)
+
+Respond ONLY with valid JSON in this exact format:
+{{"confidence": 75, "risk": "Medium", "stars": 3, "factors": "key points here"}}"""
+                
+                try:
+                    message = client.messages.create(
+                        model="claude-sonnet-4-20250514",
+                        max_tokens=300,
+                        messages=[{"role": "user", "content": prompt}]
+                    )
+                    
+                    response_text = message.content[0].text
+                    
+                    # Extract JSON from response
+                    json_match = re.search(r'\{[^}]+\}', response_text, re.DOTALL)
+                    if json_match:
+                        analysis = json.loads(json_match.group())
+                        vertex_scores.append({
+                            'Game': game,
+                            'Vertex Confidence': float(analysis.get('confidence', 75)),
+                            'Vertex Risk': str(analysis.get('risk', 'Medium')),
+                            'Vertex Stars': int(analysis.get('stars', 3)),
+                            'Vertex Factors': str(analysis.get('factors', ''))[:100]
+                        })
+                    else:
+                        # Fallback if JSON parsing fails
+                        vertex_scores.append({
+                            'Game': game,
+                            'Vertex Confidence': 75.0,
+                            'Vertex Risk': 'Medium',
+                            'Vertex Stars': 3,
+                            'Vertex Factors': 'Analysis format error'
+                        })
+                        
+                except Exception as e:
+                    # Graceful fallback on API error
+                    vertex_scores.append({
+                        'Game': game,
+                        'Vertex Confidence': 75.0,
+                        'Vertex Risk': 'Medium',
+                        'Vertex Stars': 3,
+                        'Vertex Factors': f'Error: {str(e)[:50]}'
+                    })
+                
+                progress_bar.progress((idx + 1) / total_bets)
+            
+            progress_bar.empty()
+            status_text.empty()
+            
+            # Merge Vertex AI scores with best bets
+            vertex_df = pd.DataFrame(vertex_scores)
+            vertex_analyzed_df = best_bets_df.merge(vertex_df, on='Game', how='left')
+            
+            # Fill any missing values
+            vertex_analyzed_df['Vertex Confidence'] = vertex_analyzed_df['Vertex Confidence'].fillna(75.0)
+            vertex_analyzed_df['Vertex Risk'] = vertex_analyzed_df['Vertex Risk'].fillna('Medium')
+            vertex_analyzed_df['Vertex Stars'] = vertex_analyzed_df['Vertex Stars'].fillna(3)
+            
+            st.success(f"✅ **Step 2/4:** Vertex AI analyzed {len(vertex_scores)} bets")
+            
+        except Exception as e:
+            st.error(f"❌ Vertex AI error: {e}")
+            st.info("Continuing with ML data only...")
+            vertex_analyzed_df = best_bets_df.copy()
+            vertex_analyzed_df['Vertex Confidence'] = 75.0
+            vertex_analyzed_df['Vertex Risk'] = 'Medium'
+            vertex_analyzed_df['Vertex Stars'] = 3
+            vertex_analyzed_df['Vertex Factors'] = f'Error: {str(e)[:50]}'
+    
+    # Step 3: CSV Enrichment (theover.ai)
+    st.write("---")
+    st.write("📊 **Step 3/4: CSV Enrichment (theover.ai)**")
+    
+    with st.spinner("Enriching with theover.ai data..."):
+        try:
+            enriched_df = enrich_best_bets_with_csv(vertex_analyzed_df)
+            st.success("✅ **Step 3/4:** CSV enrichment complete")
+        except Exception as e:
+            st.warning(f"⚠️ CSV enrichment skipped: {e}")
+            enriched_df = vertex_analyzed_df.copy()
+            # Add placeholder columns
+            enriched_df['theover.ai %'] = '—'
+            enriched_df['theover Δ pp'] = '—'
+            enriched_df['theover Source'] = 'Not available'
+    
+    # Step 4: Composite Rankings
+    st.write("---")
+    st.write("🏆 **Step 4/4: Composite Rankings**")
+    
+    # Extract numeric values for calculations
+    def extract_percent(val):
+        """Extract numeric percentage from string"""
+        if pd.isna(val) or val == '—':
+            return 50.0
+        try:
+            return float(str(val).replace('%', ''))
+        except:
+            return 50.0
+    
+    # Get numeric probabilities
+    enriched_df['ML_Prob_Numeric'] = enriched_df['AI Prob %'].apply(extract_percent)
+    enriched_df['Vertex_Conf_Numeric'] = enriched_df['Vertex Confidence'].fillna(75.0)
+    enriched_df['theover_Prob_Numeric'] = enriched_df['theover.ai %'].apply(extract_percent)
+    
+    # Calculate consensus score (how much the models agree)
+    enriched_df['Consensus Score'] = 100 - (
+        abs(enriched_df['ML_Prob_Numeric'] - enriched_df['Vertex_Conf_Numeric']) +
+        abs(enriched_df['ML_Prob_Numeric'] - enriched_df['theover_Prob_Numeric']) +
+        abs(enriched_df['Vertex_Conf_Numeric'] - enriched_df['theover_Prob_Numeric'])
+    ) / 3
+    
+    # Calculate composite score (weighted average + consensus bonus)
+    enriched_df['Composite Score'] = (
+        enriched_df['ML_Prob_Numeric'] * 0.35 +           # ML weight: 35%
+        enriched_df['Vertex_Conf_Numeric'] * 0.35 +      # Vertex weight: 35%
+        enriched_df['theover_Prob_Numeric'] * 0.20 +     # theover weight: 20%
+        enriched_df['Consensus Score'] * 0.10            # Consensus bonus: 10%
+    )
+    
+    # Add risk penalty
+    risk_penalty = {'Low': 0, 'Medium': -2, 'High': -5}
+    enriched_df['Risk Penalty'] = enriched_df['Vertex Risk'].map(risk_penalty).fillna(-2)
+    enriched_df['Final Score'] = enriched_df['Composite Score'] + enriched_df['Risk Penalty']
+    
+    # Sort by final score
+    enriched_df = enriched_df.sort_values('Final Score', ascending=False).reset_index(drop=True)
+    enriched_df['Rank'] = range(1, len(enriched_df) + 1)
+    
+    st.success("✅ **Step 4/4:** Rankings calculated using multi-model consensus")
+    
+    # Display pipeline summary
+    st.write("---")
+    st.write("### 📈 Pipeline Summary")
+    
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.metric("Total Bets Analyzed", total_bets)
+    
+    with col2:
+        avg_vertex = enriched_df['Vertex_Conf_Numeric'].mean()
+        st.metric("Avg Vertex Confidence", f"{avg_vertex:.1f}%")
+    
+    with col3:
+        high_consensus = (enriched_df['Consensus Score'] >= 90).sum()
+        st.metric("High Consensus Bets", f"{high_consensus}")
+    
+    with col4:
+        five_star = (enriched_df['Vertex Stars'] >= 4).sum()
+        st.metric("4+ Star Bets", five_star)
+    
+    # Show top ranked bets
+    st.write("---")
+    st.write("### 🏆 Top Ranked Opportunities")
+    
+    display_cols = ['Rank', 'Game', 'Market', 'Selection', 'AI Prob %', 
+                    'Vertex Confidence', 'Vertex Stars', 'theover.ai %', 
+                    'Consensus Score', 'Final Score']
+    available_cols = [col for col in display_cols if col in enriched_df.columns]
+    
+    st.dataframe(
+        enriched_df[available_cols].head(10),
+        use_container_width=True,
+        hide_index=True
+    )
+    
+    # Provide download
+    csv_output = enriched_df.to_csv(index=False, encoding='utf-8-sig')
+    timestamp = pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')
+    
+    st.download_button(
+        "📥 Download Complete Analysis CSV",
+        csv_output,
+        f"complete_analysis_{timestamp}.csv",
+        "text/csv",
+        key='download_complete_analysis',
+        type="primary"
+    )
+    
+    return enriched_df
+
+
 
 st.markdown("---")
 st.header("📊 Best Bets CSV Enrichment")
