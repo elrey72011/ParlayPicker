@@ -1337,6 +1337,14 @@ def render_sidebar_controls() -> Dict[str, Any]:
             st.write("Add to secrets:")
             st.code('gcp_project_id = "sports-betting-ml"\nvertex_endpoint_id = "5396533911008313344"\ngcp_location = "us-central1"', language="toml")
     
+    # --------------------- Kalshi Status ---------------------
+    # Check if Kalshi is configured (will be loaded later in session init)
+    kalshi_key = get_secret("KALSHI_API_KEY", "") or os.environ.get("KALSHI_API_KEY", "")
+    if kalshi_key:
+        sidebar.caption(f"📈 Kalshi: Connected ({kalshi_key[:8]}...)")
+    else:
+        sidebar.caption("⚠️ Kalshi not configured")
+    
     # --------------------- API-Sports keys ---------------------
     nfl_key_default, nfl_source_default = resolve_nfl_apisports_key()
     st.session_state.setdefault('nfl_apisports_api_key', nfl_key_default)
@@ -8123,8 +8131,23 @@ if 'social_analyzer' not in st.session_state:
     twitter_key = os.environ.get("TWITTER_API_KEY", "")
     st.session_state['social_analyzer'] = SocialMediaAnalyzer(twitter_key)
 if 'kalshi_integrator' not in st.session_state:
-    kalshi_key = os.environ.get("KALSHI_API_KEY", "")
-    kalshi_secret = os.environ.get("KALSHI_API_SECRET", "")
+    # Helper to get secret
+    def get_secret(key, default=""):
+        try:
+            if key in st.secrets:
+                return st.secrets[key]
+        except Exception:
+            pass
+        return default
+    
+    kalshi_key = os.environ.get("KALSHI_API_KEY", "") or get_secret("KALSHI_API_KEY", "")
+    kalshi_secret = os.environ.get("KALSHI_API_SECRET", "") or get_secret("KALSHI_API_SECRET", "")
+    
+    if kalshi_key and kalshi_secret:
+        logger.info(f"Kalshi API key found: {kalshi_key[:8]}...")
+    else:
+        logger.info("Kalshi API keys not configured")
+    
     st.session_state['kalshi_integrator'] = KalshiIntegrator(kalshi_key, kalshi_secret)
 if not _session_client_or_none('apisports_nfl_client', APISportsFootballClient):
     stored_key = st.session_state.get('nfl_apisports_api_key')
@@ -8423,7 +8446,14 @@ if is_vertex_ai_enabled():
                             except:
                                 spread_line = 0
                             
-                            # Extract win probability from TheOver.ai
+                            # Get the pick (which team TheOver likes)
+                            pick = row.get('Pick') or row.get('pick') or ''
+                            
+                            home_team = row.get('home_team') or row.get('HomeTeam') or ''
+                            away_team = row.get('away_team') or row.get('AwayTeam') or ''
+                            league = (row.get('League') or row.get('league') or 'NBA').upper()
+                            
+                            # Extract win probability from TheOver.ai - OR CALCULATE FROM SPREAD
                             theover_prob = row.get('WinProbability') or row.get('Win_Probability') or row.get('Probability') or 0
                             try:
                                 theover_prob = float(theover_prob) if theover_prob else 0
@@ -8432,12 +8462,35 @@ if is_vertex_ai_enabled():
                             except:
                                 theover_prob = 0
                             
-                            # Get the pick (which team TheOver likes)
-                            pick = row.get('Pick') or row.get('pick') or ''
-                            
-                            home_team = row.get('home_team') or row.get('HomeTeam') or ''
-                            away_team = row.get('away_team') or row.get('AwayTeam') or ''
-                            league = (row.get('League') or row.get('league') or 'NBA').upper()
+                            # If no WinProbability, CALCULATE from spread
+                            # Rule: Each point of spread ≈ 2.5-3% probability shift
+                            # The Pick column tells us which team TheOver.ai favors
+                            if theover_prob == 0 and spread_line != 0:
+                                # Spread is relative to the Pick team
+                                # Positive spread = underdog (getting points)
+                                # Negative spread = favorite (giving points)
+                                spread_points = abs(spread_line)
+                                
+                                # Calculate probability: 50% base + spread adjustment
+                                # ~2.5% per point, capped at 85%
+                                spread_prob = min(0.85, 0.50 + (spread_points * 0.025))
+                                
+                                if pick == home_team:
+                                    # Home team is the pick
+                                    if spread_line > 0:
+                                        # Home is underdog getting points - they think home covers
+                                        theover_prob = 1 - spread_prob  # Lower base win prob but covers
+                                    else:
+                                        # Home is favorite - they think home covers
+                                        theover_prob = spread_prob
+                                else:
+                                    # Away team is the pick
+                                    if spread_line > 0:
+                                        # Away team getting points - they think away covers
+                                        theover_prob = spread_prob  # Higher away win prob
+                                    else:
+                                        # Away team giving points (rare)
+                                        theover_prob = 1 - spread_prob
                             
                             # Determine sport_key from league
                             if league == 'NFL':
@@ -8453,15 +8506,19 @@ if is_vertex_ai_enabled():
                             else:
                                 sport_key = 'basketball_nba'
                             
-                            # Calculate implied odds from spread (rough estimate)
-                            # Standard -110 juice, adjust based on spread size
+                            # Calculate implied odds from spread
                             if spread_line:
-                                # Larger spreads = more confident favorite
-                                spread_adj = abs(spread_line) * 3  # Each point worth ~3%
-                                if spread_line > 0:  # Home is underdog
-                                    home_implied_prob = max(0.25, 0.5 - spread_adj/100)
-                                else:  # Home is favorite
-                                    home_implied_prob = min(0.75, 0.5 + spread_adj/100)
+                                spread_adj = abs(spread_line) * 2.5  # Each point worth ~2.5%
+                                if spread_line > 0:  # Pick is underdog getting points
+                                    if pick == home_team:
+                                        home_implied_prob = max(0.25, 0.5 - spread_adj/100)
+                                    else:
+                                        home_implied_prob = min(0.75, 0.5 + spread_adj/100)
+                                else:  # Pick is favorite giving points
+                                    if pick == home_team:
+                                        home_implied_prob = min(0.75, 0.5 + spread_adj/100)
+                                    else:
+                                        home_implied_prob = max(0.25, 0.5 - spread_adj/100)
                                 
                                 # Convert to American odds
                                 if home_implied_prob > 0.5:
@@ -8469,7 +8526,7 @@ if is_vertex_ai_enabled():
                                     away_ml = int(100 * (1 - home_implied_prob) / home_implied_prob)
                                 else:
                                     home_ml = int(100 * (1 - home_implied_prob) / home_implied_prob)
-                                    away_ml = int(-100 * (1 - home_implied_prob) / home_implied_prob)
+                                    away_ml = int(-100 * home_implied_prob / (1 - home_implied_prob))
                             else:
                                 home_ml = -110
                                 away_ml = -110
@@ -8491,7 +8548,8 @@ if is_vertex_ai_enabled():
                                 'home_spread': -spread_line if pick == home_team else spread_line,
                                 'implied_home_prob': home_implied_prob,
                             })
-                        st.info(f"📊 Loaded {len(all_games)} games from theover.ai with spread data")
+                        
+                        st.info(f"📊 Loaded {len(all_games)} games from theover.ai (spreads → probabilities calculated)")
                 
                 if not all_games:
                     st.error("❌ No games found. Either:")
@@ -9246,6 +9304,21 @@ if is_vertex_ai_enabled():
                     
                     # Debug: show confidence threshold
                     st.caption(f"🔧 Confidence threshold: {min_ai_confidence * 100:.0f}%")
+                    
+                    # Check for stale/identical predictions (symptom of old analysis)
+                    unique_probs = set(r.get('vertex_prob', 0.5) for r in vertex_results)
+                    if len(unique_probs) <= 2:
+                        st.warning("⚠️ **Detected identical predictions for all games.** Please re-run 'Vertex AI Master Analysis' to get game-specific predictions based on spread data.")
+                    
+                    # Show sample data for debugging
+                    with st.expander("🔍 Debug: Sample Game Data"):
+                        sample = vertex_results[0] if vertex_results else {}
+                        st.write(f"**Sample Game:** {sample.get('away_team')} @ {sample.get('home_team')}")
+                        st.write(f"- Vertex Prob: {sample.get('vertex_prob', 'N/A')}")
+                        st.write(f"- TheOver Prob: {sample.get('theover_probability', 'N/A')}")
+                        st.write(f"- Spread: {sample.get('spread', 'N/A')}")
+                        st.write(f"- Implied Home Prob: {sample.get('implied_home_prob', 'N/A')}")
+                        st.write(f"- Home ML Odds: {sample.get('home_ml_odds', 'N/A')}")
                     
                     for vertex_result in vertex_results:
                         home_team = vertex_result.get('home_team', 'Home')
