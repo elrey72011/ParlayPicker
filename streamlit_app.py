@@ -8466,7 +8466,10 @@ if is_vertex_ai_enabled():
                                 'away_team': row.get('away_team', ''),
                                 'league': row.get('league', ''),
                                 'vertex_prob': row.get('vertex_ai_prob', 0.5),
-                                'confidence': row.get('vertex_ai_confidence', 0) * 100 if row.get('vertex_ai_confidence', 0) <= 1 else row.get('vertex_ai_confidence', 0),
+                                # Calculate meaningful confidence: base 50% + (edge * 500) capped at 95%
+                                # Edge of 0.10 (10%) = 50 + 50 = 100% confidence
+                                # Edge of 0.05 (5%) = 50 + 25 = 75% confidence
+                                'confidence': min(95, 50 + abs(row.get('vertex_ai_edge', 0)) * 500),
                                 'edge': row.get('vertex_ai_edge', 0),
                                 'has_edge': abs(row.get('vertex_ai_edge', 0)) > 0.03,
                                 'home_sentiment': row.get('home_sentiment', 0),
@@ -9057,6 +9060,9 @@ if is_vertex_ai_enabled():
         if not odds_key:
             st.error("Configure your The Odds API key to evaluate best bets.")
         else:
+            # Initialize best_bets_df to prevent NameError
+            best_bets_df = pd.DataFrame()
+            
             # VERTEX AI PATH
             if use_vertex_results:
                 st.write("🎯 **Generating Best Bets from Vertex AI Analysis...**")
@@ -9065,6 +9071,7 @@ if is_vertex_ai_enabled():
                 odds_data = st.session_state.get('odds_data', [])
                 
                 best_bets_rows = []
+                skipped_low_conf = 0  # Track skipped bets for debugging
                 
                 # If we have odds_data from The Odds API, use the detailed path
                 if odds_data:
@@ -9130,6 +9137,7 @@ if is_vertex_ai_enabled():
                                     
                                     # Apply minimum confidence filter
                                     if confidence < min_ai_confidence * 100:
+                                        skipped_low_conf += 1
                                         continue
                                     
                                     # Format decimal odds
@@ -9164,6 +9172,9 @@ if is_vertex_ai_enabled():
                     # NO ODDS DATA - Generate Best Bets directly from Vertex Results
                     st.info(f"📊 Generating Best Bets from {len(vertex_results)} Vertex AI analyzed games (TheOver.ai data)")
                     
+                    # Debug: show confidence threshold
+                    st.caption(f"🔧 Confidence threshold: {min_ai_confidence * 100:.0f}%")
+                    
                     for vertex_result in vertex_results:
                         home_team = vertex_result.get('home_team', 'Home')
                         away_team = vertex_result.get('away_team', 'Away')
@@ -9180,6 +9191,7 @@ if is_vertex_ai_enabled():
                         
                         # Apply minimum confidence filter
                         if confidence < min_ai_confidence * 100:
+                            skipped_low_conf += 1
                             continue
                         
                         # Get odds from stored data
@@ -9248,6 +9260,9 @@ if is_vertex_ai_enabled():
                         })
                 
                 # Display results
+                if skipped_low_conf > 0:
+                    st.caption(f"⏭️ Skipped {skipped_low_conf} games due to low confidence")
+                
                 if best_bets_rows:
                     best_bets_df = pd.DataFrame(best_bets_rows)
                     
@@ -9288,6 +9303,7 @@ if is_vertex_ai_enabled():
                     st.session_state['positive_ev_bets'] = positive_ev_df
                 else:
                     st.warning("No bets passed the confidence filter. Try lowering the minimum confidence threshold.")
+                    best_bets_df = pd.DataFrame()  # Empty DataFrame to prevent NameError
             
             # LEGACY PATH
             else:
