@@ -445,28 +445,38 @@ class VertexMasterAnalyzer:
         return kalshi_features
     
     def _calculate_derived_features(self, features: Dict) -> Dict:
-        """Calculate derived/engineered features"""
+        """Calculate derived/engineered features - handles None values gracefully"""
         derived = {}
         
-        # Win% differential
-        derived['win_pct_diff'] = features.get('home_win_pct', 0.5) - features.get('away_win_pct', 0.5)
+        # Helper to safely get values
+        def safe_get(key, default):
+            val = features.get(key)
+            return val if val is not None else default
+        
+        # Win% differential (use 0.5 if None - no difference)
+        home_win = safe_get('home_win_pct', 0.5)
+        away_win = safe_get('away_win_pct', 0.5)
+        derived['win_pct_diff'] = home_win - away_win
         
         # Offensive/Defensive matchups
-        derived['off_def_matchup_home'] = features.get('home_off_rating', 0) - features.get('away_def_rating', 0)
-        derived['off_def_matchup_away'] = features.get('away_off_rating', 0) - features.get('home_def_rating', 0)
+        derived['off_def_matchup_home'] = safe_get('home_off_rating', 0) - safe_get('away_def_rating', 0)
+        derived['off_def_matchup_away'] = safe_get('away_off_rating', 0) - safe_get('home_def_rating', 0)
         
         # Form momentum
-        derived['form_momentum_diff'] = features.get('home_last_5_wins', 0) - features.get('away_last_5_wins', 0)
+        home_last_5 = safe_get('home_last_5_wins', 0)
+        away_last_5 = safe_get('away_last_5_wins', 0)
+        derived['form_momentum_diff'] = home_last_5 - away_last_5 if home_last_5 is not None and away_last_5 is not None else 0
         
         # Implied probability from odds
         home_ml = features.get('home_ml_odds')
-        if home_ml:
+        if home_ml and home_ml != 0:
             if home_ml > 0:
                 derived['implied_home_prob'] = 100 / (home_ml + 100)
             else:
                 derived['implied_home_prob'] = abs(home_ml) / (abs(home_ml) + 100)
         else:
-            derived['implied_home_prob'] = 0.5
+            # Try to use TheOver.ai implied probability
+            derived['implied_home_prob'] = safe_get('implied_home_prob', 0.5)
         
         # Consensus probability (average of all sources including Kalshi)
         probs = [
@@ -500,28 +510,104 @@ class VertexMasterAnalyzer:
         return derived
     
     def _fetch_team_stats(self, team: str, league: str, is_home: bool) -> Dict:
-        """Fetch team stats from SportsData.io"""
-        # Placeholder - implement with actual client
+        """Fetch team stats from SportsData.io - returns None values if not available"""
+        # Try to get stats from SportsData.io client
+        sportsdata_client = self.sportsdata.get(league.lower()) if self.sportsdata else None
+        
+        if sportsdata_client:
+            try:
+                # Try to get team stats from the client
+                if hasattr(sportsdata_client, 'get_team_stats'):
+                    stats = sportsdata_client.get_team_stats(team)
+                    if stats:
+                        return {
+                            'win_pct': stats.get('win_pct', None),
+                            'avg_points': stats.get('avg_points', None),
+                            'avg_points_allowed': stats.get('avg_points_allowed', None),
+                            'off_rating': stats.get('off_rating', None),
+                            'def_rating': stats.get('def_rating', None),
+                            'pace': stats.get('pace', None),
+                            'home_record': stats.get('home_record', None),
+                            'away_record': stats.get('away_record', None),
+                        }
+                
+                # Alternative: get standings
+                if hasattr(sportsdata_client, 'get_standings'):
+                    standings = sportsdata_client.get_standings()
+                    if standings:
+                        for team_data in standings:
+                            if team.lower() in str(team_data.get('Name', '')).lower() or \
+                               team.lower() in str(team_data.get('City', '')).lower():
+                                wins = team_data.get('Wins', 0)
+                                losses = team_data.get('Losses', 0)
+                                total = wins + losses
+                                return {
+                                    'win_pct': wins / total if total > 0 else None,
+                                    'avg_points': team_data.get('PointsPerGameFor', None),
+                                    'avg_points_allowed': team_data.get('PointsPerGameAgainst', None),
+                                    'off_rating': team_data.get('OffensiveRating', None),
+                                    'def_rating': team_data.get('DefensiveRating', None),
+                                    'pace': None,
+                                    'home_record': f"{team_data.get('HomeWins', 0)}-{team_data.get('HomeLosses', 0)}",
+                                    'away_record': f"{team_data.get('AwayWins', 0)}-{team_data.get('AwayLosses', 0)}",
+                                }
+            except Exception as e:
+                logger.warning(f"Error fetching stats for {team} from SportsData.io: {e}")
+        
+        # Return None values - NO PLACEHOLDER DATA
+        # The ML model should handle None/missing values appropriately
         return {
-            'win_pct': 0.55,
-            'avg_points': 110 if league == 'NBA' else 24,
-            'avg_points_allowed': 108 if league == 'NBA' else 22,
-            'off_rating': 110,
-            'def_rating': 105,
-            'pace': 100,
-            'home_record': '10-5' if is_home else '',
-            'away_record': '8-7' if not is_home else '',
+            'win_pct': None,
+            'avg_points': None,
+            'avg_points_allowed': None,
+            'off_rating': None,
+            'def_rating': None,
+            'pace': None,
+            'home_record': None,
+            'away_record': None,
         }
     
     def _fetch_recent_games(self, team: str, league: str, n: int = 5) -> Dict:
-        """Fetch recent game results"""
-        # Placeholder
+        """Fetch recent game results - returns None values if not available"""
+        # Try SportsData.io client
+        sportsdata_client = self.sportsdata.get(league.lower()) if self.sportsdata else None
+        
+        if sportsdata_client:
+            try:
+                if hasattr(sportsdata_client, 'get_recent_games'):
+                    games = sportsdata_client.get_recent_games(team, n)
+                    if games:
+                        wins = sum(1 for g in games if g.get('won', False))
+                        avg_pts = sum(g.get('points', 0) for g in games) / len(games) if games else None
+                        return {
+                            'wins': wins,
+                            'avg_points': avg_pts,
+                            'streak': self._calculate_streak(games),
+                            'trend': 'hot' if wins >= 3 else ('cold' if wins <= 1 else 'neutral'),
+                        }
+            except Exception as e:
+                logger.warning(f"Error fetching recent games for {team}: {e}")
+        
+        # Return None values - NO PLACEHOLDER DATA
         return {
-            'wins': 3,
-            'avg_points': 110,
-            'streak': 2,
-            'trend': 'hot',
+            'wins': None,
+            'avg_points': None,
+            'streak': None,
+            'trend': None,
         }
+    
+    def _calculate_streak(self, games: List[Dict]) -> int:
+        """Calculate win/loss streak from recent games"""
+        if not games:
+            return 0
+        streak = 0
+        first_result = games[0].get('won', False) if games else False
+        for game in games:
+            if game.get('won', False) == first_result:
+                streak += 1 if first_result else -1
+            else:
+                break
+        return streak
     
     def _calculate_team_sentiment(self, team: str) -> float:
         """Calculate sentiment for team using the sentiment analyzer"""
@@ -920,32 +1006,58 @@ def show_vertex_master_analysis(results_df: pd.DataFrame):
             
             # Fourth row - team analysis (NO NESTED EXPANDER!)
             st.markdown("---")
-            st.markdown("**📈 Detailed Team Analysis**")
-            team_cols = st.columns(2)
             
-            with team_cols[0]:
-                st.markdown(f"**🏠 {game['home_team']}**")
-                st.write(f"Win %: {game['home_win_pct']:.1%}")
-                st.write(f"Avg Points: {game['home_avg_points']:.1f}")
-                st.write(f"Avg Points Allowed: {game['home_avg_points_allowed']:.1f}")
-                st.write(f"Last 5: {game['home_last_5_wins']}-{5-game['home_last_5_wins']}")
-                st.write(f"Form: {game.get('home_trend', 'neutral').capitalize()}")
-                st.write(f"Sentiment: {game['home_sentiment']:+.2f}")
+            # Check if we have real stats or if using TheOver.ai data
+            has_real_stats = (game.get('home_win_pct') is not None and 
+                              game.get('home_win_pct') != 0.5 and
+                              game.get('away_win_pct') is not None)
             
-            with team_cols[1]:
-                st.markdown(f"**✈️ {game['away_team']}**")
-                st.write(f"Win %: {game['away_win_pct']:.1%}")
-                st.write(f"Avg Points: {game['away_avg_points']:.1f}")
-                st.write(f"Avg Points Allowed: {game['away_avg_points_allowed']:.1f}")
-                st.write(f"Last 5: {game['away_last_5_wins']}-{5-game['away_last_5_wins']}")
-                st.write(f"Form: {game.get('away_trend', 'neutral').capitalize()}")
-                st.write(f"Sentiment: {game['away_sentiment']:+.2f}")
+            if has_real_stats:
+                st.markdown("**📈 Team Statistics**")
+                team_cols = st.columns(2)
+                
+                with team_cols[0]:
+                    st.markdown(f"**🏠 {game['home_team']}**")
+                    st.write(f"Win %: {game['home_win_pct']:.1%}" if game.get('home_win_pct') else "Win %: N/A")
+                    st.write(f"Avg Points: {game['home_avg_points']:.1f}" if game.get('home_avg_points') else "Avg Points: N/A")
+                    if game.get('home_last_5_wins') is not None:
+                        st.write(f"Last 5: {game['home_last_5_wins']}-{5-game['home_last_5_wins']}")
+                    st.write(f"Sentiment: {game.get('home_sentiment', 0):+.2f}")
+                
+                with team_cols[1]:
+                    st.markdown(f"**✈️ {game['away_team']}**")
+                    st.write(f"Win %: {game['away_win_pct']:.1%}" if game.get('away_win_pct') else "Win %: N/A")
+                    st.write(f"Avg Points: {game['away_avg_points']:.1f}" if game.get('away_avg_points') else "Avg Points: N/A")
+                    if game.get('away_last_5_wins') is not None:
+                        st.write(f"Last 5: {game['away_last_5_wins']}-{5-game['away_last_5_wins']}")
+                    st.write(f"Sentiment: {game.get('away_sentiment', 0):+.2f}")
+            else:
+                # No real stats - show TheOver.ai data prominently
+                st.markdown("**📊 Analysis Based on TheOver.ai Data**")
+                st.info("📍 Using spread and market data for predictions (no team statistics required)")
+                
+                data_cols = st.columns(3)
+                with data_cols[0]:
+                    spread = game.get('home_spread', 0) or game.get('theover_spread', 0)
+                    st.metric("Spread", f"{spread:+.1f}" if spread else "N/A")
+                with data_cols[1]:
+                    theover_prob = game.get('theover_probability', 0)
+                    if theover_prob and theover_prob != 0.5:
+                        st.metric("TheOver.ai Prob", f"{theover_prob*100:.1f}%")
+                    else:
+                        st.metric("TheOver.ai Prob", "N/A")
+                with data_cols[2]:
+                    implied = game.get('implied_home_prob', 0.5)
+                    st.metric("Implied Prob", f"{implied*100:.1f}%")
             
-            # Matchup analysis
-            st.markdown("**⚔️ Matchup Analysis:**")
-            st.write(f"Win% Differential: {game['win_pct_diff']:+.1%}")
-            st.write(f"Form Momentum: {game.get('form_momentum_diff', 0):+.1f}")
-            st.write(f"Sentiment Differential: {game.get('sentiment_diff', 0):+.2f}")
+            # Matchup analysis (simplified when no stats)
+            if has_real_stats and game.get('win_pct_diff') is not None:
+                st.markdown("**⚔️ Matchup Analysis:**")
+                st.write(f"Win% Differential: {game['win_pct_diff']:+.1%}")
+                st.write(f"Sentiment Differential: {game.get('sentiment_diff', 0):+.2f}")
+            elif game.get('sentiment_diff', 0) != 0:
+                st.markdown("**📰 Sentiment:**")
+                st.write(f"Differential: {game.get('sentiment_diff', 0):+.2f}")
             
             # Fifth row - theover.ai pick if available
             if game.get('theover_has_pick', 0) == 1:
