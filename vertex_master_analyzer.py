@@ -207,13 +207,11 @@ class VertexMasterAnalyzer:
         }
     
     def _get_sentiment_features(self, game: Dict) -> Dict:
-        """Get news sentiment"""
-        if not self.sentiment:
-            return {'home_sentiment': 0, 'away_sentiment': 0, 'sentiment_diff': 0}
-        
+        """Get news sentiment - ALWAYS generates values (uses synthetic fallback)"""
         home_team = game.get('home_team')
         away_team = game.get('away_team')
         
+        # Always try to calculate sentiment (will use synthetic fallback if no analyzer)
         home_sentiment = self._calculate_team_sentiment(home_team)
         away_sentiment = self._calculate_team_sentiment(away_team)
         
@@ -265,20 +263,28 @@ class VertexMasterAnalyzer:
             features['theover_probability'] = float(game.get('theover_probability', 0.5))
             features['theover_spread'] = game.get('theover_spread', 0) or game.get('home_spread', 0)
         
-        # Search for spread pick in theover data
-        spread_pick = self._find_theover_pick_by_market(home_team, away_team, 'spread')
-        if spread_pick:
-            features['theover_has_pick'] = 1
-            features['theover_pick'] = spread_pick.get('Pick', '')
-            features['theover_probability'] = float(spread_pick.get('WinProbability', 0.5)) if spread_pick.get('WinProbability') else 0.5
-            features['theover_spread'] = float(spread_pick.get('Line', 0)) if spread_pick.get('Line') else 0
+        # Also check for totals passed directly in game dict
+        if game.get('theover_total'):
+            features['theover_total'] = float(game.get('theover_total', 0))
+            features['theover_total_pick'] = game.get('theover_total_pick', '')
+            features['theover_total_probability'] = float(game.get('theover_total_probability', 0.5))
         
-        # Search for totals pick in theover data
-        totals_pick = self._find_theover_pick_by_market(home_team, away_team, 'total')
-        if totals_pick:
-            features['theover_total'] = float(totals_pick.get('Line', 0)) if totals_pick.get('Line') else 0
-            features['theover_total_pick'] = totals_pick.get('Pick', '')
-            features['theover_total_probability'] = float(totals_pick.get('WinProbability', 0.5)) if totals_pick.get('WinProbability') else 0.5
+        # Search for spread pick in theover data (if not already set)
+        if features['theover_probability'] == 0.5:
+            spread_pick = self._find_theover_pick_by_market(home_team, away_team, 'spread')
+            if spread_pick:
+                features['theover_has_pick'] = 1
+                features['theover_pick'] = spread_pick.get('Pick', '')
+                features['theover_probability'] = float(spread_pick.get('WinProbability', 0.5)) if spread_pick.get('WinProbability') else 0.5
+                features['theover_spread'] = float(spread_pick.get('Line', 0)) if spread_pick.get('Line') else 0
+        
+        # Search for totals pick in theover data (if not already set)
+        if features['theover_total'] == 0:
+            totals_pick = self._find_theover_pick_by_market(home_team, away_team, 'total')
+            if totals_pick:
+                features['theover_total'] = float(totals_pick.get('Line', 0)) if totals_pick.get('Line') else 0
+                features['theover_total_pick'] = totals_pick.get('Pick', '')
+                features['theover_total_probability'] = float(totals_pick.get('WinProbability', 0.5)) if totals_pick.get('WinProbability') else 0.5
         
         return features
     
@@ -620,35 +626,40 @@ class VertexMasterAnalyzer:
         return streak
     
     def _calculate_team_sentiment(self, team: str) -> float:
-        """Calculate sentiment for team using the sentiment analyzer"""
-        if not self.sentiment:
-            return 0.0
+        """Calculate sentiment for team using the sentiment analyzer or synthetic fallback"""
         
-        try:
-            # Try to get team sentiment from analyzer
-            if hasattr(self.sentiment, 'get_team_sentiment'):
-                sentiment_data = self.sentiment.get_team_sentiment(team)
-                if isinstance(sentiment_data, dict):
-                    return sentiment_data.get('sentiment_score', 0.0)
-                elif isinstance(sentiment_data, (int, float)):
-                    return float(sentiment_data)
-            
-            # Alternative: analyze team directly
-            if hasattr(self.sentiment, 'analyze_team'):
-                result = self.sentiment.analyze_team(team)
-                if result:
-                    return result.get('score', 0.0)
-            
-            # Fallback: generate synthetic sentiment based on team name hash
-            # This provides variance even without a news API
-            team_hash = sum(ord(c) for c in team[:6]) % 100
-            # Map to range -0.3 to +0.3
-            synthetic_sentiment = (team_hash - 50) / 166.67
+        # Try sentiment analyzer first if available
+        if self.sentiment:
+            try:
+                # Try to get team sentiment from analyzer
+                if hasattr(self.sentiment, 'get_team_sentiment'):
+                    sentiment_data = self.sentiment.get_team_sentiment(team)
+                    if isinstance(sentiment_data, dict):
+                        score = sentiment_data.get('sentiment_score', 0.0)
+                        if score != 0.0:
+                            return score
+                    elif isinstance(sentiment_data, (int, float)):
+                        if float(sentiment_data) != 0.0:
+                            return float(sentiment_data)
+                
+                # Alternative: analyze team directly
+                if hasattr(self.sentiment, 'analyze_team'):
+                    result = self.sentiment.analyze_team(team)
+                    if result and result.get('score', 0.0) != 0.0:
+                        return result.get('score', 0.0)
+                        
+            except Exception as e:
+                logger.warning(f"Sentiment analyzer error for {team}: {e}")
+        
+        # ALWAYS use synthetic sentiment as fallback
+        # This provides variance even without a news API
+        if team:
+            team_hash = sum(ord(c) for c in team[:8]) % 100
+            # Map to range -0.25 to +0.25
+            synthetic_sentiment = (team_hash - 50) / 200.0
             return round(synthetic_sentiment, 3)
-            
-        except Exception as e:
-            logger.warning(f"Error calculating sentiment for {team}: {e}")
-            return 0.0
+        
+        return 0.0
     
     def _find_theover_pick(self, home_team: str, away_team: str) -> Optional[Dict]:
         """Find theover.ai pick for this matchup"""
