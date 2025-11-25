@@ -948,12 +948,123 @@ def show_vertex_master_analysis(results_df: pd.DataFrame):
     with col4:
         st.metric("Best Win Probability", f"{best_prob:.1f}%")
     
+    # =====================================================
+    # SINGLE BEST PICK PER GAME - Quick Summary Table
+    # =====================================================
+    st.markdown("---")
+    st.subheader("🎯 SINGLE BEST PICK PER GAME")
+    st.caption("One recommended bet per game, sorted by win probability. Use this for quick decisions!")
+    
+    # Calculate best side for each game
+    summary_df = results_df.copy()
+    summary_df['Home Win %'] = summary_df['vertex_ai_prob'] * 100
+    summary_df['Away Win %'] = (1 - summary_df['vertex_ai_prob']) * 100
+    
+    # Determine best pick for each game
+    def get_best_pick_row(row):
+        home_prob = row['Home Win %']
+        away_prob = row['Away Win %']
+        home_team = row.get('home_team', 'Home')
+        away_team = row.get('away_team', 'Away')
+        spread = row.get('home_spread', 0) or row.get('theover_spread', 0) or 0
+        
+        if home_prob >= away_prob:
+            pick_team = home_team
+            pick_prob = home_prob
+            pick_spread = spread
+            is_favorite = spread <= 0
+        else:
+            pick_team = away_team
+            pick_prob = away_prob
+            pick_spread = -spread if spread else 0
+            is_favorite = spread >= 0
+        
+        # Format the pick
+        if pick_spread and pick_spread != 0:
+            if pick_spread > 0:
+                pick_text = f"{pick_team} +{abs(pick_spread):.1f}"
+            else:
+                pick_text = f"{pick_team} {pick_spread:.1f}"
+        else:
+            pick_text = f"{pick_team} ML"
+        
+        # Sentiment check
+        sentiment = row.get('sentiment_diff', 0)
+        if (pick_team == home_team and sentiment > 0) or (pick_team == away_team and sentiment < 0):
+            sent_agrees = '✅'
+        elif sentiment == 0:
+            sent_agrees = '—'
+        else:
+            sent_agrees = '❌'
+        
+        # Kalshi check
+        kalshi_prob = row.get('kalshi_prob', 0.5) or 0.5
+        kalshi_available = row.get('kalshi_available', False)
+        if kalshi_available:
+            kalshi_home = kalshi_prob * 100
+            kalshi_away = (1 - kalshi_prob) * 100
+            if pick_team == home_team:
+                kalshi_agrees = '✅' if kalshi_home > 50 else '❌'
+                kalshi_pct = kalshi_home
+            else:
+                kalshi_agrees = '✅' if kalshi_away > 50 else '❌'
+                kalshi_pct = kalshi_away
+        else:
+            kalshi_agrees = '—'
+            kalshi_pct = None
+        
+        return pd.Series({
+            'Game': f"{away_team} @ {home_team}",
+            'THE PICK': pick_text,
+            'Win %': round(pick_prob, 1),
+            'Favorite': '✅' if is_favorite else '❌',
+            'Sentiment': sent_agrees,
+            'Kalshi': kalshi_agrees,
+            'Kalshi %': f"{kalshi_pct:.0f}" if kalshi_pct else '—',
+            'EV': f"${row.get('expected_value', 0):.2f}",
+            'League': row.get('league', 'N/A'),
+        })
+    
+    summary_picks = summary_df.apply(get_best_pick_row, axis=1)
+    summary_picks = summary_picks.sort_values('Win %', ascending=False)
+    summary_picks['Rank'] = range(1, len(summary_picks) + 1)
+    
+    # Reorder columns
+    display_order = ['Rank', 'League', 'Game', 'THE PICK', 'Win %', 'Favorite', 'Sentiment', 'Kalshi', 'Kalshi %', 'EV']
+    summary_picks = summary_picks[display_order]
+    
+    # Display the summary table
+    st.dataframe(
+        summary_picks,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            'Win %': st.column_config.ProgressColumn(
+                'Win %',
+                help='AI Win Probability',
+                min_value=0,
+                max_value=100,
+            ),
+        }
+    )
+    
+    # Export single picks
+    csv_single = summary_picks.to_csv(index=False)
+    st.download_button(
+        "⬇️ Download Single Best Pick Per Game (CSV)",
+        csv_single,
+        f"best_picks_{pd.Timestamp.now().strftime('%Y%m%d')}.csv",
+        "text/csv",
+        key="single_picks_export"
+    )
+    
     st.info("💡 **Tip:** In 'Likely Winners' mode, we show the **FAVORITE** side of each game - the team most likely to cover. Default filter is 55%+ probability.")
     
     st.markdown("---")
     
-    # COMPLETE RANKED LIST - ALL GAMES
-    st.subheader(f"📊 Complete Rankings (1-{total_games})")
+    # COMPLETE RANKED LIST - ALL GAMES (DETAILED)
+    st.subheader(f"📊 Detailed Analysis (1-{total_games})")
+    st.caption("Expand each game for full analysis including odds, consensus, and TheOver.ai data")
     
     # Add filter options
     col_filter1, col_filter2, col_filter3, col_filter4 = st.columns(4)
