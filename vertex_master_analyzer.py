@@ -91,7 +91,7 @@ class VertexMasterAnalyzer:
         return features
     
     def _get_market_odds_features(self, game: Dict) -> Dict:
-        """Extract market odds features"""
+        """Extract market odds features from bookmakers OR TheOver.ai data"""
         bookmakers = game.get('bookmakers', [])
         
         features = {
@@ -105,8 +105,21 @@ class VertexMasterAnalyzer:
             'over_odds': None,
             'under_odds': None,
             'num_bookmakers': len(bookmakers),
+            'theover_probability': None,
+            'theover_pick': None,
         }
         
+        # First try to get TheOver.ai data (passed directly in game dict)
+        if game.get('theover_probability'):
+            features['theover_probability'] = game.get('theover_probability')
+            features['theover_pick'] = game.get('theover_pick')
+            features['home_ml_odds'] = game.get('home_ml_odds')
+            features['away_ml_odds'] = game.get('away_ml_odds')
+            features['home_spread'] = game.get('home_spread') or game.get('theover_spread')
+            features['implied_home_prob'] = game.get('implied_home_prob', 0.5)
+            logger.info(f"Using TheOver.ai data: prob={features['theover_probability']}, spread={features['home_spread']}")
+        
+        # Then try bookmakers data from The Odds API
         if bookmakers:
             # Get best odds across all bookmakers
             for bookmaker in bookmakers:
@@ -225,7 +238,16 @@ class VertexMasterAnalyzer:
         home_team = game.get('home_team')
         away_team = game.get('away_team')
         
-        # Check if we have theover.ai data for this game
+        # First check if theover data is passed directly in game dict
+        if game.get('theover_probability'):
+            return {
+                'theover_has_pick': 1,
+                'theover_pick': game.get('theover_pick', ''),
+                'theover_probability': float(game.get('theover_probability', 0.5)),
+                'theover_spread': game.get('theover_spread', 0),
+            }
+        
+        # Otherwise check if we have theover.ai data for this game from self.theover
         theover_pick = self._find_theover_pick(home_team, away_team)
         
         if theover_pick:
@@ -233,12 +255,14 @@ class VertexMasterAnalyzer:
                 'theover_has_pick': 1,
                 'theover_pick': theover_pick.get('Pick', ''),
                 'theover_probability': float(theover_pick.get('WinProbability', 0.5)),
+                'theover_spread': float(theover_pick.get('Line', 0)) if theover_pick.get('Line') else 0,
             }
         else:
             return {
                 'theover_has_pick': 0,
                 'theover_pick': '',
                 'theover_probability': 0.5,
+                'theover_spread': 0,
             }
     
     def _get_sharp_money_features(self, game: Dict) -> Dict:
