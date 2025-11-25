@@ -10246,10 +10246,14 @@ if is_vertex_ai_enabled():
                             
                             ml_away_implied = 100 - ml_home_implied
                             
-                            # ML probabilities based on spread (rough conversion)
+                            # ML probabilities based on spread
+                            # IMPORTANT: Negative spread = favorite (MORE likely to win)
+                            #            Positive spread = underdog (LESS likely to win)
                             # Each point of spread ≈ 3% probability shift
-                            ml_home_prob = 50 + (spread * 3)  # Negative spread = favorite
-                            ml_home_prob = max(10, min(90, ml_home_prob))  # Clamp
+                            # Example: Home team -10.5 spread → favorite → 50 + 31.5 = 81.5% to win ML
+                            # Example: Home team +10.5 spread → underdog → 50 - 31.5 = 18.5% to win ML
+                            ml_home_prob = 50 - (spread * 3)  # Positive spread = underdog = lower prob
+                            ml_home_prob = max(5, min(95, ml_home_prob))  # Clamp to reasonable range
                             ml_away_prob = 100 - ml_home_prob
                             
                             # Home ML bet
@@ -10273,7 +10277,10 @@ if is_vertex_ai_enabled():
                                 'Sentiment': '✅' if vertex_result.get('sentiment_diff', 0) > 0 else ('❌' if vertex_result.get('sentiment_diff', 0) < 0 else '—'),
                                 'Kalshi': ('✅' if not vertex_result.get('kalshi_synthetic') else '🔮') if vertex_result.get('kalshi_available') else '—',
                                 'Kalshi %': round(vertex_result.get('kalshi_prob', 0.5) * 100, 1) if vertex_result.get('kalshi_available') else None,
-                                'Kalshi Agrees': '—',
+                                # Check if Kalshi agrees: both favor same team (>50% or <50%)
+                                'Kalshi Agrees': ('✅' if (ml_home_prob > 50 and vertex_result.get('kalshi_prob', 0.5) > 0.5) or 
+                                                         (ml_home_prob < 50 and vertex_result.get('kalshi_prob', 0.5) < 0.5) 
+                                                  else '❌') if vertex_result.get('kalshi_available') else '—',
                             })
                             
                             # Away ML bet
@@ -10298,7 +10305,11 @@ if is_vertex_ai_enabled():
                                 'Sentiment': '✅' if ml_away_sentiment < 0 else ('❌' if ml_away_sentiment > 0 else '—'),
                                 'Kalshi': ('✅' if not vertex_result.get('kalshi_synthetic') else '🔮') if vertex_result.get('kalshi_available') else '—',
                                 'Kalshi %': round((1 - vertex_result.get('kalshi_prob', 0.5)) * 100, 1) if vertex_result.get('kalshi_available') else None,
-                                'Kalshi Agrees': '—',
+                                # Check if Kalshi agrees: both favor same team (>50% or <50%)
+                                # For away team: kalshi_prob < 0.5 means Kalshi favors away
+                                'Kalshi Agrees': ('✅' if (ml_away_prob > 50 and vertex_result.get('kalshi_prob', 0.5) < 0.5) or 
+                                                         (ml_away_prob < 50 and vertex_result.get('kalshi_prob', 0.5) > 0.5) 
+                                                  else '❌') if vertex_result.get('kalshi_available') else '—',
                             })
                 
                 # Display results
