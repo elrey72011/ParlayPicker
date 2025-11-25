@@ -8431,6 +8431,9 @@ if is_vertex_ai_enabled():
                 else:
                     st.info(f"🤖 Analyzing {len(all_games)} games across all selected sports...")
                     
+                    # Get Kalshi integrator if available
+                    kalshi_int = st.session_state.get('kalshi_integrator')
+                    
                     analyzer = VertexMasterAnalyzer(
                         odds_api_client=odds_client if 'odds_client' in locals() else None,
                         sportsdata_clients=sportsdata_clients if 'sportsdata_clients' in locals() else {},
@@ -8445,7 +8448,8 @@ if is_vertex_ai_enabled():
                             'spreads': theover_spreads_data if 'theover_spreads_data' in locals() else None,
                             'totals': theover_totals_data if 'theover_totals_data' in locals() else None,
                             'ml': theover_ml_data if 'theover_ml_data' in locals() else None,
-                        }
+                        },
+                        kalshi_integrator=kalshi_int,  # NEW: Kalshi prediction market validation
                     )
                     
                     results_df = analyzer.analyze_all_games(all_games, league='multi')
@@ -8453,6 +8457,43 @@ if is_vertex_ai_enabled():
                     if not results_df.empty:
                         st.success(f"✅ Analysis complete! Found {len(results_df)} opportunities")
                         show_vertex_master_analysis(results_df)
+                        
+                        # Store results in session_state for Best Bets and Parlays
+                        vertex_results = []
+                        for _, row in results_df.iterrows():
+                            vertex_results.append({
+                                'home_team': row.get('home_team', ''),
+                                'away_team': row.get('away_team', ''),
+                                'league': row.get('league', ''),
+                                'vertex_prob': row.get('vertex_ai_prob', 0.5),
+                                'confidence': row.get('vertex_ai_confidence', 0) * 100 if row.get('vertex_ai_confidence', 0) <= 1 else row.get('vertex_ai_confidence', 0),
+                                'edge': row.get('vertex_ai_edge', 0),
+                                'has_edge': abs(row.get('vertex_ai_edge', 0)) > 0.03,
+                                'home_sentiment': row.get('home_sentiment', 0),
+                                'away_sentiment': row.get('away_sentiment', 0),
+                                'sentiment_diff': row.get('sentiment_diff', 0),
+                                'local_ml_prob': row.get('local_ml_prob', 0.5),
+                                'theover_probability': row.get('theover_probability', 0.5),
+                                'sharp_money_indicator': row.get('sharp_money_indicator', 0),
+                                'home_ml_odds': row.get('home_ml_odds', 0),
+                                'away_ml_odds': row.get('away_ml_odds', 0),
+                                'spread': row.get('spread', 0),
+                                'total': row.get('total', 0),
+                                # Kalshi prediction market data (NEW!)
+                                'kalshi_available': row.get('kalshi_available', False),
+                                'kalshi_prob': row.get('kalshi_prob', 0.5),
+                                'kalshi_alignment': row.get('kalshi_alignment', 0),
+                                'kalshi_validation_score': row.get('kalshi_validation_score', 0.5),
+                                'kalshi_agrees': row.get('kalshi_agrees', None),
+                                'kalshi_arbitrage_opportunity': row.get('kalshi_arbitrage_opportunity', False),
+                            })
+                        
+                        st.session_state['vertex_results'] = vertex_results
+                        st.session_state['vertex_analysis_complete'] = True
+                        st.session_state['vertex_timestamp'] = datetime.now()
+                        st.session_state['vertex_results_df'] = results_df
+                        
+                        st.info(f"💾 Stored {len(vertex_results)} games for Best Bets & Parlays. Scroll down to generate!")
                     else:
                         st.warning("⚠️ No results from analysis. Try adjusting your filters.")
                 
