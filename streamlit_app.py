@@ -1271,23 +1271,47 @@ def render_sidebar_controls() -> Dict[str, Any]:
         sidebar.caption("🤖 Anthropic API key configured")
     else:
         sidebar.caption("❌ Enter Anthropic API key for AI analysis")
-
+    
     # --------------------- GCP Vertex AI Config ---------------------
+    # Load GCP configuration from secrets/environment
     st.session_state.setdefault('gcp_project_id', 
         os.environ.get("GCP_PROJECT_ID", "") or
-        st.secrets.get("gcp_project_id", "")
+        os.environ.get("gcp_project_id", "") or
+        st.secrets.get("gcp_project_id", "") or
+        st.secrets.get("GCP_PROJECT_ID", "")
     )
     st.session_state.setdefault('vertex_endpoint_id', 
         os.environ.get("VERTEX_ENDPOINT_ID", "") or
-        st.secrets.get("vertex_endpoint_id", "")
+        os.environ.get("vertex_endpoint_id", "") or
+        st.secrets.get("vertex_endpoint_id", "") or
+        st.secrets.get("VERTEX_ENDPOINT_ID", "")
     )
     st.session_state.setdefault('gcp_location', 
         os.environ.get("GCP_LOCATION", "") or
-        st.secrets.get("gcp_location", "us-central1")
+        os.environ.get("gcp_location", "") or
+        st.secrets.get("gcp_location", "") or
+        st.secrets.get("GCP_LOCATION", "us-central1")
     )
     
-    if st.session_state.get('gcp_project_id'):
-        sidebar.caption(f"☁️ GCP Project: {st.session_state['gcp_project_id'][:20]}...")
+    # Initialize GCP credentials from service account if available
+    if 'gcp_service_account' in st.secrets and not os.environ.get('GOOGLE_APPLICATION_CREDENTIALS'):
+        try:
+            import tempfile
+            # Write service account JSON to temp file for Google Cloud SDK
+            gcp_creds = dict(st.secrets.gcp_service_account)
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+                json.dump(gcp_creds, f)
+                os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = f.name
+            logger.info("GCP credentials loaded from secrets")
+        except Exception as e:
+            logger.warning(f"Could not load GCP credentials: {e}")
+    
+    # Display GCP status in sidebar
+    if st.session_state.get('gcp_project_id') and st.session_state.get('vertex_endpoint_id'):
+        sidebar.caption(f"☁️ Vertex AI: {st.session_state['gcp_project_id']}")
+    else:
+        sidebar.caption("⚠️ GCP Vertex AI not fully configured")
+    
     # --------------------- API-Sports keys ---------------------
     nfl_key_default, nfl_source_default = resolve_nfl_apisports_key()
     st.session_state.setdefault('nfl_apisports_api_key', nfl_key_default)
