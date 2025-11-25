@@ -8416,13 +8416,82 @@ if is_vertex_ai_enabled():
                     
                     if 'theover_spreads_data' in locals() and theover_spreads_data is not None:
                         for _, row in theover_spreads_data.iterrows():
+                            # Extract spread line - could be in 'Line' or 'Spread' column
+                            spread_line = row.get('Line') or row.get('Spread') or row.get('line') or 0
+                            try:
+                                spread_line = float(spread_line) if spread_line else 0
+                            except:
+                                spread_line = 0
+                            
+                            # Extract win probability from TheOver.ai
+                            theover_prob = row.get('WinProbability') or row.get('Win_Probability') or row.get('Probability') or 0
+                            try:
+                                theover_prob = float(theover_prob) if theover_prob else 0
+                                if theover_prob > 1:
+                                    theover_prob = theover_prob / 100  # Convert percentage to decimal
+                            except:
+                                theover_prob = 0
+                            
+                            # Get the pick (which team TheOver likes)
+                            pick = row.get('Pick') or row.get('pick') or ''
+                            
+                            home_team = row.get('home_team') or row.get('HomeTeam') or ''
+                            away_team = row.get('away_team') or row.get('AwayTeam') or ''
+                            league = (row.get('League') or row.get('league') or 'NBA').upper()
+                            
+                            # Determine sport_key from league
+                            if league == 'NFL':
+                                sport_key = 'americanfootball_nfl'
+                            elif league == 'NBA':
+                                sport_key = 'basketball_nba'
+                            elif league == 'NHL':
+                                sport_key = 'icehockey_nhl'
+                            elif league == 'NCAAB':
+                                sport_key = 'basketball_ncaab'
+                            elif league == 'NCAAF':
+                                sport_key = 'americanfootball_ncaaf'
+                            else:
+                                sport_key = 'basketball_nba'
+                            
+                            # Calculate implied odds from spread (rough estimate)
+                            # Standard -110 juice, adjust based on spread size
+                            if spread_line:
+                                # Larger spreads = more confident favorite
+                                spread_adj = abs(spread_line) * 3  # Each point worth ~3%
+                                if spread_line > 0:  # Home is underdog
+                                    home_implied_prob = max(0.25, 0.5 - spread_adj/100)
+                                else:  # Home is favorite
+                                    home_implied_prob = min(0.75, 0.5 + spread_adj/100)
+                                
+                                # Convert to American odds
+                                if home_implied_prob > 0.5:
+                                    home_ml = int(-100 * home_implied_prob / (1 - home_implied_prob))
+                                    away_ml = int(100 * (1 - home_implied_prob) / home_implied_prob)
+                                else:
+                                    home_ml = int(100 * (1 - home_implied_prob) / home_implied_prob)
+                                    away_ml = int(-100 * (1 - home_implied_prob) / home_implied_prob)
+                            else:
+                                home_ml = -110
+                                away_ml = -110
+                                home_implied_prob = 0.5
+                            
                             all_games.append({
-                                'home_team': row.get('home_team') or row.get('HomeTeam'),
-                                'away_team': row.get('away_team') or row.get('AwayTeam'),
-                                'sport_key': row.get('league', 'NBA').lower(),
+                                'home_team': home_team,
+                                'away_team': away_team,
+                                'sport_key': sport_key,
+                                'league': league,
                                 'commence_time': None,
+                                # TheOver.ai specific data
+                                'theover_spread': spread_line,
+                                'theover_pick': pick,
+                                'theover_probability': theover_prob,
+                                # Calculated odds
+                                'home_ml_odds': home_ml,
+                                'away_ml_odds': away_ml,
+                                'home_spread': -spread_line if pick == home_team else spread_line,
+                                'implied_home_prob': home_implied_prob,
                             })
-                        st.info(f"📊 Loaded {len(all_games)} games from theover.ai")
+                        st.info(f"📊 Loaded {len(all_games)} games from theover.ai with spread data")
                 
                 if not all_games:
                     st.error("❌ No games found. Either:")
@@ -8477,11 +8546,14 @@ if is_vertex_ai_enabled():
                                 'sentiment_diff': row.get('sentiment_diff', 0),
                                 'local_ml_prob': row.get('local_ml_prob', 0.5),
                                 'theover_probability': row.get('theover_probability', 0.5),
+                                'theover_spread': row.get('theover_spread', 0),
+                                'theover_pick': row.get('theover_pick', ''),
                                 'sharp_money_indicator': row.get('sharp_money_indicator', 0),
-                                'home_ml_odds': row.get('home_ml_odds', 0),
-                                'away_ml_odds': row.get('away_ml_odds', 0),
-                                'spread': row.get('spread', 0),
-                                'total': row.get('total', 0),
+                                'home_ml_odds': row.get('home_ml_odds') or row.get('home_ml', 0),
+                                'away_ml_odds': row.get('away_ml_odds') or row.get('away_ml', 0),
+                                'spread': row.get('home_spread') or row.get('theover_spread') or row.get('spread', 0),
+                                'total': row.get('total_line') or row.get('total', 0),
+                                'implied_home_prob': row.get('implied_home_prob', 0.5),
                                 # Kalshi prediction market data (NEW!)
                                 'kalshi_available': row.get('kalshi_available', False),
                                 'kalshi_prob': row.get('kalshi_prob', 0.5),
@@ -9195,12 +9267,14 @@ if is_vertex_ai_enabled():
                             continue
                         
                         # Get odds from stored data
-                        home_ml = vertex_result.get('home_ml_odds', -110)
-                        away_ml = vertex_result.get('away_ml_odds', -110)
+                        home_ml = vertex_result.get('home_ml_odds') or -110
+                        away_ml = vertex_result.get('away_ml_odds') or -110
                         spread = vertex_result.get('spread', 0)
                         
-                        # Calculate implied probabilities from odds
-                        if home_ml and home_ml != 0:
+                        # Use stored implied probability if available, otherwise calculate
+                        if vertex_result.get('implied_home_prob') and vertex_result.get('implied_home_prob') != 0.5:
+                            home_implied = vertex_result.get('implied_home_prob') * 100
+                        elif home_ml and home_ml != 0 and home_ml != -110:
                             if home_ml > 0:
                                 home_implied = 100 / (home_ml + 100) * 100
                             else:
@@ -9212,6 +9286,10 @@ if is_vertex_ai_enabled():
                         
                         # Home team bet
                         home_edge = vertex_prob - home_implied
+                        theover_prob = vertex_result.get('theover_probability', 0)
+                        if theover_prob and theover_prob <= 1:
+                            theover_prob = theover_prob * 100  # Convert to percentage
+                        
                         best_bets_rows.append({
                             'League': league,
                             'Game': f"{away_team} @ {home_team}",
@@ -9225,7 +9303,7 @@ if is_vertex_ai_enabled():
                             'Best Decimal': round((home_ml / 100 + 1) if home_ml and home_ml > 0 else (100 / abs(home_ml) + 1) if home_ml else 1.91, 3),
                             'Implied Prob %': round(home_implied, 1),
                             'AI Prob %': round(vertex_prob, 1),
-                            'AI Raw %': round(vertex_prob, 1),
+                            'TheOver %': round(theover_prob, 1) if theover_prob else '—',
                             'AI EV %': round(home_edge, 1),
                             'AI Edge pp': round(home_edge, 1),
                             'Confidence': round(confidence, 1),
@@ -9250,7 +9328,7 @@ if is_vertex_ai_enabled():
                             'Best Decimal': round((away_ml / 100 + 1) if away_ml and away_ml > 0 else (100 / abs(away_ml) + 1) if away_ml else 1.91, 3),
                             'Implied Prob %': round(away_implied, 1),
                             'AI Prob %': round(away_prob, 1),
-                            'AI Raw %': round(away_prob, 1),
+                            'TheOver %': round(100 - theover_prob, 1) if theover_prob else '—',
                             'AI EV %': round(away_edge, 1),
                             'AI Edge pp': round(away_edge, 1),
                             'Confidence': round(confidence, 1),
