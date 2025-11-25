@@ -10308,41 +10308,77 @@ if is_vertex_ai_enabled():
                 if best_bets_rows:
                     best_bets_df = pd.DataFrame(best_bets_rows)
                     
-                    # Sort by edge (best opportunities first)
-                    best_bets_df = best_bets_df.sort_values('AI Edge pp', ascending=False)
+                    # Add sorting and filtering controls
+                    sort_col1, sort_col2, sort_col3 = st.columns(3)
                     
-                    # Filter to only positive EV bets by default
-                    positive_ev_df = best_bets_df[best_bets_df['AI Edge pp'] > 0]
+                    with sort_col1:
+                        best_bets_sort = st.selectbox(
+                            "Sort by",
+                            ["Win Probability (Likely Winners)", "Edge % (Sharp Bets)", "Confidence"],
+                            key="best_bets_sort"
+                        )
                     
-                    st.success(f"🎯 Found {len(positive_ev_df)} positive EV opportunities out of {len(best_bets_df)} total bets")
+                    with sort_col2:
+                        min_prob_filter = st.slider(
+                            "Min Win Probability %",
+                            0, 100, 50, 5,
+                            key="min_prob_best_bets",
+                            help="Only show bets where AI gives 50%+ chance to win"
+                        )
+                    
+                    with sort_col3:
+                        show_underdogs = st.checkbox("Include underdogs (<50%)", value=False,
+                            help="Show bets where the pick has less than 50% chance (higher payout, lower chance)")
+                    
+                    # Filter by win probability
+                    if not show_underdogs:
+                        likely_winners_df = best_bets_df[best_bets_df['AI Prob %'] >= min_prob_filter]
+                    else:
+                        likely_winners_df = best_bets_df.copy()
+                    
+                    # Sort based on selection
+                    if best_bets_sort == "Win Probability (Likely Winners)":
+                        likely_winners_df = likely_winners_df.sort_values('AI Prob %', ascending=False)
+                    elif best_bets_sort == "Edge % (Sharp Bets)":
+                        likely_winners_df = likely_winners_df.sort_values('AI Edge pp', ascending=False)
+                    else:  # Confidence
+                        likely_winners_df = likely_winners_df.sort_values('Confidence', ascending=False)
+                    
+                    # Count stats
+                    strong_picks = len(likely_winners_df[likely_winners_df['AI Prob %'] >= 65])
+                    likely_picks = len(likely_winners_df[likely_winners_df['AI Prob %'] >= 55])
+                    
+                    st.success(f"🎯 Found {len(likely_winners_df)} bets with {min_prob_filter}%+ win probability")
                     
                     # Summary metrics
                     col1, col2, col3, col4 = st.columns(4)
                     with col1:
-                        st.metric("Best Edge", f"+{positive_ev_df['AI Edge pp'].max():.1f}%" if len(positive_ev_df) > 0 else "N/A")
+                        best_prob = likely_winners_df['AI Prob %'].max() if len(likely_winners_df) > 0 else 0
+                        st.metric("Best Win Prob", f"{best_prob:.1f}%" if best_prob > 0 else "N/A")
                     with col2:
-                        st.metric("Avg Edge", f"+{positive_ev_df['AI Edge pp'].mean():.1f}%" if len(positive_ev_df) > 0 else "N/A")
+                        st.metric("Strong Picks (65%+)", strong_picks)
                     with col3:
-                        st.metric("Total Opportunities", len(positive_ev_df))
+                        st.metric("Likely Winners (55%+)", likely_picks)
                     with col4:
-                        kalshi_count = len(positive_ev_df[positive_ev_df['Kalshi'] == '✅']) if 'Kalshi' in positive_ev_df.columns else 0
+                        kalshi_count = len(likely_winners_df[likely_winners_df['Kalshi'] == '✅']) if 'Kalshi' in likely_winners_df.columns else 0
                         st.metric("Kalshi Validated", kalshi_count)
                     
-                    # Show positive EV bets
-                    st.subheader("🏆 Top Positive EV Bets")
+                    # Show filtered bets
+                    st.subheader("🏆 Top Likely Winners")
                     st.dataframe(
-                        positive_ev_df.head(20),
+                        likely_winners_df.head(20),
                         use_container_width=True,
                         hide_index=True
                     )
                     
                     # Option to see all bets
-                    with st.expander("📊 View All Analyzed Bets"):
-                        st.dataframe(best_bets_df, use_container_width=True, hide_index=True)
+                    with st.expander("📊 View All Analyzed Bets (including underdogs)"):
+                        all_sorted = best_bets_df.sort_values('AI Prob %', ascending=False)
+                        st.dataframe(all_sorted, use_container_width=True, hide_index=True)
                     
                     # Store for parlay generation
                     st.session_state['best_bets_df'] = best_bets_df
-                    st.session_state['positive_ev_bets'] = positive_ev_df
+                    st.session_state['positive_ev_bets'] = likely_winners_df
                 else:
                     st.warning("No bets passed the confidence filter. Try lowering the minimum confidence threshold.")
                     best_bets_df = pd.DataFrame()  # Empty DataFrame to prevent NameError
