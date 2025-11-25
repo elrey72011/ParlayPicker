@@ -10355,41 +10355,149 @@ if is_vertex_ai_enabled():
                     else:  # Confidence
                         likely_winners_df = likely_winners_df.sort_values('Confidence', ascending=False)
                     
-                    # Count stats
-                    strong_picks = len(likely_winners_df[likely_winners_df['AI Prob %'] >= 65])
-                    likely_picks = len(likely_winners_df[likely_winners_df['AI Prob %'] >= 55])
+                    # =====================================================
+                    # SINGLE BEST PICK PER GAME - Composite Confidence Scoring
+                    # =====================================================
                     
-                    st.success(f"🎯 Found {len(likely_winners_df)} bets with {min_prob_filter}%+ win probability")
+                    def get_single_best_pick_per_game(df):
+                        """
+                        For each game, pick the SINGLE BEST bet using composite scoring:
+                        - AI Win Probability (base score)
+                        - Kalshi Agreement (+15% boost)
+                        - Sentiment Agreement (+10% boost)
+                        - Positive Edge (+5% boost)
+                        - Only consider favorites (AI Prob >= 50%)
+                        """
+                        if df.empty:
+                            return df
+                        
+                        # Calculate composite confidence score
+                        df = df.copy()
+                        
+                        # Base score = AI Probability
+                        df['Composite Score'] = df['AI Prob %'].fillna(50)
+                        
+                        # Kalshi Agreement Boost (+15 points if Kalshi agrees)
+                        df['Kalshi Boost'] = df.apply(
+                            lambda x: 15 if x.get('Kalshi Agrees') == '✅' else 
+                                      (10 if x.get('Kalshi') == '✅' else 0), axis=1
+                        )
+                        df['Composite Score'] = df['Composite Score'] + df['Kalshi Boost']
+                        
+                        # Sentiment Agreement Boost (+10 points if sentiment agrees)
+                        df['Sentiment Boost'] = df.apply(
+                            lambda x: 10 if x.get('Sentiment') == '✅' else 
+                                      (-5 if x.get('Sentiment') == '❌' else 0), axis=1
+                        )
+                        df['Composite Score'] = df['Composite Score'] + df['Sentiment Boost']
+                        
+                        # Positive Edge Boost (+5 points for positive edge)
+                        df['Edge Boost'] = df.apply(
+                            lambda x: min(10, max(0, x.get('AI Edge pp', 0) * 2)) if x.get('AI Edge pp', 0) > 0 else 0, axis=1
+                        )
+                        df['Composite Score'] = df['Composite Score'] + df['Edge Boost']
+                        
+                        # Filter to only FAVORITES (AI Prob >= 50%) - we want likely winners
+                        favorites_df = df[df['AI Prob %'] >= 50].copy()
+                        
+                        # If no favorites, use original df but prefer higher probability
+                        if favorites_df.empty:
+                            favorites_df = df.copy()
+                        
+                        # Prefer Moneyline bets (clearer win/loss) over spreads
+                        favorites_df['ML Preference'] = favorites_df['Market'].apply(
+                            lambda x: 5 if x == 'Moneyline' else 0
+                        )
+                        favorites_df['Composite Score'] = favorites_df['Composite Score'] + favorites_df['ML Preference']
+                        
+                        # Group by game and pick the best bet for each
+                        best_picks = []
+                        for game, group in favorites_df.groupby('Game'):
+                            # Sort by composite score descending and take the top one
+                            best_bet = group.nlargest(1, 'Composite Score').iloc[0]
+                            best_picks.append(best_bet)
+                        
+                        if not best_picks:
+                            return pd.DataFrame()
+                        
+                        result_df = pd.DataFrame(best_picks)
+                        
+                        # Sort by composite score
+                        result_df = result_df.sort_values('Composite Score', ascending=False)
+                        
+                        # Add rank
+                        result_df['Rank'] = range(1, len(result_df) + 1)
+                        
+                        return result_df
+                    
+                    # Generate single best pick per game
+                    single_best_df = get_single_best_pick_per_game(best_bets_df)
+                    
+                    # Count stats
+                    total_games = len(single_best_df)
+                    kalshi_agrees = len(single_best_df[single_best_df['Kalshi Agrees'] == '✅']) if 'Kalshi Agrees' in single_best_df.columns else 0
+                    sentiment_agrees = len(single_best_df[single_best_df['Sentiment'] == '✅']) if 'Sentiment' in single_best_df.columns else 0
+                    avg_prob = single_best_df['AI Prob %'].mean() if len(single_best_df) > 0 else 0
+                    
+                    st.success(f"🎯 **{total_games} Games Analyzed - ONE Best Pick Per Game**")
                     
                     # Summary metrics
                     col1, col2, col3, col4 = st.columns(4)
                     with col1:
-                        best_prob = likely_winners_df['AI Prob %'].max() if len(likely_winners_df) > 0 else 0
-                        st.metric("Best Win Prob", f"{best_prob:.1f}%" if best_prob > 0 else "N/A")
+                        st.metric("Total Games", total_games)
                     with col2:
-                        st.metric("Strong Picks (65%+)", strong_picks)
+                        st.metric("Avg Win Prob", f"{avg_prob:.1f}%")
                     with col3:
-                        st.metric("Likely Winners (55%+)", likely_picks)
+                        st.metric("Kalshi Agrees", f"{kalshi_agrees}/{total_games}")
                     with col4:
-                        kalshi_count = len(likely_winners_df[likely_winners_df['Kalshi'] == '✅']) if 'Kalshi' in likely_winners_df.columns else 0
-                        st.metric("Kalshi Validated", kalshi_count)
+                        st.metric("Sentiment Agrees", f"{sentiment_agrees}/{total_games}")
                     
-                    # Show filtered bets
-                    st.subheader("🏆 Top Likely Winners")
+                    # Display columns for single best picks
+                    display_cols = ['Rank', 'League', 'Game', 'Market', 'Selection', 'Line', 
+                                   'AI Prob %', 'Composite Score', 'Sentiment', 'Kalshi', 'Kalshi Agrees',
+                                   'Best American', 'AI Edge pp']
+                    
+                    # Filter to available columns
+                    display_cols = [c for c in display_cols if c in single_best_df.columns]
+                    
+                    # Show single best picks
+                    st.subheader("🏆 SINGLE BEST PICK PER GAME")
+                    st.caption("One recommended bet per game, ranked by composite confidence score")
                     st.dataframe(
-                        likely_winners_df.head(20),
+                        single_best_df[display_cols],
                         use_container_width=True,
                         hide_index=True
                     )
                     
+                    # CSV Export for Single Best Picks
+                    st.subheader("📥 Export Best Picks")
+                    
+                    # Simplified export columns
+                    export_cols = ['League', 'Game', 'Market', 'Selection', 'Line', 
+                                  'AI Prob %', 'Composite Score', 'Sentiment', 'Kalshi Agrees',
+                                  'Best American']
+                    export_cols = [c for c in export_cols if c in single_best_df.columns]
+                    export_df = single_best_df[export_cols].copy()
+                    
+                    # Format for export
+                    csv_buffer = export_df.to_csv(index=False)
+                    st.download_button(
+                        "⬇️ Download Single Best Pick Per Game (CSV)",
+                        data=csv_buffer,
+                        file_name=f"best_picks_{pd.Timestamp.now().strftime('%Y-%m-%d')}.csv",
+                        mime="text/csv",
+                        key="single_best_picks_download"
+                    )
+                    
                     # Option to see all bets
-                    with st.expander("📊 View All Analyzed Bets (including underdogs)"):
+                    with st.expander("📊 View All Analyzed Bets (multiple per game)"):
                         all_sorted = best_bets_df.sort_values('AI Prob %', ascending=False)
                         st.dataframe(all_sorted, use_container_width=True, hide_index=True)
                     
                     # Store for parlay generation
                     st.session_state['best_bets_df'] = best_bets_df
-                    st.session_state['positive_ev_bets'] = likely_winners_df
+                    st.session_state['single_best_picks'] = single_best_df
+                    st.session_state['positive_ev_bets'] = single_best_df
                 else:
                     st.warning("No bets passed the confidence filter. Try lowering the minimum confidence threshold.")
                     best_bets_df = pd.DataFrame()  # Empty DataFrame to prevent NameError
