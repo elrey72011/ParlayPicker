@@ -1340,8 +1340,25 @@ def render_sidebar_controls() -> Dict[str, Any]:
     # --------------------- Kalshi Status ---------------------
     # Check if Kalshi is configured (will be loaded later in session init)
     kalshi_key = get_secret("KALSHI_API_KEY", "") or os.environ.get("KALSHI_API_KEY", "")
-    if kalshi_key:
+    kalshi_secret = get_secret("KALSHI_API_SECRET", "") or os.environ.get("KALSHI_API_SECRET", "")
+    if kalshi_key and kalshi_secret:
         sidebar.caption(f"📈 Kalshi: Connected ({kalshi_key[:8]}...)")
+        # Show debug info
+        with sidebar.expander("🔧 Kalshi Debug"):
+            st.write(f"API Key: {kalshi_key[:12]}...")
+            st.write(f"Secret: {'Set' if kalshi_secret else 'Not set'}")
+            # Test Kalshi connection
+            try:
+                kalshi = st.session_state.get('kalshi_integrator')
+                if kalshi:
+                    markets = kalshi.get_sports_markets()
+                    st.write(f"Sports Markets Found: {len(markets) if markets else 0}")
+                    if markets and len(markets) > 0:
+                        st.write(f"Sample: {markets[0].get('title', 'N/A')[:50]}")
+                else:
+                    st.write("Kalshi integrator not in session")
+            except Exception as e:
+                st.write(f"Error: {str(e)[:100]}")
     else:
         sidebar.caption("⚠️ Kalshi not configured")
     
@@ -2172,30 +2189,138 @@ class AIOptimizer:
 # ============ KALSHI INTEGRATION ============
 
 class KalshiIntegrator:
-    """Integrates Kalshi prediction market odds and analysis"""
+    """Integrates Kalshi prediction market odds and analysis
+    
+    Kalshi uses RSA signature authentication for API requests.
+    The API key is a UUID and the secret is an RSA private key.
+    """
     
     def __init__(self, api_key: str = None, api_secret: str = None):
         self.api_key = api_key or os.environ.get("KALSHI_API_KEY")
         self.api_secret = api_secret or os.environ.get("KALSHI_API_SECRET")
-        self.base_url = "https://api.elections.kalshi.com/trade-api/v2"
-        self.demo_url = "https://demo-api.elections.kalshi.com/trade-api/v2"
-
-        # Use demo for testing, production for live
+        
+        # Kalshi API URLs - production API (not elections subdomain)
+        self.base_url = "https://api.kalshi.com/trade-api/v2"
+        self.demo_url = "https://demo-api.kalshi.com/trade-api/v2"
+        
+        # Use production API if we have credentials
         self.api_url = self.base_url if self.api_key else self.demo_url
-
+        
         self.headers = {
-            "Content-Type": "application/json"
+            "Content-Type": "application/json",
+            "Accept": "application/json",
         }
+        
+        # RSA key for signing (parsed from api_secret)
+        self._private_key = None
+        self._auth_ready = False
+        
+        if self.api_key and self.api_secret:
+            try:
+                from cryptography.hazmat.primitives import serialization
+                from cryptography.hazmat.backends import default_backend
+                
+                # Clean up the key if needed
+                key_data = self.api_secret.strip()
+                if not key_data.startswith('-----BEGIN'):
+                    key_data = f"-----BEGIN RSA PRIVATE KEY-----\n{key_data}\n-----END RSA PRIVATE KEY-----"
+                
+                self._private_key = serialization.load_pem_private_key(
+                    key_data.encode(),
+                    password=None,
+                    backend=default_backend()
+                )
+                self._auth_ready = True
+                logger.info(f"✅ Kalshi RSA key loaded successfully (key: {self.api_key[:8]}...)")
+            except ImportError:
+                logger.warning("cryptography library not installed - Kalshi auth disabled")
+                self._private_key = None
+            except Exception as e:
+                logger.warning(f"Could not load Kalshi RSA key: {e}")
+                self._private_key = None
 
-        if self.api_key:
-            self.headers["Authorization"] = f"Bearer {self.api_key}"
-
-        # Synthetic fallback cache when Kalshi API is unavailable (e.g., network blocks)
+        # Synthetic fallback cache when Kalshi API is unavailable
         self._using_synthetic_data = False
         self._synthetic_markets: List[Dict[str, Any]] = []
         self._synthetic_orderbooks: Dict[str, Dict[str, List[Dict[str, Any]]]] = {}
         self._synthetic_market_by_team: Dict[str, Dict[str, Any]] = {}
         self.last_error: Optional[str] = None
+        
+        # Cache for API responses
+        self._markets_cache = None
+        self._cache_time = None
+        self._cache_duration = 300  # 5 minutes
+        
+    def _sign_request(self, method: str, path: str, timestamp: str) -> str:
+        """Create RSA signature for Kalshi API request"""
+        if not self._private_key:
+            return ""
+        
+        try:
+            from cryptography.hazmat.primitives import hashes
+            from cryptography.hazmat.primitives.asymmetric import padding
+            import base64
+            
+            # Message format: timestamp + method + path
+            message = f"{timestamp}{method}{path}"
+            
+            signature = self._private_key.sign(
+                message.encode('utf-8'),
+                padding.PKCS1v15(),
+                hashes.SHA256()
+            )
+            
+            return base64.b64encode(signature).decode('utf-8')
+        except Exception as e:
+            logger.warning(f"Error signing Kalshi request: {e}")
+            return ""
+    
+    def _make_authenticated_request(self, method: str, endpoint: str, params: dict = None) -> Optional[dict]:
+        """Make authenticated request to Kalshi API"""
+        import time as time_module
+        
+        url = f"{self.api_url}{endpoint}"
+        timestamp = str(int(time_module.time() * 1000))
+        
+        headers = self.headers.copy()
+        
+        if self._auth_ready and self._private_key:
+            signature = self._sign_request(method.upper(), endpoint, timestamp)
+            headers["KALSHI-ACCESS-KEY"] = self.api_key
+            headers["KALSHI-ACCESS-SIGNATURE"] = signature
+            headers["KALSHI-ACCESS-TIMESTAMP"] = timestamp
+        
+        try:
+            if method.upper() == "GET":
+                response = requests.get(url, headers=headers, params=params, timeout=15)
+            else:
+                response = requests.post(url, headers=headers, json=params, timeout=15)
+            
+            if response.status_code == 200:
+                self.last_error = None
+                return response.json()
+            elif response.status_code == 401:
+                logger.warning("Kalshi API authentication failed - check API key and secret")
+                self.last_error = "Authentication failed"
+            elif response.status_code == 403:
+                logger.warning("Kalshi API access forbidden")
+                self.last_error = "Access forbidden"
+            else:
+                logger.warning(f"Kalshi API error: {response.status_code} - {response.text[:200]}")
+                self.last_error = f"API error: {response.status_code}"
+                
+        except requests.exceptions.Timeout:
+            logger.warning("Kalshi API timeout")
+            self.last_error = "Request timeout"
+        except Exception as e:
+            logger.warning(f"Kalshi API request failed: {e}")
+            self.last_error = str(e)
+        
+        return None
+    
+    def is_configured(self) -> bool:
+        """Check if Kalshi is properly configured"""
+        return bool(self.api_key and self._auth_ready)
 
     # -------------------- Synthetic helpers --------------------
     def _synthetic_probability(self, team: str, sport_key: Optional[str] = None,
@@ -2267,7 +2392,55 @@ class KalshiIntegrator:
 
     def get_synthetic_market_for_team(self, team: str) -> Optional[Dict[str, Any]]:
         self._ensure_synthetic_data()
-        return self._synthetic_market_by_team.get(team.upper())
+        team_upper = team.upper().strip()
+        
+        # Try exact match first
+        if team_upper in self._synthetic_market_by_team:
+            return self._synthetic_market_by_team.get(team_upper)
+        
+        # Try partial matches - check if team name is part of any key or vice versa
+        for key, market in self._synthetic_market_by_team.items():
+            # Check if team is in the key (e.g., "Brooklyn" in "BROOKLYN NETS")
+            if team_upper in key or key in team_upper:
+                return market
+            
+            # Check individual words (e.g., "Nets" matches "BROOKLYN NETS")
+            team_words = team_upper.split()
+            key_words = key.split()
+            for word in team_words:
+                if len(word) > 2 and word in key_words:
+                    return market
+        
+        # No match found - create an on-the-fly synthetic market for this team
+        # This allows college teams and other unknown teams to get Kalshi validation
+        ticker = self._synthetic_ticker_for_team(team_upper, "SPORTS")
+        prob = self._synthetic_probability(team_upper)
+        price = int(round(prob * 100))
+        
+        now = datetime.now(timezone.utc)
+        expiry = (now + timedelta(days=30)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        
+        market = {
+            "ticker": ticker,
+            "title": f"{team.title()} confidence (synthetic)",
+            "subtitle": "On-the-fly synthetic market",
+            "series_ticker": "SPORTS",
+            "status": "open",
+            "close_time": expiry,
+            "league": "NCAAB",  # Assume college if not found
+            "synthetic": True,
+            "team": team_upper,
+        }
+        
+        # Cache it for future lookups
+        self._synthetic_markets.append(market)
+        self._synthetic_orderbooks[ticker] = {
+            "yes": [{"price": price, "contracts": 100}],
+            "no": [{"price": 100 - price, "contracts": 100}],
+        }
+        self._synthetic_market_by_team[team_upper] = market
+        
+        return market
 
     def synthetic_probability(self, team: str, sport_key: Optional[str] = None,
                                sportsbook_prob: Optional[float] = None) -> float:
@@ -2378,6 +2551,138 @@ class KalshiIntegrator:
         except Exception as e:
             st.warning(f"Error fetching orderbook: {str(e)}")
             return {}
+    
+    def get_game_market(self, home_team: str, away_team: str, sport: str = 'NBA') -> Dict:
+        """
+        Find and return Kalshi market data for a specific game.
+        
+        Args:
+            home_team: Home team name
+            away_team: Away team name  
+            sport: Sport type (NBA, NFL, NHL, NCAAB, etc.)
+            
+        Returns:
+            Dict with kalshi_available, kalshi_prob, market_ticker, etc.
+        """
+        result = {
+            'kalshi_available': False,
+            'kalshi_prob': 0.5,
+            'kalshi_home_prob': 0.5,
+            'kalshi_away_prob': 0.5,
+            'market_ticker': None,
+            'market_title': None,
+            'confidence': 0,
+        }
+        
+        def normalize_name(name: str) -> str:
+            """Normalize team name for matching"""
+            return re.sub(r'[^a-z]', '', name.lower())
+        
+        def teams_match(team: str, text: str) -> bool:
+            """Check if team name appears in text"""
+            team_lower = team.lower()
+            text_lower = text.lower()
+            
+            # Direct match
+            if team_lower in text_lower:
+                return True
+            
+            # Try individual words (for "New York" matching "Knicks" market)
+            team_words = team_lower.split()
+            for word in team_words:
+                if len(word) > 3 and word in text_lower:
+                    return True
+            
+            # Check abbreviations
+            abbrev_map = {
+                'new york': ['ny', 'knicks', 'yankees', 'mets', 'giants', 'jets', 'rangers', 'islanders'],
+                'los angeles': ['la', 'lakers', 'clippers', 'dodgers', 'rams', 'chargers', 'kings'],
+                'golden state': ['gs', 'warriors'],
+                'oklahoma city': ['okc', 'thunder'],
+                'san antonio': ['sa', 'spurs'],
+                'san francisco': ['sf', '49ers', 'giants'],
+                'tampa bay': ['tb', 'bucs', 'rays', 'lightning'],
+                'green bay': ['gb', 'packers'],
+            }
+            
+            for city, abbrevs in abbrev_map.items():
+                if city in team_lower:
+                    for abbr in abbrevs:
+                        if abbr in text_lower:
+                            return True
+            
+            return False
+        
+        try:
+            # Get all sports markets
+            sports_markets = self.get_sports_markets()
+            
+            if not sports_markets:
+                # Fall back to synthetic data
+                self._using_synthetic_data = True
+                self._ensure_synthetic_data()
+                sports_markets = self._synthetic_markets
+            
+            # Search for matching market
+            home_normalized = normalize_name(home_team)
+            away_normalized = normalize_name(away_team)
+            
+            for market in sports_markets:
+                title = market.get('title', '') or ''
+                ticker = market.get('ticker', '') or ''
+                market_text = f"{title} {ticker}"
+                
+                # Check if this market matches both teams
+                home_match = teams_match(home_team, market_text)
+                away_match = teams_match(away_team, market_text)
+                
+                if home_match and away_match:
+                    # Found matching market!
+                    ticker = market.get('ticker', '')
+                    
+                    # Get orderbook to determine probabilities
+                    orderbook = self.get_orderbook(ticker) if ticker else {}
+                    
+                    yes_bids = orderbook.get('yes', [])
+                    no_bids = orderbook.get('no', [])
+                    
+                    if yes_bids:
+                        # Price is in cents, convert to probability
+                        yes_price = yes_bids[0].get('price', 50)
+                        kalshi_prob = yes_price / 100.0
+                    elif market.get('synthetic'):
+                        # Use synthetic probability
+                        kalshi_prob = self._synthetic_probability(home_team, sport)
+                    else:
+                        kalshi_prob = 0.5
+                    
+                    result['kalshi_available'] = True
+                    result['kalshi_prob'] = kalshi_prob
+                    result['kalshi_home_prob'] = kalshi_prob
+                    result['kalshi_away_prob'] = 1 - kalshi_prob
+                    result['market_ticker'] = ticker
+                    result['market_title'] = title
+                    result['confidence'] = 0.8 if not market.get('synthetic') else 0.5
+                    
+                    logger.info(f"Kalshi match found for {home_team} vs {away_team}: {ticker} = {kalshi_prob:.2%}")
+                    return result
+            
+            # No direct match found - try synthetic market
+            if not result['kalshi_available']:
+                synthetic = self.get_synthetic_market_for_team(home_team)
+                if synthetic:
+                    result['kalshi_available'] = True
+                    result['kalshi_prob'] = self._synthetic_probability(home_team, sport)
+                    result['kalshi_home_prob'] = result['kalshi_prob']
+                    result['kalshi_away_prob'] = 1 - result['kalshi_prob']
+                    result['market_ticker'] = synthetic.get('ticker')
+                    result['market_title'] = f"Synthetic: {home_team}"
+                    result['confidence'] = 0.4  # Lower confidence for synthetic
+                    
+        except Exception as e:
+            logger.warning(f"Error getting Kalshi game market: {e}")
+        
+        return result
     
     def compare_with_sportsbook(
         self,
@@ -3500,7 +3805,55 @@ class KalshiIntegrator:
 
     def get_synthetic_market_for_team(self, team: str) -> Optional[Dict[str, Any]]:
         self._ensure_synthetic_data()
-        return self._synthetic_market_by_team.get(team.upper())
+        team_upper = team.upper().strip()
+        
+        # Try exact match first
+        if team_upper in self._synthetic_market_by_team:
+            return self._synthetic_market_by_team.get(team_upper)
+        
+        # Try partial matches - check if team name is part of any key or vice versa
+        for key, market in self._synthetic_market_by_team.items():
+            # Check if team is in the key (e.g., "Brooklyn" in "BROOKLYN NETS")
+            if team_upper in key or key in team_upper:
+                return market
+            
+            # Check individual words (e.g., "Nets" matches "BROOKLYN NETS")
+            team_words = team_upper.split()
+            key_words = key.split()
+            for word in team_words:
+                if len(word) > 2 and word in key_words:
+                    return market
+        
+        # No match found - create an on-the-fly synthetic market for this team
+        # This allows college teams and other unknown teams to get Kalshi validation
+        ticker = self._synthetic_ticker_for_team(team_upper, "SPORTS")
+        prob = self._synthetic_probability(team_upper)
+        price = int(round(prob * 100))
+        
+        now = datetime.now(timezone.utc)
+        expiry = (now + timedelta(days=30)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        
+        market = {
+            "ticker": ticker,
+            "title": f"{team.title()} confidence (synthetic)",
+            "subtitle": "On-the-fly synthetic market",
+            "series_ticker": "SPORTS",
+            "status": "open",
+            "close_time": expiry,
+            "league": "NCAAB",  # Assume college if not found
+            "synthetic": True,
+            "team": team_upper,
+        }
+        
+        # Cache it for future lookups
+        self._synthetic_markets.append(market)
+        self._synthetic_orderbooks[ticker] = {
+            "yes": [{"price": price, "contracts": 100}],
+            "no": [{"price": 100 - price, "contracts": 100}],
+        }
+        self._synthetic_market_by_team[team_upper] = market
+        
+        return market
 
     def synthetic_probability(self, team: str, sport_key: Optional[str] = None,
                                sportsbook_prob: Optional[float] = None) -> float:
@@ -3612,6 +3965,138 @@ class KalshiIntegrator:
             st.warning(f"Error fetching orderbook: {str(e)}")
             return {}
     
+    
+    def get_game_market(self, home_team: str, away_team: str, sport: str = 'NBA') -> Dict:
+        """
+        Find and return Kalshi market data for a specific game.
+        
+        Args:
+            home_team: Home team name
+            away_team: Away team name  
+            sport: Sport type (NBA, NFL, NHL, NCAAB, etc.)
+            
+        Returns:
+            Dict with kalshi_available, kalshi_prob, market_ticker, etc.
+        """
+        result = {
+            'kalshi_available': False,
+            'kalshi_prob': 0.5,
+            'kalshi_home_prob': 0.5,
+            'kalshi_away_prob': 0.5,
+            'market_ticker': None,
+            'market_title': None,
+            'confidence': 0,
+        }
+        
+        def normalize_name(name: str) -> str:
+            """Normalize team name for matching"""
+            return re.sub(r'[^a-z]', '', name.lower())
+        
+        def teams_match(team: str, text: str) -> bool:
+            """Check if team name appears in text"""
+            team_lower = team.lower()
+            text_lower = text.lower()
+            
+            # Direct match
+            if team_lower in text_lower:
+                return True
+            
+            # Try individual words (for "New York" matching "Knicks" market)
+            team_words = team_lower.split()
+            for word in team_words:
+                if len(word) > 3 and word in text_lower:
+                    return True
+            
+            # Check abbreviations
+            abbrev_map = {
+                'new york': ['ny', 'knicks', 'yankees', 'mets', 'giants', 'jets', 'rangers', 'islanders'],
+                'los angeles': ['la', 'lakers', 'clippers', 'dodgers', 'rams', 'chargers', 'kings'],
+                'golden state': ['gs', 'warriors'],
+                'oklahoma city': ['okc', 'thunder'],
+                'san antonio': ['sa', 'spurs'],
+                'san francisco': ['sf', '49ers', 'giants'],
+                'tampa bay': ['tb', 'bucs', 'rays', 'lightning'],
+                'green bay': ['gb', 'packers'],
+            }
+            
+            for city, abbrevs in abbrev_map.items():
+                if city in team_lower:
+                    for abbr in abbrevs:
+                        if abbr in text_lower:
+                            return True
+            
+            return False
+        
+        try:
+            # Get all sports markets
+            sports_markets = self.get_sports_markets()
+            
+            if not sports_markets:
+                # Fall back to synthetic data
+                self._using_synthetic_data = True
+                self._ensure_synthetic_data()
+                sports_markets = self._synthetic_markets
+            
+            # Search for matching market
+            home_normalized = normalize_name(home_team)
+            away_normalized = normalize_name(away_team)
+            
+            for market in sports_markets:
+                title = market.get('title', '') or ''
+                ticker = market.get('ticker', '') or ''
+                market_text = f"{title} {ticker}"
+                
+                # Check if this market matches both teams
+                home_match = teams_match(home_team, market_text)
+                away_match = teams_match(away_team, market_text)
+                
+                if home_match and away_match:
+                    # Found matching market!
+                    ticker = market.get('ticker', '')
+                    
+                    # Get orderbook to determine probabilities
+                    orderbook = self.get_orderbook(ticker) if ticker else {}
+                    
+                    yes_bids = orderbook.get('yes', [])
+                    no_bids = orderbook.get('no', [])
+                    
+                    if yes_bids:
+                        # Price is in cents, convert to probability
+                        yes_price = yes_bids[0].get('price', 50)
+                        kalshi_prob = yes_price / 100.0
+                    elif market.get('synthetic'):
+                        # Use synthetic probability
+                        kalshi_prob = self._synthetic_probability(home_team, sport)
+                    else:
+                        kalshi_prob = 0.5
+                    
+                    result['kalshi_available'] = True
+                    result['kalshi_prob'] = kalshi_prob
+                    result['kalshi_home_prob'] = kalshi_prob
+                    result['kalshi_away_prob'] = 1 - kalshi_prob
+                    result['market_ticker'] = ticker
+                    result['market_title'] = title
+                    result['confidence'] = 0.8 if not market.get('synthetic') else 0.5
+                    
+                    logger.info(f"Kalshi match found for {home_team} vs {away_team}: {ticker} = {kalshi_prob:.2%}")
+                    return result
+            
+            # No direct match found - try synthetic market
+            if not result['kalshi_available']:
+                synthetic = self.get_synthetic_market_for_team(home_team)
+                if synthetic:
+                    result['kalshi_available'] = True
+                    result['kalshi_prob'] = self._synthetic_probability(home_team, sport)
+                    result['kalshi_home_prob'] = result['kalshi_prob']
+                    result['kalshi_away_prob'] = 1 - result['kalshi_prob']
+                    result['market_ticker'] = synthetic.get('ticker')
+                    result['market_title'] = f"Synthetic: {home_team}"
+                    result['confidence'] = 0.4  # Lower confidence for synthetic
+                    
+        except Exception as e:
+            logger.warning(f"Error getting Kalshi game market: {e}")
+        
+        return result
     def compare_with_sportsbook(
         self,
         kalshi_market: Dict,
@@ -8547,7 +9032,10 @@ if is_vertex_ai_enabled():
                                 # Calculated odds
                                 'home_ml_odds': home_ml,
                                 'away_ml_odds': away_ml,
-                                'home_spread': -spread if pick == home_team else spread,
+                                # Line IS the home team's spread directly
+                                # Positive = home underdog getting points
+                                # Negative = home favorite giving points
+                                'home_spread': line_value if not is_nhl else 1.5,
                                 'implied_home_prob': home_implied_prob,
                             })
                         
@@ -8614,13 +9102,14 @@ if is_vertex_ai_enabled():
                                 'spread': row.get('home_spread') or row.get('theover_spread') or row.get('spread', 0),
                                 'total': row.get('total_line') or row.get('total', 0),
                                 'implied_home_prob': row.get('implied_home_prob', 0.5),
-                                # Kalshi prediction market data (NEW!)
+                                # Kalshi prediction market data
                                 'kalshi_available': row.get('kalshi_available', False),
                                 'kalshi_prob': row.get('kalshi_prob', 0.5),
                                 'kalshi_alignment': row.get('kalshi_alignment', 0),
                                 'kalshi_validation_score': row.get('kalshi_validation_score', 0.5),
                                 'kalshi_agrees': row.get('kalshi_agrees', None),
                                 'kalshi_arbitrage_opportunity': row.get('kalshi_arbitrage_opportunity', False),
+                                'kalshi_synthetic': row.get('kalshi_synthetic', True),  # Indicates if synthetic data
                             })
                         
                         st.session_state['vertex_results'] = vertex_results
@@ -9391,7 +9880,8 @@ if is_vertex_ai_enabled():
                             'AI Edge pp': round(home_edge, 1),
                             'Confidence': round(confidence, 1),
                             'Sentiment': round(vertex_result.get('sentiment_diff', 0), 2),
-                            'Kalshi': '✅' if vertex_result.get('kalshi_available') else '—',
+                            'Kalshi': ('✅' if not vertex_result.get('kalshi_synthetic') else '🔮') if vertex_result.get('kalshi_available') else '—',
+                            'Kalshi %': round(vertex_result.get('kalshi_prob', 0.5) * 100, 1) if vertex_result.get('kalshi_available') else '—',
                             'Kalshi Agrees': '✅' if vertex_result.get('kalshi_agrees') else ('❌' if vertex_result.get('kalshi_agrees') == False else '—'),
                         })
                         
@@ -9416,7 +9906,8 @@ if is_vertex_ai_enabled():
                             'AI Edge pp': round(away_edge, 1),
                             'Confidence': round(confidence, 1),
                             'Sentiment': round(-vertex_result.get('sentiment_diff', 0), 2),
-                            'Kalshi': '✅' if vertex_result.get('kalshi_available') else '—',
+                            'Kalshi': ('✅' if not vertex_result.get('kalshi_synthetic') else '🔮') if vertex_result.get('kalshi_available') else '—',
+                            'Kalshi %': round((1 - vertex_result.get('kalshi_prob', 0.5)) * 100, 1) if vertex_result.get('kalshi_available') else '—',
                             'Kalshi Agrees': '✅' if vertex_result.get('kalshi_agrees') else ('❌' if vertex_result.get('kalshi_agrees') == False else '—'),
                         })
                 
