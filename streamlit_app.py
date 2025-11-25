@@ -9051,6 +9051,12 @@ if is_vertex_ai_enabled():
                     # Get Kalshi integrator if available
                     kalshi_int = st.session_state.get('kalshi_integrator')
                     
+                    # Get sentiment analyzer from session state
+                    sentiment_analyzer = st.session_state.get('sentiment_analyzer')
+                    
+                    # Get ML predictor from session state
+                    ml_predictor = st.session_state.get('ml_predictor')
+                    
                     analyzer = VertexMasterAnalyzer(
                         odds_api_client=odds_client if 'odds_client' in locals() else None,
                         sportsdata_clients=sportsdata_clients if 'sportsdata_clients' in locals() else {},
@@ -9059,14 +9065,14 @@ if is_vertex_ai_enabled():
                             'nfl': apisports_client if 'apisports_client' in locals() else None,
                             'nhl': hockey_client if 'hockey_client' in locals() else None,
                         },
-                        sentiment_analyzer=sentiment_analyzer if 'sentiment_analyzer' in locals() else None,
-                        local_ml_predictor=st.session_state.get('ml_predictor'),
+                        sentiment_analyzer=sentiment_analyzer,  # From session_state
+                        local_ml_predictor=ml_predictor,  # From session_state
                         theover_data={
                             'spreads': theover_spreads_data if 'theover_spreads_data' in locals() else None,
                             'totals': theover_totals_data if 'theover_totals_data' in locals() else None,
                             'ml': theover_ml_data if 'theover_ml_data' in locals() else None,
                         },
-                        kalshi_integrator=kalshi_int,  # NEW: Kalshi prediction market validation
+                        kalshi_integrator=kalshi_int,
                     )
                     
                     results_df = analyzer.analyze_all_games(all_games, league='multi')
@@ -9096,6 +9102,9 @@ if is_vertex_ai_enabled():
                                 'theover_probability': row.get('theover_probability', 0.5),
                                 'theover_spread': row.get('theover_spread', 0),
                                 'theover_pick': row.get('theover_pick', ''),
+                                'theover_total': row.get('theover_total', 0),
+                                'theover_total_pick': row.get('theover_total_pick', ''),
+                                'theover_total_probability': row.get('theover_total_probability', 0.5),
                                 'sharp_money_indicator': row.get('sharp_money_indicator', 0),
                                 'home_ml_odds': row.get('home_ml_odds') or row.get('home_ml', 0),
                                 'away_ml_odds': row.get('away_ml_odds') or row.get('away_ml', 0),
