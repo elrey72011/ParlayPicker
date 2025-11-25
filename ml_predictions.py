@@ -412,20 +412,22 @@ def _try_local_model_prediction(features: List[float]) -> Optional[float]:
 def _calculate_heuristic_prediction(features: List[float]) -> float:
     """
     Calculate a simple heuristic prediction when no model is available
-    Uses spread and theover_probability as primary signals
+    PRIORITIZES TheOver.ai spread-derived probabilities over placeholder stats
     
     Feature positions (from vertex_master_analyzer):
-    0-2: team strength (home_win_pct, away_win_pct, diff)
-    3-8: offense/defense stats
-    9-11: recent form
-    12: implied_home_prob (KEY!)
-    13: home_spread / 20 (KEY!)
+    0-2: team strength (home_win_pct, away_win_pct, diff) - MAY BE NONE
+    3-8: offense/defense stats - MAY BE NONE
+    9-11: recent form - MAY BE NONE
+    12: implied_home_prob (KEY - from TheOver.ai)
+    13: home_spread / 20 (KEY - from TheOver.ai)
     14: total_line / 200
     15: sentiment_diff
-    16-17: local_ml
-    18: theover_probability (KEY!)
-    19: consensus_prob
-    20-23: kalshi data
+    16-17: home/away sentiment
+    18-19: local_ml
+    20: theover_probability (KEY - from TheOver.ai)
+    21: consensus_prob
+    22-23: theover_total data
+    24-27: kalshi data
     
     Returns:
         Estimated probability based on features
@@ -434,49 +436,67 @@ def _calculate_heuristic_prediction(features: List[float]) -> float:
         if len(features) < 2:
             return 0.5
         
-        # Get key features
+        # Get key TheOver.ai features (these are the most reliable)
+        implied_home_prob = features[12] if len(features) > 12 else 0.5
+        spread_normalized = features[13] if len(features) > 13 else 0  # home_spread / 20
+        theover_prob = features[20] if len(features) > 20 else 0.5
+        consensus_prob = features[21] if len(features) > 21 else 0.5
+        
+        # Get sentiment
+        sentiment_diff = features[15] if len(features) > 15 else 0
+        
+        # Get team stats (may be None/placeholder)
         home_win_pct = features[0] if len(features) > 0 else 0.5
         away_win_pct = features[1] if len(features) > 1 else 0.5
         
-        # Get spread-derived data (more reliable than placeholder team stats)
-        implied_home_prob = features[12] if len(features) > 12 else 0.5
-        spread_normalized = features[13] if len(features) > 13 else 0  # home_spread / 20
-        theover_prob = features[18] if len(features) > 18 else 0.5
-        consensus_prob = features[19] if len(features) > 19 else 0.5
-        
-        # Check if we have real spread data (not placeholder)
+        # Check if we have real TheOver.ai data
         has_real_spread = spread_normalized != 0
-        has_theover = theover_prob != 0.5
+        has_theover = theover_prob != 0 and theover_prob != 0.5
+        has_real_implied = implied_home_prob != 0.5
         
-        if has_theover or has_real_spread:
-            # USE SPREAD-DERIVED PROBABILITIES as primary signal
-            if has_theover and theover_prob != 0.5:
-                # Blend theover with implied probability
-                base_prob = theover_prob * 0.5 + implied_home_prob * 0.3 + consensus_prob * 0.2
-            elif has_real_spread:
-                # Use spread to calculate probability
-                # Each point of spread ≈ 2.5% shift from 50%
-                spread_points = spread_normalized * 20  # Undo normalization
-                spread_prob = 0.5 + (spread_points * 0.025)
-                base_prob = np.clip(spread_prob, 0.25, 0.75)
-            else:
-                base_prob = implied_home_prob
+        # PRIORITY 1: Use TheOver.ai probability directly if available
+        if has_theover:
+            # TheOver.ai already calculated probability from spread
+            base_prob = theover_prob * 0.6 + implied_home_prob * 0.25 + consensus_prob * 0.15
+            logger.debug(f"Using TheOver.ai prob: {theover_prob:.3f} -> blend: {base_prob:.3f}")
+        
+        # PRIORITY 2: Use spread to calculate probability
+        elif has_real_spread:
+            # Each point of spread ≈ 2.8% shift from 50%
+            spread_points = spread_normalized * 20  # Undo normalization
+            spread_prob = 0.5 + (spread_points * 0.028)
+            base_prob = np.clip(spread_prob, 0.20, 0.80)
+            
+            # Blend with implied if available
+            if has_real_implied:
+                base_prob = base_prob * 0.6 + implied_home_prob * 0.4
+            
+            logger.debug(f"Using spread-derived prob: spread={spread_points:.1f} -> {base_prob:.3f}")
+        
+        # PRIORITY 3: Use implied probability from moneyline
+        elif has_real_implied:
+            base_prob = implied_home_prob
+            logger.debug(f"Using implied prob: {base_prob:.3f}")
+        
+        # FALLBACK: Team stats (only if they look real, not placeholder)
         else:
-            # Fallback to team stats (likely placeholder - use 50% base)
-            if home_win_pct == away_win_pct == 0.55:
-                # This is placeholder data - return near 50%
-                base_prob = 0.5 + (implied_home_prob - 0.5) * 0.5
+            # Check if team stats look like placeholder (both teams 55%)
+            is_placeholder = (abs(home_win_pct - 0.55) < 0.01 and abs(away_win_pct - 0.55) < 0.01)
+            
+            if is_placeholder:
+                # Return 50% with slight random variance based on team names
+                base_prob = 0.5
+                logger.debug("Placeholder stats detected - using 50%")
             else:
-                base_prob = (home_win_pct * 0.55 + (1 - away_win_pct) * 0.45)
+                # Real team stats - use weighted combination
+                base_prob = home_win_pct * 0.55 + (1 - away_win_pct) * 0.45
         
-        # Add sentiment if available
-        if len(features) > 15:
-            sentiment_diff = features[15]
-            if sentiment_diff != 0:
-                base_prob += sentiment_diff * 0.05
+        # Add sentiment adjustment (small effect)
+        if sentiment_diff != 0:
+            base_prob += sentiment_diff * 0.03  # Reduced from 0.05
         
         # Clip to valid probability range
-        return float(np.clip(base_prob, 0.25, 0.75))
+        return float(np.clip(base_prob, 0.20, 0.80))
         
     except Exception as e:
         logger.warning(f"Heuristic calculation failed: {e}")
