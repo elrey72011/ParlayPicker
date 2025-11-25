@@ -8439,58 +8439,18 @@ if is_vertex_ai_enabled():
                     
                     if 'theover_spreads_data' in locals() and theover_spreads_data is not None:
                         for _, row in theover_spreads_data.iterrows():
-                            # Extract spread line - could be in 'Line' or 'Spread' column
-                            spread_line = row.get('Line') or row.get('Spread') or row.get('line') or 0
-                            try:
-                                spread_line = float(spread_line) if spread_line else 0
-                            except:
-                                spread_line = 0
-                            
-                            # Get the pick (which team TheOver likes)
-                            pick = row.get('Pick') or row.get('pick') or ''
-                            
+                            # Get basic info
                             home_team = row.get('home_team') or row.get('HomeTeam') or ''
                             away_team = row.get('away_team') or row.get('AwayTeam') or ''
                             league = (row.get('League') or row.get('league') or 'NBA').upper()
+                            pick = row.get('Pick') or row.get('pick') or ''
                             
-                            # Extract win probability from TheOver.ai - OR CALCULATE FROM SPREAD
-                            theover_prob = row.get('WinProbability') or row.get('Win_Probability') or row.get('Probability') or 0
+                            # Extract line value
+                            line_value = row.get('Line') or row.get('Spread') or row.get('line') or 0
                             try:
-                                theover_prob = float(theover_prob) if theover_prob else 0
-                                if theover_prob > 1:
-                                    theover_prob = theover_prob / 100  # Convert percentage to decimal
+                                line_value = float(line_value) if line_value else 0
                             except:
-                                theover_prob = 0
-                            
-                            # If no WinProbability, CALCULATE from spread
-                            # Rule: Each point of spread ≈ 2.5-3% probability shift
-                            # The Pick column tells us which team TheOver.ai favors
-                            if theover_prob == 0 and spread_line != 0:
-                                # Spread is relative to the Pick team
-                                # Positive spread = underdog (getting points)
-                                # Negative spread = favorite (giving points)
-                                spread_points = abs(spread_line)
-                                
-                                # Calculate probability: 50% base + spread adjustment
-                                # ~2.5% per point, capped at 85%
-                                spread_prob = min(0.85, 0.50 + (spread_points * 0.025))
-                                
-                                if pick == home_team:
-                                    # Home team is the pick
-                                    if spread_line > 0:
-                                        # Home is underdog getting points - they think home covers
-                                        theover_prob = 1 - spread_prob  # Lower base win prob but covers
-                                    else:
-                                        # Home is favorite - they think home covers
-                                        theover_prob = spread_prob
-                                else:
-                                    # Away team is the pick
-                                    if spread_line > 0:
-                                        # Away team getting points - they think away covers
-                                        theover_prob = spread_prob  # Higher away win prob
-                                    else:
-                                        # Away team giving points (rare)
-                                        theover_prob = 1 - spread_prob
+                                line_value = 0
                             
                             # Determine sport_key from league
                             if league == 'NFL':
@@ -8506,31 +8466,71 @@ if is_vertex_ai_enabled():
                             else:
                                 sport_key = 'basketball_nba'
                             
-                            # Calculate implied odds from spread
-                            if spread_line:
-                                spread_adj = abs(spread_line) * 2.5  # Each point worth ~2.5%
-                                if spread_line > 0:  # Pick is underdog getting points
-                                    if pick == home_team:
-                                        home_implied_prob = max(0.25, 0.5 - spread_adj/100)
-                                    else:
-                                        home_implied_prob = min(0.75, 0.5 + spread_adj/100)
-                                else:  # Pick is favorite giving points
-                                    if pick == home_team:
-                                        home_implied_prob = min(0.75, 0.5 + spread_adj/100)
-                                    else:
-                                        home_implied_prob = max(0.25, 0.5 - spread_adj/100)
+                            # NHL uses MONEYLINES in the Line column (125, -150, etc.)
+                            # Other sports use point spreads (13.5, -7.5, etc.)
+                            is_nhl = league == 'NHL'
+                            
+                            if is_nhl:
+                                # Line is a moneyline for NHL
+                                moneyline = line_value
+                                spread = 1.5  # Standard puckline
                                 
-                                # Convert to American odds
+                                # Calculate probability from moneyline
+                                if moneyline > 0:
+                                    # Underdog: +150 means 100/(150+100) = 40%
+                                    pick_win_prob = 100 / (moneyline + 100)
+                                else:
+                                    # Favorite: -150 means 150/(150+100) = 60%
+                                    pick_win_prob = abs(moneyline) / (abs(moneyline) + 100)
+                                
+                                # Determine home/away probabilities based on pick
+                                if pick == home_team or (pick and pick in home_team):
+                                    home_implied_prob = pick_win_prob
+                                    home_ml = int(moneyline)
+                                    away_ml = int(-moneyline) if moneyline > 0 else int(100 * 100 / abs(moneyline))
+                                else:
+                                    home_implied_prob = 1 - pick_win_prob
+                                    away_ml = int(moneyline)
+                                    home_ml = int(-moneyline) if moneyline > 0 else int(100 * 100 / abs(moneyline))
+                                
+                                theover_prob = pick_win_prob
+                                
+                            else:
+                                # Basketball/Football: Line is a point spread
+                                spread = abs(line_value)
+                                
+                                # Calculate probability from spread
+                                # Each point of spread ≈ 2.5-3% shift from 50%
+                                spread_shift = spread * 0.028  # ~2.8% per point
+                                
+                                # The pick is expected to COVER the spread
+                                # Positive line = underdog getting points (e.g., +13.5)
+                                # Negative line = favorite giving points (e.g., -7.5)
+                                
+                                if line_value > 0:
+                                    # Pick is underdog getting points
+                                    # They may lose outright but cover
+                                    # Win probability lower, but cover probability is what matters
+                                    pick_win_prob = max(0.20, 0.50 - spread_shift)
+                                    theover_prob = 0.52 + (spread * 0.005)  # Slight edge for covering
+                                else:
+                                    # Pick is favorite giving points  
+                                    pick_win_prob = min(0.80, 0.50 + spread_shift)
+                                    theover_prob = 0.52 + (spread * 0.005)  # Slight edge for covering
+                                
+                                # Determine home/away based on pick
+                                if pick == home_team or (pick and pick in str(home_team)):
+                                    home_implied_prob = pick_win_prob
+                                else:
+                                    home_implied_prob = 1 - pick_win_prob
+                                
+                                # Calculate American odds from probability
                                 if home_implied_prob > 0.5:
                                     home_ml = int(-100 * home_implied_prob / (1 - home_implied_prob))
                                     away_ml = int(100 * (1 - home_implied_prob) / home_implied_prob)
                                 else:
                                     home_ml = int(100 * (1 - home_implied_prob) / home_implied_prob)
                                     away_ml = int(-100 * home_implied_prob / (1 - home_implied_prob))
-                            else:
-                                home_ml = -110
-                                away_ml = -110
-                                home_implied_prob = 0.5
                             
                             all_games.append({
                                 'home_team': home_team,
@@ -8539,17 +8539,19 @@ if is_vertex_ai_enabled():
                                 'league': league,
                                 'commence_time': None,
                                 # TheOver.ai specific data
-                                'theover_spread': spread_line,
+                                'theover_spread': spread if not is_nhl else 1.5,
                                 'theover_pick': pick,
                                 'theover_probability': theover_prob,
+                                'theover_line': line_value,  # Original line from CSV
+                                'is_moneyline': is_nhl,
                                 # Calculated odds
                                 'home_ml_odds': home_ml,
                                 'away_ml_odds': away_ml,
-                                'home_spread': -spread_line if pick == home_team else spread_line,
+                                'home_spread': -spread if pick == home_team else spread,
                                 'implied_home_prob': home_implied_prob,
                             })
                         
-                        st.info(f"📊 Loaded {len(all_games)} games from theover.ai (spreads → probabilities calculated)")
+                        st.success(f"📊 Loaded {len(all_games)} games from theover.ai (spreads + NHL moneylines converted)")
                 
                 if not all_games:
                     st.error("❌ No games found. Either:")
@@ -9363,6 +9365,14 @@ if is_vertex_ai_enabled():
                         if theover_prob and theover_prob <= 1:
                             theover_prob = theover_prob * 100  # Convert to percentage
                         
+                        # Format American odds properly (+150 or -110)
+                        def format_american_odds(odds):
+                            if odds is None or odds == 0:
+                                return "-110"
+                            if odds > 0:
+                                return f"+{int(odds)}"
+                            return str(int(odds))
+                        
                         best_bets_rows.append({
                             'League': league,
                             'Game': f"{away_team} @ {home_team}",
@@ -9370,13 +9380,13 @@ if is_vertex_ai_enabled():
                             'Market': 'Spread' if spread else 'Moneyline',
                             'Side': home_team,
                             'Selection': home_team,
-                            'Line': spread if spread else '—',
+                            'Line': round(spread, 1) if spread else '—',
                             'Best Book': 'TheOver.ai',
-                            'Best American': home_ml if home_ml else -110,
+                            'Best American': format_american_odds(home_ml),
                             'Best Decimal': round((home_ml / 100 + 1) if home_ml and home_ml > 0 else (100 / abs(home_ml) + 1) if home_ml else 1.91, 3),
                             'Implied Prob %': round(home_implied, 1),
                             'AI Prob %': round(vertex_prob, 1),
-                            'TheOver %': round(theover_prob, 1) if theover_prob else '—',
+                            'TheOver %': round(theover_prob, 1) if theover_prob and theover_prob > 0 else '—',
                             'AI EV %': round(home_edge, 1),
                             'AI Edge pp': round(home_edge, 1),
                             'Confidence': round(confidence, 1),
@@ -9395,13 +9405,13 @@ if is_vertex_ai_enabled():
                             'Market': 'Spread' if spread else 'Moneyline',
                             'Side': away_team,
                             'Selection': away_team,
-                            'Line': -spread if spread else '—',
+                            'Line': round(-spread, 1) if spread else '—',
                             'Best Book': 'TheOver.ai',
-                            'Best American': away_ml if away_ml else -110,
+                            'Best American': format_american_odds(away_ml),
                             'Best Decimal': round((away_ml / 100 + 1) if away_ml and away_ml > 0 else (100 / abs(away_ml) + 1) if away_ml else 1.91, 3),
                             'Implied Prob %': round(away_implied, 1),
                             'AI Prob %': round(away_prob, 1),
-                            'TheOver %': round(100 - theover_prob, 1) if theover_prob else '—',
+                            'TheOver %': round(100 - theover_prob, 1) if theover_prob and theover_prob > 0 else '—',
                             'AI EV %': round(away_edge, 1),
                             'AI Edge pp': round(away_edge, 1),
                             'Confidence': round(confidence, 1),
