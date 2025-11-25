@@ -8954,13 +8954,40 @@ with main_tab1:
                             for _, row in theover_totals_data.iterrows():
                                 home_team = row.get('home_team') or row.get('HomeTeam') or ''
                                 away_team = row.get('away_team') or row.get('AwayTeam') or ''
-                                total_line = row.get('Line') or row.get('Total') or 0
-                                total_pick = row.get('Pick') or ''  # 'Over' or 'Under'
+                                
+                                # Try multiple column names for the total line
+                                total_line = (
+                                    row.get('Total') or 
+                                    row.get('total') or 
+                                    row.get('OU') or 
+                                    row.get('ou') or
+                                    row.get('OU Line') or
+                                    row.get('TotalLine') or
+                                    row.get('Line') or 
+                                    0
+                                )
+                                total_pick = row.get('Pick') or row.get('pick') or ''  # 'Over' or 'Under'
                                 
                                 try:
                                     total_line = float(total_line) if total_line else 0
                                 except:
                                     total_line = 0
+                                
+                                # SANITY CHECK: If line is less than 50, it's probably a probability not a total
+                                # Basketball totals are 150-250, Football 35-60, Hockey 4-8
+                                # If value is < 10, it's likely a probability (0.75, 0.8125, etc.)
+                                if total_line > 0 and total_line < 10:
+                                    # This is probably a probability, not a line - try to find actual total
+                                    alt_total = row.get('Total') or row.get('TotalLine') or row.get('OU')
+                                    try:
+                                        alt_total = float(alt_total) if alt_total else 0
+                                        if alt_total > 30:  # Looks like a real total
+                                            total_line = alt_total
+                                        else:
+                                            # Skip this row - we don't have a valid total
+                                            continue
+                                    except:
+                                        continue
                                 
                                 # Calculate probability for the pick (TheOver.ai has edge)
                                 # Give a meaningful probability based on whether there's a pick
@@ -10093,7 +10120,7 @@ if is_vertex_ai_enabled():
                             'AI EV %': round(home_edge, 1),
                             'AI Edge pp': round(home_edge, 1),
                             'Confidence': round(confidence, 1),
-                            'Sentiment': round(vertex_result.get('sentiment_diff', 0), 2),
+                            'Sentiment': '✅' if vertex_result.get('sentiment_diff', 0) > 0 else ('❌' if vertex_result.get('sentiment_diff', 0) < 0 else '—'),
                             'Kalshi': ('✅' if not vertex_result.get('kalshi_synthetic') else '🔮') if vertex_result.get('kalshi_available') else '—',
                             'Kalshi %': round(vertex_result.get('kalshi_prob', 0.5) * 100, 1) if vertex_result.get('kalshi_available') else None,
                             'Kalshi Agrees': '✅' if vertex_result.get('kalshi_agrees') else ('❌' if vertex_result.get('kalshi_agrees') == False else '—'),
@@ -10102,6 +10129,8 @@ if is_vertex_ai_enabled():
                         # Away team bet
                         away_prob = 100 - vertex_prob
                         away_edge = away_prob - away_implied
+                        # For away team: sentiment < 0 means away team has better sentiment (good for away bet)
+                        away_sentiment_diff = vertex_result.get('sentiment_diff', 0)
                         best_bets_rows.append({
                             'League': league,
                             'Game': f"{away_team} @ {home_team}",
@@ -10119,7 +10148,7 @@ if is_vertex_ai_enabled():
                             'AI EV %': round(away_edge, 1),
                             'AI Edge pp': round(away_edge, 1),
                             'Confidence': round(confidence, 1),
-                            'Sentiment': round(-vertex_result.get('sentiment_diff', 0), 2),
+                            'Sentiment': '✅' if away_sentiment_diff < 0 else ('❌' if away_sentiment_diff > 0 else '—'),
                             'Kalshi': ('✅' if not vertex_result.get('kalshi_synthetic') else '🔮') if vertex_result.get('kalshi_available') else '—',
                             'Kalshi %': round((1 - vertex_result.get('kalshi_prob', 0.5)) * 100, 1) if vertex_result.get('kalshi_available') else None,
                             'Kalshi Agrees': '✅' if vertex_result.get('kalshi_agrees') else ('❌' if vertex_result.get('kalshi_agrees') == False else '—'),
@@ -10130,7 +10159,10 @@ if is_vertex_ai_enabled():
                         total_pick = vertex_result.get('theover_total_pick', '')
                         total_prob = vertex_result.get('theover_total_probability', 0.5)
                         
-                        if total_line and total_line > 0:
+                        # SANITY CHECK: Skip invalid totals (probabilities mistaken for lines)
+                        # Real totals: Basketball 150-250, Football 35-60, Hockey 4-8
+                        # If < 10, it's probably a probability (0.75, 0.8125, etc.)
+                        if total_line and total_line > 10:
                             # Convert total_prob to percentage if needed
                             if total_prob and total_prob <= 1:
                                 total_prob = total_prob * 100
@@ -10173,7 +10205,7 @@ if is_vertex_ai_enabled():
                                 'AI EV %': round(over_edge, 1) if over_prob != 50 else None,
                                 'AI Edge pp': round(over_edge, 1) if over_prob != 50 else None,
                                 'Confidence': round(confidence * 0.9, 1),  # Slightly lower confidence for totals
-                                'Sentiment': None,
+                                'Sentiment': '—',  # Sentiment doesn't apply to totals
                                 'Kalshi': '—',
                                 'Kalshi %': None,
                                 'Kalshi Agrees': '—',
@@ -10197,7 +10229,7 @@ if is_vertex_ai_enabled():
                                 'AI EV %': round(under_edge, 1) if under_prob != 50 else None,
                                 'AI Edge pp': round(under_edge, 1) if under_prob != 50 else None,
                                 'Confidence': round(confidence * 0.9, 1),
-                                'Sentiment': None,
+                                'Sentiment': '—',  # Sentiment doesn't apply to totals
                                 'Kalshi': '—',
                                 'Kalshi %': None,
                                 'Kalshi Agrees': '—',
@@ -10238,13 +10270,14 @@ if is_vertex_ai_enabled():
                                 'AI EV %': round(ml_home_prob - ml_home_implied, 1),
                                 'AI Edge pp': round(ml_home_prob - ml_home_implied, 1),
                                 'Confidence': round(confidence * 0.85, 1),  # Lower confidence for ML
-                                'Sentiment': round(vertex_result.get('sentiment_diff', 0), 2),
+                                'Sentiment': '✅' if vertex_result.get('sentiment_diff', 0) > 0 else ('❌' if vertex_result.get('sentiment_diff', 0) < 0 else '—'),
                                 'Kalshi': ('✅' if not vertex_result.get('kalshi_synthetic') else '🔮') if vertex_result.get('kalshi_available') else '—',
                                 'Kalshi %': round(vertex_result.get('kalshi_prob', 0.5) * 100, 1) if vertex_result.get('kalshi_available') else None,
                                 'Kalshi Agrees': '—',
                             })
                             
                             # Away ML bet
+                            ml_away_sentiment = vertex_result.get('sentiment_diff', 0)
                             best_bets_rows.append({
                                 'League': league,
                                 'Game': f"{away_team} @ {home_team}",
@@ -10262,7 +10295,7 @@ if is_vertex_ai_enabled():
                                 'AI EV %': round(ml_away_prob - ml_away_implied, 1),
                                 'AI Edge pp': round(ml_away_prob - ml_away_implied, 1),
                                 'Confidence': round(confidence * 0.85, 1),
-                                'Sentiment': round(-vertex_result.get('sentiment_diff', 0), 2),
+                                'Sentiment': '✅' if ml_away_sentiment < 0 else ('❌' if ml_away_sentiment > 0 else '—'),
                                 'Kalshi': ('✅' if not vertex_result.get('kalshi_synthetic') else '🔮') if vertex_result.get('kalshi_available') else '—',
                                 'Kalshi %': round((1 - vertex_result.get('kalshi_prob', 0.5)) * 100, 1) if vertex_result.get('kalshi_available') else None,
                                 'Kalshi Agrees': '—',
