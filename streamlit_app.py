@@ -9818,12 +9818,14 @@ if is_vertex_ai_enabled():
             else:
                 display_df = best_odds_df.copy()
                 if "decimal_odds" in display_df.columns:
-                    display_df["decimal_odds"] = display_df["decimal_odds"].map(
-                        lambda x: f"{float(x):.3f}" if pd.notna(x) else "—"
+                    display_df["decimal_odds"] = pd.to_numeric(display_df["decimal_odds"], errors='coerce')
+                    display_df["decimal_odds"] = display_df["decimal_odds"].apply(
+                        lambda x: f"{float(x):.3f}" if pd.notna(x) and isinstance(x, (int, float)) else "—"
                     )
                 if "line" in display_df.columns:
-                    display_df["line"] = display_df["line"].map(
-                        lambda x: f"{float(x):.1f}" if pd.notna(x) else "—"
+                    display_df["line"] = pd.to_numeric(display_df["line"], errors='coerce')
+                    display_df["line"] = display_df["line"].apply(
+                        lambda x: f"{float(x):.1f}" if pd.notna(x) and isinstance(x, (int, float)) else "—"
                     )
 
                 st.dataframe(display_df, use_container_width=True, hide_index=True)
@@ -10071,10 +10073,8 @@ if is_vertex_ai_enabled():
                         # Format American odds properly (+150 or -110)
                         def format_american_odds(odds):
                             if odds is None or odds == 0:
-                                return "-110"
-                            if odds > 0:
-                                return f"+{int(odds)}"
-                            return str(int(odds))
+                                return -110
+                            return int(odds)
                         
                         best_bets_rows.append({
                             'League': league,
@@ -10083,19 +10083,19 @@ if is_vertex_ai_enabled():
                             'Market': 'Spread' if spread else 'Moneyline',
                             'Side': home_team,
                             'Selection': home_team,
-                            'Line': round(spread, 1) if spread else '—',
+                            'Line': round(spread, 1) if spread else None,
                             'Best Book': 'TheOver.ai',
                             'Best American': format_american_odds(home_ml),
                             'Best Decimal': round((home_ml / 100 + 1) if home_ml and home_ml > 0 else (100 / abs(home_ml) + 1) if home_ml else 1.91, 3),
                             'Implied Prob %': round(home_implied, 1),
                             'AI Prob %': round(vertex_prob, 1),
-                            'TheOver %': round(theover_prob, 1) if theover_prob and theover_prob > 0 else '—',
+                            'TheOver %': round(theover_prob, 1) if theover_prob and theover_prob > 0 else None,
                             'AI EV %': round(home_edge, 1),
                             'AI Edge pp': round(home_edge, 1),
                             'Confidence': round(confidence, 1),
                             'Sentiment': round(vertex_result.get('sentiment_diff', 0), 2),
                             'Kalshi': ('✅' if not vertex_result.get('kalshi_synthetic') else '🔮') if vertex_result.get('kalshi_available') else '—',
-                            'Kalshi %': round(vertex_result.get('kalshi_prob', 0.5) * 100, 1) if vertex_result.get('kalshi_available') else '—',
+                            'Kalshi %': round(vertex_result.get('kalshi_prob', 0.5) * 100, 1) if vertex_result.get('kalshi_available') else None,
                             'Kalshi Agrees': '✅' if vertex_result.get('kalshi_agrees') else ('❌' if vertex_result.get('kalshi_agrees') == False else '—'),
                         })
                         
@@ -10109,19 +10109,19 @@ if is_vertex_ai_enabled():
                             'Market': 'Spread' if spread else 'Moneyline',
                             'Side': away_team,
                             'Selection': away_team,
-                            'Line': round(-spread, 1) if spread else '—',
+                            'Line': round(-spread, 1) if spread else None,
                             'Best Book': 'TheOver.ai',
                             'Best American': format_american_odds(away_ml),
                             'Best Decimal': round((away_ml / 100 + 1) if away_ml and away_ml > 0 else (100 / abs(away_ml) + 1) if away_ml else 1.91, 3),
                             'Implied Prob %': round(away_implied, 1),
                             'AI Prob %': round(away_prob, 1),
-                            'TheOver %': round(100 - theover_prob, 1) if theover_prob and theover_prob > 0 else '—',
+                            'TheOver %': round(100 - theover_prob, 1) if theover_prob and theover_prob > 0 else None,
                             'AI EV %': round(away_edge, 1),
                             'AI Edge pp': round(away_edge, 1),
                             'Confidence': round(confidence, 1),
                             'Sentiment': round(-vertex_result.get('sentiment_diff', 0), 2),
                             'Kalshi': ('✅' if not vertex_result.get('kalshi_synthetic') else '🔮') if vertex_result.get('kalshi_available') else '—',
-                            'Kalshi %': round((1 - vertex_result.get('kalshi_prob', 0.5)) * 100, 1) if vertex_result.get('kalshi_available') else '—',
+                            'Kalshi %': round((1 - vertex_result.get('kalshi_prob', 0.5)) * 100, 1) if vertex_result.get('kalshi_available') else None,
                             'Kalshi Agrees': '✅' if vertex_result.get('kalshi_agrees') else ('❌' if vertex_result.get('kalshi_agrees') == False else '—'),
                         })
                         
@@ -10155,7 +10155,7 @@ if is_vertex_ai_enabled():
                             over_edge = over_prob - over_implied
                             under_edge = under_prob - over_implied
                             
-                            # Over bet
+                            # Over bet - use numeric values (formatting happens at display)
                             best_bets_rows.append({
                                 'League': league,
                                 'Game': f"{away_team} @ {home_team}",
@@ -10165,17 +10165,17 @@ if is_vertex_ai_enabled():
                                 'Selection': f"Over {total_line}",
                                 'Line': total_line,
                                 'Best Book': 'TheOver.ai',
-                                'Best American': '-110',
+                                'Best American': -110,
                                 'Best Decimal': 1.91,
-                                'Implied Prob %': f"{over_implied}%",
-                                'AI Prob %': f"{over_prob:.1f}%" if over_prob != 50 else '—',
-                                'TheOver %': f"{over_prob:.1f}%" if total_pick and total_pick.lower() == 'over' else ('—' if not total_pick else f"{100-total_prob:.1f}%"),
-                                'AI EV %': f"{over_edge:.1f}%" if over_prob != 50 else '—',
-                                'AI Edge pp': round(over_edge, 1) if over_prob != 50 else '—',
+                                'Implied Prob %': over_implied,
+                                'AI Prob %': round(over_prob, 1) if over_prob != 50 else None,
+                                'TheOver %': round(over_prob, 1) if total_pick and total_pick.lower() == 'over' else (None if not total_pick else round(100-total_prob, 1)),
+                                'AI EV %': round(over_edge, 1) if over_prob != 50 else None,
+                                'AI Edge pp': round(over_edge, 1) if over_prob != 50 else None,
                                 'Confidence': round(confidence * 0.9, 1),  # Slightly lower confidence for totals
-                                'Sentiment': '—',
+                                'Sentiment': None,
                                 'Kalshi': '—',
-                                'Kalshi %': '—',
+                                'Kalshi %': None,
                                 'Kalshi Agrees': '—',
                             })
                             
@@ -10189,17 +10189,17 @@ if is_vertex_ai_enabled():
                                 'Selection': f"Under {total_line}",
                                 'Line': total_line,
                                 'Best Book': 'TheOver.ai',
-                                'Best American': '-110',
+                                'Best American': -110,
                                 'Best Decimal': 1.91,
-                                'Implied Prob %': f"{over_implied}%",
-                                'AI Prob %': f"{under_prob:.1f}%" if under_prob != 50 else '—',
-                                'TheOver %': f"{under_prob:.1f}%" if total_pick and total_pick.lower() == 'under' else ('—' if not total_pick else f"{100-over_prob:.1f}%"),
-                                'AI EV %': f"{under_edge:.1f}%" if under_prob != 50 else '—',
-                                'AI Edge pp': round(under_edge, 1) if under_prob != 50 else '—',
+                                'Implied Prob %': over_implied,
+                                'AI Prob %': round(under_prob, 1) if under_prob != 50 else None,
+                                'TheOver %': round(under_prob, 1) if total_pick and total_pick.lower() == 'under' else (None if not total_pick else round(100-over_prob, 1)),
+                                'AI EV %': round(under_edge, 1) if under_prob != 50 else None,
+                                'AI Edge pp': round(under_edge, 1) if under_prob != 50 else None,
                                 'Confidence': round(confidence * 0.9, 1),
-                                'Sentiment': '—',
+                                'Sentiment': None,
                                 'Kalshi': '—',
-                                'Kalshi %': '—',
+                                'Kalshi %': None,
                                 'Kalshi Agrees': '—',
                             })
                         
@@ -10228,19 +10228,19 @@ if is_vertex_ai_enabled():
                                 'Market': 'Moneyline',
                                 'Side': home_team,
                                 'Selection': home_team,
-                                'Line': '—',
+                                'Line': None,
                                 'Best Book': 'TheOver.ai',
                                 'Best American': format_american_odds(home_ml),
                                 'Best Decimal': round((home_ml / 100 + 1) if home_ml > 0 else (100 / abs(home_ml) + 1), 3),
                                 'Implied Prob %': round(ml_home_implied, 1),
                                 'AI Prob %': round(ml_home_prob, 1),
-                                'TheOver %': '—',
+                                'TheOver %': None,
                                 'AI EV %': round(ml_home_prob - ml_home_implied, 1),
                                 'AI Edge pp': round(ml_home_prob - ml_home_implied, 1),
                                 'Confidence': round(confidence * 0.85, 1),  # Lower confidence for ML
                                 'Sentiment': round(vertex_result.get('sentiment_diff', 0), 2),
                                 'Kalshi': ('✅' if not vertex_result.get('kalshi_synthetic') else '🔮') if vertex_result.get('kalshi_available') else '—',
-                                'Kalshi %': round(vertex_result.get('kalshi_prob', 0.5) * 100, 1) if vertex_result.get('kalshi_available') else '—',
+                                'Kalshi %': round(vertex_result.get('kalshi_prob', 0.5) * 100, 1) if vertex_result.get('kalshi_available') else None,
                                 'Kalshi Agrees': '—',
                             })
                             
@@ -10252,19 +10252,19 @@ if is_vertex_ai_enabled():
                                 'Market': 'Moneyline',
                                 'Side': away_team,
                                 'Selection': away_team,
-                                'Line': '—',
+                                'Line': None,
                                 'Best Book': 'TheOver.ai',
                                 'Best American': format_american_odds(away_ml),
                                 'Best Decimal': round((away_ml / 100 + 1) if away_ml > 0 else (100 / abs(away_ml) + 1), 3),
                                 'Implied Prob %': round(ml_away_implied, 1),
                                 'AI Prob %': round(ml_away_prob, 1),
-                                'TheOver %': '—',
+                                'TheOver %': None,
                                 'AI EV %': round(ml_away_prob - ml_away_implied, 1),
                                 'AI Edge pp': round(ml_away_prob - ml_away_implied, 1),
                                 'Confidence': round(confidence * 0.85, 1),
                                 'Sentiment': round(-vertex_result.get('sentiment_diff', 0), 2),
                                 'Kalshi': ('✅' if not vertex_result.get('kalshi_synthetic') else '🔮') if vertex_result.get('kalshi_available') else '—',
-                                'Kalshi %': round((1 - vertex_result.get('kalshi_prob', 0.5)) * 100, 1) if vertex_result.get('kalshi_available') else '—',
+                                'Kalshi %': round((1 - vertex_result.get('kalshi_prob', 0.5)) * 100, 1) if vertex_result.get('kalshi_available') else None,
                                 'Kalshi Agrees': '—',
                             })
                 
@@ -10380,30 +10380,32 @@ if is_vertex_ai_enabled():
                 ]
                 for col in percent_columns:
                     if col in display_df.columns:
-                        display_df[col] = display_df[col].map(
-                            lambda x: f"{x:.1f}%" if pd.notna(x) else "—"
+                        # Convert to numeric first, coercing errors to NaN
+                        display_df[col] = pd.to_numeric(display_df[col], errors='coerce')
+                        display_df[col] = display_df[col].apply(
+                            lambda x: f"{float(x):.1f}%" if pd.notna(x) and isinstance(x, (int, float)) else "—"
                         )
 
                 if 'Best Decimal' in display_df.columns:
                     display_df['Best Decimal'] = pd.to_numeric(
                         display_df['Best Decimal'], errors='coerce'
                     )
-                    display_df['Best Decimal'] = display_df['Best Decimal'].map(
-                        lambda x: f"{float(x):.3f}" if pd.notna(x) else "—"
+                    display_df['Best Decimal'] = display_df['Best Decimal'].apply(
+                        lambda x: f"{float(x):.3f}" if pd.notna(x) and isinstance(x, (int, float)) else "—"
                     )
 
                 if 'Best American' in display_df.columns:
                     display_df['Best American'] = pd.to_numeric(
                         display_df['Best American'], errors='coerce'
                     )
-                    display_df['Best American'] = display_df['Best American'].map(
-                        lambda x: f"{int(round(float(x))):+d}" if pd.notna(x) else "—"
+                    display_df['Best American'] = display_df['Best American'].apply(
+                        lambda x: f"{int(round(float(x))):+d}" if pd.notna(x) and isinstance(x, (int, float)) else "—"
                     )
 
                 if 'Line' in display_df.columns:
                     display_df['Line'] = pd.to_numeric(display_df['Line'], errors='coerce')
-                    display_df['Line'] = display_df['Line'].map(
-                        lambda x: f"{float(x):g}" if pd.notna(x) else "—"
+                    display_df['Line'] = display_df['Line'].apply(
+                        lambda x: f"{float(x):g}" if pd.notna(x) and isinstance(x, (int, float)) else "—"
                     )
 
                 st.dataframe(display_df, use_container_width=True, hide_index=True)
@@ -11211,17 +11213,20 @@ if is_vertex_ai_enabled():
                         ]
                         for col in percent_columns:
                             if col in top_display.columns:
-                                top_display[col] = top_display[col].map(
-                                    lambda x: f"{x*100:.1f}%" if pd.notna(x) else "—"
+                                top_display[col] = pd.to_numeric(top_display[col], errors='coerce')
+                                top_display[col] = top_display[col].apply(
+                                    lambda x: f"{float(x)*100:.1f}%" if pd.notna(x) and isinstance(x, (int, float)) else "—"
                                 )
                         for col in delta_columns:
                             if col in top_display.columns:
-                                top_display[col] = top_display[col].map(
-                                    lambda x: f"{x*100:+.1f}pp" if pd.notna(x) else "—"
+                                top_display[col] = pd.to_numeric(top_display[col], errors='coerce')
+                                top_display[col] = top_display[col].apply(
+                                    lambda x: f"{float(x)*100:+.1f}pp" if pd.notna(x) and isinstance(x, (int, float)) else "—"
                                 )
                         if 'Decimal Odds' in top_display.columns:
-                            top_display['Decimal Odds'] = top_display['Decimal Odds'].map(
-                                lambda x: f"{x:.3f}" if pd.notna(x) else "—"
+                            top_display['Decimal Odds'] = pd.to_numeric(top_display['Decimal Odds'], errors='coerce')
+                            top_display['Decimal Odds'] = top_display['Decimal Odds'].apply(
+                                lambda x: f"{float(x):.3f}" if pd.notna(x) and isinstance(x, (int, float)) else "—"
                             )
 
                         st.dataframe(top_display, use_container_width=True, hide_index=True)
