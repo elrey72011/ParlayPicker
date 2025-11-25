@@ -9064,141 +9064,230 @@ if is_vertex_ai_enabled():
                 vertex_results = st.session_state['vertex_results']
                 odds_data = st.session_state.get('odds_data', [])
                 
-                if not odds_data:
-                    st.error("❌ No odds data available. Please fetch odds first.")
-                    st.stop()
-                
                 best_bets_rows = []
                 
-                # Filter controls (already set above)
-                for vertex_result in vertex_results:
-                    matching_game = None
-                    for game in odds_data:
-                        if game['id'] == vertex_result['game_id']:
-                            matching_game = game
-                            break
+                # If we have odds_data from The Odds API, use the detailed path
+                if odds_data:
+                    st.info(f"📊 Using odds data from {len(odds_data)} games via The Odds API")
                     
-                    if not matching_game:
-                        continue
-                    
-                    home_team = vertex_result['home_team']
-                    away_team = vertex_result['away_team']
-                    vertex_prob = vertex_result['vertex_probability']
-                    confidence = vertex_result['confidence']
-                    
-                    # Process each market type
-                    for bookmaker in matching_game.get('bookmakers', []):
-                        bookmaker_name = bookmaker['title']
-                        
-                        for market in bookmaker.get('markets', []):
-                            market_key = market['key']
+                    # Filter controls (already set above)
+                    for vertex_result in vertex_results:
+                        matching_game = None
+                        for game in odds_data:
+                            # Match by team names since game_id might not exist
+                            game_home = game.get('home_team', '')
+                            game_away = game.get('away_team', '')
+                            vertex_home = vertex_result.get('home_team', '')
+                            vertex_away = vertex_result.get('away_team', '')
                             
-                            for outcome in market.get('outcomes', []):
-                                team_or_side = outcome['name']
-                                odds = outcome['price']
-                                line = outcome.get('point', None)
+                            if (game_home == vertex_home and game_away == vertex_away) or \
+                               game.get('id') == vertex_result.get('game_id'):
+                                matching_game = game
+                                break
+                        
+                        if not matching_game:
+                            continue
+                        
+                        home_team = vertex_result['home_team']
+                        away_team = vertex_result['away_team']
+                        vertex_prob = vertex_result.get('vertex_prob', 0.5) * 100  # Convert to percentage
+                        confidence = vertex_result.get('confidence', 50)
+                        
+                        # Process each market type
+                        for bookmaker in matching_game.get('bookmakers', []):
+                            bookmaker_name = bookmaker['title']
+                            
+                            for market in bookmaker.get('markets', []):
+                                market_key = market['key']
                                 
-                                # Calculate implied probability
-                                if odds > 0:
-                                    implied_prob = 100 / (odds + 100) * 100
-                                else:
-                                    implied_prob = abs(odds) / (abs(odds) + 100) * 100
-                                
-                                # Determine actual probability
-                                if market_key == 'h2h':
-                                    if team_or_side == home_team:
-                                        actual_prob = vertex_prob
+                                for outcome in market.get('outcomes', []):
+                                    team_or_side = outcome['name']
+                                    odds = outcome['price']
+                                    line = outcome.get('point', None)
+                                    
+                                    # Calculate implied probability
+                                    if odds > 0:
+                                        implied_prob = 100 / (odds + 100) * 100
                                     else:
-                                        actual_prob = 100 - vertex_prob
-                                elif market_key == 'spreads':
-                                    if team_or_side == home_team:
-                                        actual_prob = vertex_prob
+                                        implied_prob = abs(odds) / (abs(odds) + 100) * 100
+                                    
+                                    # Determine actual probability
+                                    if market_key == 'h2h':
+                                        if team_or_side == home_team:
+                                            actual_prob = vertex_prob
+                                        else:
+                                            actual_prob = 100 - vertex_prob
+                                    elif market_key == 'spreads':
+                                        if team_or_side == home_team:
+                                            actual_prob = vertex_prob
+                                        else:
+                                            actual_prob = 100 - vertex_prob
                                     else:
-                                        actual_prob = 100 - vertex_prob
-                                else:
-                                    actual_prob = 50.0
-                                
-                                # Calculate edge
-                                edge_pp = actual_prob - implied_prob
-                                
-                                # Apply minimum confidence filter
-                                if confidence < min_ai_confidence:
-                                    continue
-                                
-                                # Format decimal odds
-                                if odds > 0:
-                                    decimal_odds = (odds / 100) + 1
-                                else:
-                                    decimal_odds = (100 / abs(odds)) + 1
-                                
-                                # Add to best bets
-                                best_bets_rows.append({
-                                    'League': vertex_result['sport'].upper(),
-                                    'Game': f"{away_team} @ {home_team}",
-                                    'Commence (Local)': vertex_result['commence_time'],
-                                    'Market': market_key.replace('_', ' ').title(),
-                                    'Side': team_or_side,
-                                    'Selection': team_or_side,
-                                    'Line': line if line is not None else '—',
-                                    'Best Book': bookmaker_name,
-                                    'Best American': odds,
-                                    'Best Decimal': round(decimal_odds, 3),
-                                    'Implied Prob %': implied_prob,
-                                    'AI Prob %': actual_prob,
-                                    'AI Raw %': actual_prob,
-                                    'AI EV %': edge_pp,
-                                    'AI Edge pp': edge_pp,
-                                    'AI Confidence %': confidence,
-                                    'ML Prob %': actual_prob,
-                                    'ML Model': 'Vertex AI',
-                                    'theover.ai %': '—',
-                                    'theover Δ pp': '—',
-                                    'theover Source': 'Vertex AI',
-                                    'SportsData Prob %': '—',
-                                    'SportsData Δ pp': '—',
-                                    'Kalshi Prob %': '—',
-                                    'Kalshi Δ pp': '—',
-                                    'Kalshi Edge %': '—',
-                                    'Kalshi Verdict': '—',
-                                    'Best Edge %': edge_pp,
-                                    'Best Edge Source': 'Vertex AI',
-                                    'Best Win Prob %': actual_prob,
-                                    'Win Prob Source': 'Vertex AI',
-                                    'Event ID': vertex_result['game_id'],
-                                    'Sport Key': vertex_result['sport'],
-                                    'Commence (UTC)': vertex_result['commence_time'],
-                                })
+                                        actual_prob = 50.0
+                                    
+                                    # Calculate edge
+                                    edge_pp = actual_prob - implied_prob
+                                    
+                                    # Apply minimum confidence filter
+                                    if confidence < min_ai_confidence * 100:
+                                        continue
+                                    
+                                    # Format decimal odds
+                                    if odds > 0:
+                                        decimal_odds = (odds / 100) + 1
+                                    else:
+                                        decimal_odds = (100 / abs(odds)) + 1
+                                    
+                                    # Add to best bets
+                                    best_bets_rows.append({
+                                        'League': vertex_result.get('league', 'N/A').upper(),
+                                        'Game': f"{away_team} @ {home_team}",
+                                        'Commence (Local)': vertex_result.get('commence_time', ''),
+                                        'Market': market_key.replace('_', ' ').title(),
+                                        'Side': team_or_side,
+                                        'Selection': team_or_side,
+                                        'Line': line if line is not None else '—',
+                                        'Best Book': bookmaker_name,
+                                        'Best American': odds,
+                                        'Best Decimal': round(decimal_odds, 3),
+                                        'Implied Prob %': implied_prob,
+                                        'AI Prob %': actual_prob,
+                                        'AI Raw %': actual_prob,
+                                        'AI EV %': edge_pp,
+                                        'AI Edge pp': edge_pp,
+                                        'Confidence': confidence,
+                                        'Sentiment': vertex_result.get('sentiment_diff', 0),
+                                        'Kalshi': '✅' if vertex_result.get('kalshi_available') else '—',
+                                    })
                 
-                if not best_bets_rows:
-                    st.info("No qualifying bets found matching your criteria.")
                 else:
+                    # NO ODDS DATA - Generate Best Bets directly from Vertex Results
+                    st.info(f"📊 Generating Best Bets from {len(vertex_results)} Vertex AI analyzed games (TheOver.ai data)")
+                    
+                    for vertex_result in vertex_results:
+                        home_team = vertex_result.get('home_team', 'Home')
+                        away_team = vertex_result.get('away_team', 'Away')
+                        league = vertex_result.get('league', 'N/A').upper()
+                        
+                        vertex_prob = vertex_result.get('vertex_prob', 0.5)
+                        if vertex_prob <= 1:
+                            vertex_prob = vertex_prob * 100  # Convert to percentage
+                        
+                        confidence = vertex_result.get('confidence', 50)
+                        edge = vertex_result.get('edge', 0)
+                        if abs(edge) < 1:
+                            edge = edge * 100  # Convert to percentage
+                        
+                        # Apply minimum confidence filter
+                        if confidence < min_ai_confidence * 100:
+                            continue
+                        
+                        # Get odds from stored data
+                        home_ml = vertex_result.get('home_ml_odds', -110)
+                        away_ml = vertex_result.get('away_ml_odds', -110)
+                        spread = vertex_result.get('spread', 0)
+                        
+                        # Calculate implied probabilities from odds
+                        if home_ml and home_ml != 0:
+                            if home_ml > 0:
+                                home_implied = 100 / (home_ml + 100) * 100
+                            else:
+                                home_implied = abs(home_ml) / (abs(home_ml) + 100) * 100
+                        else:
+                            home_implied = 50.0
+                        
+                        away_implied = 100 - home_implied
+                        
+                        # Home team bet
+                        home_edge = vertex_prob - home_implied
+                        best_bets_rows.append({
+                            'League': league,
+                            'Game': f"{away_team} @ {home_team}",
+                            'Commence (Local)': vertex_result.get('commence_time', 'Today'),
+                            'Market': 'Spread' if spread else 'Moneyline',
+                            'Side': home_team,
+                            'Selection': home_team,
+                            'Line': spread if spread else '—',
+                            'Best Book': 'TheOver.ai',
+                            'Best American': home_ml if home_ml else -110,
+                            'Best Decimal': round((home_ml / 100 + 1) if home_ml and home_ml > 0 else (100 / abs(home_ml) + 1) if home_ml else 1.91, 3),
+                            'Implied Prob %': round(home_implied, 1),
+                            'AI Prob %': round(vertex_prob, 1),
+                            'AI Raw %': round(vertex_prob, 1),
+                            'AI EV %': round(home_edge, 1),
+                            'AI Edge pp': round(home_edge, 1),
+                            'Confidence': round(confidence, 1),
+                            'Sentiment': round(vertex_result.get('sentiment_diff', 0), 2),
+                            'Kalshi': '✅' if vertex_result.get('kalshi_available') else '—',
+                            'Kalshi Agrees': '✅' if vertex_result.get('kalshi_agrees') else ('❌' if vertex_result.get('kalshi_agrees') == False else '—'),
+                        })
+                        
+                        # Away team bet
+                        away_prob = 100 - vertex_prob
+                        away_edge = away_prob - away_implied
+                        best_bets_rows.append({
+                            'League': league,
+                            'Game': f"{away_team} @ {home_team}",
+                            'Commence (Local)': vertex_result.get('commence_time', 'Today'),
+                            'Market': 'Spread' if spread else 'Moneyline',
+                            'Side': away_team,
+                            'Selection': away_team,
+                            'Line': -spread if spread else '—',
+                            'Best Book': 'TheOver.ai',
+                            'Best American': away_ml if away_ml else -110,
+                            'Best Decimal': round((away_ml / 100 + 1) if away_ml and away_ml > 0 else (100 / abs(away_ml) + 1) if away_ml else 1.91, 3),
+                            'Implied Prob %': round(away_implied, 1),
+                            'AI Prob %': round(away_prob, 1),
+                            'AI Raw %': round(away_prob, 1),
+                            'AI EV %': round(away_edge, 1),
+                            'AI Edge pp': round(away_edge, 1),
+                            'Confidence': round(confidence, 1),
+                            'Sentiment': round(-vertex_result.get('sentiment_diff', 0), 2),
+                            'Kalshi': '✅' if vertex_result.get('kalshi_available') else '—',
+                            'Kalshi Agrees': '✅' if vertex_result.get('kalshi_agrees') else ('❌' if vertex_result.get('kalshi_agrees') == False else '—'),
+                        })
+                
+                # Display results
+                if best_bets_rows:
                     best_bets_df = pd.DataFrame(best_bets_rows)
+                    
+                    # Sort by edge (best opportunities first)
                     best_bets_df = best_bets_df.sort_values('AI Edge pp', ascending=False)
-
-                    st.session_state['best_bets_df'] = best_bets_df
                     
-                    st.success(f"✅ Generated {len(best_bets_df)} best bets using Vertex AI!")
+                    # Filter to only positive EV bets by default
+                    positive_ev_df = best_bets_df[best_bets_df['AI Edge pp'] > 0]
                     
-                    # AUTO-ENRICH: Automatically fill theover.ai columns
-                    with st.spinner("🔄 Auto-enriching with theover.ai data..."):
-                        try:
-                            best_bets_df = enrich_best_bets_with_csv(best_bets_df)
-                            st.session_state['best_bets_df'] = best_bets_df
-                            st.success("✅ Auto-enrichment complete!")
-                        except Exception as e:
-                            st.warning(f"⚠️ Auto-enrichment skipped: {e}")
-
+                    st.success(f"🎯 Found {len(positive_ev_df)} positive EV opportunities out of {len(best_bets_df)} total bets")
                     
-                    # Display metrics
-                    col1, col2, col3 = st.columns(3)
+                    # Summary metrics
+                    col1, col2, col3, col4 = st.columns(4)
                     with col1:
-                        st.metric("Total Bets", len(best_bets_df))
+                        st.metric("Best Edge", f"+{positive_ev_df['AI Edge pp'].max():.1f}%" if len(positive_ev_df) > 0 else "N/A")
                     with col2:
-                        avg_edge = best_bets_df['AI Edge pp'].mean()
-                        st.metric("Avg Edge", f"{avg_edge:+.1f}pp")
+                        st.metric("Avg Edge", f"+{positive_ev_df['AI Edge pp'].mean():.1f}%" if len(positive_ev_df) > 0 else "N/A")
                     with col3:
-                        avg_conf = best_bets_df['AI Confidence %'].mean()
-                        st.metric("Avg Confidence", f"{avg_conf:.0f}%")
+                        st.metric("Total Opportunities", len(positive_ev_df))
+                    with col4:
+                        kalshi_count = len(positive_ev_df[positive_ev_df['Kalshi'] == '✅']) if 'Kalshi' in positive_ev_df.columns else 0
+                        st.metric("Kalshi Validated", kalshi_count)
+                    
+                    # Show positive EV bets
+                    st.subheader("🏆 Top Positive EV Bets")
+                    st.dataframe(
+                        positive_ev_df.head(20),
+                        use_container_width=True,
+                        hide_index=True
+                    )
+                    
+                    # Option to see all bets
+                    with st.expander("📊 View All Analyzed Bets"):
+                        st.dataframe(best_bets_df, use_container_width=True, hide_index=True)
+                    
+                    # Store for parlay generation
+                    st.session_state['best_bets_df'] = best_bets_df
+                    st.session_state['positive_ev_bets'] = positive_ev_df
+                else:
+                    st.warning("No bets passed the confidence filter. Try lowering the minimum confidence threshold.")
             
             # LEGACY PATH
             else:
