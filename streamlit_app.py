@@ -8828,37 +8828,219 @@ with main_tab1:
     theover_spreads_data = _collect_theover_dataset("#### 📐 Spread projections", "theover_spreads")
     theover_totals_data = _collect_theover_dataset("#### 📈 Totals (Over/Under) projections", "theover_totals")
     
-    # Vertex AI Analysis Integration
-    if is_vertex_ai_enabled() and analyze_theover_spreads_with_vertex is not None:
-        if theover_spreads_data is not None and len(theover_spreads_data) > 0:
+    # Vertex AI Analysis Integration - Uses VertexMasterAnalyzer with BOTH spreads and totals
+    if is_vertex_ai_enabled():
+        if (theover_spreads_data is not None and len(theover_spreads_data) > 0) or \
+           (theover_totals_data is not None and len(theover_totals_data) > 0):
             st.markdown("---")
             st.subheader("🤖 Vertex AI Best Bet Analysis")
-            st.caption("AI-powered analysis of your theover.ai spread picks")
             
-            if st.button("🎯 Analyze Spreads with Vertex AI", key="vertex_analyze_spreads_btn"):
+            # Show what data is available
+            data_summary = []
+            if theover_spreads_data is not None and len(theover_spreads_data) > 0:
+                data_summary.append(f"📐 {len(theover_spreads_data)} spread picks")
+            if theover_totals_data is not None and len(theover_totals_data) > 0:
+                data_summary.append(f"📈 {len(theover_totals_data)} totals picks")
+            st.caption(f"AI-powered analysis using: {' + '.join(data_summary)}")
+            
+            if st.button("🎯 Analyze with Vertex AI (Spreads + Totals)", key="vertex_analyze_combined_btn"):
                 with st.spinner("Running AI analysis on all picks... This may take a minute..."):
                     try:
-                        # Get available clients
-                        sportsdata_client = sportsdata_clients.get('nba') if 'sportsdata_clients' in locals() else None
-                        apisports_client = basketball_client if 'basketball_client' in locals() else None
+                        from vertex_master_analyzer import VertexMasterAnalyzer, show_vertex_master_analysis
                         
-                        # Run analysis
-                        results_df = analyze_theover_spreads_with_vertex(
-                            theover_spreads_data,
-                            sportsdata_client,
-                            apisports_client
-                        )
+                        # Build games list from TheOver.ai data
+                        all_games = []
                         
-                        # Show results
-                        if not results_df.empty:
-                            show_best_bets_table(results_df)
+                        # Process spreads data
+                        if theover_spreads_data is not None:
+                            for _, row in theover_spreads_data.iterrows():
+                                home_team = row.get('home_team') or row.get('HomeTeam') or ''
+                                away_team = row.get('away_team') or row.get('AwayTeam') or ''
+                                league = (row.get('League') or row.get('league') or 'NBA').upper()
+                                pick = row.get('Pick') or row.get('pick') or ''
+                                
+                                # Get spread line
+                                line_value = row.get('Line') or row.get('Spread') or row.get('line') or 0
+                                try:
+                                    line_value = float(line_value) if line_value else 0
+                                except:
+                                    line_value = 0
+                                
+                                # Determine sport_key
+                                sport_key_map = {
+                                    'NFL': 'americanfootball_nfl',
+                                    'NBA': 'basketball_nba', 
+                                    'NHL': 'icehockey_nhl',
+                                    'NCAAB': 'basketball_ncaab',
+                                    'NCAAF': 'americanfootball_ncaaf',
+                                }
+                                sport_key = sport_key_map.get(league, 'basketball_nba')
+                                
+                                # NHL uses moneylines in Line column
+                                is_nhl = league == 'NHL'
+                                
+                                if is_nhl:
+                                    moneyline = line_value
+                                    if moneyline != 0:
+                                        if moneyline > 0:
+                                            home_implied_prob = 100 / (moneyline + 100)
+                                        else:
+                                            home_implied_prob = abs(moneyline) / (abs(moneyline) + 100)
+                                    else:
+                                        home_implied_prob = 0.5
+                                    
+                                    # For NHL, theover_prob = home team win probability
+                                    theover_prob = home_implied_prob
+                                    
+                                    home_ml = int(moneyline) if pick == home_team else int(-moneyline * 0.9)
+                                    away_ml = int(-moneyline * 0.9) if pick == home_team else int(moneyline)
+                                    spread = 1.5  # Standard puckline
+                                    home_spread = spread  # Will be adjusted below
+                                else:
+                                    # Basketball/Football - line is spread for the PICK team
+                                    # Negative spread = favorite, Positive spread = underdog
+                                    pick_spread = line_value
+                                    
+                                    # Calculate HOME team's spread (opposite of pick's if pick is away)
+                                    if pick == away_team or pick.lower() in away_team.lower() or away_team.lower() in pick.lower():
+                                        # Pick is away team, so home_spread is opposite
+                                        home_spread = -pick_spread
+                                    else:
+                                        # Pick is home team
+                                        home_spread = pick_spread
+                                    
+                                    # Calculate home team win probability from HOME spread
+                                    # Negative home_spread = home team is favorite = higher win prob
+                                    # Each point of spread ≈ 2.8% probability shift from 50%
+                                    home_implied_prob = 0.5 - (home_spread * 0.028)
+                                    home_implied_prob = max(0.15, min(0.85, home_implied_prob))
+                                    
+                                    # theover_probability = home team win probability
+                                    theover_prob = home_implied_prob
+                                    
+                                    # Add slight boost based on TheOver.ai pick (they have edge)
+                                    pick_boost = 0.02
+                                    if pick == home_team or pick.lower() in home_team.lower() or home_team.lower() in pick.lower():
+                                        theover_prob = min(0.85, theover_prob + pick_boost)
+                                    else:
+                                        theover_prob = max(0.15, theover_prob - pick_boost)
+                                    
+                                    # Calculate moneylines from home implied probability
+                                    if home_implied_prob > 0.5:
+                                        home_ml = int(-100 * home_implied_prob / (1 - home_implied_prob))
+                                        away_ml = int(100 * (1 - home_implied_prob) / home_implied_prob)
+                                    else:
+                                        home_ml = int(100 * (1 - home_implied_prob) / home_implied_prob)
+                                        away_ml = int(-100 * (1 - home_implied_prob) / home_implied_prob)
+                                    
+                                    spread = pick_spread  # Keep original for display
+                                
+                                all_games.append({
+                                    'home_team': home_team,
+                                    'away_team': away_team,
+                                    'sport_key': sport_key,
+                                    'league': league,
+                                    'theover_probability': theover_prob,
+                                    'theover_pick': pick,
+                                    'theover_spread': pick_spread if 'pick_spread' in dir() else spread,
+                                    'home_spread': home_spread,
+                                    'home_ml_odds': home_ml,
+                                    'away_ml_odds': away_ml,
+                                    'implied_home_prob': home_implied_prob,
+                                })
+                        
+                        # Add totals data to games
+                        if theover_totals_data is not None and len(theover_totals_data) > 0:
+                            for _, row in theover_totals_data.iterrows():
+                                home_team = row.get('home_team') or row.get('HomeTeam') or ''
+                                away_team = row.get('away_team') or row.get('AwayTeam') or ''
+                                total_line = row.get('Line') or row.get('Total') or 0
+                                total_pick = row.get('Pick') or ''  # 'Over' or 'Under'
+                                
+                                try:
+                                    total_line = float(total_line) if total_line else 0
+                                except:
+                                    total_line = 0
+                                
+                                # Find matching game and add totals data
+                                for game in all_games:
+                                    if (game['home_team'].lower() in home_team.lower() or 
+                                        home_team.lower() in game['home_team'].lower()) and \
+                                       (game['away_team'].lower() in away_team.lower() or 
+                                        away_team.lower() in game['away_team'].lower()):
+                                        game['theover_total'] = total_line
+                                        game['theover_total_pick'] = total_pick
+                                        game['theover_total_probability'] = 0.54 if total_pick else 0.5  # Slight edge for pick
+                                        break
+                        
+                        if not all_games:
+                            st.error("❌ No games found in TheOver.ai data")
                         else:
-                            st.warning("No results from Vertex AI analysis")
+                            st.info(f"🤖 Analyzing {len(all_games)} games with Vertex AI...")
+                            
+                            # Get clients from session state
+                            kalshi_int = st.session_state.get('kalshi_integrator')
+                            sentiment_analyzer = st.session_state.get('sentiment_analyzer')
+                            ml_predictor = st.session_state.get('ml_predictor')
+                            
+                            # Create analyzer with TheOver data
+                            analyzer = VertexMasterAnalyzer(
+                                odds_api_client=None,
+                                sportsdata_clients=sportsdata_clients if 'sportsdata_clients' in locals() else {},
+                                apisports_clients={
+                                    'nba': basketball_client if 'basketball_client' in locals() else None,
+                                    'nfl': apisports_client if 'apisports_client' in locals() else None,
+                                    'nhl': hockey_client if 'hockey_client' in locals() else None,
+                                },
+                                sentiment_analyzer=sentiment_analyzer,
+                                local_ml_predictor=ml_predictor,
+                                theover_data={
+                                    'spreads': theover_spreads_data,
+                                    'totals': theover_totals_data,
+                                },
+                                kalshi_integrator=kalshi_int,
+                            )
+                            
+                            results_df = analyzer.analyze_all_games(all_games, league='multi')
+                            
+                            if not results_df.empty:
+                                st.success(f"✅ Analysis complete! Found {len(results_df)} opportunities")
+                                show_vertex_master_analysis(results_df)
+                                
+                                # Store results for Best Bets
+                                vertex_results = []
+                                for _, row in results_df.iterrows():
+                                    vertex_results.append({
+                                        'home_team': row.get('home_team', ''),
+                                        'away_team': row.get('away_team', ''),
+                                        'league': row.get('league', ''),
+                                        'vertex_prob': row.get('vertex_ai_prob', 0.5),
+                                        'theover_probability': row.get('theover_probability', 0.5),
+                                        'theover_pick': row.get('theover_pick', ''),
+                                        'theover_total': row.get('theover_total', 0),
+                                        'theover_total_pick': row.get('theover_total_pick', ''),
+                                        'spread': row.get('home_spread', 0),
+                                        'home_ml_odds': row.get('home_ml_odds', 0),
+                                        'away_ml_odds': row.get('away_ml_odds', 0),
+                                        'implied_home_prob': row.get('implied_home_prob', 0.5),
+                                        'sentiment_diff': row.get('sentiment_diff', 0),
+                                        'kalshi_available': row.get('kalshi_available', False),
+                                        'kalshi_prob': row.get('kalshi_prob', 0.5),
+                                        'confidence': min(95, 50 + abs(row.get('vertex_ai_edge', 0)) * 500),
+                                    })
+                                st.session_state['vertex_results'] = vertex_results
+                                st.session_state['vertex_analysis_complete'] = True
+                            else:
+                                st.warning("No results from Vertex AI analysis")
+                                
                     except Exception as e:
                         st.error(f"Error during Vertex AI analysis: {e}")
                         logger.error(f"Vertex AI analysis error: {e}", exc_info=True)
-        elif theover_spreads_data is None:
-            st.info("💡 Upload spread picks above to enable Vertex AI analysis")
+                        import traceback
+                        with st.expander("🔍 Debug"):
+                            st.code(traceback.format_exc())
+        else:
+            st.info("💡 Upload spread or totals picks above to enable Vertex AI analysis")
     
     st.markdown("---")
     st.subheader("🏆 Best Overall Odds for Date Range")
@@ -8969,7 +9151,9 @@ if is_vertex_ai_enabled():
                                     pick_win_prob = abs(moneyline) / (abs(moneyline) + 100)
                                 
                                 # Determine home/away probabilities based on pick
-                                if pick == home_team or (pick and pick in home_team):
+                                pick_is_home = (pick == home_team) or (pick and (pick.lower() in home_team.lower() or home_team.lower() in pick.lower()))
+                                
+                                if pick_is_home:
                                     home_implied_prob = pick_win_prob
                                     home_ml = int(moneyline)
                                     away_ml = int(-moneyline) if moneyline > 0 else int(100 * 100 / abs(moneyline))
@@ -8978,7 +9162,9 @@ if is_vertex_ai_enabled():
                                     away_ml = int(moneyline)
                                     home_ml = int(-moneyline) if moneyline > 0 else int(100 * 100 / abs(moneyline))
                                 
-                                theover_prob = pick_win_prob
+                                # theover_prob = HOME team win probability
+                                theover_prob = home_implied_prob
+                                home_spread = 1.5  # Standard puckline
                                 
                             else:
                                 # Basketball/Football: Line is a point spread
@@ -8995,19 +9181,26 @@ if is_vertex_ai_enabled():
                                 if line_value > 0:
                                     # Pick is underdog getting points
                                     # They may lose outright but cover
-                                    # Win probability lower, but cover probability is what matters
                                     pick_win_prob = max(0.20, 0.50 - spread_shift)
-                                    theover_prob = 0.52 + (spread * 0.005)  # Slight edge for covering
                                 else:
                                     # Pick is favorite giving points  
                                     pick_win_prob = min(0.80, 0.50 + spread_shift)
-                                    theover_prob = 0.52 + (spread * 0.005)  # Slight edge for covering
                                 
                                 # Determine home/away based on pick
-                                if pick == home_team or (pick and pick in str(home_team)):
+                                # CRITICAL: Calculate home_spread correctly based on whether pick is home or away
+                                pick_is_home = (pick == home_team) or (pick and (pick.lower() in home_team.lower() or home_team.lower() in pick.lower()))
+                                
+                                if pick_is_home:
+                                    # Pick is home team, so home_spread = line_value directly
                                     home_implied_prob = pick_win_prob
+                                    home_spread = line_value
                                 else:
+                                    # Pick is away team, so home_spread = OPPOSITE of line_value
                                     home_implied_prob = 1 - pick_win_prob
+                                    home_spread = -line_value  # Flip the sign!
+                                
+                                # theover_probability = home team win probability
+                                theover_prob = home_implied_prob
                                 
                                 # Calculate American odds from probability
                                 if home_implied_prob > 0.5:
@@ -9015,7 +9208,7 @@ if is_vertex_ai_enabled():
                                     away_ml = int(100 * (1 - home_implied_prob) / home_implied_prob)
                                 else:
                                     home_ml = int(100 * (1 - home_implied_prob) / home_implied_prob)
-                                    away_ml = int(-100 * home_implied_prob / (1 - home_implied_prob))
+                                    away_ml = int(-100 * (1 - home_implied_prob) / home_implied_prob)
                             
                             all_games.append({
                                 'home_team': home_team,
@@ -9024,18 +9217,16 @@ if is_vertex_ai_enabled():
                                 'league': league,
                                 'commence_time': None,
                                 # TheOver.ai specific data
-                                'theover_spread': spread if not is_nhl else 1.5,
+                                'theover_spread': line_value,  # Original line from CSV for the pick
                                 'theover_pick': pick,
-                                'theover_probability': theover_prob,
+                                'theover_probability': theover_prob,  # Home team win probability
                                 'theover_line': line_value,  # Original line from CSV
                                 'is_moneyline': is_nhl,
                                 # Calculated odds
                                 'home_ml_odds': home_ml,
                                 'away_ml_odds': away_ml,
-                                # Line IS the home team's spread directly
-                                # Positive = home underdog getting points
-                                # Negative = home favorite giving points
-                                'home_spread': line_value if not is_nhl else 1.5,
+                                # home_spread is the HOME team's spread (correctly calculated)
+                                'home_spread': home_spread if not is_nhl else 1.5,
                                 'implied_home_prob': home_implied_prob,
                             })
                         
