@@ -9919,6 +9919,136 @@ if is_vertex_ai_enabled():
                             'Kalshi %': round((1 - vertex_result.get('kalshi_prob', 0.5)) * 100, 1) if vertex_result.get('kalshi_available') else '—',
                             'Kalshi Agrees': '✅' if vertex_result.get('kalshi_agrees') else ('❌' if vertex_result.get('kalshi_agrees') == False else '—'),
                         })
+                        
+                        # === TOTALS (Over/Under) Bets ===
+                        total_line = vertex_result.get('theover_total', 0) or vertex_result.get('total', 0)
+                        total_pick = vertex_result.get('theover_total_pick', '')
+                        total_prob = vertex_result.get('theover_total_probability', 0.5)
+                        
+                        if total_line and total_line > 0:
+                            # Convert total_prob to percentage if needed
+                            if total_prob and total_prob <= 1:
+                                total_prob = total_prob * 100
+                            
+                            # Over bet
+                            over_prob = total_prob if total_pick.lower() == 'over' else (100 - total_prob)
+                            over_implied = 50.0  # Standard -110 implies 52.4%, but use 50 for simplicity
+                            over_edge = over_prob - over_implied
+                            
+                            best_bets_rows.append({
+                                'League': league,
+                                'Game': f"{away_team} @ {home_team}",
+                                'Commence (Local)': vertex_result.get('commence_time', 'Today'),
+                                'Market': 'Total',
+                                'Side': 'Over',
+                                'Selection': f"Over {total_line}",
+                                'Line': total_line,
+                                'Best Book': 'TheOver.ai',
+                                'Best American': '-110',
+                                'Best Decimal': 1.91,
+                                'Implied Prob %': round(over_implied, 1),
+                                'AI Prob %': round(over_prob, 1),
+                                'TheOver %': round(over_prob, 1) if total_prob else '—',
+                                'AI EV %': round(over_edge, 1),
+                                'AI Edge pp': round(over_edge, 1),
+                                'Confidence': round(confidence * 0.9, 1),  # Slightly lower confidence for totals
+                                'Sentiment': '—',
+                                'Kalshi': '—',
+                                'Kalshi %': '—',
+                                'Kalshi Agrees': '—',
+                            })
+                            
+                            # Under bet
+                            under_prob = 100 - over_prob
+                            under_edge = under_prob - over_implied
+                            
+                            best_bets_rows.append({
+                                'League': league,
+                                'Game': f"{away_team} @ {home_team}",
+                                'Commence (Local)': vertex_result.get('commence_time', 'Today'),
+                                'Market': 'Total',
+                                'Side': 'Under',
+                                'Selection': f"Under {total_line}",
+                                'Line': total_line,
+                                'Best Book': 'TheOver.ai',
+                                'Best American': '-110',
+                                'Best Decimal': 1.91,
+                                'Implied Prob %': round(over_implied, 1),
+                                'AI Prob %': round(under_prob, 1),
+                                'TheOver %': round(under_prob, 1) if total_prob else '—',
+                                'AI EV %': round(under_edge, 1),
+                                'AI Edge pp': round(under_edge, 1),
+                                'Confidence': round(confidence * 0.9, 1),
+                                'Sentiment': '—',
+                                'Kalshi': '—',
+                                'Kalshi %': '—',
+                                'Kalshi Agrees': '—',
+                            })
+                        
+                        # === MONEYLINE Bets (if different from spread) ===
+                        if spread and home_ml and away_ml:
+                            # Only add ML if we have both spread AND moneyline data
+                            ml_home_implied = 0
+                            if home_ml > 0:
+                                ml_home_implied = 100 / (home_ml + 100) * 100
+                            else:
+                                ml_home_implied = abs(home_ml) / (abs(home_ml) + 100) * 100
+                            
+                            ml_away_implied = 100 - ml_home_implied
+                            
+                            # ML probabilities based on spread (rough conversion)
+                            # Each point of spread ≈ 3% probability shift
+                            ml_home_prob = 50 + (spread * 3)  # Negative spread = favorite
+                            ml_home_prob = max(10, min(90, ml_home_prob))  # Clamp
+                            ml_away_prob = 100 - ml_home_prob
+                            
+                            # Home ML bet
+                            best_bets_rows.append({
+                                'League': league,
+                                'Game': f"{away_team} @ {home_team}",
+                                'Commence (Local)': vertex_result.get('commence_time', 'Today'),
+                                'Market': 'Moneyline',
+                                'Side': home_team,
+                                'Selection': home_team,
+                                'Line': '—',
+                                'Best Book': 'TheOver.ai',
+                                'Best American': format_american_odds(home_ml),
+                                'Best Decimal': round((home_ml / 100 + 1) if home_ml > 0 else (100 / abs(home_ml) + 1), 3),
+                                'Implied Prob %': round(ml_home_implied, 1),
+                                'AI Prob %': round(ml_home_prob, 1),
+                                'TheOver %': '—',
+                                'AI EV %': round(ml_home_prob - ml_home_implied, 1),
+                                'AI Edge pp': round(ml_home_prob - ml_home_implied, 1),
+                                'Confidence': round(confidence * 0.85, 1),  # Lower confidence for ML
+                                'Sentiment': round(vertex_result.get('sentiment_diff', 0), 2),
+                                'Kalshi': ('✅' if not vertex_result.get('kalshi_synthetic') else '🔮') if vertex_result.get('kalshi_available') else '—',
+                                'Kalshi %': round(vertex_result.get('kalshi_prob', 0.5) * 100, 1) if vertex_result.get('kalshi_available') else '—',
+                                'Kalshi Agrees': '—',
+                            })
+                            
+                            # Away ML bet
+                            best_bets_rows.append({
+                                'League': league,
+                                'Game': f"{away_team} @ {home_team}",
+                                'Commence (Local)': vertex_result.get('commence_time', 'Today'),
+                                'Market': 'Moneyline',
+                                'Side': away_team,
+                                'Selection': away_team,
+                                'Line': '—',
+                                'Best Book': 'TheOver.ai',
+                                'Best American': format_american_odds(away_ml),
+                                'Best Decimal': round((away_ml / 100 + 1) if away_ml > 0 else (100 / abs(away_ml) + 1), 3),
+                                'Implied Prob %': round(ml_away_implied, 1),
+                                'AI Prob %': round(ml_away_prob, 1),
+                                'TheOver %': '—',
+                                'AI EV %': round(ml_away_prob - ml_away_implied, 1),
+                                'AI Edge pp': round(ml_away_prob - ml_away_implied, 1),
+                                'Confidence': round(confidence * 0.85, 1),
+                                'Sentiment': round(-vertex_result.get('sentiment_diff', 0), 2),
+                                'Kalshi': ('✅' if not vertex_result.get('kalshi_synthetic') else '🔮') if vertex_result.get('kalshi_available') else '—',
+                                'Kalshi %': round((1 - vertex_result.get('kalshi_prob', 0.5)) * 100, 1) if vertex_result.get('kalshi_available') else '—',
+                                'Kalshi Agrees': '—',
+                            })
                 
                 # Display results
                 if skipped_low_conf > 0:
