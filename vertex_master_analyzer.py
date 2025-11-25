@@ -907,7 +907,7 @@ def show_vertex_master_analysis(results_df: pd.DataFrame):
     """Display ALL games ranked by Vertex AI - complete ranked list from 1 to N"""
     
     st.header("🏆 Vertex AI Master Analysis - Complete Rankings")
-    st.caption("ALL games ranked by expected value - powered by comprehensive data sources")
+    st.caption("ALL games ranked by WIN PROBABILITY - showing most likely winners first")
     
     if results_df.empty:
         st.info("No games analyzed yet")
@@ -923,25 +923,30 @@ def show_vertex_master_analysis(results_df: pd.DataFrame):
     # Add rank column
     results_df['rank'] = range(1, len(results_df) + 1)
     
+    # Calculate best side for each game to get summary stats
+    results_df['home_win_prob_pct'] = results_df['vertex_ai_prob'] * 100
+    results_df['away_win_prob_pct'] = (1 - results_df['vertex_ai_prob']) * 100
+    results_df['best_win_prob_summary'] = results_df[['home_win_prob_pct', 'away_win_prob_pct']].max(axis=1)
+    
     # Summary stats - handle NaN safely
     total_games = len(results_df)
-    positive_ev = len(results_df[results_df['expected_value'] > 0])
-    best_ev = results_df['expected_value'].max() if total_games > 0 else 0
-    if pd.isna(best_ev):
-        best_ev = 0
+    likely_winners = len(results_df[results_df['best_win_prob_summary'] >= 55])  # Games with 55%+ best pick
+    strong_picks = len(results_df[results_df['best_win_prob_summary'] >= 65])  # Strong favorites
+    best_prob = results_df['best_win_prob_summary'].max() if total_games > 0 else 50
+    if pd.isna(best_prob):
+        best_prob = 50
     
     col1, col2, col3, col4 = st.columns(4)
     with col1:
         st.metric("Total Games Analyzed", total_games)
     with col2:
-        st.metric("Positive EV Opportunities", positive_ev)
+        st.metric("Likely Winners (55%+)", likely_winners, 
+                  help="Games where AI gives the best pick 55%+ chance")
     with col3:
-        st.metric("Best EV", f"${best_ev:.2f}")
+        st.metric("Strong Picks (65%+)", strong_picks,
+                  help="Games where AI gives the best pick 65%+ chance")
     with col4:
-        avg_edge = results_df['vertex_ai_edge'].mean() * 100
-        if pd.isna(avg_edge):
-            avg_edge = 0
-        st.metric("Avg Vertex AI Edge", f"{avg_edge:+.2f}%")
+        st.metric("Best Win Probability", f"{best_prob:.1f}%")
     
     st.markdown("---")
     
@@ -949,51 +954,91 @@ def show_vertex_master_analysis(results_df: pd.DataFrame):
     st.subheader(f"📊 Complete Rankings (1-{total_games})")
     
     # Add filter options
-    col_filter1, col_filter2, col_filter3 = st.columns(3)
+    col_filter1, col_filter2, col_filter3, col_filter4 = st.columns(4)
     
     with col_filter1:
-        show_only_positive = st.checkbox("Show only positive EV bets", value=False)
+        sort_by = st.selectbox(
+            "Sort by",
+            ["Win Probability (Likely Winners)", "Expected Value (Sharp Bets)", "Edge %"],
+            index=0,
+            help="Win Probability shows most likely winners first. EV shows best mathematical value."
+        )
     
     with col_filter2:
-        min_edge = st.slider("Minimum edge %", -50.0, 50.0, -50.0, 0.5)
+        min_win_prob = st.slider("Min Win Probability %", 0, 100, 50, 5,
+            help="Only show bets where AI thinks the pick has at least this % chance to win")
     
     with col_filter3:
+        show_only_positive = st.checkbox("Show only positive EV", value=False)
+    
+    with col_filter4:
         expand_top_n = st.number_input("Auto-expand top N", min_value=0, max_value=20, value=3)
     
-    # Filter dataframe
+    # Calculate the BEST side for each game (home or away - whichever has higher prob)
     filtered_df = results_df.copy()
+    
+    # For each game, determine which side is the "best pick"
+    # vertex_ai_prob is home team probability
+    # If home_prob > 50%, pick home. If away_prob (1 - home_prob) > 50%, pick away
+    filtered_df['home_win_prob'] = filtered_df['vertex_ai_prob'] * 100
+    filtered_df['away_win_prob'] = (1 - filtered_df['vertex_ai_prob']) * 100
+    filtered_df['best_side'] = filtered_df.apply(
+        lambda x: 'home' if x['home_win_prob'] >= x['away_win_prob'] else 'away', axis=1
+    )
+    filtered_df['best_win_prob'] = filtered_df.apply(
+        lambda x: x['home_win_prob'] if x['best_side'] == 'home' else x['away_win_prob'], axis=1
+    )
+    filtered_df['best_team'] = filtered_df.apply(
+        lambda x: x.get('home_team', 'Home') if x['best_side'] == 'home' else x.get('away_team', 'Away'), axis=1
+    )
+    
+    # Apply minimum win probability filter
+    filtered_df = filtered_df[filtered_df['best_win_prob'] >= min_win_prob]
+    
     if show_only_positive:
         filtered_df = filtered_df[filtered_df['expected_value'] > 0]
     
-    filtered_df = filtered_df[filtered_df['vertex_ai_edge'] * 100 >= min_edge]
+    # Sort based on selection
+    if sort_by == "Win Probability (Likely Winners)":
+        filtered_df = filtered_df.sort_values('best_win_prob', ascending=False)
+    elif sort_by == "Expected Value (Sharp Bets)":
+        filtered_df = filtered_df.sort_values('expected_value', ascending=False)
+    else:  # Edge %
+        filtered_df = filtered_df.sort_values('vertex_ai_edge', ascending=False)
+    
+    # Re-rank after sorting
+    filtered_df['rank'] = range(1, len(filtered_df) + 1)
     
     if len(filtered_df) == 0:
-        st.warning("No games match your filters")
+        st.warning("No games match your filters. Try lowering the minimum win probability.")
         return
     
-    st.write(f"Showing {len(filtered_df)} of {total_games} games")
+    st.write(f"Showing {len(filtered_df)} of {total_games} games (sorted by {sort_by})")
     
     # Display ALL games ranked
     for idx, (_, game) in enumerate(filtered_df.iterrows(), 1):
         rank = game['rank']
         ev = game['expected_value']
         edge = game['vertex_ai_edge'] * 100
+        best_prob = game['best_win_prob']
+        best_team = game['best_team']
+        best_side = game['best_side']
         
-        # Color coding
-        if ev > 10:
-            emoji = "🌟"  # Excellent bet
+        # Color coding based on WIN PROBABILITY (not EV)
+        if best_prob >= 70:
+            emoji = "🌟"  # Strong favorite
             color = "🟢"
-        elif ev > 5:
-            emoji = "💚"  # Great bet
+        elif best_prob >= 60:
+            emoji = "💚"  # Good chance
             color = "🟢"
-        elif ev > 0:
-            emoji = "🟡"  # Good bet
+        elif best_prob >= 55:
+            emoji = "🟡"  # Slight edge
             color = "🟡"
-        elif ev > -5:
-            emoji = "⚪"  # Neutral
+        elif best_prob >= 50:
+            emoji = "⚪"  # Coin flip with small edge
             color = "⚪"
         else:
-            emoji = "🔴"  # Avoid
+            emoji = "🔴"  # Underdog (less likely)
             color = "🔴"
         
         # Expandable for each game
@@ -1013,32 +1058,39 @@ def show_vertex_master_analysis(results_df: pd.DataFrame):
         
         with st.expander(
             f"{color} **#{rank}** | {emoji} {game['away_team']} @ {game['home_team']} | "
-            f"EV: ${ev:+.2f} | Edge: {edge:+.1f}% | Vertex AI: {vertex_ai_prob_display*100:.0f}%",
+            f"**Pick: {best_team}** ({best_prob:.0f}% to win) | EV: ${ev:+.2f}",
             expanded=(idx <= expand_top_n)
         ):
-            # Top row - main metrics
+            # Top row - main metrics showing THE PICK (not just home team)
             metric_cols = st.columns(5)
             
             with metric_cols[0]:
                 st.metric(
-                    "Vertex AI Win %",
-                    f"{vertex_ai_prob_display*100:.1f}%",
-                    help="Ultimate AI prediction combining all sources"
+                    f"🎯 {best_team} Win %",
+                    f"{best_prob:.1f}%",
+                    help=f"AI prediction: {best_team} has {best_prob:.1f}% chance to cover"
                 )
             
             with metric_cols[1]:
+                # Show market implied for the PICKED side
+                if best_side == 'home':
+                    market_prob = implied_prob_display * 100
+                else:
+                    market_prob = (1 - implied_prob_display) * 100
                 st.metric(
                     "Market Implied %",
-                    f"{implied_prob_display*100:.1f}%",
+                    f"{market_prob:.1f}%",
                     help="What the betting market thinks"
                 )
             
             with metric_cols[2]:
+                # Calculate edge for the PICKED side
+                pick_edge = best_prob - market_prob
                 st.metric(
                     "Edge",
-                    f"{edge:+.2f}%",
-                    delta=f"{edge:+.2f}%",
-                    help="Vertex AI advantage over market"
+                    f"{pick_edge:+.1f}%",
+                    delta=f"{pick_edge:+.1f}%",
+                    help=f"AI thinks {best_team} is {abs(pick_edge):.1f}% better than market"
                 )
             
             with metric_cols[3]:
@@ -1050,26 +1102,51 @@ def show_vertex_master_analysis(results_df: pd.DataFrame):
                 )
             
             with metric_cols[4]:
-                recommendation = "✅ BET" if ev > 5 else "⚠️ SMALL BET" if ev > 0 else "❌ PASS"
+                # Recommendation based on win probability AND EV
+                if best_prob >= 60 and ev > 0:
+                    recommendation = "✅ BET"
+                elif best_prob >= 55 and ev > 0:
+                    recommendation = "⚠️ SMALL BET"
+                elif best_prob >= 50:
+                    recommendation = "🟡 CONSIDER"
+                else:
+                    recommendation = "❌ PASS"
                 st.metric("Recommendation", recommendation)
             
-            # Show THE PICK clearly
-            if ev > 0:
-                spread = game.get('home_spread', 0) or game.get('theover_spread', 0)
-                if spread is None or (isinstance(spread, float) and (pd.isna(spread) or spread != spread)):
-                    spread = 0
-                home_team = game.get('home_team', 'Home')
-                if spread != 0:
-                    spread = float(spread)
-                    # Spread bet
+            # Show THE PICK clearly - now uses best_team and best_side
+            spread = game.get('home_spread', 0) or game.get('theover_spread', 0)
+            if spread is None or (isinstance(spread, float) and (pd.isna(spread) or spread != spread)):
+                spread = 0
+            
+            home_team = game.get('home_team', 'Home')
+            away_team = game.get('away_team', 'Away')
+            
+            if spread != 0:
+                spread = float(spread)
+                # Determine pick spread based on best_side
+                if best_side == 'home':
+                    pick_spread = spread
+                    pick_team = home_team
                     if spread > 0:
-                        pick_text = f"🎯 **THE PICK: {home_team} +{abs(spread):.1f}** (home team covers as underdog)"
+                        pick_text = f"🎯 **THE PICK: {pick_team} +{abs(spread):.1f}** ({best_prob:.0f}% to cover as underdog)"
                     else:
-                        pick_text = f"🎯 **THE PICK: {home_team} {spread:.1f}** (home team covers as favorite)"
+                        pick_text = f"🎯 **THE PICK: {pick_team} {spread:.1f}** ({best_prob:.0f}% to cover as favorite)"
                 else:
-                    # Moneyline
-                    pick_text = f"🎯 **THE PICK: {home_team} ML** (home team to win)"
+                    # Away team - spread is opposite
+                    pick_spread = -spread
+                    pick_team = away_team
+                    if pick_spread > 0:
+                        pick_text = f"🎯 **THE PICK: {pick_team} +{abs(pick_spread):.1f}** ({best_prob:.0f}% to cover as underdog)"
+                    else:
+                        pick_text = f"🎯 **THE PICK: {pick_team} {pick_spread:.1f}** ({best_prob:.0f}% to cover as favorite)"
+            else:
+                # Moneyline
+                pick_text = f"🎯 **THE PICK: {best_team} ML** ({best_prob:.0f}% to win)"
+            
+            if best_prob >= 50:
                 st.success(pick_text)
+            else:
+                st.warning(pick_text + " ⚠️ (Underdog - lower chance)")
             
             # Second row - odds information
             st.markdown("**📊 Market Odds:**")
@@ -1080,8 +1157,8 @@ def show_vertex_master_analysis(results_df: pd.DataFrame):
                 st.write(f"**Moneyline:** {ml_odds}")
             
             with odds_cols[1]:
-                spread = game.get('home_spread', 'N/A')
-                st.write(f"**Spread:** {spread}")
+                spread_display = game.get('home_spread', 'N/A')
+                st.write(f"**Spread:** {spread_display}")
             
             with odds_cols[2]:
                 total = game.get('total_line', 'N/A')
