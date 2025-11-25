@@ -159,21 +159,26 @@ class VertexMasterAnalyzer:
         home_stats = self._fetch_team_stats(home_team, league, is_home=True)
         away_stats = self._fetch_team_stats(away_team, league, is_home=False)
         
+        # Helper to safely get values, converting None to default
+        def safe_val(stats, key, default):
+            val = stats.get(key)
+            return val if val is not None else default
+        
         return {
-            'home_win_pct': home_stats.get('win_pct', 0.5),
-            'away_win_pct': away_stats.get('win_pct', 0.5),
-            'home_avg_points': home_stats.get('avg_points', 0),
-            'away_avg_points': away_stats.get('avg_points', 0),
-            'home_avg_points_allowed': home_stats.get('avg_points_allowed', 0),
-            'away_avg_points_allowed': away_stats.get('avg_points_allowed', 0),
-            'home_off_rating': home_stats.get('off_rating', 0),
-            'away_off_rating': away_stats.get('off_rating', 0),
-            'home_def_rating': home_stats.get('def_rating', 0),
-            'away_def_rating': away_stats.get('def_rating', 0),
-            'home_pace': home_stats.get('pace', 0),
-            'away_pace': away_stats.get('pace', 0),
-            'home_home_record': home_stats.get('home_record', '0-0'),
-            'away_away_record': away_stats.get('away_record', '0-0'),
+            'home_win_pct': safe_val(home_stats, 'win_pct', 0.5),
+            'away_win_pct': safe_val(away_stats, 'win_pct', 0.5),
+            'home_avg_points': safe_val(home_stats, 'avg_points', 100),
+            'away_avg_points': safe_val(away_stats, 'avg_points', 100),
+            'home_avg_points_allowed': safe_val(home_stats, 'avg_points_allowed', 100),
+            'away_avg_points_allowed': safe_val(away_stats, 'avg_points_allowed', 100),
+            'home_off_rating': safe_val(home_stats, 'off_rating', 100),
+            'away_off_rating': safe_val(away_stats, 'off_rating', 100),
+            'home_def_rating': safe_val(home_stats, 'def_rating', 100),
+            'away_def_rating': safe_val(away_stats, 'def_rating', 100),
+            'home_pace': safe_val(home_stats, 'pace', 100),
+            'away_pace': safe_val(away_stats, 'pace', 100),
+            'home_home_record': safe_val(home_stats, 'home_record', '0-0'),
+            'away_away_record': safe_val(away_stats, 'away_record', '0-0'),
         }
     
     def _get_form_features(self, game: Dict, league: str) -> Dict:
@@ -185,15 +190,20 @@ class VertexMasterAnalyzer:
         home_last_5 = self._fetch_recent_games(home_team, league, n=5)
         away_last_5 = self._fetch_recent_games(away_team, league, n=5)
         
+        # Helper to safely get values, converting None to default
+        def safe_val(stats, key, default):
+            val = stats.get(key)
+            return val if val is not None else default
+        
         return {
-            'home_last_5_wins': home_last_5.get('wins', 0),
-            'away_last_5_wins': away_last_5.get('wins', 0),
-            'home_last_5_avg_points': home_last_5.get('avg_points', 0),
-            'away_last_5_avg_points': away_last_5.get('avg_points', 0),
-            'home_streak': home_last_5.get('streak', 0),
-            'away_streak': away_last_5.get('streak', 0),
-            'home_trend': home_last_5.get('trend', 'neutral'),
-            'away_trend': away_last_5.get('trend', 'neutral'),
+            'home_last_5_wins': safe_val(home_last_5, 'wins', 2),
+            'away_last_5_wins': safe_val(away_last_5, 'wins', 2),
+            'home_last_5_avg_points': safe_val(home_last_5, 'avg_points', 100),
+            'away_last_5_avg_points': safe_val(away_last_5, 'avg_points', 100),
+            'home_streak': safe_val(home_last_5, 'streak', 0),
+            'away_streak': safe_val(away_last_5, 'streak', 0),
+            'home_trend': safe_val(home_last_5, 'trend', 'neutral'),
+            'away_trend': safe_val(away_last_5, 'trend', 'neutral'),
         }
     
     def _get_sentiment_features(self, game: Dict) -> Dict:
@@ -663,14 +673,21 @@ class VertexMasterAnalyzer:
         
         Returns: List of 20-30 key features in consistent order
         
-        FIXED: Handles None values properly to prevent division errors
+        FIXED: Handles None and NaN values properly to prevent division errors
         """
         
-        # Helper function to safely get values, handling None
+        # Helper function to safely get values, handling None and NaN
         def safe_get(key, default):
-            """Get value, returning default if None or missing"""
+            """Get value, returning default if None, missing, or NaN"""
             value = comprehensive_features.get(key, default)
-            return value if value is not None else default
+            if value is None:
+                return default
+            try:
+                if pd.isna(value):
+                    return default
+            except (TypeError, ValueError):
+                pass
+            return value
         
         features = [
             # Team strength
@@ -717,6 +734,9 @@ class VertexMasterAnalyzer:
             safe_get('kalshi_alignment', 0.5),
             safe_get('kalshi_validation_score', 0.5),
         ]
+        
+        # Final NaN check on all features
+        features = [0.5 if (isinstance(f, float) and np.isnan(f)) else f for f in features]
         
         return features
     
@@ -778,9 +798,17 @@ class VertexMasterAnalyzer:
                 theover_prob = comp_features.get('theover_probability') or game.get('theover_probability')
                 implied_prob = comp_features.get('implied_home_prob') or game.get('implied_home_prob', 0.5)
                 
+                # Ensure implied_prob is valid
+                if implied_prob is None or pd.isna(implied_prob):
+                    implied_prob = 0.5
+                
+                # Ensure theover_prob is valid
+                if theover_prob is None or pd.isna(theover_prob):
+                    theover_prob = implied_prob
+                
                 if vertex_prob is None or (vertex_prob and 0.57 <= vertex_prob <= 0.59):
                     # ML returned fallback/heuristic value - use spread-derived probability instead
-                    if theover_prob and theover_prob != 0:
+                    if theover_prob and theover_prob != 0 and not pd.isna(theover_prob):
                         # Blend theover with implied for final prediction
                         # Weight theover more heavily since it's based on actual spread data
                         vertex_prob = theover_prob * 0.6 + implied_prob * 0.4
@@ -788,31 +816,45 @@ class VertexMasterAnalyzer:
                     else:
                         vertex_prob = implied_prob
 
-                if vertex_prob is not None:
-                    # Calculate expected value
-                    edge = vertex_prob - implied_prob
+                # Ensure vertex_prob is valid
+                if vertex_prob is None or pd.isna(vertex_prob):
+                    vertex_prob = 0.5
+                
+                # Clamp to valid range
+                vertex_prob = max(0.15, min(0.85, float(vertex_prob)))
+                implied_prob = max(0.15, min(0.85, float(implied_prob)))
 
-                    # Store everything
-                    result = comp_features.copy()
-                    result['vertex_ai_prob'] = vertex_prob
-                    result['vertex_ai_edge'] = edge
-                    result['vertex_ai_confidence'] = abs(edge)
+                # Calculate expected value
+                edge = vertex_prob - implied_prob
 
-                    # Calculate EV
-                    home_ml = comp_features.get('home_ml_odds', 100)
-                    if home_ml and home_ml != 0:
-                        if home_ml > 0:
-                            ev = (vertex_prob * home_ml) - ((1 - vertex_prob) * 100)
-                        else:
-                            ev = (vertex_prob * 100) - ((1 - vertex_prob) * abs(home_ml))
+                # Store everything
+                result = comp_features.copy()
+                result['vertex_ai_prob'] = vertex_prob
+                result['vertex_ai_edge'] = edge
+                result['vertex_ai_confidence'] = abs(edge)
 
-                        result['expected_value'] = ev
-                        result['recommendation'] = 'BET' if ev > 5 else 'PASS'
+                # Calculate EV
+                home_ml = comp_features.get('home_ml_odds') or game.get('home_ml_odds', -110)
+                if home_ml is None or home_ml == 0:
+                    home_ml = -110  # Default to standard juice
+                
+                try:
+                    if home_ml > 0:
+                        ev = (vertex_prob * home_ml) - ((1 - vertex_prob) * 100)
                     else:
-                        result['expected_value'] = 0
-                        result['recommendation'] = 'PASS'
+                        ev = (vertex_prob * 100) - ((1 - vertex_prob) * abs(home_ml))
+                    
+                    if pd.isna(ev):
+                        ev = 0
+                    
+                    result['expected_value'] = ev
+                    result['recommendation'] = 'BET' if ev > 5 else 'PASS'
+                except Exception as calc_err:
+                    logger.warning(f"EV calculation error: {calc_err}")
+                    result['expected_value'] = 0
+                    result['recommendation'] = 'PASS'
 
-                    results.append(result)
+                results.append(result)
 
             except Exception as e:
                 logger.error(f"Error analyzing game {idx}: {e}")
@@ -841,13 +883,22 @@ def show_vertex_master_analysis(results_df: pd.DataFrame):
         st.info("No games analyzed yet")
         return
     
+    # Clean NaN values before display
+    results_df = results_df.copy()
+    results_df['expected_value'] = results_df['expected_value'].fillna(0)
+    results_df['vertex_ai_edge'] = results_df['vertex_ai_edge'].fillna(0)
+    results_df['vertex_ai_prob'] = results_df['vertex_ai_prob'].fillna(0.5)
+    results_df['implied_home_prob'] = results_df['implied_home_prob'].fillna(0.5)
+    
     # Add rank column
     results_df['rank'] = range(1, len(results_df) + 1)
     
-    # Summary stats
+    # Summary stats - handle NaN safely
     total_games = len(results_df)
     positive_ev = len(results_df[results_df['expected_value'] > 0])
-    best_ev = results_df.iloc[0]['expected_value'] if len(results_df) > 0 else 0
+    best_ev = results_df['expected_value'].max() if total_games > 0 else 0
+    if pd.isna(best_ev):
+        best_ev = 0
     
     col1, col2, col3, col4 = st.columns(4)
     with col1:
@@ -858,6 +909,8 @@ def show_vertex_master_analysis(results_df: pd.DataFrame):
         st.metric("Best EV", f"${best_ev:.2f}")
     with col4:
         avg_edge = results_df['vertex_ai_edge'].mean() * 100
+        if pd.isna(avg_edge):
+            avg_edge = 0
         st.metric("Avg Vertex AI Edge", f"{avg_edge:+.2f}%")
     
     st.markdown("---")
