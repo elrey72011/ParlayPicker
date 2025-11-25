@@ -930,8 +930,8 @@ def show_vertex_master_analysis(results_df: pd.DataFrame):
     
     # Summary stats - handle NaN safely
     total_games = len(results_df)
-    likely_winners = len(results_df[results_df['best_win_prob_summary'] >= 55])  # Games with 55%+ best pick
-    strong_picks = len(results_df[results_df['best_win_prob_summary'] >= 65])  # Strong favorites
+    strong_favorites = len(results_df[results_df['best_win_prob_summary'] >= 65])  # Clear favorites
+    likely_winners = len(results_df[results_df['best_win_prob_summary'] >= 55])  # Solid picks
     best_prob = results_df['best_win_prob_summary'].max() if total_games > 0 else 50
     if pd.isna(best_prob):
         best_prob = 50
@@ -940,13 +940,15 @@ def show_vertex_master_analysis(results_df: pd.DataFrame):
     with col1:
         st.metric("Total Games Analyzed", total_games)
     with col2:
-        st.metric("Likely Winners (55%+)", likely_winners, 
-                  help="Games where AI gives the best pick 55%+ chance")
+        st.metric("🔥 Strong Favorites (65%+)", strong_favorites, 
+                  help="Games with a clear favorite - highest probability picks")
     with col3:
-        st.metric("Strong Picks (65%+)", strong_picks,
-                  help="Games where AI gives the best pick 65%+ chance")
+        st.metric("✅ Solid Picks (55%+)", likely_winners,
+                  help="Games where the favorite has 55%+ chance")
     with col4:
         st.metric("Best Win Probability", f"{best_prob:.1f}%")
+    
+    st.info("💡 **Tip:** In 'Likely Winners' mode, we show the **FAVORITE** side of each game - the team most likely to cover. Default filter is 55%+ probability.")
     
     st.markdown("---")
     
@@ -965,7 +967,7 @@ def show_vertex_master_analysis(results_df: pd.DataFrame):
         )
     
     with col_filter2:
-        min_win_prob = st.slider("Min Win Probability %", 0, 100, 50, 5,
+        min_win_prob = st.slider("Min Win Probability %", 0, 100, 55, 5,
             help="Only show bets where AI thinks the pick has at least this % chance to win")
     
     with col_filter3:
@@ -978,18 +980,33 @@ def show_vertex_master_analysis(results_df: pd.DataFrame):
     filtered_df = results_df.copy()
     
     # For each game, determine which side is the "best pick"
-    # vertex_ai_prob is home team probability
+    # vertex_ai_prob is home team probability (to cover spread)
     # If home_prob > 50%, pick home. If away_prob (1 - home_prob) > 50%, pick away
     filtered_df['home_win_prob'] = filtered_df['vertex_ai_prob'] * 100
     filtered_df['away_win_prob'] = (1 - filtered_df['vertex_ai_prob']) * 100
+    
+    # ALWAYS pick the FAVORITE (higher probability side)
     filtered_df['best_side'] = filtered_df.apply(
-        lambda x: 'home' if x['home_win_prob'] >= x['away_win_prob'] else 'away', axis=1
+        lambda x: 'home' if x['home_win_prob'] > x['away_win_prob'] else 'away', axis=1
     )
     filtered_df['best_win_prob'] = filtered_df.apply(
-        lambda x: x['home_win_prob'] if x['best_side'] == 'home' else x['away_win_prob'], axis=1
+        lambda x: max(x['home_win_prob'], x['away_win_prob']), axis=1
     )
     filtered_df['best_team'] = filtered_df.apply(
         lambda x: x.get('home_team', 'Home') if x['best_side'] == 'home' else x.get('away_team', 'Away'), axis=1
+    )
+    
+    # Calculate spread for the best side
+    filtered_df['best_spread'] = filtered_df.apply(
+        lambda x: x.get('home_spread', 0) if x['best_side'] == 'home' else -x.get('home_spread', 0) if x.get('home_spread') else 0, 
+        axis=1
+    )
+    
+    # Determine if this is a "likely winner" (favorite with reasonable spread)
+    # Likely winner = best_win_prob > 50% AND (ML bet OR spread < 10 points)
+    filtered_df['is_likely_winner'] = filtered_df.apply(
+        lambda x: x['best_win_prob'] >= 50 and (abs(x.get('best_spread', 0) or 0) < 15 or x.get('best_spread', 0) == 0),
+        axis=1
     )
     
     # Apply minimum win probability filter
@@ -1000,7 +1017,8 @@ def show_vertex_master_analysis(results_df: pd.DataFrame):
     
     # Sort based on selection
     if sort_by == "Win Probability (Likely Winners)":
-        filtered_df = filtered_df.sort_values('best_win_prob', ascending=False)
+        # Sort by win probability, with likely winners first
+        filtered_df = filtered_df.sort_values(['is_likely_winner', 'best_win_prob'], ascending=[False, False])
     elif sort_by == "Expected Value (Sharp Bets)":
         filtered_df = filtered_df.sort_values('expected_value', ascending=False)
     else:  # Edge %
@@ -1103,17 +1121,17 @@ def show_vertex_master_analysis(results_df: pd.DataFrame):
             
             with metric_cols[4]:
                 # Recommendation based on win probability AND EV
-                if best_prob >= 60 and ev > 0:
+                if best_prob >= 65 and ev > 0:
                     recommendation = "✅ BET"
                 elif best_prob >= 55 and ev > 0:
                     recommendation = "⚠️ SMALL BET"
-                elif best_prob >= 50:
+                elif best_prob >= 55:
                     recommendation = "🟡 CONSIDER"
                 else:
                     recommendation = "❌ PASS"
                 st.metric("Recommendation", recommendation)
             
-            # Show THE PICK clearly - now uses best_team and best_side
+            # Show THE PICK clearly - ALWAYS show the FAVORITE (higher probability side)
             spread = game.get('home_spread', 0) or game.get('theover_spread', 0)
             if spread is None or (isinstance(spread, float) and (pd.isna(spread) or spread != spread)):
                 spread = 0
@@ -1121,32 +1139,37 @@ def show_vertex_master_analysis(results_df: pd.DataFrame):
             home_team = game.get('home_team', 'Home')
             away_team = game.get('away_team', 'Away')
             
+            # best_side and best_team should already be the FAVORITE
+            # best_prob is the probability the favorite covers/wins
+            
             if spread != 0:
                 spread = float(spread)
-                # Determine pick spread based on best_side
+                # Determine pick spread based on best_side (which is the FAVORITE)
                 if best_side == 'home':
                     pick_spread = spread
                     pick_team = home_team
-                    if spread > 0:
-                        pick_text = f"🎯 **THE PICK: {pick_team} +{abs(spread):.1f}** ({best_prob:.0f}% to cover as underdog)"
-                    else:
-                        pick_text = f"🎯 **THE PICK: {pick_team} {spread:.1f}** ({best_prob:.0f}% to cover as favorite)"
                 else:
-                    # Away team - spread is opposite
                     pick_spread = -spread
                     pick_team = away_team
-                    if pick_spread > 0:
-                        pick_text = f"🎯 **THE PICK: {pick_team} +{abs(pick_spread):.1f}** ({best_prob:.0f}% to cover as underdog)"
-                    else:
-                        pick_text = f"🎯 **THE PICK: {pick_team} {pick_spread:.1f}** ({best_prob:.0f}% to cover as favorite)"
+                
+                # Describe the pick
+                if pick_spread < 0:
+                    # Favorite giving points
+                    pick_text = f"🎯 **THE PICK: {pick_team} {pick_spread:.1f}** ({best_prob:.0f}% to cover as favorite)"
+                else:
+                    # Getting points (shouldn't happen for favorites, but handle it)
+                    pick_text = f"🎯 **THE PICK: {pick_team} +{abs(pick_spread):.1f}** ({best_prob:.0f}% to cover)"
             else:
                 # Moneyline
                 pick_text = f"🎯 **THE PICK: {best_team} ML** ({best_prob:.0f}% to win)"
             
-            if best_prob >= 50:
+            # Color code based on probability
+            if best_prob >= 65:
                 st.success(pick_text)
+            elif best_prob >= 55:
+                st.info(pick_text)
             else:
-                st.warning(pick_text + " ⚠️ (Underdog - lower chance)")
+                st.warning(pick_text + " ⚠️ (Close game)")
             
             # Second row - odds information
             st.markdown("**📊 Market Odds:**")
