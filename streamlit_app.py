@@ -9937,8 +9937,8 @@ if is_vertex_ai_enabled():
                 best_bets_rows = []
                 skipped_low_conf = 0  # Track skipped bets for debugging
                 
-                # If we have odds_data from The Odds API, use the detailed path
-                if odds_data:
+                # ALWAYS use single-pick path (disabled multi-row Odds API path)
+                if False:  # Disabled: was `if odds_data:`
                     st.info(f"📊 Using odds data from {len(odds_data)} games via The Odds API")
                     
                     # Filter controls (already set above)
@@ -10054,6 +10054,10 @@ if is_vertex_ai_enabled():
                         st.write(f"- Implied Home Prob: {sample.get('implied_home_prob', 'N/A')}")
                         st.write(f"- Home ML Odds: {sample.get('home_ml_odds', 'N/A')}")
                     
+                    # =====================================================
+                    # SINGLE BEST PICK PER GAME - Only generate ONE bet per game
+                    # =====================================================
+                    
                     for vertex_result in vertex_results:
                         home_team = vertex_result.get('home_team', 'Home')
                         away_team = vertex_result.get('away_team', 'Away')
@@ -10064,9 +10068,6 @@ if is_vertex_ai_enabled():
                             vertex_prob = vertex_prob * 100  # Convert to percentage
                         
                         confidence = vertex_result.get('confidence', 50)
-                        edge = vertex_result.get('edge', 0)
-                        if abs(edge) < 1:
-                            edge = edge * 100  # Convert to percentage
                         
                         # Apply minimum confidence filter
                         if confidence < min_ai_confidence * 100:
@@ -10076,241 +10077,117 @@ if is_vertex_ai_enabled():
                         # Get odds from stored data
                         home_ml = vertex_result.get('home_ml_odds') or -110
                         away_ml = vertex_result.get('away_ml_odds') or -110
-                        spread = vertex_result.get('spread', 0)
+                        spread = vertex_result.get('spread', 0) or 0
                         
-                        # Use stored implied probability if available, otherwise calculate
-                        if vertex_result.get('implied_home_prob') and vertex_result.get('implied_home_prob') != 0.5:
-                            home_implied = vertex_result.get('implied_home_prob') * 100
-                        elif home_ml and home_ml != 0 and home_ml != -110:
-                            if home_ml > 0:
-                                home_implied = 100 / (home_ml + 100) * 100
-                            else:
-                                home_implied = abs(home_ml) / (abs(home_ml) + 100) * 100
-                        else:
-                            home_implied = 50.0
-                        
-                        away_implied = 100 - home_implied
-                        
-                        # Home team bet
-                        home_edge = vertex_prob - home_implied
-                        theover_prob = vertex_result.get('theover_probability', 0)
-                        if theover_prob and theover_prob <= 1:
-                            theover_prob = theover_prob * 100  # Convert to percentage
-                        
-                        # Format American odds properly (+150 or -110)
-                        def format_american_odds(odds):
-                            if odds is None or odds == 0:
-                                return -110
-                            return int(odds)
-                        
-                        best_bets_rows.append({
-                            'League': league,
-                            'Game': f"{away_team} @ {home_team}",
-                            'Commence (Local)': vertex_result.get('commence_time', 'Today'),
-                            'Market': 'Spread' if spread else 'Moneyline',
-                            'Side': home_team,
-                            'Selection': home_team,
-                            'Line': round(spread, 1) if spread else None,
-                            'Best Book': 'TheOver.ai',
-                            'Best American': format_american_odds(home_ml),
-                            'Best Decimal': round((home_ml / 100 + 1) if home_ml and home_ml > 0 else (100 / abs(home_ml) + 1) if home_ml else 1.91, 3),
-                            'Implied Prob %': round(home_implied, 1),
-                            'AI Prob %': round(vertex_prob, 1),
-                            'TheOver %': round(theover_prob, 1) if theover_prob and theover_prob > 0 else None,
-                            'AI EV %': round(home_edge, 1),
-                            'AI Edge pp': round(home_edge, 1),
-                            'Confidence': round(confidence, 1),
-                            'Sentiment': '✅' if vertex_result.get('sentiment_diff', 0) > 0 else ('❌' if vertex_result.get('sentiment_diff', 0) < 0 else '—'),
-                            'Kalshi': ('✅' if not vertex_result.get('kalshi_synthetic') else '🔮') if vertex_result.get('kalshi_available') else '—',
-                            'Kalshi %': round(vertex_result.get('kalshi_prob', 0.5) * 100, 1) if vertex_result.get('kalshi_available') else None,
-                            'Kalshi Agrees': '✅' if vertex_result.get('kalshi_agrees') else ('❌' if vertex_result.get('kalshi_agrees') == False else '—'),
-                        })
-                        
-                        # Away team bet
+                        # Calculate probabilities
+                        home_prob = vertex_prob
                         away_prob = 100 - vertex_prob
-                        away_edge = away_prob - away_implied
-                        # For away team: sentiment < 0 means away team has better sentiment (good for away bet)
-                        away_sentiment_diff = vertex_result.get('sentiment_diff', 0)
+                        
+                        # Get sentiment and Kalshi data
+                        sentiment_diff = vertex_result.get('sentiment_diff', 0)
+                        kalshi_available = vertex_result.get('kalshi_available', False)
+                        kalshi_prob = vertex_result.get('kalshi_prob', 0.5) or 0.5
+                        kalshi_home = kalshi_prob * 100
+                        kalshi_away = 100 - kalshi_home
+                        
+                        # =====================================================
+                        # DETERMINE SINGLE BEST PICK FOR THIS GAME
+                        # =====================================================
+                        
+                        # Calculate composite scores for each potential bet
+                        candidates = []
+                        
+                        # Candidate 1: Home team (spread or ML)
+                        home_score = home_prob
+                        home_sentiment_boost = 10 if sentiment_diff > 0 else (-5 if sentiment_diff < 0 else 0)
+                        home_kalshi_boost = 15 if (kalshi_available and kalshi_home > 50) else 0
+                        home_composite = home_score + home_sentiment_boost + home_kalshi_boost
+                        
+                        if spread and spread != 0:
+                            home_pick = f"{home_team} {spread:+.1f}"
+                            home_market = 'Spread'
+                        else:
+                            home_pick = f"{home_team} ML"
+                            home_market = 'Moneyline'
+                        
+                        candidates.append({
+                            'pick': home_pick,
+                            'team': home_team,
+                            'market': home_market,
+                            'line': spread if spread else None,
+                            'win_prob': home_prob,
+                            'composite': home_composite,
+                            'sentiment_agrees': '✅' if sentiment_diff > 0 else ('❌' if sentiment_diff < 0 else '—'),
+                            'kalshi_agrees': '✅' if (kalshi_available and kalshi_home > 50) else ('❌' if kalshi_available else '—'),
+                            'kalshi_pct': kalshi_home if kalshi_available else None,
+                            'odds': home_ml,
+                            'is_favorite': spread <= 0 if spread else home_prob > 50,
+                        })
+                        
+                        # Candidate 2: Away team (spread or ML)
+                        away_score = away_prob
+                        away_sentiment_boost = 10 if sentiment_diff < 0 else (-5 if sentiment_diff > 0 else 0)
+                        away_kalshi_boost = 15 if (kalshi_available and kalshi_away > 50) else 0
+                        away_composite = away_score + away_sentiment_boost + away_kalshi_boost
+                        
+                        if spread and spread != 0:
+                            away_pick = f"{away_team} {-spread:+.1f}"
+                            away_market = 'Spread'
+                        else:
+                            away_pick = f"{away_team} ML"
+                            away_market = 'Moneyline'
+                        
+                        candidates.append({
+                            'pick': away_pick,
+                            'team': away_team,
+                            'market': away_market,
+                            'line': -spread if spread else None,
+                            'win_prob': away_prob,
+                            'composite': away_composite,
+                            'sentiment_agrees': '✅' if sentiment_diff < 0 else ('❌' if sentiment_diff > 0 else '—'),
+                            'kalshi_agrees': '✅' if (kalshi_available and kalshi_away > 50) else ('❌' if kalshi_available else '—'),
+                            'kalshi_pct': kalshi_away if kalshi_available else None,
+                            'odds': away_ml,
+                            'is_favorite': spread >= 0 if spread else away_prob > 50,
+                        })
+                        
+                        # =====================================================
+                        # SELECT THE SINGLE BEST PICK (FAVOR FAVORITES)
+                        # =====================================================
+                        
+                        # Filter to only favorites (win_prob >= 50%)
+                        favorites = [c for c in candidates if c['win_prob'] >= 50]
+                        
+                        if favorites:
+                            # Pick the favorite with highest composite score
+                            best = max(favorites, key=lambda x: x['composite'])
+                        else:
+                            # No clear favorite, pick highest probability
+                            best = max(candidates, key=lambda x: x['win_prob'])
+                        
+                        # Format American odds
+                        if best['odds'] and best['odds'] != 0:
+                            if best['odds'] > 0:
+                                odds_str = f"+{int(best['odds'])}"
+                            else:
+                                odds_str = str(int(best['odds']))
+                        else:
+                            odds_str = "-110"
+                        
+                        # Add the SINGLE BEST PICK for this game
                         best_bets_rows.append({
                             'League': league,
                             'Game': f"{away_team} @ {home_team}",
-                            'Commence (Local)': vertex_result.get('commence_time', 'Today'),
-                            'Market': 'Spread' if spread else 'Moneyline',
-                            'Side': away_team,
-                            'Selection': away_team,
-                            'Line': round(-spread, 1) if spread else None,
-                            'Best Book': 'TheOver.ai',
-                            'Best American': format_american_odds(away_ml),
-                            'Best Decimal': round((away_ml / 100 + 1) if away_ml and away_ml > 0 else (100 / abs(away_ml) + 1) if away_ml else 1.91, 3),
-                            'Implied Prob %': round(away_implied, 1),
-                            'AI Prob %': round(away_prob, 1),
-                            'TheOver %': round(100 - theover_prob, 1) if theover_prob and theover_prob > 0 else None,
-                            'AI EV %': round(away_edge, 1),
-                            'AI Edge pp': round(away_edge, 1),
+                            'THE PICK': best['pick'],
+                            'Win %': round(best['win_prob'], 1),
+                            'Composite': round(best['composite'], 1),
+                            'Favorite': '✅' if best['is_favorite'] else '❌',
+                            'Sentiment': best['sentiment_agrees'],
+                            'Kalshi': best['kalshi_agrees'],
+                            'Kalshi %': f"{best['kalshi_pct']:.0f}" if best['kalshi_pct'] else '—',
+                            'Odds': odds_str,
                             'Confidence': round(confidence, 1),
-                            'Sentiment': '✅' if away_sentiment_diff < 0 else ('❌' if away_sentiment_diff > 0 else '—'),
-                            'Kalshi': ('✅' if not vertex_result.get('kalshi_synthetic') else '🔮') if vertex_result.get('kalshi_available') else '—',
-                            'Kalshi %': round((1 - vertex_result.get('kalshi_prob', 0.5)) * 100, 1) if vertex_result.get('kalshi_available') else None,
-                            'Kalshi Agrees': '✅' if vertex_result.get('kalshi_agrees') else ('❌' if vertex_result.get('kalshi_agrees') == False else '—'),
                         })
-                        
-                        # === TOTALS (Over/Under) Bets ===
-                        total_line = vertex_result.get('theover_total', 0) or vertex_result.get('total', 0)
-                        total_pick = vertex_result.get('theover_total_pick', '')
-                        total_prob = vertex_result.get('theover_total_probability', 0.5)
-                        
-                        # SANITY CHECK: Skip invalid totals (probabilities mistaken for lines)
-                        # Real totals: Basketball 150-250, Football 35-60, Hockey 4-8
-                        # If < 10, it's probably a probability (0.75, 0.8125, etc.)
-                        if total_line and total_line > 10:
-                            # Convert total_prob to percentage if needed
-                            if total_prob and total_prob <= 1:
-                                total_prob = total_prob * 100
-                            
-                            # If no TheOver pick, default to 52% (slight over bias)
-                            if total_prob == 50:
-                                total_prob = 52 if not total_pick else total_prob
-                            
-                            # Calculate probabilities based on TheOver.ai pick
-                            if total_pick and total_pick.lower() == 'over':
-                                over_prob = max(52, total_prob)  # TheOver picked Over
-                                under_prob = 100 - over_prob
-                            elif total_pick and total_pick.lower() == 'under':
-                                under_prob = max(52, total_prob)  # TheOver picked Under
-                                over_prob = 100 - under_prob
-                            else:
-                                # No pick - use 50/50 with slight variance
-                                over_prob = 50.0
-                                under_prob = 50.0
-                            
-                            over_implied = 52.4  # Standard -110 implies 52.4%
-                            over_edge = over_prob - over_implied
-                            under_edge = under_prob - over_implied
-                            
-                            # Over bet - use numeric values (formatting happens at display)
-                            best_bets_rows.append({
-                                'League': league,
-                                'Game': f"{away_team} @ {home_team}",
-                                'Commence (Local)': vertex_result.get('commence_time', 'Today'),
-                                'Market': 'Total',
-                                'Side': 'Over',
-                                'Selection': f"Over {total_line}",
-                                'Line': total_line,
-                                'Best Book': 'TheOver.ai',
-                                'Best American': -110,
-                                'Best Decimal': 1.91,
-                                'Implied Prob %': over_implied,
-                                'AI Prob %': round(over_prob, 1) if over_prob != 50 else None,
-                                'TheOver %': round(over_prob, 1) if total_pick and total_pick.lower() == 'over' else (None if not total_pick else round(100-total_prob, 1)),
-                                'AI EV %': round(over_edge, 1) if over_prob != 50 else None,
-                                'AI Edge pp': round(over_edge, 1) if over_prob != 50 else None,
-                                'Confidence': round(confidence * 0.9, 1),  # Slightly lower confidence for totals
-                                'Sentiment': '—',  # Sentiment doesn't apply to totals
-                                'Kalshi': '—',
-                                'Kalshi %': None,
-                                'Kalshi Agrees': '—',
-                            })
-                            
-                            # Under bet
-                            best_bets_rows.append({
-                                'League': league,
-                                'Game': f"{away_team} @ {home_team}",
-                                'Commence (Local)': vertex_result.get('commence_time', 'Today'),
-                                'Market': 'Total',
-                                'Side': 'Under',
-                                'Selection': f"Under {total_line}",
-                                'Line': total_line,
-                                'Best Book': 'TheOver.ai',
-                                'Best American': -110,
-                                'Best Decimal': 1.91,
-                                'Implied Prob %': over_implied,
-                                'AI Prob %': round(under_prob, 1) if under_prob != 50 else None,
-                                'TheOver %': round(under_prob, 1) if total_pick and total_pick.lower() == 'under' else (None if not total_pick else round(100-over_prob, 1)),
-                                'AI EV %': round(under_edge, 1) if under_prob != 50 else None,
-                                'AI Edge pp': round(under_edge, 1) if under_prob != 50 else None,
-                                'Confidence': round(confidence * 0.9, 1),
-                                'Sentiment': '—',  # Sentiment doesn't apply to totals
-                                'Kalshi': '—',
-                                'Kalshi %': None,
-                                'Kalshi Agrees': '—',
-                            })
-                        
-                        # === MONEYLINE Bets (if different from spread) ===
-                        if spread and home_ml and away_ml:
-                            # Only add ML if we have both spread AND moneyline data
-                            ml_home_implied = 0
-                            if home_ml > 0:
-                                ml_home_implied = 100 / (home_ml + 100) * 100
-                            else:
-                                ml_home_implied = abs(home_ml) / (abs(home_ml) + 100) * 100
-                            
-                            ml_away_implied = 100 - ml_home_implied
-                            
-                            # ML probabilities based on spread
-                            # IMPORTANT: Negative spread = favorite (MORE likely to win)
-                            #            Positive spread = underdog (LESS likely to win)
-                            # Each point of spread ≈ 3% probability shift
-                            # Example: Home team -10.5 spread → favorite → 50 + 31.5 = 81.5% to win ML
-                            # Example: Home team +10.5 spread → underdog → 50 - 31.5 = 18.5% to win ML
-                            ml_home_prob = 50 - (spread * 3)  # Positive spread = underdog = lower prob
-                            ml_home_prob = max(5, min(95, ml_home_prob))  # Clamp to reasonable range
-                            ml_away_prob = 100 - ml_home_prob
-                            
-                            # Home ML bet
-                            best_bets_rows.append({
-                                'League': league,
-                                'Game': f"{away_team} @ {home_team}",
-                                'Commence (Local)': vertex_result.get('commence_time', 'Today'),
-                                'Market': 'Moneyline',
-                                'Side': home_team,
-                                'Selection': home_team,
-                                'Line': None,
-                                'Best Book': 'TheOver.ai',
-                                'Best American': format_american_odds(home_ml),
-                                'Best Decimal': round((home_ml / 100 + 1) if home_ml > 0 else (100 / abs(home_ml) + 1), 3),
-                                'Implied Prob %': round(ml_home_implied, 1),
-                                'AI Prob %': round(ml_home_prob, 1),
-                                'TheOver %': None,
-                                'AI EV %': round(ml_home_prob - ml_home_implied, 1),
-                                'AI Edge pp': round(ml_home_prob - ml_home_implied, 1),
-                                'Confidence': round(confidence * 0.85, 1),  # Lower confidence for ML
-                                'Sentiment': '✅' if vertex_result.get('sentiment_diff', 0) > 0 else ('❌' if vertex_result.get('sentiment_diff', 0) < 0 else '—'),
-                                'Kalshi': ('✅' if not vertex_result.get('kalshi_synthetic') else '🔮') if vertex_result.get('kalshi_available') else '—',
-                                'Kalshi %': round(vertex_result.get('kalshi_prob', 0.5) * 100, 1) if vertex_result.get('kalshi_available') else None,
-                                # Check if Kalshi agrees: both favor same team (>50% or <50%)
-                                'Kalshi Agrees': ('✅' if (ml_home_prob > 50 and vertex_result.get('kalshi_prob', 0.5) > 0.5) or 
-                                                         (ml_home_prob < 50 and vertex_result.get('kalshi_prob', 0.5) < 0.5) 
-                                                  else '❌') if vertex_result.get('kalshi_available') else '—',
-                            })
-                            
-                            # Away ML bet
-                            ml_away_sentiment = vertex_result.get('sentiment_diff', 0)
-                            best_bets_rows.append({
-                                'League': league,
-                                'Game': f"{away_team} @ {home_team}",
-                                'Commence (Local)': vertex_result.get('commence_time', 'Today'),
-                                'Market': 'Moneyline',
-                                'Side': away_team,
-                                'Selection': away_team,
-                                'Line': None,
-                                'Best Book': 'TheOver.ai',
-                                'Best American': format_american_odds(away_ml),
-                                'Best Decimal': round((away_ml / 100 + 1) if away_ml > 0 else (100 / abs(away_ml) + 1), 3),
-                                'Implied Prob %': round(ml_away_implied, 1),
-                                'AI Prob %': round(ml_away_prob, 1),
-                                'TheOver %': None,
-                                'AI EV %': round(ml_away_prob - ml_away_implied, 1),
-                                'AI Edge pp': round(ml_away_prob - ml_away_implied, 1),
-                                'Confidence': round(confidence * 0.85, 1),
-                                'Sentiment': '✅' if ml_away_sentiment < 0 else ('❌' if ml_away_sentiment > 0 else '—'),
-                                'Kalshi': ('✅' if not vertex_result.get('kalshi_synthetic') else '🔮') if vertex_result.get('kalshi_available') else '—',
-                                'Kalshi %': round((1 - vertex_result.get('kalshi_prob', 0.5)) * 100, 1) if vertex_result.get('kalshi_available') else None,
-                                # Check if Kalshi agrees: both favor same team (>50% or <50%)
-                                # For away team: kalshi_prob < 0.5 means Kalshi favors away
-                                'Kalshi Agrees': ('✅' if (ml_away_prob > 50 and vertex_result.get('kalshi_prob', 0.5) < 0.5) or 
-                                                         (ml_away_prob < 50 and vertex_result.get('kalshi_prob', 0.5) > 0.5) 
-                                                  else '❌') if vertex_result.get('kalshi_available') else '—',
-                            })
                 
                 # Display results
                 if skipped_low_conf > 0:
@@ -10319,185 +10196,57 @@ if is_vertex_ai_enabled():
                 if best_bets_rows:
                     best_bets_df = pd.DataFrame(best_bets_rows)
                     
-                    # Add sorting and filtering controls
-                    sort_col1, sort_col2, sort_col3 = st.columns(3)
+                    # Sort by Win % (highest first) then Composite score
+                    best_bets_df = best_bets_df.sort_values(['Win %', 'Composite'], ascending=[False, False])
                     
-                    with sort_col1:
-                        best_bets_sort = st.selectbox(
-                            "Sort by",
-                            ["Win Probability (Likely Winners)", "Edge % (Sharp Bets)", "Confidence"],
-                            key="best_bets_sort"
-                        )
+                    # Add rank column
+                    best_bets_df.insert(0, 'Rank', range(1, len(best_bets_df) + 1))
                     
-                    with sort_col2:
-                        min_prob_filter = st.slider(
-                            "Min Win Probability %",
-                            0, 100, 50, 5,
-                            key="min_prob_best_bets",
-                            help="Only show bets where AI gives 50%+ chance to win"
-                        )
+                    # Summary stats
+                    total_games = len(best_bets_df)
+                    kalshi_agrees = len(best_bets_df[best_bets_df['Kalshi'] == '✅'])
+                    sentiment_agrees = len(best_bets_df[best_bets_df['Sentiment'] == '✅'])
+                    avg_win_prob = best_bets_df['Win %'].mean()
                     
-                    with sort_col3:
-                        show_underdogs = st.checkbox("Include underdogs (<50%)", value=False,
-                            help="Show bets where the pick has less than 50% chance (higher payout, lower chance)")
+                    st.success(f"🎯 **{total_games} Games - ONE Best Pick Per Game**")
                     
-                    # Filter by win probability
-                    if not show_underdogs:
-                        likely_winners_df = best_bets_df[best_bets_df['AI Prob %'] >= min_prob_filter]
-                    else:
-                        likely_winners_df = best_bets_df.copy()
-                    
-                    # Sort based on selection
-                    if best_bets_sort == "Win Probability (Likely Winners)":
-                        likely_winners_df = likely_winners_df.sort_values('AI Prob %', ascending=False)
-                    elif best_bets_sort == "Edge % (Sharp Bets)":
-                        likely_winners_df = likely_winners_df.sort_values('AI Edge pp', ascending=False)
-                    else:  # Confidence
-                        likely_winners_df = likely_winners_df.sort_values('Confidence', ascending=False)
-                    
-                    # =====================================================
-                    # SINGLE BEST PICK PER GAME - Composite Confidence Scoring
-                    # =====================================================
-                    
-                    def get_single_best_pick_per_game(df):
-                        """
-                        For each game, pick the SINGLE BEST bet using composite scoring:
-                        - AI Win Probability (base score)
-                        - Kalshi Agreement (+15% boost)
-                        - Sentiment Agreement (+10% boost)
-                        - Positive Edge (+5% boost)
-                        - Only consider favorites (AI Prob >= 50%)
-                        """
-                        if df.empty:
-                            return df
-                        
-                        # Calculate composite confidence score
-                        df = df.copy()
-                        
-                        # Base score = AI Probability
-                        df['Composite Score'] = df['AI Prob %'].fillna(50)
-                        
-                        # Kalshi Agreement Boost (+15 points if Kalshi agrees)
-                        df['Kalshi Boost'] = df.apply(
-                            lambda x: 15 if x.get('Kalshi Agrees') == '✅' else 
-                                      (10 if x.get('Kalshi') == '✅' else 0), axis=1
-                        )
-                        df['Composite Score'] = df['Composite Score'] + df['Kalshi Boost']
-                        
-                        # Sentiment Agreement Boost (+10 points if sentiment agrees)
-                        df['Sentiment Boost'] = df.apply(
-                            lambda x: 10 if x.get('Sentiment') == '✅' else 
-                                      (-5 if x.get('Sentiment') == '❌' else 0), axis=1
-                        )
-                        df['Composite Score'] = df['Composite Score'] + df['Sentiment Boost']
-                        
-                        # Positive Edge Boost (+5 points for positive edge)
-                        df['Edge Boost'] = df.apply(
-                            lambda x: min(10, max(0, x.get('AI Edge pp', 0) * 2)) if x.get('AI Edge pp', 0) > 0 else 0, axis=1
-                        )
-                        df['Composite Score'] = df['Composite Score'] + df['Edge Boost']
-                        
-                        # Filter to only FAVORITES (AI Prob >= 50%) - we want likely winners
-                        favorites_df = df[df['AI Prob %'] >= 50].copy()
-                        
-                        # If no favorites, use original df but prefer higher probability
-                        if favorites_df.empty:
-                            favorites_df = df.copy()
-                        
-                        # Prefer Moneyline bets (clearer win/loss) over spreads
-                        favorites_df['ML Preference'] = favorites_df['Market'].apply(
-                            lambda x: 5 if x == 'Moneyline' else 0
-                        )
-                        favorites_df['Composite Score'] = favorites_df['Composite Score'] + favorites_df['ML Preference']
-                        
-                        # Group by game and pick the best bet for each
-                        best_picks = []
-                        for game, group in favorites_df.groupby('Game'):
-                            # Sort by composite score descending and take the top one
-                            best_bet = group.nlargest(1, 'Composite Score').iloc[0]
-                            best_picks.append(best_bet)
-                        
-                        if not best_picks:
-                            return pd.DataFrame()
-                        
-                        result_df = pd.DataFrame(best_picks)
-                        
-                        # Sort by composite score
-                        result_df = result_df.sort_values('Composite Score', ascending=False)
-                        
-                        # Add rank
-                        result_df['Rank'] = range(1, len(result_df) + 1)
-                        
-                        return result_df
-                    
-                    # Generate single best pick per game
-                    single_best_df = get_single_best_pick_per_game(best_bets_df)
-                    
-                    # Count stats
-                    total_games = len(single_best_df)
-                    kalshi_agrees = len(single_best_df[single_best_df['Kalshi Agrees'] == '✅']) if 'Kalshi Agrees' in single_best_df.columns else 0
-                    sentiment_agrees = len(single_best_df[single_best_df['Sentiment'] == '✅']) if 'Sentiment' in single_best_df.columns else 0
-                    avg_prob = single_best_df['AI Prob %'].mean() if len(single_best_df) > 0 else 0
-                    
-                    st.success(f"🎯 **{total_games} Games Analyzed - ONE Best Pick Per Game**")
-                    
-                    # Summary metrics
+                    # Metrics row
                     col1, col2, col3, col4 = st.columns(4)
                     with col1:
                         st.metric("Total Games", total_games)
                     with col2:
-                        st.metric("Avg Win Prob", f"{avg_prob:.1f}%")
+                        st.metric("Avg Win %", f"{avg_win_prob:.1f}%")
                     with col3:
                         st.metric("Kalshi Agrees", f"{kalshi_agrees}/{total_games}")
                     with col4:
                         st.metric("Sentiment Agrees", f"{sentiment_agrees}/{total_games}")
                     
-                    # Display columns for single best picks
-                    display_cols = ['Rank', 'League', 'Game', 'Market', 'Selection', 'Line', 
-                                   'AI Prob %', 'Composite Score', 'Sentiment', 'Kalshi', 'Kalshi Agrees',
-                                   'Best American', 'AI Edge pp']
+                    # Display columns
+                    display_cols = ['Rank', 'League', 'Game', 'THE PICK', 'Win %', 'Composite', 
+                                   'Sentiment', 'Kalshi', 'Kalshi %', 'Odds', 'Confidence']
+                    display_cols = [c for c in display_cols if c in best_bets_df.columns]
                     
-                    # Filter to available columns
-                    display_cols = [c for c in display_cols if c in single_best_df.columns]
-                    
-                    # Show single best picks
+                    # Show the single best picks table
                     st.subheader("🏆 SINGLE BEST PICK PER GAME")
-                    st.caption("One recommended bet per game, ranked by composite confidence score")
                     st.dataframe(
-                        single_best_df[display_cols],
+                        best_bets_df[display_cols],
                         use_container_width=True,
                         hide_index=True
                     )
                     
-                    # CSV Export for Single Best Picks
-                    st.subheader("📥 Export Best Picks")
-                    
-                    # Simplified export columns
-                    export_cols = ['League', 'Game', 'Market', 'Selection', 'Line', 
-                                  'AI Prob %', 'Composite Score', 'Sentiment', 'Kalshi Agrees',
-                                  'Best American']
-                    export_cols = [c for c in export_cols if c in single_best_df.columns]
-                    export_df = single_best_df[export_cols].copy()
-                    
-                    # Format for export
-                    csv_buffer = export_df.to_csv(index=False)
+                    # CSV Download
+                    csv_buffer = best_bets_df[display_cols].to_csv(index=False)
                     st.download_button(
-                        "⬇️ Download Single Best Pick Per Game (CSV)",
+                        "⬇️ Download Best Picks (CSV)",
                         data=csv_buffer,
                         file_name=f"best_picks_{pd.Timestamp.now().strftime('%Y-%m-%d')}.csv",
                         mime="text/csv",
-                        key="single_best_picks_download"
+                        key="single_picks_csv"
                     )
-                    
-                    # Option to see all bets
-                    with st.expander("📊 View All Analyzed Bets (multiple per game)"):
-                        all_sorted = best_bets_df.sort_values('AI Prob %', ascending=False)
-                        st.dataframe(all_sorted, use_container_width=True, hide_index=True)
                     
                     # Store for parlay generation
                     st.session_state['best_bets_df'] = best_bets_df
-                    st.session_state['single_best_picks'] = single_best_df
-                    st.session_state['positive_ev_bets'] = single_best_df
+                    st.session_state['single_best_picks'] = best_bets_df
                 else:
                     st.warning("No bets passed the confidence filter. Try lowering the minimum confidence threshold.")
                     best_bets_df = pd.DataFrame()  # Empty DataFrame to prevent NameError
