@@ -256,18 +256,31 @@ class VertexMasterAnalyzer:
             'theover_total_probability': 0.5,
         }
         
+        # Helper to safely convert to float
+        def safe_float(val, default=0.5):
+            if val is None:
+                return default
+            try:
+                f = float(val)
+                if pd.isna(f):
+                    return default
+                return f
+            except (TypeError, ValueError):
+                return default
+        
         # First check if theover data is passed directly in game dict
-        if game.get('theover_probability'):
+        theover_prob_raw = game.get('theover_probability')
+        if theover_prob_raw and theover_prob_raw != 0.5:
             features['theover_has_pick'] = 1
             features['theover_pick'] = game.get('theover_pick', '')
-            features['theover_probability'] = float(game.get('theover_probability', 0.5))
-            features['theover_spread'] = game.get('theover_spread', 0) or game.get('home_spread', 0)
+            features['theover_probability'] = safe_float(theover_prob_raw, 0.5)
+            features['theover_spread'] = safe_float(game.get('theover_spread', 0) or game.get('home_spread', 0), 0)
         
         # Also check for totals passed directly in game dict
         if game.get('theover_total'):
-            features['theover_total'] = float(game.get('theover_total', 0))
+            features['theover_total'] = safe_float(game.get('theover_total', 0), 0)
             features['theover_total_pick'] = game.get('theover_total_pick', '')
-            features['theover_total_probability'] = float(game.get('theover_total_probability', 0.5))
+            features['theover_total_probability'] = safe_float(game.get('theover_total_probability', 0.5), 0.5)
         
         # Search for spread pick in theover data (if not already set)
         if features['theover_probability'] == 0.5:
@@ -507,16 +520,22 @@ class VertexMasterAnalyzer:
             probs.append(kalshi_prob)
             probs.append(kalshi_prob)  # Double-weight Kalshi (real money)
         
-        derived['consensus_prob'] = np.mean(probs)
+        # Filter out NaN values and calculate mean
+        valid_probs = [p for p in probs if p is not None and not pd.isna(p)]
+        derived['consensus_prob'] = np.mean(valid_probs) if valid_probs else 0.5
         
         # Kalshi validation score (how much Kalshi agrees with our prediction)
         if features.get('kalshi_available'):
             kalshi_prob = features.get('kalshi_prob', 0.5)
-            model_consensus = np.mean([
+            if pd.isna(kalshi_prob):
+                kalshi_prob = 0.5
+            model_probs = [
                 derived.get('implied_home_prob', 0.5),
                 features.get('local_ml_prob', 0.5),
                 features.get('theover_probability', 0.5),
-            ])
+            ]
+            valid_model_probs = [p for p in model_probs if p is not None and not pd.isna(p)]
+            model_consensus = np.mean(valid_model_probs) if valid_model_probs else 0.5
             derived['kalshi_validation_score'] = 1 - abs(kalshi_prob - model_consensus)
             derived['kalshi_agrees'] = abs(kalshi_prob - model_consensus) < 0.05
         else:
@@ -1020,6 +1039,23 @@ def show_vertex_master_analysis(results_df: pd.DataFrame):
                 recommendation = "✅ BET" if ev > 5 else "⚠️ SMALL BET" if ev > 0 else "❌ PASS"
                 st.metric("Recommendation", recommendation)
             
+            # Show THE PICK clearly
+            if ev > 0:
+                spread = game.get('home_spread', 0) or game.get('theover_spread', 0)
+                if pd.isna(spread):
+                    spread = 0
+                home_team = game.get('home_team', 'Home')
+                if spread != 0:
+                    # Spread bet
+                    if spread > 0:
+                        pick_text = f"🎯 **THE PICK: {home_team} +{abs(spread):.1f}** (home team covers as underdog)"
+                    else:
+                        pick_text = f"🎯 **THE PICK: {home_team} {spread:.1f}** (home team covers as favorite)"
+                else:
+                    # Moneyline
+                    pick_text = f"🎯 **THE PICK: {home_team} ML** (home team to win)"
+                st.success(pick_text)
+            
             # Second row - odds information
             st.markdown("**📊 Market Odds:**")
             odds_cols = st.columns(4)
@@ -1046,10 +1082,15 @@ def show_vertex_master_analysis(results_df: pd.DataFrame):
             
             with consensus_cols[0]:
                 st.write(f"**Market**")
-                st.write(f"{game['implied_home_prob']*100:.0f}%")
+                market_prob = game.get('implied_home_prob', 0.5)
+                if pd.isna(market_prob):
+                    market_prob = 0.5
+                st.write(f"{market_prob*100:.0f}%")
             
             with consensus_cols[1]:
                 local_ml = game.get('local_ml_prob', 0.5)
+                if pd.isna(local_ml):
+                    local_ml = 0.5
                 st.write(f"**Your ML**")
                 st.write(f"{local_ml*100:.0f}%")
             
@@ -1057,16 +1098,31 @@ def show_vertex_master_analysis(results_df: pd.DataFrame):
                 theover = game.get('theover_probability', 0.5)
                 has_theover = game.get('theover_has_pick', 0)
                 st.write(f"**theover.ai**")
-                st.write(f"{theover*100:.0f}%" if has_theover else "N/A")
+                if pd.isna(theover) or theover == 0.5:
+                    # Show spread-derived probability instead
+                    spread = game.get('home_spread', 0) or game.get('theover_spread', 0)
+                    if spread and not pd.isna(spread) and spread != 0:
+                        spread_prob = 0.5 - (float(spread) * 0.028)
+                        spread_prob = max(0.15, min(0.85, spread_prob))
+                        st.write(f"{spread_prob*100:.0f}%")
+                    else:
+                        st.write("N/A")
+                else:
+                    st.write(f"{theover*100:.0f}%")
             
             with consensus_cols[3]:
                 consensus = game.get('consensus_prob', 0.5)
+                if pd.isna(consensus):
+                    consensus = 0.5
                 st.write(f"**Consensus**")
                 st.write(f"{consensus*100:.0f}%")
             
             with consensus_cols[4]:
                 st.write(f"**Vertex AI**")
-                st.write(f"**{game['vertex_ai_prob']*100:.0f}%**")
+                vertex_prob = game.get('vertex_ai_prob', 0.5)
+                if pd.isna(vertex_prob):
+                    vertex_prob = 0.5
+                st.write(f"**{vertex_prob*100:.0f}%**")
             
             # Fourth row - team analysis (NO NESTED EXPANDER!)
             st.markdown("---")
@@ -1103,15 +1159,29 @@ def show_vertex_master_analysis(results_df: pd.DataFrame):
                 data_cols = st.columns(3)
                 with data_cols[0]:
                     spread = game.get('home_spread', 0) or game.get('theover_spread', 0)
+                    if pd.isna(spread):
+                        spread = 0
                     st.metric("Spread", f"{spread:+.1f}" if spread else "N/A")
                 with data_cols[1]:
                     theover_prob = game.get('theover_probability', 0)
-                    if theover_prob and theover_prob != 0.5:
-                        st.metric("TheOver.ai Prob", f"{theover_prob*100:.1f}%")
+                    # Handle NaN and calculate from spread if needed
+                    if pd.isna(theover_prob) or theover_prob == 0 or theover_prob == 0.5:
+                        # Calculate from spread
+                        spread_val = game.get('home_spread', 0) or game.get('theover_spread', 0)
+                        if spread_val and not pd.isna(spread_val) and spread_val != 0:
+                            # Positive spread = underdog, convert to win prob
+                            # Each point ≈ 2.8% shift from 50%
+                            calc_prob = 0.5 - (float(spread_val) * 0.028)
+                            calc_prob = max(0.20, min(0.80, calc_prob))
+                            st.metric("TheOver.ai Prob", f"{calc_prob*100:.1f}%")
+                        else:
+                            st.metric("TheOver.ai Prob", "N/A")
                     else:
-                        st.metric("TheOver.ai Prob", "N/A")
+                        st.metric("TheOver.ai Prob", f"{theover_prob*100:.1f}%")
                 with data_cols[2]:
                     implied = game.get('implied_home_prob', 0.5)
+                    if pd.isna(implied):
+                        implied = 0.5
                     st.metric("Implied Prob", f"{implied*100:.1f}%")
             
             # Matchup analysis (simplified when no stats)
@@ -1125,7 +1195,10 @@ def show_vertex_master_analysis(results_df: pd.DataFrame):
             
             # Fifth row - theover.ai pick if available
             if game.get('theover_has_pick', 0) == 1:
-                st.info(f"💡 theover.ai pick: **{game['theover_pick']}** ({game['theover_probability']*100:.0f}%)")
+                theover_prob_display = game.get('theover_probability', 0.5)
+                if pd.isna(theover_prob_display):
+                    theover_prob_display = 0.5
+                st.info(f"💡 theover.ai pick: **{game['theover_pick']}** ({theover_prob_display*100:.0f}%)")
     
     st.markdown("---")
     
