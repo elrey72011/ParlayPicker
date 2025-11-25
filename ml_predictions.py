@@ -1,6 +1,6 @@
 """
 ML Predictions Module
-Provides Vertex AI, Anthropic Claude, and local ML predictions for Streamlit app
+Provides Vertex AI (GCP), Anthropic Claude, and local ML predictions for Streamlit app
 """
 
 import streamlit as st
@@ -9,6 +9,7 @@ import logging
 import numpy as np
 import json
 import re
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -37,19 +38,19 @@ def is_vertex_ai_enabled() -> bool:
             logger.info(f"AI enabled via session key: {key}")
             return True
     
-    # Method 2: Auto-detect based on Anthropic API key (NEW!)
-    if st.session_state.get('anthropic_api_key'):
-        logger.info("AI auto-enabled: found Anthropic API key")
-        return True
-    
-    # Method 3: Auto-detect based on GCP configuration
+    # Method 2: Auto-detect based on GCP configuration
     has_gcp_config = bool(
-        st.session_state.get('gcp_project_id') or
+        st.session_state.get('gcp_project_id') and
         st.session_state.get('vertex_endpoint_id')
     )
     
     if has_gcp_config:
-        logger.info("AI auto-enabled: found GCP configuration")
+        logger.info("AI auto-enabled: found GCP Vertex AI configuration")
+        return True
+    
+    # Method 3: Auto-detect based on Anthropic API key
+    if st.session_state.get('anthropic_api_key'):
+        logger.info("AI auto-enabled: found Anthropic API key")
         return True
     
     # Method 4: Auto-detect based on local models
@@ -71,11 +72,11 @@ def is_vertex_ai_enabled() -> bool:
 
 def get_vertex_ai_prediction(features: List[float], game_context: Dict = None) -> Optional[float]:
     """
-    Get prediction from Vertex AI, Anthropic Claude, or local model
+    Get prediction from Vertex AI (GCP), Anthropic Claude, or local model
     
     Args:
         features: List of feature values (must match training data format)
-        game_context: Optional dict with game details for Claude analysis
+        game_context: Optional dict with game details for better AI analysis
         
     Returns:
         Probability between 0 and 1, or None if prediction fails
@@ -84,25 +85,111 @@ def get_vertex_ai_prediction(features: List[float], game_context: Dict = None) -
         logger.info("AI predictions not enabled")
         return None
     
-    # Try Vertex AI endpoint first (Google Cloud)
+    # Try GCP Vertex AI endpoint first
     vertex_result = _try_vertex_ai_endpoint(features)
     if vertex_result is not None:
+        logger.info(f"✅ GCP Vertex AI prediction: {vertex_result:.3f}")
         return vertex_result
     
-    # Try Anthropic Claude (NEW!)
+    # Try Anthropic Claude as fallback
     anthropic_result = _try_anthropic_claude_prediction(features, game_context)
     if anthropic_result is not None:
+        logger.info(f"✅ Anthropic Claude prediction: {anthropic_result:.3f}")
         return anthropic_result
     
     # Fall back to local model
     logger.info("Trying local model prediction")
     local_result = _try_local_model_prediction(features)
     if local_result is not None:
+        logger.info(f"✅ Local model prediction: {local_result:.3f}")
         return local_result
     
     # Ultimate fallback: use feature-based heuristic for demo purposes
     logger.warning("No model available, using feature-based heuristic")
     return _calculate_heuristic_prediction(features)
+
+
+def _try_vertex_ai_endpoint(features: List[float]) -> Optional[float]:
+    """
+    Try to get prediction from GCP Vertex AI endpoint
+    
+    Args:
+        features: Feature values
+        
+    Returns:
+        Probability or None
+    """
+    try:
+        from google.cloud import aiplatform
+        
+        # Get configuration from session state
+        project_id = st.session_state.get('gcp_project_id')
+        location = st.session_state.get('gcp_location', 'us-central1')
+        endpoint_id = st.session_state.get('vertex_endpoint_id')
+        
+        if not project_id:
+            logger.info("GCP Project ID not configured")
+            return None
+        
+        if not endpoint_id:
+            logger.info("Vertex AI Endpoint ID not configured")
+            return None
+        
+        logger.info(f"Connecting to Vertex AI: project={project_id}, endpoint={endpoint_id}")
+        
+        # Initialize Vertex AI
+        aiplatform.init(project=project_id, location=location)
+        
+        # Get endpoint - use full resource name
+        endpoint_resource = f"projects/{project_id}/locations/{location}/endpoints/{endpoint_id}"
+        endpoint = aiplatform.Endpoint(endpoint_resource)
+        
+        # Format instances for prediction
+        # Try different formats based on what the model expects
+        # Format 1: List of features directly
+        instances = [features]
+        
+        # Make prediction
+        logger.info(f"Sending {len(features)} features to Vertex AI endpoint")
+        response = endpoint.predict(instances=instances)
+        
+        # Extract probability from response
+        if response and response.predictions:
+            prediction = response.predictions[0]
+            
+            # Handle different response formats
+            if isinstance(prediction, (int, float)):
+                prob = float(prediction)
+            elif isinstance(prediction, list) and len(prediction) > 0:
+                # Model might return [prob_class_0, prob_class_1]
+                if len(prediction) == 2:
+                    prob = float(prediction[1])  # Class 1 probability (home win)
+                else:
+                    prob = float(prediction[0])
+            elif isinstance(prediction, dict):
+                # Model might return {"probability": X} or {"predictions": [X]}
+                prob = float(prediction.get('probability', prediction.get('score', prediction.get('predictions', [0.5])[0])))
+            else:
+                logger.warning(f"Unknown prediction format: {type(prediction)}")
+                prob = float(prediction) if prediction else None
+            
+            # Ensure probability is valid
+            if prob is not None and 0 <= prob <= 1:
+                logger.info(f"Vertex AI prediction successful: {prob:.3f}")
+                return prob
+            else:
+                logger.warning(f"Invalid probability from Vertex AI: {prob}")
+                return None
+        
+        logger.warning("No predictions in Vertex AI response")
+        return None
+        
+    except ImportError:
+        logger.info("Google Cloud SDK not installed")
+        return None
+    except Exception as e:
+        logger.error(f"Vertex AI prediction failed: {e}")
+        return None
 
 
 def _try_anthropic_claude_prediction(features: List[float], game_context: Dict = None) -> Optional[float]:
@@ -132,15 +219,18 @@ def _try_anthropic_claude_prediction(features: List[float], game_context: Dict =
         feature_names = [
             "home_win_pct", "away_win_pct", "home_avg_points", "away_avg_points",
             "home_def_rating", "away_def_rating", "spread_normalized", 
-            "home_last_5", "away_last_5"
+            "home_last_5", "away_last_5", "home_home_record", "away_away_record",
+            "head_to_head", "rest_advantage", "injuries_impact", "weather_factor",
+            "public_betting_pct", "sharp_money_indicator", "line_movement",
+            "total_movement", "model_consensus"
         ]
         
         feature_dict = {}
         for i, val in enumerate(features):
             if i < len(feature_names):
-                feature_dict[feature_names[i]] = val
+                feature_dict[feature_names[i]] = round(val, 4) if isinstance(val, float) else val
             else:
-                feature_dict[f"feature_{i}"] = val
+                feature_dict[f"feature_{i}"] = round(val, 4) if isinstance(val, float) else val
         
         # Add game context if available
         context_str = ""
@@ -149,41 +239,47 @@ def _try_anthropic_claude_prediction(features: List[float], game_context: Dict =
 GAME DETAILS:
 - Home Team: {game_context.get('home_team', 'Unknown')}
 - Away Team: {game_context.get('away_team', 'Unknown')}
-- Sport: {game_context.get('sport', 'Unknown')}
+- Sport: {game_context.get('sport', game_context.get('league', 'Unknown'))}
 - Spread: {game_context.get('spread', 'N/A')}
 - Total: {game_context.get('total', 'N/A')}
+- Date: {game_context.get('date', game_context.get('commence_time', 'Unknown'))}
 """
         
-        prompt = f"""You are a sports betting AI analyst. Based on the following statistical features, predict the HOME TEAM win probability.
+        prompt = f"""You are an expert sports betting AI analyst with deep knowledge of statistical modeling and betting markets.
 
 {context_str}
 
-STATISTICAL FEATURES:
+STATISTICAL FEATURES (normalized 0-1 scale unless noted):
 {json.dumps(feature_dict, indent=2)}
 
-FEATURE EXPLANATIONS:
-- home_win_pct/away_win_pct: Season win percentages (0-1 scale)
-- home_avg_points/away_avg_points: Average points scored per game
+KEY FEATURE EXPLANATIONS:
+- home_win_pct/away_win_pct: Season win percentages (0-1)
+- home_avg_points/away_avg_points: Average points scored (normalized)
 - home_def_rating/away_def_rating: Defensive efficiency (lower is better)
-- spread_normalized: Point spread normalized (positive favors home)
-- home_last_5/away_last_5: Win rate in last 5 games (0-1 scale)
+- spread_normalized: Point spread (positive favors home)
+- home_last_5/away_last_5: Win rate in last 5 games (0-1)
 
-Based on these features and your sports knowledge, provide:
-1. Your estimated HOME TEAM win probability (between 0.30 and 0.70 - be decisive, don't default to 0.50)
-2. Brief reasoning
+TASK: Based on these features and your sports knowledge, estimate the HOME TEAM win probability.
+
+IMPORTANT:
+- Be decisive - don't default to 50%
+- Consider home court/field advantage
+- Weight recent form heavily
+- Typical probabilities range from 0.35 to 0.65 for competitive matchups
 
 RESPOND WITH ONLY THIS JSON (no other text):
 {{
   "home_win_probability": 0.XX,
   "confidence": "high/medium/low",
-  "reasoning": "Brief 1-2 sentence explanation"
+  "key_factors": ["factor1", "factor2"],
+  "reasoning": "One sentence explanation"
 }}"""
 
         message = client.messages.create(
             model="claude-sonnet-4-20250514",
             max_tokens=500,
             messages=[{"role": "user", "content": prompt}],
-            timeout=15.0
+            timeout=20.0
         )
         
         response_text = message.content[0].text
@@ -194,14 +290,22 @@ RESPOND WITH ONLY THIS JSON (no other text):
             analysis = json.loads(json_match.group())
             prob = float(analysis.get('home_win_probability', 0))
             
-            # Validate probability
-            if 0.25 <= prob <= 0.75:
+            # Validate probability - reject clear defaults
+            if prob == 0.5 or prob == 50.0 or prob == 0.505:
+                logger.warning(f"Claude returned default probability: {prob}")
+                return None
+            
+            # Normalize if given as percentage
+            if prob > 1:
+                prob = prob / 100.0
+            
+            # Validate range
+            if 0.20 <= prob <= 0.80:
                 logger.info(f"Anthropic Claude prediction: {prob:.3f}")
                 return prob
             else:
                 logger.warning(f"Claude returned out-of-range probability: {prob}")
-                # Clip to valid range
-                return float(np.clip(prob, 0.30, 0.70))
+                return float(np.clip(prob, 0.25, 0.75))
         
         logger.warning("Could not parse Claude response")
         return None
@@ -211,69 +315,6 @@ RESPOND WITH ONLY THIS JSON (no other text):
         return None
     except Exception as e:
         logger.error(f"Anthropic prediction failed: {e}")
-        return None
-
-
-def _try_vertex_ai_endpoint(features: List[float]) -> Optional[float]:
-    """
-    Try to get prediction from Vertex AI endpoint
-    
-    Args:
-        features: Feature values
-        
-    Returns:
-        Probability or None
-    """
-    try:
-        from google.cloud import aiplatform
-        
-        # Get configuration from session state
-        project_id = st.session_state.get('gcp_project_id')
-        location = st.session_state.get('gcp_location', 'us-central1')
-        endpoint_id = st.session_state.get('vertex_endpoint_id')
-        
-        if not project_id:
-            logger.warning("GCP Project ID not configured")
-            return None
-        
-        if not endpoint_id:
-            logger.warning("Vertex AI Endpoint ID not configured")
-            return None
-        
-        # Initialize Vertex AI
-        aiplatform.init(project=project_id, location=location)
-        
-        # Get endpoint
-        endpoint = aiplatform.Endpoint(endpoint_id)
-        
-        # Format instances for prediction
-        # Adjust this based on your model's expected input format
-        instances = [{"features": features}]
-        
-        # Make prediction
-        response = endpoint.predict(instances=instances)
-        
-        # Extract probability from response
-        if response and response.predictions:
-            # Assuming model returns probability as first element
-            prob = float(response.predictions[0])
-            
-            # Ensure probability is valid
-            if 0 <= prob <= 1:
-                logger.info(f"Vertex AI prediction: {prob:.3f}")
-                return prob
-            else:
-                logger.warning(f"Invalid probability from Vertex AI: {prob}")
-                return None
-        
-        logger.warning("No predictions in Vertex AI response")
-        return None
-        
-    except ImportError:
-        logger.info("Google Cloud SDK not installed")
-        return None
-    except Exception as e:
-        logger.error(f"Vertex AI prediction failed: {e}")
         return None
 
 
@@ -296,6 +337,9 @@ def _try_local_model_prediction(features: List[float]) -> Optional[float]:
         possible_models = [
             Path('./models/nfl/NFL_spread.pkl'),
             Path('./models/nba/NBA_spread.pkl'),
+            Path('./models/nhl/NHL_spread.pkl'),
+            Path('./models/ncaab/NCAAB_spread.pkl'),
+            Path('./models/ncaaf/NCAAF_spread.pkl'),
             Path('./models/spread_model.pkl'),
             Path('../models/nfl/NFL_spread.pkl'),
         ]
@@ -311,7 +355,7 @@ def _try_local_model_prediction(features: List[float]) -> Optional[float]:
                 break
         
         if not model_path:
-            logger.warning("No trained model found locally")
+            logger.info("No trained model found locally")
             return None
         
         # Load model
@@ -356,6 +400,48 @@ def _try_local_model_prediction(features: List[float]) -> Optional[float]:
         return None
 
 
+def _calculate_heuristic_prediction(features: List[float]) -> float:
+    """
+    Calculate a simple heuristic prediction when no model is available
+    This is a fallback for demo/testing purposes
+    
+    Args:
+        features: Feature values (assumes standard feature format)
+        
+    Returns:
+        Estimated probability based on features
+    """
+    try:
+        if len(features) < 2:
+            return 0.5
+        
+        home_win_pct = features[0] if features[0] <= 1 else features[0] / 100
+        away_win_pct = features[1] if features[1] <= 1 else features[1] / 100
+        
+        # Simple weighted average favoring home team slightly (home advantage)
+        base_prob = (home_win_pct * 0.55 + (1 - away_win_pct) * 0.45)
+        
+        # Add recent form if available
+        if len(features) >= 9:
+            home_form = features[7]  # home_last_5
+            away_form = features[8]  # away_last_5
+            form_factor = (home_form - away_form) * 0.1
+            base_prob += form_factor
+        
+        # Add spread information if available
+        if len(features) >= 7:
+            spread_normalized = features[6]
+            spread_factor = spread_normalized * 0.15
+            base_prob += spread_factor
+        
+        # Clip to valid probability range
+        return float(np.clip(base_prob, 0.25, 0.75))
+        
+    except Exception as e:
+        logger.warning(f"Heuristic calculation failed: {e}")
+        return 0.5
+
+
 def get_batch_predictions(features_list: List[List[float]], game_contexts: List[Dict] = None) -> List[Optional[float]]:
     """
     Get predictions for multiple games at once
@@ -390,31 +476,34 @@ def show_vertex_ai_prediction_section(home_team: str, away_team: str):
     st.subheader(f"🤖 AI Prediction: {away_team} @ {home_team}")
     
     if not is_vertex_ai_enabled():
-        st.warning("⚠️ Vertex AI is not enabled. Enable in AI Settings to see predictions.")
+        st.warning("⚠️ AI predictions not enabled. Configure in sidebar settings.")
         
         with st.expander("📖 How to Enable AI Predictions"):
-            st.write("**Option 1: Use Anthropic Claude (Recommended)**")
+            st.write("**Option 1: Use GCP Vertex AI (Your deployed model)**")
+            st.write("1. Add to Streamlit secrets:")
+            st.code("""gcp_project_id = "your-project-id"
+vertex_endpoint_id = "your-endpoint-id"
+gcp_location = "us-central1"
+""", language="toml")
+            
+            st.write("\n**Option 2: Use Anthropic Claude (Fallback)**")
             st.write("1. Get API key from console.anthropic.com")
             st.write("2. Enter in sidebar under 'Anthropic API key'")
-            st.write("3. AI predictions will work automatically!")
-            
-            st.write("\n**Option 2: Use Vertex AI (Google Cloud)**")
-            st.write("1. Go to AI Settings in sidebar")
-            st.write("2. Check 'Enable Vertex AI'")
-            st.write("3. Enter your GCP Project ID")
-            st.write("4. Enter your Vertex AI Endpoint ID")
-            st.write("5. Set GCP Location (e.g., us-central1)")
             
             st.write("\n**Option 3: Use Local Models**")
-            st.write("1. Train models using the ML pipeline:")
-            st.code("python main.py --train --sports NFL NBA", language="bash")
-            st.write("2. Models will be saved to ./models/")
-            st.write("3. Enable Vertex AI in settings")
-            st.write("4. Local models will be used automatically")
+            st.write("1. Train models using the ML pipeline")
+            st.write("2. Models will be used automatically")
         
         return
     
-    # Generate demo features (replace with real features)
+    # Create game context
+    game_context = {
+        'home_team': home_team,
+        'away_team': away_team,
+        'sport': 'Unknown'
+    }
+    
+    # Generate demo features
     demo_features = [
         0.55,   # home_win_pct
         0.45,   # away_win_pct
@@ -422,17 +511,10 @@ def show_vertex_ai_prediction_section(home_team: str, away_team: str):
         105.0,  # away_avg_points
         105.0,  # home_def_rating
         108.0,  # away_def_rating
-        0.15,   # spread_abs / 20
-        0.6,    # home_last_5 / 5
-        0.4,    # away_last_5 / 5
+        0.15,   # spread_normalized
+        0.6,    # home_last_5
+        0.4,    # away_last_5
     ]
-    
-    # Create game context for better Claude predictions
-    game_context = {
-        'home_team': home_team,
-        'away_team': away_team,
-        'sport': 'Unknown'
-    }
     
     with st.spinner("Getting AI prediction..."):
         prob = get_vertex_ai_prediction(demo_features, game_context)
@@ -455,7 +537,7 @@ def show_vertex_ai_prediction_section(home_team: str, away_team: str):
             )
         
         # Show confidence
-        confidence = abs(prob - 0.5) * 2  # 0 to 1 scale
+        confidence = abs(prob - 0.5) * 2
         
         if confidence > 0.3:
             confidence_label = "🟢 High"
@@ -467,46 +549,21 @@ def show_vertex_ai_prediction_section(home_team: str, away_team: str):
         st.write(f"**Confidence:** {confidence_label} ({confidence * 100:.1f}%)")
         
         # Show AI source
-        if st.session_state.get('anthropic_api_key'):
+        if st.session_state.get('gcp_project_id') and st.session_state.get('vertex_endpoint_id'):
+            st.caption("☁️ Powered by GCP Vertex AI")
+        elif st.session_state.get('anthropic_api_key'):
             st.caption("🤖 Powered by Anthropic Claude")
-        elif st.session_state.get('gcp_project_id'):
-            st.caption("☁️ Powered by Google Vertex AI")
         else:
             st.caption("📊 Using local model/heuristics")
-        
-        # Show features used
-        with st.expander("📊 Features Used in Prediction"):
-            st.write("**Feature Values:**")
-            feature_names = [
-                "Home Win %",
-                "Away Win %",
-                "Home Avg Points",
-                "Away Avg Points",
-                "Home Def Rating",
-                "Away Def Rating",
-                "Spread (normalized)",
-                "Home Last 5",
-                "Away Last 5"
-            ]
-            
-            for name, value in zip(feature_names, demo_features):
-                st.write(f"- {name}: {value:.3f}")
     else:
         st.error("❌ Prediction failed. Check configuration and logs.")
         
-        # Show debugging info
         with st.expander("🔍 Debug Information"):
             st.write(f"**Vertex AI Enabled:** {is_vertex_ai_enabled()}")
-            st.write(f"**Anthropic API Key:** {'✅ Configured' if st.session_state.get('anthropic_api_key') else '❌ Not set'}")
             st.write(f"**GCP Project ID:** {st.session_state.get('gcp_project_id', 'Not set')}")
             st.write(f"**Endpoint ID:** {st.session_state.get('vertex_endpoint_id', 'Not set')}")
-            st.write(f"**Location:** {st.session_state.get('gcp_location', 'Not set')}")
-            
-            st.write("\n**Possible Issues:**")
-            st.write("- No Anthropic API key configured")
-            st.write("- Vertex AI credentials not configured")
-            st.write("- No trained models found locally")
-            st.write("- Feature format doesn't match model")
+            st.write(f"**GCP Location:** {st.session_state.get('gcp_location', 'Not set')}")
+            st.write(f"**Anthropic Key:** {'✅ Configured' if st.session_state.get('anthropic_api_key') else '❌ Not set'}")
 
 
 def validate_vertex_ai_configuration() -> Dict[str, Any]:
@@ -518,22 +575,15 @@ def validate_vertex_ai_configuration() -> Dict[str, Any]:
     """
     results = {
         'enabled': is_vertex_ai_enabled(),
-        'has_anthropic_key': bool(st.session_state.get('anthropic_api_key')),
-        'has_project_id': bool(st.session_state.get('gcp_project_id')),
-        'has_endpoint_id': bool(st.session_state.get('vertex_endpoint_id')),
+        'has_gcp_project': bool(st.session_state.get('gcp_project_id')),
+        'has_endpoint': bool(st.session_state.get('vertex_endpoint_id')),
         'has_location': bool(st.session_state.get('gcp_location')),
+        'has_anthropic_key': bool(st.session_state.get('anthropic_api_key')),
         'has_google_cloud': False,
         'has_anthropic': False,
         'has_local_models': False,
         'errors': []
     }
-    
-    # Check Anthropic (NEW!)
-    try:
-        import anthropic
-        results['has_anthropic'] = True
-    except ImportError:
-        results['errors'].append("Anthropic library not installed")
     
     # Check Google Cloud SDK
     try:
@@ -541,6 +591,13 @@ def validate_vertex_ai_configuration() -> Dict[str, Any]:
         results['has_google_cloud'] = True
     except ImportError:
         results['errors'].append("Google Cloud SDK not installed")
+    
+    # Check Anthropic
+    try:
+        import anthropic
+        results['has_anthropic'] = True
+    except ImportError:
+        results['errors'].append("Anthropic library not installed")
     
     # Check for local models
     from pathlib import Path
@@ -551,89 +608,34 @@ def validate_vertex_ai_configuration() -> Dict[str, Any]:
     )
     
     # Overall status
+    results['can_use_gcp'] = (
+        results['has_gcp_project'] and 
+        results['has_endpoint'] and
+        results['has_google_cloud']
+    )
+    
     results['can_use_anthropic'] = (
-        results['enabled'] and 
         results['has_anthropic_key'] and 
         results['has_anthropic']
     )
     
-    results['can_use_vertex'] = (
-        results['enabled'] and 
-        results['has_project_id'] and 
-        results['has_endpoint_id'] and
-        results['has_google_cloud']
-    )
+    results['can_use_local'] = results['has_local_models']
     
-    results['can_use_local'] = (
-        results['enabled'] and 
-        results['has_local_models']
-    )
-    
-    results['ready'] = results['can_use_anthropic'] or results['can_use_vertex'] or results['can_use_local']
+    results['ready'] = results['can_use_gcp'] or results['can_use_anthropic'] or results['can_use_local']
     
     return results
 
 
-def _calculate_heuristic_prediction(features: List[float]) -> float:
-    """
-    Calculate a simple heuristic prediction when no model is available
-    This is a fallback for demo/testing purposes
-    
-    Args:
-        features: Feature values (assumes standard 9-feature format)
-        
-    Returns:
-        Estimated probability based on features
-    """
-    try:
-        # Assume standard feature order:
-        # [home_win_pct, away_win_pct, home_points, away_points, 
-        #  home_def, away_def, spread, home_l5, away_l5]
-        
-        if len(features) < 2:
-            return 0.5
-        
-        home_win_pct = features[0]
-        away_win_pct = features[1]
-        
-        # Simple weighted average favoring home team slightly (home advantage)
-        base_prob = (home_win_pct * 0.55 + (1 - away_win_pct) * 0.45)
-        
-        # Add recent form if available
-        if len(features) >= 9:
-            home_form = features[7]  # home_last_5
-            away_form = features[8]  # away_last_5
-            form_factor = (home_form - away_form) * 0.1
-            base_prob += form_factor
-        
-        # Clip to valid probability range
-        return float(np.clip(base_prob, 0.1, 0.9))
-        
-    except Exception as e:
-        logger.warning(f"Heuristic calculation failed: {e}")
-        return 0.5  # Return neutral 50/50
-
-
-# Export key functions
-
-
-# Example usage in Streamlit
+# Example usage
 if __name__ == "__main__":
     print("ML Predictions Module")
     print("=" * 50)
+    print(f"Vertex AI enabled: {is_vertex_ai_enabled()}")
     
-    # Test configuration
-    print("\nConfiguration Check:")
-    print(f"- Vertex AI enabled: {is_vertex_ai_enabled()}")
-    
-    # Test prediction
-    print("\nTest Prediction:")
     test_features = [0.55, 0.45, 110, 105, 105, 108, 0.15, 0.6, 0.4]
     result = get_vertex_ai_prediction(test_features)
     
     if result is not None:
-        print(f"✅ Prediction successful: {result:.3f}")
+        print(f"✅ Prediction: {result:.3f}")
     else:
         print("❌ Prediction failed")
-    
-    print("\n" + "=" * 50)
