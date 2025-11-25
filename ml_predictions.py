@@ -412,11 +412,21 @@ def _try_local_model_prediction(features: List[float]) -> Optional[float]:
 def _calculate_heuristic_prediction(features: List[float]) -> float:
     """
     Calculate a simple heuristic prediction when no model is available
-    This is a fallback for demo/testing purposes
+    Uses spread and theover_probability as primary signals
     
-    Args:
-        features: Feature values (assumes standard feature format)
-        
+    Feature positions (from vertex_master_analyzer):
+    0-2: team strength (home_win_pct, away_win_pct, diff)
+    3-8: offense/defense stats
+    9-11: recent form
+    12: implied_home_prob (KEY!)
+    13: home_spread / 20 (KEY!)
+    14: total_line / 200
+    15: sentiment_diff
+    16-17: local_ml
+    18: theover_probability (KEY!)
+    19: consensus_prob
+    20-23: kalshi data
+    
     Returns:
         Estimated probability based on features
     """
@@ -424,24 +434,46 @@ def _calculate_heuristic_prediction(features: List[float]) -> float:
         if len(features) < 2:
             return 0.5
         
-        home_win_pct = features[0] if features[0] <= 1 else features[0] / 100
-        away_win_pct = features[1] if features[1] <= 1 else features[1] / 100
+        # Get key features
+        home_win_pct = features[0] if len(features) > 0 else 0.5
+        away_win_pct = features[1] if len(features) > 1 else 0.5
         
-        # Simple weighted average favoring home team slightly (home advantage)
-        base_prob = (home_win_pct * 0.55 + (1 - away_win_pct) * 0.45)
+        # Get spread-derived data (more reliable than placeholder team stats)
+        implied_home_prob = features[12] if len(features) > 12 else 0.5
+        spread_normalized = features[13] if len(features) > 13 else 0  # home_spread / 20
+        theover_prob = features[18] if len(features) > 18 else 0.5
+        consensus_prob = features[19] if len(features) > 19 else 0.5
         
-        # Add recent form if available
-        if len(features) >= 9:
-            home_form = features[7]  # home_last_5
-            away_form = features[8]  # away_last_5
-            form_factor = (home_form - away_form) * 0.1
-            base_prob += form_factor
+        # Check if we have real spread data (not placeholder)
+        has_real_spread = spread_normalized != 0
+        has_theover = theover_prob != 0.5
         
-        # Add spread information if available
-        if len(features) >= 7:
-            spread_normalized = features[6]
-            spread_factor = spread_normalized * 0.15
-            base_prob += spread_factor
+        if has_theover or has_real_spread:
+            # USE SPREAD-DERIVED PROBABILITIES as primary signal
+            if has_theover and theover_prob != 0.5:
+                # Blend theover with implied probability
+                base_prob = theover_prob * 0.5 + implied_home_prob * 0.3 + consensus_prob * 0.2
+            elif has_real_spread:
+                # Use spread to calculate probability
+                # Each point of spread ≈ 2.5% shift from 50%
+                spread_points = spread_normalized * 20  # Undo normalization
+                spread_prob = 0.5 + (spread_points * 0.025)
+                base_prob = np.clip(spread_prob, 0.25, 0.75)
+            else:
+                base_prob = implied_home_prob
+        else:
+            # Fallback to team stats (likely placeholder - use 50% base)
+            if home_win_pct == away_win_pct == 0.55:
+                # This is placeholder data - return near 50%
+                base_prob = 0.5 + (implied_home_prob - 0.5) * 0.5
+            else:
+                base_prob = (home_win_pct * 0.55 + (1 - away_win_pct) * 0.45)
+        
+        # Add sentiment if available
+        if len(features) > 15:
+            sentiment_diff = features[15]
+            if sentiment_diff != 0:
+                base_prob += sentiment_diff * 0.05
         
         # Clip to valid probability range
         return float(np.clip(base_prob, 0.25, 0.75))
