@@ -26,7 +26,8 @@ class VertexMasterAnalyzer:
         apisports_clients: Dict = None,
         sentiment_analyzer=None,
         local_ml_predictor=None,
-        theover_data: Dict = None
+        theover_data: Dict = None,
+        kalshi_integrator=None  # NEW: Kalshi prediction market integration
     ):
         self.odds_api = odds_api_client
         self.sportsdata = sportsdata_clients or {}
@@ -34,6 +35,7 @@ class VertexMasterAnalyzer:
         self.sentiment = sentiment_analyzer
         self.local_ml = local_ml_predictor
         self.theover = theover_data or {}
+        self.kalshi = kalshi_integrator  # NEW: Store Kalshi integrator
         
     def build_comprehensive_features(self, game: Dict, league: str) -> Dict:
         """
@@ -80,7 +82,10 @@ class VertexMasterAnalyzer:
         # 7. SHARP MONEY INDICATORS
         features.update(self._get_sharp_money_features(game))
         
-        # 8. DERIVED FEATURES
+        # 8. KALSHI PREDICTION MARKET DATA (NEW!)
+        features.update(self._get_kalshi_features(game))
+        
+        # 9. DERIVED FEATURES
         features.update(self._calculate_derived_features(features))
         
         return features
@@ -245,6 +250,91 @@ class VertexMasterAnalyzer:
             'public_betting_pct': 50,
         }
     
+    def _get_kalshi_features(self, game: Dict) -> Dict:
+        """
+        Get Kalshi prediction market data for the game
+        
+        Kalshi provides real-money prediction market odds that can validate
+        our AI predictions and identify arbitrage opportunities.
+        """
+        kalshi_features = {
+            'kalshi_available': False,
+            'kalshi_prob': 0.5,
+            'kalshi_home_prob': 0.5,
+            'kalshi_away_prob': 0.5,
+            'kalshi_alignment': 0,  # How aligned Kalshi is with our prediction
+            'kalshi_arbitrage_opportunity': False,
+            'kalshi_market_ticker': None,
+            'kalshi_validation': None,
+        }
+        
+        if not self.kalshi:
+            return kalshi_features
+        
+        try:
+            home_team = game.get('home_team', '')
+            away_team = game.get('away_team', '')
+            sport_key = game.get('sport_key', '')
+            
+            # Determine sport for Kalshi lookup
+            if 'nba' in sport_key.lower():
+                sport = 'NBA'
+            elif 'nfl' in sport_key.lower():
+                sport = 'NFL'
+            elif 'nhl' in sport_key.lower():
+                sport = 'NHL'
+            elif 'ncaab' in sport_key.lower():
+                sport = 'NCAAB'
+            elif 'ncaaf' in sport_key.lower():
+                sport = 'NCAAF'
+            elif 'mlb' in sport_key.lower():
+                sport = 'MLB'
+            else:
+                sport = 'NBA'  # Default
+            
+            # Try to get Kalshi market data
+            if hasattr(self.kalshi, 'get_game_market'):
+                kalshi_data = self.kalshi.get_game_market(
+                    home_team=home_team,
+                    away_team=away_team,
+                    sport=sport
+                )
+            elif hasattr(self.kalshi, 'validate_with_kalshi'):
+                # Alternative method name
+                kalshi_data = self.kalshi.validate_with_kalshi(
+                    home_team=home_team,
+                    away_team=away_team,
+                    sport=sport
+                )
+            else:
+                # Try direct API call if available
+                kalshi_data = None
+            
+            if kalshi_data and kalshi_data.get('kalshi_available'):
+                kalshi_features['kalshi_available'] = True
+                kalshi_features['kalshi_prob'] = kalshi_data.get('kalshi_prob', 0.5)
+                kalshi_features['kalshi_home_prob'] = kalshi_data.get('kalshi_prob', 0.5)
+                kalshi_features['kalshi_away_prob'] = 1 - kalshi_data.get('kalshi_prob', 0.5)
+                kalshi_features['kalshi_market_ticker'] = kalshi_data.get('market_ticker')
+                kalshi_features['kalshi_validation'] = kalshi_data
+                
+                # Calculate alignment with implied odds
+                implied_prob = game.get('implied_home_prob', 0.5)
+                kalshi_prob = kalshi_features['kalshi_prob']
+                alignment = 1 - abs(kalshi_prob - implied_prob)
+                kalshi_features['kalshi_alignment'] = alignment
+                
+                # Check for arbitrage opportunity
+                if abs(kalshi_prob - implied_prob) > 0.08:
+                    kalshi_features['kalshi_arbitrage_opportunity'] = True
+                    
+                logger.info(f"Kalshi data found for {home_team} vs {away_team}: {kalshi_prob:.2%}")
+            
+        except Exception as e:
+            logger.warning(f"Error getting Kalshi data: {e}")
+        
+        return kalshi_features
+    
     def _calculate_derived_features(self, features: Dict) -> Dict:
         """Calculate derived/engineered features"""
         derived = {}
@@ -269,13 +359,34 @@ class VertexMasterAnalyzer:
         else:
             derived['implied_home_prob'] = 0.5
         
-        # Consensus probability (average of all sources)
+        # Consensus probability (average of all sources including Kalshi)
         probs = [
             derived.get('implied_home_prob', 0.5),
             features.get('local_ml_prob', 0.5),
             features.get('theover_probability', 0.5),
         ]
+        
+        # Include Kalshi if available (weighted more heavily as real money)
+        if features.get('kalshi_available'):
+            kalshi_prob = features.get('kalshi_prob', 0.5)
+            probs.append(kalshi_prob)
+            probs.append(kalshi_prob)  # Double-weight Kalshi (real money)
+        
         derived['consensus_prob'] = np.mean(probs)
+        
+        # Kalshi validation score (how much Kalshi agrees with our prediction)
+        if features.get('kalshi_available'):
+            kalshi_prob = features.get('kalshi_prob', 0.5)
+            model_consensus = np.mean([
+                derived.get('implied_home_prob', 0.5),
+                features.get('local_ml_prob', 0.5),
+                features.get('theover_probability', 0.5),
+            ])
+            derived['kalshi_validation_score'] = 1 - abs(kalshi_prob - model_consensus)
+            derived['kalshi_agrees'] = abs(kalshi_prob - model_consensus) < 0.05
+        else:
+            derived['kalshi_validation_score'] = 0.5
+            derived['kalshi_agrees'] = None
         
         return derived
     
@@ -372,6 +483,12 @@ class VertexMasterAnalyzer:
             safe_get('local_ml_confidence', 0),
             safe_get('theover_probability', 0.5),
             safe_get('consensus_prob', 0.5),
+            
+            # Kalshi prediction market data (NEW!)
+            1.0 if safe_get('kalshi_available', False) else 0.0,
+            safe_get('kalshi_prob', 0.5),
+            safe_get('kalshi_alignment', 0.5),
+            safe_get('kalshi_validation_score', 0.5),
         ]
         
         return features
