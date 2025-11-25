@@ -122,10 +122,19 @@ def _try_vertex_ai_endpoint(features: List[float]) -> Optional[float]:
     try:
         from google.cloud import aiplatform
         
-        # Get configuration from session state
-        project_id = st.session_state.get('gcp_project_id')
-        location = st.session_state.get('gcp_location', 'us-central1')
-        endpoint_id = st.session_state.get('vertex_endpoint_id')
+        # Helper to safely get secrets
+        def get_secret(key, default=""):
+            try:
+                if key in st.secrets:
+                    return st.secrets[key]
+            except Exception:
+                pass
+            return default
+        
+        # Get configuration from session state first, then secrets
+        project_id = st.session_state.get('gcp_project_id') or get_secret('gcp_project_id', '')
+        location = st.session_state.get('gcp_location') or get_secret('gcp_location', 'us-central1')
+        endpoint_id = st.session_state.get('vertex_endpoint_id') or get_secret('vertex_endpoint_id', '')
         
         if not project_id:
             logger.info("GCP Project ID not configured")
