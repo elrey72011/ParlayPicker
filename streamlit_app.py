@@ -1273,29 +1273,46 @@ def render_sidebar_controls() -> Dict[str, Any]:
         sidebar.caption("❌ Enter Anthropic API key for AI analysis")
     
     # --------------------- GCP Vertex AI Config ---------------------
+    # Helper function to safely get secrets
+    def get_secret(key, default=""):
+        try:
+            if key in st.secrets:
+                return st.secrets[key]
+        except Exception:
+            pass
+        return default
+    
     # Load GCP configuration from secrets/environment
-    st.session_state.setdefault('gcp_project_id', 
-        os.environ.get("GCP_PROJECT_ID", "") or
-        os.environ.get("gcp_project_id", "") or
-        st.secrets.get("gcp_project_id", "") or
-        st.secrets.get("GCP_PROJECT_ID", "")
-    )
-    st.session_state.setdefault('vertex_endpoint_id', 
-        os.environ.get("VERTEX_ENDPOINT_ID", "") or
-        os.environ.get("vertex_endpoint_id", "") or
-        st.secrets.get("vertex_endpoint_id", "") or
-        st.secrets.get("VERTEX_ENDPOINT_ID", "")
-    )
-    st.session_state.setdefault('gcp_location', 
-        os.environ.get("GCP_LOCATION", "") or
-        os.environ.get("gcp_location", "") or
-        st.secrets.get("gcp_location", "") or
-        st.secrets.get("GCP_LOCATION", "us-central1")
-    )
+    if 'gcp_project_id' not in st.session_state or not st.session_state['gcp_project_id']:
+        gcp_project = (
+            os.environ.get("GCP_PROJECT_ID", "") or
+            os.environ.get("gcp_project_id", "") or
+            get_secret("gcp_project_id", "") or
+            get_secret("GCP_PROJECT_ID", "")
+        )
+        st.session_state['gcp_project_id'] = gcp_project
+    
+    if 'vertex_endpoint_id' not in st.session_state or not st.session_state['vertex_endpoint_id']:
+        endpoint_id = (
+            os.environ.get("VERTEX_ENDPOINT_ID", "") or
+            os.environ.get("vertex_endpoint_id", "") or
+            get_secret("vertex_endpoint_id", "") or
+            get_secret("VERTEX_ENDPOINT_ID", "")
+        )
+        st.session_state['vertex_endpoint_id'] = endpoint_id
+    
+    if 'gcp_location' not in st.session_state or not st.session_state['gcp_location']:
+        gcp_loc = (
+            os.environ.get("GCP_LOCATION", "") or
+            os.environ.get("gcp_location", "") or
+            get_secret("gcp_location", "") or
+            get_secret("GCP_LOCATION", "us-central1")
+        )
+        st.session_state['gcp_location'] = gcp_loc if gcp_loc else "us-central1"
     
     # Initialize GCP credentials from service account if available
-    if 'gcp_service_account' in st.secrets and not os.environ.get('GOOGLE_APPLICATION_CREDENTIALS'):
-        try:
+    try:
+        if 'gcp_service_account' in st.secrets and not os.environ.get('GOOGLE_APPLICATION_CREDENTIALS'):
             import tempfile
             # Write service account JSON to temp file for Google Cloud SDK
             gcp_creds = dict(st.secrets.gcp_service_account)
@@ -1303,14 +1320,22 @@ def render_sidebar_controls() -> Dict[str, Any]:
                 json.dump(gcp_creds, f)
                 os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = f.name
             logger.info("GCP credentials loaded from secrets")
-        except Exception as e:
-            logger.warning(f"Could not load GCP credentials: {e}")
+    except Exception as e:
+        logger.warning(f"Could not load GCP credentials: {e}")
     
     # Display GCP status in sidebar
-    if st.session_state.get('gcp_project_id') and st.session_state.get('vertex_endpoint_id'):
+    gcp_configured = st.session_state.get('gcp_project_id') and st.session_state.get('vertex_endpoint_id')
+    if gcp_configured:
         sidebar.caption(f"☁️ Vertex AI: {st.session_state['gcp_project_id']}")
     else:
         sidebar.caption("⚠️ GCP Vertex AI not fully configured")
+        # Debug info
+        with sidebar.expander("🔧 GCP Debug"):
+            st.write(f"Project ID: {st.session_state.get('gcp_project_id', 'Not set')}")
+            st.write(f"Endpoint ID: {st.session_state.get('vertex_endpoint_id', 'Not set')}")
+            st.write(f"Location: {st.session_state.get('gcp_location', 'Not set')}")
+            st.write("Add to secrets:")
+            st.code('gcp_project_id = "sports-betting-ml"\nvertex_endpoint_id = "5396533911008313344"\ngcp_location = "us-central1"', language="toml")
     
     # --------------------- API-Sports keys ---------------------
     nfl_key_default, nfl_source_default = resolve_nfl_apisports_key()
