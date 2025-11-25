@@ -558,13 +558,35 @@ class VertexMasterAnalyzer:
 
                 # Build Vertex AI feature vector
                 vertex_features = self.build_vertex_feature_vector(comp_features)
+                
+                # Build game context for Claude
+                game_context = {
+                    'home_team': game.get('home_team'),
+                    'away_team': game.get('away_team'),
+                    'sport': game_league,
+                    'spread': game.get('theover_spread') or comp_features.get('home_spread'),
+                    'pick': game.get('theover_pick'),
+                }
 
                 # Get Vertex AI ultimate prediction
-                vertex_prob = get_vertex_ai_prediction(vertex_features)
+                vertex_prob = get_vertex_ai_prediction(vertex_features, game_context)
+                
+                # If vertex_prob is the fallback value (0.58), use spread-derived probability instead
+                theover_prob = comp_features.get('theover_probability') or game.get('theover_probability')
+                implied_prob = comp_features.get('implied_home_prob') or game.get('implied_home_prob', 0.5)
+                
+                if vertex_prob is None or (vertex_prob and 0.57 <= vertex_prob <= 0.59):
+                    # ML returned fallback/heuristic value - use spread-derived probability instead
+                    if theover_prob and theover_prob != 0:
+                        # Blend theover with implied for final prediction
+                        # Weight theover more heavily since it's based on actual spread data
+                        vertex_prob = theover_prob * 0.6 + implied_prob * 0.4
+                        logger.info(f"Using spread-derived prob for {game.get('home_team')}: {vertex_prob:.3f}")
+                    else:
+                        vertex_prob = implied_prob
 
                 if vertex_prob is not None:
                     # Calculate expected value
-                    implied_prob = comp_features.get('implied_home_prob', 0.5)
                     edge = vertex_prob - implied_prob
 
                     # Store everything
