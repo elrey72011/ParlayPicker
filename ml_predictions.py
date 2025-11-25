@@ -430,24 +430,33 @@ def _calculate_heuristic_prediction(features: List[float]) -> float:
     24-27: kalshi data
     
     Returns:
-        Estimated probability based on features
+        Estimated probability based on features (always valid, never NaN)
     """
     try:
         if len(features) < 2:
             return 0.5
         
+        # Helper to safely get feature value
+        def safe_get(idx, default=0.5):
+            if len(features) > idx:
+                val = features[idx]
+                if val is None or (isinstance(val, float) and np.isnan(val)):
+                    return default
+                return val
+            return default
+        
         # Get key TheOver.ai features (these are the most reliable)
-        implied_home_prob = features[12] if len(features) > 12 else 0.5
-        spread_normalized = features[13] if len(features) > 13 else 0  # home_spread / 20
-        theover_prob = features[20] if len(features) > 20 else 0.5
-        consensus_prob = features[21] if len(features) > 21 else 0.5
+        implied_home_prob = safe_get(12, 0.5)
+        spread_normalized = safe_get(13, 0)  # home_spread / 20
+        theover_prob = safe_get(20, 0.5)
+        consensus_prob = safe_get(21, 0.5)
         
         # Get sentiment
-        sentiment_diff = features[15] if len(features) > 15 else 0
+        sentiment_diff = safe_get(15, 0)
         
         # Get team stats (may be None/placeholder)
-        home_win_pct = features[0] if len(features) > 0 else 0.5
-        away_win_pct = features[1] if len(features) > 1 else 0.5
+        home_win_pct = safe_get(0, 0.5)
+        away_win_pct = safe_get(1, 0.5)
         
         # Check if we have real TheOver.ai data
         has_real_spread = spread_normalized != 0
@@ -494,6 +503,11 @@ def _calculate_heuristic_prediction(features: List[float]) -> float:
         # Add sentiment adjustment (small effect)
         if sentiment_diff != 0:
             base_prob += sentiment_diff * 0.03  # Reduced from 0.05
+        
+        # Final safety check - ensure no NaN
+        if np.isnan(base_prob):
+            logger.warning("NaN detected in heuristic, returning 0.5")
+            return 0.5
         
         # Clip to valid probability range
         return float(np.clip(base_prob, 0.20, 0.80))
