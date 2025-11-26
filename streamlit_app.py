@@ -10148,6 +10148,8 @@ if is_vertex_ai_enabled():
                     # Pick the FAVORITE (most likely winner) for each game
                     # =====================================================
                     
+                    skipped_low_conf = 0  # Initialize counter
+                    
                     for vertex_result in vertex_results:
                         home_team = vertex_result.get('home_team', 'Home')
                         away_team = vertex_result.get('away_team', 'Away')
@@ -10280,12 +10282,24 @@ if is_vertex_ai_enabled():
                 
                 if best_bets_rows:
                     best_bets_df = pd.DataFrame(best_bets_rows)
-                    best_bets_df = best_bets_df.sort_values('AI Edge pp', ascending=False)
+                    
+                    # Sort by Win % (highest first)
+                    if 'Win %' in best_bets_df.columns:
+                        best_bets_df = best_bets_df.sort_values('Win %', ascending=False)
+                    
+                    # Add rank column
+                    best_bets_df.insert(0, 'Rank', range(1, len(best_bets_df) + 1))
+                    
+                    # Calculate summary stats
+                    total_games = len(best_bets_df)
+                    avg_win_prob = best_bets_df['Win %'].mean() if 'Win %' in best_bets_df.columns else 50.0
+                    kalshi_agrees = len(best_bets_df[best_bets_df['Kalshi'] == '✅']) if 'Kalshi' in best_bets_df.columns else 0
+                    sentiment_agrees = len(best_bets_df[best_bets_df['Sentiment'] == '✅']) if 'Sentiment' in best_bets_df.columns else 0
 
-                    st.success(f"✅ Generated {len(best_bets_df)} best bets using Vertex AI!")
+                    st.success(f"🎯 **{total_games} Games - ONE Best Pick Per Game**")
 
                     # Display metrics
-                    col1, col2, col3 = st.columns(3)
+                    col1, col2, col3, col4 = st.columns(4)
                     with col1:
                         st.metric("Total Games", total_games)
                     with col2:
