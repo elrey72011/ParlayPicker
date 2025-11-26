@@ -9912,7 +9912,11 @@ if is_vertex_ai_enabled():
             if use_vertex_results:
                 st.write("🎯 **Generating Best Bets from Vertex AI Analysis...**")
 
-                vertex_results = st.session_state['vertex_results']
+                vertex_results = st.session_state.get('vertex_results')
+                if not vertex_results:
+                    st.error("Run Vertex AI Master Analysis first to populate Vertex probabilities.")
+                    st.stop()
+
                 odds_data = ensure_session_odds_data(
                     selected_sport_keys,
                     best_leg_start,
