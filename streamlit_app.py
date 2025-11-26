@@ -9791,6 +9791,40 @@ if is_vertex_ai_enabled():
         if label in sport_display_map
     ]
 
+    # Persist user selections for downstream features (Vertex analysis, odds fetching)
+    st.session_state['selected_best_bet_sports'] = selected_sport_keys
+    st.session_state['best_leg_start_date'] = best_leg_start
+    st.session_state['best_leg_end_date'] = best_leg_end
+
+    def ensure_session_odds_data(
+        sport_keys: List[str],
+        start_date: Optional[date],
+        end_date: Optional[date],
+        tz_name: str,
+    ) -> List[Dict[str, Any]]:
+        """Load odds data into session state if missing, filtered by date range."""
+
+        existing = st.session_state.get('odds_data')
+        if existing:
+            return existing
+
+        odds_key = st.session_state.get('api_key', "") or os.environ.get("ODDS_API_KEY", "")
+        if not odds_key:
+            return []
+
+        snapshots = fetch_all_sports_parallel(odds_key, sport_keys)
+        aggregated: List[Dict[str, Any]] = []
+
+        for snapshot in snapshots.values():
+            events = snapshot.get("events") or []
+            filtered = filter_events_by_date_range(events, start_date, end_date, tz_name)
+            aggregated.extend(filtered)
+
+        if aggregated:
+            st.session_state['odds_data'] = aggregated
+
+        return aggregated
+
     # Check if Vertex AI analysis is available
     use_vertex_results = False
     if 'vertex_results' in st.session_state and st.session_state.get('vertex_analysis_complete'):
@@ -9879,10 +9913,15 @@ if is_vertex_ai_enabled():
                 st.write("🎯 **Generating Best Bets from Vertex AI Analysis...**")
 
                 vertex_results = st.session_state['vertex_results']
-                odds_data = st.session_state.get('odds_data', [])
+                odds_data = ensure_session_odds_data(
+                    selected_sport_keys,
+                    best_leg_start,
+                    best_leg_end,
+                    sidebar_state["timezone_name"],
+                )
 
                 if not odds_data:
-                    st.error("❌ No odds data available. Please fetch odds first.")
+                    st.error("❌ No odds data available. Please fetch odds first (or ensure your Odds API key is set).")
                     st.stop()
 
                 best_bets_rows: List[Dict[str, Any]] = []
@@ -13147,12 +13186,30 @@ if st.button(
         )
         st.stop()
     
+    odds_data = st.session_state.get('odds_data')
+    if not odds_data:
+        inferred_sports = st.session_state.get('selected_best_bet_sports', APP_CFG["sports_common"])
+        inferred_start = st.session_state.get('best_leg_start_date')
+        inferred_end = st.session_state.get('best_leg_end_date')
+        inferred_tz = st.session_state.get('user_timezone', sidebar_state.get("timezone_name", "UTC"))
+
+        odds_key = st.session_state.get('api_key', "") or os.environ.get("ODDS_API_KEY", "")
+        if odds_key:
+            snapshots = fetch_all_sports_parallel(odds_key, inferred_sports)
+            aggregated: List[Dict[str, Any]] = []
+            for snapshot in snapshots.values():
+                events = snapshot.get("events") or []
+                filtered = filter_events_by_date_range(events, inferred_start, inferred_end, inferred_tz)
+                aggregated.extend(filtered)
+
+            if aggregated:
+                st.session_state['odds_data'] = aggregated
+                odds_data = aggregated
+
     # Check for odds data
-    if 'odds_data' not in st.session_state or not st.session_state['odds_data']:
+    if not odds_data:
         st.error("❌ No odds data found! Please fetch odds first.")
         st.stop()
-    
-    odds_data = st.session_state['odds_data']
     
     st.write("📊 Found odds data for games:")
     st.info(f"**{len(odds_data)} games** ready for analysis")
