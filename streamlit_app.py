@@ -11281,32 +11281,6 @@ if is_vertex_ai_enabled():
             4. Try a different date
             5. Disable sentiment analysis if enabled
             """)
-# ---- Global safe odds helper (always available) ------------------------------
-def american_to_decimal_safe(odds) -> Optional[float]:
-    """
-    Safe American→Decimal conversion.
-    Returns None for None/0/invalid odds in (-100, 100) or on parsing errors.
-    """
-    try:
-        if odds is None:
-            return None
-        o = float(odds)
-        if abs(o) < 100:
-            return None
-        if o >= 100:
-            return 1.0 + o/100.0
-        else:
-            return 1.0 + 100.0/abs(o)
-    except Exception:
-        return None
-# -----------------------------------------------------------------------------
-# ---- Safety shim to guarantee robust odds conversion ----
-try:
-    american_to_decimal_safe
-except NameError:
-    pass
-# ---------------------------------------------------------
-    
 st.markdown("---")
 st.markdown("""
     ### 🤖 AI Features Explained:
