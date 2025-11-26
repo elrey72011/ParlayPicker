@@ -10119,181 +10119,158 @@ if is_vertex_ai_enabled():
                         'Commence (UTC)': leg.get('commence_time'),
                     })
 
-                # Initialize counter BEFORE the conditional block
+                # =====================================================
+                # SINGLE BEST PICK PER GAME - ALWAYS GENERATE
+                # Clear old format and generate one pick per game
+                # =====================================================
+                
+                # Clear any old-format rows and start fresh
+                best_bets_rows = []
                 skipped_low_conf = 0
                 
-                if not best_bets_rows:
-                    st.info("No qualifying bets found matching your criteria.")
-                else:
-                    # NO ODDS DATA - Generate Best Bets directly from Vertex Results
-                    st.info(f"📊 Generating Best Bets from {len(vertex_results)} Vertex AI analyzed games (TheOver.ai data)")
+                st.info(f"📊 Generating Best Bets from {len(vertex_results)} Vertex AI analyzed games")
+                
+                for vertex_result in vertex_results:
+                    home_team = vertex_result.get('home_team', 'Home')
+                    away_team = vertex_result.get('away_team', 'Away')
+                    league = vertex_result.get('league', 'N/A').upper()
                     
-                    # Debug: show confidence threshold
-                    st.caption(f"🔧 Confidence threshold: {min_ai_confidence * 100:.0f}%")
+                    confidence = vertex_result.get('confidence', 50)
                     
-                    # Check for stale/identical predictions (symptom of old analysis)
-                    unique_probs = set(r.get('vertex_prob', 0.5) for r in vertex_results)
-                    if len(unique_probs) <= 2:
-                        st.warning("⚠️ **Detected identical predictions for all games.** Please re-run 'Vertex AI Master Analysis' to get game-specific predictions based on spread data.")
+                    # Apply minimum confidence filter
+                    if confidence < min_ai_confidence * 100:
+                        skipped_low_conf += 1
+                        continue
                     
-                    # Show sample data for debugging
-                    with st.expander("🔍 Debug: Sample Game Data"):
-                        sample = vertex_results[0] if vertex_results else {}
-                        st.write(f"**Sample Game:** {sample.get('away_team')} @ {sample.get('home_team')}")
-                        st.write(f"- Vertex Prob: {sample.get('vertex_prob', 'N/A')}")
-                        st.write(f"- TheOver Prob: {sample.get('theover_probability', 'N/A')}")
-                        st.write(f"- Spread: {sample.get('spread', 'N/A')}")
-                        st.write(f"- Implied Home Prob: {sample.get('implied_home_prob', 'N/A')}")
-                        st.write(f"- Home ML Odds: {sample.get('home_ml_odds', 'N/A')}")
+                    # Get HOME TEAM's spread (not the pick's spread)
+                    # Prioritize home_spread (correctly calculated) over theover_spread (raw from CSV)
+                    home_spread = vertex_result.get('home_spread')
+                    if home_spread is None or (isinstance(home_spread, float) and pd.isna(home_spread)):
+                        # Try theover_spread but be careful - it might need sign adjustment
+                        raw_spread = vertex_result.get('theover_spread', 0) or vertex_result.get('spread', 0) or 0
+                        home_spread = abs(raw_spread) if raw_spread else 0  # Just get magnitude for now
+                    
+                    # Ensure home_spread is a valid number (magnitude only)
+                    if home_spread is None or (isinstance(home_spread, float) and pd.isna(home_spread)):
+                        home_spread = 0
+                    spread_magnitude = abs(home_spread)
+                    
+                    # Get odds from stored data
+                    home_ml = vertex_result.get('home_ml_odds') or -110
+                    away_ml = vertex_result.get('away_ml_odds') or -110
                     
                     # =====================================================
-                    # SINGLE BEST PICK PER GAME - Only generate ONE bet per game
-                    # Pick the FAVORITE (most likely winner) for each game
+                    # DETERMINE TRUE FAVORITE USING COMMON SENSE RULES
                     # =====================================================
                     
-                    skipped_low_conf = 0  # Initialize counter
+                    # Rule 1: For COLLEGE sports (NCAAB, NCAAF) with large spreads (10+ points),
+                    # the HOME team is almost ALWAYS the favorite
+                    is_college = league.upper() in ['NCAAB', 'NCAAF', 'CBB', 'CFB']
+                    large_spread = spread_magnitude >= 10
                     
-                    for vertex_result in vertex_results:
-                        home_team = vertex_result.get('home_team', 'Home')
-                        away_team = vertex_result.get('away_team', 'Away')
-                        league = vertex_result.get('league', 'N/A').upper()
-                        
-                        confidence = vertex_result.get('confidence', 50)
-                        
-                        # Apply minimum confidence filter
-                        if confidence < min_ai_confidence * 100:
-                            skipped_low_conf += 1
-                            continue
-                        
-                        # Get HOME TEAM's spread (not the pick's spread)
-                        # Prioritize home_spread (correctly calculated) over theover_spread (raw from CSV)
-                        home_spread = vertex_result.get('home_spread')
-                        if home_spread is None or (isinstance(home_spread, float) and pd.isna(home_spread)):
-                            # Try theover_spread but be careful - it might need sign adjustment
-                            raw_spread = vertex_result.get('theover_spread', 0) or vertex_result.get('spread', 0) or 0
-                            home_spread = abs(raw_spread) if raw_spread else 0  # Just get magnitude for now
-                        
-                        # Ensure home_spread is a valid number (magnitude only)
-                        if home_spread is None or (isinstance(home_spread, float) and pd.isna(home_spread)):
-                            home_spread = 0
-                        spread_magnitude = abs(home_spread)
-                        
-                        # Get odds from stored data
-                        home_ml = vertex_result.get('home_ml_odds') or -110
-                        away_ml = vertex_result.get('away_ml_odds') or -110
-                        
-                        # =====================================================
-                        # DETERMINE TRUE FAVORITE USING COMMON SENSE RULES
-                        # =====================================================
-                        
-                        # Rule 1: For COLLEGE sports (NCAAB, NCAAF) with large spreads (10+ points),
-                        # the HOME team is almost ALWAYS the favorite
-                        is_college = league.upper() in ['NCAAB', 'NCAAF', 'CBB', 'CFB']
-                        large_spread = spread_magnitude >= 10
-                        
-                        if is_college and large_spread:
-                            # HOME team is the favorite in college sports with large spreads
-                            home_ml_prob = 50 + (spread_magnitude * 2.25)  # ~2.25% per point
-                            home_ml_prob = min(90, home_ml_prob)  # Cap at 90%
-                            away_ml_prob = 100 - home_ml_prob
-                        elif home_ml and away_ml and home_ml != -110 and away_ml != -110:
-                            # Use ML odds if available and not default values
-                            if home_ml < 0:
-                                home_ml_prob_from_odds = abs(home_ml) / (abs(home_ml) + 100) * 100
-                            else:
-                                home_ml_prob_from_odds = 100 / (home_ml + 100) * 100
-                            
-                            if away_ml < 0:
-                                away_ml_prob_from_odds = abs(away_ml) / (abs(away_ml) + 100) * 100
-                            else:
-                                away_ml_prob_from_odds = 100 / (away_ml + 100) * 100
-                            
-                            # Normalize to 100%
-                            total = home_ml_prob_from_odds + away_ml_prob_from_odds
-                            if total > 0:
-                                home_ml_prob = (home_ml_prob_from_odds / total) * 100
-                                away_ml_prob = (away_ml_prob_from_odds / total) * 100
-                            else:
-                                home_ml_prob = 50
-                                away_ml_prob = 50
+                    if is_college and large_spread:
+                        # HOME team is the favorite in college sports with large spreads
+                        home_ml_prob = 50 + (spread_magnitude * 2.25)  # ~2.25% per point
+                        home_ml_prob = min(90, home_ml_prob)  # Cap at 90%
+                        away_ml_prob = 100 - home_ml_prob
+                    elif home_ml and away_ml and home_ml != -110 and away_ml != -110:
+                        # Use ML odds if available and not default values
+                        if home_ml < 0:
+                            home_ml_prob_from_odds = abs(home_ml) / (abs(home_ml) + 100) * 100
                         else:
-                            # Fallback: use spread-based calculation (assume home gets the negative spread)
-                            if spread_magnitude > 0:
-                                home_ml_prob = 50 + (spread_magnitude * 2.25)
-                                home_ml_prob = min(90, max(10, home_ml_prob))
-                            else:
-                                home_ml_prob = 50
-                            away_ml_prob = 100 - home_ml_prob
+                            home_ml_prob_from_odds = 100 / (home_ml + 100) * 100
                         
-                        # Get sentiment and Kalshi data
-                        sentiment_diff = vertex_result.get('sentiment_diff', 0)
-                        kalshi_available = vertex_result.get('kalshi_available', False)
-                        kalshi_prob = vertex_result.get('kalshi_prob', 0.5) or 0.5
-                        kalshi_home = kalshi_prob * 100
-                        kalshi_away = 100 - kalshi_home
-                        
-                        # =====================================================
-                        # DETERMINE THE FAVORITE (MOST LIKELY WINNER)
-                        # Always pick the team with higher win probability
-                        # =====================================================
-                        
-                        if home_ml_prob >= away_ml_prob:
-                            # HOME team is favorite
-                            fav_team = home_team
-                            fav_prob = home_ml_prob
-                            # Favorite always has NEGATIVE spread
-                            fav_spread = -spread_magnitude if spread_magnitude else 0
-                            fav_ml_odds = home_ml
-                            fav_sentiment = '✅' if sentiment_diff > 0 else ('❌' if sentiment_diff < 0 else '—')
-                            fav_kalshi_agrees = '✅' if (kalshi_available and kalshi_home > 50) else ('❌' if kalshi_available else '—')
-                            fav_kalshi_pct = kalshi_home if kalshi_available else None
+                        if away_ml < 0:
+                            away_ml_prob_from_odds = abs(away_ml) / (abs(away_ml) + 100) * 100
                         else:
-                            # AWAY team is favorite
-                            fav_team = away_team
-                            fav_prob = away_ml_prob
-                            # Favorite always has NEGATIVE spread
-                            fav_spread = -spread_magnitude if spread_magnitude else 0
-                            fav_ml_odds = away_ml
-                            fav_sentiment = '✅' if sentiment_diff < 0 else ('❌' if sentiment_diff > 0 else '—')
-                            fav_kalshi_agrees = '✅' if (kalshi_available and kalshi_away > 50) else ('❌' if kalshi_available else '—')
-                            fav_kalshi_pct = kalshi_away if kalshi_available else None
+                            away_ml_prob_from_odds = 100 / (away_ml + 100) * 100
                         
-                        # Format the pick string
-                        if fav_spread and fav_spread != 0:
-                            # Favorite always shows NEGATIVE spread (giving points)
-                            pick_str = f"{fav_team} {fav_spread:.1f}"
+                        # Normalize to 100%
+                        total = home_ml_prob_from_odds + away_ml_prob_from_odds
+                        if total > 0:
+                            home_ml_prob = (home_ml_prob_from_odds / total) * 100
+                            away_ml_prob = (away_ml_prob_from_odds / total) * 100
                         else:
-                            pick_str = f"{fav_team} ML"
-                        
-                        # Format odds
-                        if fav_ml_odds and fav_ml_odds != 0:
-                            if fav_ml_odds > 0:
-                                odds_str = f"+{int(fav_ml_odds)}"
-                            else:
-                                odds_str = str(int(fav_ml_odds))
+                            home_ml_prob = 50
+                            away_ml_prob = 50
+                    else:
+                        # Fallback: use spread-based calculation (assume home gets the negative spread)
+                        if spread_magnitude > 0:
+                            home_ml_prob = 50 + (spread_magnitude * 2.25)
+                            home_ml_prob = min(90, max(10, home_ml_prob))
                         else:
-                            odds_str = "-110"
-                        
-                        # Calculate composite score for ranking
-                        composite = fav_prob
-                        if fav_sentiment == '✅':
-                            composite += 10
-                        if fav_kalshi_agrees == '✅':
-                            composite += 15
-                        
-                        # Add the SINGLE BEST PICK (the favorite)
-                        best_bets_rows.append({
-                            'League': league,
-                            'Game': f"{away_team} @ {home_team}",
-                            'THE PICK': pick_str,
-                            'Win %': round(fav_prob, 1),
-                            'Composite': round(composite, 1),
-                            'Sentiment': fav_sentiment,
-                            'Kalshi': fav_kalshi_agrees,
-                            'Kalshi %': f"{fav_kalshi_pct:.0f}" if fav_kalshi_pct else '—',
-                            'Odds': odds_str,
-                            'Confidence': round(confidence, 1),
-                        })
+                            home_ml_prob = 50
+                        away_ml_prob = 100 - home_ml_prob
+                    
+                    # Get sentiment and Kalshi data
+                    sentiment_diff = vertex_result.get('sentiment_diff', 0)
+                    kalshi_available = vertex_result.get('kalshi_available', False)
+                    kalshi_prob = vertex_result.get('kalshi_prob', 0.5) or 0.5
+                    kalshi_home = kalshi_prob * 100
+                    kalshi_away = 100 - kalshi_home
+                    
+                    # =====================================================
+                    # DETERMINE THE FAVORITE (MOST LIKELY WINNER)
+                    # Always pick the team with higher win probability
+                    # =====================================================
+                    
+                    if home_ml_prob >= away_ml_prob:
+                        # HOME team is favorite
+                        fav_team = home_team
+                        fav_prob = home_ml_prob
+                        # Favorite always has NEGATIVE spread
+                        fav_spread = -spread_magnitude if spread_magnitude else 0
+                        fav_ml_odds = home_ml
+                        fav_sentiment = '✅' if sentiment_diff > 0 else ('❌' if sentiment_diff < 0 else '—')
+                        fav_kalshi_agrees = '✅' if (kalshi_available and kalshi_home > 50) else ('❌' if kalshi_available else '—')
+                        fav_kalshi_pct = kalshi_home if kalshi_available else None
+                    else:
+                        # AWAY team is favorite
+                        fav_team = away_team
+                        fav_prob = away_ml_prob
+                        # Favorite always has NEGATIVE spread
+                        fav_spread = -spread_magnitude if spread_magnitude else 0
+                        fav_ml_odds = away_ml
+                        fav_sentiment = '✅' if sentiment_diff < 0 else ('❌' if sentiment_diff > 0 else '—')
+                        fav_kalshi_agrees = '✅' if (kalshi_available and kalshi_away > 50) else ('❌' if kalshi_available else '—')
+                        fav_kalshi_pct = kalshi_away if kalshi_available else None
+                    
+                    # Format the pick string
+                    if fav_spread and fav_spread != 0:
+                        # Favorite always shows NEGATIVE spread (giving points)
+                        pick_str = f"{fav_team} {fav_spread:.1f}"
+                    else:
+                        pick_str = f"{fav_team} ML"
+                    
+                    # Format odds
+                    if fav_ml_odds and fav_ml_odds != 0:
+                        if fav_ml_odds > 0:
+                            odds_str = f"+{int(fav_ml_odds)}"
+                        else:
+                            odds_str = str(int(fav_ml_odds))
+                    else:
+                        odds_str = "-110"
+                    
+                    # Calculate composite score for ranking
+                    composite = fav_prob
+                    if fav_sentiment == '✅':
+                        composite += 10
+                    if fav_kalshi_agrees == '✅':
+                        composite += 15
+                    
+                    # Add the SINGLE BEST PICK (the favorite)
+                    best_bets_rows.append({
+                        'League': league,
+                        'Game': f"{away_team} @ {home_team}",
+                        'THE PICK': pick_str,
+                        'Win %': round(fav_prob, 1),
+                        'Composite': round(composite, 1),
+                        'Sentiment': fav_sentiment,
+                        'Kalshi': fav_kalshi_agrees,
+                        'Kalshi %': f"{fav_kalshi_pct:.0f}" if fav_kalshi_pct else '—',
+                        'Odds': odds_str,
+                        'Confidence': round(confidence, 1),
+                    })
                 
                 # Display results
                 if skipped_low_conf > 0:
