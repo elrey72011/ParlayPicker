@@ -10119,6 +10119,9 @@ if is_vertex_ai_enabled():
                         'Commence (UTC)': leg.get('commence_time'),
                     })
 
+                # Initialize counter BEFORE the conditional block
+                skipped_low_conf = 0
+                
                 if not best_bets_rows:
                     st.info("No qualifying bets found matching your criteria.")
                 else:
