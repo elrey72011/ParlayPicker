@@ -9830,6 +9830,13 @@ if is_vertex_ai_enabled():
     
     best_bets_df = st.session_state.get('best_bets_df', pd.DataFrame())
 
+    # Option to show ALL games (no filtering)
+    show_all_games = st.checkbox(
+        "📋 Show ALL Games Ranked (no confidence filter)",
+        value=True,
+        help="When checked, shows every game ranked by edge. When unchecked, filters by AI confidence threshold."
+    )
+
     compute_best_bets = st.button(
         "🚀 Generate Best Bets" + (" (with Vertex AI)" if use_vertex_results else " (Legacy Mode)"),
         key="compute_best_bets",
@@ -10074,8 +10081,8 @@ if is_vertex_ai_enabled():
                     
                     confidence = vertex_result.get('confidence', 50)
                     
-                    # Apply minimum confidence filter
-                    if confidence < min_ai_confidence * 100:
+                    # Apply minimum confidence filter ONLY if show_all_games is False
+                    if not show_all_games and confidence < min_ai_confidence * 100:
                         skipped_low_conf += 1
                         continue
                     
@@ -10087,9 +10094,14 @@ if is_vertex_ai_enabled():
                     theover_prob = vertex_result.get('theover_probability', None)
                     theover_spread = vertex_result.get('theover_spread', 0) or 0
                     
-                    # Skip games without TheOver.ai data
-                    if not theover_pick:
+                    # Skip games without TheOver.ai data ONLY if show_all_games is False
+                    if not show_all_games and not theover_pick:
                         continue
+                    
+                    # For games without TheOver.ai pick, use home team as default pick
+                    if not theover_pick:
+                        theover_pick = home_team
+                        theover_picked_home = True
                     
                     # Convert to percentage if needed
                     if theover_prob is not None and theover_prob <= 1:
@@ -10126,15 +10138,24 @@ if is_vertex_ai_enabled():
                     
                     # =====================================================
                     # GET AI/ML PREDICTION
-                    # Vertex AI win probability for the picked team
+                    # CRITICAL: vertex_ai_prob is HOME team win probability
+                    # We need to convert it to PICKED team probability
                     # =====================================================
                     vertex_ai_prob = vertex_result.get('vertex_ai_prob') or vertex_result.get('vertex_prob')
                     if vertex_ai_prob is not None and vertex_ai_prob <= 1:
                         vertex_ai_prob = vertex_ai_prob * 100
                     
-                    # If no Vertex AI prob, use TheOver.ai prob as the AI prediction
-                    ai_win_prob = vertex_ai_prob if vertex_ai_prob else theover_prob
-                    if ai_win_prob is None:
+                    # CRITICAL FIX: Convert HOME probability to PICKED team probability
+                    if vertex_ai_prob is not None:
+                        if theover_picked_home:
+                            # TheOver.ai picked HOME team, vertex_ai_prob is correct
+                            ai_win_prob = vertex_ai_prob
+                        else:
+                            # TheOver.ai picked AWAY team, invert the probability
+                            ai_win_prob = 100 - vertex_ai_prob
+                    elif theover_prob:
+                        ai_win_prob = theover_prob
+                    else:
                         ai_win_prob = 50
                     
                     # =====================================================
@@ -10215,6 +10236,7 @@ if is_vertex_ai_enabled():
                     # =====================================================
                     # ADD TO BEST BETS
                     # =====================================================
+                    ml_source = vertex_result.get('ml_source', 'unknown')
                     best_bets_rows.append({
                         'League': league,
                         'Game': f"{away_team} @ {home_team}",
@@ -10230,6 +10252,7 @@ if is_vertex_ai_enabled():
                         'TheOver %': f"{theover_prob:.0f}" if theover_prob else '—',
                         'Odds': odds_str,
                         'Confidence': round(confidence, 1),
+                        'ML Source': ml_source,
                     })
                 
                 # Display results
@@ -10268,6 +10291,35 @@ if is_vertex_ai_enabled():
                         st.metric("High Consensus (3-4/4)", high_consensus)
                     with col4:
                         st.metric("Kalshi + Sentiment", f"{kalshi_agrees}K / {sentiment_agrees}S")
+                    
+                    # ML Source Summary
+                    if 'ML Source' in best_bets_df.columns:
+                        ml_counts = best_bets_df['ML Source'].value_counts()
+                        claude_count = ml_counts.get('anthropic_claude', 0)
+                        spread_count = ml_counts.get('spread_derived', 0)
+                        fallback_count = ml_counts.get('fallback_heuristic', 0) + ml_counts.get('unknown', 0)
+                        
+                        st.markdown("---")
+                        st.subheader("🔬 ML Prediction Sources")
+                        ml_col1, ml_col2, ml_col3 = st.columns(3)
+                        with ml_col1:
+                            if claude_count > 0:
+                                st.success(f"🤖 Claude API: {claude_count} games")
+                            else:
+                                st.info(f"🤖 Claude API: {claude_count} games")
+                        with ml_col2:
+                            st.info(f"📊 Spread-Derived: {spread_count} games")
+                        with ml_col3:
+                            if fallback_count > 0:
+                                st.warning(f"⚙️ Fallback: {fallback_count} games")
+                            else:
+                                st.info(f"⚙️ Fallback: {fallback_count} games")
+                        
+                        if claude_count > 0:
+                            st.success(f"✅ **{claude_count}/{total_games} games used REAL ML predictions from Claude API**")
+                        elif spread_count > 0:
+                            st.info(f"📊 Using spread-derived probabilities (each point ≈ 2.8% shift from 50%)")
+                        st.markdown("---")
                     
                     # Display columns - new edge-based format
                     display_cols = ['Rank', 'League', 'Game', 'THE PICK', 'AI Win %', 'Market %', 
