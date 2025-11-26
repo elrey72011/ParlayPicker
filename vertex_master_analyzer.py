@@ -825,8 +825,40 @@ class VertexMasterAnalyzer:
                 vertex_prob = get_vertex_ai_prediction(vertex_features, game_context)
                 
                 # If vertex_prob is the fallback value (0.58), use spread-derived probability instead
-                theover_prob = comp_features.get('theover_probability') or game.get('theover_probability')
+                theover_prob_raw = comp_features.get('theover_probability') or game.get('theover_probability')
                 implied_prob = comp_features.get('implied_home_prob') or game.get('implied_home_prob', 0.5)
+                
+                # =====================================================
+                # CRITICAL FIX: Convert theover_probability to HOME team probability
+                # theover_probability is the PICKED team's win probability
+                # We need HOME team's probability for vertex_ai_prob
+                # =====================================================
+                home_team = game.get('home_team', '')
+                away_team = game.get('away_team', '')
+                theover_pick = game.get('theover_pick', '') or ''
+                
+                # Determine if TheOver.ai picked the HOME or AWAY team
+                theover_pick_lower = theover_pick.lower() if theover_pick else ''
+                home_lower = home_team.lower() if home_team else ''
+                away_lower = away_team.lower() if away_team else ''
+                
+                # Check if pick matches home or away
+                pick_is_home = any(word in home_lower for word in theover_pick_lower.split()) if theover_pick_lower and home_lower else False
+                pick_is_away = any(word in away_lower for word in theover_pick_lower.split()) if theover_pick_lower and away_lower else False
+                
+                # Convert theover_prob to HOME team probability
+                if theover_prob_raw is not None and not pd.isna(theover_prob_raw) and theover_prob_raw != 0:
+                    if pick_is_away and not pick_is_home:
+                        # TheOver picked AWAY team, so theover_prob is AWAY probability
+                        # HOME probability = 1 - theover_prob
+                        theover_prob = 1.0 - float(theover_prob_raw)
+                        logger.info(f"Converted theover_prob: {theover_pick} is AWAY, home_prob = 1 - {theover_prob_raw:.3f} = {theover_prob:.3f}")
+                    else:
+                        # TheOver picked HOME team, theover_prob is already HOME probability
+                        theover_prob = float(theover_prob_raw)
+                        logger.info(f"Using theover_prob directly: {theover_pick} is HOME, prob = {theover_prob:.3f}")
+                else:
+                    theover_prob = None
                 
                 # Ensure implied_prob is valid
                 if implied_prob is None or pd.isna(implied_prob):
@@ -839,8 +871,7 @@ class VertexMasterAnalyzer:
                 if vertex_prob is None or (vertex_prob and 0.57 <= vertex_prob <= 0.59):
                     # ML returned fallback/heuristic value - use spread-derived probability instead
                     if theover_prob and theover_prob != 0 and not pd.isna(theover_prob):
-                        # Blend theover with implied for final prediction
-                        # Weight theover more heavily since it's based on actual spread data
+                        # Blend theover (now HOME prob) with implied for final prediction
                         vertex_prob = theover_prob * 0.6 + implied_prob * 0.4
                         logger.info(f"Using spread-derived prob for {game.get('home_team')}: {vertex_prob:.3f}")
                     else:
@@ -1330,9 +1361,13 @@ def show_vertex_master_analysis(results_df: pd.DataFrame):
                 st.write(f"{float(local_ml)*100:.0f}%")
             
             with consensus_cols[2]:
-                theover = game.get('theover_probability', 0.5)
+                theover_raw = game.get('theover_probability', 0.5)
+                theover_pick = game.get('theover_pick', '')
+                home_team = game.get('home_team', '')
+                away_team = game.get('away_team', '')
+                
                 st.write(f"**theover.ai**")
-                if is_nan(theover) or theover == 0.5 or theover == 0:
+                if is_nan(theover_raw) or theover_raw == 0.5 or theover_raw == 0:
                     # Show spread-derived probability instead
                     spread = game.get('home_spread', 0) or game.get('theover_spread', 0)
                     if spread and not is_nan(spread) and spread != 0:
@@ -1342,17 +1377,50 @@ def show_vertex_master_analysis(results_df: pd.DataFrame):
                     else:
                         st.write("50%")  # Default instead of N/A
                 else:
-                    st.write(f"{float(theover)*100:.0f}%")
+                    # Convert to HOME team probability
+                    theover_pick_lower = theover_pick.lower() if theover_pick else ''
+                    home_lower = home_team.lower() if home_team else ''
+                    away_lower = away_team.lower() if away_team else ''
+                    
+                    pick_is_home = any(word in home_lower for word in theover_pick_lower.split()) if theover_pick_lower and home_lower else False
+                    pick_is_away = any(word in away_lower for word in theover_pick_lower.split()) if theover_pick_lower and away_lower else False
+                    
+                    if pick_is_away and not pick_is_home:
+                        # theover picked away, so raw prob is away prob, home = 1 - raw
+                        theover_home = 1.0 - float(theover_raw)
+                    else:
+                        theover_home = float(theover_raw)
+                    
+                    st.write(f"{theover_home*100:.0f}%")
             
             with consensus_cols[3]:
                 consensus = game.get('consensus_prob', 0.5)
                 if is_nan(consensus):
-                    # Calculate consensus from available data
+                    # Calculate consensus from available data - using HOME probabilities
                     probs = []
-                    for key in ['implied_home_prob', 'local_ml_prob', 'theover_probability']:
+                    for key in ['implied_home_prob', 'local_ml_prob']:
                         val = game.get(key, 0.5)
                         if not is_nan(val) and val != 0:
                             probs.append(float(val))
+                    
+                    # Add theover as HOME probability
+                    theover_for_consensus = game.get('theover_probability', 0.5)
+                    if not is_nan(theover_for_consensus) and theover_for_consensus != 0:
+                        # Convert to home prob if needed
+                        theover_pick_c = game.get('theover_pick', '')
+                        home_team_c = game.get('home_team', '')
+                        away_team_c = game.get('away_team', '')
+                        tp_lower = theover_pick_c.lower() if theover_pick_c else ''
+                        ht_lower = home_team_c.lower() if home_team_c else ''
+                        at_lower = away_team_c.lower() if away_team_c else ''
+                        p_is_home = any(w in ht_lower for w in tp_lower.split()) if tp_lower and ht_lower else False
+                        p_is_away = any(w in at_lower for w in tp_lower.split()) if tp_lower and at_lower else False
+                        if p_is_away and not p_is_home:
+                            theover_home_c = 1.0 - float(theover_for_consensus)
+                        else:
+                            theover_home_c = float(theover_for_consensus)
+                        probs.append(theover_home_c)
+                    
                     consensus = sum(probs) / len(probs) if probs else 0.5
                 st.write(f"**Consensus**")
                 st.write(f"{float(consensus)*100:.0f}%")
@@ -1446,21 +1514,20 @@ def show_vertex_master_analysis(results_df: pd.DataFrame):
                     # Calculate from spread
                     spread = game.get('home_spread', 0) or game.get('theover_spread', 0)
                     if spread and spread != 0:
-                        theover_prob_raw = 0.5 - (float(spread) * 0.028)
-                        theover_prob_raw = max(0.20, min(0.80, theover_prob_raw))
+                        # This gives home probability, need to adjust for pick
+                        home_spread_prob = 0.5 - (float(spread) * 0.028)
+                        home_spread_prob = max(0.20, min(0.80, home_spread_prob))
+                        
+                        is_home_pick = (pick == home_team or 
+                                       pick.lower() in home_team.lower() or 
+                                       home_team.lower() in pick.lower())
+                        pick_prob = home_spread_prob if is_home_pick else (1.0 - home_spread_prob)
                     else:
-                        theover_prob_raw = 0.5
-                
-                # theover_prob_raw is HOME team probability
-                # If pick is away team, show away team probability (1 - home_prob)
-                is_home_pick = (pick == home_team or 
-                               pick.lower() in home_team.lower() or 
-                               home_team.lower() in pick.lower())
-                
-                if is_home_pick:
-                    pick_prob = float(theover_prob_raw)
+                        pick_prob = 0.5
                 else:
-                    pick_prob = 1.0 - float(theover_prob_raw)
+                    # theover_prob_raw IS the PICKED team's probability
+                    # No conversion needed - display directly
+                    pick_prob = float(theover_prob_raw)
                 
                 st.info(f"💡 theover.ai pick: **{pick}** ({pick_prob*100:.0f}% to cover)")
     
