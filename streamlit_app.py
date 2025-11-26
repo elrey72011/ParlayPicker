@@ -10142,65 +10142,85 @@ if is_vertex_ai_enabled():
                         skipped_low_conf += 1
                         continue
                     
-                    # Get HOME TEAM's spread (not the pick's spread)
-                    # Prioritize home_spread (correctly calculated) over theover_spread (raw from CSV)
-                    home_spread = vertex_result.get('home_spread')
-                    if home_spread is None or (isinstance(home_spread, float) and pd.isna(home_spread)):
-                        # Try theover_spread but be careful - it might need sign adjustment
-                        raw_spread = vertex_result.get('theover_spread', 0) or vertex_result.get('spread', 0) or 0
-                        home_spread = abs(raw_spread) if raw_spread else 0  # Just get magnitude for now
+                    # Get spread and TheOver.ai data
+                    raw_spread = vertex_result.get('theover_spread', 0) or vertex_result.get('spread', 0) or 0
+                    theover_pick = vertex_result.get('theover_pick', '') or ''
+                    theover_prob = vertex_result.get('theover_probability', None)
                     
-                    # Ensure home_spread is a valid number (magnitude only)
-                    if home_spread is None or (isinstance(home_spread, float) and pd.isna(home_spread)):
-                        home_spread = 0
-                    spread_magnitude = abs(home_spread)
+                    # Convert theover_prob to percentage if needed
+                    if theover_prob is not None and theover_prob <= 1:
+                        theover_prob = theover_prob * 100
+                    
+                    spread_magnitude = abs(raw_spread) if raw_spread else 0
                     
                     # Get odds from stored data
                     home_ml = vertex_result.get('home_ml_odds') or -110
                     away_ml = vertex_result.get('away_ml_odds') or -110
                     
                     # =====================================================
-                    # DETERMINE TRUE FAVORITE USING COMMON SENSE RULES
+                    # DETERMINE FAVORITE USING THEOVER.AI PROBABILITY
+                    # TheOver.ai prob is the WIN probability for their pick
                     # =====================================================
                     
-                    # Rule 1: For COLLEGE sports (NCAAB, NCAAF) with large spreads (10+ points),
-                    # the HOME team is almost ALWAYS the favorite
-                    is_college = league.upper() in ['NCAAB', 'NCAAF', 'CBB', 'CFB']
-                    large_spread = spread_magnitude >= 10
+                    # Determine which team TheOver picked
+                    theover_pick_lower = theover_pick.lower() if theover_pick else ''
+                    home_lower = home_team.lower()
+                    away_lower = away_team.lower()
                     
-                    if is_college and large_spread:
-                        # HOME team is the favorite in college sports with large spreads
-                        home_ml_prob = 50 + (spread_magnitude * 2.25)  # ~2.25% per point
-                        home_ml_prob = min(90, home_ml_prob)  # Cap at 90%
-                        away_ml_prob = 100 - home_ml_prob
-                    elif home_ml and away_ml and home_ml != -110 and away_ml != -110:
-                        # Use ML odds if available and not default values
-                        if home_ml < 0:
-                            home_ml_prob_from_odds = abs(home_ml) / (abs(home_ml) + 100) * 100
+                    theover_picked_home = any(word in home_lower for word in theover_pick_lower.split()) if theover_pick_lower else False
+                    
+                    if theover_prob is not None and theover_prob > 0:
+                        # USE THEOVER.AI PROBABILITY DIRECTLY
+                        # theover_prob is the win probability of their picked team
+                        if theover_picked_home:
+                            home_ml_prob = theover_prob
+                            away_ml_prob = 100 - theover_prob
                         else:
-                            home_ml_prob_from_odds = 100 / (home_ml + 100) * 100
+                            away_ml_prob = theover_prob
+                            home_ml_prob = 100 - theover_prob
+                    elif home_ml != -110 or away_ml != -110:
+                        # Use ML odds if available
+                        if home_ml < 0:
+                            home_ml_prob = abs(home_ml) / (abs(home_ml) + 100) * 100
+                        else:
+                            home_ml_prob = 100 / (home_ml + 100) * 100 if home_ml > 0 else 50
                         
                         if away_ml < 0:
-                            away_ml_prob_from_odds = abs(away_ml) / (abs(away_ml) + 100) * 100
+                            away_ml_prob = abs(away_ml) / (abs(away_ml) + 100) * 100
                         else:
-                            away_ml_prob_from_odds = 100 / (away_ml + 100) * 100
+                            away_ml_prob = 100 / (away_ml + 100) * 100 if away_ml > 0 else 50
                         
-                        # Normalize to 100%
-                        total = home_ml_prob_from_odds + away_ml_prob_from_odds
+                        # Normalize
+                        total = home_ml_prob + away_ml_prob
                         if total > 0:
-                            home_ml_prob = (home_ml_prob_from_odds / total) * 100
-                            away_ml_prob = (away_ml_prob_from_odds / total) * 100
+                            home_ml_prob = (home_ml_prob / total) * 100
+                            away_ml_prob = (away_ml_prob / total) * 100
+                    elif spread_magnitude >= 3:
+                        # Use spread for probability estimate
+                        # Negative spread = favorite, positive = underdog
+                        if raw_spread < 0:
+                            # Picked team is favorite
+                            fav_prob = 50 + (spread_magnitude * 2.25)
+                            fav_prob = min(90, fav_prob)
+                            if theover_picked_home:
+                                home_ml_prob = fav_prob
+                                away_ml_prob = 100 - fav_prob
+                            else:
+                                away_ml_prob = fav_prob
+                                home_ml_prob = 100 - fav_prob
                         else:
-                            home_ml_prob = 50
-                            away_ml_prob = 50
+                            # Picked team is underdog
+                            dog_prob = 50 - (spread_magnitude * 2.25)
+                            dog_prob = max(10, dog_prob)
+                            if theover_picked_home:
+                                home_ml_prob = dog_prob
+                                away_ml_prob = 100 - dog_prob
+                            else:
+                                away_ml_prob = dog_prob
+                                home_ml_prob = 100 - dog_prob
                     else:
-                        # Fallback: use spread-based calculation (assume home gets the negative spread)
-                        if spread_magnitude > 0:
-                            home_ml_prob = 50 + (spread_magnitude * 2.25)
-                            home_ml_prob = min(90, max(10, home_ml_prob))
-                        else:
-                            home_ml_prob = 50
-                        away_ml_prob = 100 - home_ml_prob
+                        home_ml_prob = 50
+                        away_ml_prob = 50
                     
                     # Get sentiment and Kalshi data
                     sentiment_diff = vertex_result.get('sentiment_diff', 0)
