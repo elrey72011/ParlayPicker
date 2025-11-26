@@ -10168,30 +10168,33 @@ if is_vertex_ai_enabled():
                         if home_spread is None or (isinstance(home_spread, float) and pd.isna(home_spread)):
                             # Try theover_spread but be careful - it might need sign adjustment
                             raw_spread = vertex_result.get('theover_spread', 0) or vertex_result.get('spread', 0) or 0
-                            # If we have a pick, check if it matches home team to determine sign
-                            theover_pick = vertex_result.get('theover_pick', '')
-                            if theover_pick and theover_pick.lower() not in home_team.lower() and home_team.lower() not in theover_pick.lower():
-                                # Pick is away team, so home_spread is opposite of raw_spread
-                                home_spread = -raw_spread if raw_spread else 0
-                            else:
-                                home_spread = raw_spread
+                            home_spread = abs(raw_spread) if raw_spread else 0  # Just get magnitude for now
                         
-                        # Ensure home_spread is a valid number
+                        # Ensure home_spread is a valid number (magnitude only)
                         if home_spread is None or (isinstance(home_spread, float) and pd.isna(home_spread)):
                             home_spread = 0
+                        spread_magnitude = abs(home_spread)
                         
                         # Get odds from stored data
                         home_ml = vertex_result.get('home_ml_odds') or -110
                         away_ml = vertex_result.get('away_ml_odds') or -110
                         
                         # =====================================================
-                        # DETERMINE TRUE FAVORITE FROM ML ODDS (most reliable)
-                        # Negative ML odds = favorite, Positive ML odds = underdog
+                        # DETERMINE TRUE FAVORITE USING COMMON SENSE RULES
                         # =====================================================
                         
-                        # Use ML odds to determine who is actually favored
-                        if home_ml and away_ml and home_ml != 0 and away_ml != 0:
-                            # Calculate implied probabilities from ML odds
+                        # Rule 1: For COLLEGE sports (NCAAB, NCAAF) with large spreads (10+ points),
+                        # the HOME team is almost ALWAYS the favorite
+                        is_college = league.upper() in ['NCAAB', 'NCAAF', 'CBB', 'CFB']
+                        large_spread = spread_magnitude >= 10
+                        
+                        if is_college and large_spread:
+                            # HOME team is the favorite in college sports with large spreads
+                            home_ml_prob = 50 + (spread_magnitude * 2.25)  # ~2.25% per point
+                            home_ml_prob = min(90, home_ml_prob)  # Cap at 90%
+                            away_ml_prob = 100 - home_ml_prob
+                        elif home_ml and away_ml and home_ml != -110 and away_ml != -110:
+                            # Use ML odds if available and not default values
                             if home_ml < 0:
                                 home_ml_prob_from_odds = abs(home_ml) / (abs(home_ml) + 100) * 100
                             else:
@@ -10202,40 +10205,22 @@ if is_vertex_ai_enabled():
                             else:
                                 away_ml_prob_from_odds = 100 / (away_ml + 100) * 100
                             
-                            # Use the ML odds probabilities
-                            home_ml_prob = home_ml_prob_from_odds
-                            away_ml_prob = away_ml_prob_from_odds
-                            
                             # Normalize to 100%
-                            total = home_ml_prob + away_ml_prob
+                            total = home_ml_prob_from_odds + away_ml_prob_from_odds
                             if total > 0:
-                                home_ml_prob = (home_ml_prob / total) * 100
-                                away_ml_prob = (away_ml_prob / total) * 100
-                        else:
-                            # Fallback to vertex probability or spread-based calculation
-                            vertex_prob = vertex_result.get('vertex_ai_prob') or vertex_result.get('vertex_prob') or vertex_result.get('implied_home_prob')
-                            
-                            if vertex_prob is not None and vertex_prob != 0:
-                                # Use vertex probability directly
-                                if vertex_prob <= 1:
-                                    vertex_prob = vertex_prob * 100
-                                home_ml_prob = vertex_prob
-                                away_ml_prob = 100 - home_ml_prob
-                            elif home_spread and home_spread != 0:
-                                # Spread-based ML probability
-                                spread_shift = abs(home_spread) * 2.25
-                                spread_shift = min(spread_shift, 40)
-                                
-                                if home_spread < 0:
-                                    home_ml_prob = 50 + spread_shift
-                                else:
-                                    home_ml_prob = 50 - spread_shift
-                                
-                                home_ml_prob = max(10, min(90, home_ml_prob))
-                                away_ml_prob = 100 - home_ml_prob
+                                home_ml_prob = (home_ml_prob_from_odds / total) * 100
+                                away_ml_prob = (away_ml_prob_from_odds / total) * 100
                             else:
                                 home_ml_prob = 50
                                 away_ml_prob = 50
+                        else:
+                            # Fallback: use spread-based calculation (assume home gets the negative spread)
+                            if spread_magnitude > 0:
+                                home_ml_prob = 50 + (spread_magnitude * 2.25)
+                                home_ml_prob = min(90, max(10, home_ml_prob))
+                            else:
+                                home_ml_prob = 50
+                            away_ml_prob = 100 - home_ml_prob
                         
                         # Get sentiment and Kalshi data
                         sentiment_diff = vertex_result.get('sentiment_diff', 0)
@@ -10248,9 +10233,6 @@ if is_vertex_ai_enabled():
                         # DETERMINE THE FAVORITE (MOST LIKELY WINNER)
                         # Always pick the team with higher win probability
                         # =====================================================
-                        
-                        # Get the absolute spread value for display
-                        spread_magnitude = abs(home_spread) if home_spread else 0
                         
                         if home_ml_prob >= away_ml_prob:
                             # HOME team is favorite
