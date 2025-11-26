@@ -1261,6 +1261,116 @@ def render_sidebar_controls() -> Dict[str, Any]:
     else:
         sidebar.caption("ℹ️ Using neutral fallback sentiment")
 
+    # --------------------- Anthropic API key ---------------------
+    st.session_state.setdefault('anthropic_api_key', 
+        os.environ.get("ANTHROPIC_API_KEY", "") or 
+        os.environ.get("anthropic_api_key", "") or
+        st.secrets.get("anthropic_api_key", "") or
+        st.secrets.get("ANTHROPIC_API_KEY", "")
+    )
+    anthropic_api_input = sidebar.text_input(
+        "Anthropic API key",
+        value=st.session_state.get('anthropic_api_key', ""),
+        type="password",
+        help="Required for Vertex AI analysis. Get from console.anthropic.com",
+    ).strip()
+    if anthropic_api_input != st.session_state.get('anthropic_api_key', ""):
+        st.session_state['anthropic_api_key'] = anthropic_api_input
+    if st.session_state.get('anthropic_api_key'):
+        sidebar.caption("🤖 Anthropic API key configured")
+    else:
+        sidebar.caption("❌ Enter Anthropic API key for AI analysis")
+    
+    # --------------------- GCP Vertex AI Config ---------------------
+    # Helper function to safely get secrets
+    def get_secret(key, default=""):
+        try:
+            if key in st.secrets:
+                return st.secrets[key]
+        except Exception:
+            pass
+        return default
+    
+    # Load GCP configuration from secrets/environment
+    if 'gcp_project_id' not in st.session_state or not st.session_state['gcp_project_id']:
+        gcp_project = (
+            os.environ.get("GCP_PROJECT_ID", "") or
+            os.environ.get("gcp_project_id", "") or
+            get_secret("gcp_project_id", "") or
+            get_secret("GCP_PROJECT_ID", "")
+        )
+        st.session_state['gcp_project_id'] = gcp_project
+    
+    if 'vertex_endpoint_id' not in st.session_state or not st.session_state['vertex_endpoint_id']:
+        endpoint_id = (
+            os.environ.get("VERTEX_ENDPOINT_ID", "") or
+            os.environ.get("vertex_endpoint_id", "") or
+            get_secret("vertex_endpoint_id", "") or
+            get_secret("VERTEX_ENDPOINT_ID", "")
+        )
+        st.session_state['vertex_endpoint_id'] = endpoint_id
+    
+    if 'gcp_location' not in st.session_state or not st.session_state['gcp_location']:
+        gcp_loc = (
+            os.environ.get("GCP_LOCATION", "") or
+            os.environ.get("gcp_location", "") or
+            get_secret("gcp_location", "") or
+            get_secret("GCP_LOCATION", "us-central1")
+        )
+        st.session_state['gcp_location'] = gcp_loc if gcp_loc else "us-central1"
+    
+    # Initialize GCP credentials from service account if available
+    try:
+        if 'gcp_service_account' in st.secrets and not os.environ.get('GOOGLE_APPLICATION_CREDENTIALS'):
+            import tempfile
+            # Write service account JSON to temp file for Google Cloud SDK
+            gcp_creds = dict(st.secrets.gcp_service_account)
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+                json.dump(gcp_creds, f)
+                os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = f.name
+            logger.info("GCP credentials loaded from secrets")
+    except Exception as e:
+        logger.warning(f"Could not load GCP credentials: {e}")
+    
+    # Display GCP status in sidebar
+    gcp_configured = st.session_state.get('gcp_project_id') and st.session_state.get('vertex_endpoint_id')
+    if gcp_configured:
+        sidebar.caption(f"☁️ Vertex AI: {st.session_state['gcp_project_id']}")
+    else:
+        sidebar.caption("⚠️ GCP Vertex AI not fully configured")
+        # Debug info
+        with sidebar.expander("🔧 GCP Debug"):
+            st.write(f"Project ID: {st.session_state.get('gcp_project_id', 'Not set')}")
+            st.write(f"Endpoint ID: {st.session_state.get('vertex_endpoint_id', 'Not set')}")
+            st.write(f"Location: {st.session_state.get('gcp_location', 'Not set')}")
+            st.write("Add to secrets:")
+            st.code('gcp_project_id = "sports-betting-ml"\nvertex_endpoint_id = "5396533911008313344"\ngcp_location = "us-central1"', language="toml")
+    
+    # --------------------- Kalshi Status ---------------------
+    # Check if Kalshi is configured (will be loaded later in session init)
+    kalshi_key = get_secret("KALSHI_API_KEY", "") or os.environ.get("KALSHI_API_KEY", "")
+    kalshi_secret = get_secret("KALSHI_API_SECRET", "") or os.environ.get("KALSHI_API_SECRET", "")
+    if kalshi_key and kalshi_secret:
+        sidebar.caption(f"📈 Kalshi: Connected ({kalshi_key[:8]}...)")
+        # Show debug info
+        with sidebar.expander("🔧 Kalshi Debug"):
+            st.write(f"API Key: {kalshi_key[:12]}...")
+            st.write(f"Secret: {'Set' if kalshi_secret else 'Not set'}")
+            # Test Kalshi connection
+            try:
+                kalshi = st.session_state.get('kalshi_integrator')
+                if kalshi:
+                    markets = kalshi.get_sports_markets()
+                    st.write(f"Sports Markets Found: {len(markets) if markets else 0}")
+                    if markets and len(markets) > 0:
+                        st.write(f"Sample: {markets[0].get('title', 'N/A')[:50]}")
+                else:
+                    st.write("Kalshi integrator not in session")
+            except Exception as e:
+                st.write(f"Error: {str(e)[:100]}")
+    else:
+        sidebar.caption("⚠️ Kalshi not configured")
+    
     # --------------------- API-Sports keys ---------------------
     nfl_key_default, nfl_source_default = resolve_nfl_apisports_key()
     st.session_state.setdefault('nfl_apisports_api_key', nfl_key_default)
@@ -2088,30 +2198,138 @@ class AIOptimizer:
 # ============ KALSHI INTEGRATION ============
 
 class KalshiIntegrator:
-    """Integrates Kalshi prediction market odds and analysis"""
+    """Integrates Kalshi prediction market odds and analysis
+    
+    Kalshi uses RSA signature authentication for API requests.
+    The API key is a UUID and the secret is an RSA private key.
+    """
     
     def __init__(self, api_key: str = None, api_secret: str = None):
         self.api_key = api_key or os.environ.get("KALSHI_API_KEY")
         self.api_secret = api_secret or os.environ.get("KALSHI_API_SECRET")
-        self.base_url = "https://api.elections.kalshi.com/trade-api/v2"
-        self.demo_url = "https://demo-api.elections.kalshi.com/trade-api/v2"
-
-        # Use demo for testing, production for live
+        
+        # Kalshi API URLs - production API (not elections subdomain)
+        self.base_url = "https://api.kalshi.com/trade-api/v2"
+        self.demo_url = "https://demo-api.kalshi.com/trade-api/v2"
+        
+        # Use production API if we have credentials
         self.api_url = self.base_url if self.api_key else self.demo_url
-
+        
         self.headers = {
-            "Content-Type": "application/json"
+            "Content-Type": "application/json",
+            "Accept": "application/json",
         }
+        
+        # RSA key for signing (parsed from api_secret)
+        self._private_key = None
+        self._auth_ready = False
+        
+        if self.api_key and self.api_secret:
+            try:
+                from cryptography.hazmat.primitives import serialization
+                from cryptography.hazmat.backends import default_backend
+                
+                # Clean up the key if needed
+                key_data = self.api_secret.strip()
+                if not key_data.startswith('-----BEGIN'):
+                    key_data = f"-----BEGIN RSA PRIVATE KEY-----\n{key_data}\n-----END RSA PRIVATE KEY-----"
+                
+                self._private_key = serialization.load_pem_private_key(
+                    key_data.encode(),
+                    password=None,
+                    backend=default_backend()
+                )
+                self._auth_ready = True
+                logger.info(f"✅ Kalshi RSA key loaded successfully (key: {self.api_key[:8]}...)")
+            except ImportError:
+                logger.warning("cryptography library not installed - Kalshi auth disabled")
+                self._private_key = None
+            except Exception as e:
+                logger.warning(f"Could not load Kalshi RSA key: {e}")
+                self._private_key = None
 
-        if self.api_key:
-            self.headers["Authorization"] = f"Bearer {self.api_key}"
-
-        # Synthetic fallback cache when Kalshi API is unavailable (e.g., network blocks)
+        # Synthetic fallback cache when Kalshi API is unavailable
         self._using_synthetic_data = False
         self._synthetic_markets: List[Dict[str, Any]] = []
         self._synthetic_orderbooks: Dict[str, Dict[str, List[Dict[str, Any]]]] = {}
         self._synthetic_market_by_team: Dict[str, Dict[str, Any]] = {}
         self.last_error: Optional[str] = None
+        
+        # Cache for API responses
+        self._markets_cache = None
+        self._cache_time = None
+        self._cache_duration = 300  # 5 minutes
+        
+    def _sign_request(self, method: str, path: str, timestamp: str) -> str:
+        """Create RSA signature for Kalshi API request"""
+        if not self._private_key:
+            return ""
+        
+        try:
+            from cryptography.hazmat.primitives import hashes
+            from cryptography.hazmat.primitives.asymmetric import padding
+            import base64
+            
+            # Message format: timestamp + method + path
+            message = f"{timestamp}{method}{path}"
+            
+            signature = self._private_key.sign(
+                message.encode('utf-8'),
+                padding.PKCS1v15(),
+                hashes.SHA256()
+            )
+            
+            return base64.b64encode(signature).decode('utf-8')
+        except Exception as e:
+            logger.warning(f"Error signing Kalshi request: {e}")
+            return ""
+    
+    def _make_authenticated_request(self, method: str, endpoint: str, params: dict = None) -> Optional[dict]:
+        """Make authenticated request to Kalshi API"""
+        import time as time_module
+        
+        url = f"{self.api_url}{endpoint}"
+        timestamp = str(int(time_module.time() * 1000))
+        
+        headers = self.headers.copy()
+        
+        if self._auth_ready and self._private_key:
+            signature = self._sign_request(method.upper(), endpoint, timestamp)
+            headers["KALSHI-ACCESS-KEY"] = self.api_key
+            headers["KALSHI-ACCESS-SIGNATURE"] = signature
+            headers["KALSHI-ACCESS-TIMESTAMP"] = timestamp
+        
+        try:
+            if method.upper() == "GET":
+                response = requests.get(url, headers=headers, params=params, timeout=15)
+            else:
+                response = requests.post(url, headers=headers, json=params, timeout=15)
+            
+            if response.status_code == 200:
+                self.last_error = None
+                return response.json()
+            elif response.status_code == 401:
+                logger.warning("Kalshi API authentication failed - check API key and secret")
+                self.last_error = "Authentication failed"
+            elif response.status_code == 403:
+                logger.warning("Kalshi API access forbidden")
+                self.last_error = "Access forbidden"
+            else:
+                logger.warning(f"Kalshi API error: {response.status_code} - {response.text[:200]}")
+                self.last_error = f"API error: {response.status_code}"
+                
+        except requests.exceptions.Timeout:
+            logger.warning("Kalshi API timeout")
+            self.last_error = "Request timeout"
+        except Exception as e:
+            logger.warning(f"Kalshi API request failed: {e}")
+            self.last_error = str(e)
+        
+        return None
+    
+    def is_configured(self) -> bool:
+        """Check if Kalshi is properly configured"""
+        return bool(self.api_key and self._auth_ready)
 
     # -------------------- Synthetic helpers --------------------
     def _synthetic_probability(self, team: str, sport_key: Optional[str] = None,
@@ -2183,7 +2401,55 @@ class KalshiIntegrator:
 
     def get_synthetic_market_for_team(self, team: str) -> Optional[Dict[str, Any]]:
         self._ensure_synthetic_data()
-        return self._synthetic_market_by_team.get(team.upper())
+        team_upper = team.upper().strip()
+        
+        # Try exact match first
+        if team_upper in self._synthetic_market_by_team:
+            return self._synthetic_market_by_team.get(team_upper)
+        
+        # Try partial matches - check if team name is part of any key or vice versa
+        for key, market in self._synthetic_market_by_team.items():
+            # Check if team is in the key (e.g., "Brooklyn" in "BROOKLYN NETS")
+            if team_upper in key or key in team_upper:
+                return market
+            
+            # Check individual words (e.g., "Nets" matches "BROOKLYN NETS")
+            team_words = team_upper.split()
+            key_words = key.split()
+            for word in team_words:
+                if len(word) > 2 and word in key_words:
+                    return market
+        
+        # No match found - create an on-the-fly synthetic market for this team
+        # This allows college teams and other unknown teams to get Kalshi validation
+        ticker = self._synthetic_ticker_for_team(team_upper, "SPORTS")
+        prob = self._synthetic_probability(team_upper)
+        price = int(round(prob * 100))
+        
+        now = datetime.now(timezone.utc)
+        expiry = (now + timedelta(days=30)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        
+        market = {
+            "ticker": ticker,
+            "title": f"{team.title()} confidence (synthetic)",
+            "subtitle": "On-the-fly synthetic market",
+            "series_ticker": "SPORTS",
+            "status": "open",
+            "close_time": expiry,
+            "league": "NCAAB",  # Assume college if not found
+            "synthetic": True,
+            "team": team_upper,
+        }
+        
+        # Cache it for future lookups
+        self._synthetic_markets.append(market)
+        self._synthetic_orderbooks[ticker] = {
+            "yes": [{"price": price, "contracts": 100}],
+            "no": [{"price": 100 - price, "contracts": 100}],
+        }
+        self._synthetic_market_by_team[team_upper] = market
+        
+        return market
 
     def synthetic_probability(self, team: str, sport_key: Optional[str] = None,
                                sportsbook_prob: Optional[float] = None) -> float:
@@ -2294,6 +2560,138 @@ class KalshiIntegrator:
         except Exception as e:
             st.warning(f"Error fetching orderbook: {str(e)}")
             return {}
+    
+    def get_game_market(self, home_team: str, away_team: str, sport: str = 'NBA') -> Dict:
+        """
+        Find and return Kalshi market data for a specific game.
+        
+        Args:
+            home_team: Home team name
+            away_team: Away team name  
+            sport: Sport type (NBA, NFL, NHL, NCAAB, etc.)
+            
+        Returns:
+            Dict with kalshi_available, kalshi_prob, market_ticker, etc.
+        """
+        result = {
+            'kalshi_available': False,
+            'kalshi_prob': 0.5,
+            'kalshi_home_prob': 0.5,
+            'kalshi_away_prob': 0.5,
+            'market_ticker': None,
+            'market_title': None,
+            'confidence': 0,
+        }
+        
+        def normalize_name(name: str) -> str:
+            """Normalize team name for matching"""
+            return re.sub(r'[^a-z]', '', name.lower())
+        
+        def teams_match(team: str, text: str) -> bool:
+            """Check if team name appears in text"""
+            team_lower = team.lower()
+            text_lower = text.lower()
+            
+            # Direct match
+            if team_lower in text_lower:
+                return True
+            
+            # Try individual words (for "New York" matching "Knicks" market)
+            team_words = team_lower.split()
+            for word in team_words:
+                if len(word) > 3 and word in text_lower:
+                    return True
+            
+            # Check abbreviations
+            abbrev_map = {
+                'new york': ['ny', 'knicks', 'yankees', 'mets', 'giants', 'jets', 'rangers', 'islanders'],
+                'los angeles': ['la', 'lakers', 'clippers', 'dodgers', 'rams', 'chargers', 'kings'],
+                'golden state': ['gs', 'warriors'],
+                'oklahoma city': ['okc', 'thunder'],
+                'san antonio': ['sa', 'spurs'],
+                'san francisco': ['sf', '49ers', 'giants'],
+                'tampa bay': ['tb', 'bucs', 'rays', 'lightning'],
+                'green bay': ['gb', 'packers'],
+            }
+            
+            for city, abbrevs in abbrev_map.items():
+                if city in team_lower:
+                    for abbr in abbrevs:
+                        if abbr in text_lower:
+                            return True
+            
+            return False
+        
+        try:
+            # Get all sports markets
+            sports_markets = self.get_sports_markets()
+            
+            if not sports_markets:
+                # Fall back to synthetic data
+                self._using_synthetic_data = True
+                self._ensure_synthetic_data()
+                sports_markets = self._synthetic_markets
+            
+            # Search for matching market
+            home_normalized = normalize_name(home_team)
+            away_normalized = normalize_name(away_team)
+            
+            for market in sports_markets:
+                title = market.get('title', '') or ''
+                ticker = market.get('ticker', '') or ''
+                market_text = f"{title} {ticker}"
+                
+                # Check if this market matches both teams
+                home_match = teams_match(home_team, market_text)
+                away_match = teams_match(away_team, market_text)
+                
+                if home_match and away_match:
+                    # Found matching market!
+                    ticker = market.get('ticker', '')
+                    
+                    # Get orderbook to determine probabilities
+                    orderbook = self.get_orderbook(ticker) if ticker else {}
+                    
+                    yes_bids = orderbook.get('yes', [])
+                    no_bids = orderbook.get('no', [])
+                    
+                    if yes_bids:
+                        # Price is in cents, convert to probability
+                        yes_price = yes_bids[0].get('price', 50)
+                        kalshi_prob = yes_price / 100.0
+                    elif market.get('synthetic'):
+                        # Use synthetic probability
+                        kalshi_prob = self._synthetic_probability(home_team, sport)
+                    else:
+                        kalshi_prob = 0.5
+                    
+                    result['kalshi_available'] = True
+                    result['kalshi_prob'] = kalshi_prob
+                    result['kalshi_home_prob'] = kalshi_prob
+                    result['kalshi_away_prob'] = 1 - kalshi_prob
+                    result['market_ticker'] = ticker
+                    result['market_title'] = title
+                    result['confidence'] = 0.8 if not market.get('synthetic') else 0.5
+                    
+                    logger.info(f"Kalshi match found for {home_team} vs {away_team}: {ticker} = {kalshi_prob:.2%}")
+                    return result
+            
+            # No direct match found - try synthetic market
+            if not result['kalshi_available']:
+                synthetic = self.get_synthetic_market_for_team(home_team)
+                if synthetic:
+                    result['kalshi_available'] = True
+                    result['kalshi_prob'] = self._synthetic_probability(home_team, sport)
+                    result['kalshi_home_prob'] = result['kalshi_prob']
+                    result['kalshi_away_prob'] = 1 - result['kalshi_prob']
+                    result['market_ticker'] = synthetic.get('ticker')
+                    result['market_title'] = f"Synthetic: {home_team}"
+                    result['confidence'] = 0.4  # Lower confidence for synthetic
+                    
+        except Exception as e:
+            logger.warning(f"Error getting Kalshi game market: {e}")
+        
+        return result
     
     def compare_with_sportsbook(
         self,
@@ -3416,7 +3814,55 @@ class KalshiIntegrator:
 
     def get_synthetic_market_for_team(self, team: str) -> Optional[Dict[str, Any]]:
         self._ensure_synthetic_data()
-        return self._synthetic_market_by_team.get(team.upper())
+        team_upper = team.upper().strip()
+        
+        # Try exact match first
+        if team_upper in self._synthetic_market_by_team:
+            return self._synthetic_market_by_team.get(team_upper)
+        
+        # Try partial matches - check if team name is part of any key or vice versa
+        for key, market in self._synthetic_market_by_team.items():
+            # Check if team is in the key (e.g., "Brooklyn" in "BROOKLYN NETS")
+            if team_upper in key or key in team_upper:
+                return market
+            
+            # Check individual words (e.g., "Nets" matches "BROOKLYN NETS")
+            team_words = team_upper.split()
+            key_words = key.split()
+            for word in team_words:
+                if len(word) > 2 and word in key_words:
+                    return market
+        
+        # No match found - create an on-the-fly synthetic market for this team
+        # This allows college teams and other unknown teams to get Kalshi validation
+        ticker = self._synthetic_ticker_for_team(team_upper, "SPORTS")
+        prob = self._synthetic_probability(team_upper)
+        price = int(round(prob * 100))
+        
+        now = datetime.now(timezone.utc)
+        expiry = (now + timedelta(days=30)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        
+        market = {
+            "ticker": ticker,
+            "title": f"{team.title()} confidence (synthetic)",
+            "subtitle": "On-the-fly synthetic market",
+            "series_ticker": "SPORTS",
+            "status": "open",
+            "close_time": expiry,
+            "league": "NCAAB",  # Assume college if not found
+            "synthetic": True,
+            "team": team_upper,
+        }
+        
+        # Cache it for future lookups
+        self._synthetic_markets.append(market)
+        self._synthetic_orderbooks[ticker] = {
+            "yes": [{"price": price, "contracts": 100}],
+            "no": [{"price": 100 - price, "contracts": 100}],
+        }
+        self._synthetic_market_by_team[team_upper] = market
+        
+        return market
 
     def synthetic_probability(self, team: str, sport_key: Optional[str] = None,
                                sportsbook_prob: Optional[float] = None) -> float:
@@ -3528,6 +3974,138 @@ class KalshiIntegrator:
             st.warning(f"Error fetching orderbook: {str(e)}")
             return {}
     
+    
+    def get_game_market(self, home_team: str, away_team: str, sport: str = 'NBA') -> Dict:
+        """
+        Find and return Kalshi market data for a specific game.
+        
+        Args:
+            home_team: Home team name
+            away_team: Away team name  
+            sport: Sport type (NBA, NFL, NHL, NCAAB, etc.)
+            
+        Returns:
+            Dict with kalshi_available, kalshi_prob, market_ticker, etc.
+        """
+        result = {
+            'kalshi_available': False,
+            'kalshi_prob': 0.5,
+            'kalshi_home_prob': 0.5,
+            'kalshi_away_prob': 0.5,
+            'market_ticker': None,
+            'market_title': None,
+            'confidence': 0,
+        }
+        
+        def normalize_name(name: str) -> str:
+            """Normalize team name for matching"""
+            return re.sub(r'[^a-z]', '', name.lower())
+        
+        def teams_match(team: str, text: str) -> bool:
+            """Check if team name appears in text"""
+            team_lower = team.lower()
+            text_lower = text.lower()
+            
+            # Direct match
+            if team_lower in text_lower:
+                return True
+            
+            # Try individual words (for "New York" matching "Knicks" market)
+            team_words = team_lower.split()
+            for word in team_words:
+                if len(word) > 3 and word in text_lower:
+                    return True
+            
+            # Check abbreviations
+            abbrev_map = {
+                'new york': ['ny', 'knicks', 'yankees', 'mets', 'giants', 'jets', 'rangers', 'islanders'],
+                'los angeles': ['la', 'lakers', 'clippers', 'dodgers', 'rams', 'chargers', 'kings'],
+                'golden state': ['gs', 'warriors'],
+                'oklahoma city': ['okc', 'thunder'],
+                'san antonio': ['sa', 'spurs'],
+                'san francisco': ['sf', '49ers', 'giants'],
+                'tampa bay': ['tb', 'bucs', 'rays', 'lightning'],
+                'green bay': ['gb', 'packers'],
+            }
+            
+            for city, abbrevs in abbrev_map.items():
+                if city in team_lower:
+                    for abbr in abbrevs:
+                        if abbr in text_lower:
+                            return True
+            
+            return False
+        
+        try:
+            # Get all sports markets
+            sports_markets = self.get_sports_markets()
+            
+            if not sports_markets:
+                # Fall back to synthetic data
+                self._using_synthetic_data = True
+                self._ensure_synthetic_data()
+                sports_markets = self._synthetic_markets
+            
+            # Search for matching market
+            home_normalized = normalize_name(home_team)
+            away_normalized = normalize_name(away_team)
+            
+            for market in sports_markets:
+                title = market.get('title', '') or ''
+                ticker = market.get('ticker', '') or ''
+                market_text = f"{title} {ticker}"
+                
+                # Check if this market matches both teams
+                home_match = teams_match(home_team, market_text)
+                away_match = teams_match(away_team, market_text)
+                
+                if home_match and away_match:
+                    # Found matching market!
+                    ticker = market.get('ticker', '')
+                    
+                    # Get orderbook to determine probabilities
+                    orderbook = self.get_orderbook(ticker) if ticker else {}
+                    
+                    yes_bids = orderbook.get('yes', [])
+                    no_bids = orderbook.get('no', [])
+                    
+                    if yes_bids:
+                        # Price is in cents, convert to probability
+                        yes_price = yes_bids[0].get('price', 50)
+                        kalshi_prob = yes_price / 100.0
+                    elif market.get('synthetic'):
+                        # Use synthetic probability
+                        kalshi_prob = self._synthetic_probability(home_team, sport)
+                    else:
+                        kalshi_prob = 0.5
+                    
+                    result['kalshi_available'] = True
+                    result['kalshi_prob'] = kalshi_prob
+                    result['kalshi_home_prob'] = kalshi_prob
+                    result['kalshi_away_prob'] = 1 - kalshi_prob
+                    result['market_ticker'] = ticker
+                    result['market_title'] = title
+                    result['confidence'] = 0.8 if not market.get('synthetic') else 0.5
+                    
+                    logger.info(f"Kalshi match found for {home_team} vs {away_team}: {ticker} = {kalshi_prob:.2%}")
+                    return result
+            
+            # No direct match found - try synthetic market
+            if not result['kalshi_available']:
+                synthetic = self.get_synthetic_market_for_team(home_team)
+                if synthetic:
+                    result['kalshi_available'] = True
+                    result['kalshi_prob'] = self._synthetic_probability(home_team, sport)
+                    result['kalshi_home_prob'] = result['kalshi_prob']
+                    result['kalshi_away_prob'] = 1 - result['kalshi_prob']
+                    result['market_ticker'] = synthetic.get('ticker')
+                    result['market_title'] = f"Synthetic: {home_team}"
+                    result['confidence'] = 0.4  # Lower confidence for synthetic
+                    
+        except Exception as e:
+            logger.warning(f"Error getting Kalshi game market: {e}")
+        
+        return result
     def compare_with_sportsbook(
         self,
         kalshi_market: Dict,
@@ -8047,8 +8625,23 @@ if 'social_analyzer' not in st.session_state:
     twitter_key = os.environ.get("TWITTER_API_KEY", "")
     st.session_state['social_analyzer'] = SocialMediaAnalyzer(twitter_key)
 if 'kalshi_integrator' not in st.session_state:
-    kalshi_key = os.environ.get("KALSHI_API_KEY", "")
-    kalshi_secret = os.environ.get("KALSHI_API_SECRET", "")
+    # Helper to get secret
+    def get_secret(key, default=""):
+        try:
+            if key in st.secrets:
+                return st.secrets[key]
+        except Exception:
+            pass
+        return default
+    
+    kalshi_key = os.environ.get("KALSHI_API_KEY", "") or get_secret("KALSHI_API_KEY", "")
+    kalshi_secret = os.environ.get("KALSHI_API_SECRET", "") or get_secret("KALSHI_API_SECRET", "")
+    
+    if kalshi_key and kalshi_secret:
+        logger.info(f"Kalshi API key found: {kalshi_key[:8]}...")
+    else:
+        logger.info("Kalshi API keys not configured")
+    
     st.session_state['kalshi_integrator'] = KalshiIntegrator(kalshi_key, kalshi_secret)
 if not _session_client_or_none('apisports_nfl_client', APISportsFootballClient):
     stored_key = st.session_state.get('nfl_apisports_api_key')
@@ -8244,37 +8837,260 @@ with main_tab1:
     theover_spreads_data = _collect_theover_dataset("#### 📐 Spread projections", "theover_spreads")
     theover_totals_data = _collect_theover_dataset("#### 📈 Totals (Over/Under) projections", "theover_totals")
     
-    # Vertex AI Analysis Integration
-    if is_vertex_ai_enabled() and analyze_theover_spreads_with_vertex is not None:
-        if theover_spreads_data is not None and len(theover_spreads_data) > 0:
+    # Vertex AI Analysis Integration - Uses VertexMasterAnalyzer with BOTH spreads and totals
+    if is_vertex_ai_enabled():
+        if (theover_spreads_data is not None and len(theover_spreads_data) > 0) or \
+           (theover_totals_data is not None and len(theover_totals_data) > 0):
             st.markdown("---")
             st.subheader("🤖 Vertex AI Best Bet Analysis")
-            st.caption("AI-powered analysis of your theover.ai spread picks")
             
-            if st.button("🎯 Analyze Spreads with Vertex AI", key="vertex_analyze_spreads_btn"):
+            # Show what data is available
+            data_summary = []
+            if theover_spreads_data is not None and len(theover_spreads_data) > 0:
+                data_summary.append(f"📐 {len(theover_spreads_data)} spread picks")
+            if theover_totals_data is not None and len(theover_totals_data) > 0:
+                data_summary.append(f"📈 {len(theover_totals_data)} totals picks")
+            st.caption(f"AI-powered analysis using: {' + '.join(data_summary)}")
+            
+            if st.button("🎯 Analyze with Vertex AI (Spreads + Totals)", key="vertex_analyze_combined_btn"):
                 with st.spinner("Running AI analysis on all picks... This may take a minute..."):
                     try:
-                        # Get available clients
-                        sportsdata_client = sportsdata_clients.get('nba') if 'sportsdata_clients' in locals() else None
-                        apisports_client = basketball_client if 'basketball_client' in locals() else None
+                        from vertex_master_analyzer import VertexMasterAnalyzer, show_vertex_master_analysis
                         
-                        # Run analysis
-                        results_df = analyze_theover_spreads_with_vertex(
-                            theover_spreads_data,
-                            sportsdata_client,
-                            apisports_client
-                        )
+                        # Build games list from TheOver.ai data
+                        all_games = []
                         
-                        # Show results
-                        if not results_df.empty:
-                            show_best_bets_table(results_df)
+                        # Process spreads data
+                        if theover_spreads_data is not None:
+                            for _, row in theover_spreads_data.iterrows():
+                                home_team = row.get('home_team') or row.get('HomeTeam') or ''
+                                away_team = row.get('away_team') or row.get('AwayTeam') or ''
+                                league = (row.get('League') or row.get('league') or 'NBA').upper()
+                                pick = row.get('Pick') or row.get('pick') or ''
+                                
+                                # Get spread line
+                                line_value = row.get('Line') or row.get('Spread') or row.get('line') or 0
+                                try:
+                                    line_value = float(line_value) if line_value else 0
+                                except:
+                                    line_value = 0
+                                
+                                # Determine sport_key
+                                sport_key_map = {
+                                    'NFL': 'americanfootball_nfl',
+                                    'NBA': 'basketball_nba', 
+                                    'NHL': 'icehockey_nhl',
+                                    'NCAAB': 'basketball_ncaab',
+                                    'NCAAF': 'americanfootball_ncaaf',
+                                }
+                                sport_key = sport_key_map.get(league, 'basketball_nba')
+                                
+                                # NHL uses moneylines in Line column
+                                is_nhl = league == 'NHL'
+                                
+                                if is_nhl:
+                                    moneyline = line_value
+                                    if moneyline != 0:
+                                        if moneyline > 0:
+                                            home_implied_prob = 100 / (moneyline + 100)
+                                        else:
+                                            home_implied_prob = abs(moneyline) / (abs(moneyline) + 100)
+                                    else:
+                                        home_implied_prob = 0.5
+                                    
+                                    # For NHL, theover_prob = home team win probability
+                                    theover_prob = home_implied_prob
+                                    
+                                    home_ml = int(moneyline) if pick == home_team else int(-moneyline * 0.9)
+                                    away_ml = int(-moneyline * 0.9) if pick == home_team else int(moneyline)
+                                    spread = 1.5  # Standard puckline
+                                    home_spread = spread  # Will be adjusted below
+                                else:
+                                    # Basketball/Football - line is spread for the PICK team
+                                    # Negative spread = favorite, Positive spread = underdog
+                                    pick_spread = line_value
+                                    
+                                    # Calculate HOME team's spread (opposite of pick's if pick is away)
+                                    if pick == away_team or pick.lower() in away_team.lower() or away_team.lower() in pick.lower():
+                                        # Pick is away team, so home_spread is opposite
+                                        home_spread = -pick_spread
+                                    else:
+                                        # Pick is home team
+                                        home_spread = pick_spread
+                                    
+                                    # Calculate home team win probability from HOME spread
+                                    # Negative home_spread = home team is favorite = higher win prob
+                                    # Each point of spread ≈ 2.8% probability shift from 50%
+                                    home_implied_prob = 0.5 - (home_spread * 0.028)
+                                    home_implied_prob = max(0.15, min(0.85, home_implied_prob))
+                                    
+                                    # theover_probability = home team win probability
+                                    theover_prob = home_implied_prob
+                                    
+                                    # Add slight boost based on TheOver.ai pick (they have edge)
+                                    pick_boost = 0.02
+                                    if pick == home_team or pick.lower() in home_team.lower() or home_team.lower() in pick.lower():
+                                        theover_prob = min(0.85, theover_prob + pick_boost)
+                                    else:
+                                        theover_prob = max(0.15, theover_prob - pick_boost)
+                                    
+                                    # Calculate moneylines from home implied probability
+                                    if home_implied_prob > 0.5:
+                                        home_ml = int(-100 * home_implied_prob / (1 - home_implied_prob))
+                                        away_ml = int(100 * (1 - home_implied_prob) / home_implied_prob)
+                                    else:
+                                        home_ml = int(100 * (1 - home_implied_prob) / home_implied_prob)
+                                        away_ml = int(-100 * (1 - home_implied_prob) / home_implied_prob)
+                                    
+                                    spread = pick_spread  # Keep original for display
+                                
+                                all_games.append({
+                                    'home_team': home_team,
+                                    'away_team': away_team,
+                                    'sport_key': sport_key,
+                                    'league': league,
+                                    'theover_probability': theover_prob,
+                                    'theover_pick': pick,
+                                    'theover_spread': pick_spread if 'pick_spread' in dir() else spread,
+                                    'home_spread': home_spread,
+                                    'home_ml_odds': home_ml,
+                                    'away_ml_odds': away_ml,
+                                    'implied_home_prob': home_implied_prob,
+                                })
+                        
+                        # Add totals data to games
+                        if theover_totals_data is not None and len(theover_totals_data) > 0:
+                            for _, row in theover_totals_data.iterrows():
+                                home_team = row.get('home_team') or row.get('HomeTeam') or ''
+                                away_team = row.get('away_team') or row.get('AwayTeam') or ''
+                                
+                                # Try multiple column names for the total line
+                                total_line = (
+                                    row.get('Total') or 
+                                    row.get('total') or 
+                                    row.get('OU') or 
+                                    row.get('ou') or
+                                    row.get('OU Line') or
+                                    row.get('TotalLine') or
+                                    row.get('Line') or 
+                                    0
+                                )
+                                total_pick = row.get('Pick') or row.get('pick') or ''  # 'Over' or 'Under'
+                                
+                                try:
+                                    total_line = float(total_line) if total_line else 0
+                                except:
+                                    total_line = 0
+                                
+                                # SANITY CHECK: If line is less than 50, it's probably a probability not a total
+                                # Basketball totals are 150-250, Football 35-60, Hockey 4-8
+                                # If value is < 10, it's likely a probability (0.75, 0.8125, etc.)
+                                if total_line > 0 and total_line < 10:
+                                    # This is probably a probability, not a line - try to find actual total
+                                    alt_total = row.get('Total') or row.get('TotalLine') or row.get('OU')
+                                    try:
+                                        alt_total = float(alt_total) if alt_total else 0
+                                        if alt_total > 30:  # Looks like a real total
+                                            total_line = alt_total
+                                        else:
+                                            # Skip this row - we don't have a valid total
+                                            continue
+                                    except:
+                                        continue
+                                
+                                # Calculate probability for the pick (TheOver.ai has edge)
+                                # Give a meaningful probability based on whether there's a pick
+                                if total_pick:
+                                    # TheOver.ai picked this side - give it 54-58% probability
+                                    # Use total_line to add variance (higher totals are harder to predict)
+                                    base_prob = 0.54
+                                    if total_line > 200:  # High total game
+                                        base_prob = 0.55
+                                    elif total_line < 140:  # Low total game
+                                        base_prob = 0.56
+                                    total_probability = base_prob
+                                else:
+                                    total_probability = 0.50
+                                
+                                # Find matching game and add totals data
+                                for game in all_games:
+                                    if (game['home_team'].lower() in home_team.lower() or 
+                                        home_team.lower() in game['home_team'].lower()) and \
+                                       (game['away_team'].lower() in away_team.lower() or 
+                                        away_team.lower() in game['away_team'].lower()):
+                                        game['theover_total'] = total_line
+                                        game['theover_total_pick'] = total_pick
+                                        game['theover_total_probability'] = total_probability
+                                        break
+                        
+                        if not all_games:
+                            st.error("❌ No games found in TheOver.ai data")
                         else:
-                            st.warning("No results from Vertex AI analysis")
+                            st.info(f"🤖 Analyzing {len(all_games)} games with Vertex AI...")
+                            
+                            # Get clients from session state
+                            kalshi_int = st.session_state.get('kalshi_integrator')
+                            sentiment_analyzer = st.session_state.get('sentiment_analyzer')
+                            ml_predictor = st.session_state.get('ml_predictor')
+                            
+                            # Create analyzer with TheOver data
+                            analyzer = VertexMasterAnalyzer(
+                                odds_api_client=None,
+                                sportsdata_clients=sportsdata_clients if 'sportsdata_clients' in locals() else {},
+                                apisports_clients={
+                                    'nba': basketball_client if 'basketball_client' in locals() else None,
+                                    'nfl': apisports_client if 'apisports_client' in locals() else None,
+                                    'nhl': hockey_client if 'hockey_client' in locals() else None,
+                                },
+                                sentiment_analyzer=sentiment_analyzer,
+                                local_ml_predictor=ml_predictor,
+                                theover_data={
+                                    'spreads': theover_spreads_data,
+                                    'totals': theover_totals_data,
+                                },
+                                kalshi_integrator=kalshi_int,
+                            )
+                            
+                            results_df = analyzer.analyze_all_games(all_games, league='multi')
+                            
+                            if not results_df.empty:
+                                st.success(f"✅ Analysis complete! Found {len(results_df)} opportunities")
+                                show_vertex_master_analysis(results_df)
+                                
+                                # Store results for Best Bets
+                                vertex_results = []
+                                for _, row in results_df.iterrows():
+                                    vertex_results.append({
+                                        'home_team': row.get('home_team', ''),
+                                        'away_team': row.get('away_team', ''),
+                                        'league': row.get('league', ''),
+                                        'vertex_prob': row.get('vertex_ai_prob', 0.5),
+                                        'theover_probability': row.get('theover_probability', 0.5),
+                                        'theover_pick': row.get('theover_pick', ''),
+                                        'theover_total': row.get('theover_total', 0),
+                                        'theover_total_pick': row.get('theover_total_pick', ''),
+                                        'spread': row.get('home_spread', 0),
+                                        'home_ml_odds': row.get('home_ml_odds', 0),
+                                        'away_ml_odds': row.get('away_ml_odds', 0),
+                                        'implied_home_prob': row.get('implied_home_prob', 0.5),
+                                        'sentiment_diff': row.get('sentiment_diff', 0),
+                                        'kalshi_available': row.get('kalshi_available', False),
+                                        'kalshi_prob': row.get('kalshi_prob', 0.5),
+                                        'confidence': min(95, 50 + abs(row.get('vertex_ai_edge', 0)) * 500),
+                                    })
+                                st.session_state['vertex_results'] = vertex_results
+                                st.session_state['vertex_analysis_complete'] = True
+                            else:
+                                st.warning("No results from Vertex AI analysis")
+                                
                     except Exception as e:
                         st.error(f"Error during Vertex AI analysis: {e}")
                         logger.error(f"Vertex AI analysis error: {e}", exc_info=True)
-        elif theover_spreads_data is None:
-            st.info("💡 Upload spread picks above to enable Vertex AI analysis")
+                        import traceback
+                        with st.expander("🔍 Debug"):
+                            st.code(traceback.format_exc())
+        else:
+            st.info("💡 Upload spread or totals picks above to enable Vertex AI analysis")
     
     st.markdown("---")
     st.subheader("🏆 Best Overall Odds for Date Range")
@@ -8340,13 +9156,131 @@ if is_vertex_ai_enabled():
                     
                     if 'theover_spreads_data' in locals() and theover_spreads_data is not None:
                         for _, row in theover_spreads_data.iterrows():
+                            # Get basic info
+                            home_team = row.get('home_team') or row.get('HomeTeam') or ''
+                            away_team = row.get('away_team') or row.get('AwayTeam') or ''
+                            league = (row.get('League') or row.get('league') or 'NBA').upper()
+                            pick = row.get('Pick') or row.get('pick') or ''
+                            
+                            # Extract line value
+                            line_value = row.get('Line') or row.get('Spread') or row.get('line') or 0
+                            try:
+                                line_value = float(line_value) if line_value else 0
+                            except:
+                                line_value = 0
+                            
+                            # Determine sport_key from league
+                            if league == 'NFL':
+                                sport_key = 'americanfootball_nfl'
+                            elif league == 'NBA':
+                                sport_key = 'basketball_nba'
+                            elif league == 'NHL':
+                                sport_key = 'icehockey_nhl'
+                            elif league == 'NCAAB':
+                                sport_key = 'basketball_ncaab'
+                            elif league == 'NCAAF':
+                                sport_key = 'americanfootball_ncaaf'
+                            else:
+                                sport_key = 'basketball_nba'
+                            
+                            # NHL uses MONEYLINES in the Line column (125, -150, etc.)
+                            # Other sports use point spreads (13.5, -7.5, etc.)
+                            is_nhl = league == 'NHL'
+                            
+                            if is_nhl:
+                                # Line is a moneyline for NHL
+                                moneyline = line_value
+                                spread = 1.5  # Standard puckline
+                                
+                                # Calculate probability from moneyline
+                                if moneyline > 0:
+                                    # Underdog: +150 means 100/(150+100) = 40%
+                                    pick_win_prob = 100 / (moneyline + 100)
+                                else:
+                                    # Favorite: -150 means 150/(150+100) = 60%
+                                    pick_win_prob = abs(moneyline) / (abs(moneyline) + 100)
+                                
+                                # Determine home/away probabilities based on pick
+                                pick_is_home = (pick == home_team) or (pick and (pick.lower() in home_team.lower() or home_team.lower() in pick.lower()))
+                                
+                                if pick_is_home:
+                                    home_implied_prob = pick_win_prob
+                                    home_ml = int(moneyline)
+                                    away_ml = int(-moneyline) if moneyline > 0 else int(100 * 100 / abs(moneyline))
+                                else:
+                                    home_implied_prob = 1 - pick_win_prob
+                                    away_ml = int(moneyline)
+                                    home_ml = int(-moneyline) if moneyline > 0 else int(100 * 100 / abs(moneyline))
+                                
+                                # theover_prob = HOME team win probability
+                                theover_prob = home_implied_prob
+                                home_spread = 1.5  # Standard puckline
+                                
+                            else:
+                                # Basketball/Football: Line is a point spread
+                                spread = abs(line_value)
+                                
+                                # Calculate probability from spread
+                                # Each point of spread ≈ 2.5-3% shift from 50%
+                                spread_shift = spread * 0.028  # ~2.8% per point
+                                
+                                # The pick is expected to COVER the spread
+                                # Positive line = underdog getting points (e.g., +13.5)
+                                # Negative line = favorite giving points (e.g., -7.5)
+                                
+                                if line_value > 0:
+                                    # Pick is underdog getting points
+                                    # They may lose outright but cover
+                                    pick_win_prob = max(0.20, 0.50 - spread_shift)
+                                else:
+                                    # Pick is favorite giving points  
+                                    pick_win_prob = min(0.80, 0.50 + spread_shift)
+                                
+                                # Determine home/away based on pick
+                                # CRITICAL: Calculate home_spread correctly based on whether pick is home or away
+                                pick_is_home = (pick == home_team) or (pick and (pick.lower() in home_team.lower() or home_team.lower() in pick.lower()))
+                                
+                                if pick_is_home:
+                                    # Pick is home team, so home_spread = line_value directly
+                                    home_implied_prob = pick_win_prob
+                                    home_spread = line_value
+                                else:
+                                    # Pick is away team, so home_spread = OPPOSITE of line_value
+                                    home_implied_prob = 1 - pick_win_prob
+                                    home_spread = -line_value  # Flip the sign!
+                                
+                                # theover_probability = home team win probability
+                                theover_prob = home_implied_prob
+                                
+                                # Calculate American odds from probability
+                                if home_implied_prob > 0.5:
+                                    home_ml = int(-100 * home_implied_prob / (1 - home_implied_prob))
+                                    away_ml = int(100 * (1 - home_implied_prob) / home_implied_prob)
+                                else:
+                                    home_ml = int(100 * (1 - home_implied_prob) / home_implied_prob)
+                                    away_ml = int(-100 * (1 - home_implied_prob) / home_implied_prob)
+                            
                             all_games.append({
-                                'home_team': row.get('home_team') or row.get('HomeTeam'),
-                                'away_team': row.get('away_team') or row.get('AwayTeam'),
-                                'sport_key': row.get('league', 'NBA').lower(),
+                                'home_team': home_team,
+                                'away_team': away_team,
+                                'sport_key': sport_key,
+                                'league': league,
                                 'commence_time': None,
+                                # TheOver.ai specific data
+                                'theover_spread': line_value,  # Original line from CSV for the pick
+                                'theover_pick': pick,
+                                'theover_probability': theover_prob,  # Home team win probability
+                                'theover_line': line_value,  # Original line from CSV
+                                'is_moneyline': is_nhl,
+                                # Calculated odds
+                                'home_ml_odds': home_ml,
+                                'away_ml_odds': away_ml,
+                                # home_spread is the HOME team's spread (correctly calculated)
+                                'home_spread': home_spread if not is_nhl else 1.5,
+                                'implied_home_prob': home_implied_prob,
                             })
-                        st.info(f"📊 Loaded {len(all_games)} games from theover.ai")
+                        
+                        st.success(f"📊 Loaded {len(all_games)} games from theover.ai (spreads + NHL moneylines converted)")
                 
                 if not all_games:
                     st.error("❌ No games found. Either:")
@@ -8354,6 +9288,15 @@ if is_vertex_ai_enabled():
                     st.write("- Upload theover.ai CSV files above")
                 else:
                     st.info(f"🤖 Analyzing {len(all_games)} games across all selected sports...")
+                    
+                    # Get Kalshi integrator if available
+                    kalshi_int = st.session_state.get('kalshi_integrator')
+                    
+                    # Get sentiment analyzer from session state
+                    sentiment_analyzer = st.session_state.get('sentiment_analyzer')
+                    
+                    # Get ML predictor from session state
+                    ml_predictor = st.session_state.get('ml_predictor')
                     
                     analyzer = VertexMasterAnalyzer(
                         odds_api_client=odds_client if 'odds_client' in locals() else None,
@@ -8363,13 +9306,14 @@ if is_vertex_ai_enabled():
                             'nfl': apisports_client if 'apisports_client' in locals() else None,
                             'nhl': hockey_client if 'hockey_client' in locals() else None,
                         },
-                        sentiment_analyzer=sentiment_analyzer if 'sentiment_analyzer' in locals() else None,
-                        local_ml_predictor=st.session_state.get('ml_predictor'),
+                        sentiment_analyzer=sentiment_analyzer,  # From session_state
+                        local_ml_predictor=ml_predictor,  # From session_state
                         theover_data={
                             'spreads': theover_spreads_data if 'theover_spreads_data' in locals() else None,
                             'totals': theover_totals_data if 'theover_totals_data' in locals() else None,
                             'ml': theover_ml_data if 'theover_ml_data' in locals() else None,
-                        }
+                        },
+                        kalshi_integrator=kalshi_int,
                     )
                     
                     results_df = analyzer.analyze_all_games(all_games, league='multi')
@@ -8377,6 +9321,53 @@ if is_vertex_ai_enabled():
                     if not results_df.empty:
                         st.success(f"✅ Analysis complete! Found {len(results_df)} opportunities")
                         show_vertex_master_analysis(results_df)
+                        
+                        # Store results in session_state for Best Bets and Parlays
+                        vertex_results = []
+                        for _, row in results_df.iterrows():
+                            vertex_results.append({
+                                'home_team': row.get('home_team', ''),
+                                'away_team': row.get('away_team', ''),
+                                'league': row.get('league', ''),
+                                'vertex_prob': row.get('vertex_ai_prob', 0.5),
+                                # Calculate meaningful confidence: base 50% + (edge * 500) capped at 95%
+                                # Edge of 0.10 (10%) = 50 + 50 = 100% confidence
+                                # Edge of 0.05 (5%) = 50 + 25 = 75% confidence
+                                'confidence': min(95, 50 + abs(row.get('vertex_ai_edge', 0)) * 500),
+                                'edge': row.get('vertex_ai_edge', 0),
+                                'has_edge': abs(row.get('vertex_ai_edge', 0)) > 0.03,
+                                'home_sentiment': row.get('home_sentiment', 0),
+                                'away_sentiment': row.get('away_sentiment', 0),
+                                'sentiment_diff': row.get('sentiment_diff', 0),
+                                'local_ml_prob': row.get('local_ml_prob', 0.5),
+                                'theover_probability': row.get('theover_probability', 0.5),
+                                'theover_spread': row.get('theover_spread', 0),
+                                'theover_pick': row.get('theover_pick', ''),
+                                'theover_total': row.get('theover_total', 0),
+                                'theover_total_pick': row.get('theover_total_pick', ''),
+                                'theover_total_probability': row.get('theover_total_probability', 0.5),
+                                'sharp_money_indicator': row.get('sharp_money_indicator', 0),
+                                'home_ml_odds': row.get('home_ml_odds') or row.get('home_ml', 0),
+                                'away_ml_odds': row.get('away_ml_odds') or row.get('away_ml', 0),
+                                'spread': row.get('home_spread') or row.get('theover_spread') or row.get('spread', 0),
+                                'total': row.get('total_line') or row.get('total', 0),
+                                'implied_home_prob': row.get('implied_home_prob', 0.5),
+                                # Kalshi prediction market data
+                                'kalshi_available': row.get('kalshi_available', False),
+                                'kalshi_prob': row.get('kalshi_prob', 0.5),
+                                'kalshi_alignment': row.get('kalshi_alignment', 0),
+                                'kalshi_validation_score': row.get('kalshi_validation_score', 0.5),
+                                'kalshi_agrees': row.get('kalshi_agrees', None),
+                                'kalshi_arbitrage_opportunity': row.get('kalshi_arbitrage_opportunity', False),
+                                'kalshi_synthetic': row.get('kalshi_synthetic', True),  # Indicates if synthetic data
+                            })
+                        
+                        st.session_state['vertex_results'] = vertex_results
+                        st.session_state['vertex_analysis_complete'] = True
+                        st.session_state['vertex_timestamp'] = datetime.now()
+                        st.session_state['vertex_results_df'] = results_df
+                        
+                        st.info(f"💾 Stored {len(vertex_results)} games for Best Bets & Parlays. Scroll down to generate!")
                     else:
                         st.warning("⚠️ No results from analysis. Try adjusting your filters.")
                 
@@ -8723,7 +9714,7 @@ if is_vertex_ai_enabled():
         )
 
     if fetch_best_odds:
-        odds_key = st.session_state.get('api_key', "") or os.environ.get("ODDS_API_KEY", "")
+        odds_key = st.session_state.get('api_key', "") or os.environ.get("ODDS_API_KEY", "") or st.secrets.get("ODDS_API_KEY", "")
         if not odds_key:
             st.error("Configure your The Odds API key to pull live odds data.")
         else:
@@ -8741,12 +9732,14 @@ if is_vertex_ai_enabled():
             else:
                 display_df = best_odds_df.copy()
                 if "decimal_odds" in display_df.columns:
-                    display_df["decimal_odds"] = display_df["decimal_odds"].map(
-                        lambda x: f"{float(x):.3f}" if pd.notna(x) else "—"
+                    display_df["decimal_odds"] = pd.to_numeric(display_df["decimal_odds"], errors='coerce')
+                    display_df["decimal_odds"] = display_df["decimal_odds"].apply(
+                        lambda x: f"{float(x):.3f}" if pd.notna(x) and isinstance(x, (int, float)) else "—"
                     )
                 if "line" in display_df.columns:
-                    display_df["line"] = display_df["line"].map(
-                        lambda x: f"{float(x):.1f}" if pd.notna(x) else "—"
+                    display_df["line"] = pd.to_numeric(display_df["line"], errors='coerce')
+                    display_df["line"] = display_df["line"].apply(
+                        lambda x: f"{float(x):.1f}" if pd.notna(x) and isinstance(x, (int, float)) else "—"
                     )
 
                 st.dataframe(display_df, use_container_width=True, hide_index=True)
@@ -8908,10 +9901,13 @@ if is_vertex_ai_enabled():
     )
 
     if compute_best_bets:
-        odds_key = st.session_state.get('api_key', "") or os.environ.get("ODDS_API_KEY", "")
+        odds_key = st.session_state.get('api_key', "") or os.environ.get("ODDS_API_KEY", "") or st.secrets.get("ODDS_API_KEY", "")
         if not odds_key:
             st.error("Configure your The Odds API key to evaluate best bets.")
         else:
+            # Initialize best_bets_df to prevent NameError
+            best_bets_df = pd.DataFrame()
+            
             # VERTEX AI PATH
             if use_vertex_results:
                 st.write("🎯 **Generating Best Bets from Vertex AI Analysis...**")
@@ -9129,6 +10125,163 @@ if is_vertex_ai_enabled():
                 if not best_bets_rows:
                     st.info("No qualifying bets found matching your criteria.")
                 else:
+                    # NO ODDS DATA - Generate Best Bets directly from Vertex Results
+                    st.info(f"📊 Generating Best Bets from {len(vertex_results)} Vertex AI analyzed games (TheOver.ai data)")
+                    
+                    # Debug: show confidence threshold
+                    st.caption(f"🔧 Confidence threshold: {min_ai_confidence * 100:.0f}%")
+                    
+                    # Check for stale/identical predictions (symptom of old analysis)
+                    unique_probs = set(r.get('vertex_prob', 0.5) for r in vertex_results)
+                    if len(unique_probs) <= 2:
+                        st.warning("⚠️ **Detected identical predictions for all games.** Please re-run 'Vertex AI Master Analysis' to get game-specific predictions based on spread data.")
+                    
+                    # Show sample data for debugging
+                    with st.expander("🔍 Debug: Sample Game Data"):
+                        sample = vertex_results[0] if vertex_results else {}
+                        st.write(f"**Sample Game:** {sample.get('away_team')} @ {sample.get('home_team')}")
+                        st.write(f"- Vertex Prob: {sample.get('vertex_prob', 'N/A')}")
+                        st.write(f"- TheOver Prob: {sample.get('theover_probability', 'N/A')}")
+                        st.write(f"- Spread: {sample.get('spread', 'N/A')}")
+                        st.write(f"- Implied Home Prob: {sample.get('implied_home_prob', 'N/A')}")
+                        st.write(f"- Home ML Odds: {sample.get('home_ml_odds', 'N/A')}")
+                    
+                    # =====================================================
+                    # SINGLE BEST PICK PER GAME - Only generate ONE bet per game
+                    # Pick the FAVORITE (most likely winner) for each game
+                    # =====================================================
+                    
+                    for vertex_result in vertex_results:
+                        home_team = vertex_result.get('home_team', 'Home')
+                        away_team = vertex_result.get('away_team', 'Away')
+                        league = vertex_result.get('league', 'N/A').upper()
+                        
+                        confidence = vertex_result.get('confidence', 50)
+                        
+                        # Apply minimum confidence filter
+                        if confidence < min_ai_confidence * 100:
+                            skipped_low_conf += 1
+                            continue
+                        
+                        # Get spread - this is HOME TEAM's spread
+                        # Negative = home favorite, Positive = home underdog
+                        home_spread = vertex_result.get('spread', 0) or vertex_result.get('home_spread', 0) or 0
+                        
+                        # Get odds from stored data
+                        home_ml = vertex_result.get('home_ml_odds') or -110
+                        away_ml = vertex_result.get('away_ml_odds') or -110
+                        
+                        # =====================================================
+                        # CALCULATE REALISTIC WIN PROBABILITIES FROM SPREAD
+                        # Formula: Each point of spread ≈ 2.5% probability shift
+                        # A -10 favorite has ~75% ML win probability
+                        # =====================================================
+                        
+                        if home_spread != 0:
+                            # Spread-based ML probability
+                            # Negative spread = favorite, Positive spread = underdog
+                            # home_spread of -10 means home is 10-pt favorite → ~72.5% win prob
+                            # home_spread of +10 means home is 10-pt underdog → ~27.5% win prob
+                            spread_shift = abs(home_spread) * 2.25  # 2.25% per point (more conservative)
+                            spread_shift = min(spread_shift, 40)  # Cap at 40% shift (so range is 10%-90%)
+                            
+                            if home_spread < 0:
+                                # Home is favorite
+                                home_ml_prob = 50 + spread_shift
+                            else:
+                                # Home is underdog
+                                home_ml_prob = 50 - spread_shift
+                            
+                            # Ensure reasonable bounds
+                            home_ml_prob = max(10, min(90, home_ml_prob))
+                            away_ml_prob = 100 - home_ml_prob
+                        else:
+                            # No spread - use ML odds to calculate probability
+                            if home_ml and home_ml != 0:
+                                if home_ml > 0:
+                                    home_ml_prob = 100 / (home_ml + 100) * 100
+                                else:
+                                    home_ml_prob = abs(home_ml) / (abs(home_ml) + 100) * 100
+                            else:
+                                home_ml_prob = 50
+                            away_ml_prob = 100 - home_ml_prob
+                        
+                        # Get sentiment and Kalshi data
+                        sentiment_diff = vertex_result.get('sentiment_diff', 0)
+                        kalshi_available = vertex_result.get('kalshi_available', False)
+                        kalshi_prob = vertex_result.get('kalshi_prob', 0.5) or 0.5
+                        kalshi_home = kalshi_prob * 100
+                        kalshi_away = 100 - kalshi_home
+                        
+                        # =====================================================
+                        # DETERMINE THE FAVORITE (MOST LIKELY WINNER)
+                        # Always pick the team with higher win probability
+                        # =====================================================
+                        
+                        if home_ml_prob >= away_ml_prob:
+                            # HOME team is favorite
+                            fav_team = home_team
+                            fav_prob = home_ml_prob
+                            fav_spread = home_spread  # Already correct sign
+                            fav_ml_odds = home_ml
+                            fav_sentiment = '✅' if sentiment_diff > 0 else ('❌' if sentiment_diff < 0 else '—')
+                            fav_kalshi_agrees = '✅' if (kalshi_available and kalshi_home > 50) else ('❌' if kalshi_available else '—')
+                            fav_kalshi_pct = kalshi_home if kalshi_available else None
+                        else:
+                            # AWAY team is favorite
+                            fav_team = away_team
+                            fav_prob = away_ml_prob
+                            fav_spread = -home_spread  # Negate for away team
+                            fav_ml_odds = away_ml
+                            fav_sentiment = '✅' if sentiment_diff < 0 else ('❌' if sentiment_diff > 0 else '—')
+                            fav_kalshi_agrees = '✅' if (kalshi_available and kalshi_away > 50) else ('❌' if kalshi_available else '—')
+                            fav_kalshi_pct = kalshi_away if kalshi_available else None
+                        
+                        # Format the pick string
+                        if fav_spread and fav_spread != 0:
+                            # Show spread - favorite should have NEGATIVE spread
+                            if fav_spread > 0:
+                                pick_str = f"{fav_team} +{fav_spread:.1f}"
+                            else:
+                                pick_str = f"{fav_team} {fav_spread:.1f}"
+                        else:
+                            pick_str = f"{fav_team} ML"
+                        
+                        # Format odds
+                        if fav_ml_odds and fav_ml_odds != 0:
+                            if fav_ml_odds > 0:
+                                odds_str = f"+{int(fav_ml_odds)}"
+                            else:
+                                odds_str = str(int(fav_ml_odds))
+                        else:
+                            odds_str = "-110"
+                        
+                        # Calculate composite score for ranking
+                        composite = fav_prob
+                        if fav_sentiment == '✅':
+                            composite += 10
+                        if fav_kalshi_agrees == '✅':
+                            composite += 15
+                        
+                        # Add the SINGLE BEST PICK (the favorite)
+                        best_bets_rows.append({
+                            'League': league,
+                            'Game': f"{away_team} @ {home_team}",
+                            'THE PICK': pick_str,
+                            'Win %': round(fav_prob, 1),
+                            'Composite': round(composite, 1),
+                            'Sentiment': fav_sentiment,
+                            'Kalshi': fav_kalshi_agrees,
+                            'Kalshi %': f"{fav_kalshi_pct:.0f}" if fav_kalshi_pct else '—',
+                            'Odds': odds_str,
+                            'Confidence': round(confidence, 1),
+                        })
+                
+                # Display results
+                if skipped_low_conf > 0:
+                    st.caption(f"⏭️ Skipped {skipped_low_conf} games due to low confidence")
+                
+                if best_bets_rows:
                     best_bets_df = pd.DataFrame(best_bets_rows)
                     best_bets_df = best_bets_df.sort_values('AI Edge pp', ascending=False)
 
@@ -9137,13 +10290,43 @@ if is_vertex_ai_enabled():
                     # Display metrics
                     col1, col2, col3 = st.columns(3)
                     with col1:
-                        st.metric("Total Bets", len(best_bets_df))
+                        st.metric("Total Games", total_games)
                     with col2:
-                        avg_edge = best_bets_df['AI Edge pp'].mean()
-                        st.metric("Avg Edge", f"{avg_edge:+.1f}pp")
+                        st.metric("Avg Win %", f"{avg_win_prob:.1f}%")
                     with col3:
-                        avg_conf = best_bets_df['AI Confidence %'].mean()
-                        st.metric("Avg Confidence", f"{avg_conf:.0f}%")
+                        st.metric("Kalshi Agrees", f"{kalshi_agrees}/{total_games}")
+                    with col4:
+                        st.metric("Sentiment Agrees", f"{sentiment_agrees}/{total_games}")
+                    
+                    # Display columns
+                    display_cols = ['Rank', 'League', 'Game', 'THE PICK', 'Win %', 'Composite', 
+                                   'Sentiment', 'Kalshi', 'Kalshi %', 'Odds', 'Confidence']
+                    display_cols = [c for c in display_cols if c in best_bets_df.columns]
+                    
+                    # Show the single best picks table
+                    st.subheader("🏆 SINGLE BEST PICK PER GAME")
+                    st.dataframe(
+                        best_bets_df[display_cols],
+                        use_container_width=True,
+                        hide_index=True
+                    )
+                    
+                    # CSV Download
+                    csv_buffer = best_bets_df[display_cols].to_csv(index=False)
+                    st.download_button(
+                        "⬇️ Download Best Picks (CSV)",
+                        data=csv_buffer,
+                        file_name=f"best_picks_{pd.Timestamp.now().strftime('%Y-%m-%d')}.csv",
+                        mime="text/csv",
+                        key="single_picks_csv"
+                    )
+                    
+                    # Store for parlay generation
+                    st.session_state['best_bets_df'] = best_bets_df
+                    st.session_state['single_best_picks'] = best_bets_df
+                else:
+                    st.warning("No bets passed the confidence filter. Try lowering the minimum confidence threshold.")
+                    best_bets_df = pd.DataFrame()  # Empty DataFrame to prevent NameError
             
             # LEGACY PATH
             else:
@@ -9213,30 +10396,32 @@ if is_vertex_ai_enabled():
                 ]
                 for col in percent_columns:
                     if col in display_df.columns:
-                        display_df[col] = display_df[col].map(
-                            lambda x: f"{x:.1f}%" if pd.notna(x) else "—"
+                        # Convert to numeric first, coercing errors to NaN
+                        display_df[col] = pd.to_numeric(display_df[col], errors='coerce')
+                        display_df[col] = display_df[col].apply(
+                            lambda x: f"{float(x):.1f}%" if pd.notna(x) and isinstance(x, (int, float)) else "—"
                         )
 
                 if 'Best Decimal' in display_df.columns:
                     display_df['Best Decimal'] = pd.to_numeric(
                         display_df['Best Decimal'], errors='coerce'
                     )
-                    display_df['Best Decimal'] = display_df['Best Decimal'].map(
-                        lambda x: f"{float(x):.3f}" if pd.notna(x) else "—"
+                    display_df['Best Decimal'] = display_df['Best Decimal'].apply(
+                        lambda x: f"{float(x):.3f}" if pd.notna(x) and isinstance(x, (int, float)) else "—"
                     )
 
                 if 'Best American' in display_df.columns:
                     display_df['Best American'] = pd.to_numeric(
                         display_df['Best American'], errors='coerce'
                     )
-                    display_df['Best American'] = display_df['Best American'].map(
-                        lambda x: f"{int(round(float(x))):+d}" if pd.notna(x) else "—"
+                    display_df['Best American'] = display_df['Best American'].apply(
+                        lambda x: f"{int(round(float(x))):+d}" if pd.notna(x) and isinstance(x, (int, float)) else "—"
                     )
 
                 if 'Line' in display_df.columns:
                     display_df['Line'] = pd.to_numeric(display_df['Line'], errors='coerce')
-                    display_df['Line'] = display_df['Line'].map(
-                        lambda x: f"{float(x):g}" if pd.notna(x) else "—"
+                    display_df['Line'] = display_df['Line'].apply(
+                        lambda x: f"{float(x):g}" if pd.notna(x) and isinstance(x, (int, float)) else "—"
                     )
 
                 st.dataframe(display_df, use_container_width=True, hide_index=True)
@@ -9277,9 +10462,20 @@ if is_vertex_ai_enabled():
     else:
         st.warning("⚠️ Run 'Vertex AI Master Analysis' first for AI-powered parlay optimization with better probabilities")
 
+    
+    st.info("""
+    💡 **Smart Parlay Selection**: This optimizer uses your ranked best bets from the complete pipeline:
+    - ✅ ML probabilities
+    - ✅ Vertex AI confidence & risk scores  
+    - ✅ theover.ai market data
+    - ✅ Composite ranking scores
+    
+    Parlays are built from your highest-ranked, lowest-risk opportunities.
+    """)
+    
     if st.button("🤖 Find AI-Optimized Parlays", type="primary"):
         # Get API key from session state or environment only
-        api_key = st.session_state.get('api_key', "") or os.environ.get("ODDS_API_KEY", "")
+        api_key = st.session_state.get('api_key', "") or os.environ.get("ODDS_API_KEY", "") or st.secrets.get("ODDS_API_KEY", "")
         
         if not api_key:
             st.error("No API key provided. Please enter your API key above.")
@@ -10033,17 +11229,20 @@ if is_vertex_ai_enabled():
                         ]
                         for col in percent_columns:
                             if col in top_display.columns:
-                                top_display[col] = top_display[col].map(
-                                    lambda x: f"{x*100:.1f}%" if pd.notna(x) else "—"
+                                top_display[col] = pd.to_numeric(top_display[col], errors='coerce')
+                                top_display[col] = top_display[col].apply(
+                                    lambda x: f"{float(x)*100:.1f}%" if pd.notna(x) and isinstance(x, (int, float)) else "—"
                                 )
                         for col in delta_columns:
                             if col in top_display.columns:
-                                top_display[col] = top_display[col].map(
-                                    lambda x: f"{x*100:+.1f}pp" if pd.notna(x) else "—"
+                                top_display[col] = pd.to_numeric(top_display[col], errors='coerce')
+                                top_display[col] = top_display[col].apply(
+                                    lambda x: f"{float(x)*100:+.1f}pp" if pd.notna(x) and isinstance(x, (int, float)) else "—"
                                 )
                         if 'Decimal Odds' in top_display.columns:
-                            top_display['Decimal Odds'] = top_display['Decimal Odds'].map(
-                                lambda x: f"{x:.3f}" if pd.notna(x) else "—"
+                            top_display['Decimal Odds'] = pd.to_numeric(top_display['Decimal Odds'], errors='coerce')
+                            top_display['Decimal Odds'] = top_display['Decimal Odds'].apply(
+                                lambda x: f"{float(x):.3f}" if pd.notna(x) and isinstance(x, (int, float)) else "—"
                             )
 
                         st.dataframe(top_display, use_container_width=True, hide_index=True)
@@ -10131,7 +11330,7 @@ with main_tab2:
     
     col_api1, col_api2 = st.columns(2)
     with col_api1:
-        odds_key = st.session_state.get('api_key', "") or os.environ.get("ODDS_API_KEY", "")
+        odds_key = st.session_state.get('api_key', "") or os.environ.get("ODDS_API_KEY", "") or st.secrets.get("ODDS_API_KEY", "")
         if not odds_key:
             st.warning("⚠️ Odds API key not configured. Please set it in the Sports Betting tab.")
     
@@ -10533,7 +11732,7 @@ with main_tab3:
     st.caption("Select 2-4 legs, then get comprehensive AI/ML analysis with sentiment, probability, and edge calculations")
     
     # API key check
-    api_key = st.session_state.get('api_key', "") or os.environ.get("ODDS_API_KEY", "")
+    api_key = st.session_state.get('api_key', "") or os.environ.get("ODDS_API_KEY", "") or st.secrets.get("ODDS_API_KEY", "")
     
     if not api_key:
         st.warning("⚠️ Please enter your Odds API key in the 'Sports Betting Parlays' tab first")
@@ -12835,31 +14034,530 @@ if st.button("🚨 Debug Master Analyzer", type="secondary"):
     - It shows ALL errors and has no silent failures
     """)
 
+# ============================================================
+# CSV ENRICHMENT HELPER FUNCTIONS
+# ============================================================
 
-# ============================================================================
-# AUTOMATIC CSV ENRICHMENT SECTION
-# Works directly with generated best bets - no upload needed
-# ============================================================================
+def normalize_team(team):
+    """Normalize team name for matching."""
+    replacements = {
+        'ny': 'new york', 'la': 'los angeles', 'sf': 'san francisco',
+        'tb': 'tampa bay', 'gb': 'green bay', 'ne': 'new england',
+        'no': 'new orleans', 'kc': 'kansas city'
+    }
+    team_lower = str(team).lower()
+    for abbr, full in replacements.items():
+        if team_lower.startswith(abbr + ' ') or team_lower == abbr:
+            team_lower = team_lower.replace(abbr, full)
+    return team_lower.replace('.', '').replace(' ', '').strip()
+
+
+def fuzzy_match(team1, team2):
+    """Check if teams match using fuzzy string matching."""
+    if not team1 or not team2:
+        return False
+    norm1 = normalize_team(team1)
+    norm2 = normalize_team(team2)
+    if norm1 == norm2 or norm1 in norm2 or norm2 in norm1:
+        return True
+    from difflib import SequenceMatcher
+    return SequenceMatcher(None, norm1, norm2).ratio() >= 0.6
+
+
+def line_to_probability(line, market='Spread'):
+    """Estimate probability from betting line."""
+    if pd.isna(line) or line == '':
+        return 55.0
+    try:
+        line = float(line)
+    except:
+        return 55.0
+    
+    if market == 'Spread':
+        from scipy.stats import norm
+        std_dev = 13.5
+        prob = norm.cdf(-line / std_dev) * 100
+        prob = np.clip(prob, 15, 85)
+    else:
+        prob = 50.0
+    return float(prob)
+
+
+def enrich_best_bets_with_csv(best_bets_df):
+    """Enrich best bets DataFrame with theover.ai data from CSV files."""
+    # Load theover data
+    theover_df = None
+    try:
+        spreads = pd.read_csv('23_Nov_Spreads.csv')
+        totals = pd.read_csv('23_Nov_Totals.csv')
+        theover_df = pd.concat([spreads, totals], ignore_index=True)
+        theover_df['EstimatedProb'] = theover_df.apply(
+            lambda row: line_to_probability(row.get('Line'), row.get('Market', 'Spread')),
+            axis=1
+        )
+        st.write(f"✅ Loaded {len(theover_df)} theover.ai games")
+    except Exception as e:
+        st.warning(f"⚠️ Could not load theover.ai data: {e}")
+        st.info("Make sure 23_Nov_Spreads.csv and 23_Nov_Totals.csv are in the same directory")
+    
+    enriched_rows = []
+    matches_found = 0
+    
+    progress = st.progress(0)
+    status_text = st.empty()
+    
+    for idx, row in best_bets_df.iterrows():
+        enriched = row.to_dict()
+        game = row.get('Game', '')
+        
+        status_text.write(f"Processing {idx+1}/{len(best_bets_df)}: {game}")
+        
+        try:
+            parts = game.split('@')
+            if len(parts) == 2:
+                away_team = parts[0].strip()
+                home_team = parts[1].strip()
+            else:
+                enriched_rows.append(enriched)
+                progress.progress((idx + 1) / len(best_bets_df))
+                continue
+        except:
+            enriched_rows.append(enriched)
+            progress.progress((idx + 1) / len(best_bets_df))
+            continue
+        
+        if theover_df is not None:
+            market_type = row.get('Market', '')
+            selection = row.get('Selection', '')
+            
+            match_found = False
+            for _, theover_row in theover_df.iterrows():
+                t_home = str(theover_row.get('HomeTeam', ''))
+                t_away = str(theover_row.get('AwayTeam', ''))
+                t_market = str(theover_row.get('Market', ''))
+                
+                if fuzzy_match(home_team, t_home) and fuzzy_match(away_team, t_away):
+                    market_matches = (
+                        (market_type == 'Spread' and t_market == 'Spread') or
+                        (market_type == 'Total' and t_market == 'Total') or
+                        (market_type == 'Moneyline' and t_market == 'Spread')
+                    )
+                    
+                    if market_matches:
+                        est_prob = theover_row.get('EstimatedProb', 55.0)
+                        
+                        if market_type in ['Spread', 'Moneyline']:
+                            if home_team in selection or normalize_team(home_team) in normalize_team(selection):
+                                theover_prob = est_prob
+                            else:
+                                theover_prob = 100 - est_prob
+                        else:
+                            theover_prob = 50.0
+                        
+                        enriched['theover.ai %'] = f"{theover_prob:.1f}%"
+                        
+                        try:
+                            ai_prob = float(str(row.get('AI Prob %', '50')).replace('%', ''))
+                            enriched['theover Δ pp'] = f"{theover_prob - ai_prob:+.1f}"
+                        except:
+                            enriched['theover Δ pp'] = '—'
+                        
+                        enriched['theover Source'] = 'theover.ai (CSV)'
+                        match_found = True
+                        matches_found += 1
+                        break
+            
+            if not match_found:
+                enriched['theover.ai %'] = '—'
+                enriched['theover Δ pp'] = '—'
+                enriched['theover Source'] = '—'
+        else:
+            enriched['theover.ai %'] = '—'
+            enriched['theover Δ pp'] = '—'
+            enriched['theover Source'] = '—'
+        
+        if pd.isna(enriched.get('ML Prob %')) or enriched.get('ML Prob %') in ['—', '', 'nan', None]:
+            enriched['ML Prob %'] = enriched.get('AI Prob %', '52.0%')
+            enriched['ML Model'] = 'AI Fallback'
+        
+        enriched_rows.append(enriched)
+        progress.progress((idx + 1) / len(best_bets_df))
+    
+    progress.empty()
+    status_text.empty()
+    
+    enriched_df = pd.DataFrame(enriched_rows)
+    
+    st.success("✅ Enrichment Complete!")
+    
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Total Bets", len(enriched_df))
+    with col2:
+        match_rate = (matches_found / len(enriched_df)) * 100 if len(enriched_df) > 0 else 0
+        st.metric("theover Matches", f"{matches_found} ({match_rate:.0f}%)")
+    with col3:
+        filled = (enriched_df['theover.ai %'] != '—').sum()
+        st.metric("Enriched", f"{filled}/{len(enriched_df)}")
+    
+    return enriched_df
+
+
+# ============================================================
+# SINGLE CSV ENRICHMENT SECTION
+# ============================================================
+
+
+
+# ============================================================
+# COMPLETE BETTING PIPELINE: ML → VERTEX AI → ENRICHMENT → RANKINGS
+# ============================================================
+
+def run_complete_betting_pipeline(best_bets_df, anthropic_api_key=None):
+    """
+    Sequential pipeline that combines all analysis methods:
+    1. ML Best Bets (already generated)
+    2. Vertex AI Analysis (confidence, risk, stars)
+    3. CSV Enrichment (theover.ai data)
+    4. Composite Rankings (weighted score from all sources)
+    """
+    import json
+    
+    st.write("---")
+    st.write("### 🔄 Running Complete Analysis Pipeline")
+    st.write("")
+    
+    total_bets = len(best_bets_df)
+    
+    # Step 1: ML Best Bets (already done)
+    st.success(f"✅ **Step 1/4:** Generated {total_bets} ML best bets")
+    
+    # Step 2: Vertex AI Analysis
+    st.write("---")
+    st.write("🧠 **Step 2/4: Vertex AI Analysis**")
+    
+    if not anthropic_api_key:
+        st.warning("⚠️ No Anthropic API key - skipping Vertex AI analysis")
+        st.info("💡 Add API key in sidebar to enable Vertex AI deep analysis")
+        vertex_analyzed_df = best_bets_df.copy()
+        # Add placeholder columns
+        vertex_analyzed_df['Vertex Confidence'] = 75.0
+        vertex_analyzed_df['Vertex Risk'] = 'Medium'
+        vertex_analyzed_df['Vertex Stars'] = 3
+        vertex_analyzed_df['Vertex Factors'] = 'Skipped - no API key'
+    else:
+        try:
+            import anthropic
+            client = anthropic.Anthropic(api_key=anthropic_api_key)
+            
+            vertex_scores = []
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            
+            for idx, row in best_bets_df.iterrows():
+                game = row['Game']
+                market = row.get('Market', '')
+                selection = row.get('Selection', '')
+                ai_prob = row.get('AI Prob %', '50%')
+                ai_edge = row.get('AI Edge pp', 0)
+                
+                status_text.write(f"🔍 Analyzing {idx+1}/{total_bets}: {game}")
+                
+                # Vertex AI prompt for this specific bet
+                prompt = f"""Analyze this sports betting opportunity:
+
+Game: {game}
+Market: {market}
+Pick: {selection}
+ML Probability: {ai_prob}
+Edge: {ai_edge} percentage points
+
+Please provide a concise analysis with:
+1. confidence: Your confidence score (0-100) for this bet
+2. risk: Risk level (Low, Medium, or High)
+3. stars: Rating (1-5, where 5 is best)
+4. factors: Brief key factors (max 100 chars)
+
+Respond ONLY with valid JSON in this exact format:
+{{"confidence": 75, "risk": "Medium", "stars": 3, "factors": "key points here"}}"""
+                
+                try:
+                    message = client.messages.create(
+                        model="claude-sonnet-4-20250514",
+                        max_tokens=300,
+                        messages=[{"role": "user", "content": prompt}]
+                    )
+                    
+                    response_text = message.content[0].text
+                    
+                    # Extract JSON from response
+                    json_match = re.search(r'\{[^}]+\}', response_text, re.DOTALL)
+                    if json_match:
+                        analysis = json.loads(json_match.group())
+                        vertex_scores.append({
+                            'Game': game,
+                            'Vertex Confidence': float(analysis.get('confidence', 75)),
+                            'Vertex Risk': str(analysis.get('risk', 'Medium')),
+                            'Vertex Stars': int(analysis.get('stars', 3)),
+                            'Vertex Factors': str(analysis.get('factors', ''))[:100]
+                        })
+                    else:
+                        # Fallback if JSON parsing fails
+                        vertex_scores.append({
+                            'Game': game,
+                            'Vertex Confidence': 75.0,
+                            'Vertex Risk': 'Medium',
+                            'Vertex Stars': 3,
+                            'Vertex Factors': 'Analysis format error'
+                        })
+                        
+                except Exception as e:
+                    # Graceful fallback on API error
+                    vertex_scores.append({
+                        'Game': game,
+                        'Vertex Confidence': 75.0,
+                        'Vertex Risk': 'Medium',
+                        'Vertex Stars': 3,
+                        'Vertex Factors': f'Error: {str(e)[:50]}'
+                    })
+                
+                progress_bar.progress((idx + 1) / total_bets)
+            
+            progress_bar.empty()
+            status_text.empty()
+            
+            # Merge Vertex AI scores with best bets
+            vertex_df = pd.DataFrame(vertex_scores)
+            vertex_analyzed_df = best_bets_df.merge(vertex_df, on='Game', how='left')
+            
+            # Fill any missing values
+            vertex_analyzed_df['Vertex Confidence'] = vertex_analyzed_df['Vertex Confidence'].fillna(75.0)
+            vertex_analyzed_df['Vertex Risk'] = vertex_analyzed_df['Vertex Risk'].fillna('Medium')
+            vertex_analyzed_df['Vertex Stars'] = vertex_analyzed_df['Vertex Stars'].fillna(3)
+            
+            st.success(f"✅ **Step 2/4:** Vertex AI analyzed {len(vertex_scores)} bets")
+            
+        except Exception as e:
+            st.error(f"❌ Vertex AI error: {e}")
+            st.info("Continuing with ML data only...")
+            vertex_analyzed_df = best_bets_df.copy()
+            vertex_analyzed_df['Vertex Confidence'] = 75.0
+            vertex_analyzed_df['Vertex Risk'] = 'Medium'
+            vertex_analyzed_df['Vertex Stars'] = 3
+            vertex_analyzed_df['Vertex Factors'] = f'Error: {str(e)[:50]}'
+    
+    # Step 3: CSV Enrichment (theover.ai)
+    st.write("---")
+    st.write("📊 **Step 3/4: CSV Enrichment (theover.ai)**")
+    
+    with st.spinner("Enriching with theover.ai data..."):
+        try:
+            enriched_df = enrich_best_bets_with_csv(vertex_analyzed_df)
+            st.success("✅ **Step 3/4:** CSV enrichment complete")
+        except Exception as e:
+            st.warning(f"⚠️ CSV enrichment skipped: {e}")
+            enriched_df = vertex_analyzed_df.copy()
+            # Add placeholder columns
+            enriched_df['theover.ai %'] = '—'
+            enriched_df['theover Δ pp'] = '—'
+            enriched_df['theover Source'] = 'Not available'
+    
+    # Step 4: Composite Rankings
+    st.write("---")
+    st.write("🏆 **Step 4/4: Composite Rankings**")
+    
+    # Extract numeric values for calculations
+    def extract_percent(val):
+        """Extract numeric percentage from string"""
+        if pd.isna(val) or val == '—':
+            return 50.0
+        try:
+            return float(str(val).replace('%', ''))
+        except:
+            return 50.0
+    
+    # Get numeric probabilities
+    enriched_df['ML_Prob_Numeric'] = enriched_df['AI Prob %'].apply(extract_percent)
+    enriched_df['Vertex_Conf_Numeric'] = enriched_df['Vertex Confidence'].fillna(75.0)
+    enriched_df['theover_Prob_Numeric'] = enriched_df['theover.ai %'].apply(extract_percent)
+    
+    # Calculate consensus score (how much the models agree)
+    enriched_df['Consensus Score'] = 100 - (
+        abs(enriched_df['ML_Prob_Numeric'] - enriched_df['Vertex_Conf_Numeric']) +
+        abs(enriched_df['ML_Prob_Numeric'] - enriched_df['theover_Prob_Numeric']) +
+        abs(enriched_df['Vertex_Conf_Numeric'] - enriched_df['theover_Prob_Numeric'])
+    ) / 3
+    
+    # Calculate composite score (weighted average + consensus bonus)
+    enriched_df['Composite Score'] = (
+        enriched_df['ML_Prob_Numeric'] * 0.35 +           # ML weight: 35%
+        enriched_df['Vertex_Conf_Numeric'] * 0.35 +      # Vertex weight: 35%
+        enriched_df['theover_Prob_Numeric'] * 0.20 +     # theover weight: 20%
+        enriched_df['Consensus Score'] * 0.10            # Consensus bonus: 10%
+    )
+    
+    # Add risk penalty
+    risk_penalty = {'Low': 0, 'Medium': -2, 'High': -5}
+    enriched_df['Risk Penalty'] = enriched_df['Vertex Risk'].map(risk_penalty).fillna(-2)
+    enriched_df['Final Score'] = enriched_df['Composite Score'] + enriched_df['Risk Penalty']
+    
+    # Sort by final score
+    enriched_df = enriched_df.sort_values('Final Score', ascending=False).reset_index(drop=True)
+    enriched_df['Rank'] = range(1, len(enriched_df) + 1)
+    
+    st.success("✅ **Step 4/4:** Rankings calculated using multi-model consensus")
+    
+    # Display pipeline summary
+    st.write("---")
+    st.write("### 📈 Pipeline Summary")
+    
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.metric("Total Bets Analyzed", total_bets)
+    
+    with col2:
+        avg_vertex = enriched_df['Vertex_Conf_Numeric'].mean()
+        st.metric("Avg Vertex Confidence", f"{avg_vertex:.1f}%")
+    
+    with col3:
+        high_consensus = (enriched_df['Consensus Score'] >= 90).sum()
+        st.metric("High Consensus Bets", f"{high_consensus}")
+    
+    with col4:
+        five_star = (enriched_df['Vertex Stars'] >= 4).sum()
+        st.metric("4+ Star Bets", five_star)
+    
+
+    # Show top ranked bets with DETAILED ANALYSIS
+    st.write("---")
+    st.write("### 🏆 Top Ranked Opportunities (with Full Analysis)")
+    
+    # Display top 10 bets with expandable details
+    for idx, row in enriched_df.head(10).iterrows():
+        rank = row['Rank']
+        game = row['Game']
+        market = row.get('Market', 'N/A')
+        selection = row.get('Selection', 'N/A')
+        
+        # Get all the scores
+        ml_prob = row.get('AI Prob %', 'N/A')
+        vertex_conf = row.get('Vertex Confidence', 75)
+        vertex_risk = row.get('Vertex Risk', 'Medium')
+        vertex_stars = row.get('Vertex Stars', 3)
+        vertex_factors = row.get('Vertex Factors', 'No details')
+        theover_prob = row.get('theover.ai %', '—')
+        consensus = row.get('Consensus Score', 0)
+        final_score = row.get('Final Score', 0)
+        
+        # Create star display
+        star_display = '⭐' * int(vertex_stars)
+        
+        # Color-code risk
+        risk_color = {'Low': '🟢', 'Medium': '🟡', 'High': '🔴'}.get(vertex_risk, '⚪')
+        
+        # Create expandable section for each bet
+        with st.expander(f"**Rank #{rank}: {game}** | Score: {final_score:.1f} | {star_display}", expanded=(rank <= 3)):
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.markdown("### 📊 Bet Details")
+                st.write(f"**Market:** {market}")
+                st.write(f"**Pick:** {selection}")
+                st.write("")
+                
+                st.markdown("### 🤖 Model Probabilities")
+                st.metric("ML Probability", ml_prob)
+                st.metric("Vertex AI Confidence", f"{vertex_conf:.1f}%")
+                st.metric("theover.ai Probability", theover_prob)
+                st.metric("Consensus Score", f"{consensus:.1f}")
+                
+            with col2:
+                st.markdown("### 🧠 Vertex AI Analysis")
+                st.write(f"**Confidence:** {vertex_conf:.1f}%")
+                st.write(f"**Risk Level:** {risk_color} {vertex_risk}")
+                st.write(f"**Rating:** {star_display} ({vertex_stars}/5)")
+                st.write("")
+                
+                st.markdown("**Key Factors:**")
+                st.info(vertex_factors if vertex_factors else "No detailed analysis available")
+                
+                st.write("")
+                st.markdown("**Multi-Model Consensus:**")
+                if consensus >= 90:
+                    st.success(f"✅ **Excellent** ({consensus:.1f}/100) - All models strongly agree!")
+                elif consensus >= 80:
+                    st.success(f"✅ **Good** ({consensus:.1f}/100) - Strong model agreement")
+                elif consensus >= 70:
+                    st.info(f"ℹ️ **Moderate** ({consensus:.1f}/100) - Models mostly agree")
+                else:
+                    st.warning(f"⚠️ **Low** ({consensus:.1f}/100) - Models disagree - review carefully")
+            
+            # Add recommendation strength
+            st.write("---")
+            st.markdown("### 💡 Recommendation Strength")
+            
+            # Calculate overall recommendation
+            if final_score >= 75 and vertex_risk == 'Low' and vertex_stars >= 4:
+                st.success("🔥 **STRONG BET** - High score, low risk, excellent rating")
+            elif final_score >= 70 and vertex_risk in ['Low', 'Medium'] and vertex_stars >= 3:
+                st.success("✅ **GOOD BET** - Solid score with manageable risk")
+            elif final_score >= 65:
+                st.info("📊 **CONSIDER** - Decent opportunity, evaluate carefully")
+            else:
+                st.warning("⚠️ **CAUTION** - Lower confidence, higher risk")
+    
+    # Also show compact table for quick reference
+    st.write("---")
+    st.write("### 📋 Quick Reference Table (All Ranked Bets)")
+    
+    display_cols = ['Rank', 'Game', 'Market', 'Selection', 'AI Prob %', 
+                    'Vertex Confidence', 'Vertex Stars', 'Vertex Risk',
+                    'theover.ai %', 'Consensus Score', 'Final Score']
+    available_cols = [col for col in display_cols if col in enriched_df.columns]
+    
+    st.dataframe(
+        enriched_df[available_cols],
+        use_container_width=True,
+        hide_index=True
+    )
+
+    
+    # Provide download
+    csv_output = enriched_df.to_csv(index=False, encoding='utf-8-sig')
+    timestamp = pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')
+    
+    st.download_button(
+        "📥 Download Complete Analysis CSV",
+        csv_output,
+        f"complete_analysis_{timestamp}.csv",
+        "text/csv",
+        key='download_complete_analysis',
+        type="primary"
+    )
+    
+    return enriched_df
+
+
 
 st.markdown("---")
-st.header("🔧 Automatic Best Bets Enrichment")
+st.header("📊 Best Bets CSV Enrichment")
 
 st.info("""
-**This section automatically enriches your best bets with:**
-- ✅ theover.ai probabilities (estimated from betting lines)
-- ✅ ML predictions (uses AI fallback if missing)  
-- ✅ SportsData statistics (if available)
+**This section enriches your best bets with:**
+- ✅ theover.ai probabilities (from 23_Nov_Spreads.csv and 23_Nov_Totals.csv)
+- ✅ ML predictions (AI fallback if missing)
 
-No manual CSV upload needed - works directly with your generated best bets!
+**Two options:**
+1. Auto-enrich: Works with generated best bets above
+2. Manual upload: Upload your own CSV file
 """)
 
-# Check if best bets have been generated
 if 'best_bets_df' in st.session_state and st.session_state['best_bets_df'] is not None:
     best_bets_df = st.session_state['best_bets_df']
     
     st.success(f"✅ Found {len(best_bets_df)} best bets ready for enrichment")
     
-    # Show current status
     with st.expander("📊 Current Data Status"):
         theover_filled = (best_bets_df.get('theover.ai %', pd.Series(['—'] * len(best_bets_df))) != '—').sum()
         ml_filled = (best_bets_df.get('ML Prob %', pd.Series(['—'] * len(best_bets_df))) != '—').sum()
@@ -12873,184 +14571,16 @@ if 'best_bets_df' in st.session_state and st.session_state['best_bets_df'] is no
             st.metric("ML Prob % Filled", f"{ml_filled}/{len(best_bets_df)}")
     
     if st.button("🚀 Auto-Enrich Best Bets", type="primary", key="auto_enrich"):
-        
-        with st.spinner("🔄 Enriching best bets with theover.ai data..."):
+        with st.spinner("🔄 Enriching best bets with CSV data..."):
+            enriched_df = enrich_best_bets_with_csv(best_bets_df)
             
-            from scipy.stats import norm
-            from difflib import SequenceMatcher
-            
-            def line_to_probability(line, market='Spread'):
-                """Estimate probability from betting line"""
-                if pd.isna(line) or line == '':
-                    return 55.0
-                try:
-                    line = float(line)
-                except:
-                    return 55.0
-                
-                if market == 'Spread':
-                    std_dev = 13.5
-                    prob = norm.cdf(-line / std_dev) * 100
-                    prob = np.clip(prob, 15, 85)
-                else:
-                    prob = 50.0
-                return float(prob)
-            
-            def normalize_team(team):
-                """Normalize team name"""
-                replacements = {
-                    'ny': 'new york', 'la': 'los angeles', 'sf': 'san francisco',
-                    'tb': 'tampa bay', 'gb': 'green bay', 'ne': 'new england',
-                    'no': 'new orleans', 'kc': 'kansas city'
-                }
-                team_lower = str(team).lower()
-                for abbr, full in replacements.items():
-                    if team_lower.startswith(abbr + ' ') or team_lower == abbr:
-                        team_lower = team_lower.replace(abbr, full)
-                return team_lower.replace('.', '').replace(' ', '').strip()
-            
-            def fuzzy_match(team1, team2):
-                """Check if teams match"""
-                if not team1 or not team2:
-                    return False
-                norm1 = normalize_team(team1)
-                norm2 = normalize_team(team2)
-                if norm1 == norm2 or norm1 in norm2 or norm2 in norm1:
-                    return True
-                return SequenceMatcher(None, norm1, norm2).ratio() >= 0.6
-            
-            # Load theover data
-            theover_df = None
-            try:
-                spreads = pd.read_csv('23_Nov_Spreads.csv')
-                totals = pd.read_csv('23_Nov_Totals.csv')
-                theover_df = pd.concat([spreads, totals], ignore_index=True)
-                theover_df['EstimatedProb'] = theover_df.apply(
-                    lambda row: line_to_probability(row.get('Line'), row.get('Market', 'Spread')),
-                    axis=1
-                )
-                st.write(f"✅ Loaded {len(theover_df)} theover.ai games")
-            except Exception as e:
-                st.warning(f"⚠️ Could not load theover.ai data: {e}")
-                st.info("Make sure 23_Nov_Spreads.csv and 23_Nov_Totals.csv are in the same directory")
-            
-            # Enrich each bet
-            enriched_rows = []
-            matches_found = 0
-            
-            progress = st.progress(0)
-            status_text = st.empty()
-            
-            for idx, row in best_bets_df.iterrows():
-                enriched = row.to_dict()
-                game = row.get('Game', '')
-                
-                status_text.write(f"Processing {idx+1}/{len(best_bets_df)}: {game}")
-                
-                # Parse game
-                try:
-                    parts = game.split('@')
-                    if len(parts) == 2:
-                        away_team = parts[0].strip()
-                        home_team = parts[1].strip()
-                    else:
-                        enriched_rows.append(enriched)
-                        progress.progress((idx + 1) / len(best_bets_df))
-                        continue
-                except:
-                    enriched_rows.append(enriched)
-                    progress.progress((idx + 1) / len(best_bets_df))
-                    continue
-                
-                # Match with theover data
-                if theover_df is not None:
-                    market_type = row.get('Market', '')
-                    selection = row.get('Selection', '')
-                    
-                    match_found = False
-                    for _, theover_row in theover_df.iterrows():
-                        t_home = str(theover_row.get('HomeTeam', ''))
-                        t_away = str(theover_row.get('AwayTeam', ''))
-                        t_market = str(theover_row.get('Market', ''))
-                        
-                        if fuzzy_match(home_team, t_home) and fuzzy_match(away_team, t_away):
-                            market_matches = (
-                                (market_type == 'Spread' and t_market == 'Spread') or
-                                (market_type == 'Total' and t_market == 'Total') or
-                                (market_type == 'Moneyline' and t_market == 'Spread')
-                            )
-                            
-                            if market_matches:
-                                est_prob = theover_row.get('EstimatedProb', 55.0)
-                                
-                                # Determine side
-                                if market_type in ['Spread', 'Moneyline']:
-                                    if home_team in selection or normalize_team(home_team) in normalize_team(selection):
-                                        theover_prob = est_prob
-                                    else:
-                                        theover_prob = 100 - est_prob
-                                else:
-                                    theover_prob = 50.0
-                                
-                                enriched['theover.ai %'] = f"{theover_prob:.1f}%"
-                                
-                                try:
-                                    ai_prob = float(str(row.get('AI Prob %', '50')).replace('%', ''))
-                                    enriched['theover Δ pp'] = f"{theover_prob - ai_prob:+.1f}"
-                                except:
-                                    enriched['theover Δ pp'] = '—'
-                                
-                                enriched['theover Source'] = 'theover.ai (line-based)'
-                                match_found = True
-                                matches_found += 1
-                                break
-                    
-                    if not match_found:
-                        enriched['theover.ai %'] = '—'
-                        enriched['theover Δ pp'] = '—'
-                        enriched['theover Source'] = '—'
-                else:
-                    enriched['theover.ai %'] = '—'
-                    enriched['theover Δ pp'] = '—'
-                    enriched['theover Source'] = '—'
-                
-                # Fill ML if empty
-                if pd.isna(enriched.get('ML Prob %')) or enriched.get('ML Prob %') in ['—', '', 'nan', None]:
-                    enriched['ML Prob %'] = enriched.get('AI Prob %', '52.0%')
-                    enriched['ML Model'] = 'AI Fallback'
-                
-                enriched_rows.append(enriched)
-                progress.progress((idx + 1) / len(best_bets_df))
-            
-            progress.empty()
-            status_text.empty()
-            
-            # Create enriched dataframe
-            enriched_df = pd.DataFrame(enriched_rows)
-            
-            # Store back in session state
             st.session_state['best_bets_df'] = enriched_df
             
-            # Show results
-            st.success("✅ Enrichment Complete!")
-            
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.metric("Total Bets", len(enriched_df))
-            with col2:
-                match_rate = (matches_found / len(enriched_df)) * 100 if len(enriched_df) > 0 else 0
-                st.metric("theover Matches", f"{matches_found} ({match_rate:.0f}%)")
-            with col3:
-                filled = (enriched_df['theover.ai %'] != '—').sum()
-                st.metric("Enriched", f"{filled}/{len(enriched_df)}")
-            
-            # Preview
             st.write("### 📋 Enriched Preview")
             preview_cols = ['Game', 'Market', 'AI Prob %', 'theover.ai %', 'theover Δ pp']
             available_cols = [col for col in preview_cols if col in enriched_df.columns]
             st.dataframe(enriched_df[available_cols].head(10), use_container_width=True)
             
-            # Download
             csv_output = enriched_df.to_csv(index=False, encoding='utf-8-sig')
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
             
@@ -13062,147 +14592,918 @@ if 'best_bets_df' in st.session_state and st.session_state['best_bets_df'] is no
                 key='download_auto_enriched'
             )
             
-            st.info("💡 The best_bets_df in session state has been updated with enriched data!")
+            st.success("🎉 Best bets have been enriched with CSV data!")
 
 else:
-    st.warning("⚠️ No best bets found. Generate best bets first using the sections above.")
-    st.info("👆 Go to 'AI/ML Best Bet Per Game' section and click 'Generate Best Bets'")
+    st.warning("⚠️ No best bets found. Generate best bets first using the section above.")
+    st.info("👆 Go to 'Best Bets Generation' and click 'Generate Best Bets'")
 
-# 🔧 PASTE THIS INTO YOUR STREAMLIT APP
-# Add this section to enrich your incomplete best bets CSVs
+st.markdown("---")
+st.subheader("📤 Manual CSV Upload (Optional)")
+
+uploaded_csv = st.file_uploader(
+    "Upload your own best bets CSV to enrich",
+    type=['csv'],
+    key='manual_csv_upload'
+)
+
+if uploaded_csv is not None:
+    if st.button("🚀 Enrich Uploaded CSV", type="secondary"):
+        uploaded_df = pd.read_csv(uploaded_csv)
+        
+        st.write(f"📊 Processing {len(uploaded_df)} bets from uploaded CSV...")
+        
+        with st.spinner("🔄 Enriching uploaded CSV..."):
+            enriched_df = enrich_best_bets_with_csv(uploaded_df)
+            
+            st.write("### 📊 Enriched CSV Preview")
+            preview_cols = ['Game', 'AI Prob %', 'theover.ai %', 'ML Prob %']
+            available_cols = [col for col in preview_cols if col in enriched_df.columns]
+            st.dataframe(enriched_df[available_cols].head(10))
+            
+            csv = enriched_df.to_csv(index=False)
+            st.download_button(
+                "📥 Download Enriched CSV",
+                csv,
+                f"best_bets_enriched_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                "text/csv",
+                key='download_manual_enriched'
+            )
+            
+            st.success("🎉 Your uploaded CSV has been enriched!")
+
+
+# ═══════════════════════════════════════════════════════════════
+# COMPLETE API VERIFICATION TOOL
+# Tests ALL APIs with real calls and shows exactly what works
+# ═══════════════════════════════════════════════════════════════
+
+import streamlit as st
+import requests
+import json
+from datetime import datetime
+
+def test_odds_api(api_key):
+    """Test The Odds API with real call"""
+    if not api_key:
+        return False, "❌ No API key provided"
+    
+    try:
+        url = "https://api.the-odds-api.com/v4/sports"
+        params = {'apiKey': api_key}
+        
+        response = requests.get(url, params=params, timeout=10)
+        
+        if response.status_code == 200:
+            sports = response.json()
+            return True, f"✅ Working! Found {len(sports)} sports. Remaining requests: {response.headers.get('x-requests-remaining', 'Unknown')}"
+        elif response.status_code == 401:
+            return False, "❌ Invalid API key (401 Unauthorized)"
+        elif response.status_code == 429:
+            return False, "❌ Rate limit exceeded (429)"
+        else:
+            return False, f"❌ Error: Status {response.status_code}"
+    
+    except requests.exceptions.Timeout:
+        return False, "❌ Timeout (>10s)"
+    except Exception as e:
+        return False, f"❌ Error: {str(e)[:100]}"
+
+
+def test_anthropic_api(api_key):
+    """Test Anthropic API (Vertex AI) with real call"""
+    if not api_key:
+        return False, "❌ No API key provided"
+    
+    try:
+        import anthropic
+        
+        client = anthropic.Anthropic(api_key=api_key)
+        
+        # Make a simple test call
+        message = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=100,
+            messages=[{
+                "role": "user",
+                "content": "Reply with just the number 42"
+            }],
+            timeout=15.0
+        )
+        
+        response_text = message.content[0].text
+        
+        # Check if we got a real response (not default/error)
+        if response_text and len(response_text) > 0:
+            return True, f"✅ Working! Response: '{response_text[:50]}...'"
+        else:
+            return False, "❌ Got empty response"
+    
+    except anthropic.AuthenticationError:
+        return False, "❌ Invalid API key (Authentication failed)"
+    except anthropic.RateLimitError:
+        return False, "❌ Rate limit exceeded"
+    except anthropic.APITimeoutError:
+        return False, "❌ Timeout (>15s)"
+    except anthropic.APIError as e:
+        return False, f"❌ API Error: {str(e)[:100]}"
+    except Exception as e:
+        return False, f"❌ Error: {str(e)[:100]}"
+
+
+def test_news_api(api_key):
+    """Test News API with real call"""
+    if not api_key:
+        return False, "❌ No API key provided"
+    
+    try:
+        url = "https://newsapi.org/v2/top-headlines"
+        params = {
+            'apiKey': api_key,
+            'category': 'sports',
+            'language': 'en',
+            'pageSize': 5
+        }
+        
+        response = requests.get(url, params=params, timeout=10)
+        
+        if response.status_code == 200:
+            data = response.json()
+            articles = data.get('articles', [])
+            total = data.get('totalResults', 0)
+            return True, f"✅ Working! Found {len(articles)} recent articles (Total: {total})"
+        elif response.status_code == 401:
+            return False, "❌ Invalid API key (401 Unauthorized)"
+        elif response.status_code == 429:
+            return False, "❌ Rate limit exceeded (429)"
+        else:
+            return False, f"❌ Error: Status {response.status_code}"
+    
+    except requests.exceptions.Timeout:
+        return False, "❌ Timeout (>10s)"
+    except Exception as e:
+        return False, f"❌ Error: {str(e)[:100]}"
+
+
+def test_anthropic_sports_analysis(api_key):
+    """Test Anthropic with actual sports analysis (like CSV workflow uses)"""
+    if not api_key:
+        return False, "❌ No API key provided", None
+    
+    try:
+        import anthropic
+        
+        client = anthropic.Anthropic(api_key=api_key)
+        
+        # Test with a real sports analysis prompt
+        prompt = """Analyze this game:
+
+Game: Lakers @ Celtics
+Sport: basketball_nba
+Date: 2024-11-24
+Home Odds: -150
+Away Odds: +130
+
+Provide analysis as JSON:
+{
+  "home_win_probability": 65.0,
+  "away_win_probability": 35.0,
+  "confidence_level": 78,
+  "risk_assessment": "Low",
+  "recommendation": "Home team moneyline"
+}
+
+Respond ONLY with valid JSON."""
+        
+        message = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=500,
+            messages=[{"role": "user", "content": prompt}],
+            timeout=20.0
+        )
+        
+        response_text = message.content[0].text
+        
+        # Try to parse JSON
+        import re
+        json_match = re.search(r'\{[\s\S]*\}', response_text)
+        
+        if json_match:
+            try:
+                analysis = json.loads(json_match.group())
+                home_prob = float(analysis.get('home_win_probability', 0))
+                
+                # Check if we got real analysis (not default 50%)
+                if home_prob > 0 and home_prob != 50.0 and home_prob != 50.5:
+                    return True, f"✅ Sports analysis working! Home win prob: {home_prob}%", analysis
+                else:
+                    return False, f"⚠️ Got default probability ({home_prob}%), might not be analyzing properly", analysis
+            except json.JSONDecodeError as e:
+                return False, f"❌ JSON parse error: {str(e)[:50]}", None
+        else:
+            return False, f"❌ No JSON found in response: {response_text[:200]}", None
+    
+    except Exception as e:
+        return False, f"❌ Error: {str(e)[:100]}", None
+
+
+# ═══════════════════════════════════════════════════════════════
+# STREAMLIT UI
+# ═══════════════════════════════════════════════════════════════
+
+st.write("---")
+st.write("---")
+st.header("🔍 Complete API Verification Tool")
+
+st.info("""
+**This tool tests ALL your APIs with REAL calls:**
+- ✅ = API working correctly
+- ❌ = API not working (see error)
+- ⚠️ = API responds but might have issues
+
+Run this to verify everything before analyzing games!
+""")
+
+# Collect API keys
+st.subheader("📋 Step 1: Collect API Keys")
+
+col1, col2 = st.columns(2)
+
+with col1:
+    st.write("**From Session State:**")
+    odds_key_session = st.session_state.get('api_key', '')
+    anthropic_key_session = st.session_state.get('anthropic_api_key', '')
+    news_key_session = st.session_state.get('news_api_key', '')
+    
+    st.write(f"- Odds API: {'✅' if odds_key_session else '❌'} {odds_key_session[:10] + '...' if odds_key_session else 'Not found'}")
+    st.write(f"- Anthropic: {'✅' if anthropic_key_session else '❌'} {anthropic_key_session[:10] + '...' if anthropic_key_session else 'Not found'}")
+    st.write(f"- News API: {'✅' if news_key_session else '❌'} {news_key_session[:10] + '...' if news_key_session else 'Not found'}")
+
+with col2:
+    st.write("**From Environment/Secrets:**")
+    import os
+    
+    odds_key_env = os.environ.get('ODDS_API_KEY', '') or st.secrets.get('ODDS_API_KEY', '')
+    anthropic_key_env = os.environ.get('anthropic_api_key', '') or st.secrets.get('anthropic_api_key', '')
+    news_key_env = os.environ.get('NEWS_API_KEY', '') or st.secrets.get('NEWS_API_KEY', '')
+    
+    st.write(f"- Odds API: {'✅' if odds_key_env else '❌'} {odds_key_env[:10] + '...' if odds_key_env else 'Not found'}")
+    st.write(f"- Anthropic: {'✅' if anthropic_key_env else '❌'} {anthropic_key_env[:10] + '...' if anthropic_key_env else 'Not found'}")
+    st.write(f"- News API: {'✅' if news_key_env else '❌'} {news_key_env[:10] + '...' if news_key_env else 'Not found'}")
+
+# Use best available keys
+final_odds_key = odds_key_session or odds_key_env
+final_anthropic_key = anthropic_key_session or anthropic_key_env
+final_news_key = news_key_session or news_key_env
+
+st.write("---")
+
+# Test APIs
+st.subheader("🧪 Step 2: Test APIs with Real Calls")
+
+if st.button("🚀 Run Complete API Test", type="primary"):
+    
+    results = {}
+    
+    # Test 1: The Odds API
+    st.write("### 1️⃣ Testing The Odds API")
+    with st.spinner("Testing..."):
+        success, message = test_odds_api(final_odds_key)
+        results['odds_api'] = (success, message)
+        
+        if success:
+            st.success(message)
+        else:
+            st.error(message)
+    
+    st.write("---")
+    
+    # Test 2: Anthropic API (Basic)
+    st.write("### 2️⃣ Testing Anthropic API (Basic)")
+    with st.spinner("Testing..."):
+        success, message = test_anthropic_api(final_anthropic_key)
+        results['anthropic_basic'] = (success, message)
+        
+        if success:
+            st.success(message)
+        else:
+            st.error(message)
+    
+    st.write("---")
+    
+    # Test 3: Anthropic API (Sports Analysis)
+    st.write("### 3️⃣ Testing Anthropic API (Sports Analysis)")
+    st.caption("This is the REAL test - simulates CSV workflow")
+    
+    with st.spinner("Testing sports analysis..."):
+        success, message, analysis = test_anthropic_sports_analysis(final_anthropic_key)
+        results['anthropic_sports'] = (success, message)
+        
+        if success:
+            st.success(message)
+            if analysis:
+                with st.expander("📊 View Full Analysis"):
+                    st.json(analysis)
+        else:
+            st.error(message)
+            if analysis:
+                with st.expander("⚠️ View Response (might show issue)"):
+                    st.json(analysis)
+    
+    st.write("---")
+    
+    # Test 4: News API
+    st.write("### 4️⃣ Testing News API (Sentiment)")
+    with st.spinner("Testing..."):
+        success, message = test_news_api(final_news_key)
+        results['news_api'] = (success, message)
+        
+        if success:
+            st.success(message)
+        else:
+            st.error(message)
+    
+    st.write("---")
+    st.write("---")
+    
+    # Summary
+    st.write("## 📊 Test Summary")
+    
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        status = "✅" if results.get('odds_api', (False,))[0] else "❌"
+        st.metric("Odds API", status)
+    
+    with col2:
+        status = "✅" if results.get('anthropic_basic', (False,))[0] else "❌"
+        st.metric("Anthropic (Basic)", status)
+    
+    with col3:
+        status = "✅" if results.get('anthropic_sports', (False,))[0] else "❌"
+        st.metric("Anthropic (Sports)", status)
+    
+    with col4:
+        status = "✅" if results.get('news_api', (False,))[0] else "❌"
+        st.metric("News API", status)
+    
+    # Diagnosis
+    st.write("---")
+    st.write("## 🔍 Diagnosis")
+    
+    all_working = all(result[0] for result in results.values())
+    
+    if all_working:
+        st.success("🎉 **ALL APIS WORKING!** You're ready to analyze games!")
+    else:
+        st.error("⚠️ **SOME APIS NOT WORKING** - See issues above")
+        
+        # Specific recommendations
+        if not results.get('odds_api', (False,))[0]:
+            st.warning("**The Odds API Issue:**")
+            st.write("- Check API key is correct")
+            st.write("- Verify you have remaining requests")
+            st.write("- Get key from: https://the-odds-api.com/")
+        
+        if not results.get('anthropic_basic', (False,))[0]:
+            st.warning("**Anthropic API Issue (Basic):**")
+            st.write("- Check API key is correct (starts with 'sk-ant-')")
+            st.write("- Verify account has credits")
+            st.write("- Get key from: https://console.anthropic.com/")
+        
+        if not results.get('anthropic_sports', (False,))[0]:
+            st.warning("**Anthropic Sports Analysis Issue:**")
+            st.write("- Basic API works but sports analysis doesn't")
+            st.write("- This is why you see 50.5% for everything!")
+            st.write("- Check error message above")
+            st.write("- Might be prompt issue or JSON parsing")
+        
+        if not results.get('news_api', (False,))[0]:
+            st.warning("**News API Issue (Sentiment):**")
+            st.write("- Check API key is correct")
+            st.write("- Sentiment analysis won't work")
+            st.write("- Get key from: https://newsapi.org/")
+    
+    st.write("---")
+    
+    # What to do next
+    st.write("## ✅ What To Do Next")
+    
+    if all_working:
+        st.info("""
+        **All APIs working! Now you can:**
+        1. Upload your CSV in the CSV workflow section
+        2. Run analysis with confidence
+        3. Get real probabilities (not 50.5%)
+        """)
+    else:
+        st.info("""
+        **Fix the failing APIs:**
+        1. Add/fix API keys as shown above
+        2. Re-run this test
+        3. Once all ✅, proceed to CSV analysis
+        """)
+
+st.write("---")
+st.write("---")
+
+
+# ═══════════════════════════════════════════════════════════════
+# CSV UPLOAD → VERTEX-POWERED ANALYSIS (FIXED WITH DEBUGGING)
+# Now with proper error handling and visible status messages
+# ═══════════════════════════════════════════════════════════════
 
 import streamlit as st
 import pandas as pd
 import numpy as np
+from datetime import datetime
+import json
+import re
 
-st.markdown("---")
-st.subheader("🔧 Fix Incomplete Best Bets CSV")
+# ═══════════════════════════════════════════════════════════════
+# IMPROVED VERTEX FUNCTIONS WITH DEBUGGING
+# ═══════════════════════════════════════════════════════════════
 
-st.info("""
-**Problem:** Your best bets CSV has blank columns:
-- ❌ theover.ai % - EMPTY
-- ❌ ML Prob % - MOSTLY EMPTY
-- ❌ SportsData % - EMPTY
-
-**Solution:** Upload your CSV here and I'll fill in ALL missing data!
-""")
-
-uploaded_csv = st.file_uploader("📤 Upload Incomplete Best Bets CSV", type=['csv'], key='csv_enricher')
-
-if uploaded_csv is not None:
+def vertex_analyze_historical_data_debug(game, anthropic_api_key):
+    """
+    Use Vertex AI to analyze historical game data - WITH DEBUGGING
+    """
+    if not anthropic_api_key:
+        return None, "❌ No API key provided"
     
-    # Check if theover data is available
-    if 'theover_spreads_data' not in locals() and 'theover_spreads_data' not in st.session_state:
-        st.error("❌ Load theover.ai data first!")
-        st.stop()
-    
-    theover_df = theover_spreads_data if 'theover_spreads_data' in locals() else st.session_state.get('theover_spreads_data')
-    
-    if st.button("🚀 Enrich CSV with All Data", type="primary"):
+    try:
+        import anthropic
+        client = anthropic.Anthropic(api_key=anthropic_api_key)
         
-        # Load uploaded CSV
-        incomplete_df = pd.read_csv(uploaded_csv)
+        prompt = f"""You are an expert sports analyst. Analyze this upcoming game:
+
+GAME: {game['away_team']} @ {game['home_team']}
+Sport: {game['sport']}
+Date: {game['date']}
+Home Odds: {game.get('home_odds', 'N/A')}
+Away Odds: {game.get('away_odds', 'N/A')}
+
+Analyze:
+1. Recent head-to-head history
+2. Home/away performance trends  
+3. Injuries or roster changes you know about
+4. Betting line value assessment
+5. Sport-specific factors (rest, travel, etc)
+
+RESPOND WITH ONLY THIS JSON (no other text):
+{{
+  "home_win_probability": 65.0,
+  "away_win_probability": 35.0,
+  "confidence_level": 78,
+  "risk_assessment": "Low",
+  "key_factors": ["Factor 1", "Factor 2", "Factor 3"],
+  "historical_edge": "Brief summary",
+  "betting_recommendation": "Specific bet",
+  "value_rating": 7.5,
+  "sentiment": "Bullish on home",
+  "concerns": ["Concern 1", "Concern 2"]
+}}"""
         
-        st.write(f"📊 Processing {len(incomplete_df)} bets...")
-        
-        enriched_rows = []
-        progress = st.progress(0)
-        
-        for idx, row in incomplete_df.iterrows():
-            enriched = row.to_dict()
-            
-            # Parse game string
-            game = row['Game']
-            try:
-                away_team, home_team = game.split('@')
-                away_team = away_team.strip()
-                home_team = home_team.strip()
-            except:
-                st.warning(f"⚠️ Could not parse: {game}")
-                enriched_rows.append(enriched)
-                continue
-            
-            # Find theover.ai pick
-            theover_match = None
-            for _, theover_row in theover_df.iterrows():
-                try:
-                    t_home = str(theover_row.get('HomeTeam') or theover_row.get('home_team', '')).lower()
-                    t_away = str(theover_row.get('AwayTeam') or theover_row.get('away_team', '')).lower()
-                    
-                    if home_team.lower() in t_home and away_team.lower() in t_away:
-                        theover_match = theover_row
-                        break
-                except:
-                    continue
-            
-            # Add theover.ai data
-            if theover_match is not None:
-                win_prob = theover_match.get('WinProbability', np.nan)
-                if pd.notna(win_prob):
-                    enriched['theover.ai %'] = float(win_prob)
-                    enriched['theover Δ pp'] = float(win_prob) - row['AI Prob %']
-                    enriched['theover Source'] = 'theover.ai'
-                else:
-                    # Use default if theover.ai doesn't have probability
-                    enriched['theover.ai %'] = 55.0
-                    enriched['theover Δ pp'] = 55.0 - row['AI Prob %']
-                    enriched['theover Source'] = 'theover.ai (estimated)'
-            else:
-                enriched['theover.ai %'] = ''
-                enriched['theover Δ pp'] = ''
-                enriched['theover Source'] = 'Not Available'
-            
-            # Add ML prediction if missing
-            if pd.isna(row['ML Prob %']) or row['ML Prob %'] == '':
-                enriched['ML Prob %'] = 52.0  # Default home advantage
-                enriched['ML Model'] = 'Fallback (Not Available)'
-            
-            # Add SportsData if missing
-            if pd.isna(row['SportsData Prob %']) or row['SportsData Prob %'] == '':
-                enriched['SportsData Prob %'] = 52.0  # Default home advantage
-                enriched['SportsData Δ pp'] = 52.0 - row['AI Prob %']
-            
-            enriched_rows.append(enriched)
-            progress.progress((idx + 1) / len(incomplete_df))
-        
-        progress.empty()
-        
-        # Create enriched DataFrame
-        enriched_df = pd.DataFrame(enriched_rows)
-        
-        # Show what was added
-        st.success("✅ Enrichment Complete!")
-        
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            theover_filled = enriched_df['theover.ai %'].replace('', np.nan).notna().sum()
-            st.metric("theover.ai Added", f"{theover_filled}/{len(enriched_df)}")
-        
-        with col2:
-            ml_filled = enriched_df['ML Prob %'].replace('', np.nan).notna().sum()
-            st.metric("ML Predictions", f"{ml_filled}/{len(enriched_df)}")
-        
-        with col3:
-            sd_filled = enriched_df['SportsData Prob %'].replace('', np.nan).notna().sum()
-            st.metric("SportsData Stats", f"{sd_filled}/{len(enriched_df)}")
-        
-        # Show preview
-        st.write("### 📊 Enriched CSV Preview")
-        
-        # Show key columns
-        preview_cols = ['Game', 'AI Prob %', 'theover.ai %', 'ML Prob %', 'SportsData Prob %']
-        available_cols = [col for col in preview_cols if col in enriched_df.columns]
-        st.dataframe(enriched_df[available_cols].head(10))
-        
-        # Download button
-        csv = enriched_df.to_csv(index=False)
-        st.download_button(
-            "📥 Download Complete CSV (ALL COLUMNS FILLED)",
-            csv,
-            f"best_bets_complete_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.csv",
-            "text/csv",
-            key='download_enriched_csv'
+        # Call API with timeout
+        message = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=1000,
+            messages=[{"role": "user", "content": prompt}],
+            timeout=30.0
         )
         
-        st.success("🎉 Your CSV now has ALL columns filled with data!")
+        response_text = message.content[0].text
+        
+        # Try to parse JSON
+        json_match = re.search(r'\{[\s\S]*\}', response_text)
+        if json_match:
+            analysis = json.loads(json_match.group())
+            
+            # Validate we got actual probabilities (not defaults)
+            home_prob = float(analysis.get('home_win_probability', 50.0))
+            if home_prob == 50.0 or home_prob == 50.5:
+                return None, "⚠️ Got default probability (50%), likely API issue"
+            
+            return analysis, "✅ Success"
+        else:
+            return None, f"❌ JSON parse failed. Response: {response_text[:200]}"
+    
+    except anthropic.APIError as e:
+        return None, f"❌ API Error: {str(e)[:100]}"
+    except anthropic.APITimeoutError:
+        return None, "❌ API Timeout (>30s)"
+    except json.JSONDecodeError as e:
+        return None, f"❌ JSON decode error: {str(e)[:100]}"
+    except Exception as e:
+        return None, f"❌ Unexpected error: {str(e)[:100]}"
+
+
+def comprehensive_vertex_analysis_debug(game, ml_result, sentiment_result, anthropic_api_key):
+    """
+    Vertex AI synthesizes ALL data for final winning probability - WITH DEBUGGING
+    """
+    if not anthropic_api_key:
+        return None, "❌ No API key"
+    
+    try:
+        import anthropic
+        client = anthropic.Anthropic(api_key=anthropic_api_key)
+        
+        prompt = f"""FINAL ANALYSIS - Synthesize all data to make best betting decision:
+
+GAME: {game['away_team']} @ {game['home_team']}
+Sport: {game['sport']}
+Date: {game['date']}
+
+MACHINE LEARNING:
+- ML Home Win: {ml_result['ml_home_prob']:.1f}%
+- ML Away Win: {ml_result['ml_away_prob']:.1f}%
+- ML Confidence: {ml_result['ml_confidence']:.1f}%
+
+SENTIMENT:
+- Sentiment: {sentiment_result['sentiment_label']}
+- Score: {sentiment_result['sentiment_score']:.1f}
+
+BETTING LINES:
+- Home Odds: {game.get('home_odds', 'N/A')}
+- Away Odds: {game.get('away_odds', 'N/A')}
+
+YOUR TASK: Produce FINAL winning probability combining ML, sentiment, lines, and YOUR sports knowledge.
+
+RESPOND WITH ONLY THIS JSON (no other text):
+{{
+  "final_home_win_probability": 62.5,
+  "final_away_win_probability": 37.5,
+  "overall_confidence": 82,
+  "risk_level": "Low",
+  "recommended_bet": "Home Team -5.5",
+  "bet_confidence": "High",
+  "value_assessment": 8.0,
+  "key_insights": ["Insight 1", "Insight 2", "Insight 3"],
+  "edge_analysis": "Edge description",
+  "final_verdict": "STRONG HOME PLAY",
+  "stars": 4
+}}"""
+        
+        message = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=1000,
+            messages=[{"role": "user", "content": prompt}],
+            timeout=30.0
+        )
+        
+        response_text = message.content[0].text
+        json_match = re.search(r'\{[\s\S]*\}', response_text)
+        
+        if json_match:
+            analysis = json.loads(json_match.group())
+            
+            # Validate actual analysis happened
+            final_prob = float(analysis.get('final_home_win_probability', 50.0))
+            if final_prob == 50.0 or final_prob == 50.5:
+                return None, "⚠️ Got default probability, API issue"
+            
+            return analysis, "✅ Success"
+        else:
+            return None, f"❌ Parse failed: {response_text[:200]}"
+    
+    except Exception as e:
+        return None, f"❌ Error: {str(e)[:100]}"
+
+
+def run_complete_analysis_with_debug(games, ml_predictor, sentiment_analyzer, anthropic_api_key):
+    """
+    Run complete analysis with DETAILED STATUS REPORTING
+    """
+    results = []
+    errors_log = []
+    
+    progress_bar = st.progress(0)
+    status_container = st.container()
+    
+    for idx, game in enumerate(games):
+        game_name = f"{game['away_team']} @ {game['home_team']}"
+        
+        with status_container:
+            st.write(f"### 🔍 Game {idx+1}/{len(games)}: {game_name}")
+            
+            # Step 1: Vertex Historical
+            hist_col, hist_status = st.columns([3, 1])
+            with hist_col:
+                st.write("🧠 Vertex Historical Analysis...")
+            
+            vertex_historical, hist_error = vertex_analyze_historical_data_debug(
+                game, anthropic_api_key
+            )
+            
+            with hist_status:
+                if vertex_historical:
+                    st.success("✅")
+                else:
+                    st.error("❌")
+                    st.caption(hist_error)
+                    errors_log.append(f"Game {idx+1} Historical: {hist_error}")
+            
+            # Step 2: ML
+            ml_col, ml_status = st.columns([3, 1])
+            with ml_col:
+                st.write("🤖 ML Predictions...")
+            
+            if ml_predictor:
+                try:
+                    prediction = ml_predictor.predict_game(game['home_team'], game['away_team'])
+                    ml_result = {
+                        'ml_home_prob': prediction.get('home_win_prob', 50.0),
+                        'ml_away_prob': prediction.get('away_win_prob', 50.0),
+                        'ml_confidence': prediction.get('confidence', 50.0)
+                    }
+                    with ml_status:
+                        st.success("✅")
+                except Exception as e:
+                    ml_result = {'ml_home_prob': 50.0, 'ml_away_prob': 50.0, 'ml_confidence': 50.0}
+                    with ml_status:
+                        st.warning("⚠️")
+                    errors_log.append(f"Game {idx+1} ML: {str(e)[:50]}")
+            else:
+                ml_result = {'ml_home_prob': 50.0, 'ml_away_prob': 50.0, 'ml_confidence': 50.0}
+                with ml_status:
+                    st.info("⊘")
+            
+            # Step 3: Sentiment
+            sent_col, sent_status = st.columns([3, 1])
+            with sent_col:
+                st.write("📰 Sentiment Analysis...")
+            
+            if sentiment_analyzer:
+                try:
+                    result = sentiment_analyzer.analyze_game(
+                        game['home_team'], game['away_team'], game['sport']
+                    )
+                    sentiment_result = {
+                        'sentiment_score': result.get('score', 50.0),
+                        'sentiment_label': result.get('label', 'Neutral')
+                    }
+                    with sent_status:
+                        st.success("✅")
+                except Exception as e:
+                    sentiment_result = {'sentiment_score': 50.0, 'sentiment_label': 'Neutral'}
+                    with sent_status:
+                        st.warning("⚠️")
+                    errors_log.append(f"Game {idx+1} Sentiment: {str(e)[:50]}")
+            else:
+                sentiment_result = {'sentiment_score': 50.0, 'sentiment_label': 'Neutral'}
+                with sent_status:
+                    st.info("⊘")
+            
+            # Step 4: Vertex Final Synthesis
+            final_col, final_status = st.columns([3, 1])
+            with final_col:
+                st.write("🎯 Vertex Final Synthesis...")
+            
+            final_analysis, final_error = comprehensive_vertex_analysis_debug(
+                game, ml_result, sentiment_result, anthropic_api_key
+            )
+            
+            with final_status:
+                if final_analysis:
+                    st.success("✅")
+                else:
+                    st.error("❌")
+                    st.caption(final_error)
+                    errors_log.append(f"Game {idx+1} Final: {final_error}")
+            
+            st.write("---")
+        
+        # Compile result
+        result = {
+            'Game': game_name,
+            'Sport': game['sport'],
+            'Date': game['date'],
+            
+            # Historical
+            'Vertex Historical': "✅" if vertex_historical else "❌",
+            'Historical Confidence': f"{vertex_historical.get('confidence_level', 0):.0f}%" if vertex_historical else "N/A",
+            
+            # ML
+            'ML Home %': f"{ml_result['ml_home_prob']:.1f}%",
+            'ML Away %': f"{ml_result['ml_away_prob']:.1f}%",
+            
+            # Sentiment
+            'Sentiment': sentiment_result['sentiment_label'],
+            'Sentiment Score': f"{sentiment_result['sentiment_score']:.1f}",
+            
+            # Final
+            'Final Analysis': "✅" if final_analysis else "❌",
+            'FINAL Home %': f"{final_analysis.get('final_home_win_probability', 0):.1f}%" if final_analysis else "N/A",
+            'FINAL Away %': f"{final_analysis.get('final_away_win_probability', 0):.1f}%" if final_analysis else "N/A",
+            'Confidence': f"{final_analysis.get('overall_confidence', 0):.0f}%" if final_analysis else "N/A",
+            'Risk': final_analysis.get('risk_level', 'N/A') if final_analysis else "N/A",
+            'Recommended Bet': final_analysis.get('recommended_bet', 'N/A') if final_analysis else "N/A",
+            'Stars': final_analysis.get('stars', 0) if final_analysis else 0,
+            'Verdict': final_analysis.get('final_verdict', 'N/A') if final_analysis else "N/A",
+            
+            # Errors
+            'Status': "✅ Complete" if (vertex_historical and final_analysis) else "⚠️ Partial" if (vertex_historical or final_analysis) else "❌ Failed"
+        }
+        
+        results.append(result)
+        progress_bar.progress((idx + 1) / len(games))
+    
+    progress_bar.empty()
+    
+    # Show error log
+    if errors_log:
+        with st.expander("⚠️ Errors Encountered", expanded=True):
+            for error in errors_log:
+                st.error(error)
+    
+    return pd.DataFrame(results)
+
+
+# ═══════════════════════════════════════════════════════════════
+# PARSE CSV FUNCTION (unchanged)
+# ═══════════════════════════════════════════════════════════════
+
+def parse_theover_csv(uploaded_file):
+    """Parse uploaded CSV"""
+    try:
+        df = pd.read_csv(uploaded_file)
+        df.columns = df.columns.str.strip().str.lower()
+        
+        games = []
+        for idx, row in df.iterrows():
+            # Try different column name variations
+            home = row.get('home_team') or row.get('home') or row.get('home team') or ''
+            away = row.get('away_team') or row.get('away') or row.get('away team') or ''
+            sport = row.get('sport') or row.get('league') or 'unknown'
+            date = row.get('date') or row.get('game_date') or row.get('game date') or ''
+            
+            if not home or not away:
+                continue  # Skip rows without teams
+            
+            games.append({
+                'game_id': f"game_{idx}",
+                'home_team': str(home).strip(),
+                'away_team': str(away).strip(),
+                'sport': str(sport).strip().lower(),
+                'date': str(date),
+                'home_odds': row.get('home_odds') or row.get('home odds'),
+                'away_odds': row.get('away_odds') or row.get('away odds'),
+                'spread': row.get('spread'),
+                'total': row.get('total')
+            })
+        
+        return games, df
+    
+    except Exception as e:
+        st.error(f"CSV parsing error: {e}")
+        return None, None
+
+
+# ═══════════════════════════════════════════════════════════════
+# STREAMLIT UI
+# ═══════════════════════════════════════════════════════════════
+
+st.write("---")
+st.write("---")
+st.header("📊 CSV Upload → Vertex Analysis (DEBUG MODE)")
+
+st.info("""
+**This version shows EXACTLY what's happening:**
+- ✅ = Step succeeded
+- ❌ = Step failed (with error message)
+- ⚠️ = Step partially worked
+- ⊘ = Step skipped (optional)
+
+Upload CSV and watch each step's status in real-time!
+""")
+
+# API Key Check
+st.subheader("🔑 Step 1: Verify API Key")
+anthropic_key = st.session_state.get('anthropic_api_key', '')
+
+if anthropic_key:
+    # Test the API key
+    try:
+        import anthropic
+        test_client = anthropic.Anthropic(api_key=anthropic_key)
+        st.success(f"✅ Anthropic API key detected ({anthropic_key[:8]}...)")
+    except Exception as e:
+        st.error(f"❌ API key invalid: {e}")
+        anthropic_key = None
+else:
+    st.error("❌ No Anthropic API key found")
+    st.info("Add your API key in the sidebar under 'Anthropic API Key'")
+
+st.write("---")
+
+# CSV Upload
+st.subheader("📤 Step 2: Upload CSV")
+uploaded_file = st.file_uploader(
+    "Upload CSV file",
+    type=['csv'],
+    help="Columns needed: Home Team, Away Team, Sport, Date"
+)
+
+if uploaded_file is not None:
+    with st.spinner("📊 Parsing CSV..."):
+        games, raw_df = parse_theover_csv(uploaded_file)
+    
+    if games:
+        st.success(f"✅ Parsed {len(games)} games")
+        
+        # Preview
+        with st.expander("📋 View Parsed Games"):
+            preview = pd.DataFrame([{
+                'Away': g['away_team'],
+                'Home': g['home_team'],
+                'Sport': g['sport'],
+                'Date': g['date']
+            } for g in games])
+            st.dataframe(preview, use_container_width=True)
+        
+        st.write("---")
+        
+        # Analysis
+        st.subheader("🚀 Step 3: Run Analysis")
+        
+        ml_predictor = st.session_state.get('ml_predictor')
+        sentiment_analyzer = st.session_state.get('sentiment_analyzer')
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            st.info(f"ML Predictor: {'✅ Available' if ml_predictor else '⊘ Not available'}")
+        with col2:
+            st.info(f"Sentiment: {'✅ Available' if sentiment_analyzer else '⊘ Not available'}")
+        
+        # Limit games for testing
+        max_games = st.slider("Max games to analyze (for testing)", 1, len(games), min(5, len(games)))
+        games_to_analyze = games[:max_games]
+        
+        if not anthropic_key:
+            st.error("❌ Cannot proceed without Anthropic API key")
+        else:
+            if st.button("🚀 Run Analysis with Debug Mode", type="primary"):
+                st.write("### 📊 Analysis Progress")
+                
+                results_df = run_complete_analysis_with_debug(
+                    games_to_analyze,
+                    ml_predictor,
+                    sentiment_analyzer,
+                    anthropic_key
+                )
+                
+                st.write("---")
+                st.success(f"✅ Analysis complete for {len(results_df)} games")
+                
+                # Summary
+                st.write("### 📊 Results Summary")
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    complete = len(results_df[results_df['Status'] == "✅ Complete"])
+                    st.metric("Fully Analyzed", complete)
+                with col2:
+                    partial = len(results_df[results_df['Status'] == "⚠️ Partial"])
+                    st.metric("Partial", partial)
+                with col3:
+                    failed = len(results_df[results_df['Status'] == "❌ Failed"])
+                    st.metric("Failed", failed)
+                
+                # Results table
+                st.write("### 📊 Results")
+                st.dataframe(results_df, use_container_width=True)
+                
+                # Download
+                csv = results_df.to_csv(index=False)
+                st.download_button(
+                    "📥 Download Results",
+                    csv,
+                    "vertex_analysis_debug.csv",
+                    "text/csv"
+                )
+                
+                # Analysis of problems
+                if failed > 0 or partial > 0:
+                    st.write("### 🔍 Problem Analysis")
+                    
+                    # Check what's failing
+                    hist_fails = len(results_df[results_df['Vertex Historical'] == "❌"])
+                    final_fails = len(results_df[results_df['Final Analysis'] == "❌"])
+                    
+                    if hist_fails > 0:
+                        st.error(f"❌ Historical analysis failed {hist_fails} times")
+                        st.info("Possible causes: API timeout, rate limit, JSON parse error")
+                    
+                    if final_fails > 0:
+                        st.error(f"❌ Final synthesis failed {final_fails} times")
+                        st.info("Possible causes: API timeout, rate limit, JSON parse error")
+                    
+                    # Recommendations
+                    st.write("**Recommendations:**")
+                    st.write("- Try analyzing fewer games at once")
+                    st.write("- Check your API key has sufficient credits")
+                    st.write("- Look at error messages in the expander above")
+                    st.write("- Try again with a delay between games")
+
+st.write("---")

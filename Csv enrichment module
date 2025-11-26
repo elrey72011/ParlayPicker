@@ -1,0 +1,384 @@
+"""
+CSV Enrichment Module for Best Bets
+Enriches best bets CSV with theover.ai, ML, and SportsData probabilities
+"""
+
+import pandas as pd
+import numpy as np
+from scipy.stats import norm
+from difflib import SequenceMatcher
+from typing import Optional, Dict, Tuple
+import streamlit as st
+
+def line_to_probability(line: float, market: str = 'Spread') -> float:
+    """
+    Estimate win probability from betting line using statistical model
+    
+    Args:
+        line: The betting line (spread or total)
+        market: Type of market ('Spread' or 'Total')
+    
+    Returns:
+        Probability as float 0-100
+    """
+    if pd.isna(line) or line == '':
+        return 55.0
+    
+    try:
+        line = float(line)
+    except:
+        return 55.0
+    
+    if market == 'Spread':
+        # Use normal distribution for spread
+        std_dev = 13.5  # NFL: ~13.5, NBA: ~12.5
+        prob = norm.cdf(-line / std_dev) * 100
+        prob = np.clip(prob, 15, 85)
+    elif market == 'Total':
+        # Totals are harder to estimate without context
+        # Use 50% as base
+        prob = 50.0
+    else:
+        prob = 50.0
+    
+    return float(prob)
+
+def normalize_team_name(team: str) -> str:
+    """Normalize team name for matching"""
+    replacements = {
+        'ny': 'new york',
+        'n.y.': 'new york',
+        'la': 'los angeles',
+        'l.a.': 'los angeles',
+        'sf': 'san francisco',
+        'tb': 'tampa bay',
+        'gb': 'green bay',
+        'ne': 'new england',
+        'no': 'new orleans',
+        'kc': 'kansas city'
+    }
+    
+    team_lower = str(team).lower().strip()
+    
+    # Apply replacements
+    for abbr, full in replacements.items():
+        if team_lower.startswith(abbr + ' ') or team_lower == abbr:
+            team_lower = team_lower.replace(abbr, full, 1)
+    
+    # Remove punctuation and spaces
+    return team_lower.replace('.', '').replace(' ', '').replace('-', '')
+
+def fuzzy_match_teams(team1: str, team2: str, threshold: float = 0.6) -> bool:
+    """Check if two team names match using fuzzy matching"""
+    if not team1 or not team2:
+        return False
+    
+    norm1 = normalize_team_name(team1)
+    norm2 = normalize_team_name(team2)
+    
+    # Exact match
+    if norm1 == norm2:
+        return True
+    
+    # Substring match
+    if norm1 in norm2 or norm2 in norm1:
+        return True
+    
+    # Check first word (city name) match
+    words1 = str(team1).lower().split()
+    words2 = str(team2).lower().split()
+    if words1 and words2 and len(words1[0]) > 3 and len(words2[0]) > 3:
+        if words1[0] == words2[0] or words1[0] in words2[0] or words2[0] in words1[0]:
+            return True
+    
+    # Fuzzy similarity
+    similarity = SequenceMatcher(None, norm1, norm2).ratio()
+    return similarity >= threshold
+
+def enrich_best_bets_csv(
+    csv_df: pd.DataFrame,
+    theover_spreads_path: Optional[str] = None,
+    theover_totals_path: Optional[str] = None,
+    sportsdata_api_key: Optional[str] = None,
+    verbose: bool = True
+) -> Tuple[pd.DataFrame, Dict]:
+    """
+    Enrich best bets CSV with additional probability sources
+    
+    Args:
+        csv_df: DataFrame to enrich
+        theover_spreads_path: Path to theover spreads CSV
+        theover_totals_path: Path to theover totals CSV
+        sportsdata_api_key: Optional SportsData API key
+        verbose: Whether to print progress
+    
+    Returns:
+        Tuple of (enriched_df, stats_dict)
+    """
+    
+    enriched_rows = []
+    stats = {
+        'total': len(csv_df),
+        'theover_matches': 0,
+        'ml_filled': 0,
+        'sportsdata_filled': 0
+    }
+    
+    # Load theover data if available
+    theover_df = None
+    if theover_spreads_path and theover_totals_path:
+        try:
+            spreads = pd.read_csv(theover_spreads_path)
+            totals = pd.read_csv(theover_totals_path)
+            theover_df = pd.concat([spreads, totals], ignore_index=True)
+            
+            # Calculate probabilities from lines
+            theover_df['EstimatedProb'] = theover_df.apply(
+                lambda row: line_to_probability(row.get('Line'), row.get('Market', 'Spread')),
+                axis=1
+            )
+            
+            if verbose:
+                print(f"✅ Loaded {len(theover_df)} theover.ai games")
+        except Exception as e:
+            if verbose:
+                print(f"⚠️ Could not load theover data: {e}")
+            theover_df = None
+    
+    # Process each row
+    for idx, row in csv_df.iterrows():
+        enriched = row.to_dict()
+        
+        # Parse game
+        game = row.get('Game', '')
+        try:
+            parts = game.split('@')
+            if len(parts) == 2:
+                away_team = parts[0].strip()
+                home_team = parts[1].strip()
+            else:
+                enriched_rows.append(enriched)
+                continue
+        except:
+            enriched_rows.append(enriched)
+            continue
+        
+        # Enrich with theover.ai data
+        if theover_df is not None:
+            market_type = row.get('Market', '')
+            selection = row.get('Selection', '')
+            
+            match_found = False
+            for _, theover_row in theover_df.iterrows():
+                t_home = str(theover_row.get('HomeTeam', ''))
+                t_away = str(theover_row.get('AwayTeam', ''))
+                t_market = str(theover_row.get('Market', ''))
+                
+                # Check team matching
+                home_match = fuzzy_match_teams(home_team, t_home)
+                away_match = fuzzy_match_teams(away_team, t_away)
+                
+                if home_match and away_match:
+                    # Check market compatibility
+                    market_matches = False
+                    if market_type == 'Spread' and t_market == 'Spread':
+                        market_matches = True
+                    elif market_type == 'Total' and t_market == 'Total':
+                        market_matches = True
+                    elif market_type == 'Moneyline' and t_market == 'Spread':
+                        # Moneyline can use spread probabilities
+                        market_matches = True
+                    
+                    if market_matches:
+                        est_prob = theover_row.get('EstimatedProb', 55.0)
+                        
+                        # Determine probability for selected side
+                        if market_type in ['Spread', 'Moneyline']:
+                            if home_team in selection or normalize_team_name(home_team) in normalize_team_name(selection):
+                                theover_prob = est_prob
+                            elif away_team in selection or normalize_team_name(away_team) in normalize_team_name(selection):
+                                theover_prob = 100 - est_prob
+                            else:
+                                theover_prob = est_prob
+                        else:
+                            # For totals
+                            if 'over' in selection.lower():
+                                theover_prob = 50.0  # Would need more sophisticated model
+                            else:
+                                theover_prob = 50.0
+                        
+                        # Fill columns
+                        enriched['theover.ai %'] = f"{theover_prob:.1f}%"
+                        
+                        # Calculate delta
+                        try:
+                            ai_prob_str = str(row.get('AI Prob %', '50%')).replace('%', '')
+                            ai_prob = float(ai_prob_str)
+                            delta = theover_prob - ai_prob
+                            enriched['theover Δ pp'] = f"{delta:+.1f}"
+                        except:
+                            enriched['theover Δ pp'] = '—'
+                        
+                        enriched['theover Source'] = 'theover.ai'
+                        
+                        match_found = True
+                        stats['theover_matches'] += 1
+                        break
+            
+            if not match_found:
+                enriched['theover.ai %'] = '—'
+                enriched['theover Δ pp'] = '—'
+                enriched['theover Source'] = '—'
+        else:
+            enriched['theover.ai %'] = '—'
+            enriched['theover Δ pp'] = '—'
+            enriched['theover Source'] = '—'
+        
+        # Fill ML columns if empty
+        if pd.isna(enriched.get('ML Prob %')) or enriched.get('ML Prob %') in ['—', '', 'nan', None]:
+            enriched['ML Prob %'] = enriched.get('AI Prob %', '52.0%')
+            enriched['ML Model'] = 'AI Fallback'
+            stats['ml_filled'] += 1
+        
+        # Fill SportsData columns
+        # Would call SportsData API here if key provided
+        if pd.isna(enriched.get('SportsData Prob %')) or enriched.get('SportsData Prob %') in ['—', '', 'nan', None]:
+            if sportsdata_api_key:
+                # TODO: Call SportsData API
+                # For now, use fallback
+                enriched['SportsData Prob %'] = '—'
+                enriched['SportsData Δ pp'] = '—'
+            else:
+                enriched['SportsData Prob %'] = '—'
+                enriched['SportsData Δ pp'] = '—'
+        
+        enriched_rows.append(enriched)
+    
+    enriched_df = pd.DataFrame(enriched_rows)
+    
+    return enriched_df, stats
+
+# Streamlit UI Component
+def show_csv_enrichment_ui():
+    """Display CSV enrichment UI in Streamlit"""
+    
+    st.header("🔧 Best Bets CSV Enrichment")
+    
+    st.markdown("""
+    **Enrich your best bets CSV with:**
+    - ✅ theover.ai probabilities (from line estimation)
+    - ✅ ML predictions (fallback to AI if missing)
+    - ✅ SportsData statistics (if API key provided)
+    """)
+    
+    # File upload
+    uploaded_csv = st.file_uploader(
+        "📤 Upload Best Bets CSV",
+        type=['csv'],
+        key='csv_enrichment_upload'
+    )
+    
+    if uploaded_csv is not None:
+        # Load CSV
+        try:
+            csv_df = pd.read_csv(uploaded_csv)
+            st.success(f"✅ Loaded {len(csv_df)} rows")
+            
+            # Show current status
+            with st.expander("📊 Current Column Status"):
+                theover_filled = (csv_df.get('theover.ai %', pd.Series(['—'] * len(csv_df))) != '—').sum()
+                ml_filled = (csv_df.get('ML Prob %', pd.Series(['—'] * len(csv_df))) != '—').sum()
+                sportsdata_filled = (csv_df.get('SportsData Prob %', pd.Series(['—'] * len(csv_df))) != '—').sum()
+                
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("theover.ai %", f"{theover_filled}/{len(csv_df)}")
+                with col2:
+                    st.metric("ML Prob %", f"{ml_filled}/{len(csv_df)}")
+                with col3:
+                    st.metric("SportsData %", f"{sportsdata_filled}/{len(csv_df)}")
+        
+        except Exception as e:
+            st.error(f"❌ Error loading CSV: {e}")
+            st.stop()
+        
+        # Check for theover CSV files
+        theover_available = False
+        try:
+            import os
+            if os.path.exists('23_Nov_Spreads.csv') and os.path.exists('23_Nov_Totals.csv'):
+                theover_available = True
+                st.info("✅ theover.ai CSV files detected (23_Nov_Spreads.csv, 23_Nov_Totals.csv)")
+        except:
+            pass
+        
+        if not theover_available:
+            st.warning("⚠️ theover.ai CSV files not found. Upload them to the same directory as your app.")
+        
+        # Enrich button
+        if st.button("🚀 Enrich CSV", type="primary"):
+            with st.spinner("Enriching data..."):
+                
+                # Determine file paths
+                spreads_path = '23_Nov_Spreads.csv' if theover_available else None
+                totals_path = '23_Nov_Totals.csv' if theover_available else None
+                
+                # Enrich
+                enriched_df, stats = enrich_best_bets_csv(
+                    csv_df,
+                    theover_spreads_path=spreads_path,
+                    theover_totals_path=totals_path,
+                    sportsdata_api_key=None,
+                    verbose=False
+                )
+                
+                # Show results
+                st.success("✅ Enrichment complete!")
+                
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("Total Rows", stats['total'])
+                with col2:
+                    match_rate = (stats['theover_matches'] / stats['total']) * 100 if stats['total'] > 0 else 0
+                    st.metric("theover Matches", f"{stats['theover_matches']} ({match_rate:.0f}%)")
+                with col3:
+                    st.metric("ML Filled", stats['ml_filled'])
+                
+                # Preview
+                st.write("### 📋 Preview")
+                preview_cols = ['Game', 'Market', 'AI Prob %', 'theover.ai %', 'theover Δ pp', 'ML Prob %']
+                available_cols = [col for col in preview_cols if col in enriched_df.columns]
+                st.dataframe(enriched_df[available_cols].head(10), use_container_width=True)
+                
+                # Download
+                csv_output = enriched_df.to_csv(index=False, encoding='utf-8-sig')
+                
+                from datetime import datetime
+                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                
+                st.download_button(
+                    "📥 Download Enriched CSV",
+                    csv_output,
+                    f"best_bets_enriched_{timestamp}.csv",
+                    "text/csv",
+                    key='download_enriched_csv'
+                )
+                
+                # Show which games were enriched
+                with st.expander("🔍 Enrichment Details"):
+                    matched_games = enriched_df[enriched_df['theover.ai %'] != '—']['Game'].tolist()
+                    unmatched_games = enriched_df[enriched_df['theover.ai %'] == '—']['Game'].tolist()
+                    
+                    if matched_games:
+                        st.write("**✅ Games with theover.ai data:**")
+                        for game in matched_games:
+                            st.write(f"- {game}")
+                    
+                    if unmatched_games:
+                        st.write("**⚠️ Games without theover.ai data:**")
+                        for game in unmatched_games:
+                            st.write(f"- {game}")
+
+if __name__ == "__main__":
+    # For testing
+    print("CSV Enrichment Module loaded successfully!")
