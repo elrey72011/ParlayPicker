@@ -10120,15 +10120,15 @@ if is_vertex_ai_enabled():
                     })
 
                 # =====================================================
-                # SINGLE BEST PICK PER GAME - ALWAYS GENERATE
-                # Clear old format and generate one pick per game
+                # BEST BETS - EDGE-BASED AND CONSENSUS PICKS
+                # Find picks where AI has an edge over the market
+                # and multiple signals agree
                 # =====================================================
                 
-                # Clear any old-format rows and start fresh
                 best_bets_rows = []
                 skipped_low_conf = 0
                 
-                st.info(f"📊 Generating Best Bets from {len(vertex_results)} Vertex AI analyzed games")
+                st.info(f"📊 Analyzing {len(vertex_results)} games for Best Bets (Edge + Consensus)")
                 
                 for vertex_result in vertex_results:
                     home_team = vertex_result.get('home_team', 'Home')
@@ -10142,152 +10142,155 @@ if is_vertex_ai_enabled():
                         skipped_low_conf += 1
                         continue
                     
-                    # Get spread and TheOver.ai data
-                    raw_spread = vertex_result.get('theover_spread', 0) or vertex_result.get('spread', 0) or 0
+                    # =====================================================
+                    # GET THEOVER.AI PICK AND PROBABILITY
+                    # This is the recommended bet from TheOver.ai
+                    # =====================================================
                     theover_pick = vertex_result.get('theover_pick', '') or ''
                     theover_prob = vertex_result.get('theover_probability', None)
+                    theover_spread = vertex_result.get('theover_spread', 0) or 0
                     
-                    # Convert theover_prob to percentage if needed
+                    # Skip games without TheOver.ai data
+                    if not theover_pick:
+                        continue
+                    
+                    # Convert to percentage if needed
                     if theover_prob is not None and theover_prob <= 1:
                         theover_prob = theover_prob * 100
                     
-                    spread_magnitude = abs(raw_spread) if raw_spread else 0
-                    
-                    # Get odds from stored data
+                    # =====================================================
+                    # GET MARKET ODDS AND CALCULATE IMPLIED PROBABILITY
+                    # =====================================================
                     home_ml = vertex_result.get('home_ml_odds') or -110
                     away_ml = vertex_result.get('away_ml_odds') or -110
-                    
-                    # =====================================================
-                    # DETERMINE FAVORITE USING THEOVER.AI PROBABILITY
-                    # TheOver.ai prob is the WIN probability for their pick
-                    # =====================================================
                     
                     # Determine which team TheOver picked
                     theover_pick_lower = theover_pick.lower() if theover_pick else ''
                     home_lower = home_team.lower()
-                    away_lower = away_team.lower()
                     
                     theover_picked_home = any(word in home_lower for word in theover_pick_lower.split()) if theover_pick_lower else False
                     
-                    if theover_prob is not None and theover_prob > 0:
-                        # USE THEOVER.AI PROBABILITY DIRECTLY
-                        # theover_prob is the win probability of their picked team
-                        if theover_picked_home:
-                            home_ml_prob = theover_prob
-                            away_ml_prob = 100 - theover_prob
-                        else:
-                            away_ml_prob = theover_prob
-                            home_ml_prob = 100 - theover_prob
-                    elif home_ml != -110 or away_ml != -110:
-                        # Use ML odds if available
-                        if home_ml < 0:
-                            home_ml_prob = abs(home_ml) / (abs(home_ml) + 100) * 100
-                        else:
-                            home_ml_prob = 100 / (home_ml + 100) * 100 if home_ml > 0 else 50
-                        
-                        if away_ml < 0:
-                            away_ml_prob = abs(away_ml) / (abs(away_ml) + 100) * 100
-                        else:
-                            away_ml_prob = 100 / (away_ml + 100) * 100 if away_ml > 0 else 50
-                        
-                        # Normalize
-                        total = home_ml_prob + away_ml_prob
-                        if total > 0:
-                            home_ml_prob = (home_ml_prob / total) * 100
-                            away_ml_prob = (away_ml_prob / total) * 100
-                    elif spread_magnitude >= 3:
-                        # Use spread for probability estimate
-                        # Negative spread = favorite, positive = underdog
-                        if raw_spread < 0:
-                            # Picked team is favorite
-                            fav_prob = 50 + (spread_magnitude * 2.25)
-                            fav_prob = min(90, fav_prob)
-                            if theover_picked_home:
-                                home_ml_prob = fav_prob
-                                away_ml_prob = 100 - fav_prob
-                            else:
-                                away_ml_prob = fav_prob
-                                home_ml_prob = 100 - fav_prob
-                        else:
-                            # Picked team is underdog
-                            dog_prob = 50 - (spread_magnitude * 2.25)
-                            dog_prob = max(10, dog_prob)
-                            if theover_picked_home:
-                                home_ml_prob = dog_prob
-                                away_ml_prob = 100 - dog_prob
-                            else:
-                                away_ml_prob = dog_prob
-                                home_ml_prob = 100 - dog_prob
+                    # Get the ML odds for the picked team
+                    if theover_picked_home:
+                        pick_ml_odds = home_ml
+                        pick_team = home_team
                     else:
-                        home_ml_prob = 50
-                        away_ml_prob = 50
+                        pick_ml_odds = away_ml
+                        pick_team = away_team
                     
-                    # Get sentiment and Kalshi data
-                    sentiment_diff = vertex_result.get('sentiment_diff', 0)
+                    # Calculate market implied probability from ML odds
+                    if pick_ml_odds and pick_ml_odds != 0:
+                        if pick_ml_odds < 0:
+                            market_implied_prob = abs(pick_ml_odds) / (abs(pick_ml_odds) + 100) * 100
+                        else:
+                            market_implied_prob = 100 / (pick_ml_odds + 100) * 100
+                    else:
+                        market_implied_prob = 50
+                    
+                    # =====================================================
+                    # GET AI/ML PREDICTION
+                    # Vertex AI win probability for the picked team
+                    # =====================================================
+                    vertex_ai_prob = vertex_result.get('vertex_ai_prob') or vertex_result.get('vertex_prob')
+                    if vertex_ai_prob is not None and vertex_ai_prob <= 1:
+                        vertex_ai_prob = vertex_ai_prob * 100
+                    
+                    # If no Vertex AI prob, use TheOver.ai prob as the AI prediction
+                    ai_win_prob = vertex_ai_prob if vertex_ai_prob else theover_prob
+                    if ai_win_prob is None:
+                        ai_win_prob = 50
+                    
+                    # =====================================================
+                    # CALCULATE EDGE
+                    # Edge = AI Probability - Market Implied Probability
+                    # =====================================================
+                    edge_pp = ai_win_prob - market_implied_prob  # Edge in percentage points
+                    
+                    # Calculate Expected Value (EV)
+                    # EV = (Win Prob * Potential Profit) - (Lose Prob * Stake)
+                    if pick_ml_odds and pick_ml_odds != 0:
+                        if pick_ml_odds > 0:
+                            potential_profit = pick_ml_odds / 100  # Per $1 bet
+                        else:
+                            potential_profit = 100 / abs(pick_ml_odds)
+                        
+                        ev_per_dollar = (ai_win_prob / 100 * potential_profit) - ((100 - ai_win_prob) / 100)
+                        ev_pct = ev_per_dollar * 100
+                    else:
+                        ev_pct = 0
+                    
+                    # =====================================================
+                    # CHECK CONSENSUS SIGNALS
+                    # =====================================================
+                    
+                    # Sentiment
+                    sentiment_diff = vertex_result.get('sentiment_diff', 0) or 0
+                    if theover_picked_home:
+                        sentiment_agrees = sentiment_diff > 0
+                    else:
+                        sentiment_agrees = sentiment_diff < 0
+                    
+                    # Kalshi
                     kalshi_available = vertex_result.get('kalshi_available', False)
-                    kalshi_prob = vertex_result.get('kalshi_prob', 0.5) or 0.5
-                    kalshi_home = kalshi_prob * 100
-                    kalshi_away = 100 - kalshi_home
+                    kalshi_prob = vertex_result.get('kalshi_prob', 0.5)
+                    if kalshi_prob and kalshi_prob <= 1:
+                        kalshi_prob = kalshi_prob * 100
+                    
+                    if theover_picked_home:
+                        kalshi_agrees = kalshi_available and kalshi_prob > 50
+                        kalshi_pick_prob = kalshi_prob if kalshi_available else None
+                    else:
+                        kalshi_agrees = kalshi_available and kalshi_prob < 50
+                        kalshi_pick_prob = (100 - kalshi_prob) if kalshi_available else None
+                    
+                    # Count consensus signals
+                    consensus_count = 0
+                    if theover_prob and theover_prob > 50:  # TheOver.ai likes their pick
+                        consensus_count += 1
+                    if sentiment_agrees:
+                        consensus_count += 1
+                    if kalshi_agrees:
+                        consensus_count += 1
+                    if ai_win_prob > 55:  # AI has conviction
+                        consensus_count += 1
                     
                     # =====================================================
-                    # DETERMINE THE FAVORITE (MOST LIKELY WINNER)
-                    # Always pick the team with higher win probability
+                    # FORMAT THE PICK
                     # =====================================================
-                    
-                    if home_ml_prob >= away_ml_prob:
-                        # HOME team is favorite
-                        fav_team = home_team
-                        fav_prob = home_ml_prob
-                        # Favorite always has NEGATIVE spread
-                        fav_spread = -spread_magnitude if spread_magnitude else 0
-                        fav_ml_odds = home_ml
-                        fav_sentiment = '✅' if sentiment_diff > 0 else ('❌' if sentiment_diff < 0 else '—')
-                        fav_kalshi_agrees = '✅' if (kalshi_available and kalshi_home > 50) else ('❌' if kalshi_available else '—')
-                        fav_kalshi_pct = kalshi_home if kalshi_available else None
-                    else:
-                        # AWAY team is favorite
-                        fav_team = away_team
-                        fav_prob = away_ml_prob
-                        # Favorite always has NEGATIVE spread
-                        fav_spread = -spread_magnitude if spread_magnitude else 0
-                        fav_ml_odds = away_ml
-                        fav_sentiment = '✅' if sentiment_diff < 0 else ('❌' if sentiment_diff > 0 else '—')
-                        fav_kalshi_agrees = '✅' if (kalshi_available and kalshi_away > 50) else ('❌' if kalshi_available else '—')
-                        fav_kalshi_pct = kalshi_away if kalshi_available else None
-                    
-                    # Format the pick string
-                    if fav_spread and fav_spread != 0:
-                        # Favorite always shows NEGATIVE spread (giving points)
-                        pick_str = f"{fav_team} {fav_spread:.1f}"
-                    else:
-                        pick_str = f"{fav_team} ML"
-                    
-                    # Format odds
-                    if fav_ml_odds and fav_ml_odds != 0:
-                        if fav_ml_odds > 0:
-                            odds_str = f"+{int(fav_ml_odds)}"
+                    spread_magnitude = abs(theover_spread) if theover_spread else 0
+                    if spread_magnitude > 0:
+                        if theover_spread > 0:
+                            pick_str = f"{pick_team} +{spread_magnitude:.1f}"
                         else:
-                            odds_str = str(int(fav_ml_odds))
+                            pick_str = f"{pick_team} -{spread_magnitude:.1f}"
+                    else:
+                        pick_str = f"{pick_team} ML"
+                    
+                    # Format odds string
+                    if pick_ml_odds and pick_ml_odds != 0:
+                        if pick_ml_odds > 0:
+                            odds_str = f"+{int(pick_ml_odds)}"
+                        else:
+                            odds_str = str(int(pick_ml_odds))
                     else:
                         odds_str = "-110"
                     
-                    # Calculate composite score for ranking
-                    composite = fav_prob
-                    if fav_sentiment == '✅':
-                        composite += 10
-                    if fav_kalshi_agrees == '✅':
-                        composite += 15
-                    
-                    # Add the SINGLE BEST PICK (the favorite)
+                    # =====================================================
+                    # ADD TO BEST BETS
+                    # =====================================================
                     best_bets_rows.append({
                         'League': league,
                         'Game': f"{away_team} @ {home_team}",
                         'THE PICK': pick_str,
-                        'Win %': round(fav_prob, 1),
-                        'Composite': round(composite, 1),
-                        'Sentiment': fav_sentiment,
-                        'Kalshi': fav_kalshi_agrees,
-                        'Kalshi %': f"{fav_kalshi_pct:.0f}" if fav_kalshi_pct else '—',
+                        'AI Win %': round(ai_win_prob, 1),
+                        'Market %': round(market_implied_prob, 1),
+                        'Edge': round(edge_pp, 1),
+                        'EV': f"${ev_pct:.2f}",
+                        'Consensus': f"{consensus_count}/4",
+                        'Sentiment': '✅' if sentiment_agrees else '❌',
+                        'Kalshi': '✅' if kalshi_agrees else ('❌' if kalshi_available else '—'),
+                        'Kalshi %': f"{kalshi_pick_prob:.0f}" if kalshi_pick_prob else '—',
+                        'TheOver %': f"{theover_prob:.0f}" if theover_prob else '—',
                         'Odds': odds_str,
                         'Confidence': round(confidence, 1),
                     })
@@ -10299,53 +10302,70 @@ if is_vertex_ai_enabled():
                 if best_bets_rows:
                     best_bets_df = pd.DataFrame(best_bets_rows)
                     
-                    # Sort by Win % (highest first)
-                    if 'Win %' in best_bets_df.columns:
-                        best_bets_df = best_bets_df.sort_values('Win %', ascending=False)
+                    # Convert Edge to numeric for sorting
+                    best_bets_df['Edge_numeric'] = pd.to_numeric(best_bets_df['Edge'], errors='coerce')
+                    
+                    # Sort by Edge (highest first) - this shows the best value bets first
+                    best_bets_df = best_bets_df.sort_values('Edge_numeric', ascending=False)
                     
                     # Add rank column
                     best_bets_df.insert(0, 'Rank', range(1, len(best_bets_df) + 1))
                     
                     # Calculate summary stats
                     total_games = len(best_bets_df)
-                    avg_win_prob = best_bets_df['Win %'].mean() if 'Win %' in best_bets_df.columns else 50.0
+                    avg_edge = best_bets_df['Edge_numeric'].mean() if 'Edge_numeric' in best_bets_df.columns else 0
+                    positive_edge = len(best_bets_df[best_bets_df['Edge_numeric'] > 0])
+                    high_consensus = len(best_bets_df[best_bets_df['Consensus'].isin(['3/4', '4/4'])])
                     kalshi_agrees = len(best_bets_df[best_bets_df['Kalshi'] == '✅']) if 'Kalshi' in best_bets_df.columns else 0
                     sentiment_agrees = len(best_bets_df[best_bets_df['Sentiment'] == '✅']) if 'Sentiment' in best_bets_df.columns else 0
 
-                    st.success(f"🎯 **{total_games} Games - ONE Best Pick Per Game**")
+                    st.success(f"🎯 **{total_games} Games Analyzed - Edge + Consensus Ranking**")
 
                     # Display metrics
                     col1, col2, col3, col4 = st.columns(4)
                     with col1:
-                        st.metric("Total Games", total_games)
+                        st.metric("Positive Edge", f"{positive_edge}/{total_games}")
                     with col2:
-                        st.metric("Avg Win %", f"{avg_win_prob:.1f}%")
+                        st.metric("Avg Edge", f"{avg_edge:+.1f}%")
                     with col3:
-                        st.metric("Kalshi Agrees", f"{kalshi_agrees}/{total_games}")
+                        st.metric("High Consensus (3-4/4)", high_consensus)
                     with col4:
-                        st.metric("Sentiment Agrees", f"{sentiment_agrees}/{total_games}")
+                        st.metric("Kalshi + Sentiment", f"{kalshi_agrees}K / {sentiment_agrees}S")
                     
-                    # Display columns
-                    display_cols = ['Rank', 'League', 'Game', 'THE PICK', 'Win %', 'Composite', 
-                                   'Sentiment', 'Kalshi', 'Kalshi %', 'Odds', 'Confidence']
+                    # Display columns - new edge-based format
+                    display_cols = ['Rank', 'League', 'Game', 'THE PICK', 'AI Win %', 'Market %', 
+                                   'Edge', 'EV', 'Consensus', 'Sentiment', 'Kalshi', 'Kalshi %', 
+                                   'TheOver %', 'Odds', 'Confidence']
                     display_cols = [c for c in display_cols if c in best_bets_df.columns]
                     
-                    # Show the single best picks table
-                    st.subheader("🏆 SINGLE BEST PICK PER GAME")
+                    # Show the best bets table
+                    st.subheader("🏆 BEST BETS - Ranked by Edge")
+                    st.caption("Edge = AI Win % - Market Implied %. Positive edge = potential value.")
                     st.dataframe(
                         best_bets_df[display_cols],
                         use_container_width=True,
                         hide_index=True
                     )
                     
+                    # Show top picks with high consensus
+                    if high_consensus > 0:
+                        st.subheader("⭐ TOP CONSENSUS PICKS (3-4 signals agree)")
+                        consensus_picks = best_bets_df[best_bets_df['Consensus'].isin(['3/4', '4/4'])]
+                        if len(consensus_picks) > 0:
+                            st.dataframe(
+                                consensus_picks[display_cols],
+                                use_container_width=True,
+                                hide_index=True
+                            )
+                    
                     # CSV Download
                     csv_buffer = best_bets_df[display_cols].to_csv(index=False)
                     st.download_button(
-                        "⬇️ Download Best Picks (CSV)",
+                        "⬇️ Download Best Bets (CSV)",
                         data=csv_buffer,
-                        file_name=f"best_picks_{pd.Timestamp.now().strftime('%Y-%m-%d')}.csv",
+                        file_name=f"best_bets_{pd.Timestamp.now().strftime('%Y-%m-%d')}.csv",
                         mime="text/csv",
-                        key="single_picks_csv"
+                        key="best_bets_csv"
                     )
                     
                     # Store for parlay generation
