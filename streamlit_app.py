@@ -9097,9 +9097,6 @@ with main_tab1:
             st.info("💡 Upload spread or totals picks above to enable Vertex AI analysis")
     
     st.markdown("---")
-    st.subheader("🏆 Best Overall Odds for Date Range")
-
-    # After "Best Overall Odds for Date Range" section
 
 # VERTEX AI MASTER ANALYSIS
 
@@ -9692,74 +9689,10 @@ if is_vertex_ai_enabled():
     render_saved_parlay_tracker(tracker_clients, user_timezone_label)
 
     st.markdown("---")
-    st.subheader("🏆 Best Overall Odds for Date Range")
 
+    # Default date range for AI/ML Best Bet section
     default_start = sel_date - timedelta(days=_day_window or 0)
     default_end = sel_date + timedelta(days=_day_window or 0)
-
-    col_start, col_end, col_action = st.columns([1, 1, 1])
-    with col_start:
-        best_odds_start = st.date_input(
-            "Start date",
-            value=default_start,
-            key="best_odds_start",
-        )
-    with col_end:
-        best_odds_end = st.date_input(
-            "End date",
-            value=default_end,
-            key="best_odds_end",
-        )
-    with col_action:
-        fetch_best_odds = st.button(
-            "Show Best Odds",
-            key="best_odds_button",
-            use_container_width=True,
-        )
-
-    if fetch_best_odds:
-        odds_key = st.session_state.get('api_key', "") or os.environ.get("ODDS_API_KEY", "") or st.secrets.get("ODDS_API_KEY", "")
-        if not odds_key:
-            st.error("Configure your The Odds API key to pull live odds data.")
-        else:
-            with st.spinner("Calculating top prices across sportsbooks..."):
-                best_odds_df = build_best_odds_report(
-                    odds_key,
-                    active_sports_list,
-                    best_odds_start,
-                    best_odds_end,
-                    sidebar_state["timezone_name"],
-                )
-
-            if best_odds_df.empty:
-                st.info("No qualifying odds found for the selected range.")
-            else:
-                display_df = best_odds_df.copy()
-                if "decimal_odds" in display_df.columns:
-                    display_df["decimal_odds"] = pd.to_numeric(display_df["decimal_odds"], errors='coerce')
-                    display_df["decimal_odds"] = display_df["decimal_odds"].apply(
-                        lambda x: f"{float(x):.3f}" if pd.notna(x) and isinstance(x, (int, float)) else "—"
-                    )
-                if "line" in display_df.columns:
-                    display_df["line"] = pd.to_numeric(display_df["line"], errors='coerce')
-                    display_df["line"] = display_df["line"].apply(
-                        lambda x: f"{float(x):.1f}" if pd.notna(x) and isinstance(x, (int, float)) else "—"
-                    )
-
-                st.dataframe(display_df, use_container_width=True, hide_index=True)
-
-                csv_export = best_odds_df.to_csv(index=False)
-                file_name = (
-                    f"best_odds_{best_odds_start.isoformat()}_{best_odds_end.isoformat()}.csv"
-                )
-                st.download_button(
-                    "💾 Download best odds CSV",
-                    data=csv_export,
-                    file_name=file_name,
-                    mime="text/csv",
-                    key="best_odds_download",
-                )
-
 
     st.subheader("🤖 AI/ML Best Bet Per Game (Parlay View)")
 
