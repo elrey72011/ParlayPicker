@@ -832,16 +832,9 @@ class VertexMasterAnalyzer:
                 # Get Vertex AI ultimate prediction
                 vertex_prob = get_vertex_ai_prediction(vertex_features, game_context)
                 
-                # Track ML source
-                ml_source = 'unknown'
-                if vertex_prob is not None and not (0.57 <= vertex_prob <= 0.59):
-                    # Real ML prediction (Claude or GCP Vertex)
-                    if st.session_state.get('gcp_project_id') and st.session_state.get('vertex_endpoint_id'):
-                        ml_source = 'gcp_vertex'
-                        ml_sources_used['gcp_vertex'] += 1
-                    else:
-                        ml_source = 'anthropic_claude'
-                        ml_sources_used['anthropic_claude'] += 1
+                # Get actual ML source from session state (set by get_vertex_ai_prediction)
+                initial_ml_source = st.session_state.get('last_ml_source', 'unknown')
+                ml_source = initial_ml_source  # May be overridden below
                 
                 # If vertex_prob is the fallback value (0.58), use spread-derived probability instead
                 theover_prob_raw = comp_features.get('theover_probability') or game.get('theover_probability')
@@ -893,12 +886,25 @@ class VertexMasterAnalyzer:
                         # Blend theover (now HOME prob) with implied for final prediction
                         vertex_prob = theover_prob * 0.6 + implied_prob * 0.4
                         ml_source = 'spread_derived'
-                        ml_sources_used['spread_derived'] += 1
                         logger.info(f"Using spread-derived prob for {game.get('home_team')}: {vertex_prob:.3f}")
                     else:
                         vertex_prob = implied_prob
                         ml_source = 'fallback_heuristic'
-                        ml_sources_used['fallback_heuristic'] += 1
+                else:
+                    # Real ML prediction was used (Claude or GCP Vertex)
+                    # ml_source already set from initial_ml_source
+                    pass
+                
+                # Track the FINAL ml_source used
+                if ml_source in ml_sources_used:
+                    ml_sources_used[ml_source] += 1
+                elif ml_source == 'heuristic':
+                    ml_sources_used['fallback_heuristic'] += 1
+                elif ml_source == 'local_model':
+                    ml_sources_used['fallback_heuristic'] += 1
+                else:
+                    # Unknown source - count as fallback
+                    ml_sources_used['fallback_heuristic'] += 1
 
                 # Ensure vertex_prob is valid
                 if vertex_prob is None or pd.isna(vertex_prob):
