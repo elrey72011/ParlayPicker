@@ -80,21 +80,26 @@ def get_vertex_ai_prediction(features: List[float], game_context: Dict = None) -
         
     Returns:
         Probability between 0 and 1, or None if prediction fails
+        
+    Also sets st.session_state['last_ml_source'] to track which method was used
     """
     if not is_vertex_ai_enabled():
         logger.info("AI predictions not enabled")
+        st.session_state['last_ml_source'] = 'disabled'
         return None
     
     # Try GCP Vertex AI endpoint first
     vertex_result = _try_vertex_ai_endpoint(features)
     if vertex_result is not None:
         logger.info(f"✅ GCP Vertex AI prediction: {vertex_result:.3f}")
+        st.session_state['last_ml_source'] = 'gcp_vertex'
         return vertex_result
     
     # Try Anthropic Claude as fallback
     anthropic_result = _try_anthropic_claude_prediction(features, game_context)
     if anthropic_result is not None:
         logger.info(f"✅ Anthropic Claude prediction: {anthropic_result:.3f}")
+        st.session_state['last_ml_source'] = 'anthropic_claude'
         return anthropic_result
     
     # Fall back to local model
@@ -102,10 +107,12 @@ def get_vertex_ai_prediction(features: List[float], game_context: Dict = None) -
     local_result = _try_local_model_prediction(features)
     if local_result is not None:
         logger.info(f"✅ Local model prediction: {local_result:.3f}")
+        st.session_state['last_ml_source'] = 'local_model'
         return local_result
     
     # Ultimate fallback: use feature-based heuristic for demo purposes
     logger.warning("No model available, using feature-based heuristic")
+    st.session_state['last_ml_source'] = 'heuristic'
     return _calculate_heuristic_prediction(features)
 
 
