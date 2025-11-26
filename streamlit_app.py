@@ -8898,13 +8898,19 @@ with main_tab1:
                                     else:
                                         home_implied_prob = 0.5
                                     
-                                    # For NHL, theover_prob = home team win probability
-                                    theover_prob = home_implied_prob
+                                    # Determine if pick is home or away
+                                    pick_is_home = (pick == home_team or pick.lower() in home_team.lower() or home_team.lower() in pick.lower())
                                     
-                                    home_ml = int(moneyline) if pick == home_team else int(-moneyline * 0.9)
-                                    away_ml = int(-moneyline * 0.9) if pick == home_team else int(moneyline)
+                                    # theover_prob = PICKED team's win probability (NOT home team!)
+                                    if pick_is_home:
+                                        theover_prob = home_implied_prob
+                                    else:
+                                        theover_prob = 1.0 - home_implied_prob  # Away team's probability
+                                    
+                                    home_ml = int(moneyline) if pick_is_home else int(-moneyline * 0.9)
+                                    away_ml = int(-moneyline * 0.9) if pick_is_home else int(moneyline)
                                     spread = 1.5  # Standard puckline
-                                    home_spread = spread  # Will be adjusted below
+                                    home_spread = spread if pick_is_home else -spread
                                 else:
                                     # Basketball/Football - line is spread for the PICK team
                                     # Negative spread = favorite, Positive spread = underdog
@@ -8914,9 +8920,11 @@ with main_tab1:
                                     if pick == away_team or pick.lower() in away_team.lower() or away_team.lower() in pick.lower():
                                         # Pick is away team, so home_spread is opposite
                                         home_spread = -pick_spread
+                                        pick_is_home = False
                                     else:
                                         # Pick is home team
                                         home_spread = pick_spread
+                                        pick_is_home = True
                                     
                                     # Calculate home team win probability from HOME spread
                                     # Negative home_spread = home team is favorite = higher win prob
@@ -8924,15 +8932,11 @@ with main_tab1:
                                     home_implied_prob = 0.5 - (home_spread * 0.028)
                                     home_implied_prob = max(0.15, min(0.85, home_implied_prob))
                                     
-                                    # theover_probability = home team win probability
-                                    theover_prob = home_implied_prob
-                                    
-                                    # Add slight boost based on TheOver.ai pick (they have edge)
-                                    pick_boost = 0.02
-                                    if pick == home_team or pick.lower() in home_team.lower() or home_team.lower() in pick.lower():
-                                        theover_prob = min(0.85, theover_prob + pick_boost)
+                                    # theover_probability = PICKED team's win probability (NOT home team!)
+                                    if pick_is_home:
+                                        theover_prob = home_implied_prob
                                     else:
-                                        theover_prob = max(0.15, theover_prob - pick_boost)
+                                        theover_prob = 1.0 - home_implied_prob  # Away team's probability
                                     
                                     # Calculate moneylines from home implied probability
                                     if home_implied_prob > 0.5:
