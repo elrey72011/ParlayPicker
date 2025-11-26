@@ -9933,17 +9933,26 @@ if is_vertex_ai_enabled():
 
                 # Filter controls (already set above)
                 for vertex_result in vertex_results:
+                    result_game_id = (
+                        vertex_result.get('game_id')
+                        or vertex_result.get('id')
+                        or vertex_result.get('event_id')
+                    )
+                    if not result_game_id:
+                        logger.warning("Vertex result missing game identifier; skipping entry: %s", vertex_result)
+                        continue
+
                     matching_game = None
                     for game in odds_data:
-                        if game['id'] == vertex_result['game_id']:
+                        if game.get('id') == result_game_id:
                             matching_game = game
                             break
 
                     if not matching_game:
                         continue
 
-                    home_team = vertex_result['home_team']
-                    away_team = vertex_result['away_team']
+                    home_team = vertex_result.get('home_team') or matching_game.get('home_team')
+                    away_team = vertex_result.get('away_team') or matching_game.get('away_team')
 
                     raw_vertex_prob = _safe_float(vertex_result.get('vertex_probability'))
                     raw_confidence = _safe_float(vertex_result.get('confidence'))
@@ -10002,7 +10011,7 @@ if is_vertex_ai_enabled():
                                     continue
 
                                 leg_entry = {
-                                    'event_id': vertex_result['game_id'],
+                                    'event_id': result_game_id,
                                     'type': leg_type,
                                     'team': team_or_side,
                                     'side': side_value,
@@ -10013,10 +10022,10 @@ if is_vertex_ai_enabled():
                                     'ai_prob_pre_theover': ai_prob_dec,
                                     'ai_confidence': confidence_fraction,
                                     'd': decimal_odds,
-                                    'sport_key': vertex_result['sport'],
+                                    'sport_key': vertex_result.get('sport') or matching_game.get('sport_key'),
                                     'home_team': home_team,
                                     'away_team': away_team,
-                                    'commence_time': vertex_result['commence_time'],
+                                    'commence_time': vertex_result.get('commence_time') or matching_game.get('commence_time'),
                                     'ml_probability': ai_prob_dec,
                                     'bookmaker': bookmaker_name,
                                     'best_american': odds,
