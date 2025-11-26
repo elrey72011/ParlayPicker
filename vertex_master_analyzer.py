@@ -786,6 +786,14 @@ class VertexMasterAnalyzer:
             return pd.DataFrame()
 
         results = []
+        
+        # Track which ML methods are being used
+        ml_sources_used = {
+            'anthropic_claude': 0,
+            'gcp_vertex': 0, 
+            'spread_derived': 0,
+            'fallback_heuristic': 0
+        }
 
         st.write(f"🤖 Analyzing {len(games)} games with Vertex AI Master Analyzer...")
         progress = st.progress(0)
@@ -823,6 +831,17 @@ class VertexMasterAnalyzer:
 
                 # Get Vertex AI ultimate prediction
                 vertex_prob = get_vertex_ai_prediction(vertex_features, game_context)
+                
+                # Track ML source
+                ml_source = 'unknown'
+                if vertex_prob is not None and not (0.57 <= vertex_prob <= 0.59):
+                    # Real ML prediction (Claude or GCP Vertex)
+                    if st.session_state.get('gcp_project_id') and st.session_state.get('vertex_endpoint_id'):
+                        ml_source = 'gcp_vertex'
+                        ml_sources_used['gcp_vertex'] += 1
+                    else:
+                        ml_source = 'anthropic_claude'
+                        ml_sources_used['anthropic_claude'] += 1
                 
                 # If vertex_prob is the fallback value (0.58), use spread-derived probability instead
                 theover_prob_raw = comp_features.get('theover_probability') or game.get('theover_probability')
@@ -873,9 +892,13 @@ class VertexMasterAnalyzer:
                     if theover_prob and theover_prob != 0 and not pd.isna(theover_prob):
                         # Blend theover (now HOME prob) with implied for final prediction
                         vertex_prob = theover_prob * 0.6 + implied_prob * 0.4
+                        ml_source = 'spread_derived'
+                        ml_sources_used['spread_derived'] += 1
                         logger.info(f"Using spread-derived prob for {game.get('home_team')}: {vertex_prob:.3f}")
                     else:
                         vertex_prob = implied_prob
+                        ml_source = 'fallback_heuristic'
+                        ml_sources_used['fallback_heuristic'] += 1
 
                 # Ensure vertex_prob is valid
                 if vertex_prob is None or pd.isna(vertex_prob):
@@ -893,6 +916,7 @@ class VertexMasterAnalyzer:
                 result['vertex_ai_prob'] = vertex_prob
                 result['vertex_ai_edge'] = edge
                 result['vertex_ai_confidence'] = abs(edge)
+                result['ml_source'] = ml_source  # Track which ML method was used
 
                 # Calculate EV
                 home_ml = comp_features.get('home_ml_odds') or game.get('home_ml_odds', -110)
@@ -924,6 +948,56 @@ class VertexMasterAnalyzer:
             progress.progress((idx + 1) / len(games))
 
         progress.empty()
+
+        # Display ML source summary
+        st.markdown("---")
+        st.subheader("🔬 ML Prediction Source Summary")
+        
+        total_predictions = sum(ml_sources_used.values())
+        if total_predictions > 0:
+            col1, col2, col3, col4 = st.columns(4)
+            
+            with col1:
+                claude_count = ml_sources_used['anthropic_claude']
+                if claude_count > 0:
+                    st.metric("🤖 Anthropic Claude", f"{claude_count} games", 
+                             help="Real ML predictions from Claude API")
+                    st.success(f"✅ {claude_count} real ML predictions")
+                else:
+                    st.metric("🤖 Anthropic Claude", "0 games")
+                    
+            with col2:
+                gcp_count = ml_sources_used['gcp_vertex']
+                if gcp_count > 0:
+                    st.metric("☁️ GCP Vertex AI", f"{gcp_count} games",
+                             help="Real ML predictions from custom model")
+                    st.success(f"✅ {gcp_count} custom model predictions")
+                else:
+                    st.metric("☁️ GCP Vertex AI", "0 games")
+                    st.caption("Configure GCP endpoint for custom model")
+                    
+            with col3:
+                spread_count = ml_sources_used['spread_derived']
+                st.metric("📊 Spread-Derived", f"{spread_count} games",
+                         help="Probability calculated from TheOver.ai spread data")
+                if spread_count > 0:
+                    st.info(f"Using spread × 2.8% formula")
+                    
+            with col4:
+                fallback_count = ml_sources_used['fallback_heuristic']
+                st.metric("⚙️ Fallback", f"{fallback_count} games",
+                         help="Used when no other data available")
+                if fallback_count > 0:
+                    st.warning(f"{fallback_count} games used heuristics")
+        
+        # Show overall status
+        real_ml = ml_sources_used['anthropic_claude'] + ml_sources_used['gcp_vertex']
+        if real_ml > 0:
+            st.success(f"✅ **{real_ml}/{total_predictions} games used REAL ML predictions** (Claude API or GCP Vertex)")
+        elif ml_sources_used['spread_derived'] > 0:
+            st.info(f"📊 Using spread-derived probabilities from TheOver.ai data (each point ≈ 2.8% shift)")
+        else:
+            st.warning("⚠️ Using fallback heuristics - configure Anthropic API key for real ML")
 
         results_df = pd.DataFrame(results)
 
