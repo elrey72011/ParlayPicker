@@ -8823,19 +8823,47 @@ with st.expander("🔍 ML Predictor Status", expanded=False):
         # Test prediction button
         if st.button("🧪 Test ML Prediction"):
             try:
-                # Try with sport_key first (newer predictors)
+                # Get sentiment analyzer
+                sentiment_analyzer = st.session_state.get('sentiment_analyzer')
+                sentiment_home = 0.0
+                sentiment_away = 0.0
+                
+                # Try to get real sentiment for test teams
+                if sentiment_analyzer:
+                    try:
+                        home_sent = sentiment_analyzer.get_sentiment("Kansas City Chiefs")
+                        away_sent = sentiment_analyzer.get_sentiment("Las Vegas Raiders")
+                        if home_sent and 'sentiment_score' in home_sent:
+                            sentiment_home = home_sent['sentiment_score']
+                        if away_sent and 'sentiment_score' in away_sent:
+                            sentiment_away = away_sent['sentiment_score']
+                        st.info(f"📊 Using sentiment: Home={sentiment_home:.2f}, Away={sentiment_away:.2f}")
+                    except:
+                        st.info("ℹ️ Using neutral sentiment (0.0) for test")
+                else:
+                    st.info("ℹ️ Sentiment analyzer not loaded, using neutral sentiment (0.0)")
+                
+                # Try with all parameters
                 try:
                     test_result = ml_predictor.predict_game_outcome(
                         home_team="Kansas City Chiefs",
                         away_team="Las Vegas Raiders",
+                        home_odds=-200,  # Example odds
+                        away_odds=+175,
+                        sentiment_home=sentiment_home,
+                        sentiment_away=sentiment_away,
                         sport_key="americanfootball_nfl"
                     )
-                except TypeError:
+                except TypeError as e:
                     # Fallback: without sport_key (HistoricalMLPredictor)
                     st.info("ℹ️ Using HistoricalMLPredictor (doesn't accept sport_key parameter)")
                     test_result = ml_predictor.predict_game_outcome(
                         home_team="Kansas City Chiefs",
-                        away_team="Las Vegas Raiders"
+                        away_team="Las Vegas Raiders",
+                        home_odds=-200,
+                        away_odds=+175,
+                        sentiment_home=sentiment_home,
+                        sentiment_away=sentiment_away
                     )
                 
                 if test_result:
@@ -8848,6 +8876,7 @@ with st.expander("🔍 ML Predictor Status", expanded=False):
             except Exception as e:
                 st.error(f"Test prediction failed: {e}")
                 st.info("💡 Your predictor type: " + type(ml_predictor).__name__)
+                st.code(str(e), language="python")
     else:
         st.error("❌ ML Predictor Not Loaded")
         st.info("Train a model in **Tab 5: ML Training** first")
@@ -14742,23 +14771,68 @@ if st.button(
                     }
                     break
         
-        # Match ML predictions
+        # Get best odds FIRST (needed for ML predictor)
+        best_moneyline_home = None
+        best_moneyline_away = None
+        best_spread = None
+        
+        for bookmaker in game.get('bookmakers', []):
+            for market in bookmaker.get('markets', []):
+                if market['key'] == 'h2h':
+                    for outcome in market.get('outcomes', []):
+                        if outcome['name'] == home_team:
+                            best_moneyline_home = outcome['price']
+                        elif outcome['name'] == away_team:
+                            best_moneyline_away = outcome['price']
+                elif market['key'] == 'spreads':
+                    for outcome in market.get('outcomes', []):
+                        if outcome['name'] == home_team:
+                            best_spread = outcome.get('point')
+        
+        # Match ML predictions - NOW with all required parameters!
         if 'ml' in data_sources:
             ml_predictor = st.session_state.get('ml_predictor')
-            if ml_predictor:
+            if ml_predictor and best_moneyline_home and best_moneyline_away:
                 try:
-                    # Try calling with sport_key first (newer predictors)
+                    # Get sentiment for both teams
+                    sentiment_analyzer = st.session_state.get('sentiment_analyzer')
+                    sentiment_home = 0.0  # Neutral default
+                    sentiment_away = 0.0  # Neutral default
+                    
+                    if sentiment_analyzer:
+                        try:
+                            # Try to get real sentiment
+                            home_sentiment_result = sentiment_analyzer.get_sentiment(home_team)
+                            away_sentiment_result = sentiment_analyzer.get_sentiment(away_team)
+                            
+                            if home_sentiment_result and 'sentiment_score' in home_sentiment_result:
+                                sentiment_home = home_sentiment_result['sentiment_score']
+                            if away_sentiment_result and 'sentiment_score' in away_sentiment_result:
+                                sentiment_away = away_sentiment_result['sentiment_score']
+                        except Exception as e:
+                            logger.warning(f"Sentiment analysis failed, using neutral: {e}")
+                    
+                    # Call ML predictor with ALL required parameters
                     try:
+                        # Try newer predictor interface (with sport_key)
                         ml_result = ml_predictor.predict_game_outcome(
                             home_team=home_team,
                             away_team=away_team,
+                            home_odds=best_moneyline_home,
+                            away_odds=best_moneyline_away,
+                            sentiment_home=sentiment_home,
+                            sentiment_away=sentiment_away,
                             sport_key=game.get('sport_key')
                         )
                     except TypeError:
                         # Fallback: call without sport_key (HistoricalMLPredictor)
                         ml_result = ml_predictor.predict_game_outcome(
                             home_team=home_team,
-                            away_team=away_team
+                            away_team=away_team,
+                            home_odds=best_moneyline_home,
+                            away_odds=best_moneyline_away,
+                            sentiment_home=sentiment_home,
+                            sentiment_away=sentiment_away
                         )
                     
                     if ml_result:
@@ -14767,11 +14841,14 @@ if st.button(
                             'away_win_prob': ml_result.get('away_win_prob'),
                             'confidence': ml_result.get('confidence'),
                             'edge': ml_result.get('edge'),
-                            'model_used': ml_result.get('model_used', 'ML Model')
+                            'model_used': ml_result.get('model_used', 'ML Model'),
+                            'sentiment_used': f"Home: {sentiment_home:.2f}, Away: {sentiment_away:.2f}"
                         }
-                        logger.info(f"ML data matched for {away_team} @ {home_team}")
+                        logger.info(f"✅ ML+Sentiment data matched for {away_team} @ {home_team}")
                 except Exception as e:
                     logger.warning(f"ML matching failed for {away_team} @ {home_team}: {e}")
+            elif ml_predictor and not (best_moneyline_home and best_moneyline_away):
+                logger.warning(f"ML predictor available but odds missing for {away_team} @ {home_team}")
         
         # Match SportsData
         if 'sportsdata' in data_sources:
@@ -14787,20 +14864,8 @@ if st.button(
                 except Exception as e:
                     logger.warning(f"SportsData matching failed: {e}")
         
-        # Get best odds
-        best_moneyline = None
-        best_spread = None
-        
-        for bookmaker in game.get('bookmakers', []):
-            for market in bookmaker.get('markets', []):
-                if market['key'] == 'h2h':
-                    for outcome in market.get('outcomes', []):
-                        if outcome['name'] == home_team:
-                            best_moneyline = outcome['price']
-                elif market['key'] == 'spreads':
-                    for outcome in market.get('outcomes', []):
-                        if outcome['name'] == home_team:
-                            best_spread = outcome.get('point')
+        # best_moneyline for backwards compatibility
+        best_moneyline = best_moneyline_home
         
         # Analyze with Gemini or Claude
         if use_gemini:
