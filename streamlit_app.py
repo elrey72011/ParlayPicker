@@ -1337,14 +1337,50 @@ def render_sidebar_controls() -> Dict[str, Any]:
     if gcp_configured:
         sidebar.caption(f"☁️ Vertex AI: {st.session_state['gcp_project_id']}")
     else:
-        sidebar.caption("⚠️ GCP Vertex AI not fully configured")
-        # Debug info
-        with sidebar.expander("🔧 GCP Debug"):
-            st.write(f"Project ID: {st.session_state.get('gcp_project_id', 'Not set')}")
-            st.write(f"Endpoint ID: {st.session_state.get('vertex_endpoint_id', 'Not set')}")
-            st.write(f"Location: {st.session_state.get('gcp_location', 'Not set')}")
-            st.write("Add to secrets:")
-            st.code('gcp_project_id = "sports-betting-ml"\nvertex_endpoint_id = "5396533911008313344"\ngcp_location = "us-central1"', language="toml")
+        sidebar.caption("⚠️ GCP Vertex AI not configured")
+    
+    # GCP Configuration expander
+    with sidebar.expander("☁️ GCP Vertex AI Settings", expanded=not gcp_configured):
+        st.write("Configure your trained ML model endpoint:")
+        
+        gcp_project_input = st.text_input(
+            "GCP Project ID",
+            value=st.session_state.get('gcp_project_id', ''),
+            placeholder="e.g., parlaydesk-ml-12345",
+            key="gcp_project_input",
+            help="Your Google Cloud project ID"
+        )
+        if gcp_project_input:
+            st.session_state['gcp_project_id'] = gcp_project_input
+        
+        vertex_endpoint_input = st.text_input(
+            "Vertex AI Endpoint ID", 
+            value=st.session_state.get('vertex_endpoint_id', ''),
+            placeholder="e.g., 1234567890123456789",
+            key="vertex_endpoint_input",
+            help="The numeric endpoint ID from Vertex AI"
+        )
+        if vertex_endpoint_input:
+            st.session_state['vertex_endpoint_id'] = vertex_endpoint_input
+        
+        gcp_location_input = st.text_input(
+            "GCP Location",
+            value=st.session_state.get('gcp_location', 'us-central1'),
+            placeholder="us-central1",
+            key="gcp_location_input",
+            help="The region where your endpoint is deployed"
+        )
+        if gcp_location_input:
+            st.session_state['gcp_location'] = gcp_location_input
+        
+        # Status check
+        if st.session_state.get('gcp_project_id') and st.session_state.get('vertex_endpoint_id'):
+            st.success("✅ GCP Vertex AI configured!")
+            st.caption(f"Project: {st.session_state['gcp_project_id']}")
+            st.caption(f"Endpoint: {st.session_state['vertex_endpoint_id']}")
+        else:
+            st.info("Enter your GCP credentials above, or add to Streamlit secrets:")
+            st.code('gcp_project_id = "your-project-id"\nvertex_endpoint_id = "1234567890123456789"\ngcp_location = "us-central1"', language="toml")
     
     # --------------------- Kalshi Status ---------------------
     # Check if Kalshi is configured (will be loaded later in session init)
@@ -9687,6 +9723,524 @@ if is_vertex_ai_enabled():
     }
     user_timezone_label = st.session_state.get('user_timezone', 'UTC')
     render_saved_parlay_tracker(tracker_clients, user_timezone_label)
+
+    st.markdown("---")
+    
+    # =====================================================
+    # RESULTS TRACKER - Check Previous Day's Best Bets
+    # =====================================================
+    st.subheader("📊 Results Tracker - Check Your Picks")
+    st.caption("Upload a previous day's best bets CSV to see which picks were accurate")
+    
+    with st.expander("📈 Track Previous Picks", expanded=False):
+        results_csv = st.file_uploader(
+            "Upload previous best_bets CSV",
+            type=['csv'],
+            key="results_tracker_upload",
+            help="Upload a best_bets CSV from a previous day to check results"
+        )
+        
+        if results_csv is not None:
+            try:
+                results_df = pd.read_csv(results_csv)
+                st.success(f"✅ Loaded {len(results_df)} picks from CSV")
+                
+                # Show the picks
+                st.write("**Your Picks:**")
+                display_cols = ['Rank', 'League', 'Game', 'THE PICK', 'AI Win %', 'Edge', 'Consensus']
+                display_cols = [c for c in display_cols if c in results_df.columns]
+                st.dataframe(results_df[display_cols].head(20), use_container_width=True, hide_index=True)
+                
+                st.markdown("---")
+                st.subheader("🎯 Enter Results")
+                st.info("Enter the final scores for each game to calculate accuracy")
+                
+                # Create editable results section
+                if 'tracked_results' not in st.session_state:
+                    st.session_state['tracked_results'] = {}
+                
+                results_data = []
+                
+                for idx, row in results_df.iterrows():
+                    game = row.get('Game', '')
+                    pick = row.get('THE PICK', '')
+                    league = row.get('League', '')
+                    ai_win_pct = row.get('AI Win %', 50)
+                    edge = row.get('Edge', 0)
+                    
+                    if not game or '@' not in game:
+                        continue
+                    
+                    # Parse teams
+                    parts = game.split('@')
+                    if len(parts) != 2:
+                        continue
+                    away_team = parts[0].strip()
+                    home_team = parts[1].strip()
+                    
+                    # Parse pick info
+                    pick_str = str(pick)
+                    pick_team = pick_str.split('+')[0].split('-')[0].strip() if pick_str else ''
+                    
+                    # Check if spread pick
+                    is_spread_pick = '+' in pick_str or (('-' in pick_str) and any(c.isdigit() for c in pick_str.split('-')[-1]))
+                    spread_value = 0
+                    if is_spread_pick:
+                        try:
+                            # Extract spread number
+                            if '+' in pick_str:
+                                spread_value = float(pick_str.split('+')[-1])
+                            elif '-' in pick_str:
+                                parts = pick_str.split('-')
+                                if len(parts) > 1 and parts[-1].replace('.', '').isdigit():
+                                    spread_value = -float(parts[-1])
+                        except:
+                            spread_value = 0
+                    
+                    # Determine if pick is home or away
+                    pick_is_home = pick_team.lower() in home_team.lower() or home_team.lower() in pick_team.lower()
+                    
+                    # Create unique key for this game
+                    game_key = f"{away_team}_{home_team}_{idx}"
+                    
+                    with st.container():
+                        col1, col2, col3, col4, col5 = st.columns([2, 1, 1, 1, 1])
+                        
+                        with col1:
+                            st.write(f"**{league}:** {game}")
+                            st.caption(f"Pick: {pick} (AI: {ai_win_pct}%)")
+                        
+                        with col2:
+                            away_score = st.number_input(
+                                f"{away_team[:10]}",
+                                min_value=0,
+                                max_value=200,
+                                value=st.session_state.get(f"away_{game_key}", 0),
+                                key=f"away_score_{game_key}"
+                            )
+                            st.session_state[f"away_{game_key}"] = away_score
+                        
+                        with col3:
+                            home_score = st.number_input(
+                                f"{home_team[:10]}",
+                                min_value=0,
+                                max_value=200,
+                                value=st.session_state.get(f"home_{game_key}", 0),
+                                key=f"home_score_{game_key}"
+                            )
+                            st.session_state[f"home_{game_key}"] = home_score
+                        
+                        with col4:
+                            # Determine winner
+                            if away_score > 0 or home_score > 0:
+                                if is_spread_pick:
+                                    # ATS (Against the Spread) calculation
+                                    if pick_is_home:
+                                        adjusted_score = home_score + spread_value
+                                        pick_won = adjusted_score > away_score
+                                        result_str = f"{home_score}{spread_value:+.1f}={adjusted_score:.1f} vs {away_score}"
+                                    else:
+                                        adjusted_score = away_score + spread_value
+                                        pick_won = adjusted_score > home_score
+                                        result_str = f"{away_score}{spread_value:+.1f}={adjusted_score:.1f} vs {home_score}"
+                                else:
+                                    # Moneyline
+                                    if pick_is_home:
+                                        pick_won = home_score > away_score
+                                    else:
+                                        pick_won = away_score > home_score
+                                    result_str = f"{away_score}-{home_score}"
+                                
+                                if pick_won:
+                                    st.success("✅ WIN")
+                                else:
+                                    st.error("❌ LOSS")
+                            else:
+                                pick_won = None
+                                result_str = "No score"
+                                st.write("—")
+                        
+                        with col5:
+                            if away_score > 0 or home_score > 0:
+                                st.caption(result_str)
+                        
+                        # Store result
+                        results_data.append({
+                            'Game': game,
+                            'Pick': pick,
+                            'League': league,
+                            'AI Win %': ai_win_pct,
+                            'Edge': edge,
+                            'Away Score': away_score,
+                            'Home Score': home_score,
+                            'Pick Won': pick_won,
+                            'Spread Pick': is_spread_pick,
+                        })
+                    
+                    st.markdown("---")
+                
+                # Calculate accuracy stats
+                if results_data:
+                    st.subheader("📈 Accuracy Summary")
+                    
+                    scored_games = [r for r in results_data if r['Pick Won'] is not None]
+                    
+                    if scored_games:
+                        total_scored = len(scored_games)
+                        wins = sum(1 for r in scored_games if r['Pick Won'])
+                        losses = total_scored - wins
+                        win_pct = (wins / total_scored * 100) if total_scored > 0 else 0
+                        
+                        col1, col2, col3, col4 = st.columns(4)
+                        with col1:
+                            st.metric("Total Picks", total_scored)
+                        with col2:
+                            st.metric("Wins", wins, delta=None)
+                        with col3:
+                            st.metric("Losses", losses, delta=None)
+                        with col4:
+                            delta_color = "normal" if win_pct >= 52.4 else "inverse"
+                            st.metric("Win Rate", f"{win_pct:.1f}%", 
+                                     delta=f"{win_pct - 52.4:.1f}% vs breakeven" if win_pct != 0 else None,
+                                     delta_color=delta_color)
+                        
+                        # Breakdown by confidence
+                        st.markdown("---")
+                        st.write("**Accuracy by AI Confidence:**")
+                        
+                        high_conf = [r for r in scored_games if r['AI Win %'] >= 65]
+                        med_conf = [r for r in scored_games if 55 <= r['AI Win %'] < 65]
+                        low_conf = [r for r in scored_games if r['AI Win %'] < 55]
+                        
+                        breakdown_col1, breakdown_col2, breakdown_col3 = st.columns(3)
+                        
+                        with breakdown_col1:
+                            if high_conf:
+                                high_wins = sum(1 for r in high_conf if r['Pick Won'])
+                                high_pct = high_wins / len(high_conf) * 100
+                                st.metric("High Conf (65%+)", f"{high_wins}/{len(high_conf)} ({high_pct:.0f}%)")
+                            else:
+                                st.metric("High Conf (65%+)", "0 picks")
+                        
+                        with breakdown_col2:
+                            if med_conf:
+                                med_wins = sum(1 for r in med_conf if r['Pick Won'])
+                                med_pct = med_wins / len(med_conf) * 100
+                                st.metric("Med Conf (55-65%)", f"{med_wins}/{len(med_conf)} ({med_pct:.0f}%)")
+                            else:
+                                st.metric("Med Conf (55-65%)", "0 picks")
+                        
+                        with breakdown_col3:
+                            if low_conf:
+                                low_wins = sum(1 for r in low_conf if r['Pick Won'])
+                                low_pct = low_wins / len(low_conf) * 100
+                                st.metric("Low Conf (<55%)", f"{low_wins}/{len(low_conf)} ({low_pct:.0f}%)")
+                            else:
+                                st.metric("Low Conf (<55%)", "0 picks")
+                        
+                        # Breakdown by Edge
+                        st.write("**Accuracy by Edge:**")
+                        
+                        pos_edge = [r for r in scored_games if float(r.get('Edge', 0) or 0) > 0]
+                        neg_edge = [r for r in scored_games if float(r.get('Edge', 0) or 0) <= 0]
+                        
+                        edge_col1, edge_col2 = st.columns(2)
+                        
+                        with edge_col1:
+                            if pos_edge:
+                                pos_wins = sum(1 for r in pos_edge if r['Pick Won'])
+                                pos_pct = pos_wins / len(pos_edge) * 100
+                                st.metric("Positive Edge Picks", f"{pos_wins}/{len(pos_edge)} ({pos_pct:.0f}%)")
+                            else:
+                                st.metric("Positive Edge Picks", "0 picks")
+                        
+                        with edge_col2:
+                            if neg_edge:
+                                neg_wins = sum(1 for r in neg_edge if r['Pick Won'])
+                                neg_pct = neg_wins / len(neg_edge) * 100
+                                st.metric("Negative Edge Picks", f"{neg_wins}/{len(neg_edge)} ({neg_pct:.0f}%)")
+                            else:
+                                st.metric("Negative Edge Picks", "0 picks")
+                        
+                        # Breakdown by League
+                        st.write("**Accuracy by League:**")
+                        leagues = set(r['League'] for r in scored_games)
+                        league_cols = st.columns(min(len(leagues), 4))
+                        
+                        for i, league in enumerate(sorted(leagues)):
+                            league_games = [r for r in scored_games if r['League'] == league]
+                            league_wins = sum(1 for r in league_games if r['Pick Won'])
+                            league_pct = league_wins / len(league_games) * 100 if league_games else 0
+                            
+                            with league_cols[i % len(league_cols)]:
+                                st.metric(league, f"{league_wins}/{len(league_games)} ({league_pct:.0f}%)")
+                        
+                        # ROI calculation (assuming -110 odds)
+                        st.markdown("---")
+                        st.write("**Estimated ROI (assuming -110 odds):**")
+                        
+                        # Standard -110 odds: risk 110 to win 100
+                        total_risked = total_scored * 110
+                        total_won = wins * 100
+                        total_lost = losses * 110
+                        net_profit = total_won - total_lost
+                        roi = (net_profit / total_risked) * 100 if total_risked > 0 else 0
+                        
+                        roi_col1, roi_col2, roi_col3 = st.columns(3)
+                        with roi_col1:
+                            st.metric("Units Risked", f"{total_scored * 1.1:.1f}u")
+                        with roi_col2:
+                            profit_color = "normal" if net_profit >= 0 else "inverse"
+                            st.metric("Net Profit", f"{net_profit/100:+.2f}u", delta_color=profit_color)
+                        with roi_col3:
+                            roi_color = "normal" if roi >= 0 else "inverse"
+                            st.metric("ROI", f"{roi:+.1f}%", delta_color=roi_color)
+                    
+                    else:
+                        st.info("Enter scores above to see accuracy stats")
+                
+            except Exception as e:
+                st.error(f"Error loading CSV: {e}")
+                import traceback
+                st.code(traceback.format_exc())
+
+    # =====================================================
+    # ML TRAINING DATA COLLECTION
+    # =====================================================
+    st.subheader("🧠 ML Training Data Collection")
+    st.caption("Collect historical game data to train your GCP Vertex AI model")
+    
+    with st.expander("📥 Collect Training Data", expanded=False):
+        st.write("**Collect completed games from your APIs to build training data**")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            collect_days = st.number_input(
+                "Days to look back",
+                min_value=1,
+                max_value=365,
+                value=30,
+                help="Number of days of historical data to collect"
+            )
+        with col2:
+            collect_sports = st.multiselect(
+                "Sports to collect",
+                options=["NBA", "NHL", "NCAAB", "NCAAF", "NFL"],
+                default=["NBA", "NHL", "NCAAB"],
+                help="Select which sports to include in training data"
+            )
+        
+        # Show API status
+        st.write("**API Status:**")
+        api_col1, api_col2, api_col3 = st.columns(3)
+        
+        odds_key = st.session_state.get('api_key', '') or os.environ.get('ODDS_API_KEY', '')
+        with api_col1:
+            if odds_key:
+                st.success("✅ Odds API")
+            else:
+                st.warning("❌ Odds API")
+        
+        # Check for other APIs (these would need to be added to session state)
+        sportsdata_key = st.session_state.get('sportsdata_api_key', '') or os.environ.get('SPORTSDATA_API_KEY', '')
+        with api_col2:
+            if sportsdata_key:
+                st.success("✅ SportsData.io")
+            else:
+                st.info("⚪ SportsData.io (optional)")
+        
+        api_sports_key = st.session_state.get('nba_apisports_api_key', '') or st.session_state.get('nhl_apisports_api_key', '') or os.environ.get('API_SPORTS_KEY', '')
+        with api_col3:
+            if api_sports_key:
+                st.success("✅ API-Sports")
+            else:
+                st.info("⚪ API-Sports (optional)")
+        
+        if st.button("🚀 Collect Historical Data", type="primary", use_container_width=True):
+            if not odds_key and not sportsdata_key and not api_sports_key:
+                st.error("❌ At least one API key required! Configure in sidebar.")
+            elif not collect_sports:
+                st.error("❌ Select at least one sport!")
+            else:
+                with st.spinner(f"Collecting {collect_days} days of data for {', '.join(collect_sports)}..."):
+                    try:
+                        # Calculate date range
+                        end_date = datetime.now() - timedelta(days=1)
+                        start_date = end_date - timedelta(days=collect_days)
+                        
+                        all_games = []
+                        progress_bar = st.progress(0)
+                        status_text = st.empty()
+                        
+                        # Collect from Odds API (scores endpoint)
+                        if odds_key:
+                            for i, sport in enumerate(collect_sports):
+                                status_text.text(f"Fetching {sport} scores...")
+                                progress_bar.progress((i + 1) / len(collect_sports) / 2)
+                                
+                                sport_key_map = {
+                                    "NBA": "basketball_nba",
+                                    "NHL": "icehockey_nhl",
+                                    "NCAAB": "basketball_ncaab",
+                                    "NCAAF": "americanfootball_ncaaf",
+                                    "NFL": "americanfootball_nfl",
+                                }
+                                sport_key = sport_key_map.get(sport, "")
+                                
+                                if sport_key:
+                                    try:
+                                        url = f"https://api.the-odds-api.com/v4/sports/{sport_key}/scores"
+                                        params = {
+                                            "apiKey": odds_key,
+                                            "daysFrom": min(collect_days, 3),  # API limits to 3 days
+                                        }
+                                        response = requests.get(url, params=params, timeout=30)
+                                        
+                                        if response.status_code == 200:
+                                            scores = response.json()
+                                            
+                                            for game in scores:
+                                                if not game.get("completed", False):
+                                                    continue
+                                                
+                                                home_team = game.get("home_team", "")
+                                                away_team = game.get("away_team", "")
+                                                
+                                                # Get scores
+                                                home_score = 0
+                                                away_score = 0
+                                                for score in game.get("scores", []):
+                                                    if score.get("name") == home_team:
+                                                        home_score = int(score.get("score", 0) or 0)
+                                                    elif score.get("name") == away_team:
+                                                        away_score = int(score.get("score", 0) or 0)
+                                                
+                                                if home_team and away_team and (home_score > 0 or away_score > 0):
+                                                    game_date = game.get("commence_time", "")[:10]
+                                                    
+                                                    all_games.append({
+                                                        "game_id": game.get("id", f"{game_date}_{home_team}_{away_team}"),
+                                                        "date": game_date,
+                                                        "sport": sport,
+                                                        "home_team": home_team,
+                                                        "away_team": away_team,
+                                                        "home_score": home_score,
+                                                        "away_score": away_score,
+                                                        "home_won": 1 if home_score > away_score else 0,
+                                                        # Default feature values
+                                                        "home_win_pct": 0.5,
+                                                        "away_win_pct": 0.5,
+                                                        "home_avg_points": 100 if sport in ["NBA", "NCAAB"] else 3 if sport == "NHL" else 24,
+                                                        "away_avg_points": 100 if sport in ["NBA", "NCAAB"] else 3 if sport == "NHL" else 24,
+                                                        "home_def_rating": 100 if sport in ["NBA", "NCAAB"] else 3 if sport == "NHL" else 24,
+                                                        "away_def_rating": 100 if sport in ["NBA", "NCAAB"] else 3 if sport == "NHL" else 24,
+                                                        "spread_normalized": 0.5,
+                                                        "home_last_5": 0.5,
+                                                        "away_last_5": 0.5,
+                                                        "home_home_record": 0.5,
+                                                        "away_away_record": 0.5,
+                                                        "head_to_head": 0.5,
+                                                        "rest_advantage": 0,
+                                                        "injuries_impact": 0,
+                                                        "weather_factor": 0,
+                                                        "public_betting_pct": 0.5,
+                                                        "sharp_money_indicator": 0,
+                                                        "line_movement": 0,
+                                                        "total_movement": 0,
+                                                        "model_consensus": 0.5,
+                                                        "theover_probability": 0.5,
+                                                        "implied_home_prob": 0.5,
+                                                        "home_streak": 0,
+                                                        "away_streak": 0,
+                                                        "division_game": 0,
+                                                        "back_to_back": 0,
+                                                        "primetime_game": 0,
+                                                    })
+                                    except Exception as e:
+                                        st.warning(f"Error fetching {sport}: {e}")
+                                
+                                time.sleep(0.3)  # Rate limiting
+                        
+                        progress_bar.progress(1.0)
+                        status_text.text("Processing data...")
+                        
+                        if all_games:
+                            # Create DataFrame
+                            df = pd.DataFrame(all_games)
+                            
+                            # Store in session state
+                            if 'training_data' not in st.session_state:
+                                st.session_state['training_data'] = df
+                            else:
+                                # Append to existing data
+                                existing = st.session_state['training_data']
+                                combined = pd.concat([existing, df], ignore_index=True)
+                                combined = combined.drop_duplicates(subset=['game_id'], keep='last')
+                                st.session_state['training_data'] = combined
+                                df = combined
+                            
+                            st.success(f"✅ Collected {len(all_games)} games! Total in dataset: {len(df)}")
+                            
+                            # Show summary
+                            st.write("**Data Summary:**")
+                            summary_cols = st.columns(4)
+                            with summary_cols[0]:
+                                st.metric("Total Games", len(df))
+                            with summary_cols[1]:
+                                st.metric("Home Win Rate", f"{df['home_won'].mean():.1%}")
+                            with summary_cols[2]:
+                                sports_count = df['sport'].nunique()
+                                st.metric("Sports", sports_count)
+                            with summary_cols[3]:
+                                date_range = f"{df['date'].min()} to {df['date'].max()}"
+                                st.metric("Date Range", date_range[:21])
+                            
+                            # By sport breakdown
+                            st.write("**By Sport:**")
+                            sport_summary = df.groupby('sport').agg({
+                                'game_id': 'count',
+                                'home_won': 'mean'
+                            }).rename(columns={'game_id': 'Games', 'home_won': 'Home Win %'})
+                            sport_summary['Home Win %'] = (sport_summary['Home Win %'] * 100).round(1).astype(str) + '%'
+                            st.dataframe(sport_summary, use_container_width=True)
+                            
+                            # Download button
+                            csv_data = df.to_csv(index=False)
+                            st.download_button(
+                                "⬇️ Download Training Data (CSV)",
+                                data=csv_data,
+                                file_name=f"training_data_{datetime.now().strftime('%Y%m%d')}.csv",
+                                mime="text/csv",
+                                use_container_width=True
+                            )
+                            
+                            st.info(f"""
+                            **Next Steps:**
+                            1. Download the CSV
+                            2. Run: `python train_vertex_model.py --data training_data.csv --project-id elite-hangar-479017-m8 --deploy`
+                            3. Update the Vertex AI Endpoint ID in sidebar
+                            """)
+                        else:
+                            st.warning("No completed games found in the specified date range.")
+                    
+                    except Exception as e:
+                        st.error(f"Error collecting data: {e}")
+                        import traceback
+                        st.code(traceback.format_exc())
+        
+        # Show existing training data if available
+        if 'training_data' in st.session_state and len(st.session_state['training_data']) > 0:
+            st.markdown("---")
+            st.write("**Existing Training Data:**")
+            existing_df = st.session_state['training_data']
+            st.write(f"📊 {len(existing_df)} games in memory")
+            
+            if st.checkbox("Show sample data"):
+                st.dataframe(existing_df.head(20), use_container_width=True)
+            
+            if st.button("🗑️ Clear Training Data"):
+                del st.session_state['training_data']
+                st.rerun()
 
     st.markdown("---")
 
