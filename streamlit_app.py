@@ -58,6 +58,25 @@ except ImportError:
     analyze_theover_spreads_with_vertex = None
     show_best_bets_table = None
 
+# Google Gemini AI Integration (recommended - 24x cheaper than Claude!)
+try:
+    from gemini_integration import (
+        GeminiAnalyzer,
+        show_gemini_config_ui,
+        test_gemini_connection,
+        VERTEX_AI_AVAILABLE as GEMINI_AVAILABLE
+    )
+except ImportError:
+    GEMINI_AVAILABLE = False
+    def show_gemini_config_ui():
+        import streamlit as st
+        st.sidebar.markdown("---")
+        st.sidebar.markdown("### 💎 Google Gemini AI")
+        st.sidebar.info("💰 AI analysis for ~$1/month")
+        st.sidebar.code("pip install google-cloud-aiplatform")
+        st.sidebar.caption("Then restart app")
+        return False
+
 # Optional classes with fallbacks
 try:
     from app_core import SharpMoneyDetector
@@ -1293,6 +1312,16 @@ def render_sidebar_controls() -> Dict[str, Any]:
         sidebar.caption("🤖 Anthropic API key configured")
     else:
         sidebar.caption("❌ Enter Anthropic API key for AI analysis")
+
+    # --------------------- Google Gemini AI (Recommended) ---------------------
+    if GEMINI_AVAILABLE:
+        st.sidebar.markdown("---")
+        gemini_configured = show_gemini_config_ui()
+    else:
+        st.sidebar.markdown("---")
+        st.sidebar.markdown("### 💎 Gemini AI (Optional)")
+        st.sidebar.info("💰 AI analysis for ~$1/month (24x cheaper than Claude)")
+        st.sidebar.code("pip install google-cloud-aiplatform")
     
     # --------------------- GCP Vertex AI Config ---------------------
     # Helper function to safely get secrets
