@@ -1054,8 +1054,16 @@ def show_vertex_master_analysis(results_df: pd.DataFrame):
     # Add rank column
     results_df['rank'] = range(1, len(results_df) + 1)
     
+    # DEFENSIVE: Re-ensure vertex_ai_prob is decimal before any multiplication
+    def force_decimal(val):
+        if val is None or pd.isna(val):
+            return 0.5
+        val = float(val)
+        return val / 100 if val > 1 else val
+    
+    results_df['vertex_ai_prob'] = results_df['vertex_ai_prob'].apply(force_decimal).clip(0.01, 0.99)
+    
     # Calculate best side for each game to get summary stats
-    # Note: vertex_ai_prob is now guaranteed to be decimal (0-1) after normalization above
     results_df['home_win_prob_pct'] = results_df['vertex_ai_prob'] * 100
     results_df['away_win_prob_pct'] = (1 - results_df['vertex_ai_prob']) * 100
     results_df['best_win_prob_summary'] = results_df[['home_win_prob_pct', 'away_win_prob_pct']].max(axis=1)
@@ -1090,7 +1098,20 @@ def show_vertex_master_analysis(results_df: pd.DataFrame):
     # Calculate best side for each game
     summary_df = results_df.copy()
     
-    # Note: vertex_ai_prob is now guaranteed to be decimal (0-1) after normalization
+    # CRITICAL: Ensure vertex_ai_prob is in decimal format (0-1) before multiplying
+    # Some upstream code may pass percentage values (0-100)
+    def ensure_decimal(val):
+        if val is None or pd.isna(val):
+            return 0.5
+        val = float(val)
+        if val > 1:  # It's a percentage, convert to decimal
+            return val / 100
+        return val
+    
+    summary_df['vertex_ai_prob'] = summary_df['vertex_ai_prob'].apply(ensure_decimal)
+    summary_df['vertex_ai_prob'] = summary_df['vertex_ai_prob'].clip(0.01, 0.99)
+    
+    # Now safe to multiply by 100
     summary_df['Home Win %'] = summary_df['vertex_ai_prob'] * 100
     summary_df['Away Win %'] = (1 - summary_df['vertex_ai_prob']) * 100
     
@@ -1226,10 +1247,14 @@ def show_vertex_master_analysis(results_df: pd.DataFrame):
     # Calculate the BEST side for each game (home or away - whichever has higher prob)
     filtered_df = results_df.copy()
     
+    # DEFENSIVE: Ensure decimal format before multiplication
+    filtered_df['vertex_ai_prob'] = filtered_df['vertex_ai_prob'].apply(
+        lambda x: (float(x) / 100 if float(x) > 1 else float(x)) if x is not None and not pd.isna(x) else 0.5
+    ).clip(0.01, 0.99)
+    
     # For each game, determine which side is the "best pick"
     # vertex_ai_prob is home team probability (to cover spread)
     # If home_prob > 50%, pick home. If away_prob (1 - home_prob) > 50%, pick away
-    # Note: vertex_ai_prob is now guaranteed to be decimal (0-1) after normalization
     filtered_df['home_win_prob'] = filtered_df['vertex_ai_prob'] * 100
     filtered_df['away_win_prob'] = (1 - filtered_df['vertex_ai_prob']) * 100
     
