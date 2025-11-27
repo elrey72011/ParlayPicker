@@ -10005,242 +10005,469 @@ if is_vertex_ai_enabled():
                 st.code(traceback.format_exc())
 
     # =====================================================
-    # ML TRAINING DATA COLLECTION
+    # ML MODEL TRAINING CENTER (API-SPORTS)
     # =====================================================
-    st.subheader("🧠 ML Training Data Collection")
-    st.caption("Collect historical game data to train your GCP Vertex AI model")
+    st.subheader("🧠 ML Model Training Center")
+    st.caption("Collect data, train model, and deploy to GCP Vertex AI - all from here!")
     
-    with st.expander("📥 Collect Training Data", expanded=False):
-        st.write("**Collect completed games from your APIs to build training data**")
+    # API-Sports Configuration
+    API_SPORTS_KEY = "07972c891e3d56fbc6298b5c2a07b152"  # Your key
+    API_SPORTS_URLS = {
+        "NBA": "https://v1.basketball.api-sports.io",
+        "NCAAB": "https://v1.basketball.api-sports.io",
+        "NHL": "https://v1.hockey.api-sports.io",
+        "NFL": "https://v1.american-football.api-sports.io",
+        "NCAAF": "https://v1.american-football.api-sports.io",
+    }
+    LEAGUE_IDS = {"NBA": 12, "NCAAB": 116, "NHL": 57, "NFL": 1, "NCAAF": 2}
+    
+    FEATURE_NAMES = [
+        "home_win_pct", "away_win_pct", "home_avg_points", "away_avg_points",
+        "home_def_rating", "away_def_rating", "spread_normalized",
+        "home_last_5", "away_last_5", "home_home_record", "away_away_record",
+        "head_to_head", "rest_advantage", "injuries_impact", "weather_factor",
+        "public_betting_pct", "sharp_money_indicator", "line_movement",
+        "total_movement", "model_consensus", "theover_probability",
+        "implied_home_prob", "home_streak", "away_streak", "division_game",
+        "back_to_back", "primetime_game",
+    ]
+    
+    with st.expander("📥 Step 1: Collect Training Data (API-Sports)", expanded=False):
+        st.write("**Collect completed games with real stats from API-Sports**")
+        st.info("🔑 Using your API-Sports key to fetch historical games with team statistics")
         
         col1, col2 = st.columns(2)
         with col1:
             collect_days = st.number_input(
                 "Days to look back",
-                min_value=1,
-                max_value=365,
-                value=30,
-                help="Number of days of historical data to collect"
+                min_value=7,
+                max_value=180,
+                value=60,
+                help="More days = more training data = better model"
             )
         with col2:
             collect_sports = st.multiselect(
                 "Sports to collect",
-                options=["NBA", "NHL", "NCAAB", "NCAAF", "NFL"],
+                options=["NBA", "NHL", "NCAAB", "NFL", "NCAAF"],
                 default=["NBA", "NHL", "NCAAB"],
-                help="Select which sports to include in training data"
+                help="Select sports to include"
             )
         
-        # Show API status
-        st.write("**API Status:**")
-        api_col1, api_col2, api_col3 = st.columns(3)
+        st.write(f"**Estimated games:** ~{collect_days * len(collect_sports) * 8} games")
         
-        odds_key = st.session_state.get('api_key', '') or os.environ.get('ODDS_API_KEY', '')
-        with api_col1:
-            if odds_key:
-                st.success("✅ Odds API")
-            else:
-                st.warning("❌ Odds API")
-        
-        # Check for other APIs (these would need to be added to session state)
-        sportsdata_key = st.session_state.get('sportsdata_api_key', '') or os.environ.get('SPORTSDATA_API_KEY', '')
-        with api_col2:
-            if sportsdata_key:
-                st.success("✅ SportsData.io")
-            else:
-                st.info("⚪ SportsData.io (optional)")
-        
-        api_sports_key = st.session_state.get('nba_apisports_api_key', '') or st.session_state.get('nhl_apisports_api_key', '') or os.environ.get('API_SPORTS_KEY', '')
-        with api_col3:
-            if api_sports_key:
-                st.success("✅ API-Sports")
-            else:
-                st.info("⚪ API-Sports (optional)")
-        
-        if st.button("🚀 Collect Historical Data", type="primary", use_container_width=True):
-            if not odds_key and not sportsdata_key and not api_sports_key:
-                st.error("❌ At least one API key required! Configure in sidebar.")
-            elif not collect_sports:
+        if st.button("🚀 Collect from API-Sports", type="primary", use_container_width=True, key="collect_apisports"):
+            if not collect_sports:
                 st.error("❌ Select at least one sport!")
             else:
-                with st.spinner(f"Collecting {collect_days} days of data for {', '.join(collect_sports)}..."):
+                # Helper functions
+                def calculate_win_pct(wins, losses, default=0.5):
+                    total = (wins or 0) + (losses or 0)
+                    return (wins or 0) / total if total > 0 else default
+                
+                def normalize_points(points, sport):
+                    ranges = {"NBA": (90, 130), "NCAAB": (50, 90), "NHL": (1.5, 4.5), "NFL": (14, 35), "NCAAF": (14, 45)}
+                    min_pts, max_pts = ranges.get(sport, (0, 100))
+                    if points is None:
+                        return 0.5
+                    return np.clip((float(points) - min_pts) / (max_pts - min_pts), 0, 1)
+                
+                def api_request(sport, endpoint, params=None):
+                    """Make API-Sports request"""
+                    base_url = API_SPORTS_URLS.get(sport, "")
+                    url = f"{base_url}/{endpoint}"
+                    headers = {"x-apisports-key": API_SPORTS_KEY}
                     try:
-                        # Calculate date range
-                        end_date = datetime.now() - timedelta(days=1)
-                        start_date = end_date - timedelta(days=collect_days)
-                        
-                        all_games = []
-                        progress_bar = st.progress(0)
-                        status_text = st.empty()
-                        
-                        # Collect from Odds API (scores endpoint)
-                        if odds_key:
-                            for i, sport in enumerate(collect_sports):
-                                status_text.text(f"Fetching {sport} scores...")
-                                progress_bar.progress((i + 1) / len(collect_sports) / 2)
-                                
-                                sport_key_map = {
-                                    "NBA": "basketball_nba",
-                                    "NHL": "icehockey_nhl",
-                                    "NCAAB": "basketball_ncaab",
-                                    "NCAAF": "americanfootball_ncaaf",
-                                    "NFL": "americanfootball_nfl",
-                                }
-                                sport_key = sport_key_map.get(sport, "")
-                                
-                                if sport_key:
-                                    try:
-                                        url = f"https://api.the-odds-api.com/v4/sports/{sport_key}/scores"
-                                        params = {
-                                            "apiKey": odds_key,
-                                            "daysFrom": min(collect_days, 3),  # API limits to 3 days
-                                        }
-                                        response = requests.get(url, params=params, timeout=30)
-                                        
-                                        if response.status_code == 200:
-                                            scores = response.json()
-                                            
-                                            for game in scores:
-                                                if not game.get("completed", False):
-                                                    continue
-                                                
-                                                home_team = game.get("home_team", "")
-                                                away_team = game.get("away_team", "")
-                                                
-                                                # Get scores
-                                                home_score = 0
-                                                away_score = 0
-                                                for score in game.get("scores", []):
-                                                    if score.get("name") == home_team:
-                                                        home_score = int(score.get("score", 0) or 0)
-                                                    elif score.get("name") == away_team:
-                                                        away_score = int(score.get("score", 0) or 0)
-                                                
-                                                if home_team and away_team and (home_score > 0 or away_score > 0):
-                                                    game_date = game.get("commence_time", "")[:10]
-                                                    
-                                                    all_games.append({
-                                                        "game_id": game.get("id", f"{game_date}_{home_team}_{away_team}"),
-                                                        "date": game_date,
-                                                        "sport": sport,
-                                                        "home_team": home_team,
-                                                        "away_team": away_team,
-                                                        "home_score": home_score,
-                                                        "away_score": away_score,
-                                                        "home_won": 1 if home_score > away_score else 0,
-                                                        # Default feature values
-                                                        "home_win_pct": 0.5,
-                                                        "away_win_pct": 0.5,
-                                                        "home_avg_points": 100 if sport in ["NBA", "NCAAB"] else 3 if sport == "NHL" else 24,
-                                                        "away_avg_points": 100 if sport in ["NBA", "NCAAB"] else 3 if sport == "NHL" else 24,
-                                                        "home_def_rating": 100 if sport in ["NBA", "NCAAB"] else 3 if sport == "NHL" else 24,
-                                                        "away_def_rating": 100 if sport in ["NBA", "NCAAB"] else 3 if sport == "NHL" else 24,
-                                                        "spread_normalized": 0.5,
-                                                        "home_last_5": 0.5,
-                                                        "away_last_5": 0.5,
-                                                        "home_home_record": 0.5,
-                                                        "away_away_record": 0.5,
-                                                        "head_to_head": 0.5,
-                                                        "rest_advantage": 0,
-                                                        "injuries_impact": 0,
-                                                        "weather_factor": 0,
-                                                        "public_betting_pct": 0.5,
-                                                        "sharp_money_indicator": 0,
-                                                        "line_movement": 0,
-                                                        "total_movement": 0,
-                                                        "model_consensus": 0.5,
-                                                        "theover_probability": 0.5,
-                                                        "implied_home_prob": 0.5,
-                                                        "home_streak": 0,
-                                                        "away_streak": 0,
-                                                        "division_game": 0,
-                                                        "back_to_back": 0,
-                                                        "primetime_game": 0,
-                                                    })
-                                    except Exception as e:
-                                        st.warning(f"Error fetching {sport}: {e}")
-                                
-                                time.sleep(0.3)  # Rate limiting
-                        
-                        progress_bar.progress(1.0)
-                        status_text.text("Processing data...")
-                        
-                        if all_games:
-                            # Create DataFrame
-                            df = pd.DataFrame(all_games)
-                            
-                            # Store in session state
-                            if 'training_data' not in st.session_state:
-                                st.session_state['training_data'] = df
-                            else:
-                                # Append to existing data
-                                existing = st.session_state['training_data']
-                                combined = pd.concat([existing, df], ignore_index=True)
-                                combined = combined.drop_duplicates(subset=['game_id'], keep='last')
-                                st.session_state['training_data'] = combined
-                                df = combined
-                            
-                            st.success(f"✅ Collected {len(all_games)} games! Total in dataset: {len(df)}")
-                            
-                            # Show summary
-                            st.write("**Data Summary:**")
-                            summary_cols = st.columns(4)
-                            with summary_cols[0]:
-                                st.metric("Total Games", len(df))
-                            with summary_cols[1]:
-                                st.metric("Home Win Rate", f"{df['home_won'].mean():.1%}")
-                            with summary_cols[2]:
-                                sports_count = df['sport'].nunique()
-                                st.metric("Sports", sports_count)
-                            with summary_cols[3]:
-                                date_range = f"{df['date'].min()} to {df['date'].max()}"
-                                st.metric("Date Range", date_range[:21])
-                            
-                            # By sport breakdown
-                            st.write("**By Sport:**")
-                            sport_summary = df.groupby('sport').agg({
-                                'game_id': 'count',
-                                'home_won': 'mean'
-                            }).rename(columns={'game_id': 'Games', 'home_won': 'Home Win %'})
-                            sport_summary['Home Win %'] = (sport_summary['Home Win %'] * 100).round(1).astype(str) + '%'
-                            st.dataframe(sport_summary, use_container_width=True)
-                            
-                            # Download button
-                            csv_data = df.to_csv(index=False)
-                            st.download_button(
-                                "⬇️ Download Training Data (CSV)",
-                                data=csv_data,
-                                file_name=f"training_data_{datetime.now().strftime('%Y%m%d')}.csv",
-                                mime="text/csv",
-                                use_container_width=True
-                            )
-                            
-                            st.info(f"""
-                            **Next Steps:**
-                            1. Download the CSV
-                            2. Run: `python train_vertex_model.py --data training_data.csv --project-id elite-hangar-479017-m8 --deploy`
-                            3. Update the Vertex AI Endpoint ID in sidebar
-                            """)
-                        else:
-                            st.warning("No completed games found in the specified date range.")
-                    
+                        resp = requests.get(url, headers=headers, params=params, timeout=30)
+                        if resp.status_code == 200:
+                            data = resp.json()
+                            return data.get("response", [])
+                        return []
                     except Exception as e:
-                        st.error(f"Error collecting data: {e}")
-                        import traceback
-                        st.code(traceback.format_exc())
+                        return []
+                
+                all_games = []
+                progress_bar = st.progress(0)
+                status_text = st.empty()
+                log_area = st.empty()
+                logs = []
+                
+                end_date = datetime.now() - timedelta(days=1)
+                start_date = end_date - timedelta(days=collect_days)
+                
+                total_sports = len(collect_sports)
+                
+                for sport_idx, sport in enumerate(collect_sports):
+                    status_text.text(f"📊 Collecting {sport}...")
+                    logs.append(f"🏀 Starting {sport}...")
+                    log_area.code("\n".join(logs[-10:]))
+                    
+                    league_id = LEAGUE_IDS.get(sport)
+                    
+                    # Determine season
+                    if sport in ["NBA", "NCAAB", "NHL"]:
+                        if start_date.month >= 10:
+                            season = f"{start_date.year}-{start_date.year + 1}"
+                        else:
+                            season = f"{start_date.year - 1}-{start_date.year}"
+                    else:
+                        season = str(start_date.year)
+                    
+                    logs.append(f"  Season: {season}, League ID: {league_id}")
+                    log_area.code("\n".join(logs[-10:]))
+                    
+                    # Get standings for team stats
+                    standings_data = api_request(sport, "standings", {"season": season, "league": league_id})
+                    standings = {}
+                    if standings_data:
+                        for item in standings_data:
+                            if isinstance(item, list):
+                                for team in item:
+                                    team_id = team.get("team", {}).get("id")
+                                    if team_id:
+                                        standings[team_id] = team
+                            elif isinstance(item, dict):
+                                team_id = item.get("team", {}).get("id")
+                                if team_id:
+                                    standings[team_id] = item
+                    
+                    logs.append(f"  Found {len(standings)} teams in standings")
+                    log_area.code("\n".join(logs[-10:]))
+                    
+                    # Get games
+                    games = api_request(sport, "games", {"season": season, "league": league_id})
+                    logs.append(f"  Found {len(games)} total games")
+                    log_area.code("\n".join(logs[-10:]))
+                    
+                    completed = 0
+                    for game in games:
+                        # Check status (FT = Full Time, AOT = After OT)
+                        status = game.get("status", {})
+                        status_short = status.get("short", "")
+                        if status_short not in ["FT", "AOT", "AET", "AP"]:
+                            continue
+                        
+                        # Get date
+                        game_date_str = game.get("date", "")
+                        if not game_date_str:
+                            continue
+                        try:
+                            if "T" in game_date_str:
+                                game_date = datetime.fromisoformat(game_date_str.replace("Z", "+00:00"))
+                            else:
+                                game_date = datetime.strptime(game_date_str[:10], "%Y-%m-%d")
+                            game_date = game_date.replace(tzinfo=None)
+                        except:
+                            continue
+                        
+                        if game_date < start_date or game_date > end_date:
+                            continue
+                        
+                        # Get teams
+                        teams = game.get("teams", {})
+                        home_data = teams.get("home", {})
+                        away_data = teams.get("away", {})
+                        home_name = home_data.get("name", "")
+                        away_name = away_data.get("name", "")
+                        home_id = home_data.get("id")
+                        away_id = away_data.get("id")
+                        
+                        if not home_name or not away_name:
+                            continue
+                        
+                        # Get scores
+                        scores = game.get("scores", {})
+                        if sport in ["NBA", "NCAAB"]:
+                            home_score = scores.get("home", {}).get("total", 0) or 0
+                            away_score = scores.get("away", {}).get("total", 0) or 0
+                        elif sport == "NHL":
+                            home_score = scores.get("home", 0) or 0
+                            away_score = scores.get("away", 0) or 0
+                        else:
+                            home_score = scores.get("home", {}).get("total", 0) or 0
+                            away_score = scores.get("away", {}).get("total", 0) or 0
+                        
+                        if home_score == 0 and away_score == 0:
+                            continue
+                        
+                        # Get standings data for each team
+                        home_standing = standings.get(home_id, {})
+                        away_standing = standings.get(away_id, {})
+                        
+                        # Extract features from standings
+                        home_games = home_standing.get("games", {})
+                        away_games = away_standing.get("games", {})
+                        
+                        if sport in ["NBA", "NCAAB"]:
+                            home_wins = home_games.get("win", {}).get("total", 0) or 0
+                            home_losses = home_games.get("lose", {}).get("total", 0) or 0
+                            away_wins = away_games.get("win", {}).get("total", 0) or 0
+                            away_losses = away_games.get("lose", {}).get("total", 0) or 0
+                            h_h_w = home_games.get("win", {}).get("home", 0) or 0
+                            h_h_l = home_games.get("lose", {}).get("home", 0) or 0
+                            a_a_w = away_games.get("win", {}).get("away", 0) or 0
+                            a_a_l = away_games.get("lose", {}).get("away", 0) or 0
+                        else:
+                            home_wins = home_standing.get("won", 0) or 0
+                            home_losses = home_standing.get("lost", 0) or 0
+                            away_wins = away_standing.get("won", 0) or 0
+                            away_losses = away_standing.get("lost", 0) or 0
+                            h_h_w = home_wins // 2
+                            h_h_l = home_losses // 2
+                            a_a_w = away_wins // 2
+                            a_a_l = away_losses // 2
+                        
+                        home_win_pct = calculate_win_pct(home_wins, home_losses)
+                        away_win_pct = calculate_win_pct(away_wins, away_losses)
+                        
+                        # Form (last 5)
+                        home_form = home_standing.get("form", "") or ""
+                        away_form = away_standing.get("form", "") or ""
+                        home_last_5 = home_form[-5:].count("W") / 5 if home_form else home_win_pct
+                        away_last_5 = away_form[-5:].count("W") / 5 if away_form else away_win_pct
+                        
+                        # Points (normalized)
+                        if sport in ["NBA", "NCAAB"]:
+                            home_pts = home_standing.get("points", {}).get("for", 100) or 100
+                            away_pts = away_standing.get("points", {}).get("for", 100) or 100
+                            home_def = home_standing.get("points", {}).get("against", 100) or 100
+                            away_def = away_standing.get("points", {}).get("against", 100) or 100
+                        else:
+                            home_pts = 3 if sport == "NHL" else 24
+                            away_pts = 3 if sport == "NHL" else 24
+                            home_def = 3 if sport == "NHL" else 24
+                            away_def = 3 if sport == "NHL" else 24
+                        
+                        # Build game record with all 27 features
+                        game_record = {
+                            "game_id": game.get("id", f"{game_date_str[:10]}_{home_name}_{away_name}"),
+                            "date": game_date_str[:10],
+                            "sport": sport,
+                            "season": season,
+                            "home_team": home_name,
+                            "away_team": away_name,
+                            "home_score": home_score,
+                            "away_score": away_score,
+                            "home_won": 1 if home_score > away_score else 0,
+                            # 27 Features
+                            "home_win_pct": home_win_pct,
+                            "away_win_pct": away_win_pct,
+                            "home_avg_points": normalize_points(home_pts, sport),
+                            "away_avg_points": normalize_points(away_pts, sport),
+                            "home_def_rating": normalize_points(home_def, sport),
+                            "away_def_rating": normalize_points(away_def, sport),
+                            "spread_normalized": 0.5,
+                            "home_last_5": home_last_5,
+                            "away_last_5": away_last_5,
+                            "home_home_record": calculate_win_pct(h_h_w, h_h_l),
+                            "away_away_record": calculate_win_pct(a_a_w, a_a_l),
+                            "head_to_head": 0.5,
+                            "rest_advantage": 0,
+                            "injuries_impact": 0,
+                            "weather_factor": 0,
+                            "public_betting_pct": 0.5,
+                            "sharp_money_indicator": 0,
+                            "line_movement": 0,
+                            "total_movement": 0,
+                            "model_consensus": 0.5,
+                            "theover_probability": home_win_pct,
+                            "implied_home_prob": home_win_pct,
+                            "home_streak": 0,
+                            "away_streak": 0,
+                            "division_game": 0,
+                            "back_to_back": 0,
+                            "primetime_game": 0,
+                        }
+                        
+                        all_games.append(game_record)
+                        completed += 1
+                    
+                    logs.append(f"  ✅ {completed} completed games in date range")
+                    log_area.code("\n".join(logs[-10:]))
+                    
+                    progress_bar.progress((sport_idx + 1) / total_sports)
+                    time.sleep(1)  # Rate limiting
+                
+                progress_bar.progress(1.0)
+                
+                if all_games:
+                    df = pd.DataFrame(all_games)
+                    st.session_state['training_data'] = df
+                    
+                    st.success(f"✅ Collected {len(df)} games!")
+                    
+                    summary_cols = st.columns(4)
+                    with summary_cols[0]:
+                        st.metric("Total Games", len(df))
+                    with summary_cols[1]:
+                        st.metric("Home Win Rate", f"{df['home_won'].mean():.1%}")
+                    with summary_cols[2]:
+                        st.metric("Sports", df['sport'].nunique())
+                    with summary_cols[3]:
+                        st.metric("Date Range", f"{df['date'].min()[:10]} to {df['date'].max()[:10]}")
+                    
+                    st.write("**By Sport:**")
+                    for sport in df['sport'].unique():
+                        sg = df[df['sport'] == sport]
+                        st.write(f"  • {sport}: {len(sg)} games ({sg['home_won'].mean():.1%} home win)")
+                else:
+                    st.warning("No games found. API-Sports may be rate limited or no games in date range.")
         
-        # Show existing training data if available
+        # Show existing data
         if 'training_data' in st.session_state and len(st.session_state['training_data']) > 0:
             st.markdown("---")
-            st.write("**Existing Training Data:**")
-            existing_df = st.session_state['training_data']
-            st.write(f"📊 {len(existing_df)} games in memory")
+            df = st.session_state['training_data']
+            st.success(f"📊 **{len(df)} games ready for training**")
             
-            if st.checkbox("Show sample data"):
-                st.dataframe(existing_df.head(20), use_container_width=True)
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.checkbox("Show sample data", key="show_sample"):
+                    st.dataframe(df.head(10), use_container_width=True)
+            with col2:
+                csv_data = df.to_csv(index=False)
+                st.download_button(
+                    "⬇️ Download CSV",
+                    data=csv_data,
+                    file_name=f"training_data_{datetime.now().strftime('%Y%m%d')}.csv",
+                    mime="text/csv"
+                )
             
-            if st.button("🗑️ Clear Training Data"):
+            if st.button("🗑️ Clear Data", key="clear_data"):
                 del st.session_state['training_data']
                 st.rerun()
+    
+    with st.expander("🎯 Step 2: Train & Deploy Model", expanded=False):
+        if 'training_data' not in st.session_state or len(st.session_state.get('training_data', [])) == 0:
+            st.warning("⚠️ No training data. Complete Step 1 first!")
+        else:
+            df = st.session_state['training_data']
+            st.success(f"📊 {len(df)} games available for training")
+            
+            min_games = 100
+            if len(df) < min_games:
+                st.warning(f"⚠️ Recommend at least {min_games} games. You have {len(df)}. Collect more data for better results.")
+            
+            st.write("**Training Configuration:**")
+            col1, col2 = st.columns(2)
+            with col1:
+                test_size = st.slider("Test set size", 0.1, 0.3, 0.2, 0.05)
+            with col2:
+                n_estimators = st.slider("Trees (n_estimators)", 50, 300, 150, 50)
+            
+            if st.button("🚀 Train XGBoost Model", type="primary", use_container_width=True, key="train_model"):
+                with st.spinner("Training model..."):
+                    try:
+                        from sklearn.model_selection import train_test_split
+                        from sklearn.metrics import accuracy_score, roc_auc_score, classification_report
+                        import xgboost as xgb
+                        import joblib
+                        
+                        # Prepare features
+                        X = df[FEATURE_NAMES].values
+                        y = df['home_won'].values
+                        
+                        # Split
+                        X_train, X_test, y_train, y_test = train_test_split(
+                            X, y, test_size=test_size, random_state=42, stratify=y
+                        )
+                        
+                        st.write(f"Training: {len(X_train)} games, Testing: {len(X_test)} games")
+                        
+                        # Train
+                        model = xgb.XGBClassifier(
+                            n_estimators=n_estimators,
+                            max_depth=6,
+                            learning_rate=0.05,
+                            subsample=0.8,
+                            colsample_bytree=0.8,
+                            random_state=42,
+                            use_label_encoder=False,
+                            eval_metric='logloss'
+                        )
+                        
+                        model.fit(X_train, y_train, eval_set=[(X_test, y_test)], verbose=False)
+                        
+                        # Evaluate
+                        y_pred = model.predict(X_test)
+                        y_proba = model.predict_proba(X_test)[:, 1]
+                        
+                        accuracy = accuracy_score(y_test, y_pred)
+                        roc_auc = roc_auc_score(y_test, y_proba)
+                        
+                        st.success(f"✅ Model trained!")
+                        
+                        metric_cols = st.columns(3)
+                        with metric_cols[0]:
+                            st.metric("Accuracy", f"{accuracy:.1%}")
+                        with metric_cols[1]:
+                            st.metric("ROC-AUC", f"{roc_auc:.3f}")
+                        with metric_cols[2]:
+                            edge = (accuracy - 0.524) * 100
+                            st.metric("Edge vs 52.4%", f"{edge:+.1f}%")
+                        
+                        # Feature importance
+                        st.write("**Top 10 Features:**")
+                        importance = pd.DataFrame({
+                            'Feature': FEATURE_NAMES,
+                            'Importance': model.feature_importances_
+                        }).sort_values('Importance', ascending=False).head(10)
+                        st.dataframe(importance, use_container_width=True)
+                        
+                        # Save model
+                        model_path = "/tmp/sports_betting_model.joblib"
+                        joblib.dump(model, model_path)
+                        st.session_state['trained_model'] = model
+                        st.session_state['model_path'] = model_path
+                        
+                        st.success("✅ Model saved! Ready for deployment.")
+                        
+                    except ImportError as e:
+                        st.error(f"Missing library: {e}. Install with: pip install xgboost scikit-learn joblib")
+                    except Exception as e:
+                        st.error(f"Training error: {e}")
+                        import traceback
+                        st.code(traceback.format_exc())
+            
+            # Deploy section
+            st.markdown("---")
+            st.write("**Deploy to GCP Vertex AI:**")
+            
+            if 'trained_model' not in st.session_state:
+                st.info("Train a model first (above)")
+            else:
+                st.success("✅ Model ready for deployment")
+                
+                gcp_project = st.text_input("GCP Project ID", value="elite-hangar-479017-m8", key="deploy_project")
+                gcp_region = st.text_input("Region", value="us-central1", key="deploy_region")
+                
+                st.warning("""
+                **Manual Deployment Required:**
+                
+                Due to GCP authentication requirements, deploy from your local machine:
+                
+                1. Download the model file below
+                2. Run these commands:
+                ```bash
+                # Install Google Cloud SDK if needed
+                gcloud auth login
+                gcloud config set project elite-hangar-479017-m8
+                
+                # Upload model to Cloud Storage
+                gsutil cp sports_betting_model.joblib gs://your-bucket/models/
+                
+                # Deploy to Vertex AI (or use Console)
+                ```
+                
+                Or use GCP Console → Vertex AI → Model Registry → Import
+                """)
+                
+                if st.session_state.get('model_path'):
+                    with open(st.session_state['model_path'], 'rb') as f:
+                        st.download_button(
+                            "⬇️ Download Trained Model (.joblib)",
+                            data=f,
+                            file_name="sports_betting_model.joblib",
+                            mime="application/octet-stream"
+                        )
 
     st.markdown("---")
 
