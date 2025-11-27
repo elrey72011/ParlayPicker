@@ -1031,10 +1031,31 @@ def show_vertex_master_analysis(results_df: pd.DataFrame):
     results_df['vertex_ai_prob'] = results_df['vertex_ai_prob'].fillna(0.5)
     results_df['implied_home_prob'] = results_df['implied_home_prob'].fillna(0.5)
     
+    # CRITICAL: Normalize vertex_ai_prob to always be a decimal (0-1)
+    # Apply per-row normalization to handle mixed formats
+    def normalize_prob(val):
+        if val is None or pd.isna(val):
+            return 0.5
+        val = float(val)
+        if val > 1:
+            return val / 100  # Convert percentage to decimal
+        return val
+    
+    results_df['vertex_ai_prob'] = results_df['vertex_ai_prob'].apply(normalize_prob)
+    results_df['implied_home_prob'] = results_df['implied_home_prob'].apply(normalize_prob)
+    
+    # Ensure values are clamped to valid probability range
+    results_df['vertex_ai_prob'] = results_df['vertex_ai_prob'].clip(0.01, 0.99)
+    results_df['implied_home_prob'] = results_df['implied_home_prob'].clip(0.01, 0.99)
+    
+    # Recalculate edge with normalized values
+    results_df['vertex_ai_edge'] = results_df['vertex_ai_prob'] - results_df['implied_home_prob']
+    
     # Add rank column
     results_df['rank'] = range(1, len(results_df) + 1)
     
     # Calculate best side for each game to get summary stats
+    # Note: vertex_ai_prob is now guaranteed to be decimal (0-1) after normalization above
     results_df['home_win_prob_pct'] = results_df['vertex_ai_prob'] * 100
     results_df['away_win_prob_pct'] = (1 - results_df['vertex_ai_prob']) * 100
     results_df['best_win_prob_summary'] = results_df[['home_win_prob_pct', 'away_win_prob_pct']].max(axis=1)
@@ -1068,6 +1089,8 @@ def show_vertex_master_analysis(results_df: pd.DataFrame):
     
     # Calculate best side for each game
     summary_df = results_df.copy()
+    
+    # Note: vertex_ai_prob is now guaranteed to be decimal (0-1) after normalization
     summary_df['Home Win %'] = summary_df['vertex_ai_prob'] * 100
     summary_df['Away Win %'] = (1 - summary_df['vertex_ai_prob']) * 100
     
@@ -1110,6 +1133,9 @@ def show_vertex_master_analysis(results_df: pd.DataFrame):
         
         # Kalshi check
         kalshi_prob = row.get('kalshi_prob', 0.5) or 0.5
+        # Normalize to decimal if needed
+        if kalshi_prob > 1:
+            kalshi_prob = kalshi_prob / 100
         kalshi_available = row.get('kalshi_available', False)
         if kalshi_available:
             kalshi_home = kalshi_prob * 100
@@ -1150,11 +1176,10 @@ def show_vertex_master_analysis(results_df: pd.DataFrame):
         use_container_width=True,
         hide_index=True,
         column_config={
-            'Win %': st.column_config.ProgressColumn(
+            'Win %': st.column_config.NumberColumn(
                 'Win %',
                 help='AI Win Probability',
-                min_value=0,
-                max_value=100,
+                format="%.1f%%",  # Display as percentage
             ),
         }
     )
@@ -1204,6 +1229,7 @@ def show_vertex_master_analysis(results_df: pd.DataFrame):
     # For each game, determine which side is the "best pick"
     # vertex_ai_prob is home team probability (to cover spread)
     # If home_prob > 50%, pick home. If away_prob (1 - home_prob) > 50%, pick away
+    # Note: vertex_ai_prob is now guaranteed to be decimal (0-1) after normalization
     filtered_df['home_win_prob'] = filtered_df['vertex_ai_prob'] * 100
     filtered_df['away_win_prob'] = (1 - filtered_df['vertex_ai_prob']) * 100
     
