@@ -14519,56 +14519,62 @@ import importlib.util
 import json
 from datetime import datetime
 
-anthropic_spec = importlib.util.find_spec("anthropic")
-anthropic_available = anthropic_spec is not None
+# Check for AI providers (Gemini or Claude)
+use_gemini = GEMINI_AVAILABLE and st.session_state.get('gcp_project_id')
+use_claude = st.session_state.get('anthropic_api_key')
+ai_available = use_gemini or use_claude
 
-if not anthropic_available:
+if not ai_available:
     st.warning(
-        "Anthropic dependency missing. Vertex AI analysis is disabled until the `anthropic`"
-        " package from requirements is installed."
+        "⚠️ No AI provider configured. Configure Gemini (recommended) or Claude in the sidebar to enable AI analysis."
     )
+elif use_gemini:
+    st.success("✅ Using Google Gemini for AI analysis (~24x cheaper than Claude)")
 else:
-    import anthropic
+    st.info("ℹ️ Using Claude API for AI analysis")
 
 # ============================================================================
-# VERTEX AI MASTER ANALYZER (RUNS FIRST)
+# AI MASTER ANALYZER (RUNS FIRST)
 # ============================================================================
 
-st.header("🧠 Vertex AI Master Analysis")
+st.header("🧠 AI Master Analysis")
 st.write("**Run this FIRST to calculate probabilities for all games**")
 
-if not anthropic_available:
+if not ai_available:
     st.info(
-        "Install the `anthropic` package to enable Vertex AI analysis. Other app features will"
-        " continue to work without it."
+        "Configure **Gemini** (recommended, ~$1/month) or **Claude** in the sidebar to enable AI analysis. "
+        "Other app features will continue to work without it."
     )
 
-with st.expander("ℹ️ About Vertex-First Architecture", expanded=False):
+with st.expander("ℹ️ About AI-First Architecture", expanded=False):
     st.markdown("""
     **New Workflow:**
-    1. ✅ Vertex AI analyzes ALL games with ALL data sources
+    1. ✅ AI analyzes ALL games with ALL data sources
     2. ✅ Stores comprehensive results in session state
-    3. ✅ Best Bets generator uses Vertex probabilities
-    4. ✅ Parlay Optimizer uses Vertex probabilities
+    3. ✅ Best Bets generator uses AI probabilities
+    4. ✅ Parlay Optimizer uses AI probabilities
     
     **Benefits:**
     - Single source of truth
     - All data consolidated upfront
     - No post-processing enrichment needed
     - Consistent probabilities across all features
+    
+    **AI Providers:**
+    - **Gemini** (Recommended): ~$0.001/game, excellent quality
+    - **Claude**: ~$0.015/game, premium quality
     """)
 
 if st.button(
-    "🚀 Run Vertex AI Master Analysis",
+    "🚀 Run AI Master Analysis",
     type="primary",
     key="vertex_master",
-    disabled=not anthropic_available,
+    disabled=not ai_available,
 ):
 
-    if not anthropic_available:
+    if not ai_available:
         st.error(
-            "Anthropic dependency missing. Install the `anthropic` package from requirements"
-            " to run Vertex AI analysis."
+            "❌ No AI provider configured. Please configure Gemini (recommended) or Claude in the sidebar."
         )
         st.stop()
     
