@@ -56,7 +56,7 @@ class GeminiAnalyzer:
         
         logger.info(f"Initializing Gemini with project={project_id}, region={region}")
         
-    def _get_model(self) -> GenerativeModel:
+    def _get_model(self):
         """Get or create Gemini model."""
         if self.model is None:
             try:
