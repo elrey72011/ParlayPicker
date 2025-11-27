@@ -60,6 +60,9 @@ class GeminiAnalyzer:
         """Get or create Gemini model."""
         if self.model is None:
             try:
+                # Ensure credentials are set (restore from session state if needed)
+                self._ensure_credentials()
+                
                 # Initialize Vertex AI
                 vertexai.init(project=self.project_id, location=self.region)
                 
@@ -72,6 +75,29 @@ class GeminiAnalyzer:
                 raise
         
         return self.model
+    
+    def _ensure_credentials(self):
+        """Ensure Google credentials are available."""
+        import streamlit as st
+        
+        # Check if credentials file exists
+        if os.path.exists("/tmp/gcp_service_account_key.json"):
+            os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = "/tmp/gcp_service_account_key.json"
+            return
+        
+        # Try to restore from session state
+        if 'gcp_service_account_key' in st.session_state:
+            try:
+                key_path = "/tmp/gcp_service_account_key.json"
+                with open(key_path, "wb") as f:
+                    f.write(st.session_state['gcp_service_account_key'])
+                os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = key_path
+                logger.info("✅ Credentials restored from session state")
+            except Exception as e:
+                logger.error(f"Failed to restore credentials: {e}")
+                raise ValueError("Google credentials not available. Please upload service account key in sidebar.")
+        else:
+            raise ValueError("Google credentials not found. Please upload service account key in sidebar.")
     
     def analyze_game(
         self,
@@ -459,18 +485,36 @@ def show_gemini_config_ui():
         key="gemini_sa_key_upload"
     )
     
+    # Store key in session state for persistence across reruns
     if uploaded_key:
         try:
-            # Save service account key
+            # Read the key content
+            key_content = uploaded_key.read()
+            
+            # Store in session state so it persists
+            st.session_state['gcp_service_account_key'] = key_content
+            
+            # Save to file
             key_path = "/tmp/gcp_service_account_key.json"
             with open(key_path, "wb") as f:
-                f.write(uploaded_key.read())
+                f.write(key_content)
             
             os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = key_path
             st.sidebar.success("✅ Service account key loaded")
             
         except Exception as e:
             st.sidebar.error(f"❌ Failed to load key: {e}")
+    
+    # If key is in session state but not uploaded this time, restore it
+    elif 'gcp_service_account_key' in st.session_state:
+        try:
+            key_path = "/tmp/gcp_service_account_key.json"
+            with open(key_path, "wb") as f:
+                f.write(st.session_state['gcp_service_account_key'])
+            os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = key_path
+            st.sidebar.info("🔑 Using saved credentials")
+        except Exception as e:
+            st.sidebar.warning(f"⚠️ Could not restore credentials: {e}")
     
     # Test connection button
     if project_id:
@@ -484,9 +528,14 @@ def show_gemini_config_ui():
                     else:
                         st.error("❌ Connection failed - check logs")
         
-        st.sidebar.success("✅ Gemini Configured")
-        st.sidebar.caption("💡 Gemini is ~24x cheaper than Claude!")
-        return True
+        # Show status based on whether we have credentials
+        if 'gcp_service_account_key' in st.session_state or uploaded_key:
+            st.sidebar.success("✅ Gemini Configured")
+            st.sidebar.caption("💡 Gemini is ~24x cheaper than Claude!")
+            return True
+        else:
+            st.sidebar.warning("⚠️ Upload service account key")
+            return False
     else:
         st.sidebar.warning("⚠️ Enter GCP Project ID")
         return False
