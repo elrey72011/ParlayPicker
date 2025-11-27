@@ -10200,25 +10200,35 @@ if is_vertex_ai_enabled():
                     for sport_idx, sport in enumerate(collect_sports):
                         status_text.text(f"📊 Collecting {sport}...")
                         logs.append(f"🏀 Starting {sport}...")
-                        log_area.code("\n".join(logs[-10:]))
+                        log_area.code("\n".join(logs[-15:]))
                         
                         league_id = LEAGUE_IDS.get(sport)
                         api_key = get_api_key_for_sport(sport)
                         
                         logs.append(f"  API Key: {api_key[:12]}..." if api_key else "  ❌ No API key!")
-                        log_area.code("\n".join(logs[-10:]))
+                        log_area.code("\n".join(logs[-15:]))
                         
-                        # Determine season - try multiple formats
+                        # Determine season - use END date (current) to get current season
+                        # NBA/NHL seasons run Oct-June, so if we're in Oct-Dec use current year
+                        current_month = end_date.month
+                        current_year = end_date.year
+                        
                         if sport in ["NBA", "NCAAB", "NHL"]:
-                            if start_date.month >= 10:
-                                season = f"{start_date.year}-{start_date.year + 1}"
+                            # If Oct-Dec, season is YYYY-(YYYY+1)
+                            # If Jan-Sept, season is (YYYY-1)-YYYY
+                            if current_month >= 10:
+                                season = f"{current_year}-{current_year + 1}"
                             else:
-                                season = f"{start_date.year - 1}-{start_date.year}"
+                                season = f"{current_year - 1}-{current_year}"
                         else:
-                            season = str(start_date.year)
+                            # NFL/NCAAF use single year
+                            if current_month >= 9:
+                                season = str(current_year)
+                            else:
+                                season = str(current_year - 1)
                         
                         logs.append(f"  Season: {season}, League ID: {league_id}")
-                        log_area.code("\n".join(logs[-10:]))
+                        log_area.code("\n".join(logs[-15:]))
                         
                         # Get standings for team stats
                         standings_data, standings_status = api_request(sport, "standings", {"season": season, "league": league_id})
