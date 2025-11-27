@@ -10208,26 +10208,29 @@ if is_vertex_ai_enabled():
                     logs.append(f"  API Key: {api_key[:12]}..." if api_key else "  ❌ No API key!")
                     log_area.code("\n".join(logs[-15:]))
                     
-                    # Determine season - use END date (current) to get current season
-                    # NBA/NHL seasons run Oct-June, so if we're in Oct-Dec use current year
+                    # Determine season - use PREVIOUS completed season for free plan
+                    # Free plans don't have access to current season
                     current_month = end_date.month
                     current_year = end_date.year
                     
                     if sport in ["NBA", "NCAAB", "NHL"]:
-                        # If Oct-Dec, season is YYYY-(YYYY+1)
-                        # If Jan-Sept, season is (YYYY-1)-YYYY
+                        # Use LAST completed season (2024-2025) instead of current
+                        # Current season (2025-2026) requires paid plan
                         if current_month >= 10:
-                            season = f"{current_year}-{current_year + 1}"
-                        else:
+                            # We're in Oct-Dec, last completed season was (year-1)-(year)
                             season = f"{current_year - 1}-{current_year}"
+                        else:
+                            # We're in Jan-Sept, last completed season was (year-2)-(year-1)
+                            season = f"{current_year - 2}-{current_year - 1}"
                     else:
-                        # NFL/NCAAF use single year
+                        # NFL/NCAAF use single year - use last completed season
                         if current_month >= 9:
-                            season = str(current_year)
+                            season = str(current_year - 1)
                         else:
                             season = str(current_year - 1)
                     
-                    logs.append(f"  Season: {season}, League ID: {league_id}")
+                    logs.append(f"  Season: {season} (using previous season for free plan)")
+                    logs.append(f"  League ID: {league_id}")
                     log_area.code("\n".join(logs[-15:]))
                     
                     # Get standings for team stats
