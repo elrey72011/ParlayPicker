@@ -9164,20 +9164,19 @@ if is_vertex_ai_enabled():
                 if not selected_sports:
                     selected_sports = list(sport_map.values())
                 
-                # Initialize TheOddsAPI client
+                # Initialize TheOddsAPI - use existing fetch function
                 odds_api_key = resolve_odds_api_key()
                 if not odds_api_key:
                     st.error("❌ Please configure your The Odds API key in the sidebar settings.")
                     st.stop()
                 
-                from app_core import TheOddsAPIClient
-                odds_client = TheOddsAPIClient(odds_api_key)
-                
-                # Fetch all games with odds
+                # Fetch all games with odds using existing function
                 all_results = []
                 for sport_key in selected_sports:
                     try:
-                        games = odds_client.get_odds(sport_key)
+                        # Use existing fetch_oddsapi_snapshot function
+                        snapshot = fetch_oddsapi_snapshot(odds_api_key, sport_key)
+                        games = snapshot.get('events', [])
                         st.success(f"✅ Fetched {len(games)} {sport_key} games")
                         
                         for game in games:
@@ -9415,33 +9414,26 @@ if is_vertex_ai_enabled():
                 
                 all_games = []
                 
-                if 'odds_client' not in locals():
-                    try:
-                        from app_core import TheOddsAPIClient
-                        odds_api_key = resolve_odds_api_key()
-                        if odds_api_key:
-                            odds_client = TheOddsAPIClient(odds_api_key)
-                            logger.info("✅ The Odds API client initialized")
-                        else:
-                            odds_client = None
-                            logger.warning("⚠️ No Odds API key found")
-                    except Exception as e:
-                        logger.warning(f"Could not initialize odds client: {e}")
-                        odds_client = None
+                # Try to fetch from TheOddsAPI using existing function
+                odds_api_key = resolve_odds_api_key()
+                odds_available = False
                 
-                if odds_client:
+                if odds_api_key:
                     st.info("📥 Fetching games from The Odds API...")
                     for sport in selected_sports:
                         try:
-                            games = odds_client.get_odds(sport)
+                            snapshot = fetch_oddsapi_snapshot(odds_api_key, sport)
+                            games = snapshot.get('events', [])
                             for game in games:
                                 game['sport_key'] = sport
                             all_games.extend(games)
                             st.success(f"✅ Fetched {len(games)} {sport} games")
+                            odds_available = True
                         except Exception as e:
                             st.warning(f"⚠️ Error fetching {sport}: {e}")
                             logger.error(f"Error fetching {sport}: {e}")
-                else:
+                
+                if not odds_available:
                     st.warning("⚠️ The Odds API not configured")
                     st.info("💡 Using theover.ai data if available...")
                     
