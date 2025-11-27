@@ -9308,6 +9308,13 @@ if is_vertex_ai_enabled():
                             else:
                                 odds_str = str(int(pick_ml))
                             
+                            # Determine if pick is the market favorite (negative ML = favorite)
+                            # Compare actual market moneylines
+                            is_market_favorite = pick_ml < 0 and (
+                                (pick_team == home_team and home_ml < away_ml) or
+                                (pick_team == away_team and away_ml < home_ml)
+                            )
+                            
                             all_results.append({
                                 'League': league,
                                 'Game': f"{away_team} @ {home_team}",
@@ -9315,6 +9322,7 @@ if is_vertex_ai_enabled():
                                 'AI Win %': round(pick_prob * 100, 1),
                                 'Market %': round(market_prob * 100, 1),
                                 'Edge': round(edge * 100, 1),
+                                'Favorite': '✅' if is_market_favorite else '❌',
                                 'EV': f"${ev * 100:.2f}",
                                 'Odds': odds_str,
                                 'Home ML': home_ml,
@@ -9332,7 +9340,7 @@ if is_vertex_ai_enabled():
                     results_df['Rank'] = range(1, len(results_df) + 1)
                     
                     # Reorder columns
-                    display_cols = ['Rank', 'League', 'Game', 'THE PICK', 'AI Win %', 'Market %', 'Edge', 'EV', 'Odds']
+                    display_cols = ['Rank', 'League', 'Game', 'THE PICK', 'AI Win %', 'Market %', 'Edge', 'Favorite', 'EV', 'Odds']
                     results_df = results_df[display_cols]
                     
                     st.success(f"✅ Analyzed {len(results_df)} games!")
