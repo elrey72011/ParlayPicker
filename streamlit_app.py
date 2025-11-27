@@ -8823,12 +8823,23 @@ with st.expander("🔍 ML Predictor Status", expanded=False):
         # Test prediction button
         if st.button("🧪 Test ML Prediction"):
             try:
-                test_result = ml_predictor.predict_game_outcome(
-                    home_team="Kansas City Chiefs",
-                    away_team="Las Vegas Raiders",
-                    sport_key="americanfootball_nfl"
-                )
+                # Try with sport_key first (newer predictors)
+                try:
+                    test_result = ml_predictor.predict_game_outcome(
+                        home_team="Kansas City Chiefs",
+                        away_team="Las Vegas Raiders",
+                        sport_key="americanfootball_nfl"
+                    )
+                except TypeError:
+                    # Fallback: without sport_key (HistoricalMLPredictor)
+                    st.info("ℹ️ Using HistoricalMLPredictor (doesn't accept sport_key parameter)")
+                    test_result = ml_predictor.predict_game_outcome(
+                        home_team="Kansas City Chiefs",
+                        away_team="Las Vegas Raiders"
+                    )
+                
                 if test_result:
+                    st.success("✅ ML Prediction successful!")
                     st.json(test_result)
                     if abs(test_result.get('home_win_prob', 0.58) - 0.58) < 0.01:
                         st.warning("⚠️ Probability is very close to 58% - model might not be properly trained")
@@ -8836,6 +8847,7 @@ with st.expander("🔍 ML Predictor Status", expanded=False):
                     st.error("Prediction returned None")
             except Exception as e:
                 st.error(f"Test prediction failed: {e}")
+                st.info("💡 Your predictor type: " + type(ml_predictor).__name__)
     else:
         st.error("❌ ML Predictor Not Loaded")
         st.info("Train a model in **Tab 5: ML Training** first")
@@ -14735,11 +14747,20 @@ if st.button(
             ml_predictor = st.session_state.get('ml_predictor')
             if ml_predictor:
                 try:
-                    ml_result = ml_predictor.predict_game_outcome(
-                        home_team=home_team,
-                        away_team=away_team,
-                        sport_key=game.get('sport_key')
-                    )
+                    # Try calling with sport_key first (newer predictors)
+                    try:
+                        ml_result = ml_predictor.predict_game_outcome(
+                            home_team=home_team,
+                            away_team=away_team,
+                            sport_key=game.get('sport_key')
+                        )
+                    except TypeError:
+                        # Fallback: call without sport_key (HistoricalMLPredictor)
+                        ml_result = ml_predictor.predict_game_outcome(
+                            home_team=home_team,
+                            away_team=away_team
+                        )
+                    
                     if ml_result:
                         context_data['ml'] = {
                             'home_win_prob': ml_result.get('home_win_prob'),
@@ -15004,8 +15025,76 @@ Return ONLY a JSON object with this exact structure:
         "📥 Download Vertex Results CSV",
         csv,
         f"vertex_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-        "text/csv"
+        "text/csv",
+        key="download_vertex_results"  # Add key to prevent conflicts
     )
+
+# ============================================================================
+# PERSISTENT RESULTS DISPLAY (Shows even after page rerun)
+# ============================================================================
+
+# Check if we have previous results in session state
+if st.session_state.get('vertex_analysis_complete') and st.session_state.get('vertex_results'):
+    st.write("---")
+    st.write("## 📊 Previous AI Analysis Results")
+    
+    prev_results = st.session_state['vertex_results']
+    timestamp = st.session_state.get('vertex_timestamp', 'Unknown')
+    
+    st.info(f"🕐 Analysis from: {timestamp.strftime('%Y-%m-%d %H:%M:%S') if hasattr(timestamp, 'strftime') else timestamp}")
+    
+    # Summary metrics
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.metric("Games Analyzed", len(prev_results))
+    
+    with col2:
+        avg_confidence = sum(r['confidence'] for r in prev_results) / len(prev_results) if prev_results else 0
+        st.metric("Avg Confidence", f"{avg_confidence:.1f}%")
+    
+    with col3:
+        with_edge = sum(1 for r in prev_results if r['has_edge'])
+        st.metric("Games with Edge", with_edge)
+    
+    with col4:
+        # Show which AI provider was used
+        ai_provider = prev_results[0].get('ai_provider', 'unknown') if prev_results else 'unknown'
+        if 'gemini' in ai_provider:
+            st.metric("AI Provider", "Gemini 💎")
+        elif 'claude' in ai_provider:
+            st.metric("AI Provider", "Claude 🤖")
+        else:
+            st.metric("AI Provider", "Unknown")
+    
+    # Results table
+    st.write("### 📋 All Results")
+    
+    prev_df = pd.DataFrame([{
+        'Game': f"{r['away_team']} @ {r['home_team']}",
+        'Vertex Prob %': f"{r['vertex_probability']:.1f}%",
+        'Confidence %': f"{r['confidence']:.0f}%",
+        'Has Edge': '✅' if r['has_edge'] else '❌',
+        'Sources': r['sources_used']
+    } for r in prev_results])
+    
+    st.dataframe(prev_df, use_container_width=True)
+    
+    # Download option (persists across reruns!)
+    csv_persistent = prev_df.to_csv(index=False)
+    st.download_button(
+        "📥 Download Results CSV",
+        csv_persistent,
+        f"vertex_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+        "text/csv",
+        key="download_persistent_results"
+    )
+    
+    # Option to clear results
+    if st.button("🗑️ Clear Results", key="clear_vertex_results"):
+        st.session_state['vertex_analysis_complete'] = False
+        st.session_state['vertex_results'] = []
+        st.rerun()
 
 
 # End of main application
