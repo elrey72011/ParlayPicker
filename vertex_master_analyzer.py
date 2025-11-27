@@ -1123,16 +1123,37 @@ def show_vertex_master_analysis(results_df: pd.DataFrame):
         away_team = row.get('away_team', 'Away')
         spread = row.get('home_spread', 0) or row.get('theover_spread', 0) or 0
         
+        # Get moneyline odds to determine actual market favorite
+        home_ml = row.get('home_ml_odds') or row.get('home_ml', 0) or 0
+        away_ml = row.get('away_ml_odds') or row.get('away_ml', 0) or 0
+        
+        # Determine actual market favorite from moneyline
+        # Negative ML = favorite (e.g., -150 means favorite)
+        # Positive ML = underdog (e.g., +130 means underdog)
+        # If both ML are available, compare them; otherwise use sign of home_ml
+        if home_ml and away_ml and home_ml != 0 and away_ml != 0:
+            home_is_market_favorite = home_ml < away_ml
+        elif home_ml and home_ml != 0:
+            home_is_market_favorite = home_ml < 0
+        elif spread and spread != 0:
+            # Fallback to spread: negative home spread = home is favorite
+            home_is_market_favorite = spread < 0
+        else:
+            # No data - default to home team slight favorite
+            home_is_market_favorite = True
+        
         if home_prob >= away_prob:
             pick_team = home_team
             pick_prob = home_prob
             pick_spread = spread
-            is_favorite = spread <= 0
+            # Is our pick the market favorite?
+            is_favorite = home_is_market_favorite
         else:
             pick_team = away_team
             pick_prob = away_prob
             pick_spread = -spread if spread else 0
-            is_favorite = spread >= 0
+            # Is our pick the market favorite?
+            is_favorite = not home_is_market_favorite
         
         # Format the pick
         if pick_spread and pick_spread != 0:
