@@ -66,10 +66,10 @@ try:
         test_gemini_connection,
         VERTEX_AI_AVAILABLE as GEMINI_AVAILABLE
     )
-    logger.info("✅ Gemini integration loaded successfully")
+    # Gemini integration loaded successfully
 except ImportError as e:
     GEMINI_AVAILABLE = False
-    logger.warning(f"Gemini integration not available: {e}")
+    # Gemini integration not available
     def show_gemini_config_ui():
         import streamlit as st
         st.sidebar.markdown("---")
