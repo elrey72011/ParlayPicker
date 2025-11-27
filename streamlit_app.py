@@ -8762,6 +8762,34 @@ if len(tabs) != len(tab_labels):  # pragma: no cover - ultra-defensive guard
 
 main_tab1, main_tab2, main_tab3, main_tab4, main_tab5 = tabs
 
+# Debug Section - Show ML Predictor Status
+with st.expander("🔍 ML Predictor Status", expanded=False):
+    ml_predictor = st.session_state.get('ml_predictor')
+    if ml_predictor:
+        st.success("✅ ML Predictor Loaded")
+        st.write(f"**Type:** {type(ml_predictor).__name__}")
+        st.write(f"**Has predict_game_outcome method:** {hasattr(ml_predictor, 'predict_game_outcome')}")
+        
+        # Test prediction button
+        if st.button("🧪 Test ML Prediction"):
+            try:
+                test_result = ml_predictor.predict_game_outcome(
+                    home_team="Kansas City Chiefs",
+                    away_team="Las Vegas Raiders",
+                    sport_key="americanfootball_nfl"
+                )
+                if test_result:
+                    st.json(test_result)
+                    if abs(test_result.get('home_win_prob', 0.58) - 0.58) < 0.01:
+                        st.warning("⚠️ Probability is very close to 58% - model might not be properly trained")
+                else:
+                    st.error("Prediction returned None")
+            except Exception as e:
+                st.error(f"Test prediction failed: {e}")
+    else:
+        st.error("❌ ML Predictor Not Loaded")
+        st.info("Train a model in **Tab 5: ML Training** first")
+
 # ===== TAB 1: SPORTS BETTING PARLAYS =====
 with main_tab1:
     apisports_client = _session_client_or_none('apisports_nfl_client', APISportsFootballClient)
@@ -12017,6 +12045,18 @@ if is_vertex_ai_enabled():
                                 
                                 baseline_confidence = max(min_ai_confidence, 0.55)
 
+                                # Get ML predictor from session state
+                                ml_predictor = st.session_state.get('ml_predictor')
+                                
+                                # Debug ML status (only log once per sport to avoid spam)
+                                if not hasattr(st.session_state, f'_ml_debug_logged_{skey}'):
+                                    if use_ml_predictions:
+                                        if ml_predictor:
+                                            logger.info(f"✅ ML Predictor active for {skey}")
+                                        else:
+                                            logger.warning(f"⚠️ ML Predictor not loaded for {skey} - train a model first!")
+                                    st.session_state[f'_ml_debug_logged_{skey}'] = True
+
                                 # Moneyline with AI
                                 if inc_ml and "h2h" in mkts:
                                     hp = _dig(mkts["h2h"], "home.price")
@@ -12030,18 +12070,29 @@ if is_vertex_ai_enabled():
                                         "sportsdata_home": sportsdata_payload_home,
                                         "sportsdata_away": sportsdata_payload_away,
                                     }
+                                    
+                                    # CRITICAL FIX: Actually call the ML predictor!
                                     ml_prediction_result = None
-                                    if use_ml_predictions and hp is not None and ap is not None:
+                                    if use_ml_predictions and ml_predictor and hp is not None and ap is not None:
                                         try:
-                                            games_to_predict = []
-                                            for game in games:
-                                                games_to_predict.append({
-                                                    'id': game.get('id'),
-                                                    'home_team': game['home'],
-                                                    'away_team': game['away'],
-                                                    'sport_key': sport_key
-                                                })
-                                        except Exception:
+                                            logger.info(f"🤖 Calling ML predictor for {away} @ {home} ({skey})")
+                                            ml_prediction_result = ml_predictor.predict_game_outcome(
+                                                home_team=home,
+                                                away_team=away,
+                                                sport_key=skey
+                                            )
+                                            if ml_prediction_result:
+                                                logger.info(
+                                                    f"✅ ML prediction successful: "
+                                                    f"home={ml_prediction_result.get('home_win_prob', 0):.1%}, "
+                                                    f"away={ml_prediction_result.get('away_win_prob', 0):.1%}, "
+                                                    f"conf={ml_prediction_result.get('confidence', 0):.1%}"
+                                                )
+                                        except AttributeError as e:
+                                            logger.error(f"ML predictor missing predict_game_outcome method: {e}")
+                                            ml_prediction_result = None
+                                        except Exception as e:
+                                            logger.warning(f"ML prediction failed for {away} @ {home}: {e}")
                                             ml_prediction_result = None
 
                                     if _is_reasonable_moneyline(hp):
@@ -12050,26 +12101,11 @@ if is_vertex_ai_enabled():
                                         base_prob = implied_p_from_american(hp)
                                         ai_prob = base_prob
 
-                                        if use_ml_predictions and ap is not None:
-                                            if ml_prediction_result is None:
-                                                try:
-                                                    games_to_predict = []
-                                                    for game in games:
-                                                        games_to_predict.append({
-                                                            'id': game.get('id'),
-                                                            'home_team': game['home'],
-                                                            'away_team': game['away'],
-                                                            'sport_key': sport_key
-                                                        })
-                                                except Exception:
-                                                    ml_prediction_result = None
-                                            if ml_prediction_result:
-                                                ai_prob = ml_prediction_result['home_prob']
-                                                ai_confidence = ml_prediction_result['confidence']
-                                                ai_edge = ml_prediction_result['edge']
-                                            else:
-                                                ai_confidence = baseline_confidence
-                                                ai_edge = 0
+                                        # Use ML prediction if available
+                                        if ml_prediction_result:
+                                            ai_prob = ml_prediction_result.get('home_win_prob', base_prob)
+                                            ai_confidence = ml_prediction_result.get('confidence', baseline_confidence)
+                                            ai_edge = ml_prediction_result.get('edge', 0.0)
                                         else:
                                             ai_confidence = baseline_confidence
                                             ai_edge = 0
@@ -12126,26 +12162,11 @@ if is_vertex_ai_enabled():
                                         base_prob = implied_p_from_american(ap)
                                         ai_prob = base_prob
 
-                                        if use_ml_predictions and hp is not None:
-                                            if ml_prediction_result is None:
-                                                try:
-                                                    games_to_predict = []
-                                                    for game in games:
-                                                        games_to_predict.append({
-                                                            'id': game.get('id'),
-                                                            'home_team': game['home'],
-                                                            'away_team': game['away'],
-                                                            'sport_key': sport_key
-                                                        })
-                                                except Exception:
-                                                    ml_prediction_result = None
-                                            if ml_prediction_result:
-                                                ai_prob = ml_prediction_result['away_prob']
-                                                ai_confidence = ml_prediction_result['confidence']
-                                                ai_edge = ml_prediction_result['edge']
-                                            else:
-                                                ai_confidence = baseline_confidence
-                                                ai_edge = 0
+                                        # Reuse ML prediction from home team (same game!)
+                                        if ml_prediction_result:
+                                            ai_prob = ml_prediction_result.get('away_win_prob', base_prob)
+                                            ai_confidence = ml_prediction_result.get('confidence', baseline_confidence)
+                                            ai_edge = ml_prediction_result.get('edge', 0.0)
                                         else:
                                             ai_confidence = baseline_confidence
                                             ai_edge = 0
@@ -14562,9 +14583,10 @@ if st.button(
         st.warning("⚠️ SportsData not loaded")
     
     st.write("---")
-    st.write("🧠 **Running Vertex AI analysis...**")
+    st.write("🧠 **Running AI Analysis with Claude...**")
+    st.info("ℹ️ Note: This currently uses Claude API directly. For true Google Vertex AI integration, see CRITICAL_ISSUES_ANALYSIS.md")
     
-    # Get Anthropic API key
+    # Get Anthropic API key (using Claude directly, not through Vertex AI)
     anthropic_api_key = st.session_state.get('anthropic_api_key', '')
     if not anthropic_api_key:
         st.error("❌ Anthropic API key not found! Please enter it in the sidebar.")
@@ -14615,15 +14637,42 @@ if st.button(
                     }
                     break
         
-        # Match ML predictions (implement your matching logic)
+        # Match ML predictions - FIXED: Actually implement matching
         if 'ml' in data_sources:
-            # Add your ML matching logic here
-            pass
+            ml_predictor = st.session_state.get('ml_predictor')
+            if ml_predictor:
+                try:
+                    ml_result = ml_predictor.predict_game_outcome(
+                        home_team=home_team,
+                        away_team=away_team,
+                        sport_key=game.get('sport_key')
+                    )
+                    if ml_result:
+                        context_data['ml'] = {
+                            'home_win_prob': ml_result.get('home_win_prob'),
+                            'away_win_prob': ml_result.get('away_win_prob'),
+                            'confidence': ml_result.get('confidence'),
+                            'edge': ml_result.get('edge'),
+                            'model_used': ml_result.get('model_used', 'ML Model')
+                        }
+                        logger.info(f"ML data matched for {away_team} @ {home_team}")
+                except Exception as e:
+                    logger.warning(f"ML matching failed for {away_team} @ {home_team}: {e}")
         
-        # Match SportsData (implement your matching logic)
+        # Match SportsData - FIXED: Implement basic matching
         if 'sportsdata' in data_sources:
-            # Add your SportsData matching logic here
-            pass
+            sportsdata_clients = st.session_state.get('sportsdata_clients', {})
+            sportsdata_client = sportsdata_clients.get(game.get('sport_key'))
+            if sportsdata_client and hasattr(sportsdata_client, 'is_configured') and sportsdata_client.is_configured():
+                try:
+                    # Get team stats if available
+                    context_data['sportsdata'] = {
+                        'client_available': True,
+                        'sport': game.get('sport_key')
+                    }
+                    logger.info(f"SportsData client available for {away_team} @ {home_team}")
+                except Exception as e:
+                    logger.warning(f"SportsData matching failed: {e}")
         
         # Get best odds
         best_moneyline = None
@@ -14663,11 +14712,16 @@ if st.button(
             sources_used.append('theover.ai')
         
         if context_data['ml']:
-            prompt += f"\n- **ML Model**: {context_data['ml']}"
-            sources_used.append('ML')
+            ml_data = context_data['ml']
+            prompt += f"\n- **ML Model Prediction**:"
+            prompt += f"\n  - Home Win Probability: {ml_data.get('home_win_prob', 0):.1%}"
+            prompt += f"\n  - Away Win Probability: {ml_data.get('away_win_prob', 0):.1%}"
+            prompt += f"\n  - Confidence: {ml_data.get('confidence', 0):.1%}"
+            prompt += f"\n  - Model: {ml_data.get('model_used', 'Unknown')}"
+            sources_used.append('ML Model')
         
         if context_data['sportsdata']:
-            prompt += f"\n- **SportsData**: {context_data['sportsdata']}"
+            prompt += f"\n- **SportsData**: Available for {context_data['sportsdata'].get('sport', 'this sport')}"
             sources_used.append('SportsData')
         
         prompt += """
