@@ -10360,62 +10360,66 @@ if is_vertex_ai_enabled():
                     logs.append(f"  API Key: {api_key[:12]}..." if api_key else "  ❌ No API key!")
                     log_area.code("\n".join(logs[-15:]))
                     
-                    # Determine season - use PREVIOUS completed season for free plan
-                    # Free plans don't have access to current season
-                    current_month = end_date.month
-                    current_year = end_date.year
-                    
+                    # Try multiple seasons - free plan may only have old data
                     if sport in ["NBA", "NCAAB", "NHL"]:
-                        # Use LAST completed season (2024-2025) instead of current
-                        # Current season (2025-2026) requires paid plan
-                        if current_month >= 10:
-                            # We're in Oct-Dec, last completed season was (year-1)-(year)
-                            season = f"{current_year - 1}-{current_year}"
-                        else:
-                            # We're in Jan-Sept, last completed season was (year-2)-(year-1)
-                            season = f"{current_year - 2}-{current_year - 1}"
+                        seasons_to_try = ["2023-2024", "2022-2023", "2021-2022", "2020-2021"]
                     else:
-                        # NFL/NCAAF use single year - use last completed season
-                        if current_month >= 9:
-                            season = str(current_year - 1)
-                        else:
-                            season = str(current_year - 1)
+                        seasons_to_try = ["2023", "2022", "2021", "2020"]
                     
-                    logs.append(f"  Season: {season} (using previous season for free plan)")
-                    logs.append(f"  League ID: {league_id}")
+                    # Try each season until we find one with data
+                    games = []
+                    standings = {}
+                    season = seasons_to_try[0]
+                    
+                    for try_season in seasons_to_try:
+                        logs.append(f"  Trying season: {try_season}...")
+                        log_area.code("\n".join(logs[-15:]))
+                        
+                        test_games, test_status = api_request(sport, "games", {"season": try_season, "league": league_id})
+                        
+                        if test_games and len(test_games) > 0 and "Error" not in test_status:
+                            season = try_season
+                            games = test_games
+                            logs.append(f"  ✅ Found {len(games)} games in {season}!")
+                            log_area.code("\n".join(logs[-15:]))
+                            
+                            # Get standings for this season
+                            standings_data, standings_status = api_request(sport, "standings", {"season": season, "league": league_id})
+                            if standings_data:
+                                for item in standings_data:
+                                    if isinstance(item, list):
+                                        for team in item:
+                                            team_id = team.get("team", {}).get("id")
+                                            if team_id:
+                                                standings[team_id] = team
+                                    elif isinstance(item, dict):
+                                        team_id = item.get("team", {}).get("id")
+                                        if team_id:
+                                            standings[team_id] = item
+                            break
+                        else:
+                            logs.append(f"  ❌ {try_season}: {test_status}")
+                            log_area.code("\n".join(logs[-15:]))
+                    
+                    logs.append(f"  Using season: {season}, Found {len(standings)} teams")
                     log_area.code("\n".join(logs[-15:]))
                     
-                    # Get standings for team stats
-                    standings_data, standings_status = api_request(sport, "standings", {"season": season, "league": league_id})
-                    standings = {}
-                    if standings_data:
-                        for item in standings_data:
-                            if isinstance(item, list):
-                                for team in item:
-                                    team_id = team.get("team", {}).get("id")
-                                    if team_id:
-                                        standings[team_id] = team
-                            elif isinstance(item, dict):
-                                team_id = item.get("team", {}).get("id")
-                                if team_id:
-                                    standings[team_id] = item
-                    
-                    logs.append(f"  Found {len(standings)} teams in standings (API: {standings_status})")
-                    log_area.code("\n".join(logs[-10:]))
-                    
-                    # Get games
-                    games, games_status = api_request(sport, "games", {"season": season, "league": league_id})
-                    logs.append(f"  Found {len(games) if games else 0} total games (API: {games_status})")
-                    log_area.code("\n".join(logs[-10:]))
-                    
                     if not games:
-                        logs.append(f"  ⚠️ No games returned - skipping {sport}")
+                        logs.append(f"  ⚠️ No games found in any season - skipping {sport}")
                         log_area.code("\n".join(logs[-10:]))
                         progress_bar.progress((sport_idx + 1) / total_sports)
                         continue
                     
+                    logs.append(f"  Processing {len(games)} total games...")
+                    log_area.code("\n".join(logs[-10:]))
+                    
                     completed = 0
+                    max_games_per_sport = 500  # Limit to avoid too much data
                     for game in games:
+                        if completed >= max_games_per_sport:
+                            logs.append(f"  ⚠️ Hit limit of {max_games_per_sport} games")
+                            log_area.code("\n".join(logs[-10:]))
+                            break
                         # Check status (FT = Full Time, AOT = After OT)
                         status = game.get("status", {})
                         status_short = status.get("short", "")
@@ -10426,17 +10430,8 @@ if is_vertex_ai_enabled():
                         game_date_str = game.get("date", "")
                         if not game_date_str:
                             continue
-                        try:
-                            if "T" in game_date_str:
-                                game_date = datetime.fromisoformat(game_date_str.replace("Z", "+00:00"))
-                            else:
-                                game_date = datetime.strptime(game_date_str[:10], "%Y-%m-%d")
-                            game_date = game_date.replace(tzinfo=None)
-                        except:
-                            continue
                         
-                        if game_date < start_date or game_date > end_date:
-                            continue
+                        # No date filtering for historical seasons - take all completed games
                         
                         # Get teams
                         teams = game.get("teams", {})
