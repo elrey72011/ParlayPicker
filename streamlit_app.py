@@ -11190,25 +11190,32 @@ if is_vertex_ai_enabled():
                     
                     # =====================================================
                     # GET AI/ML PREDICTION
-                    # CRITICAL: vertex_ai_prob is HOME team win probability
-                    # We need to convert it to PICKED team probability
+                    # theover_probability = PICKED team's win probability (already correct!)
+                    # vertex_probability/vertex_prob = may be HOME team's probability
                     # =====================================================
-                    vertex_ai_prob = vertex_result.get('vertex_ai_prob') or vertex_result.get('vertex_prob')
-                    if vertex_ai_prob is not None and vertex_ai_prob <= 1:
-                        vertex_ai_prob = vertex_ai_prob * 100
                     
-                    # CRITICAL FIX: Convert HOME probability to PICKED team probability
-                    if vertex_ai_prob is not None:
-                        if theover_picked_home:
-                            # TheOver.ai picked HOME team, vertex_ai_prob is correct
-                            ai_win_prob = vertex_ai_prob
-                        else:
-                            # TheOver.ai picked AWAY team, invert the probability
-                            ai_win_prob = 100 - vertex_ai_prob
-                    elif theover_prob:
+                    # PREFER theover_probability since it's already the picked team's probability
+                    # This avoids complex inversion logic
+                    if theover_prob:
+                        # Use TheOver.ai probability directly - it's already for the picked team
                         ai_win_prob = theover_prob
+                        ml_source_type = 'theover'
                     else:
-                        ai_win_prob = 50
+                        # Fallback to Vertex AI probability (which is HOME team's probability)
+                        vertex_ai_prob = vertex_result.get('vertex_probability') or vertex_result.get('vertex_ai_prob') or vertex_result.get('vertex_prob')
+                        if vertex_ai_prob is not None and vertex_ai_prob <= 1:
+                            vertex_ai_prob = vertex_ai_prob * 100
+                        
+                        if vertex_ai_prob is not None:
+                            # Convert HOME probability to PICKED team probability
+                            if theover_picked_home:
+                                ai_win_prob = vertex_ai_prob
+                            else:
+                                ai_win_prob = 100 - vertex_ai_prob
+                            ml_source_type = 'vertex'
+                        else:
+                            ai_win_prob = 50
+                            ml_source_type = 'default'
                     
                     # =====================================================
                     # CALCULATE EDGE
@@ -11288,7 +11295,6 @@ if is_vertex_ai_enabled():
                     # =====================================================
                     # ADD TO BEST BETS
                     # =====================================================
-                    ml_source = vertex_result.get('ml_source', 'unknown')
                     best_bets_rows.append({
                         'League': league,
                         'Game': f"{away_team} @ {home_team}",
@@ -11304,7 +11310,7 @@ if is_vertex_ai_enabled():
                         'TheOver %': f"{theover_prob:.0f}" if theover_prob else '—',
                         'Odds': odds_str,
                         'Confidence': round(confidence, 1),
-                        'ML Source': ml_source,
+                        'ML Source': ml_source_type,
                     })
                 
                 # Display results
