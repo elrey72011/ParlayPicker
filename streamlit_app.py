@@ -10020,19 +10020,29 @@ if is_vertex_ai_enabled():
     }
     LEAGUE_IDS = {"NBA": 12, "NCAAB": 116, "NHL": 57, "NFL": 1, "NCAAF": 2}
     
-    # Get API keys from session state (sport-specific)
+    # Your API-Sports key (hardcoded as fallback)
+    HARDCODED_API_KEY = "07972c891e3d56fbc6298b5c2a07b152"
+    
+    # Get API keys from session state (sport-specific) with hardcoded fallback
     def get_api_key_for_sport(sport):
         """Get the appropriate API-Sports key for a sport"""
+        # Try session state first
         if sport == "NBA":
-            return st.session_state.get('nba_apisports_api_key', '') or os.environ.get('NBA_APISPORTS_KEY', '')
+            key = st.session_state.get('nba_apisports_api_key', '')
         elif sport == "NCAAB":
-            # NCAAB uses the same basketball API as NBA
-            return st.session_state.get('nba_apisports_api_key', '') or os.environ.get('NBA_APISPORTS_KEY', '')
+            key = st.session_state.get('nba_apisports_api_key', '')
         elif sport == "NHL":
-            return st.session_state.get('nhl_apisports_api_key', '') or os.environ.get('NHL_APISPORTS_KEY', '')
+            key = st.session_state.get('nhl_apisports_api_key', '')
         elif sport in ["NFL", "NCAAF"]:
-            return st.session_state.get('nfl_apisports_api_key', '') or os.environ.get('NFL_APISPORTS_KEY', '')
-        return ''
+            key = st.session_state.get('nfl_apisports_api_key', '')
+        else:
+            key = ''
+        
+        # If no key in session state, use hardcoded fallback
+        if not key:
+            key = HARDCODED_API_KEY
+        
+        return key
     
     FEATURE_NAMES = [
         "home_win_pct", "away_win_pct", "home_avg_points", "away_avg_points",
@@ -10072,6 +10082,48 @@ if is_vertex_ai_enabled():
         with key_cols[3]:
             st.info("NCAAB uses NBA key")
         
+        # Debug: Test API connection
+        if st.checkbox("🔧 Debug: Test API Connection", key="debug_api"):
+            api_key = get_api_key_for_sport("NBA")
+            st.write(f"Testing with key: `{api_key[:12]}...`")
+            
+            # Test leagues endpoint
+            try:
+                resp = requests.get(
+                    "https://v1.basketball.api-sports.io/leagues",
+                    headers={"x-apisports-key": api_key},
+                    timeout=30
+                )
+                st.write(f"**Leagues Response:** Status {resp.status_code}")
+                
+                if resp.status_code == 200:
+                    data = resp.json()
+                    st.write(f"Total leagues: {data.get('results', 0)}")
+                    st.write(f"Errors: {data.get('errors', {})}")
+                    
+                    # Find NBA-related leagues
+                    leagues = data.get("response", [])
+                    nba_leagues = [l for l in leagues if "NBA" in l.get("name", "").upper()]
+                    
+                    if nba_leagues:
+                        st.success("**NBA Leagues Found:**")
+                        for lg in nba_leagues[:10]:
+                            lg_id = lg.get('id')
+                            lg_name = lg.get('name')
+                            lg_country = lg.get('country', {}).get('name', 'N/A')
+                            seasons = lg.get('seasons', [])
+                            latest_season = seasons[-1].get('season') if seasons else 'N/A'
+                            st.write(f"  • **ID: {lg_id}** - {lg_name} ({lg_country}) - Latest season: {latest_season}")
+                    else:
+                        st.warning("No NBA leagues found. First 15 leagues:")
+                        for lg in leagues[:15]:
+                            st.write(f"  • ID: {lg.get('id')}, Name: {lg.get('name')}")
+                else:
+                    st.error(f"API Error: {resp.text[:300]}")
+                    
+            except Exception as e:
+                st.error(f"Connection error: {e}")
+        
         col1, col2 = st.columns(2)
         with col1:
             collect_days = st.number_input(
@@ -10095,26 +10147,17 @@ if is_vertex_ai_enabled():
             if not collect_sports:
                 st.error("❌ Select at least one sport!")
             else:
-                # Check if we have keys for selected sports
-                missing_keys = []
-                for sport in collect_sports:
-                    if not get_api_key_for_sport(sport):
-                        missing_keys.append(sport)
+                # Helper functions
+                def calculate_win_pct(wins, losses, default=0.5):
+                    total = (wins or 0) + (losses or 0)
+                    return (wins or 0) / total if total > 0 else default
                 
-                if missing_keys:
-                    st.error(f"❌ Missing API keys for: {', '.join(missing_keys)}. Configure in sidebar.")
-                else:
-                    # Helper functions
-                    def calculate_win_pct(wins, losses, default=0.5):
-                        total = (wins or 0) + (losses or 0)
-                        return (wins or 0) / total if total > 0 else default
-                    
-                    def normalize_points(points, sport):
-                        ranges = {"NBA": (90, 130), "NCAAB": (50, 90), "NHL": (1.5, 4.5), "NFL": (14, 35), "NCAAF": (14, 45)}
-                        min_pts, max_pts = ranges.get(sport, (0, 100))
-                        if points is None:
-                            return 0.5
-                        return np.clip((float(points) - min_pts) / (max_pts - min_pts), 0, 1)
+                def normalize_points(points, sport):
+                    ranges = {"NBA": (90, 130), "NCAAB": (50, 90), "NHL": (1.5, 4.5), "NFL": (14, 35), "NCAAF": (14, 45)}
+                    min_pts, max_pts = ranges.get(sport, (0, 100))
+                    if points is None:
+                        return 0.5
+                    return np.clip((float(points) - min_pts) / (max_pts - min_pts), 0, 1)
                     
                     def api_request(sport, endpoint, params=None):
                         """Make API-Sports request with sport-specific key"""
@@ -10122,16 +10165,26 @@ if is_vertex_ai_enabled():
                         api_key = get_api_key_for_sport(sport)
                         url = f"{base_url}/{endpoint}"
                         headers = {"x-apisports-key": api_key}
+                        
                         try:
                             resp = requests.get(url, headers=headers, params=params, timeout=30)
+                            remaining = resp.headers.get('x-ratelimit-requests-remaining', 'N/A')
+                            
                             if resp.status_code == 200:
                                 data = resp.json()
-                                remaining = resp.headers.get('x-ratelimit-requests-remaining', 'N/A')
-                                return data.get("response", []), remaining
+                                errors = data.get("errors", {})
+                                results_count = data.get("results", 0)
+                                
+                                # Show any API errors
+                                if errors and (isinstance(errors, dict) and errors or isinstance(errors, list) and len(errors) > 0):
+                                    return [], f"API Error: {errors}"
+                                
+                                response_data = data.get("response", [])
+                                return response_data, f"OK ({results_count} results, {remaining} remaining)"
                             else:
-                                return [], f"Error {resp.status_code}: {resp.text[:100]}"
+                                return [], f"HTTP {resp.status_code}"
                         except Exception as e:
-                            return [], str(e)
+                            return [], f"Exception: {str(e)}"
                 
                     all_games = []
                     progress_bar = st.progress(0)
