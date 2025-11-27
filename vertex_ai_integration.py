@@ -127,7 +127,7 @@ class VertexAIAnalyzer:
             logger.info(f"Calling Vertex AI for {away_team} @ {home_team}")
             
             message = client.messages.create(
-                model="claude-3-5-sonnet@20241022",
+                model="claude-sonnet-4-5@20250514",  # Claude 4.5 Sonnet (latest)
                 max_tokens=2000,
                 temperature=0.2,
                 messages=[{"role": "user", "content": prompt}]
@@ -471,7 +471,7 @@ def show_vertex_ai_config_ui():
         "GCP Region",
         options=["us-east5", "us-central1", "europe-west4"],
         index=0,
-        help="Region for Vertex AI (us-east5 recommended for Claude 3.5 Sonnet)",
+        help="Region for Vertex AI (us-east5 recommended for Claude 4.5 Sonnet)",
         key="vertex_region_select"
     )
     
