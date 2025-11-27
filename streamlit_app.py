@@ -10143,7 +10143,159 @@ if is_vertex_ai_enabled():
         
         st.write(f"**Estimated games:** ~{collect_days * len(collect_sports) * 8} games")
         
-        if st.button("🚀 Collect from API-Sports", type="primary", use_container_width=True, key="collect_apisports"):
+        # Data source selection
+        st.write("**Choose Data Source:**")
+        source_col1, source_col2 = st.columns(2)
+        
+        with source_col1:
+            if st.button("🎯 TheOddsAPI (Current Season)", type="primary", use_container_width=True, key="collect_odds"):
+                odds_key = st.session_state.get('api_key', '') or os.environ.get('ODDS_API_KEY', '')
+                if not odds_key:
+                    st.error("❌ TheOddsAPI key not configured!")
+                elif not collect_sports:
+                    st.error("❌ Select at least one sport!")
+                else:
+                    # Collect from TheOddsAPI
+                    all_games = []
+                    progress_bar = st.progress(0)
+                    status_text = st.empty()
+                    log_area = st.empty()
+                    logs = []
+                    
+                    sport_key_map = {
+                        "NBA": "basketball_nba",
+                        "NHL": "icehockey_nhl",
+                        "NCAAB": "basketball_ncaab",
+                        "NCAAF": "americanfootball_ncaaf",
+                        "NFL": "americanfootball_nfl",
+                    }
+                    
+                    for sport_idx, sport in enumerate(collect_sports):
+                        logs.append(f"🏀 Fetching {sport} from TheOddsAPI...")
+                        log_area.code("\n".join(logs[-10:]))
+                        status_text.text(f"Collecting {sport}...")
+                        
+                        sport_key = sport_key_map.get(sport, "")
+                        if not sport_key:
+                            logs.append(f"  ⚠️ Unknown sport key for {sport}")
+                            continue
+                        
+                        try:
+                            # TheOddsAPI scores endpoint - gets last 3 days
+                            url = f"https://api.the-odds-api.com/v4/sports/{sport_key}/scores"
+                            params = {
+                                "apiKey": odds_key,
+                                "daysFrom": 3,  # API max is 3 days
+                            }
+                            resp = requests.get(url, params=params, timeout=30)
+                            
+                            if resp.status_code == 200:
+                                scores = resp.json()
+                                remaining = resp.headers.get('x-requests-remaining', 'N/A')
+                                logs.append(f"  Found {len(scores)} games (API remaining: {remaining})")
+                                log_area.code("\n".join(logs[-10:]))
+                                
+                                completed = 0
+                                for game in scores:
+                                    if not game.get("completed", False):
+                                        continue
+                                    
+                                    home_team = game.get("home_team", "")
+                                    away_team = game.get("away_team", "")
+                                    
+                                    home_score = 0
+                                    away_score = 0
+                                    for score in game.get("scores", []):
+                                        if score.get("name") == home_team:
+                                            home_score = int(score.get("score", 0) or 0)
+                                        elif score.get("name") == away_team:
+                                            away_score = int(score.get("score", 0) or 0)
+                                    
+                                    if home_team and away_team and (home_score > 0 or away_score > 0):
+                                        game_date = game.get("commence_time", "")[:10]
+                                        
+                                        # Simple feature estimation based on scores
+                                        home_win_pct = 0.55 if home_score > away_score else 0.45
+                                        away_win_pct = 1 - home_win_pct
+                                        
+                                        all_games.append({
+                                            "game_id": game.get("id", f"{game_date}_{home_team}_{away_team}"),
+                                            "date": game_date,
+                                            "sport": sport,
+                                            "season": "2025-2026",
+                                            "home_team": home_team,
+                                            "away_team": away_team,
+                                            "home_score": home_score,
+                                            "away_score": away_score,
+                                            "home_won": 1 if home_score > away_score else 0,
+                                            "home_win_pct": home_win_pct,
+                                            "away_win_pct": away_win_pct,
+                                            "home_avg_points": 0.5,
+                                            "away_avg_points": 0.5,
+                                            "home_def_rating": 0.5,
+                                            "away_def_rating": 0.5,
+                                            "spread_normalized": 0.5,
+                                            "home_last_5": 0.5,
+                                            "away_last_5": 0.5,
+                                            "home_home_record": 0.5,
+                                            "away_away_record": 0.5,
+                                            "head_to_head": 0.5,
+                                            "rest_advantage": 0,
+                                            "injuries_impact": 0,
+                                            "weather_factor": 0,
+                                            "public_betting_pct": 0.5,
+                                            "sharp_money_indicator": 0,
+                                            "line_movement": 0,
+                                            "total_movement": 0,
+                                            "model_consensus": 0.5,
+                                            "theover_probability": home_win_pct,
+                                            "implied_home_prob": home_win_pct,
+                                            "home_streak": 0,
+                                            "away_streak": 0,
+                                            "division_game": 0,
+                                            "back_to_back": 0,
+                                            "primetime_game": 0,
+                                        })
+                                        completed += 1
+                                
+                                logs.append(f"  ✅ {completed} completed games added")
+                            else:
+                                logs.append(f"  ❌ API Error: {resp.status_code}")
+                            
+                            log_area.code("\n".join(logs[-10:]))
+                            
+                        except Exception as e:
+                            logs.append(f"  ❌ Error: {str(e)}")
+                            log_area.code("\n".join(logs[-10:]))
+                        
+                        progress_bar.progress((sport_idx + 1) / len(collect_sports))
+                        time.sleep(0.5)
+                    
+                    progress_bar.progress(1.0)
+                    
+                    if all_games:
+                        df = pd.DataFrame(all_games)
+                        
+                        # Append to existing or create new
+                        if 'training_data' in st.session_state:
+                            existing = st.session_state['training_data']
+                            combined = pd.concat([existing, df], ignore_index=True)
+                            combined = combined.drop_duplicates(subset=['game_id'], keep='last')
+                            st.session_state['training_data'] = combined
+                            df = combined
+                        else:
+                            st.session_state['training_data'] = df
+                        
+                        st.success(f"✅ Collected {len(all_games)} current season games! Total: {len(df)}")
+                        logs.append(f"✅ Total games in dataset: {len(df)}")
+                        log_area.code("\n".join(logs[-10:]))
+                    else:
+                        st.warning("No completed games found. Try again tomorrow for more games.")
+        
+        with source_col2:
+            st.caption("⚠️ API-Sports free plan = historical only")
+        
+        if st.button("📚 API-Sports (Historical 2024-2025)", use_container_width=True, key="collect_apisports"):
             if not collect_sports:
                 st.error("❌ Select at least one sport!")
             else:
