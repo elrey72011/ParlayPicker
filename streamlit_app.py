@@ -34,7 +34,20 @@ from app_core import (
     SportsDataNFLClient,
     SportsDataNHLClient,
 )
-from ml_predictions import show_vertex_ai_prediction_section, is_vertex_ai_enabled
+
+# Optional ml_predictions module
+try:
+    from ml_predictions import show_vertex_ai_prediction_section, is_vertex_ai_enabled
+except ImportError:
+    def show_vertex_ai_prediction_section(*args, **kwargs):
+        """Fallback function when ml_predictions module is not available"""
+        import streamlit as st
+        st.warning("⚠️ ml_predictions module not available. ML prediction features disabled.")
+        return None
+    
+    def is_vertex_ai_enabled():
+        """Fallback function when ml_predictions module is not available"""
+        return False
 
 try:
     from theover_vertex_analyzer import (
