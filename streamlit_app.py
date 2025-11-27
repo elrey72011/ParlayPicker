@@ -10158,280 +10158,280 @@ if is_vertex_ai_enabled():
                     if points is None:
                         return 0.5
                     return np.clip((float(points) - min_pts) / (max_pts - min_pts), 0, 1)
-                    
-                    def api_request(sport, endpoint, params=None):
-                        """Make API-Sports request with sport-specific key"""
-                        base_url = API_SPORTS_URLS.get(sport, "")
-                        api_key = get_api_key_for_sport(sport)
-                        url = f"{base_url}/{endpoint}"
-                        headers = {"x-apisports-key": api_key}
-                        
-                        try:
-                            resp = requests.get(url, headers=headers, params=params, timeout=30)
-                            remaining = resp.headers.get('x-ratelimit-requests-remaining', 'N/A')
-                            
-                            if resp.status_code == 200:
-                                data = resp.json()
-                                errors = data.get("errors", {})
-                                results_count = data.get("results", 0)
-                                
-                                # Show any API errors
-                                if errors and (isinstance(errors, dict) and errors or isinstance(errors, list) and len(errors) > 0):
-                                    return [], f"API Error: {errors}"
-                                
-                                response_data = data.get("response", [])
-                                return response_data, f"OK ({results_count} results, {remaining} remaining)"
-                            else:
-                                return [], f"HTTP {resp.status_code}"
-                        except Exception as e:
-                            return [], f"Exception: {str(e)}"
                 
-                    all_games = []
-                    progress_bar = st.progress(0)
-                    status_text = st.empty()
-                    log_area = st.empty()
-                    logs = []
+                def api_request(sport, endpoint, params=None):
+                    """Make API-Sports request with sport-specific key"""
+                    base_url = API_SPORTS_URLS.get(sport, "")
+                    api_key = get_api_key_for_sport(sport)
+                    url = f"{base_url}/{endpoint}"
+                    headers = {"x-apisports-key": api_key}
                     
-                    end_date = datetime.now() - timedelta(days=1)
-                    start_date = end_date - timedelta(days=collect_days)
-                    
-                    total_sports = len(collect_sports)
-                    
-                    for sport_idx, sport in enumerate(collect_sports):
-                        status_text.text(f"📊 Collecting {sport}...")
-                        logs.append(f"🏀 Starting {sport}...")
-                        log_area.code("\n".join(logs[-15:]))
+                    try:
+                        resp = requests.get(url, headers=headers, params=params, timeout=30)
+                        remaining = resp.headers.get('x-ratelimit-requests-remaining', 'N/A')
                         
-                        league_id = LEAGUE_IDS.get(sport)
-                        api_key = get_api_key_for_sport(sport)
-                        
-                        logs.append(f"  API Key: {api_key[:12]}..." if api_key else "  ❌ No API key!")
-                        log_area.code("\n".join(logs[-15:]))
-                        
-                        # Determine season - use END date (current) to get current season
-                        # NBA/NHL seasons run Oct-June, so if we're in Oct-Dec use current year
-                        current_month = end_date.month
-                        current_year = end_date.year
-                        
-                        if sport in ["NBA", "NCAAB", "NHL"]:
-                            # If Oct-Dec, season is YYYY-(YYYY+1)
-                            # If Jan-Sept, season is (YYYY-1)-YYYY
-                            if current_month >= 10:
-                                season = f"{current_year}-{current_year + 1}"
-                            else:
-                                season = f"{current_year - 1}-{current_year}"
+                        if resp.status_code == 200:
+                            data = resp.json()
+                            errors = data.get("errors", {})
+                            results_count = data.get("results", 0)
+                            
+                            # Show any API errors
+                            if errors and (isinstance(errors, dict) and errors or isinstance(errors, list) and len(errors) > 0):
+                                return [], f"API Error: {errors}"
+                            
+                            response_data = data.get("response", [])
+                            return response_data, f"OK ({results_count} results, {remaining} remaining)"
                         else:
-                            # NFL/NCAAF use single year
-                            if current_month >= 9:
-                                season = str(current_year)
-                            else:
-                                season = str(current_year - 1)
-                        
-                        logs.append(f"  Season: {season}, League ID: {league_id}")
-                        log_area.code("\n".join(logs[-15:]))
-                        
-                        # Get standings for team stats
-                        standings_data, standings_status = api_request(sport, "standings", {"season": season, "league": league_id})
-                        standings = {}
-                        if standings_data:
-                            for item in standings_data:
-                                if isinstance(item, list):
-                                    for team in item:
-                                        team_id = team.get("team", {}).get("id")
-                                        if team_id:
-                                            standings[team_id] = team
-                                elif isinstance(item, dict):
-                                    team_id = item.get("team", {}).get("id")
+                            return [], f"HTTP {resp.status_code}"
+                    except Exception as e:
+                        return [], f"Exception: {str(e)}"
+                
+                all_games = []
+                progress_bar = st.progress(0)
+                status_text = st.empty()
+                log_area = st.empty()
+                logs = []
+                
+                end_date = datetime.now() - timedelta(days=1)
+                start_date = end_date - timedelta(days=collect_days)
+                
+                total_sports = len(collect_sports)
+                
+                for sport_idx, sport in enumerate(collect_sports):
+                    status_text.text(f"📊 Collecting {sport}...")
+                    logs.append(f"🏀 Starting {sport}...")
+                    log_area.code("\n".join(logs[-15:]))
+                    
+                    league_id = LEAGUE_IDS.get(sport)
+                    api_key = get_api_key_for_sport(sport)
+                    
+                    logs.append(f"  API Key: {api_key[:12]}..." if api_key else "  ❌ No API key!")
+                    log_area.code("\n".join(logs[-15:]))
+                    
+                    # Determine season - use END date (current) to get current season
+                    # NBA/NHL seasons run Oct-June, so if we're in Oct-Dec use current year
+                    current_month = end_date.month
+                    current_year = end_date.year
+                    
+                    if sport in ["NBA", "NCAAB", "NHL"]:
+                        # If Oct-Dec, season is YYYY-(YYYY+1)
+                        # If Jan-Sept, season is (YYYY-1)-YYYY
+                        if current_month >= 10:
+                            season = f"{current_year}-{current_year + 1}"
+                        else:
+                            season = f"{current_year - 1}-{current_year}"
+                    else:
+                        # NFL/NCAAF use single year
+                        if current_month >= 9:
+                            season = str(current_year)
+                        else:
+                            season = str(current_year - 1)
+                    
+                    logs.append(f"  Season: {season}, League ID: {league_id}")
+                    log_area.code("\n".join(logs[-15:]))
+                    
+                    # Get standings for team stats
+                    standings_data, standings_status = api_request(sport, "standings", {"season": season, "league": league_id})
+                    standings = {}
+                    if standings_data:
+                        for item in standings_data:
+                            if isinstance(item, list):
+                                for team in item:
+                                    team_id = team.get("team", {}).get("id")
                                     if team_id:
-                                        standings[team_id] = item
-                        
-                        logs.append(f"  Found {len(standings)} teams in standings (API: {standings_status})")
+                                        standings[team_id] = team
+                            elif isinstance(item, dict):
+                                team_id = item.get("team", {}).get("id")
+                                if team_id:
+                                    standings[team_id] = item
+                    
+                    logs.append(f"  Found {len(standings)} teams in standings (API: {standings_status})")
+                    log_area.code("\n".join(logs[-10:]))
+                    
+                    # Get games
+                    games, games_status = api_request(sport, "games", {"season": season, "league": league_id})
+                    logs.append(f"  Found {len(games) if games else 0} total games (API: {games_status})")
+                    log_area.code("\n".join(logs[-10:]))
+                    
+                    if not games:
+                        logs.append(f"  ⚠️ No games returned - skipping {sport}")
                         log_area.code("\n".join(logs[-10:]))
-                        
-                        # Get games
-                        games, games_status = api_request(sport, "games", {"season": season, "league": league_id})
-                        logs.append(f"  Found {len(games) if games else 0} total games (API: {games_status})")
-                        log_area.code("\n".join(logs[-10:]))
-                        
-                        if not games:
-                            logs.append(f"  ⚠️ No games returned - skipping {sport}")
-                            log_area.code("\n".join(logs[-10:]))
-                            progress_bar.progress((sport_idx + 1) / total_sports)
+                        progress_bar.progress((sport_idx + 1) / total_sports)
+                        continue
+                    
+                    completed = 0
+                    for game in games:
+                        # Check status (FT = Full Time, AOT = After OT)
+                        status = game.get("status", {})
+                        status_short = status.get("short", "")
+                        if status_short not in ["FT", "AOT", "AET", "AP"]:
                             continue
                         
-                        completed = 0
-                        for game in games:
-                            # Check status (FT = Full Time, AOT = After OT)
-                            status = game.get("status", {})
-                            status_short = status.get("short", "")
-                            if status_short not in ["FT", "AOT", "AET", "AP"]:
-                                continue
-                            
-                            # Get date
-                            game_date_str = game.get("date", "")
-                            if not game_date_str:
-                                continue
-                            try:
-                                if "T" in game_date_str:
-                                    game_date = datetime.fromisoformat(game_date_str.replace("Z", "+00:00"))
-                                else:
-                                    game_date = datetime.strptime(game_date_str[:10], "%Y-%m-%d")
-                                game_date = game_date.replace(tzinfo=None)
-                            except:
-                                continue
-                            
-                            if game_date < start_date or game_date > end_date:
-                                continue
-                            
-                            # Get teams
-                            teams = game.get("teams", {})
-                            home_data = teams.get("home", {})
-                            away_data = teams.get("away", {})
-                            home_name = home_data.get("name", "")
-                            away_name = away_data.get("name", "")
-                            home_id = home_data.get("id")
-                            away_id = away_data.get("id")
-                            
-                            if not home_name or not away_name:
-                                continue
-                            
-                            # Get scores
-                            scores = game.get("scores", {})
-                            if sport in ["NBA", "NCAAB"]:
-                                home_score = scores.get("home", {}).get("total", 0) or 0
-                                away_score = scores.get("away", {}).get("total", 0) or 0
-                            elif sport == "NHL":
-                                home_score = scores.get("home", 0) or 0
-                                away_score = scores.get("away", 0) or 0
+                        # Get date
+                        game_date_str = game.get("date", "")
+                        if not game_date_str:
+                            continue
+                        try:
+                            if "T" in game_date_str:
+                                game_date = datetime.fromisoformat(game_date_str.replace("Z", "+00:00"))
                             else:
-                                home_score = scores.get("home", {}).get("total", 0) or 0
-                                away_score = scores.get("away", {}).get("total", 0) or 0
-                            
-                            if home_score == 0 and away_score == 0:
-                                continue
-                            
-                            # Get standings data for each team
-                            home_standing = standings.get(home_id, {})
-                            away_standing = standings.get(away_id, {})
-                            
-                            # Extract features from standings
-                            home_games = home_standing.get("games", {})
-                            away_games = away_standing.get("games", {})
-                            
-                            if sport in ["NBA", "NCAAB"]:
-                                home_wins = home_games.get("win", {}).get("total", 0) or 0
-                                home_losses = home_games.get("lose", {}).get("total", 0) or 0
-                                away_wins = away_games.get("win", {}).get("total", 0) or 0
-                                away_losses = away_games.get("lose", {}).get("total", 0) or 0
-                                h_h_w = home_games.get("win", {}).get("home", 0) or 0
-                                h_h_l = home_games.get("lose", {}).get("home", 0) or 0
-                                a_a_w = away_games.get("win", {}).get("away", 0) or 0
-                                a_a_l = away_games.get("lose", {}).get("away", 0) or 0
-                            else:
-                                home_wins = home_standing.get("won", 0) or 0
-                                home_losses = home_standing.get("lost", 0) or 0
-                                away_wins = away_standing.get("won", 0) or 0
-                                away_losses = away_standing.get("lost", 0) or 0
-                                h_h_w = home_wins // 2
-                                h_h_l = home_losses // 2
-                                a_a_w = away_wins // 2
-                                a_a_l = away_losses // 2
-                            
-                            home_win_pct = calculate_win_pct(home_wins, home_losses)
-                            away_win_pct = calculate_win_pct(away_wins, away_losses)
-                            
-                            # Form (last 5)
-                            home_form = home_standing.get("form", "") or ""
-                            away_form = away_standing.get("form", "") or ""
-                            home_last_5 = home_form[-5:].count("W") / 5 if home_form else home_win_pct
-                            away_last_5 = away_form[-5:].count("W") / 5 if away_form else away_win_pct
-                            
-                            # Points (normalized)
-                            if sport in ["NBA", "NCAAB"]:
-                                home_pts = home_standing.get("points", {}).get("for", 100) or 100
-                                away_pts = away_standing.get("points", {}).get("for", 100) or 100
-                                home_def = home_standing.get("points", {}).get("against", 100) or 100
-                                away_def = away_standing.get("points", {}).get("against", 100) or 100
-                            else:
-                                home_pts = 3 if sport == "NHL" else 24
-                                away_pts = 3 if sport == "NHL" else 24
-                                home_def = 3 if sport == "NHL" else 24
-                                away_def = 3 if sport == "NHL" else 24
-                            
-                            # Build game record with all 27 features
-                            game_record = {
-                                "game_id": game.get("id", f"{game_date_str[:10]}_{home_name}_{away_name}"),
-                                "date": game_date_str[:10],
-                                "sport": sport,
-                                "season": season,
-                                "home_team": home_name,
-                                "away_team": away_name,
-                                "home_score": home_score,
-                                "away_score": away_score,
-                                "home_won": 1 if home_score > away_score else 0,
-                                # 27 Features
-                                "home_win_pct": home_win_pct,
-                                "away_win_pct": away_win_pct,
-                                "home_avg_points": normalize_points(home_pts, sport),
-                                "away_avg_points": normalize_points(away_pts, sport),
-                                "home_def_rating": normalize_points(home_def, sport),
-                                "away_def_rating": normalize_points(away_def, sport),
-                                "spread_normalized": 0.5,
-                                "home_last_5": home_last_5,
-                                "away_last_5": away_last_5,
-                                "home_home_record": calculate_win_pct(h_h_w, h_h_l),
-                                "away_away_record": calculate_win_pct(a_a_w, a_a_l),
-                                "head_to_head": 0.5,
-                                "rest_advantage": 0,
-                                "injuries_impact": 0,
-                                "weather_factor": 0,
-                                "public_betting_pct": 0.5,
-                                "sharp_money_indicator": 0,
-                                "line_movement": 0,
-                                "total_movement": 0,
-                                "model_consensus": 0.5,
-                                "theover_probability": home_win_pct,
-                                "implied_home_prob": home_win_pct,
-                                "home_streak": 0,
-                                "away_streak": 0,
-                                "division_game": 0,
-                                "back_to_back": 0,
-                                "primetime_game": 0,
-                            }
-                            
-                            all_games.append(game_record)
-                            completed += 1
+                                game_date = datetime.strptime(game_date_str[:10], "%Y-%m-%d")
+                            game_date = game_date.replace(tzinfo=None)
+                        except:
+                            continue
                         
-                        logs.append(f"  ✅ {completed} completed games in date range")
-                        log_area.code("\n".join(logs[-10:]))
+                        if game_date < start_date or game_date > end_date:
+                            continue
                         
-                        progress_bar.progress((sport_idx + 1) / total_sports)
-                        time.sleep(1)  # Rate limiting
+                        # Get teams
+                        teams = game.get("teams", {})
+                        home_data = teams.get("home", {})
+                        away_data = teams.get("away", {})
+                        home_name = home_data.get("name", "")
+                        away_name = away_data.get("name", "")
+                        home_id = home_data.get("id")
+                        away_id = away_data.get("id")
+                        
+                        if not home_name or not away_name:
+                            continue
+                        
+                        # Get scores
+                        scores = game.get("scores", {})
+                        if sport in ["NBA", "NCAAB"]:
+                            home_score = scores.get("home", {}).get("total", 0) or 0
+                            away_score = scores.get("away", {}).get("total", 0) or 0
+                        elif sport == "NHL":
+                            home_score = scores.get("home", 0) or 0
+                            away_score = scores.get("away", 0) or 0
+                        else:
+                            home_score = scores.get("home", {}).get("total", 0) or 0
+                            away_score = scores.get("away", {}).get("total", 0) or 0
+                        
+                        if home_score == 0 and away_score == 0:
+                            continue
+                        
+                        # Get standings data for each team
+                        home_standing = standings.get(home_id, {})
+                        away_standing = standings.get(away_id, {})
+                        
+                        # Extract features from standings
+                        home_games = home_standing.get("games", {})
+                        away_games = away_standing.get("games", {})
+                        
+                        if sport in ["NBA", "NCAAB"]:
+                            home_wins = home_games.get("win", {}).get("total", 0) or 0
+                            home_losses = home_games.get("lose", {}).get("total", 0) or 0
+                            away_wins = away_games.get("win", {}).get("total", 0) or 0
+                            away_losses = away_games.get("lose", {}).get("total", 0) or 0
+                            h_h_w = home_games.get("win", {}).get("home", 0) or 0
+                            h_h_l = home_games.get("lose", {}).get("home", 0) or 0
+                            a_a_w = away_games.get("win", {}).get("away", 0) or 0
+                            a_a_l = away_games.get("lose", {}).get("away", 0) or 0
+                        else:
+                            home_wins = home_standing.get("won", 0) or 0
+                            home_losses = home_standing.get("lost", 0) or 0
+                            away_wins = away_standing.get("won", 0) or 0
+                            away_losses = away_standing.get("lost", 0) or 0
+                            h_h_w = home_wins // 2
+                            h_h_l = home_losses // 2
+                            a_a_w = away_wins // 2
+                            a_a_l = away_losses // 2
+                        
+                        home_win_pct = calculate_win_pct(home_wins, home_losses)
+                        away_win_pct = calculate_win_pct(away_wins, away_losses)
+                        
+                        # Form (last 5)
+                        home_form = home_standing.get("form", "") or ""
+                        away_form = away_standing.get("form", "") or ""
+                        home_last_5 = home_form[-5:].count("W") / 5 if home_form else home_win_pct
+                        away_last_5 = away_form[-5:].count("W") / 5 if away_form else away_win_pct
+                        
+                        # Points (normalized)
+                        if sport in ["NBA", "NCAAB"]:
+                            home_pts = home_standing.get("points", {}).get("for", 100) or 100
+                            away_pts = away_standing.get("points", {}).get("for", 100) or 100
+                            home_def = home_standing.get("points", {}).get("against", 100) or 100
+                            away_def = away_standing.get("points", {}).get("against", 100) or 100
+                        else:
+                            home_pts = 3 if sport == "NHL" else 24
+                            away_pts = 3 if sport == "NHL" else 24
+                            home_def = 3 if sport == "NHL" else 24
+                            away_def = 3 if sport == "NHL" else 24
+                        
+                        # Build game record with all 27 features
+                        game_record = {
+                            "game_id": game.get("id", f"{game_date_str[:10]}_{home_name}_{away_name}"),
+                            "date": game_date_str[:10],
+                            "sport": sport,
+                            "season": season,
+                            "home_team": home_name,
+                            "away_team": away_name,
+                            "home_score": home_score,
+                            "away_score": away_score,
+                            "home_won": 1 if home_score > away_score else 0,
+                            # 27 Features
+                            "home_win_pct": home_win_pct,
+                            "away_win_pct": away_win_pct,
+                            "home_avg_points": normalize_points(home_pts, sport),
+                            "away_avg_points": normalize_points(away_pts, sport),
+                            "home_def_rating": normalize_points(home_def, sport),
+                            "away_def_rating": normalize_points(away_def, sport),
+                            "spread_normalized": 0.5,
+                            "home_last_5": home_last_5,
+                            "away_last_5": away_last_5,
+                            "home_home_record": calculate_win_pct(h_h_w, h_h_l),
+                            "away_away_record": calculate_win_pct(a_a_w, a_a_l),
+                            "head_to_head": 0.5,
+                            "rest_advantage": 0,
+                            "injuries_impact": 0,
+                            "weather_factor": 0,
+                            "public_betting_pct": 0.5,
+                            "sharp_money_indicator": 0,
+                            "line_movement": 0,
+                            "total_movement": 0,
+                            "model_consensus": 0.5,
+                            "theover_probability": home_win_pct,
+                            "implied_home_prob": home_win_pct,
+                            "home_streak": 0,
+                            "away_streak": 0,
+                            "division_game": 0,
+                            "back_to_back": 0,
+                            "primetime_game": 0,
+                        }
+                        
+                        all_games.append(game_record)
+                        completed += 1
                     
-                    progress_bar.progress(1.0)
+                    logs.append(f"  ✅ {completed} completed games in date range")
+                    log_area.code("\n".join(logs[-10:]))
                     
-                    if all_games:
-                        df = pd.DataFrame(all_games)
-                        st.session_state['training_data'] = df
-                        
-                        st.success(f"✅ Collected {len(df)} games!")
-                        
-                        summary_cols = st.columns(4)
-                        with summary_cols[0]:
-                            st.metric("Total Games", len(df))
-                        with summary_cols[1]:
-                            st.metric("Home Win Rate", f"{df['home_won'].mean():.1%}")
-                        with summary_cols[2]:
-                            st.metric("Sports", df['sport'].nunique())
-                        with summary_cols[3]:
-                            st.metric("Date Range", f"{df['date'].min()[:10]} to {df['date'].max()[:10]}")
-                        
-                        st.write("**By Sport:**")
-                        for sport in df['sport'].unique():
-                            sg = df[df['sport'] == sport]
-                            st.write(f"  • {sport}: {len(sg)} games ({sg['home_won'].mean():.1%} home win)")
-                    else:
-                        st.warning("No games found. API-Sports may be rate limited or no games in date range.")
+                    progress_bar.progress((sport_idx + 1) / total_sports)
+                    time.sleep(1)  # Rate limiting
+                
+                progress_bar.progress(1.0)
+                
+                if all_games:
+                    df = pd.DataFrame(all_games)
+                    st.session_state['training_data'] = df
+                    
+                    st.success(f"✅ Collected {len(df)} games!")
+                    
+                    summary_cols = st.columns(4)
+                    with summary_cols[0]:
+                        st.metric("Total Games", len(df))
+                    with summary_cols[1]:
+                        st.metric("Home Win Rate", f"{df['home_won'].mean():.1%}")
+                    with summary_cols[2]:
+                        st.metric("Sports", df['sport'].nunique())
+                    with summary_cols[3]:
+                        st.metric("Date Range", f"{df['date'].min()[:10]} to {df['date'].max()[:10]}")
+                    
+                    st.write("**By Sport:**")
+                    for sport in df['sport'].unique():
+                        sg = df[df['sport'] == sport]
+                        st.write(f"  • {sport}: {len(sg)} games ({sg['home_won'].mean():.1%} home win)")
+                else:
+                    st.warning("No games found. API-Sports may be rate limited or no games in date range.")
         
         # Show existing data
         if 'training_data' in st.session_state and len(st.session_state['training_data']) > 0:
