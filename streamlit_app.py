@@ -8780,6 +8780,105 @@ elif 'nba_apisports_api_key' not in st.session_state:
         basketball_client.api_key if basketball_client else ""
     )
 
+# Copy and Paste This Code Into Your App
+# Location: Line 8782 (right after the nba_apisports_api_key initialization)
+
+# ============================================================
+# CONSOLIDATE CLIENTS FOR VERTEX MASTER ANALYZER
+# ============================================================
+
+# Create consolidated client dictionaries for VertexMasterAnalyzer
+if 'sportsdata_clients' not in st.session_state:
+    st.session_state['sportsdata_clients'] = {}
+
+if 'apisports_clients' not in st.session_state:
+    st.session_state['apisports_clients'] = {}
+
+# Populate sportsdata_clients dictionary from individual clients
+sport_mappings = {
+    'nba': 'sportsdata_nba_client',
+    'basketball_nba': 'sportsdata_nba_client',
+    'nfl': 'sportsdata_nfl_client',
+    'americanfootball_nfl': 'sportsdata_nfl_client',
+    'nhl': 'sportsdata_nhl_client',
+    'icehockey_nhl': 'sportsdata_nhl_client',
+    'ncaab': 'sportsdata_ncaab_client',
+    'basketball_ncaab': 'sportsdata_ncaab_client',
+    'ncaaf': 'sportsdata_ncaaf_client',
+    'americanfootball_ncaaf': 'sportsdata_ncaaf_client',
+}
+
+for sport_key, client_key in sport_mappings.items():
+    if client_key in st.session_state and st.session_state[client_key]:
+        st.session_state['sportsdata_clients'][sport_key] = st.session_state[client_key]
+
+# Populate apisports_clients dictionary from individual clients
+apisports_mappings = {
+    'nba': 'apisports_basketball_client',
+    'basketball_nba': 'apisports_basketball_client',
+    'nfl': 'apisports_nfl_client',
+    'americanfootball_nfl': 'apisports_nfl_client',
+    'nhl': 'apisports_hockey_client',
+    'icehockey_nhl': 'apisports_hockey_client',
+}
+
+for sport_key, client_key in apisports_mappings.items():
+    if client_key in st.session_state and st.session_state[client_key]:
+        st.session_state['apisports_clients'][sport_key] = st.session_state[client_key]
+
+# Show status in sidebar
+with st.sidebar:
+    st.markdown("---")
+    st.markdown("### 🔌 Data Sources")
+    
+    # Kalshi status
+    if st.session_state.get('kalshi_integrator'):
+        kalshi = st.session_state['kalshi_integrator']
+        if hasattr(kalshi, 'api_key') and kalshi.api_key:
+            st.success("✅ Kalshi: Connected")
+        else:
+            st.warning("⚠️ Kalshi: No credentials")
+    else:
+        st.info("ℹ️ Kalshi: Not initialized")
+    
+    # SportsData status
+    sportsdata_count = len(set(st.session_state.get('sportsdata_clients', {}).values()))
+    if sportsdata_count > 0:
+        st.success(f"✅ SportsData.io: {sportsdata_count} sports")
+    else:
+        st.info("ℹ️ SportsData.io: Not configured")
+    
+    # API-Sports status
+    apisports_count = len(set(st.session_state.get('apisports_clients', {}).values()))
+    if apisports_count > 0:
+        st.success(f"✅ API-Sports: {apisports_count} sports")
+    else:
+        st.info("ℹ️ API-Sports: Not configured")
+    
+    # Sentiment status
+    if st.session_state.get('sentiment_analyzer'):
+        st.success("✅ Sentiment: Active")
+    else:
+        st.info("ℹ️ Sentiment: Not initialized")
+    
+    # ML Predictor status
+    if st.session_state.get('ml_predictor'):
+        st.success("✅ ML Predictor: Ready")
+    else:
+        st.info("ℹ️ ML Predictor: Not initialized")
+    
+    st.markdown("---")
+
+# Log what's available for debugging
+logger.info("="*60)
+logger.info("INTEGRATION STATUS:")
+logger.info(f"  Kalshi: {st.session_state.get('kalshi_integrator') is not None}")
+logger.info(f"  SportsData clients: {list(set(st.session_state.get('sportsdata_clients', {}).values()))}")
+logger.info(f"  APISports clients: {list(set(st.session_state.get('apisports_clients', {}).values()))}")
+logger.info(f"  Sentiment: {st.session_state.get('sentiment_analyzer') is not None}")
+logger.info(f"  ML Predictor: {st.session_state.get('ml_predictor') is not None}")
+logger.info("="*60)
+
 # Main navigation tabs (fallback to containers if tabs are unavailable)
 tab_labels = [
     "🎯 Sports Betting Parlays",
