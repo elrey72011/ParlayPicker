@@ -18,8 +18,7 @@ import streamlit.components.v1 as components
 import pytz
 from pathlib import Path
 from collections import defaultdict
-
-from ml_model import get_model, score_games
+from google.cloud import aiplatform
 
 from app_core import (
     APISportsBasketballClient,
@@ -255,212 +254,79 @@ def prime_builtin_secrets() -> None:
 prime_builtin_secrets()
 
 # ============================================================
-# ML PREDICTION OPTIMIZATION FUNCTIONS
-# These functions speed up ML predictions by 5-10x using batching and caching
+# VERTEX AI HELPERS
+# All ML predictions now flow through the deployed Vertex AI endpoint
 # ============================================================
 
-class BatchMLPredictor:
-    """
-    Batch ML predictor that processes multiple games at once.
-    This is 10x faster than individual predictions.
-    """
-    
-    def __init__(self, base_predictor):
-        self.predictor = base_predictor
-    
-    def predict_games_batch(self, games: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """
-        Predict multiple games at once using vectorized operations.
-        
-        Args:
-            games: List of game dicts with 'home_team', 'away_team', 'sport_key'
-        
-        Returns:
-            List of prediction results
-        """
-        if not games:
-            return []
-        
-        results = []
-        for game in games:
-            try:
-                # Use the existing predict_game_outcome method
-                pred_result = self.predictor.predict_game_outcome(
-                    home_team=game['home_team'],
-                    away_team=game['away_team'],
-                    sport_key=game.get('sport_key', 'americanfootball_nfl')
-                )
-                
-                if pred_result:
-                    results.append({
-                        'game_id': game.get('id'),
-                        'home_team': game['home_team'],
-                        'away_team': game['away_team'],
-                        'home_win_prob': pred_result.get('home_win_prob', 0.5),
-                        'away_win_prob': pred_result.get('away_win_prob', 0.5),
-                        'confidence': pred_result.get('confidence', 0.5),
-                        'predicted_winner': pred_result.get('predicted_winner', ''),
-                        'ai_prob': pred_result.get('home_win_prob', 0.5),
-                        'ai_confidence': pred_result.get('confidence', 0.5),
-                        'ai_edge': pred_result.get('edge', 0.0)
-                    })
-            except Exception as e:
-                logger.warning(f"Batch prediction failed for {game.get('home_team')} vs {game.get('away_team')}: {e}")
-                # Add a default prediction
-                results.append({
-                    'game_id': game.get('id'),
-                    'home_team': game['home_team'],
-                    'away_team': game['away_team'],
-                    'home_win_prob': 0.5,
-                    'away_win_prob': 0.5,
-                    'confidence': 0.0,
-                    'predicted_winner': '',
-                    'ai_prob': 0.5,
-                    'ai_confidence': 0.0,
-                    'ai_edge': 0.0
-                })
-        
-        return results
+def call_vertex_sports_model(instances: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Invoke the configured Vertex AI endpoint for sports predictions."""
+
+    project = st.session_state.get("gcp_project_id")
+    endpoint_id = st.session_state.get("vertex_endpoint_id") or st.session_state.get("vertex_endpoint") or st.session_state.get("vertex_endpoint_id")
+    location = st.session_state.get("gcp_location") or st.session_state.get("gcp_region")
+
+    if not project or not endpoint_id or not location:
+        raise ValueError("Vertex AI configuration missing: project, endpoint ID, or location")
+
+    endpoint = aiplatform.Endpoint(
+        endpoint_name=f"projects/{project}/locations/{location}/endpoints/{endpoint_id}"
+    )
+    response = endpoint.predict(instances=instances)
+    return response.predictions
 
 
-def create_games_hash(games: List[Dict[str, str]]) -> str:
-    """Create a stable hash from list of games for caching."""
-    if not games:
-        return "empty"
-    games_str = "|".join(sorted([
-        f"{g.get('home_team', '')}-{g.get('away_team', '')}-{g.get('sport_key', '')}"
-        for g in games
-    ]))
-    return hashlib.md5(games_str.encode()).hexdigest()[:16]
+class VertexPredictor:
+    """Simple predictor wrapper that calls the Vertex AI endpoint."""
 
-
-def get_predictor_id() -> str:
-    """Get a unique ID for the current predictor state."""
-    ml_predictor = st.session_state.get('ml_predictor')
-    if not ml_predictor:
-        return "none"
-    
-    # Use training time or model version as ID
-    if hasattr(ml_predictor, 'last_trained'):
-        return str(ml_predictor.last_trained)
-    
-    return str(id(ml_predictor))
-
-
-@st.cache_data(ttl=1800)  # Cache for 30 minutes
-def batch_predict_ml_cached(
-    games_hash: str,
-    games_data: tuple,
-    predictor_id: str
-) -> Dict[str, Dict[str, Any]]:
-    """
-    Cached batch ML predictions - this is the key to 5-10x speedup.
-    
-    Args:
-        games_hash: Hash of game list for cache invalidation
-        games_data: Tuple of (home, away, sport_key) tuples
-        predictor_id: ID of the predictor to ensure cache invalidation on retrain
-    
-    Returns:
-        Dict mapping "home-away-sport" -> prediction result
-    """
-    # Get the actual predictor from session state
-    ml_predictor = st.session_state.get('ml_predictor')
-    if not ml_predictor:
-        return {}
-    
-    # Convert back to list of dicts
-    games = [
-        {
-            'home_team': home,
-            'away_team': away,
-            'sport_key': sport,
-            'id': f"{home}-{away}"
+    def predict_game_outcome(
+        self,
+        home_team: str,
+        away_team: str,
+        home_price: Optional[float] = None,
+        away_price: Optional[float] = None,
+        home_sentiment: float = 0.0,
+        away_sentiment: float = 0.0,
+        *,
+        sport_key: str = "",
+        context: Optional[Dict[str, Any]] = None,
+    ) -> Optional[Dict[str, Any]]:
+        instance: Dict[str, Any] = {
+            "home_team": home_team,
+            "away_team": away_team,
+            "home_moneyline": _safe_float(home_price),
+            "away_moneyline": _safe_float(away_price),
+            "home_sentiment": home_sentiment,
+            "away_sentiment": away_sentiment,
+            "sport_key": sport_key,
         }
-        for home, away, sport in games_data
-    ]
-    
-    # Batch predict
-    batch_predictor = BatchMLPredictor(ml_predictor)
-    results = batch_predictor.predict_games_batch(games)
-    
-    # Convert to lookup dict
-    results_dict = {}
-    for r, game in zip(results, games):
-        key = f"{r['home_team']}-{r['away_team']}-{game['sport_key']}"
-        results_dict[key] = r
-    
-    return results_dict
 
+        if context:
+            for key, value in context.items():
+                if isinstance(value, (dict, list, tuple, str, int, float, type(None))):
+                    instance[key] = value
 
-def predict_games_parallel(predictor, games: List[Dict], max_workers: int = 4) -> List[Dict]:
-    """
-    Use parallel processing for predictions (2-3x faster on multi-core).
-    This is a fallback if batch caching doesn't work.
-    """
-    def predict_single(game):
         try:
-            return predictor.predict_game_outcome(
-                game['home_team'],
-                game['away_team'],
-                game.get('sport_key', 'americanfootball_nfl')
-            )
-        except Exception as e:
-            logger.warning(f"Parallel prediction failed: {e}")
+            predictions = call_vertex_sports_model([instance])
+        except Exception as exc:  # pragma: no cover - runtime safety
+            logger.warning(f"Vertex prediction failed for {home_team} vs {away_team}: {exc}")
             return None
-    
-    results = []
-    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-        future_to_game = {
-            executor.submit(predict_single, game): game 
-            for game in games
+
+        if not predictions:
+            return None
+
+        payload = predictions[0] or {}
+        home_prob = float(payload.get("home_win_prob", payload.get("home_prob", 0.5)))
+        away_prob = float(payload.get("away_win_prob", 1 - home_prob))
+        confidence = float(payload.get("confidence", payload.get("ai_confidence", 0.5)))
+
+        return {
+            "home_prob": home_prob,
+            "home_win_prob": home_prob,
+            "away_win_prob": away_prob,
+            "confidence": confidence,
+            "edge": float(payload.get("edge", payload.get("ai_edge", 0.0))),
+            "predicted_winner": payload.get("predicted_winner") or (home_team if home_prob >= 0.5 else away_team),
         }
-        
-        for future in concurrent.futures.as_completed(future_to_game):
-            try:
-                result = future.result()
-                if result:
-                    results.append(result)
-            except Exception as e:
-                logger.warning(f"Prediction failed in parallel processing: {e}")
-    
-    return results
-
-
-# Placeholder classes for compatibility
-class EmbeddingCachePredictor:
-    """Placeholder for advanced caching - can be implemented later."""
-    def __init__(self, predictor, cache_ttl_hours=24):
-        self.predictor = predictor
-        self.cache_ttl_hours = cache_ttl_hours
-
-def hash_games(games: List[Dict]) -> str:
-    """Alias for create_games_hash for compatibility."""
-    return create_games_hash(games)
-
-def get_cached_predictions(games_hash: str, games: List[Dict], predictor_state: Any) -> List[Dict]:
-    """
-    Wrapper for batch_predict_ml_cached that returns a list instead of dict.
-    This maintains API compatibility.
-    """
-    # Convert games to hashable tuple format
-    games_tuple = tuple([
-        (g.get('home_team', ''), g.get('away_team', ''), g.get('sport_key', ''))
-        for g in games
-    ])
-    
-    predictor_id = get_predictor_id()
-    results_dict = batch_predict_ml_cached(games_hash, games_tuple, predictor_id)
-    
-    # Convert back to list
-    results_list = []
-    for game in games:
-        key = f"{game.get('home_team', '')}-{game.get('away_team', '')}-{game.get('sport_key', '')}"
-        result = results_dict.get(key)
-        if result:
-            results_list.append(result)
-    
-    return results_list
 
 # ============================================================
 # PERFORMANCE OPTIMIZATION HELPERS
@@ -499,41 +365,6 @@ def fetch_all_sports_parallel(api_key: str, sports: List[str]) -> Dict[str, Any]
                 st.sidebar.warning(f"⚠️ {sport_key}: {error[:50]}")
     
     return results
-
-
-@st.cache_resource
-def get_cached_ml_predictor(sport_key: str, cache_key: str):
-    """
-    Safe ML model caching. Uses the ml_predictor stored in
-    st.session_state, trained earlier in the historical training panel.
-    This fixes the recursion bug and prevents unnecessary retraining.
-    """
-    try:
-        ml_predictor = st.session_state.get("ml_predictor")
-        if ml_predictor is None:
-            logger.warning(
-                f"ML predictor not found in session_state for sport_key={sport_key}. "
-                f"Returning None from cache."
-            )
-            return None
-
-        return ml_predictor
-    except Exception as e:
-        logger.warning(
-            f"Error accessing cached ML predictor for {sport_key}: {e}"
-        )
-        return None
-
-
-def get_ml_predictor_smart(sport_key: str):
-    """
-    Smart wrapper that ensures Streamlit cache is invalidated per day
-    per sport. The actual ML predictor object is stored in session_state,
-    not built recursively.
-    """
-    today = date.today().isoformat()
-    cache_key = f"{sport_key}_{today}"
-    return get_cached_ml_predictor(sport_key, cache_key)
 
 
 def calculate_parlay_metrics_vectorized(legs: List[Dict]) -> Dict[str, float]:
@@ -5934,12 +5765,13 @@ def build_best_bets_per_game(
                     }
                     try:
                         ml_prediction_result = ml_predictor.predict_game_outcome(
-                            home,
-                            away,
-                            home_price,
-                            away_price,
-                            home_sentiment['score'],
-                            away_sentiment['score'],
+                            home_team=home,
+                            away_team=away,
+                            home_price=home_price,
+                            away_price=away_price,
+                            home_sentiment=home_sentiment.get('score', 0.0),
+                            away_sentiment=away_sentiment.get('score', 0.0),
+                            sport_key=sport_key,
                             context=ml_context,
                         )
                     except Exception:
@@ -8784,41 +8616,11 @@ min_ai_confidence = sidebar_state["min_ai_confidence"]
 min_parlay_probability = sidebar_state["min_parlay_probability"]
 max_parlay_probability = sidebar_state["max_parlay_probability"]
 
-# Manage historical ML components lazily so resource-heavy datasets are only
-# built when machine-learning predictions are enabled.
-builder_error = st.session_state.get('historical_builder_error')
 if use_ml_predictions:
-    builder = st.session_state.get('historical_data_builder')
-    if builder is None:
-        try:
-            builder = HistoricalDataBuilder(
-                resolve_odds_api_key,
-                days_back=120,
-                max_days_back=540,
-                min_rows_target=30,
-            )
-            st.session_state['historical_data_builder'] = builder
-            st.session_state.pop('historical_builder_error', None)
-            builder_error = None
-        except TypeError as builder_init_error:  # pragma: no cover - defensive guard
-            logger.exception("Failed to initialize HistoricalDataBuilder", exc_info=True)
-            builder = HistoricalDataBuilder(resolve_odds_api_key)
-            st.session_state['historical_data_builder'] = builder
-            st.session_state['historical_builder_error'] = str(builder_init_error)
-            builder_error = str(builder_init_error)
-
-    if st.session_state.get('ml_predictor') is None and builder is not None:
-        st.session_state['ml_predictor'] = HistoricalMLPredictor(builder)
+    if st.session_state.get('ml_predictor') is None:
+        st.session_state['ml_predictor'] = VertexPredictor()
 else:
-    builder = st.session_state.get('historical_data_builder')
-    if builder and hasattr(builder, 'reset_cache'):
-        try:
-            builder.reset_cache()
-        except Exception:  # pragma: no cover - defensive cache clear
-            logger.debug("Failed to reset historical dataset cache", exc_info=True)
     st.session_state.pop('ml_predictor', None)
-    builder_error = None
-    st.session_state['historical_builder_error'] = None
 
 ml_predictor_state = st.session_state.get('ml_predictor')
 ai_optimizer = st.session_state.get('ai_optimizer')
@@ -8982,28 +8784,15 @@ with st.expander("🔍 ML Predictor Status", expanded=False):
                 else:
                     st.info("ℹ️ Sentiment analyzer not loaded, using neutral sentiment (0.0)")
                 
-                # Try with all parameters
-                try:
-                    test_result = ml_predictor.predict_game_outcome(
-                        home_team="Kansas City Chiefs",
-                        away_team="Las Vegas Raiders",
-                        home_odds=-200,  # Example odds
-                        away_odds=+175,
-                        sentiment_home=sentiment_home,
-                        sentiment_away=sentiment_away,
-                        sport_key="americanfootball_nfl"
-                    )
-                except TypeError as e:
-                    # Fallback: without sport_key (HistoricalMLPredictor)
-                    st.info("ℹ️ Using HistoricalMLPredictor (doesn't accept sport_key parameter)")
-                    test_result = ml_predictor.predict_game_outcome(
-                        home_team="Kansas City Chiefs",
-                        away_team="Las Vegas Raiders",
-                        home_odds=-200,
-                        away_odds=+175,
-                        sentiment_home=sentiment_home,
-                        sentiment_away=sentiment_away
-                    )
+                test_result = ml_predictor.predict_game_outcome(
+                    home_team="Kansas City Chiefs",
+                    away_team="Las Vegas Raiders",
+                    home_price=-200,  # Example odds
+                    away_price=+175,
+                    home_sentiment=sentiment_home,
+                    away_sentiment=sentiment_away,
+                    sport_key="americanfootball_nfl",
+                )
                 
                 if test_result:
                     st.success("✅ ML Prediction successful!")
@@ -12319,7 +12108,12 @@ if is_vertex_ai_enabled():
                                             ml_prediction_result = ml_predictor.predict_game_outcome(
                                                 home_team=home,
                                                 away_team=away,
-                                                sport_key=skey
+                                                home_price=hp,
+                                                away_price=ap,
+                                                home_sentiment=home_sentiment.get('score', 0.0),
+                                                away_sentiment=away_sentiment.get('score', 0.0),
+                                                sport_key=skey,
+                                                context=ml_context,
                                             )
                                             if ml_prediction_result:
                                                 logger.info(
@@ -14801,7 +14595,7 @@ if st.button(
     st.write("📊 Found odds data for games:")
     st.info(f"**{len(odds_data)} games** ready for analysis")
 
-    # Score today's games with the local ML model for quick edges
+    # Score today's games with Vertex AI for quick edges
     today_records: List[Dict[str, Any]] = []
     for game in odds_data:
         home_team = game.get('home_team')
@@ -14844,11 +14638,31 @@ if st.button(
         today_games_df = pd.DataFrame(today_records)
 
         try:
-            _model, model_feature_names = get_model()
-            features_today = build_ml_features(today_games_df, model_feature_names)
-            scored_today = score_games(features_today)
-            today_games_df = scored_today
-            today_games_df['market_edge'] = today_games_df.get('implied_home_prob', pd.Series(dtype=float)) - 0.5
+            instances = []
+            for _, row in today_games_df.iterrows():
+                instances.append({
+                    "home_team": row['home_team'],
+                    "away_team": row['away_team'],
+                    "home_moneyline": _safe_float(row['home_odds']),
+                    "away_moneyline": _safe_float(row['away_odds']),
+                    "sport_key": row.get('sport_key', ''),
+                })
+
+            predictions = call_vertex_sports_model(instances)
+            home_probs = []
+            edges = []
+            implied_probs = []
+            for pred, (_, row) in zip(predictions, today_games_df.iterrows()):
+                implied_prob = implied_p_from_american(_safe_float(row['home_odds']))
+                implied_probs.append(implied_prob)
+                home_prob = float((pred or {}).get('home_win_prob', (pred or {}).get('home_prob', 0.5)))
+                home_probs.append(home_prob)
+                edges.append(home_prob - implied_prob)
+
+            today_games_df['implied_home_prob'] = implied_probs
+            today_games_df['model_home_prob'] = home_probs
+            today_games_df['model_edge'] = edges
+            today_games_df['market_edge'] = today_games_df['implied_home_prob'] - 0.5
 
             sort_mode = st.selectbox(
                 "Rank by:",
@@ -14876,10 +14690,10 @@ if st.button(
 
             st.subheader("🎯 Model-Powered Edges for Today's Games")
             st.dataframe(display_df, use_container_width=True, hide_index=True)
-            st.caption("Ranking uses your local ML model predictions against market-implied probabilities.")
+            st.caption("Ranking uses your Vertex AI predictions against market-implied probabilities.")
         except Exception as e:
-            logger.warning(f"ML scoring failed: {e}")
-            st.warning("⚠️ Could not load the local ML model. Continuing without model edges.")
+            logger.warning(f"Vertex scoring failed: {e}")
+            st.warning("⚠️ Could not fetch Vertex AI predictions. Continuing without model edges.")
     
     # Load available data sources
     st.write("---")
@@ -15008,8 +14822,8 @@ if st.button(
                         if outcome['name'] == home_team:
                             best_spread = outcome.get('point')
         
-        # Match ML predictions - NOW with all required parameters!
-        if 'ml' in data_sources:
+        # Match Vertex AI predictions - NOW with all required parameters!
+        if use_ml_predictions:
             ml_predictor = st.session_state.get('ml_predictor')
             if ml_predictor and best_moneyline_home and best_moneyline_away:
                 try:
@@ -15017,57 +14831,45 @@ if st.button(
                     sentiment_analyzer = st.session_state.get('sentiment_analyzer')
                     sentiment_home = 0.0  # Neutral default
                     sentiment_away = 0.0  # Neutral default
-                    
+
                     if sentiment_analyzer:
                         try:
                             # Try to get real sentiment
                             home_sentiment_result = sentiment_analyzer.get_sentiment(home_team)
                             away_sentiment_result = sentiment_analyzer.get_sentiment(away_team)
-                            
+
                             if home_sentiment_result and 'sentiment_score' in home_sentiment_result:
                                 sentiment_home = home_sentiment_result['sentiment_score']
                             if away_sentiment_result and 'sentiment_score' in away_sentiment_result:
                                 sentiment_away = away_sentiment_result['sentiment_score']
                         except Exception as e:
                             logger.warning(f"Sentiment analysis failed, using neutral: {e}")
-                    
-                    # Call ML predictor with ALL required parameters
-                    try:
-                        # Try newer predictor interface (with sport_key)
-                        ml_result = ml_predictor.predict_game_outcome(
-                            home_team=home_team,
-                            away_team=away_team,
-                            home_odds=best_moneyline_home,
-                            away_odds=best_moneyline_away,
-                            sentiment_home=sentiment_home,
-                            sentiment_away=sentiment_away,
-                            sport_key=game.get('sport_key')
-                        )
-                    except TypeError:
-                        # Fallback: call without sport_key (HistoricalMLPredictor)
-                        ml_result = ml_predictor.predict_game_outcome(
-                            home_team=home_team,
-                            away_team=away_team,
-                            home_odds=best_moneyline_home,
-                            away_odds=best_moneyline_away,
-                            sentiment_home=sentiment_home,
-                            sentiment_away=sentiment_away
-                        )
-                    
+
+                    ml_result = ml_predictor.predict_game_outcome(
+                        home_team=home_team,
+                        away_team=away_team,
+                        home_price=best_moneyline_home,
+                        away_price=best_moneyline_away,
+                        home_sentiment=sentiment_home,
+                        away_sentiment=sentiment_away,
+                        sport_key=game.get('sport_key') or '',
+                        context=context_data,
+                    )
+
                     if ml_result:
                         context_data['ml'] = {
                             'home_win_prob': ml_result.get('home_win_prob'),
                             'away_win_prob': ml_result.get('away_win_prob'),
                             'confidence': ml_result.get('confidence'),
                             'edge': ml_result.get('edge'),
-                            'model_used': ml_result.get('model_used', 'ML Model'),
+                            'model_used': 'Vertex AI Endpoint',
                             'sentiment_used': f"Home: {sentiment_home:.2f}, Away: {sentiment_away:.2f}"
                         }
-                        logger.info(f"✅ ML+Sentiment data matched for {away_team} @ {home_team}")
+                        logger.info(f"✅ Vertex AI data matched for {away_team} @ {home_team}")
                 except Exception as e:
-                    logger.warning(f"ML matching failed for {away_team} @ {home_team}: {e}")
+                    logger.warning(f"Vertex matching failed for {away_team} @ {home_team}: {e}")
             elif ml_predictor and not (best_moneyline_home and best_moneyline_away):
-                logger.warning(f"ML predictor available but odds missing for {away_team} @ {home_team}")
+                logger.warning(f"Vertex predictor available but odds missing for {away_team} @ {home_team}")
         
         # Match SportsData
         if 'sportsdata' in data_sources:
