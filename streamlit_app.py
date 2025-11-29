@@ -60,7 +60,7 @@ except ImportError:
     analyze_theover_spreads_with_vertex = None
     show_best_bets_table = None
 
-# Google Gemini AI Integration (recommended - 24x cheaper than Claude!)
+# Google Gemini AI Integration (recommended)
 try:
     from gemini_integration import (
         GeminiAnalyzer,
@@ -76,7 +76,7 @@ except ImportError as e:
         import streamlit as st
         st.sidebar.markdown("---")
         st.sidebar.markdown("### 💎 Google Gemini AI")
-        st.sidebar.info("💰 AI analysis for ~$1/month (24x cheaper than Claude)")
+        st.sidebar.info("💰 AI analysis for ~$1/month")
         st.sidebar.code("pip install google-cloud-aiplatform")
         st.sidebar.caption("Then add gemini_integration.py to your project")
         return False
@@ -160,6 +160,9 @@ BUILTIN_SECRET_DEFAULTS = {
 
     # API-Sports (shared key)
     "APISPORTS_KEY": "d03eedb3-2a7b-4b27-8d24-8ed8703b9417",
+    "NFL_APISPORTS_API_KEY": "d03eedb3-2a7b-4b27-8d24-8ed8703b9417",
+    "NHL_APISPORTS_API_KEY": "d03eedb3-2a7b-4b27-8d24-8ed8703b9417",
+    "NBA_APISPORTS_API_KEY": "d03eedb3-2a7b-4b27-8d24-8ed8703b9417",
     "APISPORTS_NFL_KEY": "d03eedb3-2a7b-4b27-8d24-8ed8703b9417",
     "APISPORTS_NHL_KEY": "d03eedb3-2a7b-4b27-8d24-8ed8703b9417",
     "APISPORTS_NBA_KEY": "d03eedb3-2a7b-4b27-8d24-8ed8703b9417",
@@ -206,6 +209,9 @@ def prime_builtin_secrets() -> None:
         "kalshi_api_key": BUILTIN_SECRET_DEFAULTS["KALSHI_API_KEY"],
         "kalshi_api_secret": BUILTIN_SECRET_DEFAULTS["KALSHI_API_SECRET"],
         "apisports_key": BUILTIN_SECRET_DEFAULTS["APISPORTS_KEY"],
+        "nfl_apisports_api_key": BUILTIN_SECRET_DEFAULTS["NFL_APISPORTS_API_KEY"],
+        "nhl_apisports_api_key": BUILTIN_SECRET_DEFAULTS["NHL_APISPORTS_API_KEY"],
+        "nba_apisports_api_key": BUILTIN_SECRET_DEFAULTS["NBA_APISPORTS_API_KEY"],
         "sportsdata_nba_key": BUILTIN_SECRET_DEFAULTS["SPORTSDATA_NBA_KEY"],
         "sportsdata_nfl_key": BUILTIN_SECRET_DEFAULTS["SPORTSDATA_NFL_KEY"],
         "sportsdata_nhl_key": BUILTIN_SECRET_DEFAULTS["SPORTSDATA_NHL_KEY"],
@@ -225,6 +231,9 @@ def prime_builtin_secrets() -> None:
         "kalshi_api_key": BUILTIN_SECRET_DEFAULTS["KALSHI_API_KEY"],
         "kalshi_secret_key": BUILTIN_SECRET_DEFAULTS["KALSHI_API_SECRET"],
         "apisports_key": BUILTIN_SECRET_DEFAULTS["APISPORTS_KEY"],
+        "nfl_apisports_api_key": BUILTIN_SECRET_DEFAULTS["NFL_APISPORTS_API_KEY"],
+        "nhl_apisports_api_key": BUILTIN_SECRET_DEFAULTS["NHL_APISPORTS_API_KEY"],
+        "nba_apisports_api_key": BUILTIN_SECRET_DEFAULTS["NBA_APISPORTS_API_KEY"],
         "sportsdata_nba_key": BUILTIN_SECRET_DEFAULTS["SPORTSDATA_NBA_KEY"],
         "sportsdata_nfl_key": BUILTIN_SECRET_DEFAULTS["SPORTSDATA_NFL_KEY"],
         "sportsdata_nhl_key": BUILTIN_SECRET_DEFAULTS["SPORTSDATA_NHL_KEY"],
@@ -1404,25 +1413,7 @@ def render_sidebar_controls() -> Dict[str, Any]:
     else:
         sidebar.caption("ℹ️ Using neutral fallback sentiment")
 
-    # --------------------- Anthropic API key ---------------------
-    st.session_state.setdefault('anthropic_api_key', 
-        os.environ.get("ANTHROPIC_API_KEY", "") or 
-        os.environ.get("anthropic_api_key", "") or
-        st.secrets.get("anthropic_api_key", "") or
-        st.secrets.get("ANTHROPIC_API_KEY", "")
-    )
-    anthropic_api_input = sidebar.text_input(
-        "Anthropic API key",
-        value=st.session_state.get('anthropic_api_key', ""),
-        type="password",
-        help="Required for Vertex AI analysis. Get from console.anthropic.com",
-    ).strip()
-    if anthropic_api_input != st.session_state.get('anthropic_api_key', ""):
-        st.session_state['anthropic_api_key'] = anthropic_api_input
-    if st.session_state.get('anthropic_api_key'):
-        sidebar.caption("🤖 Anthropic API key configured")
-    else:
-        sidebar.caption("❌ Enter Anthropic API key for AI analysis")
+    # --------------------- Gemini AI Configuration ---------------------
     
     # --------------------- Google Gemini AI (Recommended) ---------------------
     if GEMINI_AVAILABLE:
@@ -1434,7 +1425,7 @@ def render_sidebar_controls() -> Dict[str, Any]:
     else:
         sidebar.markdown("---")
         sidebar.markdown("### 💎 Gemini AI (Optional)")
-        sidebar.info("💰 AI analysis for ~$1/month (24x cheaper than Claude)")
+        sidebar.info("💰 AI analysis for ~$1/month")
         sidebar.code("pip install google-cloud-aiplatform")
         sidebar.caption("See GEMINI_QUICK_SETUP.md for instructions")
     
@@ -14723,7 +14714,7 @@ use_gemini = GEMINI_AVAILABLE and st.session_state.get('gcp_project_id')
 
     # Show Gemini status
 if use_gemini:
-    st.success("🧠 Using Google Gemini AI (Vertex AI) - 24x cheaper than Claude!")
+    st.success("🧠 Using Google Gemini AI (Vertex AI)")
     gcp_project = st.session_state.get('gcp_project_id', 'Not set')
     endpoint = st.session_state.get('vertex_endpoint_id', 'Not set')
     location = st.session_state.get('gcp_location', 'us-central1')
@@ -14736,7 +14727,7 @@ if not ai_available:
         "⚠️ No AI provider configured. Configure Gemini in the sidebar to enable AI analysis."
     )
 elif use_gemini:
-    st.success("✅ Using Google Gemini for AI analysis (~24x cheaper than Claude)")
+    st.success("✅ Using Google Gemini for AI analysis")
 
 # ============================================================================
 # AI MASTER ANALYZER (RUNS FIRST)
@@ -14930,7 +14921,7 @@ if st.button(
     if use_gemini:
         st.write("🧠 **Running AI Analysis with Google Gemini...**")
         st.success(f"💎 Using Gemini Pro (~${len(odds_data) * 0.001:.2f} for {len(odds_data)} games)")
-        st.caption("✨ 24x cheaper than Claude with excellent quality!")
+        st.caption("✨ Gemini delivers strong quality at low cost")
         
         # Initialize Gemini
         project_id = st.session_state.get('gcp_project_id')
@@ -15095,7 +15086,7 @@ if st.button(
         # best_moneyline for backwards compatibility
         best_moneyline = best_moneyline_home
         
-        # Analyze with Gemini or Claude
+        # Analyze with Gemini
         if use_gemini:
             try:
                 result = analyzer.analyze_game(
