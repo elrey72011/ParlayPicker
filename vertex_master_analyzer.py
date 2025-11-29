@@ -997,7 +997,7 @@ with col3:
     st.metric("🧮 Fallback Heuristics", f"{fallback_count} games")
         
         # Show overall status
-        real_ml = ml_sources_used['anthropic_claude'] + ml_sources_used['gcp_vertex']
+    real_ml = ml_sources_used['anthropic_claude'] + ml_sources_used['gcp_vertex']
         if real_ml > 0:
             st.success(f"✅ **{real_ml}/{total_predictions} games used REAL ML predictions** (Claude API or GCP Vertex)")
         elif ml_sources_used['spread_derived'] > 0:
