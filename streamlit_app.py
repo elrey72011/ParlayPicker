@@ -9646,214 +9646,158 @@ if is_vertex_ai_enabled():
                 
                 all_games = []
 
-                # Prefer theover.ai uploads for lines/spreads to avoid TheOddsAPI mismatches
-                used_theover = False
-                if 'theover_spreads_data' in locals() and theover_spreads_data is not None and not theover_spreads_data.empty:
-                    used_theover = True
-                    st.info("📥 Using theover.ai uploads for spreads/totals (skipping The Odds API lines)")
-
-                    for _, row in theover_spreads_data.iterrows():
-                        # Get basic info
-                        home_team = row.get('home_team') or row.get('HomeTeam') or ''
-                        away_team = row.get('away_team') or row.get('AwayTeam') or ''
-                        league = (row.get('League') or row.get('league') or 'NBA').upper()
-                        pick = row.get('Pick') or row.get('pick') or ''
-
-                        # Extract line value
-                        line_value = row.get('Line') or row.get('Spread') or row.get('line') or 0
-                        try:
-                            line_value = float(line_value) if line_value else 0
-                        except:
-                            line_value = 0
-
-                        # Determine sport_key from league
-                        if league == 'NFL':
-                            sport_key = 'americanfootball_nfl'
-                        elif league == 'NBA':
-                            sport_key = 'basketball_nba'
-                        elif league == 'NHL':
-                            sport_key = 'icehockey_nhl'
-                        elif league == 'NCAAB':
-                            sport_key = 'basketball_ncaab'
-                        elif league == 'NCAAF':
-                            sport_key = 'americanfootball_ncaaf'
-                        else:
-                            sport_key = 'basketball_nba'
-
-                        # NHL uses MONEYLINES in the Line column (125, -150, etc.)
-                        # Other sports use point spreads (13.5, -7.5, etc.)
-                        is_nhl = league == 'NHL'
-
-                        if is_nhl:
-                            # Line is a moneyline for NHL
-                            moneyline = line_value
-                            spread = 1.5  # Standard puckline
-
-                            # Calculate probability from moneyline
-                            if moneyline > 0:
-                                # Underdog: +150 means 100/(150+100) = 40%
-                                pick_win_prob = 100 / (moneyline + 100)
+                # =========================================================================
+                # PRIMARY DATA SOURCE: TheOddsAPI (Real Sportsbook Lines)
+                # Use TheOddsAPI for all spreads/totals/moneylines from real books (Novig, DraftKings, FanDuel, etc.)
+                # =========================================================================
+                odds_api_key = resolve_odds_api_key()
+                
+                if not odds_api_key:
+                    st.error("❌ TheOddsAPI key required for Vertex AI Master Analysis")
+                    st.info("💡 Add ODDS_API_KEY to secrets.toml or enter in sidebar")
+                    st.stop()
+                
+                st.info("📊 Fetching games from TheOddsAPI (all sportsbooks including Novig)...")
+                
+                for sport in selected_sports:
+                    try:
+                        snapshot = fetch_oddsapi_snapshot(odds_api_key, sport)
+                        games = snapshot.get('events', [])
+                        
+                        # Add sport_key and league to each game
+                        for game in games:
+                            game['sport_key'] = sport
+                            
+                            # Map sport_key to league abbreviation
+                            if sport == 'basketball_nba':
+                                game['league'] = 'NBA'
+                            elif sport == 'basketball_ncaab':
+                                game['league'] = 'NCAAB'
+                            elif sport == 'americanfootball_nfl':
+                                game['league'] = 'NFL'
+                            elif sport == 'americanfootball_ncaaf':
+                                game['league'] = 'NCAAF'
+                            elif sport == 'icehockey_nhl':
+                                game['league'] = 'NHL'
                             else:
-                                # Favorite: -150 means 150/(150+100) = 60%
-                                pick_win_prob = abs(moneyline) / (abs(moneyline) + 100)
-
-                            # Determine home/away probabilities based on pick
-                            pick_is_home = (pick == home_team) or (pick and (pick.lower() in home_team.lower() or home_team.lower() in pick.lower()))
-
-                            if pick_is_home:
-                                home_implied_prob = pick_win_prob
-                                home_ml = int(moneyline)
-                                away_ml = int(-moneyline) if moneyline > 0 else int(100 * 100 / abs(moneyline))
-                            else:
-                                home_implied_prob = 1 - pick_win_prob
-                                away_ml = int(moneyline)
-                                home_ml = int(-moneyline) if moneyline > 0 else int(100 * 100 / abs(moneyline))
-
-                            # theover_prob = HOME team win probability
-                            theover_prob = home_implied_prob
-                            home_spread = 1.5  # Standard puckline
-
-                        else:
-                            # Basketball/Football: Line is the PICKED team's spread!
-                            # Example: "Dallas @ Lakers, Pick: Dallas, Line: 10.5"
-                            # This means Dallas +10.5, Lakers are favorites
-
-                            pick_spread = line_value  # Line is already the picked team's spread!
-                            spread = abs(line_value)
-
-                            # Calculate probability from spread
-                            # Each point of spread ≈ 2.5-3% shift from 50%
-                            spread_shift = spread * 0.028  # ~2.8% per point
-
-                            # Determine if pick is home or away
-                            pick_is_home = (pick == home_team) or (pick and (pick.lower() in home_team.lower() or home_team.lower() in pick.lower()))
-
-                            # The pick_spread tells us if picked team is favorite or underdog
-                            # Negative = favorite, Positive = underdog
-                            if line_value < 0:
-                                # Picked team is favorite
-                                pick_win_prob = min(0.80, 0.50 + spread_shift)
-                            else:
-                                # Picked team is underdog
-                                pick_win_prob = max(0.20, 0.50 - spread_shift)
-
-                            # Calculate home_spread from pick_spread
-                            if pick_is_home:
-                                # Pick is home, home_spread = pick_spread
-                                home_spread = line_value
-                                home_implied_prob = pick_win_prob
-                            else:
-                                # Pick is away, home_spread is opposite
-                                home_spread = -line_value
-                                home_implied_prob = 1 - pick_win_prob
-
-                            # theover_probability = home team win probability
-                            theover_prob = home_implied_prob
-
-                            # Calculate American odds from probability
-                            if home_implied_prob > 0.5:
-                                home_ml = int(-100 * home_implied_prob / (1 - home_implied_prob))
-                                away_ml = int(100 * (1 - home_implied_prob) / home_implied_prob)
-                            else:
-                                home_ml = int(100 * (1 - home_implied_prob) / home_implied_prob)
-                                away_ml = int(-100 * home_implied_prob / (1 - home_implied_prob))
-
-                        # Store the spread FOR THE PICKED TEAM
-                        picked_team_spread = line_value  # Line is already for picked team!
-
-                        all_games.append({
-                            'home_team': home_team,
-                            'away_team': away_team,
-                            'sport_key': sport_key,
-                            'league': league,
-                            'commence_time': None,
-                            # TheOver.ai specific data
-                            'theover_spread': picked_team_spread,  # Already correct for picked team
-                            'theover_pick': pick,
-                            'theover_probability': theover_prob,  # Home team win probability
-                            'theover_line': line_value,  # Original line from CSV
-                            'is_moneyline': is_nhl,
-                            # Calculated odds
-                            'home_ml_odds': home_ml,
-                            'away_ml_odds': away_ml,
-                            # home_spread is the HOME team's spread (correctly calculated)
-                            'home_spread': home_spread if not is_nhl else 1.5,
-                            'implied_home_prob': home_implied_prob,
-                        })
-
-                    st.success(f"📊 Loaded {len(all_games)} games from theover.ai (spreads + NHL moneylines converted)")
-
-                # If no TheOver data is available, fall back to TheOddsAPI so analysis still runs
-                if not used_theover:
-                    odds_api_key = resolve_odds_api_key()
-                    odds_available = False
-
-                    if odds_api_key:
-                        st.info("📥 Fetching games from The Odds API...")
-                        for sport in selected_sports:
-                            try:
-                                snapshot = fetch_oddsapi_snapshot(odds_api_key, sport)
-                                games = snapshot.get('events', [])
-                                for game in games:
-                                    game['sport_key'] = sport
-                                all_games.extend(games)
-                                st.success(f"✅ Fetched {len(games)} {sport} games")
-                                odds_available = True
-                            except Exception as e:
-                                st.warning(f"⚠️ Error fetching {sport}: {e}")
-                                logger.error(f"Error fetching {sport}: {e}")
-
-                    if not odds_available:
-                        st.warning("⚠️ The Odds API not configured")
-                        st.info("💡 Upload theover.ai CSV files above to power Vertex AI analysis")
+                                game['league'] = 'NBA'
+                        
+                        all_games.extend(games)
+                        st.success(f"✅ Fetched {len(games)} {sport} games from TheOddsAPI")
+                        logger.info(f"Loaded {len(games)} {sport} games from TheOddsAPI")
+                        
+                    except Exception as e:
+                        st.warning(f"⚠️ Could not fetch {sport} from TheOddsAPI: {e}")
+                        logger.error(f"Error fetching {sport} from TheOddsAPI: {e}")
                 
                 if not all_games:
-                    st.error("❌ No games found. Either:")
-                    st.write("- Configure The Odds API key in settings")
-                    st.write("- Upload theover.ai CSV files above")
-                else:
-                    st.info(f"🤖 Analyzing {len(all_games)} games across all selected sports...")
+                    st.error("❌ No games found from TheOddsAPI")
+                    st.info("Check your API key and selected sports")
+                    st.stop()
+                
+                st.success(f"✅ Loaded {len(all_games)} total games from TheOddsAPI with real sportsbook lines")
+                
+                # =========================================================================
+                # SUPPLEMENTAL DATA: TheOver.ai Picks & Probabilities (NOT Lines!)
+                # Merge TheOver.ai picks/probabilities for consensus validation
+                # DO NOT use their Line column (unreliable signs)
+                # =========================================================================
+                theover_merged = 0
+                
+                if 'theover_spreads_data' in locals() and theover_spreads_data is not None and not theover_spreads_data.empty:
+                    st.info("🔄 Merging TheOver.ai picks & probabilities (consensus validation only)...")
                     
-                    # Get Kalshi integrator if available
-                    kalshi_int = st.session_state.get('kalshi_integrator')
-                    
-                    # Get sentiment analyzer from session state
-                    sentiment_analyzer = st.session_state.get('sentiment_analyzer')
-                    
-                    # Get ML predictor from session state
-                    ml_predictor = st.session_state.get('ml_predictor')
-                    
-                    analyzer = VertexMasterAnalyzer(
-                        odds_api_client=odds_client if 'odds_client' in locals() else None,
-                        sportsdata_clients=sportsdata_clients if 'sportsdata_clients' in locals() else {},
-                        apisports_clients={
-                            'nba': basketball_client if 'basketball_client' in locals() else None,
-                            'nfl': apisports_client if 'apisports_client' in locals() else None,
-                            'nhl': hockey_client if 'hockey_client' in locals() else None,
-                        },
-                        sentiment_analyzer=sentiment_analyzer,  # From session_state
-                        local_ml_predictor=ml_predictor,  # From session_state
-                        theover_data={
-                            'spreads': theover_spreads_data if 'theover_spreads_data' in locals() else None,
-                            'totals': theover_totals_data if 'theover_totals_data' in locals() else None,
-                            'ml': theover_ml_data if 'theover_ml_data' in locals() else None,
-                        },
-                        kalshi_integrator=kalshi_int,
-                    )
-                    
-                    results_df = analyzer.analyze_all_games(all_games, league='multi')
-                    
-                    if not results_df.empty:
-                        st.success(f"✅ Analysis complete! Found {len(results_df)} opportunities")
-                        show_vertex_master_analysis(results_df)
+                    for game in all_games:
+                        home_team = game.get('home_team', '')
+                        away_team = game.get('away_team', '')
                         
-                        # Store results in session_state for Best Bets and Parlays
-                        vertex_results = []
-                        for _, row in results_df.iterrows():
-                            vertex_results.append({
-                                'home_team': row.get('home_team', ''),
-                                'away_team': row.get('away_team', ''),
-                                'league': row.get('league', ''),
+                        # Find matching TheOver.ai row
+                        for _, row in theover_spreads_data.iterrows():
+                            theover_home = str(row.get('home_team') or row.get('HomeTeam') or '')
+                            theover_away = str(row.get('away_team') or row.get('AwayTeam') or '')
+                            
+                            # Fuzzy team name matching
+                            home_match = (home_team.lower() in theover_home.lower() or 
+                                         theover_home.lower() in home_team.lower())
+                            away_match = (away_team.lower() in theover_away.lower() or 
+                                         theover_away.lower() in away_team.lower())
+                            
+                            if home_match and away_match:
+                                # Get TheOver.ai pick and win probability
+                                theover_pick = str(row.get('Pick') or '')
+                                win_prob_pct = row.get('WinProbability', 50)
+                                
+                                try:
+                                    win_prob = float(win_prob_pct) / 100 if win_prob_pct > 1 else float(win_prob_pct)
+                                except:
+                                    win_prob = 0.5
+                                
+                                # Determine if pick is home team
+                                pick_is_home = (theover_pick.lower() in home_team.lower() or 
+                                               home_team.lower() in theover_pick.lower())
+                                
+                                # Convert to HOME team probability
+                                home_prob = win_prob if pick_is_home else (1.0 - win_prob)
+                                
+                                # Add TheOver.ai data to game (for consensus only!)
+                                game['theover_pick'] = theover_pick
+                                game['theover_probability'] = home_prob  # HOME team probability
+                                
+                                # DO NOT add theover_spread or theover_line!
+                                # Spreads come from TheOddsAPI bookmakers only!
+                                
+                                theover_merged += 1
+                                break  # Found match, move to next game
+                    
+                    st.success(f"✅ Merged TheOver.ai picks for {theover_merged}/{len(all_games)} games (using picks/probabilities, NOT their lines)")
+                else:
+                    st.info("ℹ️ No TheOver.ai data uploaded - using TheOddsAPI only")
+                
+                # =========================================================================
+                # Continue with analysis
+                # =========================================================================
+                st.info(f"🤖 Analyzing {len(all_games)} games across all selected sports...")
+                
+                # Get Kalshi integrator if available
+                kalshi_int = st.session_state.get('kalshi_integrator')
+                
+                # Get sentiment analyzer from session state
+                sentiment_analyzer = st.session_state.get('sentiment_analyzer')
+                
+                # Get ML predictor from session state
+                ml_predictor = st.session_state.get('ml_predictor')
+                
+                analyzer = VertexMasterAnalyzer(
+                    odds_api_client=odds_client if 'odds_client' in locals() else None,
+                    sportsdata_clients=sportsdata_clients if 'sportsdata_clients' in locals() else {},
+                    apisports_clients={
+                        'nba': basketball_client if 'basketball_client' in locals() else None,
+                        'nfl': apisports_client if 'apisports_client' in locals() else None,
+                        'nhl': hockey_client if 'hockey_client' in locals() else None,
+                    },
+                    sentiment_analyzer=sentiment_analyzer,  # From session_state
+                    local_ml_predictor=ml_predictor,  # From session_state
+                    theover_data={
+                        'spreads': theover_spreads_data if 'theover_spreads_data' in locals() else None,
+                        'totals': theover_totals_data if 'theover_totals_data' in locals() else None,
+                        'ml': theover_ml_data if 'theover_ml_data' in locals() else None,
+                    },
+                    kalshi_integrator=kalshi_int,
+                )
+                
+                results_df = analyzer.analyze_all_games(all_games, league='multi')
+                
+                if not results_df.empty:
+                    st.success(f"✅ Analysis complete! Found {len(results_df)} opportunities")
+                    show_vertex_master_analysis(results_df)
+                    
+                    # Store results in session_state for Best Bets and Parlays
+                    vertex_results = []
+                    for _, row in results_df.iterrows():
+                        vertex_results.append({
+                            'home_team': row.get('home_team', ''),
+                            'away_team': row.get('away_team', ''),
+                            'league': row.get('league', ''),
                                 'vertex_prob': row.get('vertex_ai_prob', 0.5),
                                 # Calculate meaningful confidence: base 50% + (edge * 500) capped at 95%
                                 # Edge of 0.10 (10%) = 50 + 50 = 100% confidence
