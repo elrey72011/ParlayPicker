@@ -1251,7 +1251,11 @@ def show_vertex_master_analysis(results_df: pd.DataFrame):
             'Game': f"{away_team} @ {home_team}",
             'THE PICK': pick_text,
             'Win %': round(pick_prob, 1),
-            'Favorite': '✅' if is_favorite else '❌',
+            'Favorite': (
+                '✅' if is_favorite is True
+                else '❌' if is_favorite is False
+                else '—'
+            ),
             'Sentiment': sent_agrees,
             'Kalshi': kalshi_agrees,
             'Kalshi %': f"{kalshi_pct:.0f}" if kalshi_pct else '—',
