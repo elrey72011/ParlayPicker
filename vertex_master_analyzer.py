@@ -274,7 +274,8 @@ class VertexMasterAnalyzer:
             features['theover_has_pick'] = 1
             features['theover_pick'] = game.get('theover_pick', '')
             features['theover_probability'] = safe_float(theover_prob_raw, 0.5)
-            features['theover_spread'] = safe_float(game.get('theover_spread', 0) or game.get('home_spread', 0), 0)
+            # Don't use theover_spread - unreliable/backwards values!
+            # features['theover_spread'] = 0
         
         # Also check for totals passed directly in game dict
         if game.get('theover_total'):
@@ -826,7 +827,7 @@ class VertexMasterAnalyzer:
                     'home_team': game.get('home_team'),
                     'away_team': game.get('away_team'),
                     'sport': game_league,
-                    'spread': game.get('theover_spread') or comp_features.get('home_spread'),
+                    'spread': comp_features.get('home_spread') or 0,  # DON'T use theover_spread!
                     'pick': game.get('theover_pick'),
                 }
 
