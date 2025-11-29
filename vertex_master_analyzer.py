@@ -974,7 +974,6 @@ class VertexMasterAnalyzer:
         progress.empty()
 
         # Display ML source summary
-                # Display ML source summary
         st.markdown("---")
         st.subheader("🔬 ML Prediction Source Summary")
 
