@@ -11622,11 +11622,14 @@ if is_vertex_ai_enabled():
                     
                     # =====================================================
                     # GET THEOVER.AI PICK AND PROBABILITY
-                    # This is the recommended bet from TheOver.ai
+                    # TheOver.ai is used for their PICK and PROBABILITY only
+                    # NOT for spread values (which come from market odds)
                     # =====================================================
                     theover_pick = vertex_result.get('theover_pick', '') or ''
                     theover_prob = vertex_result.get('theover_probability', None)
-                    theover_spread = vertex_result.get('theover_spread', 0) or 0
+                    
+                    # GET MARKET SPREAD from TheOddsAPI (NOT from TheOver.ai!)
+                    market_home_spread = vertex_result.get('spread', 0) or 0
                     
                     # Skip games without TheOver.ai data ONLY if show_all_games is False
                     if not show_all_games and not theover_pick:
@@ -11657,9 +11660,13 @@ if is_vertex_ai_enabled():
                     if theover_picked_home:
                         pick_ml_odds = home_ml
                         pick_team = home_team
+                        # Pick is home, use home's spread directly
+                        pick_spread = market_home_spread
                     else:
                         pick_ml_odds = away_ml
                         pick_team = away_team
+                        # Pick is away, flip the home spread
+                        pick_spread = -market_home_spread if market_home_spread else 0
                     
                     # Calculate market implied probability from ML odds
                     if pick_ml_odds and pick_ml_odds != 0:
@@ -11755,21 +11762,22 @@ if is_vertex_ai_enabled():
                     
                     # =====================================================
                     # FORMAT THE PICK
+                    # Use MARKET spread (from TheOddsAPI), not TheOver.ai spread
                     # =====================================================
                     # DEBUG: Log the values to understand what's happening
-                    logger.info(f"DEBUG: {away_team} @ {home_team} | Pick: {pick_team} | theover_spread: {theover_spread}")
+                    logger.info(f"DEBUG: {away_team} @ {home_team} | Pick: {pick_team} | market_spread: {pick_spread}")
                     
-                    # theover_spread should now be the PICKED team's spread (after fix)
+                    # pick_spread is the MARKET spread for the picked team
                     # Positive spread = underdog getting points (+)
                     # Negative spread = favorite giving points (-)
-                    spread_magnitude = abs(theover_spread) if theover_spread else 0
+                    spread_magnitude = abs(pick_spread) if pick_spread else 0
                     if spread_magnitude > 0:
-                        if theover_spread > 0:
+                        if pick_spread > 0:
                             # Positive spread = underdog getting points
                             pick_str = f"{pick_team} +{spread_magnitude:.1f}"
                         else:
                             # Negative spread = favorite giving points
-                            pick_str = f"{pick_team} {theover_spread:.1f}"  # Already has minus sign
+                            pick_str = f"{pick_team} {pick_spread:.1f}"  # Already has minus sign
                     else:
                         pick_str = f"{pick_team} ML"
                     
