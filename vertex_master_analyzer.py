@@ -1170,37 +1170,46 @@ def show_vertex_master_analysis(results_df: pd.DataFrame):
         spread = row.get('home_spread', 0)  or 0
         
         # Get moneyline odds to determine actual market favorite
+                # Get moneyline odds to determine actual market favorite
         home_ml = row.get('home_ml_odds') or row.get('home_ml', 0) or 0
         away_ml = row.get('away_ml_odds') or row.get('away_ml', 0) or 0
-        
-        # Determine actual market favorite from moneyline
+
+        # Determine actual market favorite from moneyline ONLY
         # Negative ML = favorite (e.g., -150 means favorite)
         # Positive ML = underdog (e.g., +130 means underdog)
-        # If both ML are available, compare them; otherwise use sign of home_ml
+        # If both ML are available, compare them; otherwise infer from whichever is present.
+        home_is_market_favorite = None  # None = unknown
+
         if home_ml and away_ml and home_ml != 0 and away_ml != 0:
+            # Lower (more negative) ML = bigger favorite
             home_is_market_favorite = home_ml < away_ml
         elif home_ml and home_ml != 0:
+            # Only home ML known
             home_is_market_favorite = home_ml < 0
-        elif spread and spread != 0:
-            # Fallback to spread: negative home spread = home is favorite
-            home_is_market_favorite = spread < 0
-        else:
-            # No data - default to home team slight favorite
-            home_is_market_favorite = True
+        elif away_ml and away_ml != 0:
+            # Only away ML known: if away ML is negative, *home* is NOT favorite
+            home_is_market_favorite = not (away_ml < 0)
+        # else: leave as None – we don't know who the favorite is
         
         if home_prob >= away_prob:
             pick_team = home_team
             pick_prob = home_prob
             pick_spread = spread
             # Is our pick the market favorite?
-            is_favorite = home_is_market_favorite
+            if home_is_market_favorite is None:
+                is_favorite = None
+            else:
+                is_favorite = home_is_market_favorite
         else:
             pick_team = away_team
             pick_prob = away_prob
             pick_spread = -spread if spread else 0
             # Is our pick the market favorite?
-            is_favorite = not home_is_market_favorite
-        
+            if home_is_market_favorite is None:
+                is_favorite = None
+            else:
+                is_favorite = not home_is_market_favorite
+
         # Format the pick
         if pick_spread and pick_spread != 0:
             if pick_spread > 0:
