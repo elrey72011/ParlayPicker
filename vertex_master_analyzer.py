@@ -1,3 +1,4 @@
+
 """
 Vertex AI Master Analyzer
 Consolidates ALL data sources for ultimate best bet recommendations.
@@ -180,8 +181,8 @@ class VertexMasterAnalyzer:
                                 point = outcome.get("point")
                                 price = outcome.get("price")
                                 
-                                # Extract Novig spreads specifically
-                                if "novig" in book_name:
+                                # Extract Novig spreads specifically (Novig's API key is "lowvig")
+                                if "novig" in book_name or "lowvig" in book_name:
                                     if name == game.get("home_team"):
                                         feats["novig_home_spread"] = point
                                         feats["novig_home_spread_odds"] = price
