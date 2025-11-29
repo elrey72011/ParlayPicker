@@ -1009,6 +1009,33 @@ class VertexMasterAnalyzer:
 
         results_df = pd.DataFrame(results)
 
+        # After results_df is fully built, before summary stats
+debug_mask = (
+    results_df['home_team'].str.contains("Providence", case=False, na=False) |
+    results_df['away_team'].str.contains("Providence", case=False, na=False)
+)
+
+debug_games = results_df[debug_mask][[
+    'league',
+    'home_team', 'away_team',
+    'home_ml_odds', 'away_ml_odds',
+    'home_spread', 'away_spread',
+    'implied_home_prob',
+    'vertex_ai_prob'
+]]
+
+if not debug_games.empty:
+    logger.info("=== PROVIDENCE DEBUG GAMES (Vertex Master) ===")
+    for _, g in debug_games.iterrows():
+        logger.info(
+            f"{g['league']}: {g['away_team']} @ {g['home_team']} | "
+            f"home_ml={g['home_ml_odds']} away_ml={g['away_ml_odds']} | "
+            f"home_spread={g['home_spread']} away_spread={g['away_spread']} | "
+            f"implied_home_prob={g['implied_home_prob']:.3f} "
+            f"vertex_ai_prob={g['vertex_ai_prob']:.3f}"
+        )
+
+
         # Sort by expected value (best bets first)
         if len(results_df) > 0 and 'expected_value' in results_df.columns:
             results_df = results_df.sort_values('expected_value', ascending=False)
