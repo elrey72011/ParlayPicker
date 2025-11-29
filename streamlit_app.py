@@ -814,6 +814,26 @@ def _parse_commence_time(raw_value: Any) -> Optional[datetime]:
     return None
 
 
+def format_game_time_local(raw_value: Any, tz_name: Optional[str] = None) -> str:
+    """Convert a commence time value into a user-friendly local string."""
+
+    try:
+        commence_dt = _parse_commence_time(raw_value)
+        if commence_dt is None:
+            return "TBD"
+
+        tz_label = tz_name or st.session_state.get('user_timezone') or 'UTC'
+        try:
+            tz = pytz.timezone(tz_label)
+        except Exception:
+            tz = pytz.UTC
+
+        local_dt = commence_dt.astimezone(tz)
+        return local_dt.strftime("%Y-%m-%d %I:%M %p %Z")
+    except Exception:
+        return "TBD"
+
+
 def _normalize_team_name(name: Optional[str]) -> str:
     if not name:
         return ""
@@ -11228,6 +11248,11 @@ if is_vertex_ai_enabled():
 
                     home_team = vertex_result.get('home_team') or matching_game.get('home_team')
                     away_team = vertex_result.get('away_team') or matching_game.get('away_team')
+                    commence_raw = vertex_result.get('commence_time') or matching_game.get('commence_time')
+                    game_time_display = format_game_time_local(
+                        commence_raw,
+                        st.session_state.get('user_timezone', 'UTC'),
+                    )
 
                     raw_vertex_prob = _safe_float(vertex_result.get('vertex_probability'))
                     raw_confidence = _safe_float(vertex_result.get('confidence'))
@@ -11300,10 +11325,11 @@ if is_vertex_ai_enabled():
                                     'sport_key': vertex_result.get('sport') or matching_game.get('sport_key'),
                                     'home_team': home_team,
                                     'away_team': away_team,
-                                    'commence_time': vertex_result.get('commence_time') or matching_game.get('commence_time'),
+                                    'commence_time': commence_raw,
                                     'ml_probability': ai_prob_dec,
                                     'bookmaker': bookmaker_name,
                                     'best_american': odds,
+                                    'Game Time': game_time_display,
                                 }
 
                                 vertex_leg_rows.append(leg_entry)
@@ -11577,8 +11603,10 @@ if is_vertex_ai_enabled():
                     best_bets_rows.append({
                         'League': league,
                         'Game': f"{away_team} @ {home_team}",
+                        'Game Time': game_time_display,
                         'THE PICK': pick_str,
                         'AI Win %': round(ai_win_prob, 1),
+                        'Win %': round(ai_win_prob, 1),
                         'Market %': round(market_implied_prob, 1),
                         'Edge': round(edge_pp, 1),
                         'EV': f"${ev_pct:.2f}",
@@ -11590,6 +11618,8 @@ if is_vertex_ai_enabled():
                         'Odds': odds_str,
                         'Confidence': round(confidence, 1),
                         'ML Source': ml_source_type,
+                        'Commence (UTC)': commence_raw,
+                        'kalshi_prob_raw': kalshi_pick_prob,
                     })
                 
                 # Display results
@@ -11598,13 +11628,42 @@ if is_vertex_ai_enabled():
                 
                 if best_bets_rows:
                     best_bets_df = pd.DataFrame(best_bets_rows)
-                    
-                    # Convert Edge to numeric for sorting
+                    user_tz_label = st.session_state.get('user_timezone', 'UTC')
+
+                    if 'Game Time' not in best_bets_df.columns and 'Commence (UTC)' in best_bets_df.columns:
+                        best_bets_df['Game Time'] = best_bets_df['Commence (UTC)']
+
+                    best_bets_df['Game Time'] = best_bets_df['Game Time'].apply(
+                        lambda val: format_game_time_local(val, user_tz_label) if pd.notna(val) else "TBD"
+                    )
+
+                    if 'Win %' not in best_bets_df.columns and 'AI Win %' in best_bets_df.columns:
+                        best_bets_df['Win %'] = best_bets_df['AI Win %']
+
+                    best_bets_df['model_prob'] = pd.to_numeric(best_bets_df.get('Win %'), errors='coerce') / 100.0
+                    kalshi_pct = pd.to_numeric(best_bets_df.get('Kalshi %'), errors='coerce')
+                    if 'kalshi_prob_raw' in best_bets_df.columns:
+                        kalshi_pct = kalshi_pct.fillna(pd.to_numeric(best_bets_df['kalshi_prob_raw'], errors='coerce'))
+
+                    best_bets_df['kalshi_prob'] = kalshi_pct / 100.0
+                    best_bets_df['kalshi_edge'] = best_bets_df['model_prob'] - best_bets_df['kalshi_prob']
+                    best_bets_df['blended_score'] = best_bets_df['model_prob']
+
+                    with_kalshi = best_bets_df['kalshi_prob'].notna()
+                    best_bets_df.loc[with_kalshi, 'blended_score'] = (
+                        0.5 * best_bets_df.loc[with_kalshi, 'model_prob']
+                        + 0.5 * best_bets_df.loc[with_kalshi, 'kalshi_edge']
+                    )
+
+                    best_bets_df['kalshi_prob_pct'] = best_bets_df['kalshi_prob'] * 100
+                    best_bets_df['kalshi_edge_pct'] = best_bets_df['kalshi_edge'] * 100
+
+                    # Convert Edge to numeric for sorting/metrics
                     best_bets_df['Edge_numeric'] = pd.to_numeric(best_bets_df['Edge'], errors='coerce')
-                    
-                    # Sort by Edge (highest first) - this shows the best value bets first
-                    best_bets_df = best_bets_df.sort_values('Edge_numeric', ascending=False)
-                    
+
+                    # Sort by blended score to include market sentiment
+                    best_bets_df = best_bets_df.sort_values('blended_score', ascending=False)
+
                     # Add rank column
                     best_bets_df.insert(0, 'Rank', range(1, len(best_bets_df) + 1))
                     
@@ -11616,7 +11675,7 @@ if is_vertex_ai_enabled():
                     kalshi_agrees = len(best_bets_df[best_bets_df['Kalshi'] == '✅']) if 'Kalshi' in best_bets_df.columns else 0
                     sentiment_agrees = len(best_bets_df[best_bets_df['Sentiment'] == '✅']) if 'Sentiment' in best_bets_df.columns else 0
 
-                    st.success(f"🎯 **{total_games} Games Analyzed - Edge + Consensus Ranking**")
+                    st.success(f"🎯 **{total_games} Games Analyzed - Blended (Model + Kalshi) Ranking**")
 
                     # Display metrics
                     col1, col2, col3, col4 = st.columns(4)
@@ -11658,15 +11717,20 @@ if is_vertex_ai_enabled():
                             st.info(f"📊 Using spread-derived probabilities (each point ≈ 2.8% shift from 50%)")
                         st.markdown("---")
                     
-                    # Display columns - new edge-based format
-                    display_cols = ['Rank', 'League', 'Game', 'THE PICK', 'AI Win %', 'Market %', 
-                                   'Edge', 'EV', 'Consensus', 'Sentiment', 'Kalshi', 'Kalshi %', 
-                                   'TheOver %', 'Odds', 'Confidence']
+                    # Display columns - include game time and Kalshi-derived signals
+                    best_bets_df['Blended Score %'] = best_bets_df['blended_score'] * 100
+
+                    display_cols = [
+                        'Rank', 'League', 'Game', 'Game Time', 'THE PICK', 'AI Win %', 'Market %',
+                        'Edge', 'EV', 'Consensus', 'Sentiment', 'Kalshi', 'Kalshi %',
+                        'kalshi_prob_pct', 'kalshi_edge_pct', 'Blended Score %',
+                        'TheOver %', 'Odds', 'Confidence'
+                    ]
                     display_cols = [c for c in display_cols if c in best_bets_df.columns]
-                    
+
                     # Show the best bets table
-                    st.subheader("🏆 BEST BETS - Ranked by Edge")
-                    st.caption("Edge = AI Win % - Market Implied %. Positive edge = potential value.")
+                    st.subheader("🏆 BEST BETS - Ranked by Blended Model + Kalshi Signal")
+                    st.caption("Blended score = 50% model probability + 50% model vs. Kalshi edge. Edge still shown for context.")
                     st.dataframe(
                         best_bets_df[display_cols],
                         use_container_width=True,
@@ -11684,8 +11748,15 @@ if is_vertex_ai_enabled():
                                 hide_index=True
                             )
                     
-                    # CSV Download
-                    csv_buffer = best_bets_df[display_cols].to_csv(index=False)
+                    # CSV Download (ensure Game Time and Kalshi signals are exported)
+                    export_cols = [
+                        'Rank', 'League', 'Game', 'Game Time', 'THE PICK', 'Win %', 'AI Win %', 'Market %',
+                        'Edge', 'EV', 'Consensus', 'Sentiment', 'Kalshi', 'Kalshi %', 'kalshi_prob',
+                        'kalshi_prob_pct', 'kalshi_edge', 'kalshi_edge_pct', 'Blended Score %', 'TheOver %',
+                        'Odds', 'Confidence'
+                    ]
+                    export_cols = [c for c in export_cols if c in best_bets_df.columns]
+                    csv_buffer = best_bets_df[export_cols].to_csv(index=False)
                     st.download_button(
                         "⬇️ Download Best Bets (CSV)",
                         data=csv_buffer,
