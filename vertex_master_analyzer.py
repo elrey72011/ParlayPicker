@@ -287,9 +287,23 @@ class VertexMasterAnalyzer:
             spread_pick = self._find_theover_pick_by_market(home_team, away_team, 'spread')
             if spread_pick:
                 features['theover_has_pick'] = 1
-                features['theover_pick'] = spread_pick.get('Pick', '')
+                pick = spread_pick.get('Pick', '')
+                features['theover_pick'] = pick
                 features['theover_probability'] = float(spread_pick.get('WinProbability', 0.5)) if spread_pick.get('WinProbability') else 0.5
-                features['theover_spread'] = float(spread_pick.get('Line', 0)) if spread_pick.get('Line') else 0
+                
+                # CRITICAL: Line is HOME team's spread, convert to picked team's spread
+                line_value = float(spread_pick.get('Line', 0)) if spread_pick.get('Line') else 0
+                if line_value != 0:
+                    # Determine if pick is home or away
+                    pick_is_home = (pick == home_team) or (pick and home_team and (pick.lower() in home_team.lower() or home_team.lower() in pick.lower()))
+                    if pick_is_home:
+                        # Pick is home, spread stays same
+                        features['theover_spread'] = line_value
+                    else:
+                        # Pick is away, flip the spread
+                        features['theover_spread'] = -line_value
+                else:
+                    features['theover_spread'] = 0
         
         # Search for totals pick in theover data (if not already set)
         if features['theover_total'] == 0:
@@ -825,7 +839,7 @@ class VertexMasterAnalyzer:
                     'home_team': game.get('home_team'),
                     'away_team': game.get('away_team'),
                     'sport': game_league,
-                    'spread': game.get('theover_spread') or comp_features.get('home_spread'),
+                    'spread': comp_features.get('home_spread') or game.get('home_spread', 0),
                     'pick': game.get('theover_pick'),
                 }
 
@@ -1121,7 +1135,13 @@ def show_vertex_master_analysis(results_df: pd.DataFrame):
         away_prob = row['Away Win %']
         home_team = row.get('home_team', 'Home')
         away_team = row.get('away_team', 'Away')
-        spread = row.get('home_spread', 0) or row.get('theover_spread', 0) or 0
+        
+        # CRITICAL: home_spread is HOME team's spread
+        # theover_spread is PICKED team's spread (already corrected in streamlit_app.py)
+        # We need to use the right one based on context
+        home_spread = row.get('home_spread', 0) or 0
+        theover_spread_picked = row.get('theover_spread', 0) or 0
+        theover_pick = row.get('theover_pick', '')
         
         # Get moneyline odds to determine actual market favorite
         home_ml = row.get('home_ml_odds') or row.get('home_ml', 0) or 0
@@ -1135,23 +1155,26 @@ def show_vertex_master_analysis(results_df: pd.DataFrame):
             home_is_market_favorite = home_ml < away_ml
         elif home_ml and home_ml != 0:
             home_is_market_favorite = home_ml < 0
-        elif spread and spread != 0:
+        elif home_spread and home_spread != 0:
             # Fallback to spread: negative home spread = home is favorite
-            home_is_market_favorite = spread < 0
+            home_is_market_favorite = home_spread < 0
         else:
             # No data - default to home team slight favorite
             home_is_market_favorite = True
         
+        # Determine our pick based on AI probabilities
         if home_prob >= away_prob:
             pick_team = home_team
             pick_prob = home_prob
-            pick_spread = spread
+            # Pick is home, use home_spread directly
+            pick_spread = home_spread
             # Is our pick the market favorite?
             is_favorite = home_is_market_favorite
         else:
             pick_team = away_team
             pick_prob = away_prob
-            pick_spread = -spread if spread else 0
+            # Pick is away, flip home_spread to get away_spread
+            pick_spread = -home_spread if home_spread else 0
             # Is our pick the market favorite?
             is_favorite = not home_is_market_favorite
         
@@ -1426,9 +1449,10 @@ def show_vertex_master_analysis(results_df: pd.DataFrame):
                 st.metric("Recommendation", recommendation)
             
             # Show THE PICK clearly - ALWAYS show the FAVORITE (higher probability side)
-            spread = game.get('home_spread', 0) or game.get('theover_spread', 0)
-            if spread is None or (isinstance(spread, float) and (pd.isna(spread) or spread != spread)):
-                spread = 0
+            # Use home_spread (HOME team's spread) as the base
+            home_spread = game.get('home_spread', 0)
+            if home_spread is None or (isinstance(home_spread, float) and (pd.isna(home_spread) or home_spread != home_spread)):
+                home_spread = 0
             
             home_team = game.get('home_team', 'Home')
             away_team = game.get('away_team', 'Away')
@@ -1436,14 +1460,14 @@ def show_vertex_master_analysis(results_df: pd.DataFrame):
             # best_side and best_team should already be the FAVORITE
             # best_prob is the probability the favorite covers/wins
             
-            if spread != 0:
-                spread = float(spread)
+            if home_spread != 0:
+                home_spread = float(home_spread)
                 # Determine pick spread based on best_side (which is the FAVORITE)
                 if best_side == 'home':
-                    pick_spread = spread
+                    pick_spread = home_spread  # Use home's spread
                     pick_team = home_team
                 else:
-                    pick_spread = -spread
+                    pick_spread = -home_spread  # Flip for away team
                     pick_team = away_team
                 
                 # Describe the pick
