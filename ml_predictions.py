@@ -5,10 +5,12 @@ Uses Google Gemini via Vertex AI for sports betting predictions
 
 import json
 import logging
-import streamlit as st
+import re
 from typing import Optional
-from google.oauth2 import service_account
+
+import streamlit as st
 import vertexai
+from google.oauth2 import service_account
 from vertexai.generative_models import GenerativeModel
 
 logger = logging.getLogger(__name__)
