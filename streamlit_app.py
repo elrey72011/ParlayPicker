@@ -1297,25 +1297,8 @@ def render_sidebar_controls() -> Dict[str, Any]:
     else:
         sidebar.caption("ℹ️ Using neutral fallback sentiment")
 
-    # --------------------- Anthropic API key ---------------------
-    st.session_state.setdefault('anthropic_api_key', 
-        os.environ.get("ANTHROPIC_API_KEY", "") or 
-        os.environ.get("anthropic_api_key", "") or
-        st.secrets.get("anthropic_api_key", "") or
-        st.secrets.get("ANTHROPIC_API_KEY", "")
-    )
-    anthropic_api_input = sidebar.text_input(
-        "Anthropic API key",
-        value=st.session_state.get('anthropic_api_key', ""),
-        type="password",
-        help="Required for Vertex AI analysis. Get from console.anthropic.com",
-    ).strip()
-    if anthropic_api_input != st.session_state.get('anthropic_api_key', ""):
-        st.session_state['anthropic_api_key'] = anthropic_api_input
-    if st.session_state.get('anthropic_api_key'):
-        sidebar.caption("🤖 Anthropic API key configured")
-    else:
-        sidebar.caption("❌ Enter Anthropic API key for AI analysis")
+    # --------------------- Anthropic/Claude REMOVED - Using Gemini Only ---------------------
+    # Claude API removed - Gemini/Vertex AI is 24x cheaper and better!
     
     # --------------------- Google Gemini AI (Recommended) ---------------------
     if GEMINI_AVAILABLE:
@@ -1378,9 +1361,12 @@ def render_sidebar_controls() -> Dict[str, Any]:
             with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
                 json.dump(gcp_creds, f)
                 os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = f.name
-            logger.info("GCP credentials loaded from secrets")
+            logger.info("✅ GCP credentials loaded from secrets.toml")
+            sidebar.success("✅ Service Account loaded from secrets")
     except Exception as e:
         logger.warning(f"Could not load GCP credentials: {e}")
+        sidebar.warning("⚠️ Service Account not found in secrets")
+        sidebar.info("Add [gcp_service_account] section to .streamlit/secrets.toml")
     
     # Display GCP status in sidebar
     gcp_configured = st.session_state.get('gcp_project_id') and st.session_state.get('vertex_endpoint_id')
@@ -14686,7 +14672,16 @@ from datetime import datetime
 
 # Check for AI providers (Gemini or Claude)
 use_gemini = GEMINI_AVAILABLE and st.session_state.get('gcp_project_id')
-use_claude = st.session_state.get('anthropic_api_key')
+use_claude = False  # DISABLED - Using Gemini only
+
+    # Show Gemini status
+    if use_gemini:
+        st.success("🧠 Using Google Gemini AI (Vertex AI) - 24x cheaper than Claude!")
+        gcp_project = st.session_state.get('gcp_project_id', 'Not set')
+        endpoint = st.session_state.get('vertex_endpoint_id', 'Not set')
+        location = st.session_state.get('gcp_location', 'us-central1')
+        st.caption(f"📍 Project: {gcp_project} | Endpoint: {endpoint} | Region: {location}")
+
 ai_available = use_gemini or use_claude
 
 if not ai_available:
@@ -14807,7 +14802,7 @@ if st.button(
     
     # Determine which AI provider to use
     use_gemini = GEMINI_AVAILABLE and st.session_state.get('gcp_project_id')
-    use_claude = not use_gemini and st.session_state.get('anthropic_api_key')
+    use_claude = False  # DISABLED - Using Gemini only
     
     if use_gemini:
         st.write("🧠 **Running AI Analysis with Google Gemini...**")
@@ -14832,24 +14827,20 @@ if st.button(
         
     elif use_claude:
         st.write("🧠 **Running AI Analysis with Claude...**")
-        st.warning(f"⚠️ Using Claude API (~${len(odds_data) * 0.015:.2f} for {len(odds_data)} games)")
-        st.info("💡 Tip: Switch to Gemini in sidebar to save 95% on costs!")
-        
-        # Get Anthropic API key
-        anthropic_api_key = st.session_state.get('anthropic_api_key', '')
-        if not anthropic_api_key:
-            st.error("❌ Anthropic API key not found! Please enter it in the sidebar.")
-            st.info("Or configure Gemini instead (much cheaper!)")
-            st.stop()
-        
-        client = anthropic.Anthropic(api_key=anthropic_api_key)
+        # Claude removed - should never reach here
+        st.error("❌ Claude is disabled. Please use Gemini/Vertex AI.")
+        st.stop()
         
     else:
-        st.error("❌ No AI provider configured!")
-        st.info("**Choose one:**\n\n"
-                "- **Gemini** (Recommended): Configure in sidebar (~$1/month)\n"
-                "- **Claude**: Enter API key in sidebar (~$15/month)\n"
-                "- Or skip AI and use ML predictions only (free!)")
+        st.error("❌ Gemini/Vertex AI not configured!")
+        st.info("**Configure Gemini in sidebar:**
+
+"
+                "1. Enter GCP Project ID: elite-hangar-479017-m8
+"
+                "2. Enter Vertex Endpoint ID: 5396533911008313344
+"
+                "3. Make sure [gcp_service_account] is in secrets.toml")
         st.stop()
     
     # Analyze each game
