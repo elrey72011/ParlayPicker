@@ -808,7 +808,6 @@ class VertexMasterAnalyzer:
         
         # Track which ML methods are being used
         ml_sources_used = {
-            'anthropic_claude': 0,
             'gcp_vertex': 0, 
             'spread_derived': 0,
             'fallback_heuristic': 0
@@ -980,40 +979,22 @@ class VertexMasterAnalyzer:
         
         total_predictions = sum(ml_sources_used.values())
         if total_predictions > 0:
-            col1, col2, col3, col4 = st.columns(4)
-            
-            with col1:
-                claude_count = ml_sources_used['anthropic_claude']
-                if claude_count > 0:
-                    st.metric("🤖 Anthropic Claude", f"{claude_count} games", 
-                             help="Real ML predictions from Claude API")
-                    st.success(f"✅ {claude_count} real ML predictions")
-                else:
-                    st.metric("🤖 Anthropic Claude", "0 games")
-                    
-            with col2:
-                gcp_count = ml_sources_used['gcp_vertex']
-                if gcp_count > 0:
-                    st.metric("☁️ GCP Vertex AI", f"{gcp_count} games",
-                             help="Real ML predictions from custom model")
-                    st.success(f"✅ {gcp_count} custom model predictions")
-                else:
-                    st.metric("☁️ GCP Vertex AI", "0 games")
-                    st.caption("Configure GCP endpoint for custom model")
-                    
-            with col3:
-                spread_count = ml_sources_used['spread_derived']
-                st.metric("📊 Spread-Derived", f"{spread_count} games",
-                         help="Probability calculated from TheOver.ai spread data")
-                if spread_count > 0:
-                    st.info(f"Using spread × 2.8% formula")
-                    
-            with col4:
-                fallback_count = ml_sources_used['fallback_heuristic']
-                st.metric("⚙️ Fallback", f"{fallback_count} games",
-                         help="Used when no other data available")
-                if fallback_count > 0:
-                    st.warning(f"{fallback_count} games used heuristics")
+            col1, col2, col3 = st.columns(3)
+
+with col1:
+    gcp_count = ml_sources_used['gcp_vertex']
+    st.metric("☁️ Google Gemini (Vertex AI)", f"{gcp_count} games")
+
+with col2:
+    spread_count = ml_sources_used['spread_derived']
+    st.metric("📊 Spread-Derived", f"{spread_count} games",
+              help="Probability calculated from TheOver.ai spread data")
+    if spread_count > 0:
+        st.info("Using spread × 2.8% formula")
+
+with col3:
+    fallback_count = ml_sources_used['fallback_heuristic']
+    st.metric("🧮 Fallback Heuristics", f"{fallback_count} games")
         
         # Show overall status
         real_ml = ml_sources_used['anthropic_claude'] + ml_sources_used['gcp_vertex']
