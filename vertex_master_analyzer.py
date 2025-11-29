@@ -143,6 +143,11 @@ class VertexMasterAnalyzer:
             "theover_total_pick": game.get("theover_total_pick"),
             "theover_total_probability": game.get("theover_total_probability"),
             "implied_home_prob": game.get("implied_home_prob"),
+            # Novig-specific odds
+            "novig_home_spread": None,
+            "novig_away_spread": None,
+            "novig_home_spread_odds": None,
+            "novig_away_spread_odds": None,
         }
 
         # If we have explicit away_spread missing but know home_spread,
@@ -157,6 +162,8 @@ class VertexMasterAnalyzer:
         if bookmakers:
             try:
                 for bookmaker in bookmakers:
+                    book_name = bookmaker.get("title", "").lower()
+                    
                     for market in bookmaker.get("markets", []):
                         if market.get("key") == "h2h":
                             for outcome in market.get("outcomes", []):
@@ -172,6 +179,17 @@ class VertexMasterAnalyzer:
                                 name = outcome.get("name")
                                 point = outcome.get("point")
                                 price = outcome.get("price")
+                                
+                                # Extract Novig spreads specifically
+                                if "novig" in book_name:
+                                    if name == game.get("home_team"):
+                                        feats["novig_home_spread"] = point
+                                        feats["novig_home_spread_odds"] = price
+                                    elif name == game.get("away_team"):
+                                        feats["novig_away_spread"] = point
+                                        feats["novig_away_spread_odds"] = price
+                                
+                                # General spread extraction (any bookmaker)
                                 if name == game.get("home_team") and feats["home_spread"] is None:
                                     feats["home_spread"] = point
                                     feats["home_spread_odds"] = price
@@ -684,9 +702,14 @@ class VertexMasterAnalyzer:
                         "kalshi_alignment": feats.get("kalshi_alignment"),
                         "sentiment_diff": feats.get("sentiment_diff"),
                         "ev": ev,
-                        # NEW: Game time and TheOver.ai consensus
+                        # Game time and TheOver.ai consensus
                         "game_time": game.get("commence_time"),
                         "theover_pick": theover_pick,  # TheOver.ai's pick for consensus
+                        # Novig odds
+                        "novig_home_spread": feats.get("novig_home_spread"),
+                        "novig_away_spread": feats.get("novig_away_spread"),
+                        "novig_home_spread_odds": feats.get("novig_home_spread_odds"),
+                        "novig_away_spread_odds": feats.get("novig_away_spread_odds"),
                     }
                 )
             except Exception as e:
@@ -798,16 +821,45 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
         return "—"
     
     display_df["TheOver"] = display_df.apply(format_consensus, axis=1)
+    
+    # NEW: Novig Odds column
+    def format_novig_odds(row):
+        pick_team = row.get("pick_team", "")
+        home_team = row.get("home_team", "")
+        
+        novig_home = row.get("novig_home_spread")
+        novig_away = row.get("novig_away_spread")
+        novig_home_odds = row.get("novig_home_spread_odds")
+        novig_away_odds = row.get("novig_away_spread_odds")
+        
+        # If no Novig data available
+        if pd.isna(novig_home) and pd.isna(novig_away):
+            return "—"
+        
+        # Determine which spread to show based on picked team
+        if pick_team == home_team:
+            # Home team picked, show home spread
+            if not pd.isna(novig_home) and not pd.isna(novig_home_odds):
+                return f"{novig_home:+.1f} ({int(novig_home_odds):+d})"
+            return "—"
+        else:
+            # Away team picked, show away spread
+            if not pd.isna(novig_away) and not pd.isna(novig_away_odds):
+                return f"{novig_away:+.1f} ({int(novig_away_odds):+d})"
+            return "—"
+    
+    display_df["Novig"] = display_df.apply(format_novig_odds, axis=1)
 
     cols = [
         "Rank",
         "league",
         "game",
-        "Game Time",  # NEW
+        "Game Time",
         "the_pick",
         "Win %",
         "Favorite",
-        "TheOver",  # NEW
+        "Novig",     # NEW - Novig odds for picked team
+        "TheOver",
         "Sentiment",
         "Kalshi",
         "Kalshi %",
