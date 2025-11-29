@@ -836,7 +836,7 @@ def format_game_time_local(raw_value: Any, tz_name: Optional[str] = None) -> str
             tz = pytz.UTC
 
         local_dt = commence_dt.astimezone(tz)
-        return local_dt.strftime("%Y-%m-%d %I:%M %p %Z")
+        return local_dt.strftime("%a, %b %d — %I:%M %p %Z")
     except Exception:
         return "TBD"
 
@@ -6474,6 +6474,7 @@ def build_best_bets_per_game(
             'League': best_option['league'],
             'Game': f"{best_option['away_team']} @ {best_option['home_team']}",
             'Commence (Local)': best_option['commence_display'],
+            'Game Time (Local)': best_option.get('commence_display'),
             'Market': best_option['market'],
             'Side': best_option['side'],
             'Selection': best_option['selection'],
