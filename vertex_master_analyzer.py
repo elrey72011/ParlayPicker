@@ -835,24 +835,31 @@ class VertexMasterAnalyzer:
                 # Build comprehensive features from ALL sources
                 comp_features = self.build_comprehensive_features(game, game_league)
 
-                # Build Vertex AI feature vector
+                                # Build Vertex AI feature vector (still useful for future models / debugging)
                 vertex_features = self.build_vertex_feature_vector(comp_features)
-                
-                # Build game context for Claude
+
+                # Build game context for logging / explanation
                 game_context = {
-                    'home_team': game.get('home_team'),
-                    'away_team': game.get('away_team'),
-                    'sport': game_league,
-                    'spread': comp_features.get('home_spread') or 0,  # DON'T use theover_spread!
-                    'pick': game.get('theover_pick'),
+                    "home_team": game.get("home_team"),
+                    "away_team": game.get("away_team"),
+                    "sport": game_league,
+                    "spread": comp_features.get("home_spread") or 0,  # DON'T use theover_spread!
+                    "pick": game.get("theover_pick"),
                 }
 
-                # Get Vertex AI ultimate prediction
-                vertex_prob = get_vertex_ai_prediction(vertex_features, game_context)
-                
-                # Get actual ML source from session state (set by get_vertex_ai_prediction)
-                initial_ml_source = st.session_state.get('last_ml_source', 'unknown')
-                ml_source = initial_ml_source  # May be overridden below
+                # IMPORTANT:
+                # ml_predictions.get_vertex_ai_prediction expects a **dict of features**,
+                # not the numeric feature vector. We pass comp_features so Gemini
+                # sees team names, odds, implied prob, TheOver, etc.
+                vertex_prob = get_vertex_ai_prediction(comp_features, game_context)
+
+                # Explicitly set the initial ml_source based on whether Gemini returned
+                # a real probability. This feeds the ML Prediction Source Summary.
+                if vertex_prob is not None:
+                    ml_source = "gcp_vertex"        # real Gemini / Vertex prediction
+                else:
+                    ml_source = "heuristic"         # will be converted to spread_derived / fallback below
+
                 
                 # If vertex_prob is the fallback value (0.58), use spread-derived probability instead
                 theover_prob_raw = comp_features.get('theover_probability') or game.get('theover_probability')
