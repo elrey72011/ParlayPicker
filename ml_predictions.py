@@ -17,12 +17,62 @@ logger = logging.getLogger(__name__)
 def get_gemini_model(project_id: str, location: str = "us-central1"):
     """Initialize and cache the Gemini model"""
     try:
+        # Set up authentication from secrets.toml or uploaded file
+        import os
+        import tempfile
+        
+        service_account_info = None
+        
+        # Try to get from secrets.toml first (preferred)
+        try:
+            if 'gcp_service_account' in st.secrets:
+                # Secrets.toml format - convert to dict
+                gcp_secrets = st.secrets['gcp_service_account']
+                service_account_info = {
+                    'type': gcp_secrets.get('type', 'service_account'),
+                    'project_id': gcp_secrets.get('project_id'),
+                    'private_key_id': gcp_secrets.get('private_key_id'),
+                    'private_key': gcp_secrets.get('private_key'),
+                    'client_email': gcp_secrets.get('client_email'),
+                    'client_id': gcp_secrets.get('client_id'),
+                    'auth_uri': gcp_secrets.get('auth_uri'),
+                    'token_uri': gcp_secrets.get('token_uri'),
+                    'auth_provider_x509_cert_url': gcp_secrets.get('auth_provider_x509_cert_url'),
+                    'client_x509_cert_url': gcp_secrets.get('client_x509_cert_url'),
+                    'universe_domain': gcp_secrets.get('universe_domain', 'googleapis.com'),
+                }
+                logger.info("✓ Loaded service account from secrets.toml")
+        except Exception as e:
+            logger.warning(f"Could not load from secrets.toml: {e}")
+        
+        # Fallback to session state (uploaded file)
+        if not service_account_info and 'gcp_service_account' in st.session_state:
+            service_account_info = st.session_state['gcp_service_account']
+            logger.info("✓ Loaded service account from uploaded file")
+        
+        if service_account_info:
+            # Write credentials to temporary file for Vertex AI
+            import json
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+                json.dump(service_account_info, f)
+                cred_path = f.name
+            
+            # Set environment variable for Google Cloud auth
+            os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = cred_path
+            logger.info(f"✓ Set GCP credentials file: {cred_path}")
+        else:
+            logger.warning("⚠️ No GCP service account found in secrets or session state")
+        
+        # Initialize Vertex AI
         vertexai.init(project=project_id, location=location)
         model = GenerativeModel("gemini-1.5-flash-002")
         logger.info(f"✓ Gemini model initialized for project {project_id}")
         return model
+        
     except Exception as e:
         logger.error(f"Failed to initialize Gemini model: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
         return None
 
 
