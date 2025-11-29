@@ -11749,12 +11749,19 @@ if is_vertex_ai_enabled():
                     # =====================================================
                     # FORMAT THE PICK
                     # =====================================================
+                    # theover_spread is the line value from TheOver.ai CSV
+                    # It represents the spread for the PICKED team
+                    # Positive spread = underdog getting points (+)
+                    # Negative spread = favorite giving points (-)
                     spread_magnitude = abs(theover_spread) if theover_spread else 0
                     if spread_magnitude > 0:
+                        # theover_spread sign already indicates if team is favorite or underdog
                         if theover_spread > 0:
+                            # Positive spread = underdog getting points
                             pick_str = f"{pick_team} +{spread_magnitude:.1f}"
                         else:
-                            pick_str = f"{pick_team} -{spread_magnitude:.1f}"
+                            # Negative spread = favorite giving points
+                            pick_str = f"{pick_team} {theover_spread:.1f}"  # Already has minus sign
                     else:
                         pick_str = f"{pick_team} ML"
                     
