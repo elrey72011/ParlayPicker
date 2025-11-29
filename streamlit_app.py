@@ -14718,19 +14718,25 @@ import importlib.util
 import json
 from datetime import datetime
 
-# Check for AI providers (Gemini or Claude)
+# Check for AI provider (Gemini only)
 use_gemini = GEMINI_AVAILABLE and st.session_state.get('gcp_project_id')
-use_claude = st.session_state.get('anthropic_api_key')
-ai_available = use_gemini or use_claude
+
+    # Show Gemini status
+if use_gemini:
+    st.success("🧠 Using Google Gemini AI (Vertex AI) - 24x cheaper than Claude!")
+    gcp_project = st.session_state.get('gcp_project_id', 'Not set')
+    endpoint = st.session_state.get('vertex_endpoint_id', 'Not set')
+    location = st.session_state.get('gcp_location', 'us-central1')
+    st.caption(f"📍 Project: {gcp_project} | Endpoint: {endpoint} | Region: {location}")
+
+ai_available = use_gemini
 
 if not ai_available:
     st.warning(
-        "⚠️ No AI provider configured. Configure Gemini (recommended) or Claude in the sidebar to enable AI analysis."
+        "⚠️ No AI provider configured. Configure Gemini in the sidebar to enable AI analysis."
     )
 elif use_gemini:
     st.success("✅ Using Google Gemini for AI analysis (~24x cheaper than Claude)")
-else:
-    st.info("ℹ️ Using Claude API for AI analysis")
 
 # ============================================================================
 # AI MASTER ANALYZER (RUNS FIRST)
@@ -14741,7 +14747,7 @@ st.write("**Run this FIRST to calculate probabilities for all games**")
 
 if not ai_available:
     st.info(
-        "Configure **Gemini** (recommended, ~$1/month) or **Claude** in the sidebar to enable AI analysis. "
+        "Configure **Gemini** (recommended, ~$1/month) in the sidebar to enable AI analysis. "
         "Other app features will continue to work without it."
     )
 
@@ -14759,9 +14765,8 @@ with st.expander("ℹ️ About AI-First Architecture", expanded=False):
     - No post-processing enrichment needed
     - Consistent probabilities across all features
     
-    **AI Providers:**
+    **AI Provider:**
     - **Gemini** (Recommended): ~$0.001/game, excellent quality
-    - **Claude**: ~$0.015/game, premium quality
     """)
 
 if st.button(
@@ -14773,7 +14778,7 @@ if st.button(
 
     if not ai_available:
         st.error(
-            "❌ No AI provider configured. Please configure Gemini (recommended) or Claude in the sidebar."
+            "❌ No AI provider configured. Please configure Gemini in the sidebar."
         )
         st.stop()
     
@@ -14921,7 +14926,6 @@ if st.button(
     
     # Determine which AI provider to use
     use_gemini = GEMINI_AVAILABLE and st.session_state.get('gcp_project_id')
-    use_claude = not use_gemini and st.session_state.get('anthropic_api_key')
     
     if use_gemini:
         st.write("🧠 **Running AI Analysis with Google Gemini...**")
@@ -14943,20 +14947,6 @@ if st.button(
             st.error(f"❌ Failed to initialize Gemini: {e}")
             st.info("Make sure you've uploaded your service account key in the sidebar")
             st.stop()
-        
-    elif use_claude:
-        st.write("🧠 **Running AI Analysis with Claude...**")
-        st.warning(f"⚠️ Using Claude API (~${len(odds_data) * 0.015:.2f} for {len(odds_data)} games)")
-        st.info("💡 Tip: Switch to Gemini in sidebar to save 95% on costs!")
-        
-        # Get Anthropic API key
-        anthropic_api_key = st.session_state.get('anthropic_api_key', '')
-        if not anthropic_api_key:
-            st.error("❌ Anthropic API key not found! Please enter it in the sidebar.")
-            st.info("Or configure Gemini instead (much cheaper!)")
-            st.stop()
-        
-        client = anthropic.Anthropic(api_key=anthropic_api_key)
         
     else:
         st.error("❌ No AI provider configured!")
@@ -15158,121 +15148,6 @@ if st.button(
                     'ai_provider': 'gemini_error'
                 })
         
-        elif use_claude:
-            # Build Claude prompt
-            prompt = f"""You are an expert sports betting analyst. Analyze this game and provide a comprehensive probability assessment.
-
-**Game Details:**
-- Away Team: {away_team}
-- Home Team: {home_team}
-- Sport: {game.get('sport_key')}
-- Date: {game.get('commence_time')}
-
-**Market Odds:**
-- Moneyline (home): {best_moneyline}
-- Spread (home): {best_spread}
-
-**Available Data Sources:**
-"""
-            
-            sources_used = []
-            
-            if context_data['theover']:
-                prompt += f"\n- **theover.ai**: Pick={context_data['theover']['Pick']}, Line={context_data['theover']['Line']}, Market={context_data['theover']['Market']}"
-                sources_used.append('theover.ai')
-            
-            if context_data['ml']:
-                ml_data = context_data['ml']
-                prompt += f"\n- **ML Model Prediction**:"
-                prompt += f"\n  - Home Win Probability: {ml_data.get('home_win_prob', 0):.1%}"
-                prompt += f"\n  - Away Win Probability: {ml_data.get('away_win_prob', 0):.1%}"
-                prompt += f"\n  - Confidence: {ml_data.get('confidence', 0):.1%}"
-                prompt += f"\n  - Model: {ml_data.get('model_used', 'Unknown')}"
-                sources_used.append('ML Model')
-            
-            if context_data['sportsdata']:
-                prompt += f"\n- **SportsData**: Available for {context_data['sportsdata'].get('sport', 'this sport')}"
-                sources_used.append('SportsData')
-            
-            prompt += """
-
-**Task:**
-Analyze all available data and provide:
-
-1. **Win Probability** for the home team (0-100%)
-2. **Confidence Level** (0-100%) - how confident are you in this prediction?
-3. **Key Factors** - what drove your analysis?
-4. **Edge vs Market** - is there value compared to the odds?
-
-Return ONLY a JSON object with this exact structure:
-{
-    "home_win_probability": <float 0-100>,
-    "confidence": <float 0-100>,
-    "key_factors": "<string>",
-    "has_edge": <boolean>,
-    "edge_explanation": "<string>"
-}
-"""
-            
-            try:
-                # Call Claude API
-                response = client.messages.create(
-                    model="claude-sonnet-4-20250514",
-                    max_tokens=1000,
-                    messages=[{"role": "user", "content": prompt}]
-                )
-                
-                # Parse response
-                response_text = response.content[0].text.strip()
-                
-                # Extract JSON
-                if '```json' in response_text:
-                    response_text = response_text.split('```json')[1].split('```')[0].strip()
-                elif '```' in response_text:
-                    response_text = response_text.split('```')[1].split('```')[0].strip()
-                
-                vertex_analysis = json.loads(response_text)
-                
-                # Store result
-                vertex_results.append({
-                    'game_id': game.get('id', f"{away_team}_{home_team}"),
-                    'sport': game.get('sport_key'),
-                    'home_team': home_team,
-                    'away_team': away_team,
-                    'commence_time': game.get('commence_time'),
-                    'vertex_probability': vertex_analysis['home_win_probability'],
-                    'confidence': vertex_analysis['confidence'],
-                    'key_factors': vertex_analysis['key_factors'],
-                    'has_edge': vertex_analysis['has_edge'],
-                    'edge_explanation': vertex_analysis['edge_explanation'],
-                    'sources_used': ', '.join(sources_used) if sources_used else 'market odds only',
-                    'best_moneyline': best_moneyline,
-                    'best_spread': best_spread,
-                    'ai_provider': 'claude'
-                })
-                logger.info(f"✅ Claude analyzed: {away_team} @ {home_team}")
-                
-            except Exception as e:
-                logger.error(f"Claude analysis failed for {away_team} @ {home_team}: {e}")
-                st.error(f"❌ Error analyzing {game_name}: {str(e)[:100]}")
-                # Add fallback result
-                vertex_results.append({
-                    'game_id': game.get('id', f"{away_team}_{home_team}"),
-                    'sport': game.get('sport_key'),
-                    'home_team': home_team,
-                    'away_team': away_team,
-                    'commence_time': game.get('commence_time'),
-                    'vertex_probability': 50.0,
-                    'confidence': 50.0,
-                    'key_factors': 'Error in analysis',
-                    'has_edge': False,
-                    'edge_explanation': f'Error: {str(e)}',
-                    'sources_used': 'error',
-                    'best_moneyline': best_moneyline,
-                    'best_spread': best_spread,
-                    'ai_provider': 'claude_error'
-                })
-        
         progress_bar.progress((idx + 1) / len(odds_data))
     
     progress_bar.empty()
@@ -15288,9 +15163,6 @@ Return ONLY a JSON object with this exact structure:
         actual_cost = len(vertex_results) * 0.001
         st.success(f"✅ **Gemini analysis complete!** {len(vertex_results)} games analyzed (~${actual_cost:.2f})")
         st.balloons()
-    else:
-        actual_cost = len(vertex_results) * 0.015
-        st.success(f"✅ **Claude analysis complete!** {len(vertex_results)} games analyzed (~${actual_cost:.2f})")
     
     # Display summary
     st.write("---")
@@ -15365,8 +15237,6 @@ if st.session_state.get('vertex_analysis_complete') and st.session_state.get('ve
         ai_provider = prev_results[0].get('ai_provider', 'unknown') if prev_results else 'unknown'
         if 'gemini' in ai_provider:
             st.metric("AI Provider", "Gemini 💎")
-        elif 'claude' in ai_provider:
-            st.metric("AI Provider", "Claude 🤖")
         else:
             st.metric("AI Provider", "Unknown")
     
