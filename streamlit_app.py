@@ -9177,22 +9177,22 @@ with main_tab1:
                                     spread = 1.5  # Standard puckline
                                     home_spread = spread if pick_is_home else -spread
                                 else:
-                                    # Basketball/Football - Line is from HOME team's perspective
-                                    # CRITICAL: Line is HOME team's spread, NOT picked team's spread!
-                                    # Example: "Alabama A&M @ Clemson, Pick: Alabama A&M, Line: -28"
-                                    # This means Clemson (home) is -28, Alabama A&M (away) is +28
+                                    # Basketball/Football - Line is the PICKED team's spread!
+                                    # NOT the home team's spread!
+                                    # Example: "Dallas @ Lakers, Pick: Dallas, Line: 10.5"
+                                    # This means Dallas +10.5 (underdog), Lakers are -10.5 (favorites)
                                     
-                                    home_spread = line_value  # Line is always home team's spread
+                                    pick_spread = line_value  # Line is already for the picked team!
                                     
                                     # Determine if pick is home or away
                                     if pick == away_team or (pick and away_team and (pick.lower() in away_team.lower() or away_team.lower() in pick.lower())):
                                         pick_is_home = False
-                                        # Pick is away team, their spread is opposite of home spread
-                                        pick_spread = -line_value
+                                        # Pick is away, so home spread is opposite
+                                        home_spread = -line_value
                                     else:
                                         pick_is_home = True
-                                        # Pick is home team, their spread is same as home spread
-                                        pick_spread = line_value
+                                        # Pick is home, so home spread is same
+                                        home_spread = line_value
                                     
                                     # Calculate home team win probability from HOME spread
                                     # Negative home_spread = home team is favorite = higher win prob
@@ -9223,7 +9223,7 @@ with main_tab1:
                                     'league': league,
                                     'theover_probability': theover_prob,
                                     'theover_pick': pick,
-                                    'theover_spread': pick_spread,  # PICKED team's spread (now correct!)
+                                    'theover_spread': pick_spread,  # PICKED team's spread (correct!)
                                     'home_spread': home_spread,
                                     'home_ml_odds': home_ml,
                                     'away_ml_odds': away_ml,
@@ -9732,12 +9732,11 @@ if is_vertex_ai_enabled():
                                 home_spread = 1.5  # Standard puckline
                                 
                             else:
-                                # Basketball/Football: Line is a point spread
-                                # CRITICAL FIX: The "Line" column in TheOver.ai CSV is the HOME team's spread
-                                # NOT the picked team's spread!
-                                # Example: "Alabama A&M @ Clemson, Pick: Alabama A&M, Line: -28"
-                                # This means: Clemson (home) is -28 favorite, and TheOver picks Alabama A&M +28
+                                # Basketball/Football: Line is the PICKED team's spread!
+                                # Example: "Dallas @ Lakers, Pick: Dallas, Line: 10.5"  
+                                # This means Dallas +10.5, Lakers are favorites
                                 
+                                pick_spread = line_value  # Line is already the picked team's spread!
                                 spread = abs(line_value)
                                 
                                 # Calculate probability from spread
@@ -9747,31 +9746,23 @@ if is_vertex_ai_enabled():
                                 # Determine if pick is home or away
                                 pick_is_home = (pick == home_team) or (pick and (pick.lower() in home_team.lower() or home_team.lower() in pick.lower()))
                                 
-                                # The Line is ALWAYS from home team's perspective
-                                # Negative line = home team favored
-                                # Positive line = home team is underdog
+                                # The pick_spread tells us if picked team is favorite or underdog
+                                # Negative = favorite, Positive = underdog
+                                if line_value < 0:
+                                    # Picked team is favorite
+                                    pick_win_prob = min(0.80, 0.50 + spread_shift)
+                                else:
+                                    # Picked team is underdog
+                                    pick_win_prob = max(0.20, 0.50 - spread_shift)
                                 
+                                # Calculate home_spread from pick_spread
                                 if pick_is_home:
-                                    # Pick is home team
-                                    if line_value < 0:
-                                        # Home favored: line is already correct for the pick
-                                        pick_win_prob = min(0.80, 0.50 + spread_shift)
-                                        home_spread = line_value  # e.g., -7.5
-                                    else:
-                                        # Home underdog: they're getting points
-                                        pick_win_prob = max(0.20, 0.50 - spread_shift)
-                                        home_spread = line_value  # e.g., +3.5
+                                    # Pick is home, home_spread = pick_spread
+                                    home_spread = line_value
                                     home_implied_prob = pick_win_prob
                                 else:
-                                    # Pick is away team
-                                    if line_value < 0:
-                                        # Home favored (away underdog): away team gets opposite of line
-                                        pick_win_prob = max(0.20, 0.50 - spread_shift)
-                                        home_spread = line_value  # e.g., -28 (home favored)
-                                    else:
-                                        # Home underdog (away favored): away team is favorite
-                                        pick_win_prob = min(0.80, 0.50 + spread_shift)
-                                        home_spread = line_value  # e.g., +7 (home getting points)
+                                    # Pick is away, home_spread is opposite
+                                    home_spread = -line_value
                                     home_implied_prob = 1 - pick_win_prob
                                 
                                 # theover_probability = home team win probability
@@ -9785,14 +9776,8 @@ if is_vertex_ai_enabled():
                                     home_ml = int(100 * (1 - home_implied_prob) / home_implied_prob)
                                     away_ml = int(-100 * home_implied_prob / (1 - home_implied_prob))
                             
-                            # Store the spread FOR THE PICKED TEAM (not the home team)
-                            # This makes formatting easier later
-                            if pick_is_home:
-                                # Pick is home team, spread stays as-is from CSV
-                                picked_team_spread = line_value
-                            else:
-                                # Pick is away team, spread is opposite of home spread
-                                picked_team_spread = -line_value
+                            # Store the spread FOR THE PICKED TEAM
+                            picked_team_spread = line_value  # Line is already for picked team!
                             
                             all_games.append({
                                 'home_team': home_team,
@@ -9801,7 +9786,7 @@ if is_vertex_ai_enabled():
                                 'league': league,
                                 'commence_time': None,
                                 # TheOver.ai specific data
-                                'theover_spread': picked_team_spread,  # Spread FOR THE PICKED TEAM
+                                'theover_spread': picked_team_spread,  # Already correct for picked team
                                 'theover_pick': pick,
                                 'theover_probability': theover_prob,  # Home team win probability
                                 'theover_line': line_value,  # Original line from CSV
