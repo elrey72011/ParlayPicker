@@ -9659,13 +9659,39 @@ if is_vertex_ai_enabled():
                 
                 st.info("📊 Fetching games from TheOddsAPI (all sportsbooks including Novig)...")
                 
+                # Get current time for filtering past games
+                from datetime import datetime, timezone
+                now_utc = datetime.now(timezone.utc)
+                
                 for sport in selected_sports:
                     try:
                         snapshot = fetch_oddsapi_snapshot(odds_api_key, sport)
                         games = snapshot.get('events', [])
                         
-                        # Add sport_key and league to each game
+                        # Filter out games that have already started/finished
+                        upcoming_games = []
                         for game in games:
+                            commence_time_str = game.get('commence_time')
+                            if commence_time_str:
+                                try:
+                                    # Parse commence_time (ISO format from TheOddsAPI)
+                                    commence_time = datetime.fromisoformat(commence_time_str.replace('Z', '+00:00'))
+                                    
+                                    # Only include games that haven't started yet (with 5 min buffer)
+                                    if commence_time > now_utc:
+                                        upcoming_games.append(game)
+                                    else:
+                                        logger.info(f"Filtered out past game: {game.get('home_team')} vs {game.get('away_team')} (commenced {commence_time})")
+                                except Exception as e:
+                                    # If we can't parse time, include the game to be safe
+                                    logger.warning(f"Could not parse commence_time for game, including anyway: {e}")
+                                    upcoming_games.append(game)
+                            else:
+                                # No commence_time, include it
+                                upcoming_games.append(game)
+                        
+                        # Add sport_key and league to each upcoming game
+                        for game in upcoming_games:
                             game['sport_key'] = sport
                             
                             # Map sport_key to league abbreviation
@@ -9682,9 +9708,14 @@ if is_vertex_ai_enabled():
                             else:
                                 game['league'] = 'NBA'
                         
-                        all_games.extend(games)
-                        st.success(f"✅ Fetched {len(games)} {sport} games from TheOddsAPI")
-                        logger.info(f"Loaded {len(games)} {sport} games from TheOddsAPI")
+                        filtered_count = len(games) - len(upcoming_games)
+                        all_games.extend(upcoming_games)
+                        
+                        if filtered_count > 0:
+                            st.success(f"✅ Fetched {len(upcoming_games)} upcoming {sport} games (filtered out {filtered_count} past games)")
+                        else:
+                            st.success(f"✅ Fetched {len(upcoming_games)} {sport} games from TheOddsAPI")
+                        logger.info(f"Loaded {len(upcoming_games)} upcoming {sport} games (filtered {filtered_count} past games)")
                         
                     except Exception as e:
                         st.warning(f"⚠️ Could not fetch {sport} from TheOddsAPI: {e}")
