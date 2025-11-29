@@ -8852,30 +8852,6 @@ with main_tab1:
         if basketball_client.api_key != (nba_key or ""):
             basketball_client.update_api_key(nba_key or None, source=nba_source or "user")
 
-    ml_predictor = st.session_state.get('ml_predictor')
-    if ml_predictor and use_ml_predictions:
-        def _register_sportsdata(sport_key: str) -> None:
-            client = sportsdata_clients.get(sport_key)
-            if client is not None:
-                ml_predictor.register_sportsdata_client(sport_key, client)
-
-        if 'americanfootball_nfl' in active_sport_keys:
-            ml_predictor.register_client('americanfootball_nfl', apisports_client)
-        if 'icehockey_nhl' in active_sport_keys:
-            ml_predictor.register_client('icehockey_nhl', hockey_client)
-        if 'basketball_nba' in active_sport_keys:
-            ml_predictor.register_client('basketball_nba', basketball_client)
-
-        # SportsData.io-driven leagues (including college football) feed the ML datasets
-        for sd_sport in (
-            'americanfootball_nfl',
-            'icehockey_nhl',
-            'basketball_nba',
-            'americanfootball_ncaaf',
-            'basketball_ncaab',
-        ):
-            _register_sportsdata(sd_sport)
-
     # Quick configuration summary to reinforce sidebar selections
     config_cols = st.columns(3)
     with config_cols[0]:
