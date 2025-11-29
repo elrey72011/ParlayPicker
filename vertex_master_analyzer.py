@@ -1162,12 +1162,124 @@ def show_vertex_master_analysis(results_df: pd.DataFrame):
     summary_df['Away Win %'] = (1 - summary_df['vertex_ai_prob']) * 100
     
     # Determine best pick for each game
+        # Determine best pick for each game
     def get_best_pick_row(row):
         home_prob = row['Home Win %']
         away_prob = row['Away Win %']
         home_team = row.get('home_team', 'Home')
         away_team = row.get('away_team', 'Away')
-        spread = row.get('home_spread', 0)  or 0
+
+        # Market spreads
+        home_spread = row.get('home_spread', 0) or 0
+        away_spread = row.get('away_spread', None)
+
+        # Moneyline odds (from TheOddsAPI)
+        home_ml = row.get('home_ml_odds') or row.get('home_ml', 0) or 0
+        away_ml = row.get('away_ml_odds') or row.get('away_ml', 0) or 0
+
+        # --- Determine market favorite ONLY from moneyline ---
+        # None = unknown (no ML odds)
+        home_is_market_favorite: Optional[bool] = None
+
+        if home_ml and away_ml and home_ml != 0 and away_ml != 0:
+            # More negative ML = bigger favorite
+            home_is_market_favorite = home_ml < away_ml
+        elif home_ml and home_ml != 0:
+            home_is_market_favorite = home_ml < 0
+        elif away_ml and away_ml != 0:
+            # If only away ML known and it's negative, home is NOT favorite
+            home_is_market_favorite = not (away_ml < 0)
+        # else: leave as None (don’t guess from spread!)
+
+        # --- Choose pick side based on Vertex AI win % ---
+        if home_prob >= away_prob:
+            pick_team = home_team
+            pick_prob = home_prob
+
+            # Use home spread when we’re on the home team
+            pick_spread = home_spread
+
+            # Is our pick the market favorite?
+            if home_is_market_favorite is None:
+                is_favorite = None
+            else:
+                is_favorite = home_is_market_favorite
+        else:
+            pick_team = away_team
+            pick_prob = away_prob
+
+            # Prefer the away spread if it exists, otherwise fall back to -home_spread
+            if away_spread is not None:
+                pick_spread = away_spread
+            else:
+                pick_spread = -home_spread if home_spread else 0
+
+            # Is our pick the market favorite?
+            if home_is_market_favorite is None:
+                is_favorite = None
+            else:
+                is_favorite = not home_is_market_favorite
+
+        # --- Format the pick text ---
+        if pick_spread and pick_spread != 0:
+            if pick_spread > 0:
+                pick_text = f"{pick_team} +{abs(pick_spread):.1f}"
+            else:
+                pick_text = f"{pick_team} {pick_spread:.1f}"
+        else:
+            pick_text = f"{pick_team} ML"
+
+        # --- Sentiment check ---
+        sentiment = row.get('sentiment_diff', 0)
+        if (pick_team == home_team and sentiment > 0) or (pick_team == away_team and sentiment < 0):
+            sent_agrees = '✅'
+        elif sentiment == 0:
+            sent_agrees = '—'
+        else:
+            sent_agrees = '❌'
+
+        # --- Kalshi check ---
+        kalshi_prob = row.get('kalshi_prob', 0.5) or 0.5
+        if kalshi_prob > 1:
+            kalshi_prob = kalshi_prob / 100.0
+
+        kalshi_available = row.get('kalshi_available', False)
+        if kalshi_available:
+            kalshi_home = kalshi_prob * 100
+            kalshi_away = (1 - kalshi_prob) * 100
+
+            if pick_team == home_team:
+                kalshi_agrees = '✅' if kalshi_home > 50 else '❌'
+                kalshi_pct = kalshi_home
+            else:
+                kalshi_agrees = '✅' if kalshi_away > 50 else '❌'
+                kalshi_pct = kalshi_away
+        else:
+            kalshi_agrees = '—'
+            kalshi_pct = None
+
+        # Favorite column: map None / True / False → — / ✅ / ❌
+        if is_favorite is True:
+            favorite_str = '✅'
+        elif is_favorite is False:
+            favorite_str = '❌'
+        else:
+            favorite_str = '—'
+
+        ev_val = row.get('expected_value', 0) or 0
+
+        return pd.Series({
+            'Game': f"{away_team} @ {home_team}",
+            'THE PICK': pick_text,
+            'Win %': round(pick_prob, 1),
+            'Favorite': favorite_str,
+            'Sentiment': sent_agrees,
+            'Kalshi': kalshi_agrees,
+            'Kalshi %': f"{kalshi_pct:.0f}" if kalshi_pct else '—',
+            'EV': f"${ev_val:.2f}",
+            'League': row.get('league', 'N/A'),
+        })
+
         
         # Get moneyline odds to determine actual market favorite
                 # Get moneyline odds to determine actual market favorite
