@@ -19,6 +19,8 @@ import pytz
 from pathlib import Path
 from collections import defaultdict
 
+from ml_model import get_model, score_games
+
 from app_core import (
     APISportsBasketballClient,
     APISportsFootballClient,
@@ -4618,11 +4620,52 @@ def integrate_kalshi_into_leg(
     )
 
 # ============ UTILITY FUNCTIONS ============
-def american_to_decimal(odds) -> float:
-    odds = float(odds)
-    if odds >= 100: return 1.0 + odds/100.0
-    if odds <= -100: return 1.0 + 100.0/abs(odds)
-    raise ValueError("Bad American odds")
+def american_to_decimal(odds: float | int) -> float:
+    """
+    Convert American odds to decimal odds.
+    Returns np.nan for invalid values.
+    """
+    try:
+        o = float(odds)
+    except (TypeError, ValueError):
+        return np.nan
+
+    if o > 0:
+        return 1.0 + (o / 100.0)
+    elif o < 0:
+        return 1.0 + (100.0 / abs(o))
+    else:
+        return np.nan
+
+
+def build_ml_features(games_df: pd.DataFrame, feature_names: list[str]) -> pd.DataFrame:
+    """
+    Take the raw games DataFrame and produce the feature columns needed by the model.
+    Assumes the model was trained with:
+      - implied_home_prob
+      - implied_away_prob
+      - plus any other columns that are already present in games_df
+    We will:
+      - compute implied probabilities from home_odds / away_odds if needed
+      - fill any missing feature columns with 0.0
+    """
+    df = games_df.copy()
+
+    # If implied probabilities not already there, compute from American odds.
+    if "implied_home_prob" not in df.columns and "home_odds" in df.columns:
+        df["dec_home"] = df["home_odds"].apply(american_to_decimal)
+        df["implied_home_prob"] = 1.0 / df["dec_home"]
+
+    if "implied_away_prob" not in df.columns and "away_odds" in df.columns:
+        df["dec_away"] = df["away_odds"].apply(american_to_decimal)
+        df["implied_away_prob"] = 1.0 / df["dec_away"]
+
+    # Ensure all feature columns exist
+    for col in feature_names:
+        if col not in df.columns:
+            df[col] = 0.0
+
+    return df
 
 def implied_p_from_american(odds) -> float:
     odds = float(odds)
@@ -14848,9 +14891,89 @@ if st.button(
     if not odds_data:
         st.error("❌ No odds data found! Please fetch odds first.")
         st.stop()
-    
+
     st.write("📊 Found odds data for games:")
     st.info(f"**{len(odds_data)} games** ready for analysis")
+
+    # Score today's games with the local ML model for quick edges
+    today_records: List[Dict[str, Any]] = []
+    for game in odds_data:
+        home_team = game.get('home_team')
+        away_team = game.get('away_team')
+        best_moneyline_home = None
+        best_moneyline_away = None
+
+        for bookmaker in game.get('bookmakers', []):
+            for market in bookmaker.get('markets', []):
+                if market.get('key') != 'h2h':
+                    continue
+                for outcome in market.get('outcomes', []):
+                    price = outcome.get('price')
+                    dec_price = american_to_decimal(price)
+                    if np.isnan(dec_price):
+                        continue
+                    if outcome.get('name') == home_team:
+                        current_best = american_to_decimal(best_moneyline_home) if best_moneyline_home is not None else -np.inf
+                        if dec_price > current_best:
+                            best_moneyline_home = price
+                    elif outcome.get('name') == away_team:
+                        current_best = american_to_decimal(best_moneyline_away) if best_moneyline_away is not None else -np.inf
+                        if dec_price > current_best:
+                            best_moneyline_away = price
+
+        if best_moneyline_home is None or best_moneyline_away is None:
+            continue
+
+        today_records.append({
+            'game_id': game.get('id'),
+            'sport_key': game.get('sport_key'),
+            'commence_time': game.get('commence_time'),
+            'home_team': home_team,
+            'away_team': away_team,
+            'home_odds': best_moneyline_home,
+            'away_odds': best_moneyline_away,
+        })
+
+    if today_records:
+        today_games_df = pd.DataFrame(today_records)
+
+        try:
+            _model, model_feature_names = get_model()
+            features_today = build_ml_features(today_games_df, model_feature_names)
+            scored_today = score_games(features_today)
+            today_games_df = scored_today
+            today_games_df['market_edge'] = today_games_df.get('implied_home_prob', pd.Series(dtype=float)) - 0.5
+
+            sort_mode = st.selectbox(
+                "Rank by:",
+                ["Market Edge", "Model Edge", "Blend"],
+                key="today_games_sort_mode",
+            )
+
+            ranked = today_games_df.copy()
+            if sort_mode == "Market Edge":
+                ranked = ranked.sort_values("market_edge", ascending=False)
+            elif sort_mode == "Model Edge":
+                ranked = ranked.sort_values("model_edge", ascending=False)
+            else:
+                ranked["blend_edge"] = 0.5 * ranked["market_edge"] + 0.5 * ranked["model_edge"]
+                ranked = ranked.sort_values("blend_edge", ascending=False)
+
+            display_df = ranked[[
+                'home_team', 'away_team', 'home_odds', 'away_odds',
+                'implied_home_prob', 'model_home_prob', 'model_edge', 'market_edge'
+            ]].copy()
+
+            for col in ('implied_home_prob', 'model_home_prob', 'model_edge', 'market_edge'):
+                if col in display_df.columns:
+                    display_df[col] = (display_df[col].astype(float)).apply(lambda x: f"{x*100:.1f}%" if pd.notna(x) else "—")
+
+            st.subheader("🎯 Model-Powered Edges for Today's Games")
+            st.dataframe(display_df, use_container_width=True, hide_index=True)
+            st.caption("Ranking uses your local ML model predictions against market-implied probabilities.")
+        except Exception as e:
+            logger.warning(f"ML scoring failed: {e}")
+            st.warning("⚠️ Could not load the local ML model. Continuing without model edges.")
     
     # Load available data sources
     st.write("---")
