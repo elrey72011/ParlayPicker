@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Optional
 import numpy as np
 import pandas as pd
 import streamlit as st
+import pytz
 
 from ml_predictions import get_vertex_ai_prediction, is_vertex_ai_enabled
 
@@ -43,6 +44,25 @@ def implied_prob_from_american(odds: Optional[float]) -> Optional[float]:
     if dec is None or dec <= 1.0:
         return None
     return 1.0 / dec
+
+
+def format_game_time_local(commence_raw: Any, user_tz_label: Optional[str] = None) -> str:
+    """Format a commence/kickoff time into a friendly local string."""
+
+    if commence_raw is None or (isinstance(commence_raw, str) and commence_raw.strip() == ""):
+        return "TBD"
+
+    tz_label = user_tz_label or st.session_state.get("user_timezone") or "US/Eastern"
+    try:
+        dt = pd.to_datetime(commence_raw, utc=True)
+        tz = pytz.timezone(tz_label)
+        dt_local = dt.tz_convert(tz)
+        return dt_local.strftime("%a, %b %d — %I:%M %p %Z")
+    except Exception:
+        try:
+            return str(commence_raw)[:16]
+        except Exception:
+            return "TBD"
 
 
 # ---------------------------------------------------------------------------
@@ -534,6 +554,7 @@ class VertexMasterAnalyzer:
 
         rows: List[Dict[str, Any]] = []
         progress = st.progress(0)
+        user_tz_label = st.session_state.get("user_timezone", "US/Eastern")
 
         for idx, game in enumerate(games):
             try:
@@ -551,6 +572,15 @@ class VertexMasterAnalyzer:
                 else:
                     game_league = league
 
+                commence_raw = (
+                    game.get("commence_time")
+                    or game.get("commence")
+                    or game.get("commence_raw")
+                )
+                commence_display = format_game_time_local(commence_raw, user_tz_label)
+
+                if commence_raw:
+                    game["commence_time"] = commence_raw
                 feats = self.build_comprehensive_features(game, game_league)
                 vec = self.build_vertex_feature_vector(feats)
 
@@ -704,7 +734,9 @@ class VertexMasterAnalyzer:
                         "sentiment_diff": feats.get("sentiment_diff"),
                         "ev": ev,
                         # Game time and TheOver.ai consensus
-                        "game_time": game.get("commence_time"),
+                        "commence_time": commence_raw,
+                        "game_time": commence_raw,
+                        "commence_display": commence_display,
                         "theover_pick": theover_pick,  # TheOver.ai's pick for consensus
                         # Novig odds
                         "novig_home_spread": feats.get("novig_home_spread"),
@@ -786,24 +818,14 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
     display_df["Kalshi %"] = (display_df["kalshi_prob"] * 100).round(0)
     display_df["EV"] = display_df["ev"].map(lambda x: f"${x:.2f}")
     
-    # NEW: Format Game Time column
-    def format_game_time(time_str):
-        if pd.isna(time_str) or not time_str:
-            return "—"
-        try:
-            from datetime import datetime
-            import pytz
-            # Parse ISO time from TheOddsAPI
-            dt = datetime.fromisoformat(str(time_str).replace('Z', '+00:00'))
-            # Convert to Eastern Time for display
-            eastern = pytz.timezone('US/Eastern')
-            dt_eastern = dt.astimezone(eastern)
-            # Format as "Nov 29, 7:30 PM ET"
-            return dt_eastern.strftime("%b %d, %-I:%M %p ET")
-        except Exception:
-            return str(time_str)[:16] if time_str else "—"
-    
-    display_df["Game Time"] = display_df["game_time"].apply(format_game_time)
+    user_tz_label = st.session_state.get("user_timezone", "US/Eastern")
+    if "commence_time" not in display_df.columns:
+        display_df["commence_time"] = display_df.get("game_time")
+    display_df["Commence (UTC)"] = display_df["commence_time"]
+    display_df["Game Time"] = display_df["commence_time"].apply(
+        lambda val: format_game_time_local(val, user_tz_label)
+    )
+    display_df["commence_display"] = display_df["Game Time"]
     
     # NEW: TheOver.ai Consensus column
     def format_consensus(row):
@@ -856,6 +878,7 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
         "league",
         "game",
         "Game Time",
+        "Commence (UTC)",
         "the_pick",
         "Win %",
         "Favorite",
