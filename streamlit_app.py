@@ -9113,8 +9113,8 @@ with main_tab1:
             st.write(f"**Service Account:** {credentials.service_account_email}")
             st.write(f"**Region:** us-central1")
         
-    except Exception as e:
-        st.error(f"❌ Vertex AI Authentication Failed: {e}")
+        except Exception as e:
+            st.error(f"❌ Vertex AI Authentication Failed: {e}")
     
     # Vertex AI Analysis Integration - Uses VertexMasterAnalyzer with BOTH spreads and totals
     if is_vertex_ai_enabled():
