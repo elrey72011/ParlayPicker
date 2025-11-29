@@ -11871,28 +11871,50 @@ if is_vertex_ai_enabled():
                     # ML Source Summary
                     if 'ML Source' in best_bets_df.columns:
                         ml_counts = best_bets_df['ML Source'].value_counts()
-                        claude_count = ml_counts.get('anthropic_claude', 0)
+                        vertex_count = ml_counts.get('vertex', 0) + ml_counts.get('gcp_vertex', 0)
+                        theover_count = ml_counts.get('theover', 0)
                         spread_count = ml_counts.get('spread_derived', 0)
-                        fallback_count = ml_counts.get('fallback_heuristic', 0) + ml_counts.get('unknown', 0)
+                        fallback_count = ml_counts.get('fallback_heuristic', 0) + ml_counts.get('unknown', 0) + ml_counts.get('default', 0)
                         
                         st.markdown("---")
-                        st.subheader("🔬 ML Prediction Sources")
-                        ml_col1, ml_col2, ml_col3 = st.columns(3)
-                        with ml_col1:
-                            if claude_count > 0:
-                                st.success(f"🤖 Claude API: {claude_count} games")
-                            else:
-                                st.info(f"🤖 Claude API: {claude_count} games")
-                        with ml_col2:
-                            st.info(f"📊 Spread-Derived: {spread_count} games")
-                        with ml_col3:
-                            if fallback_count > 0:
-                                st.warning(f"⚙️ Fallback: {fallback_count} games")
-                            else:
-                                st.info(f"⚙️ Fallback: {fallback_count} games")
+                        st.subheader("🤖 ML Prediction Source Summary")
+                        ml_col1, ml_col2, ml_col3, ml_col4 = st.columns(4)
                         
-                        if claude_count > 0:
-                            st.success(f"✅ **{claude_count}/{total_games} games used REAL ML predictions from Claude API**")
+                        with ml_col1:
+                            if vertex_count > 0:
+                                st.success(f"☁️ **GCP Vertex AI**\n\n{vertex_count} games")
+                            else:
+                                st.info(f"☁️ GCP Vertex AI\n\n{vertex_count} games")
+                                st.caption("Configure GCP endpoint for custom model")
+                        
+                        with ml_col2:
+                            if theover_count > 0:
+                                st.info(f"🎯 **TheOver.ai**\n\n{theover_count} games")
+                            else:
+                                st.info(f"🎯 TheOver.ai\n\n{theover_count} games")
+                        
+                        with ml_col3:
+                            if spread_count > 0:
+                                st.info(f"📊 **Spread-Derived**\n\n{spread_count} games")
+                                st.caption("Using spread × 2.8% formula")
+                            else:
+                                st.info(f"📊 Spread-Derived\n\n{spread_count} games")
+                        
+                        with ml_col4:
+                            if fallback_count > 0:
+                                st.warning(f"🔄 **Fallback**\n\n{fallback_count} games")
+                            else:
+                                st.info(f"🔄 Fallback\n\n{fallback_count} games")
+                        
+                        # Show Kalshi integration status
+                        if kalshi_agrees > 0:
+                            st.caption(f"📈 Kalshi prediction market agrees on {kalshi_agrees}/{total_games} games")
+                        
+                        # Summary message
+                        if vertex_count > 0:
+                            st.success(f"✅ Using Gemini AI predictions via Vertex AI for {vertex_count} games")
+                        elif theover_count > 0:
+                            st.info(f"📊 Using spread-derived probabilities from TheOver.ai data (each point ≈ 2.8% shift)")
                         elif spread_count > 0:
                             st.info(f"📊 Using spread-derived probabilities (each point ≈ 2.8% shift from 50%)")
                         st.markdown("---")
