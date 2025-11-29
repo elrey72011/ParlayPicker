@@ -14675,12 +14675,12 @@ use_gemini = GEMINI_AVAILABLE and st.session_state.get('gcp_project_id')
 use_claude = False  # DISABLED - Using Gemini only
 
     # Show Gemini status
-    if use_gemini:
-        st.success("🧠 Using Google Gemini AI (Vertex AI) - 24x cheaper than Claude!")
-        gcp_project = st.session_state.get('gcp_project_id', 'Not set')
-        endpoint = st.session_state.get('vertex_endpoint_id', 'Not set')
-        location = st.session_state.get('gcp_location', 'us-central1')
-        st.caption(f"📍 Project: {gcp_project} | Endpoint: {endpoint} | Region: {location}")
+if use_gemini:
+    st.success("🧠 Using Google Gemini AI (Vertex AI) - 24x cheaper than Claude!")
+    gcp_project = st.session_state.get('gcp_project_id', 'Not set')
+    endpoint = st.session_state.get('vertex_endpoint_id', 'Not set')
+    location = st.session_state.get('gcp_location', 'us-central1')
+    st.caption(f"📍 Project: {gcp_project} | Endpoint: {endpoint} | Region: {location}")
 
 ai_available = use_gemini or use_claude
 
