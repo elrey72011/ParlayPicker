@@ -9091,6 +9091,31 @@ with main_tab1:
     theover_spreads_data = _collect_theover_dataset("#### 📐 Spread projections", "theover_spreads")
     theover_totals_data = _collect_theover_dataset("#### 📈 Totals (Over/Under) projections", "theover_totals")
     
+    with st.sidebar.expander("🔍 Vertex AI Status"):
+    try:
+        from google.oauth2 import service_account
+        import vertexai
+        
+        # Load credentials from secrets
+        credentials = service_account.Credentials.from_service_account_info(
+            st.secrets["gcp_service_account"]
+        )
+        
+        # Initialize Vertex AI
+        vertexai.init(
+            project="elite-hangar-479017-m8",
+            location="us-central1",
+            credentials=credentials
+        )
+        
+        st.success("✅ Vertex AI Authenticated!")
+        st.write(f"**Project:** elite-hangar-479017-m8")
+        st.write(f"**Service Account:** {credentials.service_account_email}")
+        st.write(f"**Region:** us-central1")
+        
+    except Exception as e:
+        st.error(f"❌ Vertex AI Authentication Failed: {e}")
+    
     # Vertex AI Analysis Integration - Uses VertexMasterAnalyzer with BOTH spreads and totals
     if is_vertex_ai_enabled():
         if (theover_spreads_data is not None and len(theover_spreads_data) > 0) or \
