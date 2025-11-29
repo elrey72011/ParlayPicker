@@ -1163,6 +1163,7 @@ def show_vertex_master_analysis(results_df: pd.DataFrame):
     
     # Determine best pick for each game
         # Determine best pick for each game
+        # Determine best pick for each game
     def get_best_pick_row(row):
         home_prob = row['Home Win %']
         away_prob = row['Away Win %']
@@ -1189,17 +1190,14 @@ def show_vertex_master_analysis(results_df: pd.DataFrame):
         elif away_ml and away_ml != 0:
             # If only away ML known and it's negative, home is NOT favorite
             home_is_market_favorite = not (away_ml < 0)
-        # else: leave as None (don’t guess from spread!)
+        # else: leave as None – don’t guess from spread
 
-        # --- Choose pick side based on Vertex AI win % ---
+        # --- Choose pick side based on win % ---
         if home_prob >= away_prob:
             pick_team = home_team
             pick_prob = home_prob
-
-            # Use home spread when we’re on the home team
             pick_spread = home_spread
 
-            # Is our pick the market favorite?
             if home_is_market_favorite is None:
                 is_favorite = None
             else:
@@ -1208,19 +1206,18 @@ def show_vertex_master_analysis(results_df: pd.DataFrame):
             pick_team = away_team
             pick_prob = away_prob
 
-            # Prefer the away spread if it exists, otherwise fall back to -home_spread
+            # Prefer real away spread, else fallback to -home_spread
             if away_spread is not None:
                 pick_spread = away_spread
             else:
                 pick_spread = -home_spread if home_spread else 0
 
-            # Is our pick the market favorite?
             if home_is_market_favorite is None:
                 is_favorite = None
             else:
                 is_favorite = not home_is_market_favorite
 
-        # --- Format the pick text ---
+        # --- Format pick text ---
         if pick_spread and pick_spread != 0:
             if pick_spread > 0:
                 pick_text = f"{pick_team} +{abs(pick_spread):.1f}"
@@ -1241,13 +1238,11 @@ def show_vertex_master_analysis(results_df: pd.DataFrame):
         # --- Kalshi check ---
         kalshi_prob = row.get('kalshi_prob', 0.5) or 0.5
         if kalshi_prob > 1:
-            kalshi_prob = kalshi_prob / 100.0
-
+            kalshi_prob = kalshi_prob / 100
         kalshi_available = row.get('kalshi_available', False)
         if kalshi_available:
             kalshi_home = kalshi_prob * 100
             kalshi_away = (1 - kalshi_prob) * 100
-
             if pick_team == home_team:
                 kalshi_agrees = '✅' if kalshi_home > 50 else '❌'
                 kalshi_pct = kalshi_home
@@ -1279,7 +1274,6 @@ def show_vertex_master_analysis(results_df: pd.DataFrame):
             'EV': f"${ev_val:.2f}",
             'League': row.get('league', 'N/A'),
         })
-
         
         # Get moneyline odds to determine actual market favorite
                 # Get moneyline odds to determine actual market favorite
