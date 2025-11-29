@@ -140,6 +140,111 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+# ------------------------------------------------------------
+# Built-in fallback credentials for local/dev usage when
+# Streamlit secrets aren't available (per user request).
+# These values are pre-populated into environment variables and
+# Streamlit session state without overriding anything already set
+# by the runtime or a deployed secrets.toml.
+# ------------------------------------------------------------
+
+BUILTIN_SECRET_DEFAULTS = {
+    # Core APIs
+    "ODDS_API_KEY": "b722c798f7bca605da45a09dba155152",
+    "THE_ODDS_API_KEY": "b722c798f7bca605da45a09dba155152",
+    "NEWS_API_KEY": "36494f57a53448b6a43901f87479c9ed",
+
+    # Kalshi prediction markets
+    "KALSHI_API_KEY": "741e9fbb-0387-4b7d-a73e-64b3fe44bb81",
+    "KALSHI_API_SECRET": "-----BEGIN RSA PRIVATE KEY-----MIIEogIBAAKCAQEAkpVAEB9VDgvuhjbrbZLlqOOJBrTKWkkHGqyBt+/ykSY5SlTHLibo76Ln+Z6sxkfBL08NXhyiBwUXmDiLEUV2zbNMPefQU0a3aLTfAOx9hKI8h+po2KTVp61tWg4zQCS1SOyxyEySFLzA16zfHBt15/es44PuH5c6WoW3doRLnXCTNgRUxZi1I7osEdHaaYN7oc5LtejrX3pMA0KaAYAUiE2DCHnH3To8yqZ1u8gg+q8Xp4W5f0/db+Wq2MLq+R6tb3ZCo7zzLuT5nwkjtl6OfKsGnEP4fY9U81eJ8028jBrrUmYnid6HKR+cMsijere2b/8HQPv3OUpzpf7rIvr4IQIDAQABAoIBADm0l+vA6fMFr3kW1cflNJQwPxlswtyYMzvE/awzwgJyUct5ZJA+sSTltP0IAmxsgxjkvhZ2nzK0Rn2ehODfv81q8HDOeazPAhUuXzw13ZQBamL3XR8shQ/lrk7tmC+AQ/3ZcIOx4TBYvnIplAu0o84WKvHGVlAJcOeCDJ+TpVDtEAFKN5RPxxx9MEjXvGAfwhyHVYKhUUBv82RY5yDYujgx17g1kpCmcZTSg0Uc8kodJRQFSEDII8M7s7UJOxmkIj230QxPgB7XEJYavBNmzh4JZ81r7z2OuHi5q0IrBmFJ3ZyiXAJVBv7SiwTXZlQUU1F9y1CtuLG+GOq8JU6vLyECgYEAwRV/hNDw875/1bp8zMT1YPl6s+wLlwG6bDlcuXaPdILG5dvmrFTXcK16Blx2X0OvMpH3QeLgNNBrVFP0jM2Lj+Id3Xz0A3SD3ZHxGCDzZZjx4jSW1puc7I1/w3CfeVBQ6UbWdYqSRN3q2U+Oq9qphzjQfrqe9GEPU+DvFD0GlNcCgYEAwljG7VdAXnIfxuvaCslYqMjHTvpMQ5mCtrTmKP/J23fK4aiXw3BS5jKQxS+H0f89qQ+9BVLEjM5530htro2yHUutgKfFjvsAqzN7FvQXFNZ4tQv0m3pMDBWl4qb5bg5NUCt46CrJqns3NCszMESVX9FTjlWxdSgtrrmAZk8/Q8cCgYBFf1xvzNj9krLmlgI3nikIJ6P/wNWHG+si6x6x7rfB4xR+RcFog/0rpHVIdt1weqdD14Ac6fFzcRVAvBtI1u8F8gh34XLfD4ArL02NNscE6aEen3kvc8Fu75tuGEp+WudUn9evZRoyyYGviFA9ES516oA5LSjro0fmFA9ZxIFq7wKBgDzmBK+qf4kYycxTa2el4BpDj/C3jd5A5CzMUrLWNDKJPxGm+qdLMy7e+W5QjobHLFMlk11vqhdVO+szjur7i6ySYjPGXqmHDZaX8yImKnVlHz3cGTH/CIVg4zI6kD5kTOWqOaDGh5rcMVgvkUK2uvfjaANZ5tmHVYlCp3Fns7NRAoGAVGiq+bXDSuWiILvORLOgW+8FZKm5ah33Ik2Z628KeGevQrFk2g24AmeXAKN5HxGBpgpJMdcx4WEZb8U1bSlIPSDhkod8gCCm2fXT48DqcYKDyd4k1AHHB2Lk5KjHaF3pR2OgEPh/ELMTk3cTOTmMpXEVjMO2nUxKNCvpkZoGZZI=-----END RSA PRIVATE KEY-----",
+
+    # API-Sports (shared key)
+    "APISPORTS_KEY": "d03eedb3-2a7b-4b27-8d24-8ed8703b9417",
+    "APISPORTS_NFL_KEY": "d03eedb3-2a7b-4b27-8d24-8ed8703b9417",
+    "APISPORTS_NHL_KEY": "d03eedb3-2a7b-4b27-8d24-8ed8703b9417",
+    "APISPORTS_NBA_KEY": "d03eedb3-2a7b-4b27-8d24-8ed8703b9417",
+
+    # SportsData.io (per-league)
+    "SPORTSDATA_NBA_KEY": "52b61286bca344d6b2d79f9551b41d4e",
+    "SPORTSDATA_NFL_KEY": "52b61286bca344d6b2d79f9551b41d4e",
+    "SPORTSDATA_NHL_KEY": "52b61286bca344d6b2d79f9551b41d4e",
+    "SPORTSDATA_NCAAB_KEY": "52b61286bca344d6b2d79f9551b41d4e",
+    "SPORTSDATA_NCAAF_KEY": "52b61286bca344d6b2d79f9551b41d4e",
+
+    # Google Cloud / Vertex AI
+    "GCP_PROJECT_ID": "elite-hangar-479017-m8",
+    "VERTEX_ENDPOINT_ID": "5396533911008313344",
+    "GCP_LOCATION": "us-central1",
+}
+
+FALLBACK_GCP_SERVICE_ACCOUNT = {
+    "type": "service_account",
+    "project_id": "elite-hangar-479017-m8",
+    "private_key_id": "35ec4254642eded9df6c946b4c7bec0d34d409f8",
+    "private_key": """-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCrY/WnrwZzihCF\njwcYwV1e7RgQpkzLqLgrdikdHNcG0PdS5tms//JExCkqSRHY8oQ3Rr0lcZp880JC\nPz41erckY6pOGnj/qo1s1b41Ssce8yLPHdPvzJ6RR801MKsSfdlb3UkM7+dRloWD\nxA9nVGAWwM4YuRdCKycLk7aRWYWy6m1AzFB1PZHuw8wop/Tn8ivi+gHUPCgp3DR5\nrWUvnBZMbxWImkgHk3Gym9rkIgqJLPVNRxH9TOfF9ipnM17nrGkueeTCS2ctwMH7\nBbWyK4uDiHq/dq1UQdaZeAdHSXZ1Zt/io3F+/E8oxG+CSUD6K5HcA4NWwZTYZGOL\nYZWSRnHzAgMBAAECggEAAs/rEfX0kc9sIfo3eu0r+QjEN6cNj4c/Lly2o/xQfZN5\nhhS08aUUIT4OvDDivWqNR32TpkT3l0vuhGPBQ44LPz+bZcNYGj8pfuWq705AzNM0\neQLbnWMAHxDMidjjQF8W7UOeP+YX0juOs/DIR+vB1TMTWU3Vgd0aEOiQOvuluUp0\njJMGa9nnpKo+qxq3fvRv9JtiE0W4acKGmkiYPiCV3UvYvfwFDJpBm7r8iePlD+oD\nqn+xsO8GWH5ZjC49OLPUedwwetZtA/KrjW+aDFvpuZ3kY2StvraSKnQCr1Yfi28L\ntBdn2fVDfbP1QjARpZe6ls8SN0qo29wue88tL459cQKBgQDUTFs/CswC9ZfOk00q\njkQtqAYXM/2KVnaYn0Gc1mUK1vVtbynv5ZIQE4HWtBBdyk8By7wS65g2KN0fNit8\nuLlP7J51FdmO/mkwOAm1HkLHbFoEAWAikIrmqB4NYq3RL36gOUBwVURjWwU1JFfZ\nqOCp8kU9Up4q1gdOS0t90zZgvQKBgQDOq9qIPXNstwQneq3P0xvr44CHwILv2Bfp\nvv8Zb7amY3N1MYpJEN8Mtuzg529nl+KnXI6Z+tb89QQ+K4bV5bFFSzitU4KLR7Mb\nBV41R2uF/O07jg/sMuU67YAc9vwXLIgd5y2xAcZ+sr0YNaHFMizdyUnae5j7lOxR\nFhvjCeSAbwKBgQCM7OLlRlWG4WCUUFO5HBdF93OTk3+KhTrUtWLoqakJOQhSTKia\nBtqesVRPIdh7agBoQMXoCVxRF28xeNQFRto8o+XL82Un9tn8mDZZdGz/1H0si301\ndJ2/33mTiR247r4vvdF4wCFVkuYyEJ4Aboo0Rg6QVneIF+thnbnPHJXMQQKBgDFL\nrIRyo+V6gfMov+yiXjaVvUKkGJc84/dNJ2vZyadGcXOyrVlgPNO7jiTXDyuWfumM\nmjcALeeIScrKdw7uCqqMlqhBExJFt+LqFN6AepUrDyr1Z7bfLO4xWC2Qe/DLHmyD\nh9KAqefumkv7/uoaXblJGeSTNppLm1J8A4rUATzhAoGAccRjVBxJDM9u6Bv+Nn/4\nbCpy2QO9aZc3QRfGdBwRzR6SoRwGcmO0kg45nSjuFXyg2BBa7fxWZ8j0BDCfWc2z\nF7mbuTDsOygf847PfziMZGdkJ6D3xXaFlHkO/9avWqEXEzLxVz4u2XcBTi3/yvV0\nMcxMzMD5Y6/o4m19F9DFW5A=\n-----END PRIVATE KEY-----\n""",
+    "client_email": "parlay-gemini@elite-hangar-479017-m8.iam.gserviceaccount.com",
+    "client_id": "100660669467267044063",
+    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+    "token_uri": "https://oauth2.googleapis.com/token",
+    "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+    "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/parlay-gemini%40elite-hangar-479017-m8.iam.gserviceaccount.com",
+    "universe_domain": "googleapis.com",
+}
+
+
+def prime_builtin_secrets() -> None:
+    """Populate environment/session defaults when secrets.toml is absent."""
+
+    # Environment variables first, without overwriting existing values
+    for env_key, env_value in BUILTIN_SECRET_DEFAULTS.items():
+        os.environ.setdefault(env_key, env_value)
+
+    # Helpful lowercase aliases used in scattered code paths
+    lowercase_aliases = {
+        "odds_api_key": BUILTIN_SECRET_DEFAULTS["ODDS_API_KEY"],
+        "news_api_key": BUILTIN_SECRET_DEFAULTS["NEWS_API_KEY"],
+        "kalshi_api_key": BUILTIN_SECRET_DEFAULTS["KALSHI_API_KEY"],
+        "kalshi_api_secret": BUILTIN_SECRET_DEFAULTS["KALSHI_API_SECRET"],
+        "apisports_key": BUILTIN_SECRET_DEFAULTS["APISPORTS_KEY"],
+        "sportsdata_nba_key": BUILTIN_SECRET_DEFAULTS["SPORTSDATA_NBA_KEY"],
+        "sportsdata_nfl_key": BUILTIN_SECRET_DEFAULTS["SPORTSDATA_NFL_KEY"],
+        "sportsdata_nhl_key": BUILTIN_SECRET_DEFAULTS["SPORTSDATA_NHL_KEY"],
+        "sportsdata_ncaab_key": BUILTIN_SECRET_DEFAULTS["SPORTSDATA_NCAAB_KEY"],
+        "sportsdata_ncaaf_key": BUILTIN_SECRET_DEFAULTS["SPORTSDATA_NCAAF_KEY"],
+        "gcp_project_id": BUILTIN_SECRET_DEFAULTS["GCP_PROJECT_ID"],
+        "vertex_endpoint_id": BUILTIN_SECRET_DEFAULTS["VERTEX_ENDPOINT_ID"],
+        "gcp_location": BUILTIN_SECRET_DEFAULTS["GCP_LOCATION"],
+    }
+    for env_key, env_value in lowercase_aliases.items():
+        os.environ.setdefault(env_key, env_value)
+
+    # Session defaults so existing UI flows continue to work
+    session_defaults = {
+        "api_key": BUILTIN_SECRET_DEFAULTS["ODDS_API_KEY"],
+        "news_api_key": BUILTIN_SECRET_DEFAULTS["NEWS_API_KEY"],
+        "kalshi_api_key": BUILTIN_SECRET_DEFAULTS["KALSHI_API_KEY"],
+        "kalshi_secret_key": BUILTIN_SECRET_DEFAULTS["KALSHI_API_SECRET"],
+        "apisports_key": BUILTIN_SECRET_DEFAULTS["APISPORTS_KEY"],
+        "sportsdata_nba_key": BUILTIN_SECRET_DEFAULTS["SPORTSDATA_NBA_KEY"],
+        "sportsdata_nfl_key": BUILTIN_SECRET_DEFAULTS["SPORTSDATA_NFL_KEY"],
+        "sportsdata_nhl_key": BUILTIN_SECRET_DEFAULTS["SPORTSDATA_NHL_KEY"],
+        "sportsdata_ncaab_key": BUILTIN_SECRET_DEFAULTS["SPORTSDATA_NCAAB_KEY"],
+        "sportsdata_ncaaf_key": BUILTIN_SECRET_DEFAULTS["SPORTSDATA_NCAAF_KEY"],
+        "gcp_project_id": BUILTIN_SECRET_DEFAULTS["GCP_PROJECT_ID"],
+        "vertex_endpoint_id": BUILTIN_SECRET_DEFAULTS["VERTEX_ENDPOINT_ID"],
+        "gcp_location": BUILTIN_SECRET_DEFAULTS["GCP_LOCATION"],
+    }
+
+    for key, value in session_defaults.items():
+        st.session_state.setdefault(key, value)
+
+    # Service account JSON for Vertex AI when no secrets.toml exists
+    st.session_state.setdefault("gcp_service_account", FALLBACK_GCP_SERVICE_ACCOUNT)
+
+
+# Prime defaults as soon as the app imports
+prime_builtin_secrets()
+
 # ============================================================
 # ML PREDICTION OPTIMIZATION FUNCTIONS
 # These functions speed up ML predictions by 5-10x using batching and caching
