@@ -1,4 +1,3 @@
-
 """
 Vertex AI Master Analyzer
 Consolidates ALL data sources for ultimate best bet recommendations.
@@ -611,24 +610,34 @@ class VertexMasterAnalyzer:
                     ml_sources_used[ml_source] += 1
 
                 # ------------------------------------------------------------------
-                # Recommended pick (side only, for now)
-                # Use TheOver pick if available; otherwise, go with side that
-                # aligns with model probability vs spread.
+                # Recommended pick - use AI probability to pick the team
+                # DON'T use TheOver.ai's pick (it can be wrong!)
                 # ------------------------------------------------------------------
-                theover_pick = feats.get("theover_pick") or ""
-                pick_team = theover_pick or (home_team if home_win_prob >= 0.5 else away_team)
+                # Pick the team with higher AI win probability
+                if home_win_prob >= 0.5:
+                    pick_team = home_team
+                else:
+                    pick_team = away_team
 
-                # Spread value for picked team: theover_spread is already
-                # expressed for the picked side (important for Providence bug).
-                pick_spread = feats.get("theover_spread")
-                if not pick_spread:
-                    # Derive from home spread if needed
-                    hs = feats.get("home_spread") or 0.0
-                    try:
-                        hs = float(hs)
-                    except Exception:
-                        hs = 0.0
-                    pick_spread = hs if pick_team == home_team else -hs
+                # Get TheOver.ai pick for consensus/comparison only
+                theover_pick = feats.get("theover_pick") or ""
+
+                # ------------------------------------------------------------------
+                # Spread value for picked team
+                # ALWAYS use home_spread from TheOddsAPI (reliable)
+                # DON'T use theover_spread (unreliable signs)
+                # ------------------------------------------------------------------
+                home_spread = feats.get("home_spread") or 0.0
+                try:
+                    home_spread = float(home_spread)
+                except Exception:
+                    home_spread = 0.0
+
+                # Calculate picked team's spread based on home_spread
+                if pick_team == home_team:
+                    pick_spread = home_spread  # Home picked, use home spread as-is
+                else:
+                    pick_spread = -home_spread  # Away picked, flip the sign
 
                 try:
                     pick_spread = float(pick_spread)
