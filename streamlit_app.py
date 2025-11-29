@@ -19,6 +19,8 @@ import pytz
 from pathlib import Path
 from collections import defaultdict
 
+from ml_model import get_model, score_games
+
 from app_core import (
     APISportsBasketballClient,
     APISportsFootballClient,
@@ -4632,11 +4634,52 @@ def integrate_kalshi_into_leg(
     )
 
 # ============ UTILITY FUNCTIONS ============
-def american_to_decimal(odds) -> float:
-    odds = float(odds)
-    if odds >= 100: return 1.0 + odds/100.0
-    if odds <= -100: return 1.0 + 100.0/abs(odds)
-    raise ValueError("Bad American odds")
+def american_to_decimal(odds: float | int) -> float:
+    """
+    Convert American odds to decimal odds.
+    Returns np.nan for invalid values.
+    """
+    try:
+        o = float(odds)
+    except (TypeError, ValueError):
+        return np.nan
+
+    if o > 0:
+        return 1.0 + (o / 100.0)
+    elif o < 0:
+        return 1.0 + (100.0 / abs(o))
+    else:
+        return np.nan
+
+
+def build_ml_features(games_df: pd.DataFrame, feature_names: list[str]) -> pd.DataFrame:
+    """
+    Take the raw games DataFrame and produce the feature columns needed by the model.
+    Assumes the model was trained with:
+      - implied_home_prob
+      - implied_away_prob
+      - plus any other columns that are already present in games_df
+    We will:
+      - compute implied probabilities from home_odds / away_odds if needed
+      - fill any missing feature columns with 0.0
+    """
+    df = games_df.copy()
+
+    # If implied probabilities not already there, compute from American odds.
+    if "implied_home_prob" not in df.columns and "home_odds" in df.columns:
+        df["dec_home"] = df["home_odds"].apply(american_to_decimal)
+        df["implied_home_prob"] = 1.0 / df["dec_home"]
+
+    if "implied_away_prob" not in df.columns and "away_odds" in df.columns:
+        df["dec_away"] = df["away_odds"].apply(american_to_decimal)
+        df["implied_away_prob"] = 1.0 / df["dec_away"]
+
+    # Ensure all feature columns exist
+    for col in feature_names:
+        if col not in df.columns:
+            df[col] = 0.0
+
+    return df
 
 def implied_p_from_american(odds) -> float:
     odds = float(odds)
@@ -9532,157 +9575,167 @@ if is_vertex_ai_enabled():
                     selected_sports = ['basketball_nba', 'americanfootball_ncaaf', 'basketball_ncaab', 'icehockey_nhl']
                 
                 all_games = []
-                
-                # Try to fetch from TheOddsAPI using existing function
-                odds_api_key = resolve_odds_api_key()
-                odds_available = False
-                
-                if odds_api_key:
-                    st.info("📥 Fetching games from The Odds API...")
-                    for sport in selected_sports:
+
+                # Prefer theover.ai uploads for lines/spreads to avoid TheOddsAPI mismatches
+                used_theover = False
+                if 'theover_spreads_data' in locals() and theover_spreads_data is not None and not theover_spreads_data.empty:
+                    used_theover = True
+                    st.info("📥 Using theover.ai uploads for spreads/totals (skipping The Odds API lines)")
+
+                    for _, row in theover_spreads_data.iterrows():
+                        # Get basic info
+                        home_team = row.get('home_team') or row.get('HomeTeam') or ''
+                        away_team = row.get('away_team') or row.get('AwayTeam') or ''
+                        league = (row.get('League') or row.get('league') or 'NBA').upper()
+                        pick = row.get('Pick') or row.get('pick') or ''
+
+                        # Extract line value
+                        line_value = row.get('Line') or row.get('Spread') or row.get('line') or 0
                         try:
-                            snapshot = fetch_oddsapi_snapshot(odds_api_key, sport)
-                            games = snapshot.get('events', [])
-                            for game in games:
-                                game['sport_key'] = sport
-                            all_games.extend(games)
-                            st.success(f"✅ Fetched {len(games)} {sport} games")
-                            odds_available = True
-                        except Exception as e:
-                            st.warning(f"⚠️ Error fetching {sport}: {e}")
-                            logger.error(f"Error fetching {sport}: {e}")
-                
-                if not odds_available:
-                    st.warning("⚠️ The Odds API not configured")
-                    st.info("💡 Using theover.ai data if available...")
-                    
-                    if 'theover_spreads_data' in locals() and theover_spreads_data is not None:
-                        for _, row in theover_spreads_data.iterrows():
-                            # Get basic info
-                            home_team = row.get('home_team') or row.get('HomeTeam') or ''
-                            away_team = row.get('away_team') or row.get('AwayTeam') or ''
-                            league = (row.get('League') or row.get('league') or 'NBA').upper()
-                            pick = row.get('Pick') or row.get('pick') or ''
-                            
-                            # Extract line value
-                            line_value = row.get('Line') or row.get('Spread') or row.get('line') or 0
+                            line_value = float(line_value) if line_value else 0
+                        except:
+                            line_value = 0
+
+                        # Determine sport_key from league
+                        if league == 'NFL':
+                            sport_key = 'americanfootball_nfl'
+                        elif league == 'NBA':
+                            sport_key = 'basketball_nba'
+                        elif league == 'NHL':
+                            sport_key = 'icehockey_nhl'
+                        elif league == 'NCAAB':
+                            sport_key = 'basketball_ncaab'
+                        elif league == 'NCAAF':
+                            sport_key = 'americanfootball_ncaaf'
+                        else:
+                            sport_key = 'basketball_nba'
+
+                        # NHL uses MONEYLINES in the Line column (125, -150, etc.)
+                        # Other sports use point spreads (13.5, -7.5, etc.)
+                        is_nhl = league == 'NHL'
+
+                        if is_nhl:
+                            # Line is a moneyline for NHL
+                            moneyline = line_value
+                            spread = 1.5  # Standard puckline
+
+                            # Calculate probability from moneyline
+                            if moneyline > 0:
+                                # Underdog: +150 means 100/(150+100) = 40%
+                                pick_win_prob = 100 / (moneyline + 100)
+                            else:
+                                # Favorite: -150 means 150/(150+100) = 60%
+                                pick_win_prob = abs(moneyline) / (abs(moneyline) + 100)
+
+                            # Determine home/away probabilities based on pick
+                            pick_is_home = (pick == home_team) or (pick and (pick.lower() in home_team.lower() or home_team.lower() in pick.lower()))
+
+                            if pick_is_home:
+                                home_implied_prob = pick_win_prob
+                                home_ml = int(moneyline)
+                                away_ml = int(-moneyline) if moneyline > 0 else int(100 * 100 / abs(moneyline))
+                            else:
+                                home_implied_prob = 1 - pick_win_prob
+                                away_ml = int(moneyline)
+                                home_ml = int(-moneyline) if moneyline > 0 else int(100 * 100 / abs(moneyline))
+
+                            # theover_prob = HOME team win probability
+                            theover_prob = home_implied_prob
+                            home_spread = 1.5  # Standard puckline
+
+                        else:
+                            # Basketball/Football: Line is the PICKED team's spread!
+                            # Example: "Dallas @ Lakers, Pick: Dallas, Line: 10.5"
+                            # This means Dallas +10.5, Lakers are favorites
+
+                            pick_spread = line_value  # Line is already the picked team's spread!
+                            spread = abs(line_value)
+
+                            # Calculate probability from spread
+                            # Each point of spread ≈ 2.5-3% shift from 50%
+                            spread_shift = spread * 0.028  # ~2.8% per point
+
+                            # Determine if pick is home or away
+                            pick_is_home = (pick == home_team) or (pick and (pick.lower() in home_team.lower() or home_team.lower() in pick.lower()))
+
+                            # The pick_spread tells us if picked team is favorite or underdog
+                            # Negative = favorite, Positive = underdog
+                            if line_value < 0:
+                                # Picked team is favorite
+                                pick_win_prob = min(0.80, 0.50 + spread_shift)
+                            else:
+                                # Picked team is underdog
+                                pick_win_prob = max(0.20, 0.50 - spread_shift)
+
+                            # Calculate home_spread from pick_spread
+                            if pick_is_home:
+                                # Pick is home, home_spread = pick_spread
+                                home_spread = line_value
+                                home_implied_prob = pick_win_prob
+                            else:
+                                # Pick is away, home_spread is opposite
+                                home_spread = -line_value
+                                home_implied_prob = 1 - pick_win_prob
+
+                            # theover_probability = home team win probability
+                            theover_prob = home_implied_prob
+
+                            # Calculate American odds from probability
+                            if home_implied_prob > 0.5:
+                                home_ml = int(-100 * home_implied_prob / (1 - home_implied_prob))
+                                away_ml = int(100 * (1 - home_implied_prob) / home_implied_prob)
+                            else:
+                                home_ml = int(100 * (1 - home_implied_prob) / home_implied_prob)
+                                away_ml = int(-100 * home_implied_prob / (1 - home_implied_prob))
+
+                        # Store the spread FOR THE PICKED TEAM
+                        picked_team_spread = line_value  # Line is already for picked team!
+
+                        all_games.append({
+                            'home_team': home_team,
+                            'away_team': away_team,
+                            'sport_key': sport_key,
+                            'league': league,
+                            'commence_time': None,
+                            # TheOver.ai specific data
+                            'theover_spread': picked_team_spread,  # Already correct for picked team
+                            'theover_pick': pick,
+                            'theover_probability': theover_prob,  # Home team win probability
+                            'theover_line': line_value,  # Original line from CSV
+                            'is_moneyline': is_nhl,
+                            # Calculated odds
+                            'home_ml_odds': home_ml,
+                            'away_ml_odds': away_ml,
+                            # home_spread is the HOME team's spread (correctly calculated)
+                            'home_spread': home_spread if not is_nhl else 1.5,
+                            'implied_home_prob': home_implied_prob,
+                        })
+
+                    st.success(f"📊 Loaded {len(all_games)} games from theover.ai (spreads + NHL moneylines converted)")
+
+                # If no TheOver data is available, fall back to TheOddsAPI so analysis still runs
+                if not used_theover:
+                    odds_api_key = resolve_odds_api_key()
+                    odds_available = False
+
+                    if odds_api_key:
+                        st.info("📥 Fetching games from The Odds API...")
+                        for sport in selected_sports:
                             try:
-                                line_value = float(line_value) if line_value else 0
-                            except:
-                                line_value = 0
-                            
-                            # Determine sport_key from league
-                            if league == 'NFL':
-                                sport_key = 'americanfootball_nfl'
-                            elif league == 'NBA':
-                                sport_key = 'basketball_nba'
-                            elif league == 'NHL':
-                                sport_key = 'icehockey_nhl'
-                            elif league == 'NCAAB':
-                                sport_key = 'basketball_ncaab'
-                            elif league == 'NCAAF':
-                                sport_key = 'americanfootball_ncaaf'
-                            else:
-                                sport_key = 'basketball_nba'
-                            
-                            # NHL uses MONEYLINES in the Line column (125, -150, etc.)
-                            # Other sports use point spreads (13.5, -7.5, etc.)
-                            is_nhl = league == 'NHL'
-                            
-                            if is_nhl:
-                                # Line is a moneyline for NHL
-                                moneyline = line_value
-                                spread = 1.5  # Standard puckline
-                                
-                                # Calculate probability from moneyline
-                                if moneyline > 0:
-                                    # Underdog: +150 means 100/(150+100) = 40%
-                                    pick_win_prob = 100 / (moneyline + 100)
-                                else:
-                                    # Favorite: -150 means 150/(150+100) = 60%
-                                    pick_win_prob = abs(moneyline) / (abs(moneyline) + 100)
-                                
-                                # Determine home/away probabilities based on pick
-                                pick_is_home = (pick == home_team) or (pick and (pick.lower() in home_team.lower() or home_team.lower() in pick.lower()))
-                                
-                                if pick_is_home:
-                                    home_implied_prob = pick_win_prob
-                                    home_ml = int(moneyline)
-                                    away_ml = int(-moneyline) if moneyline > 0 else int(100 * 100 / abs(moneyline))
-                                else:
-                                    home_implied_prob = 1 - pick_win_prob
-                                    away_ml = int(moneyline)
-                                    home_ml = int(-moneyline) if moneyline > 0 else int(100 * 100 / abs(moneyline))
-                                
-                                # theover_prob = HOME team win probability
-                                theover_prob = home_implied_prob
-                                home_spread = 1.5  # Standard puckline
-                                
-                            else:
-                                # Basketball/Football: Line is a point spread
-                                spread = abs(line_value)
-                                
-                                # Calculate probability from spread
-                                # Each point of spread ≈ 2.5-3% shift from 50%
-                                spread_shift = spread * 0.028  # ~2.8% per point
-                                
-                                # The pick is expected to COVER the spread
-                                # Positive line = underdog getting points (e.g., +13.5)
-                                # Negative line = favorite giving points (e.g., -7.5)
-                                
-                                if line_value > 0:
-                                    # Pick is underdog getting points
-                                    # They may lose outright but cover
-                                    pick_win_prob = max(0.20, 0.50 - spread_shift)
-                                else:
-                                    # Pick is favorite giving points  
-                                    pick_win_prob = min(0.80, 0.50 + spread_shift)
-                                
-                                # Determine home/away based on pick
-                                # CRITICAL: Calculate home_spread correctly based on whether pick is home or away
-                                pick_is_home = (pick == home_team) or (pick and (pick.lower() in home_team.lower() or home_team.lower() in pick.lower()))
-                                
-                                if pick_is_home:
-                                    # Pick is home team, so home_spread = line_value directly
-                                    home_implied_prob = pick_win_prob
-                                    home_spread = line_value
-                                else:
-                                    # Pick is away team, so home_spread = OPPOSITE of line_value
-                                    home_implied_prob = 1 - pick_win_prob
-                                    home_spread = -line_value  # Flip the sign!
-                                
-                                # theover_probability = home team win probability
-                                theover_prob = home_implied_prob
-                                
-                                # Calculate American odds from probability
-                                if home_implied_prob > 0.5:
-                                    home_ml = int(-100 * home_implied_prob / (1 - home_implied_prob))
-                                    away_ml = int(100 * (1 - home_implied_prob) / home_implied_prob)
-                                else:
-                                    home_ml = int(100 * (1 - home_implied_prob) / home_implied_prob)
-                                    away_ml = int(-100 * (1 - home_implied_prob) / home_implied_prob)
-                            
-                            all_games.append({
-                                'home_team': home_team,
-                                'away_team': away_team,
-                                'sport_key': sport_key,
-                                'league': league,
-                                'commence_time': None,
-                                # TheOver.ai specific data
-                                'theover_spread': line_value,  # Original line from CSV for the pick
-                                'theover_pick': pick,
-                                'theover_probability': theover_prob,  # Home team win probability
-                                'theover_line': line_value,  # Original line from CSV
-                                'is_moneyline': is_nhl,
-                                # Calculated odds
-                                'home_ml_odds': home_ml,
-                                'away_ml_odds': away_ml,
-                                # home_spread is the HOME team's spread (correctly calculated)
-                                'home_spread': home_spread if not is_nhl else 1.5,
-                                'implied_home_prob': home_implied_prob,
-                            })
-                        
-                        st.success(f"📊 Loaded {len(all_games)} games from theover.ai (spreads + NHL moneylines converted)")
+                                snapshot = fetch_oddsapi_snapshot(odds_api_key, sport)
+                                games = snapshot.get('events', [])
+                                for game in games:
+                                    game['sport_key'] = sport
+                                all_games.extend(games)
+                                st.success(f"✅ Fetched {len(games)} {sport} games")
+                                odds_available = True
+                            except Exception as e:
+                                st.warning(f"⚠️ Error fetching {sport}: {e}")
+                                logger.error(f"Error fetching {sport}: {e}")
+
+                    if not odds_available:
+                        st.warning("⚠️ The Odds API not configured")
+                        st.info("💡 Upload theover.ai CSV files above to power Vertex AI analysis")
                 
                 if not all_games:
                     st.error("❌ No games found. Either:")
@@ -14643,9 +14696,89 @@ if st.button(
     if not odds_data:
         st.error("❌ No odds data found! Please fetch odds first.")
         st.stop()
-    
+
     st.write("📊 Found odds data for games:")
     st.info(f"**{len(odds_data)} games** ready for analysis")
+
+    # Score today's games with the local ML model for quick edges
+    today_records: List[Dict[str, Any]] = []
+    for game in odds_data:
+        home_team = game.get('home_team')
+        away_team = game.get('away_team')
+        best_moneyline_home = None
+        best_moneyline_away = None
+
+        for bookmaker in game.get('bookmakers', []):
+            for market in bookmaker.get('markets', []):
+                if market.get('key') != 'h2h':
+                    continue
+                for outcome in market.get('outcomes', []):
+                    price = outcome.get('price')
+                    dec_price = american_to_decimal(price)
+                    if np.isnan(dec_price):
+                        continue
+                    if outcome.get('name') == home_team:
+                        current_best = american_to_decimal(best_moneyline_home) if best_moneyline_home is not None else -np.inf
+                        if dec_price > current_best:
+                            best_moneyline_home = price
+                    elif outcome.get('name') == away_team:
+                        current_best = american_to_decimal(best_moneyline_away) if best_moneyline_away is not None else -np.inf
+                        if dec_price > current_best:
+                            best_moneyline_away = price
+
+        if best_moneyline_home is None or best_moneyline_away is None:
+            continue
+
+        today_records.append({
+            'game_id': game.get('id'),
+            'sport_key': game.get('sport_key'),
+            'commence_time': game.get('commence_time'),
+            'home_team': home_team,
+            'away_team': away_team,
+            'home_odds': best_moneyline_home,
+            'away_odds': best_moneyline_away,
+        })
+
+    if today_records:
+        today_games_df = pd.DataFrame(today_records)
+
+        try:
+            _model, model_feature_names = get_model()
+            features_today = build_ml_features(today_games_df, model_feature_names)
+            scored_today = score_games(features_today)
+            today_games_df = scored_today
+            today_games_df['market_edge'] = today_games_df.get('implied_home_prob', pd.Series(dtype=float)) - 0.5
+
+            sort_mode = st.selectbox(
+                "Rank by:",
+                ["Market Edge", "Model Edge", "Blend"],
+                key="today_games_sort_mode",
+            )
+
+            ranked = today_games_df.copy()
+            if sort_mode == "Market Edge":
+                ranked = ranked.sort_values("market_edge", ascending=False)
+            elif sort_mode == "Model Edge":
+                ranked = ranked.sort_values("model_edge", ascending=False)
+            else:
+                ranked["blend_edge"] = 0.5 * ranked["market_edge"] + 0.5 * ranked["model_edge"]
+                ranked = ranked.sort_values("blend_edge", ascending=False)
+
+            display_df = ranked[[
+                'home_team', 'away_team', 'home_odds', 'away_odds',
+                'implied_home_prob', 'model_home_prob', 'model_edge', 'market_edge'
+            ]].copy()
+
+            for col in ('implied_home_prob', 'model_home_prob', 'model_edge', 'market_edge'):
+                if col in display_df.columns:
+                    display_df[col] = (display_df[col].astype(float)).apply(lambda x: f"{x*100:.1f}%" if pd.notna(x) else "—")
+
+            st.subheader("🎯 Model-Powered Edges for Today's Games")
+            st.dataframe(display_df, use_container_width=True, hide_index=True)
+            st.caption("Ranking uses your local ML model predictions against market-implied probabilities.")
+        except Exception as e:
+            logger.warning(f"ML scoring failed: {e}")
+            st.warning("⚠️ Could not load the local ML model. Continuing without model edges.")
     
     # Load available data sources
     st.write("---")
