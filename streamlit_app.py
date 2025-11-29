@@ -9092,14 +9092,14 @@ with main_tab1:
     theover_totals_data = _collect_theover_dataset("#### 📈 Totals (Over/Under) projections", "theover_totals")
     
     with st.sidebar.expander("🔍 Vertex AI Status"):
-    try:
-        from google.oauth2 import service_account
-        import vertexai
-        
-        # Load credentials from secrets
-        credentials = service_account.Credentials.from_service_account_info(
-            st.secrets["gcp_service_account"]
-        )
+        try:
+            from google.oauth2 import service_account
+            import vertexai
+            
+            # Load credentials from secrets
+            credentials = service_account.Credentials.from_service_account_info(
+                st.secrets["gcp_service_account"]
+            )
         
         # Initialize Vertex AI
         vertexai.init(
