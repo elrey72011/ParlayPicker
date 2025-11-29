@@ -291,19 +291,11 @@ class VertexMasterAnalyzer:
                 features['theover_pick'] = pick
                 features['theover_probability'] = float(spread_pick.get('WinProbability', 0.5)) if spread_pick.get('WinProbability') else 0.5
                 
-                # CRITICAL: Line is HOME team's spread, convert to picked team's spread
+                # CRITICAL: Line is PICKED team's spread, not home team's spread!
+                # Example: "Dallas @ Lakers, Pick: Dallas, Line: 10.5" means Dallas +10.5
                 line_value = float(spread_pick.get('Line', 0)) if spread_pick.get('Line') else 0
-                if line_value != 0:
-                    # Determine if pick is home or away
-                    pick_is_home = (pick == home_team) or (pick and home_team and (pick.lower() in home_team.lower() or home_team.lower() in pick.lower()))
-                    if pick_is_home:
-                        # Pick is home, spread stays same
-                        features['theover_spread'] = line_value
-                    else:
-                        # Pick is away, flip the spread
-                        features['theover_spread'] = -line_value
-                else:
-                    features['theover_spread'] = 0
+                # Line is already for the picked team - use as-is!
+                features['theover_spread'] = line_value
         
         # Search for totals pick in theover data (if not already set)
         if features['theover_total'] == 0:
