@@ -9868,7 +9868,7 @@ if is_vertex_ai_enabled():
                                 'sharp_money_indicator': row.get('sharp_money_indicator', 0),
                                 'home_ml_odds': row.get('home_ml_odds') or row.get('home_ml', 0),
                                 'away_ml_odds': row.get('away_ml_odds') or row.get('away_ml', 0),
-                                'spread': row.get('home_spread') or row.get('theover_spread') or row.get('spread', 0),
+                                'spread': row.get('home_spread') or row.get('spread', 0) or 0,
                                 'total': row.get('total_line') or row.get('total', 0),
                                 'implied_home_prob': row.get('implied_home_prob', 0.5),
                                 # Kalshi prediction market data
@@ -11630,6 +11630,24 @@ if is_vertex_ai_enabled():
                     
                     # GET MARKET SPREAD from TheOddsAPI (NOT from TheOver.ai!)
                     market_home_spread = vertex_result.get('spread', 0) or 0
+                    
+                    # If market spread is missing, try to estimate from moneyline
+                    if not market_home_spread or market_home_spread == 0:
+                        home_ml = vertex_result.get('home_ml_odds') or 0
+                        away_ml = vertex_result.get('away_ml_odds') or 0
+                        
+                        if home_ml and away_ml and home_ml != 0 and away_ml != 0:
+                            # Estimate spread from ML odds
+                            # Rough formula: favorite ML of -X ≈ X/30 points
+                            if home_ml < away_ml:
+                                # Home is favorite
+                                market_home_spread = home_ml / 30 if home_ml < 0 else 0
+                            else:
+                                # Away is favorite
+                                market_home_spread = away_ml / 30 if away_ml < 0 else 0
+                                market_home_spread = -market_home_spread  # Flip sign
+                            
+                            logger.info(f"Estimated spread from ML for {away_team} @ {home_team}: {market_home_spread:.1f}")
                     
                     # Skip games without TheOver.ai data ONLY if show_all_games is False
                     if not show_all_games and not theover_pick:
