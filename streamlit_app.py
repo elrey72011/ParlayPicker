@@ -11668,25 +11668,69 @@ if is_vertex_ai_enabled():
                     home_ml = vertex_result.get('home_ml_odds') or -110
                     away_ml = vertex_result.get('away_ml_odds') or -110
                     
-                    # Determine which team TheOver picked
-                    theover_pick_lower = theover_pick.lower() if theover_pick else ''
-                    home_lower = home_team.lower()
+                    # =====================================================
+                    # CALCULATE HOME AND AWAY AI PROBABILITIES
+                    # Pick the team with HIGHER AI probability (not TheOver.ai's pick!)
+                    # =====================================================
                     
-                    theover_picked_home = any(word in home_lower for word in theover_pick_lower.split()) if theover_pick_lower else False
+                    # Get AI probabilities (calculate as HOME team probability first)
+                    vertex_ai_prob = vertex_result.get('vertex_probability') or vertex_result.get('vertex_ai_prob') or vertex_result.get('vertex_prob')
+                    if vertex_ai_prob is not None and vertex_ai_prob <= 1:
+                        vertex_ai_prob = vertex_ai_prob * 100
                     
-                    # Get the ML odds for the picked team
-                    if theover_picked_home:
-                        pick_ml_odds = home_ml
-                        pick_team = home_team
-                        # Pick is home, use home's spread directly
-                        pick_spread = market_home_spread
+                    # Determine HOME and AWAY AI probabilities
+                    if vertex_ai_prob is not None and vertex_ai_prob > 0:
+                        # We have Vertex AI prediction (HOME team probability)
+                        home_ai_prob = vertex_ai_prob
+                        away_ai_prob = 100 - vertex_ai_prob
+                        ml_source_type = 'vertex'
+                    elif theover_prob:
+                        # Fall back to TheOver.ai - convert to HOME/AWAY probabilities
+                        if theover_picked_home:
+                            home_ai_prob = theover_prob
+                            away_ai_prob = 100 - theover_prob
+                        else:
+                            away_ai_prob = theover_prob
+                            home_ai_prob = 100 - theover_prob
+                        ml_source_type = 'theover'
                     else:
-                        pick_ml_odds = away_ml
-                        pick_team = away_team
-                        # Pick is away, flip the home spread
-                        pick_spread = -market_home_spread if market_home_spread else 0
+                        # No AI prediction - use spread-derived estimate
+                        if market_home_spread and market_home_spread != 0:
+                            spread_shift = abs(market_home_spread) * 2.8
+                            if market_home_spread < 0:
+                                # Home is favorite
+                                home_ai_prob = min(80, 50 + spread_shift)
+                                away_ai_prob = 100 - home_ai_prob
+                            else:
+                                # Away is favorite
+                                away_ai_prob = min(80, 50 + spread_shift)
+                                home_ai_prob = 100 - away_ai_prob
+                            ml_source_type = 'spread_derived'
+                        else:
+                            home_ai_prob = 50
+                            away_ai_prob = 50
+                            ml_source_type = 'default'
                     
-                    # Calculate market implied probability from ML odds
+                    # =====================================================
+                    # PICK THE TEAM WITH HIGHER AI PROBABILITY
+                    # This is the key fix - use AI probability, not TheOver.ai's pick!
+                    # =====================================================
+                    if home_ai_prob >= away_ai_prob:
+                        # Home team has higher (or equal) AI win probability
+                        pick_team = home_team
+                        pick_spread = market_home_spread
+                        pick_ml_odds = home_ml
+                        ai_win_prob = home_ai_prob
+                        theover_picked_home = True  # Update for consistency
+                    else:
+                        # Away team has higher AI win probability
+                        pick_team = away_team
+                        pick_spread = -market_home_spread if market_home_spread else 0
+                        pick_ml_odds = away_ml
+                        ai_win_prob = away_ai_prob
+                        theover_picked_home = False  # Update for consistency
+                    
+                    # Calculate market implied probability for the PICKED team
                     if pick_ml_odds and pick_ml_odds != 0:
                         if pick_ml_odds < 0:
                             market_implied_prob = abs(pick_ml_odds) / (abs(pick_ml_odds) + 100) * 100
@@ -11694,35 +11738,6 @@ if is_vertex_ai_enabled():
                             market_implied_prob = 100 / (pick_ml_odds + 100) * 100
                     else:
                         market_implied_prob = 50
-                    
-                    # =====================================================
-                    # GET AI/ML PREDICTION
-                    # theover_probability = PICKED team's win probability (already correct!)
-                    # vertex_probability/vertex_prob = may be HOME team's probability
-                    # =====================================================
-                    
-                    # PREFER theover_probability since it's already the picked team's probability
-                    # This avoids complex inversion logic
-                    if theover_prob:
-                        # Use TheOver.ai probability directly - it's already for the picked team
-                        ai_win_prob = theover_prob
-                        ml_source_type = 'theover'
-                    else:
-                        # Fallback to Vertex AI probability (which is HOME team's probability)
-                        vertex_ai_prob = vertex_result.get('vertex_probability') or vertex_result.get('vertex_ai_prob') or vertex_result.get('vertex_prob')
-                        if vertex_ai_prob is not None and vertex_ai_prob <= 1:
-                            vertex_ai_prob = vertex_ai_prob * 100
-                        
-                        if vertex_ai_prob is not None:
-                            # Convert HOME probability to PICKED team probability
-                            if theover_picked_home:
-                                ai_win_prob = vertex_ai_prob
-                            else:
-                                ai_win_prob = 100 - vertex_ai_prob
-                            ml_source_type = 'vertex'
-                        else:
-                            ai_win_prob = 50
-                            ml_source_type = 'default'
                     
                     # =====================================================
                     # CALCULATE EDGE
