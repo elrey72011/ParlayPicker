@@ -1,7 +1,7 @@
 # gemini_integration.py
 """
 Google Gemini Integration for ParlayDesk
-Uses native Google Gemini models on Vertex AI (much cheaper than Claude!)
+Uses native Google Gemini models on Vertex AI.
 """
 
 import os
@@ -26,7 +26,7 @@ class GeminiAnalyzer:
     """
     Analyzes sports betting games using Google Gemini on Vertex AI.
     
-    Much cheaper than Claude (~24x less expensive) and still excellent quality!
+    Cost-effective with strong quality.
     """
     
     def __init__(self, project_id: str, region: str = "us-central1"):
@@ -445,7 +445,7 @@ def show_gemini_config_ui():
     
     st.sidebar.markdown("---")
     st.sidebar.markdown("### 🔧 Google Gemini Config")
-    st.sidebar.caption("💰 Much cheaper than Claude (~24x less!)")
+    st.sidebar.caption("💰 Low-cost Gemini analysis")
     
     # Check if dependencies installed
     if not VERTEX_AI_AVAILABLE:
@@ -531,7 +531,7 @@ def show_gemini_config_ui():
         # Show status based on whether we have credentials
         if 'gcp_service_account_key' in st.session_state or uploaded_key:
             st.sidebar.success("✅ Gemini Configured")
-            st.sidebar.caption("💡 Gemini is ~24x cheaper than Claude!")
+            st.sidebar.caption("💡 Gemini keeps analysis affordable")
             return True
         else:
             st.sidebar.warning("⚠️ Upload service account key")

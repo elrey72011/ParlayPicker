@@ -19,6 +19,8 @@ import pytz
 from pathlib import Path
 from collections import defaultdict
 
+from ml_model import get_model, score_games
+
 from app_core import (
     APISportsBasketballClient,
     APISportsFootballClient,
@@ -58,7 +60,7 @@ except ImportError:
     analyze_theover_spreads_with_vertex = None
     show_best_bets_table = None
 
-# Google Gemini AI Integration (recommended - 24x cheaper than Claude!)
+# Google Gemini AI Integration (recommended)
 try:
     from gemini_integration import (
         GeminiAnalyzer,
@@ -74,7 +76,7 @@ except ImportError as e:
         import streamlit as st
         st.sidebar.markdown("---")
         st.sidebar.markdown("### 💎 Google Gemini AI")
-        st.sidebar.info("💰 AI analysis for ~$1/month (24x cheaper than Claude)")
+        st.sidebar.info("💰 AI analysis for ~$1/month")
         st.sidebar.code("pip install google-cloud-aiplatform")
         st.sidebar.caption("Then add gemini_integration.py to your project")
         return False
@@ -137,6 +139,120 @@ except ImportError:
         def __init__(self, *args, **kwargs): pass
 
 logger = logging.getLogger(__name__)
+
+# ------------------------------------------------------------
+# Built-in fallback credentials for local/dev usage when
+# Streamlit secrets aren't available (per user request).
+# These values are pre-populated into environment variables and
+# Streamlit session state without overriding anything already set
+# by the runtime or a deployed secrets.toml.
+# ------------------------------------------------------------
+
+BUILTIN_SECRET_DEFAULTS = {
+    # Core APIs
+    "ODDS_API_KEY": "b722c798f7bca605da45a09dba155152",
+    "THE_ODDS_API_KEY": "b722c798f7bca605da45a09dba155152",
+    "NEWS_API_KEY": "36494f57a53448b6a43901f87479c9ed",
+
+    # Kalshi prediction markets
+    "KALSHI_API_KEY": "741e9fbb-0387-4b7d-a73e-64b3fe44bb81",
+    "KALSHI_API_SECRET": "-----BEGIN RSA PRIVATE KEY-----MIIEogIBAAKCAQEAkpVAEB9VDgvuhjbrbZLlqOOJBrTKWkkHGqyBt+/ykSY5SlTHLibo76Ln+Z6sxkfBL08NXhyiBwUXmDiLEUV2zbNMPefQU0a3aLTfAOx9hKI8h+po2KTVp61tWg4zQCS1SOyxyEySFLzA16zfHBt15/es44PuH5c6WoW3doRLnXCTNgRUxZi1I7osEdHaaYN7oc5LtejrX3pMA0KaAYAUiE2DCHnH3To8yqZ1u8gg+q8Xp4W5f0/db+Wq2MLq+R6tb3ZCo7zzLuT5nwkjtl6OfKsGnEP4fY9U81eJ8028jBrrUmYnid6HKR+cMsijere2b/8HQPv3OUpzpf7rIvr4IQIDAQABAoIBADm0l+vA6fMFr3kW1cflNJQwPxlswtyYMzvE/awzwgJyUct5ZJA+sSTltP0IAmxsgxjkvhZ2nzK0Rn2ehODfv81q8HDOeazPAhUuXzw13ZQBamL3XR8shQ/lrk7tmC+AQ/3ZcIOx4TBYvnIplAu0o84WKvHGVlAJcOeCDJ+TpVDtEAFKN5RPxxx9MEjXvGAfwhyHVYKhUUBv82RY5yDYujgx17g1kpCmcZTSg0Uc8kodJRQFSEDII8M7s7UJOxmkIj230QxPgB7XEJYavBNmzh4JZ81r7z2OuHi5q0IrBmFJ3ZyiXAJVBv7SiwTXZlQUU1F9y1CtuLG+GOq8JU6vLyECgYEAwRV/hNDw875/1bp8zMT1YPl6s+wLlwG6bDlcuXaPdILG5dvmrFTXcK16Blx2X0OvMpH3QeLgNNBrVFP0jM2Lj+Id3Xz0A3SD3ZHxGCDzZZjx4jSW1puc7I1/w3CfeVBQ6UbWdYqSRN3q2U+Oq9qphzjQfrqe9GEPU+DvFD0GlNcCgYEAwljG7VdAXnIfxuvaCslYqMjHTvpMQ5mCtrTmKP/J23fK4aiXw3BS5jKQxS+H0f89qQ+9BVLEjM5530htro2yHUutgKfFjvsAqzN7FvQXFNZ4tQv0m3pMDBWl4qb5bg5NUCt46CrJqns3NCszMESVX9FTjlWxdSgtrrmAZk8/Q8cCgYBFf1xvzNj9krLmlgI3nikIJ6P/wNWHG+si6x6x7rfB4xR+RcFog/0rpHVIdt1weqdD14Ac6fFzcRVAvBtI1u8F8gh34XLfD4ArL02NNscE6aEen3kvc8Fu75tuGEp+WudUn9evZRoyyYGviFA9ES516oA5LSjro0fmFA9ZxIFq7wKBgDzmBK+qf4kYycxTa2el4BpDj/C3jd5A5CzMUrLWNDKJPxGm+qdLMy7e+W5QjobHLFMlk11vqhdVO+szjur7i6ySYjPGXqmHDZaX8yImKnVlHz3cGTH/CIVg4zI6kD5kTOWqOaDGh5rcMVgvkUK2uvfjaANZ5tmHVYlCp3Fns7NRAoGAVGiq+bXDSuWiILvORLOgW+8FZKm5ah33Ik2Z628KeGevQrFk2g24AmeXAKN5HxGBpgpJMdcx4WEZb8U1bSlIPSDhkod8gCCm2fXT48DqcYKDyd4k1AHHB2Lk5KjHaF3pR2OgEPh/ELMTk3cTOTmMpXEVjMO2nUxKNCvpkZoGZZI=-----END RSA PRIVATE KEY-----",
+
+    # API-Sports (shared key)
+    "APISPORTS_KEY": "d03eedb3-2a7b-4b27-8d24-8ed8703b9417",
+    "NFL_APISPORTS_API_KEY": "d03eedb3-2a7b-4b27-8d24-8ed8703b9417",
+    "NHL_APISPORTS_API_KEY": "d03eedb3-2a7b-4b27-8d24-8ed8703b9417",
+    "NBA_APISPORTS_API_KEY": "d03eedb3-2a7b-4b27-8d24-8ed8703b9417",
+    "APISPORTS_NFL_KEY": "d03eedb3-2a7b-4b27-8d24-8ed8703b9417",
+    "APISPORTS_NHL_KEY": "d03eedb3-2a7b-4b27-8d24-8ed8703b9417",
+    "APISPORTS_NBA_KEY": "d03eedb3-2a7b-4b27-8d24-8ed8703b9417",
+
+    # SportsData.io (per-league)
+    "SPORTSDATA_NBA_KEY": "52b61286bca344d6b2d79f9551b41d4e",
+    "SPORTSDATA_NFL_KEY": "52b61286bca344d6b2d79f9551b41d4e",
+    "SPORTSDATA_NHL_KEY": "52b61286bca344d6b2d79f9551b41d4e",
+    "SPORTSDATA_NCAAB_KEY": "52b61286bca344d6b2d79f9551b41d4e",
+    "SPORTSDATA_NCAAF_KEY": "52b61286bca344d6b2d79f9551b41d4e",
+
+    # Google Cloud / Vertex AI
+    "GCP_PROJECT_ID": "elite-hangar-479017-m8",
+    "VERTEX_ENDPOINT_ID": "5396533911008313344",
+    "GCP_LOCATION": "us-central1",
+}
+
+FALLBACK_GCP_SERVICE_ACCOUNT = {
+    "type": "service_account",
+    "project_id": "elite-hangar-479017-m8",
+    "private_key_id": "35ec4254642eded9df6c946b4c7bec0d34d409f8",
+    "private_key": """-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCrY/WnrwZzihCF\njwcYwV1e7RgQpkzLqLgrdikdHNcG0PdS5tms//JExCkqSRHY8oQ3Rr0lcZp880JC\nPz41erckY6pOGnj/qo1s1b41Ssce8yLPHdPvzJ6RR801MKsSfdlb3UkM7+dRloWD\nxA9nVGAWwM4YuRdCKycLk7aRWYWy6m1AzFB1PZHuw8wop/Tn8ivi+gHUPCgp3DR5\nrWUvnBZMbxWImkgHk3Gym9rkIgqJLPVNRxH9TOfF9ipnM17nrGkueeTCS2ctwMH7\nBbWyK4uDiHq/dq1UQdaZeAdHSXZ1Zt/io3F+/E8oxG+CSUD6K5HcA4NWwZTYZGOL\nYZWSRnHzAgMBAAECggEAAs/rEfX0kc9sIfo3eu0r+QjEN6cNj4c/Lly2o/xQfZN5\nhhS08aUUIT4OvDDivWqNR32TpkT3l0vuhGPBQ44LPz+bZcNYGj8pfuWq705AzNM0\neQLbnWMAHxDMidjjQF8W7UOeP+YX0juOs/DIR+vB1TMTWU3Vgd0aEOiQOvuluUp0\njJMGa9nnpKo+qxq3fvRv9JtiE0W4acKGmkiYPiCV3UvYvfwFDJpBm7r8iePlD+oD\nqn+xsO8GWH5ZjC49OLPUedwwetZtA/KrjW+aDFvpuZ3kY2StvraSKnQCr1Yfi28L\ntBdn2fVDfbP1QjARpZe6ls8SN0qo29wue88tL459cQKBgQDUTFs/CswC9ZfOk00q\njkQtqAYXM/2KVnaYn0Gc1mUK1vVtbynv5ZIQE4HWtBBdyk8By7wS65g2KN0fNit8\nuLlP7J51FdmO/mkwOAm1HkLHbFoEAWAikIrmqB4NYq3RL36gOUBwVURjWwU1JFfZ\nqOCp8kU9Up4q1gdOS0t90zZgvQKBgQDOq9qIPXNstwQneq3P0xvr44CHwILv2Bfp\nvv8Zb7amY3N1MYpJEN8Mtuzg529nl+KnXI6Z+tb89QQ+K4bV5bFFSzitU4KLR7Mb\nBV41R2uF/O07jg/sMuU67YAc9vwXLIgd5y2xAcZ+sr0YNaHFMizdyUnae5j7lOxR\nFhvjCeSAbwKBgQCM7OLlRlWG4WCUUFO5HBdF93OTk3+KhTrUtWLoqakJOQhSTKia\nBtqesVRPIdh7agBoQMXoCVxRF28xeNQFRto8o+XL82Un9tn8mDZZdGz/1H0si301\ndJ2/33mTiR247r4vvdF4wCFVkuYyEJ4Aboo0Rg6QVneIF+thnbnPHJXMQQKBgDFL\nrIRyo+V6gfMov+yiXjaVvUKkGJc84/dNJ2vZyadGcXOyrVlgPNO7jiTXDyuWfumM\nmjcALeeIScrKdw7uCqqMlqhBExJFt+LqFN6AepUrDyr1Z7bfLO4xWC2Qe/DLHmyD\nh9KAqefumkv7/uoaXblJGeSTNppLm1J8A4rUATzhAoGAccRjVBxJDM9u6Bv+Nn/4\nbCpy2QO9aZc3QRfGdBwRzR6SoRwGcmO0kg45nSjuFXyg2BBa7fxWZ8j0BDCfWc2z\nF7mbuTDsOygf847PfziMZGdkJ6D3xXaFlHkO/9avWqEXEzLxVz4u2XcBTi3/yvV0\nMcxMzMD5Y6/o4m19F9DFW5A=\n-----END PRIVATE KEY-----\n""",
+    "client_email": "parlay-gemini@elite-hangar-479017-m8.iam.gserviceaccount.com",
+    "client_id": "100660669467267044063",
+    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+    "token_uri": "https://oauth2.googleapis.com/token",
+    "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+    "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/parlay-gemini%40elite-hangar-479017-m8.iam.gserviceaccount.com",
+    "universe_domain": "googleapis.com",
+}
+
+
+def prime_builtin_secrets() -> None:
+    """Populate environment/session defaults when secrets.toml is absent."""
+
+    # Environment variables first, without overwriting existing values
+    for env_key, env_value in BUILTIN_SECRET_DEFAULTS.items():
+        os.environ.setdefault(env_key, env_value)
+
+    # Helpful lowercase aliases used in scattered code paths
+    lowercase_aliases = {
+        "odds_api_key": BUILTIN_SECRET_DEFAULTS["ODDS_API_KEY"],
+        "news_api_key": BUILTIN_SECRET_DEFAULTS["NEWS_API_KEY"],
+        "kalshi_api_key": BUILTIN_SECRET_DEFAULTS["KALSHI_API_KEY"],
+        "kalshi_api_secret": BUILTIN_SECRET_DEFAULTS["KALSHI_API_SECRET"],
+        "apisports_key": BUILTIN_SECRET_DEFAULTS["APISPORTS_KEY"],
+        "nfl_apisports_api_key": BUILTIN_SECRET_DEFAULTS["NFL_APISPORTS_API_KEY"],
+        "nhl_apisports_api_key": BUILTIN_SECRET_DEFAULTS["NHL_APISPORTS_API_KEY"],
+        "nba_apisports_api_key": BUILTIN_SECRET_DEFAULTS["NBA_APISPORTS_API_KEY"],
+        "sportsdata_nba_key": BUILTIN_SECRET_DEFAULTS["SPORTSDATA_NBA_KEY"],
+        "sportsdata_nfl_key": BUILTIN_SECRET_DEFAULTS["SPORTSDATA_NFL_KEY"],
+        "sportsdata_nhl_key": BUILTIN_SECRET_DEFAULTS["SPORTSDATA_NHL_KEY"],
+        "sportsdata_ncaab_key": BUILTIN_SECRET_DEFAULTS["SPORTSDATA_NCAAB_KEY"],
+        "sportsdata_ncaaf_key": BUILTIN_SECRET_DEFAULTS["SPORTSDATA_NCAAF_KEY"],
+        "gcp_project_id": BUILTIN_SECRET_DEFAULTS["GCP_PROJECT_ID"],
+        "vertex_endpoint_id": BUILTIN_SECRET_DEFAULTS["VERTEX_ENDPOINT_ID"],
+        "gcp_location": BUILTIN_SECRET_DEFAULTS["GCP_LOCATION"],
+    }
+    for env_key, env_value in lowercase_aliases.items():
+        os.environ.setdefault(env_key, env_value)
+
+    # Session defaults so existing UI flows continue to work
+    session_defaults = {
+        "api_key": BUILTIN_SECRET_DEFAULTS["ODDS_API_KEY"],
+        "news_api_key": BUILTIN_SECRET_DEFAULTS["NEWS_API_KEY"],
+        "kalshi_api_key": BUILTIN_SECRET_DEFAULTS["KALSHI_API_KEY"],
+        "kalshi_secret_key": BUILTIN_SECRET_DEFAULTS["KALSHI_API_SECRET"],
+        "apisports_key": BUILTIN_SECRET_DEFAULTS["APISPORTS_KEY"],
+        "nfl_apisports_api_key": BUILTIN_SECRET_DEFAULTS["NFL_APISPORTS_API_KEY"],
+        "nhl_apisports_api_key": BUILTIN_SECRET_DEFAULTS["NHL_APISPORTS_API_KEY"],
+        "nba_apisports_api_key": BUILTIN_SECRET_DEFAULTS["NBA_APISPORTS_API_KEY"],
+        "sportsdata_nba_key": BUILTIN_SECRET_DEFAULTS["SPORTSDATA_NBA_KEY"],
+        "sportsdata_nfl_key": BUILTIN_SECRET_DEFAULTS["SPORTSDATA_NFL_KEY"],
+        "sportsdata_nhl_key": BUILTIN_SECRET_DEFAULTS["SPORTSDATA_NHL_KEY"],
+        "sportsdata_ncaab_key": BUILTIN_SECRET_DEFAULTS["SPORTSDATA_NCAAB_KEY"],
+        "sportsdata_ncaaf_key": BUILTIN_SECRET_DEFAULTS["SPORTSDATA_NCAAF_KEY"],
+        "gcp_project_id": BUILTIN_SECRET_DEFAULTS["GCP_PROJECT_ID"],
+        "vertex_endpoint_id": BUILTIN_SECRET_DEFAULTS["VERTEX_ENDPOINT_ID"],
+        "gcp_location": BUILTIN_SECRET_DEFAULTS["GCP_LOCATION"],
+    }
+
+    for key, value in session_defaults.items():
+        st.session_state.setdefault(key, value)
+
+    # Service account JSON for Vertex AI when no secrets.toml exists
+    st.session_state.setdefault("gcp_service_account", FALLBACK_GCP_SERVICE_ACCOUNT)
+
+
+# Prime defaults as soon as the app imports
+prime_builtin_secrets()
 
 # ============================================================
 # ML PREDICTION OPTIMIZATION FUNCTIONS
@@ -1297,8 +1413,7 @@ def render_sidebar_controls() -> Dict[str, Any]:
     else:
         sidebar.caption("ℹ️ Using neutral fallback sentiment")
 
-    # --------------------- Anthropic/Claude REMOVED - Using Gemini Only ---------------------
-    # Claude API removed - Gemini/Vertex AI is 24x cheaper and better!
+    # --------------------- Gemini AI Configuration ---------------------
     
     # --------------------- Google Gemini AI (Recommended) ---------------------
     if GEMINI_AVAILABLE:
@@ -1310,7 +1425,7 @@ def render_sidebar_controls() -> Dict[str, Any]:
     else:
         sidebar.markdown("---")
         sidebar.markdown("### 💎 Gemini AI (Optional)")
-        sidebar.info("💰 AI analysis for ~$1/month (24x cheaper than Claude)")
+        sidebar.info("💰 AI analysis for ~$1/month")
         sidebar.code("pip install google-cloud-aiplatform")
         sidebar.caption("See GEMINI_QUICK_SETUP.md for instructions")
     
@@ -4618,11 +4733,52 @@ def integrate_kalshi_into_leg(
     )
 
 # ============ UTILITY FUNCTIONS ============
-def american_to_decimal(odds) -> float:
-    odds = float(odds)
-    if odds >= 100: return 1.0 + odds/100.0
-    if odds <= -100: return 1.0 + 100.0/abs(odds)
-    raise ValueError("Bad American odds")
+def american_to_decimal(odds: float | int) -> float:
+    """
+    Convert American odds to decimal odds.
+    Returns np.nan for invalid values.
+    """
+    try:
+        o = float(odds)
+    except (TypeError, ValueError):
+        return np.nan
+
+    if o > 0:
+        return 1.0 + (o / 100.0)
+    elif o < 0:
+        return 1.0 + (100.0 / abs(o))
+    else:
+        return np.nan
+
+
+def build_ml_features(games_df: pd.DataFrame, feature_names: list[str]) -> pd.DataFrame:
+    """
+    Take the raw games DataFrame and produce the feature columns needed by the model.
+    Assumes the model was trained with:
+      - implied_home_prob
+      - implied_away_prob
+      - plus any other columns that are already present in games_df
+    We will:
+      - compute implied probabilities from home_odds / away_odds if needed
+      - fill any missing feature columns with 0.0
+    """
+    df = games_df.copy()
+
+    # If implied probabilities not already there, compute from American odds.
+    if "implied_home_prob" not in df.columns and "home_odds" in df.columns:
+        df["dec_home"] = df["home_odds"].apply(american_to_decimal)
+        df["implied_home_prob"] = 1.0 / df["dec_home"]
+
+    if "implied_away_prob" not in df.columns and "away_odds" in df.columns:
+        df["dec_away"] = df["away_odds"].apply(american_to_decimal)
+        df["implied_away_prob"] = 1.0 / df["dec_away"]
+
+    # Ensure all feature columns exist
+    for col in feature_names:
+        if col not in df.columns:
+            df[col] = 0.0
+
+    return df
 
 def implied_p_from_american(odds) -> float:
     odds = float(odds)
@@ -9645,161 +9801,167 @@ if is_vertex_ai_enabled():
                     selected_sports = ['basketball_nba', 'americanfootball_ncaaf', 'basketball_ncaab', 'icehockey_nhl']
                 
                 all_games = []
-                
-                # Try to fetch from TheOddsAPI using existing function
-                odds_api_key = resolve_odds_api_key()
-                odds_available = False
-                
-                if odds_api_key:
-                    st.info("📥 Fetching games from The Odds API...")
-                    for sport in selected_sports:
+
+                # Prefer theover.ai uploads for lines/spreads to avoid TheOddsAPI mismatches
+                used_theover = False
+                if 'theover_spreads_data' in locals() and theover_spreads_data is not None and not theover_spreads_data.empty:
+                    used_theover = True
+                    st.info("📥 Using theover.ai uploads for spreads/totals (skipping The Odds API lines)")
+
+                    for _, row in theover_spreads_data.iterrows():
+                        # Get basic info
+                        home_team = row.get('home_team') or row.get('HomeTeam') or ''
+                        away_team = row.get('away_team') or row.get('AwayTeam') or ''
+                        league = (row.get('League') or row.get('league') or 'NBA').upper()
+                        pick = row.get('Pick') or row.get('pick') or ''
+
+                        # Extract line value
+                        line_value = row.get('Line') or row.get('Spread') or row.get('line') or 0
                         try:
-                            snapshot = fetch_oddsapi_snapshot(odds_api_key, sport)
-                            games = snapshot.get('events', [])
-                            for game in games:
-                                game['sport_key'] = sport
-                            all_games.extend(games)
-                            st.success(f"✅ Fetched {len(games)} {sport} games")
-                            odds_available = True
-                        except Exception as e:
-                            st.warning(f"⚠️ Error fetching {sport}: {e}")
-                            logger.error(f"Error fetching {sport}: {e}")
-                
-                if not odds_available:
-                    st.warning("⚠️ The Odds API not configured")
-                    st.info("💡 Using theover.ai data if available...")
-                    
-                    if 'theover_spreads_data' in locals() and theover_spreads_data is not None:
-                        for _, row in theover_spreads_data.iterrows():
-                            # Get basic info
-                            home_team = row.get('home_team') or row.get('HomeTeam') or ''
-                            away_team = row.get('away_team') or row.get('AwayTeam') or ''
-                            league = (row.get('League') or row.get('league') or 'NBA').upper()
-                            pick = row.get('Pick') or row.get('pick') or ''
-                            
-                            # Extract line value
-                            line_value = row.get('Line') or row.get('Spread') or row.get('line') or 0
+                            line_value = float(line_value) if line_value else 0
+                        except:
+                            line_value = 0
+
+                        # Determine sport_key from league
+                        if league == 'NFL':
+                            sport_key = 'americanfootball_nfl'
+                        elif league == 'NBA':
+                            sport_key = 'basketball_nba'
+                        elif league == 'NHL':
+                            sport_key = 'icehockey_nhl'
+                        elif league == 'NCAAB':
+                            sport_key = 'basketball_ncaab'
+                        elif league == 'NCAAF':
+                            sport_key = 'americanfootball_ncaaf'
+                        else:
+                            sport_key = 'basketball_nba'
+
+                        # NHL uses MONEYLINES in the Line column (125, -150, etc.)
+                        # Other sports use point spreads (13.5, -7.5, etc.)
+                        is_nhl = league == 'NHL'
+
+                        if is_nhl:
+                            # Line is a moneyline for NHL
+                            moneyline = line_value
+                            spread = 1.5  # Standard puckline
+
+                            # Calculate probability from moneyline
+                            if moneyline > 0:
+                                # Underdog: +150 means 100/(150+100) = 40%
+                                pick_win_prob = 100 / (moneyline + 100)
+                            else:
+                                # Favorite: -150 means 150/(150+100) = 60%
+                                pick_win_prob = abs(moneyline) / (abs(moneyline) + 100)
+
+                            # Determine home/away probabilities based on pick
+                            pick_is_home = (pick == home_team) or (pick and (pick.lower() in home_team.lower() or home_team.lower() in pick.lower()))
+
+                            if pick_is_home:
+                                home_implied_prob = pick_win_prob
+                                home_ml = int(moneyline)
+                                away_ml = int(-moneyline) if moneyline > 0 else int(100 * 100 / abs(moneyline))
+                            else:
+                                home_implied_prob = 1 - pick_win_prob
+                                away_ml = int(moneyline)
+                                home_ml = int(-moneyline) if moneyline > 0 else int(100 * 100 / abs(moneyline))
+
+                            # theover_prob = HOME team win probability
+                            theover_prob = home_implied_prob
+                            home_spread = 1.5  # Standard puckline
+
+                        else:
+                            # Basketball/Football: Line is the PICKED team's spread!
+                            # Example: "Dallas @ Lakers, Pick: Dallas, Line: 10.5"
+                            # This means Dallas +10.5, Lakers are favorites
+
+                            pick_spread = line_value  # Line is already the picked team's spread!
+                            spread = abs(line_value)
+
+                            # Calculate probability from spread
+                            # Each point of spread ≈ 2.5-3% shift from 50%
+                            spread_shift = spread * 0.028  # ~2.8% per point
+
+                            # Determine if pick is home or away
+                            pick_is_home = (pick == home_team) or (pick and (pick.lower() in home_team.lower() or home_team.lower() in pick.lower()))
+
+                            # The pick_spread tells us if picked team is favorite or underdog
+                            # Negative = favorite, Positive = underdog
+                            if line_value < 0:
+                                # Picked team is favorite
+                                pick_win_prob = min(0.80, 0.50 + spread_shift)
+                            else:
+                                # Picked team is underdog
+                                pick_win_prob = max(0.20, 0.50 - spread_shift)
+
+                            # Calculate home_spread from pick_spread
+                            if pick_is_home:
+                                # Pick is home, home_spread = pick_spread
+                                home_spread = line_value
+                                home_implied_prob = pick_win_prob
+                            else:
+                                # Pick is away, home_spread is opposite
+                                home_spread = -line_value
+                                home_implied_prob = 1 - pick_win_prob
+
+                            # theover_probability = home team win probability
+                            theover_prob = home_implied_prob
+
+                            # Calculate American odds from probability
+                            if home_implied_prob > 0.5:
+                                home_ml = int(-100 * home_implied_prob / (1 - home_implied_prob))
+                                away_ml = int(100 * (1 - home_implied_prob) / home_implied_prob)
+                            else:
+                                home_ml = int(100 * (1 - home_implied_prob) / home_implied_prob)
+                                away_ml = int(-100 * home_implied_prob / (1 - home_implied_prob))
+
+                        # Store the spread FOR THE PICKED TEAM
+                        picked_team_spread = line_value  # Line is already for picked team!
+
+                        all_games.append({
+                            'home_team': home_team,
+                            'away_team': away_team,
+                            'sport_key': sport_key,
+                            'league': league,
+                            'commence_time': None,
+                            # TheOver.ai specific data
+                            'theover_spread': picked_team_spread,  # Already correct for picked team
+                            'theover_pick': pick,
+                            'theover_probability': theover_prob,  # Home team win probability
+                            'theover_line': line_value,  # Original line from CSV
+                            'is_moneyline': is_nhl,
+                            # Calculated odds
+                            'home_ml_odds': home_ml,
+                            'away_ml_odds': away_ml,
+                            # home_spread is the HOME team's spread (correctly calculated)
+                            'home_spread': home_spread if not is_nhl else 1.5,
+                            'implied_home_prob': home_implied_prob,
+                        })
+
+                    st.success(f"📊 Loaded {len(all_games)} games from theover.ai (spreads + NHL moneylines converted)")
+
+                # If no TheOver data is available, fall back to TheOddsAPI so analysis still runs
+                if not used_theover:
+                    odds_api_key = resolve_odds_api_key()
+                    odds_available = False
+
+                    if odds_api_key:
+                        st.info("📥 Fetching games from The Odds API...")
+                        for sport in selected_sports:
                             try:
-                                line_value = float(line_value) if line_value else 0
-                            except:
-                                line_value = 0
-                            
-                            # Determine sport_key from league
-                            if league == 'NFL':
-                                sport_key = 'americanfootball_nfl'
-                            elif league == 'NBA':
-                                sport_key = 'basketball_nba'
-                            elif league == 'NHL':
-                                sport_key = 'icehockey_nhl'
-                            elif league == 'NCAAB':
-                                sport_key = 'basketball_ncaab'
-                            elif league == 'NCAAF':
-                                sport_key = 'americanfootball_ncaaf'
-                            else:
-                                sport_key = 'basketball_nba'
-                            
-                            # NHL uses MONEYLINES in the Line column (125, -150, etc.)
-                            # Other sports use point spreads (13.5, -7.5, etc.)
-                            is_nhl = league == 'NHL'
-                            
-                            if is_nhl:
-                                # Line is a moneyline for NHL
-                                moneyline = line_value
-                                spread = 1.5  # Standard puckline
-                                
-                                # Calculate probability from moneyline
-                                if moneyline > 0:
-                                    # Underdog: +150 means 100/(150+100) = 40%
-                                    pick_win_prob = 100 / (moneyline + 100)
-                                else:
-                                    # Favorite: -150 means 150/(150+100) = 60%
-                                    pick_win_prob = abs(moneyline) / (abs(moneyline) + 100)
-                                
-                                # Determine home/away probabilities based on pick
-                                pick_is_home = (pick == home_team) or (pick and (pick.lower() in home_team.lower() or home_team.lower() in pick.lower()))
-                                
-                                if pick_is_home:
-                                    home_implied_prob = pick_win_prob
-                                    home_ml = int(moneyline)
-                                    away_ml = int(-moneyline) if moneyline > 0 else int(100 * 100 / abs(moneyline))
-                                else:
-                                    home_implied_prob = 1 - pick_win_prob
-                                    away_ml = int(moneyline)
-                                    home_ml = int(-moneyline) if moneyline > 0 else int(100 * 100 / abs(moneyline))
-                                
-                                # theover_prob = HOME team win probability
-                                theover_prob = home_implied_prob
-                                home_spread = 1.5  # Standard puckline
-                                
-                            else:
-                                # Basketball/Football: Line is the PICKED team's spread!
-                                # Example: "Dallas @ Lakers, Pick: Dallas, Line: 10.5"  
-                                # This means Dallas +10.5, Lakers are favorites
-                                
-                                pick_spread = line_value  # Line is already the picked team's spread!
-                                spread = abs(line_value)
-                                
-                                # Calculate probability from spread
-                                # Each point of spread ≈ 2.5-3% shift from 50%
-                                spread_shift = spread * 0.028  # ~2.8% per point
-                                
-                                # Determine if pick is home or away
-                                pick_is_home = (pick == home_team) or (pick and (pick.lower() in home_team.lower() or home_team.lower() in pick.lower()))
-                                
-                                # The pick_spread tells us if picked team is favorite or underdog
-                                # Negative = favorite, Positive = underdog
-                                if line_value < 0:
-                                    # Picked team is favorite
-                                    pick_win_prob = min(0.80, 0.50 + spread_shift)
-                                else:
-                                    # Picked team is underdog
-                                    pick_win_prob = max(0.20, 0.50 - spread_shift)
-                                
-                                # Calculate home_spread from pick_spread
-                                if pick_is_home:
-                                    # Pick is home, home_spread = pick_spread
-                                    home_spread = line_value
-                                    home_implied_prob = pick_win_prob
-                                else:
-                                    # Pick is away, home_spread is opposite
-                                    home_spread = -line_value
-                                    home_implied_prob = 1 - pick_win_prob
-                                
-                                # theover_probability = home team win probability
-                                theover_prob = home_implied_prob
-                                
-                                # Calculate American odds from probability
-                                if home_implied_prob > 0.5:
-                                    home_ml = int(-100 * home_implied_prob / (1 - home_implied_prob))
-                                    away_ml = int(100 * (1 - home_implied_prob) / home_implied_prob)
-                                else:
-                                    home_ml = int(100 * (1 - home_implied_prob) / home_implied_prob)
-                                    away_ml = int(-100 * home_implied_prob / (1 - home_implied_prob))
-                            
-                            # Store the spread FOR THE PICKED TEAM
-                            picked_team_spread = line_value  # Line is already for picked team!
-                            
-                            all_games.append({
-                                'home_team': home_team,
-                                'away_team': away_team,
-                                'sport_key': sport_key,
-                                'league': league,
-                                'commence_time': None,
-                                # TheOver.ai specific data
-                                'theover_spread': picked_team_spread,  # Already correct for picked team
-                                'theover_pick': pick,
-                                'theover_probability': theover_prob,  # Home team win probability
-                                'theover_line': line_value,  # Original line from CSV
-                                'is_moneyline': is_nhl,
-                                # Calculated odds
-                                'home_ml_odds': home_ml,
-                                'away_ml_odds': away_ml,
-                                # home_spread is the HOME team's spread (correctly calculated)
-                                'home_spread': home_spread if not is_nhl else 1.5,
-                                'implied_home_prob': home_implied_prob,
-                            })
-                        
-                        st.success(f"📊 Loaded {len(all_games)} games from theover.ai (spreads + NHL moneylines converted)")
+                                snapshot = fetch_oddsapi_snapshot(odds_api_key, sport)
+                                games = snapshot.get('events', [])
+                                for game in games:
+                                    game['sport_key'] = sport
+                                all_games.extend(games)
+                                st.success(f"✅ Fetched {len(games)} {sport} games")
+                                odds_available = True
+                            except Exception as e:
+                                st.warning(f"⚠️ Error fetching {sport}: {e}")
+                                logger.error(f"Error fetching {sport}: {e}")
+
+                    if not odds_available:
+                        st.warning("⚠️ The Odds API not configured")
+                        st.info("💡 Upload theover.ai CSV files above to power Vertex AI analysis")
                 
                 if not all_games:
                     st.error("❌ No games found. Either:")
@@ -14750,28 +14912,25 @@ import importlib.util
 import json
 from datetime import datetime
 
-# Check for AI providers (Gemini or Claude)
+# Check for AI provider (Gemini only)
 use_gemini = GEMINI_AVAILABLE and st.session_state.get('gcp_project_id')
-use_claude = False  # DISABLED - Using Gemini only
 
     # Show Gemini status
 if use_gemini:
-    st.success("🧠 Using Google Gemini AI (Vertex AI) - 24x cheaper than Claude!")
+    st.success("🧠 Using Google Gemini AI (Vertex AI)")
     gcp_project = st.session_state.get('gcp_project_id', 'Not set')
     endpoint = st.session_state.get('vertex_endpoint_id', 'Not set')
     location = st.session_state.get('gcp_location', 'us-central1')
     st.caption(f"📍 Project: {gcp_project} | Endpoint: {endpoint} | Region: {location}")
 
-ai_available = use_gemini or use_claude
+ai_available = use_gemini
 
 if not ai_available:
     st.warning(
-        "⚠️ No AI provider configured. Configure Gemini (recommended) or Claude in the sidebar to enable AI analysis."
+        "⚠️ No AI provider configured. Configure Gemini in the sidebar to enable AI analysis."
     )
 elif use_gemini:
-    st.success("✅ Using Google Gemini for AI analysis (~24x cheaper than Claude)")
-else:
-    st.info("ℹ️ Using Claude API for AI analysis")
+    st.success("✅ Using Google Gemini for AI analysis")
 
 # ============================================================================
 # AI MASTER ANALYZER (RUNS FIRST)
@@ -14782,7 +14941,7 @@ st.write("**Run this FIRST to calculate probabilities for all games**")
 
 if not ai_available:
     st.info(
-        "Configure **Gemini** (recommended, ~$1/month) or **Claude** in the sidebar to enable AI analysis. "
+        "Configure **Gemini** (recommended, ~$1/month) in the sidebar to enable AI analysis. "
         "Other app features will continue to work without it."
     )
 
@@ -14800,9 +14959,8 @@ with st.expander("ℹ️ About AI-First Architecture", expanded=False):
     - No post-processing enrichment needed
     - Consistent probabilities across all features
     
-    **AI Providers:**
+    **AI Provider:**
     - **Gemini** (Recommended): ~$0.001/game, excellent quality
-    - **Claude**: ~$0.015/game, premium quality
     """)
 
 if st.button(
@@ -14814,7 +14972,7 @@ if st.button(
 
     if not ai_available:
         st.error(
-            "❌ No AI provider configured. Please configure Gemini (recommended) or Claude in the sidebar."
+            "❌ No AI provider configured. Please configure Gemini in the sidebar."
         )
         st.stop()
     
@@ -14842,9 +15000,89 @@ if st.button(
     if not odds_data:
         st.error("❌ No odds data found! Please fetch odds first.")
         st.stop()
-    
+
     st.write("📊 Found odds data for games:")
     st.info(f"**{len(odds_data)} games** ready for analysis")
+
+    # Score today's games with the local ML model for quick edges
+    today_records: List[Dict[str, Any]] = []
+    for game in odds_data:
+        home_team = game.get('home_team')
+        away_team = game.get('away_team')
+        best_moneyline_home = None
+        best_moneyline_away = None
+
+        for bookmaker in game.get('bookmakers', []):
+            for market in bookmaker.get('markets', []):
+                if market.get('key') != 'h2h':
+                    continue
+                for outcome in market.get('outcomes', []):
+                    price = outcome.get('price')
+                    dec_price = american_to_decimal(price)
+                    if np.isnan(dec_price):
+                        continue
+                    if outcome.get('name') == home_team:
+                        current_best = american_to_decimal(best_moneyline_home) if best_moneyline_home is not None else -np.inf
+                        if dec_price > current_best:
+                            best_moneyline_home = price
+                    elif outcome.get('name') == away_team:
+                        current_best = american_to_decimal(best_moneyline_away) if best_moneyline_away is not None else -np.inf
+                        if dec_price > current_best:
+                            best_moneyline_away = price
+
+        if best_moneyline_home is None or best_moneyline_away is None:
+            continue
+
+        today_records.append({
+            'game_id': game.get('id'),
+            'sport_key': game.get('sport_key'),
+            'commence_time': game.get('commence_time'),
+            'home_team': home_team,
+            'away_team': away_team,
+            'home_odds': best_moneyline_home,
+            'away_odds': best_moneyline_away,
+        })
+
+    if today_records:
+        today_games_df = pd.DataFrame(today_records)
+
+        try:
+            _model, model_feature_names = get_model()
+            features_today = build_ml_features(today_games_df, model_feature_names)
+            scored_today = score_games(features_today)
+            today_games_df = scored_today
+            today_games_df['market_edge'] = today_games_df.get('implied_home_prob', pd.Series(dtype=float)) - 0.5
+
+            sort_mode = st.selectbox(
+                "Rank by:",
+                ["Market Edge", "Model Edge", "Blend"],
+                key="today_games_sort_mode",
+            )
+
+            ranked = today_games_df.copy()
+            if sort_mode == "Market Edge":
+                ranked = ranked.sort_values("market_edge", ascending=False)
+            elif sort_mode == "Model Edge":
+                ranked = ranked.sort_values("model_edge", ascending=False)
+            else:
+                ranked["blend_edge"] = 0.5 * ranked["market_edge"] + 0.5 * ranked["model_edge"]
+                ranked = ranked.sort_values("blend_edge", ascending=False)
+
+            display_df = ranked[[
+                'home_team', 'away_team', 'home_odds', 'away_odds',
+                'implied_home_prob', 'model_home_prob', 'model_edge', 'market_edge'
+            ]].copy()
+
+            for col in ('implied_home_prob', 'model_home_prob', 'model_edge', 'market_edge'):
+                if col in display_df.columns:
+                    display_df[col] = (display_df[col].astype(float)).apply(lambda x: f"{x*100:.1f}%" if pd.notna(x) else "—")
+
+            st.subheader("🎯 Model-Powered Edges for Today's Games")
+            st.dataframe(display_df, use_container_width=True, hide_index=True)
+            st.caption("Ranking uses your local ML model predictions against market-implied probabilities.")
+        except Exception as e:
+            logger.warning(f"ML scoring failed: {e}")
+            st.warning("⚠️ Could not load the local ML model. Continuing without model edges.")
     
     # Load available data sources
     st.write("---")
@@ -14882,12 +15120,11 @@ if st.button(
     
     # Determine which AI provider to use
     use_gemini = GEMINI_AVAILABLE and st.session_state.get('gcp_project_id')
-    use_claude = False  # DISABLED - Using Gemini only
     
     if use_gemini:
         st.write("🧠 **Running AI Analysis with Google Gemini...**")
         st.success(f"💎 Using Gemini Pro (~${len(odds_data) * 0.001:.2f} for {len(odds_data)} games)")
-        st.caption("✨ 24x cheaper than Claude with excellent quality!")
+        st.caption("✨ Gemini delivers strong quality at low cost")
         
         # Initialize Gemini
         project_id = st.session_state.get('gcp_project_id')
@@ -14904,12 +15141,6 @@ if st.button(
             st.error(f"❌ Failed to initialize Gemini: {e}")
             st.info("Make sure you've uploaded your service account key in the sidebar")
             st.stop()
-        
-    elif use_claude:
-        st.write("🧠 **Running AI Analysis with Claude...**")
-        # Claude removed - should never reach here
-        st.error("❌ Claude is disabled. Please use Gemini/Vertex AI.")
-        st.stop()
         
     else:
         st.error("❌ Gemini/Vertex AI not configured!")
@@ -15058,7 +15289,7 @@ if st.button(
         # best_moneyline for backwards compatibility
         best_moneyline = best_moneyline_home
         
-        # Analyze with Gemini or Claude
+        # Analyze with Gemini
         if use_gemini:
             try:
                 result = analyzer.analyze_game(
@@ -15111,121 +15342,6 @@ if st.button(
                     'ai_provider': 'gemini_error'
                 })
         
-        elif use_claude:
-            # Build Claude prompt
-            prompt = f"""You are an expert sports betting analyst. Analyze this game and provide a comprehensive probability assessment.
-
-**Game Details:**
-- Away Team: {away_team}
-- Home Team: {home_team}
-- Sport: {game.get('sport_key')}
-- Date: {game.get('commence_time')}
-
-**Market Odds:**
-- Moneyline (home): {best_moneyline}
-- Spread (home): {best_spread}
-
-**Available Data Sources:**
-"""
-            
-            sources_used = []
-            
-            if context_data['theover']:
-                prompt += f"\n- **theover.ai**: Pick={context_data['theover']['Pick']}, Line={context_data['theover']['Line']}, Market={context_data['theover']['Market']}"
-                sources_used.append('theover.ai')
-            
-            if context_data['ml']:
-                ml_data = context_data['ml']
-                prompt += f"\n- **ML Model Prediction**:"
-                prompt += f"\n  - Home Win Probability: {ml_data.get('home_win_prob', 0):.1%}"
-                prompt += f"\n  - Away Win Probability: {ml_data.get('away_win_prob', 0):.1%}"
-                prompt += f"\n  - Confidence: {ml_data.get('confidence', 0):.1%}"
-                prompt += f"\n  - Model: {ml_data.get('model_used', 'Unknown')}"
-                sources_used.append('ML Model')
-            
-            if context_data['sportsdata']:
-                prompt += f"\n- **SportsData**: Available for {context_data['sportsdata'].get('sport', 'this sport')}"
-                sources_used.append('SportsData')
-            
-            prompt += """
-
-**Task:**
-Analyze all available data and provide:
-
-1. **Win Probability** for the home team (0-100%)
-2. **Confidence Level** (0-100%) - how confident are you in this prediction?
-3. **Key Factors** - what drove your analysis?
-4. **Edge vs Market** - is there value compared to the odds?
-
-Return ONLY a JSON object with this exact structure:
-{
-    "home_win_probability": <float 0-100>,
-    "confidence": <float 0-100>,
-    "key_factors": "<string>",
-    "has_edge": <boolean>,
-    "edge_explanation": "<string>"
-}
-"""
-            
-            try:
-                # Call Claude API
-                response = client.messages.create(
-                    model="claude-sonnet-4-20250514",
-                    max_tokens=1000,
-                    messages=[{"role": "user", "content": prompt}]
-                )
-                
-                # Parse response
-                response_text = response.content[0].text.strip()
-                
-                # Extract JSON
-                if '```json' in response_text:
-                    response_text = response_text.split('```json')[1].split('```')[0].strip()
-                elif '```' in response_text:
-                    response_text = response_text.split('```')[1].split('```')[0].strip()
-                
-                vertex_analysis = json.loads(response_text)
-                
-                # Store result
-                vertex_results.append({
-                    'game_id': game.get('id', f"{away_team}_{home_team}"),
-                    'sport': game.get('sport_key'),
-                    'home_team': home_team,
-                    'away_team': away_team,
-                    'commence_time': game.get('commence_time'),
-                    'vertex_probability': vertex_analysis['home_win_probability'],
-                    'confidence': vertex_analysis['confidence'],
-                    'key_factors': vertex_analysis['key_factors'],
-                    'has_edge': vertex_analysis['has_edge'],
-                    'edge_explanation': vertex_analysis['edge_explanation'],
-                    'sources_used': ', '.join(sources_used) if sources_used else 'market odds only',
-                    'best_moneyline': best_moneyline,
-                    'best_spread': best_spread,
-                    'ai_provider': 'claude'
-                })
-                logger.info(f"✅ Claude analyzed: {away_team} @ {home_team}")
-                
-            except Exception as e:
-                logger.error(f"Claude analysis failed for {away_team} @ {home_team}: {e}")
-                st.error(f"❌ Error analyzing {game_name}: {str(e)[:100]}")
-                # Add fallback result
-                vertex_results.append({
-                    'game_id': game.get('id', f"{away_team}_{home_team}"),
-                    'sport': game.get('sport_key'),
-                    'home_team': home_team,
-                    'away_team': away_team,
-                    'commence_time': game.get('commence_time'),
-                    'vertex_probability': 50.0,
-                    'confidence': 50.0,
-                    'key_factors': 'Error in analysis',
-                    'has_edge': False,
-                    'edge_explanation': f'Error: {str(e)}',
-                    'sources_used': 'error',
-                    'best_moneyline': best_moneyline,
-                    'best_spread': best_spread,
-                    'ai_provider': 'claude_error'
-                })
-        
         progress_bar.progress((idx + 1) / len(odds_data))
     
     progress_bar.empty()
@@ -15241,9 +15357,6 @@ Return ONLY a JSON object with this exact structure:
         actual_cost = len(vertex_results) * 0.001
         st.success(f"✅ **Gemini analysis complete!** {len(vertex_results)} games analyzed (~${actual_cost:.2f})")
         st.balloons()
-    else:
-        actual_cost = len(vertex_results) * 0.015
-        st.success(f"✅ **Claude analysis complete!** {len(vertex_results)} games analyzed (~${actual_cost:.2f})")
     
     # Display summary
     st.write("---")
@@ -15318,8 +15431,6 @@ if st.session_state.get('vertex_analysis_complete') and st.session_state.get('ve
         ai_provider = prev_results[0].get('ai_provider', 'unknown') if prev_results else 'unknown'
         if 'gemini' in ai_provider:
             st.metric("AI Provider", "Gemini 💎")
-        elif 'claude' in ai_provider:
-            st.metric("AI Provider", "Claude 🤖")
         else:
             st.metric("AI Provider", "Unknown")
     

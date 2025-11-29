@@ -5,10 +5,12 @@ Uses Google Gemini via Vertex AI for sports betting predictions
 
 import json
 import logging
-import streamlit as st
+import re
 from typing import Optional
-from google.oauth2 import service_account
+
+import streamlit as st
 import vertexai
+from google.oauth2 import service_account
 from vertexai.generative_models import GenerativeModel
 
 logger = logging.getLogger(__name__)
@@ -59,38 +61,53 @@ def get_gemini_model(
             or "us-central1"
         )
 
+        # 2. Build credentials and, if needed, infer the project_id from the service account
+        credentials = None
+        sa_info = None
+
+        # Preferred: JSON uploaded in the sidebar, stored in session_state
+        if "gcp_service_account" in st.session_state:
+            sa_info = st.session_state["gcp_service_account"]
+        # Fallback: JSON in st.secrets
+        elif "gcp_service_account" in st.secrets:
+            sa_info = st.secrets["gcp_service_account"]
+
+        if sa_info is not None:
+            if isinstance(sa_info, str):
+                sa_info = json.loads(sa_info)
+            try:
+                credentials = service_account.Credentials.from_service_account_info(
+                    sa_info,
+                    scopes=["https://www.googleapis.com/auth/cloud-platform"],
+                )
+            except Exception:
+                credentials = None
+
+            # If the user didn't manually enter a project ID, use the one from the service account
+            if not project_id:
+                project_id = (
+                    sa_info.get("project_id")
+                    or getattr(credentials, "project_id", None)
+                )
+                if project_id:
+                    # Persist for downstream calls/UI so we don't keep recomputing
+                    st.session_state["gcp_project_id"] = project_id
+
         if not project_id:
             st.warning("⚠️ Vertex AI project ID is not configured.")
             logger.warning("Vertex AI disabled: missing project_id.")
             return None
 
-        # 2. Build credentials
-        credentials = None
-
-        # Preferred: JSON uploaded in the sidebar, stored in session_state
-        if "gcp_service_account" in st.session_state:
-            sa_info = st.session_state["gcp_service_account"]
-            if isinstance(sa_info, str):
-                sa_info = json.loads(sa_info)
-            credentials = service_account.Credentials.from_service_account_info(
-                sa_info,
-                scopes=["https://www.googleapis.com/auth/cloud-platform"],
-            )
-        # Fallback: JSON in st.secrets
-        elif "gcp_service_account" in st.secrets:
-            sa_info = st.secrets["gcp_service_account"]
-            if isinstance(sa_info, str):
-                sa_info = json.loads(sa_info)
-            credentials = service_account.Credentials.from_service_account_info(
-                sa_info,
-                scopes=["https://www.googleapis.com/auth/cloud-platform"],
-            )
-
         # 3. Init Vertex AI SDK
         vertexai.init(project=project_id, location=location, credentials=credentials)
         model = GenerativeModel(model_name)
 
-        logger.info(f"Initialized Gemini model '{model_name}' for project={project_id}, location={location}")
+        logger.info(
+            "Initialized Gemini model '%s' for project=%s, location=%s",
+            model_name,
+            project_id,
+            location,
+        )
         return model
 
     except Exception as e:
