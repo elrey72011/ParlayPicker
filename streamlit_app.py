@@ -9177,19 +9177,22 @@ with main_tab1:
                                     spread = 1.5  # Standard puckline
                                     home_spread = spread if pick_is_home else -spread
                                 else:
-                                    # Basketball/Football - line is spread for the PICK team
-                                    # Negative spread = favorite, Positive spread = underdog
-                                    pick_spread = line_value
+                                    # Basketball/Football - Line is from HOME team's perspective
+                                    # CRITICAL: Line is HOME team's spread, NOT picked team's spread!
+                                    # Example: "Alabama A&M @ Clemson, Pick: Alabama A&M, Line: -28"
+                                    # This means Clemson (home) is -28, Alabama A&M (away) is +28
                                     
-                                    # Calculate HOME team's spread (opposite of pick's if pick is away)
-                                    if pick == away_team or pick.lower() in away_team.lower() or away_team.lower() in pick.lower():
-                                        # Pick is away team, so home_spread is opposite
-                                        home_spread = -pick_spread
+                                    home_spread = line_value  # Line is always home team's spread
+                                    
+                                    # Determine if pick is home or away
+                                    if pick == away_team or (pick and away_team and (pick.lower() in away_team.lower() or away_team.lower() in pick.lower())):
                                         pick_is_home = False
+                                        # Pick is away team, their spread is opposite of home spread
+                                        pick_spread = -line_value
                                     else:
-                                        # Pick is home team
-                                        home_spread = pick_spread
                                         pick_is_home = True
+                                        # Pick is home team, their spread is same as home spread
+                                        pick_spread = line_value
                                     
                                     # Calculate home team win probability from HOME spread
                                     # Negative home_spread = home team is favorite = higher win prob
@@ -9211,7 +9214,7 @@ with main_tab1:
                                         home_ml = int(100 * (1 - home_implied_prob) / home_implied_prob)
                                         away_ml = int(-100 * (1 - home_implied_prob) / home_implied_prob)
                                     
-                                    spread = pick_spread  # Keep original for display
+                                    spread = abs(line_value)  # Magnitude for display
                                 
                                 all_games.append({
                                     'home_team': home_team,
@@ -9220,7 +9223,7 @@ with main_tab1:
                                     'league': league,
                                     'theover_probability': theover_prob,
                                     'theover_pick': pick,
-                                    'theover_spread': pick_spread if 'pick_spread' in dir() else spread,
+                                    'theover_spread': pick_spread,  # PICKED team's spread (now correct!)
                                     'home_spread': home_spread,
                                     'home_ml_odds': home_ml,
                                     'away_ml_odds': away_ml,
@@ -11768,17 +11771,14 @@ if is_vertex_ai_enabled():
                     # =====================================================
                     # FORMAT THE PICK
                     # =====================================================
-                    # DIAGNOSTIC: Check if pick team makes sense with spread sign
-                    # Away underdogs should not have negative spreads
-                    # If we see "Away Team @ Home Team" with "Away Team -X", something is wrong
+                    # DEBUG: Log the values to understand what's happening
+                    logger.info(f"DEBUG: {away_team} @ {home_team} | Pick: {pick_team} | theover_spread: {theover_spread}")
                     
-                    # theover_spread is the line value from TheOver.ai CSV
-                    # It represents the spread for the PICKED team
+                    # theover_spread should now be the PICKED team's spread (after fix)
                     # Positive spread = underdog getting points (+)
                     # Negative spread = favorite giving points (-)
                     spread_magnitude = abs(theover_spread) if theover_spread else 0
                     if spread_magnitude > 0:
-                        # theover_spread sign already indicates if team is favorite or underdog
                         if theover_spread > 0:
                             # Positive spread = underdog getting points
                             pick_str = f"{pick_team} +{spread_magnitude:.1f}"
@@ -11787,6 +11787,8 @@ if is_vertex_ai_enabled():
                             pick_str = f"{pick_team} {theover_spread:.1f}"  # Already has minus sign
                     else:
                         pick_str = f"{pick_team} ML"
+                    
+                    logger.info(f"DEBUG: Formatted as: {pick_str}")
                     
                     # Format odds string
                     if pick_ml_odds and pick_ml_odds != 0:
