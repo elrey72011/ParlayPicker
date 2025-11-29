@@ -684,6 +684,9 @@ class VertexMasterAnalyzer:
                         "kalshi_alignment": feats.get("kalshi_alignment"),
                         "sentiment_diff": feats.get("sentiment_diff"),
                         "ev": ev,
+                        # NEW: Game time and TheOver.ai consensus
+                        "game_time": game.get("commence_time"),
+                        "theover_pick": theover_pick,  # TheOver.ai's pick for consensus
                     }
                 )
             except Exception as e:
@@ -758,14 +761,53 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
     )
     display_df["Kalshi %"] = (display_df["kalshi_prob"] * 100).round(0)
     display_df["EV"] = display_df["ev"].map(lambda x: f"${x:.2f}")
+    
+    # NEW: Format Game Time column
+    def format_game_time(time_str):
+        if pd.isna(time_str) or not time_str:
+            return "—"
+        try:
+            from datetime import datetime
+            import pytz
+            # Parse ISO time from TheOddsAPI
+            dt = datetime.fromisoformat(str(time_str).replace('Z', '+00:00'))
+            # Convert to Eastern Time for display
+            eastern = pytz.timezone('US/Eastern')
+            dt_eastern = dt.astimezone(eastern)
+            # Format as "Nov 29, 7:30 PM ET"
+            return dt_eastern.strftime("%b %d, %-I:%M %p ET")
+        except Exception:
+            return str(time_str)[:16] if time_str else "—"
+    
+    display_df["Game Time"] = display_df["game_time"].apply(format_game_time)
+    
+    # NEW: TheOver.ai Consensus column
+    def format_consensus(row):
+        our_pick = row.get("pick_team", "")
+        theover_pick = row.get("theover_pick", "")
+        
+        if not theover_pick or pd.isna(theover_pick):
+            return "—"  # No TheOver.ai data
+        
+        # Check if picks match (case insensitive, partial match)
+        if our_pick and theover_pick:
+            if our_pick.lower() in theover_pick.lower() or theover_pick.lower() in our_pick.lower():
+                return "✅ Agree"
+            else:
+                return "❌ Disagree"
+        return "—"
+    
+    display_df["TheOver"] = display_df.apply(format_consensus, axis=1)
 
     cols = [
         "Rank",
         "league",
         "game",
+        "Game Time",  # NEW
         "the_pick",
         "Win %",
         "Favorite",
+        "TheOver",  # NEW
         "Sentiment",
         "Kalshi",
         "Kalshi %",
