@@ -1404,8 +1404,25 @@ def render_sidebar_controls() -> Dict[str, Any]:
     else:
         sidebar.caption("ℹ️ Using neutral fallback sentiment")
 
-    # --------------------- Anthropic/Claude REMOVED - Using Gemini Only ---------------------
-    # Claude API removed - Gemini/Vertex AI is 24x cheaper and better!
+    # --------------------- Anthropic API key ---------------------
+    st.session_state.setdefault('anthropic_api_key', 
+        os.environ.get("ANTHROPIC_API_KEY", "") or 
+        os.environ.get("anthropic_api_key", "") or
+        st.secrets.get("anthropic_api_key", "") or
+        st.secrets.get("ANTHROPIC_API_KEY", "")
+    )
+    anthropic_api_input = sidebar.text_input(
+        "Anthropic API key",
+        value=st.session_state.get('anthropic_api_key', ""),
+        type="password",
+        help="Required for Vertex AI analysis. Get from console.anthropic.com",
+    ).strip()
+    if anthropic_api_input != st.session_state.get('anthropic_api_key', ""):
+        st.session_state['anthropic_api_key'] = anthropic_api_input
+    if st.session_state.get('anthropic_api_key'):
+        sidebar.caption("🤖 Anthropic API key configured")
+    else:
+        sidebar.caption("❌ Enter Anthropic API key for AI analysis")
     
     # --------------------- Google Gemini AI (Recommended) ---------------------
     if GEMINI_AVAILABLE:
@@ -1468,12 +1485,9 @@ def render_sidebar_controls() -> Dict[str, Any]:
             with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
                 json.dump(gcp_creds, f)
                 os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = f.name
-            logger.info("✅ GCP credentials loaded from secrets.toml")
-            sidebar.success("✅ Service Account loaded from secrets")
+            logger.info("GCP credentials loaded from secrets")
     except Exception as e:
         logger.warning(f"Could not load GCP credentials: {e}")
-        sidebar.warning("⚠️ Service Account not found in secrets")
-        sidebar.info("Add [gcp_service_account] section to .streamlit/secrets.toml")
     
     # Display GCP status in sidebar
     gcp_configured = st.session_state.get('gcp_project_id') and st.session_state.get('vertex_endpoint_id')
@@ -8914,105 +8928,6 @@ elif 'nba_apisports_api_key' not in st.session_state:
         basketball_client.api_key if basketball_client else ""
     )
 
-# Copy and Paste This Code Into Your App
-# Location: Line 8782 (right after the nba_apisports_api_key initialization)
-
-# ============================================================
-# CONSOLIDATE CLIENTS FOR VERTEX MASTER ANALYZER
-# ============================================================
-
-# Create consolidated client dictionaries for VertexMasterAnalyzer
-if 'sportsdata_clients' not in st.session_state:
-    st.session_state['sportsdata_clients'] = {}
-
-if 'apisports_clients' not in st.session_state:
-    st.session_state['apisports_clients'] = {}
-
-# Populate sportsdata_clients dictionary from individual clients
-sport_mappings = {
-    'nba': 'sportsdata_nba_client',
-    'basketball_nba': 'sportsdata_nba_client',
-    'nfl': 'sportsdata_nfl_client',
-    'americanfootball_nfl': 'sportsdata_nfl_client',
-    'nhl': 'sportsdata_nhl_client',
-    'icehockey_nhl': 'sportsdata_nhl_client',
-    'ncaab': 'sportsdata_ncaab_client',
-    'basketball_ncaab': 'sportsdata_ncaab_client',
-    'ncaaf': 'sportsdata_ncaaf_client',
-    'americanfootball_ncaaf': 'sportsdata_ncaaf_client',
-}
-
-for sport_key, client_key in sport_mappings.items():
-    if client_key in st.session_state and st.session_state[client_key]:
-        st.session_state['sportsdata_clients'][sport_key] = st.session_state[client_key]
-
-# Populate apisports_clients dictionary from individual clients
-apisports_mappings = {
-    'nba': 'apisports_basketball_client',
-    'basketball_nba': 'apisports_basketball_client',
-    'nfl': 'apisports_nfl_client',
-    'americanfootball_nfl': 'apisports_nfl_client',
-    'nhl': 'apisports_hockey_client',
-    'icehockey_nhl': 'apisports_hockey_client',
-}
-
-for sport_key, client_key in apisports_mappings.items():
-    if client_key in st.session_state and st.session_state[client_key]:
-        st.session_state['apisports_clients'][sport_key] = st.session_state[client_key]
-
-# Show status in sidebar
-with st.sidebar:
-    st.markdown("---")
-    st.markdown("### 🔌 Data Sources")
-    
-    # Kalshi status
-    if st.session_state.get('kalshi_integrator'):
-        kalshi = st.session_state['kalshi_integrator']
-        if hasattr(kalshi, 'api_key') and kalshi.api_key:
-            st.success("✅ Kalshi: Connected")
-        else:
-            st.warning("⚠️ Kalshi: No credentials")
-    else:
-        st.info("ℹ️ Kalshi: Not initialized")
-    
-    # SportsData status
-    sportsdata_count = len(set(st.session_state.get('sportsdata_clients', {}).values()))
-    if sportsdata_count > 0:
-        st.success(f"✅ SportsData.io: {sportsdata_count} sports")
-    else:
-        st.info("ℹ️ SportsData.io: Not configured")
-    
-    # API-Sports status
-    apisports_count = len(set(st.session_state.get('apisports_clients', {}).values()))
-    if apisports_count > 0:
-        st.success(f"✅ API-Sports: {apisports_count} sports")
-    else:
-        st.info("ℹ️ API-Sports: Not configured")
-    
-    # Sentiment status
-    if st.session_state.get('sentiment_analyzer'):
-        st.success("✅ Sentiment: Active")
-    else:
-        st.info("ℹ️ Sentiment: Not initialized")
-    
-    # ML Predictor status
-    if st.session_state.get('ml_predictor'):
-        st.success("✅ ML Predictor: Ready")
-    else:
-        st.info("ℹ️ ML Predictor: Not initialized")
-    
-    st.markdown("---")
-
-# Log what's available for debugging
-logger.info("="*60)
-logger.info("INTEGRATION STATUS:")
-logger.info(f"  Kalshi: {st.session_state.get('kalshi_integrator') is not None}")
-logger.info(f"  SportsData clients: {list(set(st.session_state.get('sportsdata_clients', {}).values()))}")
-logger.info(f"  APISports clients: {list(set(st.session_state.get('apisports_clients', {}).values()))}")
-logger.info(f"  Sentiment: {st.session_state.get('sentiment_analyzer') is not None}")
-logger.info(f"  ML Predictor: {st.session_state.get('ml_predictor') is not None}")
-logger.info("="*60)
-
 # Main navigation tabs (fallback to containers if tabs are unavailable)
 tab_labels = [
     "🎯 Sports Betting Parlays",
@@ -9225,31 +9140,6 @@ with main_tab1:
     theover_spreads_data = _collect_theover_dataset("#### 📐 Spread projections", "theover_spreads")
     theover_totals_data = _collect_theover_dataset("#### 📈 Totals (Over/Under) projections", "theover_totals")
     
-    with st.sidebar.expander("🔍 Vertex AI Status"):
-        try:
-            from google.oauth2 import service_account
-            import vertexai
-            
-            # Load credentials from secrets
-            credentials = service_account.Credentials.from_service_account_info(
-                st.secrets["gcp_service_account"]
-            )
-        
-        # Initialize Vertex AI
-            vertexai.init(
-                project="elite-hangar-479017-m8",
-                location="us-central1",
-                credentials=credentials
-            )
-            
-            st.success("✅ Vertex AI Authenticated!")
-            st.write(f"**Project:** elite-hangar-479017-m8")
-            st.write(f"**Service Account:** {credentials.service_account_email}")
-            st.write(f"**Region:** us-central1")
-        
-        except Exception as e:
-            st.error(f"❌ Vertex AI Authentication Failed: {e}")
-    
     # Vertex AI Analysis Integration - Uses VertexMasterAnalyzer with BOTH spreads and totals
     if is_vertex_ai_enabled():
         if (theover_spreads_data is not None and len(theover_spreads_data) > 0) or \
@@ -9325,22 +9215,19 @@ with main_tab1:
                                     spread = 1.5  # Standard puckline
                                     home_spread = spread if pick_is_home else -spread
                                 else:
-                                    # Basketball/Football - Line is the PICKED team's spread!
-                                    # NOT the home team's spread!
-                                    # Example: "Dallas @ Lakers, Pick: Dallas, Line: 10.5"
-                                    # This means Dallas +10.5 (underdog), Lakers are -10.5 (favorites)
+                                    # Basketball/Football - line is spread for the PICK team
+                                    # Negative spread = favorite, Positive spread = underdog
+                                    pick_spread = line_value
                                     
-                                    pick_spread = line_value  # Line is already for the picked team!
-                                    
-                                    # Determine if pick is home or away
-                                    if pick == away_team or (pick and away_team and (pick.lower() in away_team.lower() or away_team.lower() in pick.lower())):
+                                    # Calculate HOME team's spread (opposite of pick's if pick is away)
+                                    if pick == away_team or pick.lower() in away_team.lower() or away_team.lower() in pick.lower():
+                                        # Pick is away team, so home_spread is opposite
+                                        home_spread = -pick_spread
                                         pick_is_home = False
-                                        # Pick is away, so home spread is opposite
-                                        home_spread = -line_value
                                     else:
+                                        # Pick is home team
+                                        home_spread = pick_spread
                                         pick_is_home = True
-                                        # Pick is home, so home spread is same
-                                        home_spread = line_value
                                     
                                     # Calculate home team win probability from HOME spread
                                     # Negative home_spread = home team is favorite = higher win prob
@@ -9362,7 +9249,7 @@ with main_tab1:
                                         home_ml = int(100 * (1 - home_implied_prob) / home_implied_prob)
                                         away_ml = int(-100 * (1 - home_implied_prob) / home_implied_prob)
                                     
-                                    spread = abs(line_value)  # Magnitude for display
+                                    spread = pick_spread  # Keep original for display
                                 
                                 all_games.append({
                                     'home_team': home_team,
@@ -9371,7 +9258,7 @@ with main_tab1:
                                     'league': league,
                                     'theover_probability': theover_prob,
                                     'theover_pick': pick,
-                                    'theover_spread': pick_spread,  # PICKED team's spread (correct!)
+                                    'theover_spread': pick_spread if 'pick_spread' in dir() else spread,
                                     'home_spread': home_spread,
                                     'home_ml_odds': home_ml,
                                     'away_ml_odds': away_ml,
@@ -10022,7 +9909,7 @@ if is_vertex_ai_enabled():
                                 'sharp_money_indicator': row.get('sharp_money_indicator', 0),
                                 'home_ml_odds': row.get('home_ml_odds') or row.get('home_ml', 0),
                                 'away_ml_odds': row.get('away_ml_odds') or row.get('away_ml', 0),
-                                'spread': row.get('home_spread') or row.get('spread', 0) or 0,
+                                'spread': row.get('home_spread') or row.get('theover_spread') or row.get('spread', 0),
                                 'total': row.get('total_line') or row.get('total', 0),
                                 'implied_home_prob': row.get('implied_home_prob', 0.5),
                                 # Kalshi prediction market data
@@ -11776,32 +11663,11 @@ if is_vertex_ai_enabled():
                     
                     # =====================================================
                     # GET THEOVER.AI PICK AND PROBABILITY
-                    # TheOver.ai is used for their PICK and PROBABILITY only
-                    # NOT for spread values (which come from market odds)
+                    # This is the recommended bet from TheOver.ai
                     # =====================================================
                     theover_pick = vertex_result.get('theover_pick', '') or ''
                     theover_prob = vertex_result.get('theover_probability', None)
-                    
-                    # GET MARKET SPREAD from TheOddsAPI (NOT from TheOver.ai!)
-                    market_home_spread = vertex_result.get('spread', 0) or 0
-                    
-                    # If market spread is missing, try to estimate from moneyline
-                    if not market_home_spread or market_home_spread == 0:
-                        home_ml = vertex_result.get('home_ml_odds') or 0
-                        away_ml = vertex_result.get('away_ml_odds') or 0
-                        
-                        if home_ml and away_ml and home_ml != 0 and away_ml != 0:
-                            # Estimate spread from ML odds
-                            # Rough formula: favorite ML of -X ≈ X/30 points
-                            if home_ml < away_ml:
-                                # Home is favorite
-                                market_home_spread = home_ml / 30 if home_ml < 0 else 0
-                            else:
-                                # Away is favorite
-                                market_home_spread = away_ml / 30 if away_ml < 0 else 0
-                                market_home_spread = -market_home_spread  # Flip sign
-                            
-                            logger.info(f"Estimated spread from ML for {away_team} @ {home_team}: {market_home_spread:.1f}")
+                    theover_spread = vertex_result.get('theover_spread', 0) or 0
                     
                     # Skip games without TheOver.ai data ONLY if show_all_games is False
                     if not show_all_games and not theover_pick:
@@ -11822,69 +11688,21 @@ if is_vertex_ai_enabled():
                     home_ml = vertex_result.get('home_ml_odds') or -110
                     away_ml = vertex_result.get('away_ml_odds') or -110
                     
-                    # =====================================================
-                    # CALCULATE HOME AND AWAY AI PROBABILITIES
-                    # Pick the team with HIGHER AI probability (not TheOver.ai's pick!)
-                    # =====================================================
+                    # Determine which team TheOver picked
+                    theover_pick_lower = theover_pick.lower() if theover_pick else ''
+                    home_lower = home_team.lower()
                     
-                    # Get AI probabilities (calculate as HOME team probability first)
-                    vertex_ai_prob = vertex_result.get('vertex_probability') or vertex_result.get('vertex_ai_prob') or vertex_result.get('vertex_prob')
-                    if vertex_ai_prob is not None and vertex_ai_prob <= 1:
-                        vertex_ai_prob = vertex_ai_prob * 100
+                    theover_picked_home = any(word in home_lower for word in theover_pick_lower.split()) if theover_pick_lower else False
                     
-                    # Determine HOME and AWAY AI probabilities
-                    if vertex_ai_prob is not None and vertex_ai_prob > 0:
-                        # We have Vertex AI prediction (HOME team probability)
-                        home_ai_prob = vertex_ai_prob
-                        away_ai_prob = 100 - vertex_ai_prob
-                        ml_source_type = 'vertex'
-                    elif theover_prob:
-                        # Fall back to TheOver.ai - convert to HOME/AWAY probabilities
-                        if theover_picked_home:
-                            home_ai_prob = theover_prob
-                            away_ai_prob = 100 - theover_prob
-                        else:
-                            away_ai_prob = theover_prob
-                            home_ai_prob = 100 - theover_prob
-                        ml_source_type = 'theover'
-                    else:
-                        # No AI prediction - use spread-derived estimate
-                        if market_home_spread and market_home_spread != 0:
-                            spread_shift = abs(market_home_spread) * 2.8
-                            if market_home_spread < 0:
-                                # Home is favorite
-                                home_ai_prob = min(80, 50 + spread_shift)
-                                away_ai_prob = 100 - home_ai_prob
-                            else:
-                                # Away is favorite
-                                away_ai_prob = min(80, 50 + spread_shift)
-                                home_ai_prob = 100 - away_ai_prob
-                            ml_source_type = 'spread_derived'
-                        else:
-                            home_ai_prob = 50
-                            away_ai_prob = 50
-                            ml_source_type = 'default'
-                    
-                    # =====================================================
-                    # PICK THE TEAM WITH HIGHER AI PROBABILITY
-                    # This is the key fix - use AI probability, not TheOver.ai's pick!
-                    # =====================================================
-                    if home_ai_prob >= away_ai_prob:
-                        # Home team has higher (or equal) AI win probability
-                        pick_team = home_team
-                        pick_spread = market_home_spread
+                    # Get the ML odds for the picked team
+                    if theover_picked_home:
                         pick_ml_odds = home_ml
-                        ai_win_prob = home_ai_prob
-                        theover_picked_home = True  # Update for consistency
+                        pick_team = home_team
                     else:
-                        # Away team has higher AI win probability
-                        pick_team = away_team
-                        pick_spread = -market_home_spread if market_home_spread else 0
                         pick_ml_odds = away_ml
-                        ai_win_prob = away_ai_prob
-                        theover_picked_home = False  # Update for consistency
+                        pick_team = away_team
                     
-                    # Calculate market implied probability for the PICKED team
+                    # Calculate market implied probability from ML odds
                     if pick_ml_odds and pick_ml_odds != 0:
                         if pick_ml_odds < 0:
                             market_implied_prob = abs(pick_ml_odds) / (abs(pick_ml_odds) + 100) * 100
@@ -11892,6 +11710,35 @@ if is_vertex_ai_enabled():
                             market_implied_prob = 100 / (pick_ml_odds + 100) * 100
                     else:
                         market_implied_prob = 50
+                    
+                    # =====================================================
+                    # GET AI/ML PREDICTION
+                    # theover_probability = PICKED team's win probability (already correct!)
+                    # vertex_probability/vertex_prob = may be HOME team's probability
+                    # =====================================================
+                    
+                    # PREFER theover_probability since it's already the picked team's probability
+                    # This avoids complex inversion logic
+                    if theover_prob:
+                        # Use TheOver.ai probability directly - it's already for the picked team
+                        ai_win_prob = theover_prob
+                        ml_source_type = 'theover'
+                    else:
+                        # Fallback to Vertex AI probability (which is HOME team's probability)
+                        vertex_ai_prob = vertex_result.get('vertex_probability') or vertex_result.get('vertex_ai_prob') or vertex_result.get('vertex_prob')
+                        if vertex_ai_prob is not None and vertex_ai_prob <= 1:
+                            vertex_ai_prob = vertex_ai_prob * 100
+                        
+                        if vertex_ai_prob is not None:
+                            # Convert HOME probability to PICKED team probability
+                            if theover_picked_home:
+                                ai_win_prob = vertex_ai_prob
+                            else:
+                                ai_win_prob = 100 - vertex_ai_prob
+                            ml_source_type = 'vertex'
+                        else:
+                            ai_win_prob = 50
+                            ml_source_type = 'default'
                     
                     # =====================================================
                     # CALCULATE EDGE
@@ -11949,26 +11796,15 @@ if is_vertex_ai_enabled():
                     
                     # =====================================================
                     # FORMAT THE PICK
-                    # Use MARKET spread (from TheOddsAPI), not TheOver.ai spread
                     # =====================================================
-                    # DEBUG: Log the values to understand what's happening
-                    logger.info(f"DEBUG: {away_team} @ {home_team} | Pick: {pick_team} | market_spread: {pick_spread}")
-                    
-                    # pick_spread is the MARKET spread for the picked team
-                    # Positive spread = underdog getting points (+)
-                    # Negative spread = favorite giving points (-)
-                    spread_magnitude = abs(pick_spread) if pick_spread else 0
+                    spread_magnitude = abs(theover_spread) if theover_spread else 0
                     if spread_magnitude > 0:
-                        if pick_spread > 0:
-                            # Positive spread = underdog getting points
+                        if theover_spread > 0:
                             pick_str = f"{pick_team} +{spread_magnitude:.1f}"
                         else:
-                            # Negative spread = favorite giving points
-                            pick_str = f"{pick_team} {pick_spread:.1f}"  # Already has minus sign
+                            pick_str = f"{pick_team} -{spread_magnitude:.1f}"
                     else:
                         pick_str = f"{pick_team} ML"
-                    
-                    logger.info(f"DEBUG: Formatted as: {pick_str}")
                     
                     # Format odds string
                     if pick_ml_odds and pick_ml_odds != 0:
@@ -12040,50 +11876,28 @@ if is_vertex_ai_enabled():
                     # ML Source Summary
                     if 'ML Source' in best_bets_df.columns:
                         ml_counts = best_bets_df['ML Source'].value_counts()
-                        vertex_count = ml_counts.get('vertex', 0) + ml_counts.get('gcp_vertex', 0)
-                        theover_count = ml_counts.get('theover', 0)
+                        claude_count = ml_counts.get('anthropic_claude', 0)
                         spread_count = ml_counts.get('spread_derived', 0)
-                        fallback_count = ml_counts.get('fallback_heuristic', 0) + ml_counts.get('unknown', 0) + ml_counts.get('default', 0)
+                        fallback_count = ml_counts.get('fallback_heuristic', 0) + ml_counts.get('unknown', 0)
                         
                         st.markdown("---")
-                        st.subheader("🤖 ML Prediction Source Summary")
-                        ml_col1, ml_col2, ml_col3, ml_col4 = st.columns(4)
-                        
+                        st.subheader("🔬 ML Prediction Sources")
+                        ml_col1, ml_col2, ml_col3 = st.columns(3)
                         with ml_col1:
-                            if vertex_count > 0:
-                                st.success(f"☁️ **GCP Vertex AI**\n\n{vertex_count} games")
+                            if claude_count > 0:
+                                st.success(f"🤖 Claude API: {claude_count} games")
                             else:
-                                st.info(f"☁️ GCP Vertex AI\n\n{vertex_count} games")
-                                st.caption("Configure GCP endpoint for custom model")
-                        
+                                st.info(f"🤖 Claude API: {claude_count} games")
                         with ml_col2:
-                            if theover_count > 0:
-                                st.info(f"🎯 **TheOver.ai**\n\n{theover_count} games")
-                            else:
-                                st.info(f"🎯 TheOver.ai\n\n{theover_count} games")
-                        
+                            st.info(f"📊 Spread-Derived: {spread_count} games")
                         with ml_col3:
-                            if spread_count > 0:
-                                st.info(f"📊 **Spread-Derived**\n\n{spread_count} games")
-                                st.caption("Using spread × 2.8% formula")
-                            else:
-                                st.info(f"📊 Spread-Derived\n\n{spread_count} games")
-                        
-                        with ml_col4:
                             if fallback_count > 0:
-                                st.warning(f"🔄 **Fallback**\n\n{fallback_count} games")
+                                st.warning(f"⚙️ Fallback: {fallback_count} games")
                             else:
-                                st.info(f"🔄 Fallback\n\n{fallback_count} games")
+                                st.info(f"⚙️ Fallback: {fallback_count} games")
                         
-                        # Show Kalshi integration status
-                        if kalshi_agrees > 0:
-                            st.caption(f"📈 Kalshi prediction market agrees on {kalshi_agrees}/{total_games} games")
-                        
-                        # Summary message
-                        if vertex_count > 0:
-                            st.success(f"✅ Using Gemini AI predictions via Vertex AI for {vertex_count} games")
-                        elif theover_count > 0:
-                            st.info(f"📊 Using spread-derived probabilities from TheOver.ai data (each point ≈ 2.8% shift)")
+                        if claude_count > 0:
+                            st.success(f"✅ **{claude_count}/{total_games} games used REAL ML predictions from Claude API**")
                         elif spread_count > 0:
                             st.info(f"📊 Using spread-derived probabilities (each point ≈ 2.8% shift from 50%)")
                         st.markdown("---")
@@ -15135,11 +14949,11 @@ if st.button(
             st.stop()
         
     else:
-        st.error("❌ Gemini/Vertex AI not configured!")
-        st.info("**Configure Gemini in sidebar:**\n\n"
-                "1. Enter GCP Project ID: elite-hangar-479017-m8\n\n"
-                "2. Enter Vertex Endpoint ID: 5396533911008313344\n\n"
-                "3. Make sure [gcp_service_account] is in secrets.toml")
+        st.error("❌ No AI provider configured!")
+        st.info("**Choose one:**\n\n"
+                "- **Gemini** (Recommended): Configure in sidebar (~$1/month)\n"
+                "- **Claude**: Enter API key in sidebar (~$15/month)\n"
+                "- Or skip AI and use ML predictions only (free!)")
         st.stop()
     
     # Analyze each game
