@@ -789,312 +789,210 @@ class VertexMasterAnalyzer:
         
         return features
     
-    def analyze_all_games(self, games: List[Dict], league: str = 'NBA') -> pd.DataFrame:
+        def analyze_all_games(self, games: List[Dict], league: str = "NBA") -> pd.DataFrame:
         """
-        Analyze all games with Vertex AI
-
-        Args:
-            games: List of games from The Odds API
-            league: Sport league (or 'multi' for mixed sports)
+        Analyze all games with Vertex / Google Gemini and fallbacks.
 
         Returns:
-            DataFrame with comprehensive analysis and Vertex AI recommendations
+            DataFrame with one row per game, including:
+            - vertex_home_prob (Gemini home win prob)
+            - best_team / best_side
+            - pick_text (e.g. 'Providence +11.5')
+            - expected_value
+            - ml_source (gcp_vertex, spread_derived, fallback_heuristic)
         """
-        if not is_vertex_ai_enabled():
-            st.warning("⚠️ Vertex AI is disabled")
+        if not games:
             return pd.DataFrame()
 
-        results = []
-        
-        # Track which ML methods are being used
+        use_vertex = is_vertex_ai_enabled()
+        if not use_vertex:
+            st.warning("⚠️ Vertex / Google Gemini is disabled or not configured. "
+                       "Using spread-derived probabilities only.")
+
+        results: list[dict] = []
+
+        # Track how many games use each ML source
         ml_sources_used = {
-            'gcp_vertex': 0, 
-            'spread_derived': 0,
-            'fallback_heuristic': 0
+            "gcp_vertex": 0,
+            "spread_derived": 0,
+            "fallback_heuristic": 0,
         }
 
-        st.write(f"🤖 Analyzing {len(games)} games with Vertex AI Master Analyzer...")
+        st.write(f"🤖 Analyzing {len(games)} games with Vertex AI Master Analyzer…")
         progress = st.progress(0)
 
         for idx, game in enumerate(games):
+            home_team = game.get("home_team", "Home")
+            away_team = game.get("away_team", "Away")
+            sport_key = (game.get("sport_key") or "").lower()
+
+            # Infer league from sport_key
+            if "basketball_nba" in sport_key:
+                game_league = "NBA"
+            elif "basketball_ncaab" in sport_key:
+                game_league = "NCAAB"
+            elif "americanfootball" in sport_key:
+                game_league = "NFL" if "nfl" in sport_key else "NCAAF"
+            elif "icehockey" in sport_key:
+                game_league = "NHL"
+            else:
+                game_league = league
+
             try:
-                # Determine league from sport_key
-                sport_key = game.get('sport_key', 'basketball_nba')
+                # 1) Build comprehensive feature set
+                comp = self.build_comprehensive_features(game, game_league)
 
-                if 'basketball_nba' in sport_key:
-                    game_league = 'NBA'
-                elif 'basketball_ncaab' in sport_key:
-                    game_league = 'NCAAB'
-                elif 'americanfootball' in sport_key:
-                    game_league = 'NFL' if 'nfl' in sport_key else 'NCAAF'
-                elif 'icehockey' in sport_key:
-                    game_league = 'NHL'
-                else:
-                    game_league = league
+                # Basic market info
+                home_ml = comp.get("home_ml_odds")
+                away_ml = comp.get("away_ml_odds")
+                home_spread = comp.get("home_spread")
+                away_spread = comp.get("away_spread")
 
-                # Build comprehensive features from ALL sources
-                comp_features = self.build_comprehensive_features(game, game_league)
+                implied_home_prob = comp.get("implied_home_prob", 0.5)
+                theover_prob = comp.get("theover_probability", 0.5)
+                consensus_prob = comp.get("consensus_prob", implied_home_prob)
 
-                                # Build Vertex AI feature vector (still useful for future models / debugging)
-                vertex_features = self.build_vertex_feature_vector(comp_features)
-
-                # Build game context for logging / explanation
+                # 2) Context passed into Gemini helper
                 game_context = {
-                    "home_team": game.get("home_team"),
-                    "away_team": game.get("away_team"),
-                    "sport": game_league,
-                    "spread": comp_features.get("home_spread") or 0,  # DON'T use theover_spread!
-                    "pick": game.get("theover_pick"),
+                    "league": game_league,
+                    "home_team": home_team,
+                    "away_team": away_team,
+                    "commence_time": game.get("commence_time"),
+                    "home_spread": home_spread,
+                    "away_spread": away_spread,
+                    "total_line": comp.get("total_line"),
+                    "implied_home_prob": implied_home_prob,
+                    "theover_probability": theover_prob,
+                    "consensus_prob": consensus_prob,
                 }
 
-                # IMPORTANT:
-                # ml_predictions.get_vertex_ai_prediction expects a **dict of features**,
-                # not the numeric feature vector. We pass comp_features so Gemini
-                # sees team names, odds, implied prob, TheOver, etc.
-                vertex_prob = get_vertex_ai_prediction(comp_features, game_context)
+                # 3) Try Gemini first
+                vertex_home_prob: Optional[float] = None
+                ml_source = "fallback_heuristic"
 
-                # Explicitly set the initial ml_source based on whether Gemini returned
-                # a real probability. This feeds the ML Prediction Source Summary.
-                if vertex_prob is not None:
-                    ml_source = "gcp_vertex"        # real Gemini / Vertex prediction
-                else:
-                    ml_source = "heuristic"         # will be converted to spread_derived / fallback below
+                if use_vertex:
+                    try:
+                        vertex_home_prob = get_vertex_ai_prediction(comp, game_context)
+                    except Exception as e:
+                        logger.warning(
+                            f"Vertex / Gemini error for {home_team} vs {away_team}: {e}"
+                        )
+                        vertex_home_prob = None
 
-                
-                # If vertex_prob is the fallback value (0.58), use spread-derived probability instead
-                theover_prob_raw = comp_features.get('theover_probability') or game.get('theover_probability')
-                implied_prob = comp_features.get('implied_home_prob') or game.get('implied_home_prob', 0.5)
-                
-                # =====================================================
-                # CRITICAL FIX: Convert theover_probability to HOME team probability
-                # theover_probability is the PICKED team's win probability
-                # We need HOME team's probability for vertex_ai_prob
-                # =====================================================
-                home_team = game.get('home_team', '')
-                away_team = game.get('away_team', '')
-                theover_pick = game.get('theover_pick', '') or ''
-                
-                # Determine if TheOver.ai picked the HOME or AWAY team
-                theover_pick_lower = theover_pick.lower() if theover_pick else ''
-                home_lower = home_team.lower() if home_team else ''
-                away_lower = away_team.lower() if away_team else ''
-                
-                # Check if pick matches home or away
-                pick_is_home = any(word in home_lower for word in theover_pick_lower.split()) if theover_pick_lower and home_lower else False
-                pick_is_away = any(word in away_lower for word in theover_pick_lower.split()) if theover_pick_lower and away_lower else False
-                
-                # Convert theover_prob to HOME team probability
-                if theover_prob_raw is not None and not pd.isna(theover_prob_raw) and theover_prob_raw != 0:
-                    if pick_is_away and not pick_is_home:
-                        # TheOver picked AWAY team, so theover_prob is AWAY probability
-                        # HOME probability = 1 - theover_prob
-                        theover_prob = 1.0 - float(theover_prob_raw)
-                        logger.info(f"Converted theover_prob: {theover_pick} is AWAY, home_prob = 1 - {theover_prob_raw:.3f} = {theover_prob:.3f}")
+                # 4) If Gemini is unavailable, fall back to spread-derived prob
+                if not isinstance(vertex_home_prob, (int, float)):
+                    spread_prob = None
+                    if home_spread is not None:
+                        try:
+                            hs = float(home_spread)
+                            # Each point of spread ≈ 2.8% win-probability shift
+                            # Negative spread = favorite; positive = underdog.
+                            spread_prob = 0.5 - hs * 0.028
+                        except Exception:
+                            spread_prob = None
+
+                    if spread_prob is not None:
+                        vertex_home_prob = spread_prob
+                        ml_source = "spread_derived"
                     else:
-                        # TheOver picked HOME team, theover_prob is already HOME probability
-                        theover_prob = float(theover_prob_raw)
-                        logger.info(f"Using theover_prob directly: {theover_pick} is HOME, prob = {theover_prob:.3f}")
+                        # 5) Final fallback – use consensus/implied
+                        vertex_home_prob = consensus_prob
+                        ml_source = "fallback_heuristic"
                 else:
-                    theover_prob = None
-                
-                # Ensure implied_prob is valid
-                if implied_prob is None or pd.isna(implied_prob):
-                    implied_prob = 0.5
-                
-                # Ensure theover_prob is valid
-                if theover_prob is None or pd.isna(theover_prob):
-                    theover_prob = implied_prob
-                
-                if vertex_prob is None or (vertex_prob and 0.57 <= vertex_prob <= 0.59):
-                    # ML returned fallback/heuristic value - use spread-derived probability instead
-                    if theover_prob and theover_prob != 0 and not pd.isna(theover_prob):
-                        # Blend theover (now HOME prob) with implied for final prediction
-                        vertex_prob = theover_prob * 0.6 + implied_prob * 0.4
-                        ml_source = 'spread_derived'
-                        logger.info(f"Using spread-derived prob for {game.get('home_team')}: {vertex_prob:.3f}")
-                    else:
-                        vertex_prob = implied_prob
-                        ml_source = 'fallback_heuristic'
+                    ml_source = "gcp_vertex"
+
+                # 6) Clamp to sane range to avoid extreme odds explosions
+                vertex_home_prob = float(vertex_home_prob)
+                vertex_home_prob = max(0.05, min(0.95, vertex_home_prob))
+                ml_sources_used[ml_source] += 1
+
+                # 7) Decide best side: home if prob >= 0.5, else away
+                if vertex_home_prob >= 0.5:
+                    best_side = "home"
+                    best_team = home_team
+                    win_prob = vertex_home_prob
                 else:
-                    # Real ML prediction was used (Claude or GCP Vertex)
-                    # ml_source already set from initial_ml_source
-                    pass
-                
-                        # --- 4. Call Vertex / Gemini for a probability -----------------
-        vertex_prob = None
-        ml_source = "heuristic"
+                    best_side = "away"
+                    best_team = away_team
+                    win_prob = 1.0 - vertex_home_prob  # flip for away
 
-        try:
-            vertex_prob = get_vertex_ai_prediction(
-                features_for_gemini,
-                game_context=context_str,
-            )
-        except Exception as e:
-            logger.warning(f"Vertex/Gemini prediction failed for {home_team} vs {away_team}: {e}")
+                # 8) Build a nice pick text with the CORRECT spread sign
+                display_spread = None
+                if best_side == "home":
+                    if home_spread is not None and not pd.isna(home_spread):
+                        display_spread = float(home_spread)
+                else:
+                    if away_spread is not None and not pd.isna(away_spread):
+                        display_spread = float(away_spread)
+                    elif home_spread is not None and not pd.isna(home_spread):
+                        # If only home_spread is present, away_spread should be the opposite
+                        display_spread = -float(home_spread)
 
-        if vertex_prob is not None:
-            ml_source = "gcp_vertex"
+                if display_spread is not None:
+                    pick_text = f"{best_team} {display_spread:+g}"
+                else:
+                    pick_text = best_team  # moneyline only
 
-        # --- 5. Fallback to spread-derived / implied probabilities -----
-        if vertex_prob is None:
-            # Your existing spread/implied fallback
-            synthetic_prob = combined_home_prob  # or whatever you called it
-            vertex_prob = synthetic_prob
-            ml_source = "spread_derived"
-
-        # At this point vertex_prob is always a usable float in (0,1)
-        win_probability = vertex_prob * 100.0
-
-        # --- 6. Record which source was used so the summary can show it
-        if ml_source == "gcp_vertex":
-            ml_sources_used["gcp_vertex"] += 1
-        elif ml_source == "spread_derived":
-            ml_sources_used["spread_derived"] += 1
-        else:
-            ml_sources_used["fallback_heuristic"] += 1
-
-
-                # Ensure vertex_prob is valid
-                if vertex_prob is None or pd.isna(vertex_prob):
-                    vertex_prob = 0.5
-                
-                # Clamp to valid range
-                vertex_prob = max(0.15, min(0.85, float(vertex_prob)))
-                implied_prob = max(0.15, min(0.85, float(implied_prob)))
-
-                # Calculate expected value
-                edge = vertex_prob - implied_prob
-
-                # Store everything
-                result = comp_features.copy()
-                result['vertex_ai_prob'] = vertex_prob
-                result['vertex_ai_edge'] = edge
-                result['vertex_ai_confidence'] = abs(edge)
-                result['ml_source'] = ml_source  # Track which ML method was used
-
-                # Calculate EV
-                home_ml = comp_features.get('home_ml_odds') or game.get('home_ml_odds', -110)
-                if home_ml is None or home_ml == 0:
-                    home_ml = -110  # Default to standard juice
-                
-                try:
-                    if home_ml > 0:
-                        ev = (vertex_prob * home_ml) - ((1 - vertex_prob) * 100)
+                # 9) Expected value based on market odds for chosen side
+                chosen_odds = home_ml if best_side == "home" else away_ml
+                expected_value = None
+                if chosen_odds is not None and chosen_odds != 0:
+                    if chosen_odds > 0:
+                        payout = chosen_odds / 100.0
                     else:
-                        ev = (vertex_prob * 100) - ((1 - vertex_prob) * abs(home_ml))
-                    
-                    if pd.isna(ev):
-                        ev = 0
-                    
-                    result['expected_value'] = ev
-                    result['recommendation'] = 'BET' if ev > 5 else 'PASS'
-                except Exception as calc_err:
-                    logger.warning(f"EV calculation error: {calc_err}")
-                    result['expected_value'] = 0
-                    result['recommendation'] = 'PASS'
+                        payout = 100.0 / abs(chosen_odds)
+                    expected_value = win_prob * payout - (1 - win_prob)
 
-                results.append(result)
+                # 10) Is our pick the favorite according to moneyline?
+                is_favorite = None
+                if home_ml is not None and away_ml is not None:
+                    if best_side == "home":
+                        is_favorite = 1 if home_ml < away_ml else 0
+                    else:
+                        is_favorite = 1 if away_ml < home_ml else 0
+
+                # 11) Collect row
+                results.append(
+                    {
+                        "league": game_league,
+                        "game": f"{away_team} @ {home_team}",
+                        "home_team": home_team,
+                        "away_team": away_team,
+                        "home_ml_odds": home_ml,
+                        "away_ml_odds": away_ml,
+                        "home_spread": home_spread,
+                        "away_spread": away_spread,
+                        "vertex_home_prob": vertex_home_prob,
+                        "win_prob": win_prob,
+                        "ml_source": ml_source,
+                        "best_team": best_team,
+                        "best_side": best_side,
+                        "pick_text": pick_text,
+                        "expected_value": expected_value,
+                        "implied_home_prob": implied_home_prob,
+                        "theover_probability": theover_prob,
+                        "is_favorite": is_favorite,
+                    }
+                )
 
             except Exception as e:
-                logger.error(f"Error analyzing game {idx}: {e}")
-                continue
+                logger.error(f"Error analyzing game {away_team} @ {home_team}: {e}")
 
-            progress.progress((idx + 1) / len(games))
+            progress.progress(int(((idx + 1) / max(len(games), 1)) * 100))
 
-        progress.empty()
+        if not results:
+            return pd.DataFrame()
 
-        # Display ML source summary
-        st.markdown("---")
-        st.subheader("🔬 ML Prediction Source Summary")
+        df = pd.DataFrame(results)
 
-        total_predictions = sum(ml_sources_used.values())
-        if total_predictions > 0:
-            col1, col2, col3 = st.columns(3)
+        # Attach ML source usage so the Streamlit summary can show counts
+        df.attrs["ml_sources_used"] = ml_sources_used
 
-            # 1) Google Gemini / Vertex AI
-            with col1:
-                gcp_count = ml_sources_used.get("gcp_vertex", 0)
-                st.metric("☁️ Google Gemini (Vertex AI)", f"{gcp_count} games")
-                if gcp_count == 0:
-                    st.caption(
-                        "No games used the Vertex AI model yet – check your GCP endpoint and service account."
-                    )
+        # Rank by win probability (or EV if you prefer)
+        df = df.sort_values("win_prob", ascending=False).reset_index(drop=True)
+        df.insert(0, "rank", df.index + 1)
 
-            # 2) Spread-derived probabilities (TheOver.ai)
-            with col2:
-                spread_count = ml_sources_used.get("spread_derived", 0)
-                st.metric(
-                    "📊 Spread-Derived",
-                    f"{spread_count} games",
-                    help="Probability calculated from TheOver.ai spread data",
-                )
-                if spread_count > 0:
-                    st.info("Using spread × 2.8% formula")
-
-            # 3) Fallback heuristics
-            with col3:
-                fallback_count = ml_sources_used.get("fallback_heuristic", 0)
-                st.metric(
-                    "🧮 Fallback Heuristics",
-                    f"{fallback_count} games",
-                    help="Used when no ML prediction was available",
-                )
-                if fallback_count > 0:
-                    st.warning(f"{fallback_count} games used heuristics only")
-
-        # Show overall status (Vertex-only, no Claude)
-        real_ml = ml_sources_used.get("gcp_vertex", 0)
-        if real_ml > 0:
-            st.success(
-                f"✅ **{real_ml}/{total_predictions} games used REAL ML predictions from Google Gemini (Vertex AI)**"
-            )
-        elif ml_sources_used.get("spread_derived", 0) > 0:
-            st.info(
-                "📊 Using spread-derived probabilities from TheOver.ai data "
-                "(each point ≈ 2.8% shift)"
-            )
-        else:
-            st.warning(
-                "⚠️ Using fallback heuristics – configure Vertex AI to unlock real ML predictions."
-            )
-
-        # Build results DataFrame after analysis
-        results_df = pd.DataFrame(results)
-
-
-        # After results_df is fully built, before summary stats
-        debug_mask = (
-            results_df['home_team'].str.contains("Providence", case=False, na=False) |
-            results_df['away_team'].str.contains("Providence", case=False, na=False)
-        )
-        
-        debug_games = results_df[debug_mask][[
-            'league',
-            'home_team', 'away_team',
-            'home_ml_odds', 'away_ml_odds',
-            'home_spread', 'away_spread',
-            'implied_home_prob',
-            'vertex_ai_prob'
-        ]]
-        
-        if not debug_games.empty:
-            logger.info("=== PROVIDENCE DEBUG GAMES (Vertex Master) ===")
-            for _, g in debug_games.iterrows():
-                logger.info(
-                    f"{g['league']}: {g['away_team']} @ {g['home_team']} | "
-                    f"home_ml={g['home_ml_odds']} away_ml={g['away_ml_odds']} | "
-                    f"home_spread={g['home_spread']} away_spread={g['away_spread']} | "
-                    f"implied_home_prob={g['implied_home_prob']:.3f} "
-                    f"vertex_ai_prob={g['vertex_ai_prob']:.3f}"
-                )
-        
-        
-                # Sort by expected value (best bets first)
-                if len(results_df) > 0 and 'expected_value' in results_df.columns:
-                    results_df = results_df.sort_values('expected_value', ascending=False)
-        
-                return results_df
-
+        return df
 
 def show_vertex_master_analysis(results_df: pd.DataFrame):
     """Display ALL games ranked by Vertex AI - complete ranked list from 1 to N"""
