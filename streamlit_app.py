@@ -9102,16 +9102,16 @@ with main_tab1:
             )
         
         # Initialize Vertex AI
-        vertexai.init(
-            project="elite-hangar-479017-m8",
-            location="us-central1",
-            credentials=credentials
-        )
-        
-        st.success("✅ Vertex AI Authenticated!")
-        st.write(f"**Project:** elite-hangar-479017-m8")
-        st.write(f"**Service Account:** {credentials.service_account_email}")
-        st.write(f"**Region:** us-central1")
+            vertexai.init(
+                project="elite-hangar-479017-m8",
+                location="us-central1",
+                credentials=credentials
+            )
+            
+            st.success("✅ Vertex AI Authenticated!")
+            st.write(f"**Project:** elite-hangar-479017-m8")
+            st.write(f"**Service Account:** {credentials.service_account_email}")
+            st.write(f"**Region:** us-central1")
         
     except Exception as e:
         st.error(f"❌ Vertex AI Authentication Failed: {e}")
