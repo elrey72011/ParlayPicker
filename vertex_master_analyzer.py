@@ -920,16 +920,39 @@ class VertexMasterAnalyzer:
                     # ml_source already set from initial_ml_source
                     pass
                 
-                # Track the FINAL ml_source used
-                if ml_source in ml_sources_used:
-                    ml_sources_used[ml_source] += 1
-                elif ml_source == 'heuristic':
-                    ml_sources_used['fallback_heuristic'] += 1
-                elif ml_source == 'local_model':
-                    ml_sources_used['fallback_heuristic'] += 1
-                else:
-                    # Unknown source - count as fallback
-                    ml_sources_used['fallback_heuristic'] += 1
+                        # --- 4. Call Vertex / Gemini for a probability -----------------
+        vertex_prob = None
+        ml_source = "heuristic"
+
+        try:
+            vertex_prob = get_vertex_ai_prediction(
+                features_for_gemini,
+                game_context=context_str,
+            )
+        except Exception as e:
+            logger.warning(f"Vertex/Gemini prediction failed for {home_team} vs {away_team}: {e}")
+
+        if vertex_prob is not None:
+            ml_source = "gcp_vertex"
+
+        # --- 5. Fallback to spread-derived / implied probabilities -----
+        if vertex_prob is None:
+            # Your existing spread/implied fallback
+            synthetic_prob = combined_home_prob  # or whatever you called it
+            vertex_prob = synthetic_prob
+            ml_source = "spread_derived"
+
+        # At this point vertex_prob is always a usable float in (0,1)
+        win_probability = vertex_prob * 100.0
+
+        # --- 6. Record which source was used so the summary can show it
+        if ml_source == "gcp_vertex":
+            ml_sources_used["gcp_vertex"] += 1
+        elif ml_source == "spread_derived":
+            ml_sources_used["spread_derived"] += 1
+        else:
+            ml_sources_used["fallback_heuristic"] += 1
+
 
                 # Ensure vertex_prob is valid
                 if vertex_prob is None or pd.isna(vertex_prob):
