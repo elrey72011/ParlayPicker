@@ -3,73 +3,100 @@ ML Predictions Module for ParlayDesk
 Uses Google Gemini via Vertex AI for sports betting predictions
 """
 
-import streamlit as st
-import logging
 import json
-from typing import Dict, Any, Optional
+import logging
+import streamlit as st
+from typing import Optional
+from google.oauth2 import service_account
 import vertexai
 from vertexai.generative_models import GenerativeModel
 
 logger = logging.getLogger(__name__)
 
+def is_vertex_ai_enabled() -> bool:
+    """
+    Returns True when we have enough config to *attempt* a Vertex / Gemini call.
+    We treat either Streamlit secrets or an uploaded service-account JSON as valid.
+    """
+    # Uploaded service account in the sidebar
+    if "gcp_service_account" in st.session_state:
+        return True
+
+    # Or service account in secrets (Streamlit Cloud style)
+    if "gcp_service_account" in st.secrets:
+        return True
+
+    # You could add extra checks here for ADC on GCP, but keep it simple for now.
+    return False
+
+
 # Cache the model initialization
 @st.cache_resource
-def get_gemini_model(project_id: str, location: str = "us-central1"):
-    """Initialize and cache the Gemini model"""
-    try:
-        # Set up authentication using Google's credentials directly
-        from google.oauth2 import service_account
-        import os
-        
-        credentials = None
-        
-        # Try to load from secrets.toml
-        try:
-            if 'gcp_service_account' in st.secrets:
-                # Build credentials dict from secrets
-                creds_dict = {
-                    'type': str(st.secrets['gcp_service_account']['type']),
-                    'project_id': str(st.secrets['gcp_service_account']['project_id']),
-                    'private_key_id': str(st.secrets['gcp_service_account']['private_key_id']),
-                    'private_key': str(st.secrets['gcp_service_account']['private_key']),
-                    'client_email': str(st.secrets['gcp_service_account']['client_email']),
-                    'client_id': str(st.secrets['gcp_service_account']['client_id']),
-                    'auth_uri': str(st.secrets['gcp_service_account']['auth_uri']),
-                    'token_uri': str(st.secrets['gcp_service_account']['token_uri']),
-                    'auth_provider_x509_cert_url': str(st.secrets['gcp_service_account']['auth_provider_x509_cert_url']),
-                    'client_x509_cert_url': str(st.secrets['gcp_service_account']['client_x509_cert_url']),
-                    'universe_domain': str(st.secrets['gcp_service_account'].get('universe_domain', 'googleapis.com')),
-                }
-                
-                # Create credentials object
-                credentials = service_account.Credentials.from_service_account_info(creds_dict)
-                logger.info("✓ Created credentials from secrets.toml")
-                
-        except Exception as e:
-            logger.error(f"Failed to load credentials from secrets: {e}")
-            import traceback
-            logger.error(traceback.format_exc())
-        
-        # Initialize Vertex AI with credentials
-        if credentials:
-            vertexai.init(project=project_id, location=location, credentials=credentials)
-            logger.info(f"✓ Vertex AI initialized with credentials for project {project_id}")
-        else:
-            # Try without credentials (will use default)
-            vertexai.init(project=project_id, location=location)
-            logger.info(f"⚠️ Vertex AI initialized WITHOUT credentials for project {project_id}")
-        
-        # Create model
-        model = GenerativeModel("gemini-1.5-flash-002")
-        logger.info(f"✓ Gemini model created successfully")
-        return model
-        
-    except Exception as e:
-        logger.error(f"Failed to initialize Gemini model: {e}")
-        import traceback
-        logger.error(traceback.format_exc())
-        return None
+@st.cache_resource
+def get_gemini_model(
+    project_id: Optional[str] = None,
+    location: Optional[str] = None,
+    model_name: str = "gemini-1.5-pro"
+) -> Optional[GenerativeModel]:
+    """
+    Initialize a Gemini model using either:
+      * Sidebar-uploaded service account JSON (st.session_state["gcp_service_account"]), or
+      * Streamlit secrets (st.secrets["gcp_service_account"]).
 
+    Returns a GenerativeModel or None on failure.
+    """
+    try:
+        # 1. Resolve project/location from UI or secrets
+        project_id = (
+            project_id
+            or st.session_state.get("gcp_project_id")
+            or st.secrets.get("gcp_project_id")
+        )
+        location = (
+            location
+            or st.session_state.get("gcp_region")
+            or st.secrets.get("gcp_region")
+            or "us-central1"
+        )
+
+        if not project_id:
+            st.warning("⚠️ Vertex AI project ID is not configured.")
+            logger.warning("Vertex AI disabled: missing project_id.")
+            return None
+
+        # 2. Build credentials
+        credentials = None
+
+        # Preferred: JSON uploaded in the sidebar, stored in session_state
+        if "gcp_service_account" in st.session_state:
+            sa_info = st.session_state["gcp_service_account"]
+            if isinstance(sa_info, str):
+                sa_info = json.loads(sa_info)
+            credentials = service_account.Credentials.from_service_account_info(
+                sa_info,
+                scopes=["https://www.googleapis.com/auth/cloud-platform"],
+            )
+        # Fallback: JSON in st.secrets
+        elif "gcp_service_account" in st.secrets:
+            sa_info = st.secrets["gcp_service_account"]
+            if isinstance(sa_info, str):
+                sa_info = json.loads(sa_info)
+            credentials = service_account.Credentials.from_service_account_info(
+                sa_info,
+                scopes=["https://www.googleapis.com/auth/cloud-platform"],
+            )
+
+        # 3. Init Vertex AI SDK
+        vertexai.init(project=project_id, location=location, credentials=credentials)
+        model = GenerativeModel(model_name)
+
+        logger.info(f"Initialized Gemini model '{model_name}' for project={project_id}, location={location}")
+        return model
+
+    except Exception as e:
+        st.warning(f"⚠️ Failed to initialize Vertex / Gemini: {e}")
+        logger.error("Vertex/Gemini init failed", exc_info=True)
+        return None
 
 def is_vertex_ai_enabled() -> bool:
     """Check if Vertex AI is properly configured"""
@@ -94,116 +121,62 @@ def is_vertex_ai_enabled() -> bool:
         return False
 
 
-def get_vertex_ai_prediction(features: Dict[str, Any], context: str) -> Optional[float]:
+def get_vertex_ai_prediction(
+    features: dict,
+    game_context: str,
+    project_id: Optional[str] = None,
+    location: Optional[str] = None,
+) -> Optional[float]:
     """
-    Get game prediction from Gemini via Vertex AI
-    
-    Args:
-        features: Dictionary containing game features
-            - home_team: str
-            - away_team: str
-            - league: str
-            - home_ml_odds: float
-            - away_ml_odds: float
-            - implied_home_prob: float
-            - home_spread: float
-        context: String describing the matchup (e.g., "Team A @ Team B (NFL)")
-    
-    Returns:
-        float: Predicted HOME team win probability (0.0 to 1.0)
-        None: If prediction fails
+    Call Gemini to get a win probability for the home team.
+    Returns None on failure so the caller can fall back to spread-derived logic.
     """
     try:
-        # Get project configuration
-        project_id = st.session_state.get('gcp_project_id', 'elite-hangar-479017-m8')
-        region = st.session_state.get('gcp_region', 'us-central1')
-        
-        # Get or initialize the model
-        model = get_gemini_model(project_id, region)
-        if not model:
-            logger.error("Gemini model not available")
+        if not is_vertex_ai_enabled():
+            st.session_state["last_ml_source"] = "disabled"
             return None
-        
-        # Extract features
-        home_team = features.get('home_team', '')
-        away_team = features.get('away_team', '')
-        league = features.get('league', '')
-        home_ml = features.get('home_ml_odds', 0)
-        away_ml = features.get('away_ml_odds', 0)
-        implied_prob = features.get('implied_home_prob', 0.5)
-        spread = features.get('home_spread', 0)
-        
-        # Create prompt for Gemini
-        prompt = f"""You are a sports betting expert analyzing a {league} game.
 
-Game: {away_team} @ {home_team}
+        model = get_gemini_model(project_id=project_id, location=location)
+        if model is None:
+            st.session_state["last_ml_source"] = "disabled"
+            return None
 
-Market Data:
-- Home ML Odds: {home_ml:+d}
-- Away ML Odds: {away_ml:+d}
-- Spread: {spread:+.1f}
-- Market Implied Home Win Probability: {implied_prob:.1%}
+        # Build a simple prompt – you already had something similar
+        prompt = f"""
+You are evaluating a betting matchup.
 
-Analyze this matchup and predict the HOME team's win probability.
+Game context:
+{game_context}
 
-Consider:
-1. Recent team performance and trends
-2. Head-to-head history
-3. Home/away splits
-4. Key player availability
-5. Situational factors (rest, travel, motivation)
-6. Statistical matchups and team strengths
+Structured features (JSON):
+{json.dumps(features, indent=2)}
 
-Return ONLY a JSON object with this exact format:
-{{
-    "home_win_probability": 0.XX,
-    "confidence": 0.XX,
-    "key_factors": ["factor1", "factor2", "factor3"]
-}}
+Return ONLY a JSON object with a single key "home_win_prob"
+between 0 and 1 representing the probability that the home team wins.
+"""
 
-The home_win_probability should be between 0.0 and 1.0 (e.g., 0.55 for 55% chance).
-The confidence should be between 0.0 and 1.0 indicating prediction confidence.
-Provide 2-4 key factors influencing your prediction.
-
-JSON response:"""
-
-        # Call Gemini
         response = model.generate_content(prompt)
-        response_text = response.text.strip()
-        
-        # Parse JSON response
-        # Remove markdown code blocks if present
-        if response_text.startswith('```'):
-            response_text = response_text.split('```')[1]
-            if response_text.startswith('json'):
-                response_text = response_text[4:]
-        response_text = response_text.strip()
-        
-        result = json.loads(response_text)
-        
-        # Extract probability
-        home_prob = float(result.get('home_win_probability', 0.5))
-        
-        # Validate probability
-        if not 0.0 <= home_prob <= 1.0:
-            logger.warning(f"Invalid probability {home_prob} for {context}, defaulting to 0.5")
-            home_prob = 0.5
-        
-        logger.info(f"✓ Gemini prediction for {context}: {home_prob:.1%} (confidence: {result.get('confidence', 0):.1%})")
-        
-        return home_prob
-        
-    except json.JSONDecodeError as e:
-        logger.error(f"Failed to parse Gemini response for {context}: {e}")
-        logger.error(f"Response text: {response_text}")
-        return None
-        
-    except Exception as e:
-        logger.error(f"Vertex AI prediction failed for {context}: {e}")
-        import traceback
-        logger.error(traceback.format_exc())
-        return None
+        text = response.text or ""
+        # Simple JSON extraction
+        match = re.search(r"\{.*\}", text, re.DOTALL)
+        if not match:
+            logger.warning("Gemini response did not contain JSON: %s", text[:200])
+            st.session_state["last_ml_source"] = "parse_error"
+            return None
 
+        data = json.loads(match.group(0))
+        prob = float(data.get("home_win_prob", 0.5))
+
+        # Clamp to [0.01, 0.99] to avoid degenerate edges
+        prob = max(0.01, min(0.99, prob))
+
+        st.session_state["last_ml_source"] = "gcp_vertex"
+        return prob
+
+    except Exception as e:
+        logger.error("Vertex AI prediction failed; falling back to spread-derived logic: %s", e, exc_info=True)
+        st.session_state["last_ml_source"] = "error"
+        return None
 
 def show_vertex_ai_prediction_section(home_team: str, away_team: str, league: str, 
                                        home_ml: float, away_ml: float, 
