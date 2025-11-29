@@ -108,7 +108,17 @@ class VertexMasterAnalyzer:
             'theover_probability': None,
             'theover_pick': None,
         }
-        
+    if features.get('home_spread') is not None and features.get('away_spread') is not None:
+        hs = float(features['home_spread'])
+        as_ = float(features['away_spread'])
+
+        # For a normal point spread market, home_spread + away_spread should be ~0 or 0.5
+        if abs(hs + as_) > 1.0:
+            logger.warning(
+                f"Unusual spread pair from TheOddsAPI: "
+                f"{home_team} spread={hs}, {away_team} spread={as_} (sum={hs+as_})"
+            )
+
         # First try to get TheOver.ai data (passed directly in game dict)
         if game.get('theover_probability'):
             features['theover_probability'] = game.get('theover_probability')
