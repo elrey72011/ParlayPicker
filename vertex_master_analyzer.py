@@ -90,7 +90,7 @@ class VertexMasterAnalyzer:
         
         return features
     
-    def _get_market_odds_features(self, game: Dict) -> Dict:
+        def _get_market_odds_features(self, game: Dict) -> Dict:
         """Extract market odds features from bookmakers OR TheOver.ai data"""
         bookmakers = game.get('bookmakers', [])
         
@@ -108,16 +108,6 @@ class VertexMasterAnalyzer:
             'theover_probability': None,
             'theover_pick': None,
         }
-    if features.get('home_spread') is not None and features.get('away_spread') is not None:
-        hs = float(features['home_spread'])
-        as_ = float(features['away_spread'])
-
-        # For a normal point spread market, home_spread + away_spread should be ~0 or 0.5
-        if abs(hs + as_) > 1.0:
-            logger.warning(
-                f"Unusual spread pair from TheOddsAPI: "
-                f"{home_team} spread={hs}, {away_team} spread={as_} (sum={hs+as_})"
-            )
 
         # First try to get TheOver.ai data (passed directly in game dict)
         if game.get('theover_probability'):
@@ -125,20 +115,22 @@ class VertexMasterAnalyzer:
             features['theover_pick'] = game.get('theover_pick')
             features['home_ml_odds'] = game.get('home_ml_odds')
             features['away_ml_odds'] = game.get('away_ml_odds')
-            features['home_spread'] = game.get('home_spread') 
+            features['home_spread'] = game.get('home_spread')
             features['implied_home_prob'] = game.get('implied_home_prob', 0.5)
-            logger.info(f"Using TheOver.ai data: prob={features['theover_probability']}, spread={features['home_spread']}")
+            logger.info(
+                f"Using TheOver.ai data: prob={features['theover_probability']}, "
+                f"spread={features['home_spread']}"
+            )
         
         # Then try bookmakers data from The Odds API
         if bookmakers:
-            # Get best odds across all bookmakers
             for bookmaker in bookmakers:
                 for market in bookmaker.get('markets', []):
                     if market['key'] == 'h2h':
                         for outcome in market['outcomes']:
                             if outcome['name'] == game.get('home_team'):
                                 features['home_ml_odds'] = outcome['price']
-                            else:
+                            elif outcome['name'] == game.get('away_team'):
                                 features['away_ml_odds'] = outcome['price']
                     
                     elif market['key'] == 'spreads':
@@ -146,7 +138,7 @@ class VertexMasterAnalyzer:
                             if outcome['name'] == game.get('home_team'):
                                 features['home_spread'] = outcome['point']
                                 features['home_spread_odds'] = outcome['price']
-                            else:
+                            elif outcome['name'] == game.get('away_team'):
                                 features['away_spread'] = outcome['point']
                                 features['away_spread_odds'] = outcome['price']
                     
@@ -157,8 +149,23 @@ class VertexMasterAnalyzer:
                                 features['over_odds'] = outcome['price']
                             else:
                                 features['under_odds'] = outcome['price']
-        
-    return features
+
+        # 🔍 Sanity check spreads AFTER they’re populated
+        if features.get('home_spread') is not None and features.get('away_spread') is not None:
+            hs = float(features['home_spread'])
+            as_ = float(features['away_spread'])
+            home_team = game.get('home_team', 'Home')
+            away_team = game.get('away_team', 'Away')
+
+            # For a normal point spread market, home_spread + away_spread should be ~0 or 0.5
+            if abs(hs + as_) > 1.0:
+                logger.warning(
+                    f"Unusual spread pair from TheOddsAPI: "
+                    f"{home_team} spread={hs}, {away_team} spread={as_} (sum={hs+as_})"
+                )
+
+        return features
+
     
     def _get_team_stats_features(self, game: Dict, league: str) -> Dict:
         """Get comprehensive team statistics"""
