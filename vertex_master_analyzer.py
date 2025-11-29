@@ -90,7 +90,7 @@ class VertexMasterAnalyzer:
         
         return features
     
-        def _get_market_odds_features(self, game: Dict) -> Dict:
+    def _get_market_odds_features(self, game: Dict) -> Dict:
         """Extract market odds features from bookmakers OR TheOver.ai data"""
         bookmakers = game.get('bookmakers', [])
         
