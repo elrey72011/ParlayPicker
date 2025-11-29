@@ -158,7 +158,7 @@ class VertexMasterAnalyzer:
                             else:
                                 features['under_odds'] = outcome['price']
         
-        return features
+            return features
     
     def _get_team_stats_features(self, game: Dict, league: str) -> Dict:
         """Get comprehensive team statistics"""
