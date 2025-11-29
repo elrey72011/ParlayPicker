@@ -14833,13 +14833,9 @@ if st.button(
         
     else:
         st.error("❌ Gemini/Vertex AI not configured!")
-        st.info("**Configure Gemini in sidebar:**
-
-"
-                "1. Enter GCP Project ID: elite-hangar-479017-m8
-"
-                "2. Enter Vertex Endpoint ID: 5396533911008313344
-"
+        st.info("**Configure Gemini in sidebar:**\n\n"
+                "1. Enter GCP Project ID: elite-hangar-479017-m8\n\n"
+                "2. Enter Vertex Endpoint ID: 5396533911008313344\n\n"
                 "3. Make sure [gcp_service_account] is in secrets.toml")
         st.stop()
     
