@@ -74,19 +74,21 @@ def get_gemini_model(project_id: str, location: str = "us-central1"):
 def is_vertex_ai_enabled() -> bool:
     """Check if Vertex AI is properly configured"""
     try:
-        # Check for GCP project ID in session state or secrets
-        project_id = st.session_state.get('gcp_project_id')
-        if not project_id:
+        # Check for service account in secrets.toml (preferred)
+        if 'gcp_service_account' in st.secrets:
             project_id = st.secrets.get('gcp_project_id')
+            if project_id:
+                logger.info("✓ Vertex AI configured via secrets.toml")
+                return True
         
-        if not project_id:
-            return False
+        # Fallback: Check session state (uploaded file)
+        if 'gcp_service_account' in st.session_state:
+            logger.info("✓ Vertex AI configured via uploaded file")
+            return True
             
-        # Check for service account credentials
-        if 'gcp_service_account' not in st.secrets:
-            return False
-            
-        return True
+        logger.warning("⚠️ Vertex AI not configured - no credentials found")
+        return False
+        
     except Exception as e:
         logger.error(f"Error checking Vertex AI config: {e}")
         return False
@@ -212,7 +214,7 @@ def show_vertex_ai_prediction_section(home_team: str, away_team: str, league: st
     This is a UI component that shows the AI prediction with details
     """
     if not is_vertex_ai_enabled():
-        st.warning("⚠️ Vertex AI not configured. Configure in sidebar to enable AI predictions.")
+        st.warning("⚠️ Vertex AI not configured. Add credentials to secrets.toml to enable AI predictions.")
         return
     
     context = f"{away_team} @ {home_team} ({league})"
@@ -244,6 +246,33 @@ def show_vertex_ai_prediction_section(home_team: str, away_team: str, league: st
             st.info("🤝 AI agrees with market pricing")
     else:
         st.error("❌ AI prediction failed")
+
+
+def get_credential_source() -> str:
+    """
+    Determine where credentials are loaded from
+    Returns: 'secrets.toml', 'uploaded_file', or 'none'
+    """
+    if 'gcp_service_account' in st.secrets:
+        return 'secrets.toml'
+    elif 'gcp_service_account' in st.session_state:
+        return 'uploaded_file'
+    else:
+        return 'none'
+
+
+def show_credential_status():
+    """Display credential status in sidebar"""
+    source = get_credential_source()
+    
+    if source == 'secrets.toml':
+        st.success("✓ Credentials loaded from secrets.toml")
+        st.caption("No file upload needed - using secrets configuration")
+    elif source == 'uploaded_file':
+        st.success("✓ Credentials loaded from uploaded file")
+    else:
+        st.warning("⚠️ No GCP credentials found")
+        st.caption("Add [gcp_service_account] section to secrets.toml or upload JSON file")
 
 
 # Backward compatibility
