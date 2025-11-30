@@ -1262,69 +1262,20 @@ def render_sidebar_controls() -> Dict[str, Any]:
     """Render configuration controls in the Streamlit sidebar."""
 
     sidebar = st.sidebar
-    sidebar.header("⚙️ Control Center")
+    sidebar.header("⚙️ ParlayDesk")
 
-    # --------------------- Odds API key ---------------------
+    # --------------------- Auto-load All Keys from Secrets ---------------------
+    # Odds API
     default_odds_key, odds_key_source = resolve_odds_api_key_with_source()
     st.session_state.setdefault('api_key', default_odds_key)
-    st.session_state.setdefault('odds_key_source', odds_key_source)
-    odds_api_input = sidebar.text_input(
-        "The Odds API key",
-        value=st.session_state.get('api_key', ""),
-        type="password",
-        help="Stored for this session so live odds and historical snapshots can load.",
-    ).strip()
-    if odds_api_input != st.session_state.get('api_key', ""):
-        st.session_state['api_key'] = odds_api_input
-    if st.session_state.get('api_key'):
-        sidebar.caption("✅ The Odds API key configured")
-    else:
-        sidebar.caption("❌ Enter your The Odds API key to fetch odds data")
-
-    # --------------------- News API key ---------------------
-    st.session_state.setdefault('news_api_key', os.environ.get("NEWS_API_KEY", ""))
-    news_api_input = sidebar.text_input(
-        "NewsAPI key (sentiment)",
-        value=st.session_state.get('news_api_key', ""),
-        type="password",
-        help="Optional. Enables real news sentiment analysis when provided.",
-    ).strip()
-    if news_api_input != st.session_state.get('news_api_key', ""):
-        st.session_state['news_api_key'] = news_api_input
-        st.session_state['sentiment_analyzer'] = RealSentimentAnalyzer(news_api_input or None)
-    if st.session_state.get('news_api_key'):
-        sidebar.caption("📰 Live sentiment enabled")
-    else:
-        sidebar.caption("ℹ️ Using neutral fallback sentiment")
-
-    # --------------------- Anthropic/Claude REMOVED - Using Gemini Only ---------------------
-    # Claude API removed - Gemini/Vertex AI is 24x cheaper and better!
     
-    # --------------------- Google Gemini AI (Recommended) ---------------------
-    if GEMINI_AVAILABLE:
-        sidebar.markdown("---")
-        gemini_configured = show_gemini_config_ui()
-        if gemini_configured:
-            st.session_state['ai_provider'] = 'gemini'
-            logger.info("Gemini configured as AI provider")
-    else:
-        sidebar.markdown("---")
-        sidebar.markdown("### 💎 Gemini AI (Optional)")
-        sidebar.info("💰 AI analysis for ~$1/month (24x cheaper than Claude)")
-        sidebar.code("pip install google-cloud-aiplatform")
-        sidebar.caption("See GEMINI_QUICK_SETUP.md for instructions")
+    # News API
+    st.session_state.setdefault('news_api_key', 
+        st.secrets.get("NEWS_API_KEY", "") or os.environ.get("NEWS_API_KEY", ""))
+    if st.session_state.get('news_api_key') and 'sentiment_analyzer' not in st.session_state:
+        st.session_state['sentiment_analyzer'] = RealSentimentAnalyzer(st.session_state['news_api_key'])
     
-    # --------------------- GCP Vertex AI Config ---------------------
-    # Helper function to safely get secrets
-    def get_secret(key, default=""):
-        try:
-            if key in st.secrets:
-                return st.secrets[key]
-        except Exception:
-            pass
-        return default
-    
-    # Load GCP configuration from secrets/environment (FIXED VERSION)
+    # GCP/Vertex AI
     if 'gcp_project_id' not in st.session_state or not st.session_state.get('gcp_project_id'):
         gcp_project = st.secrets.get("GCP_PROJECT_ID", "") or st.secrets.get("gcp_project_id", "")
         if gcp_project:
@@ -1336,118 +1287,44 @@ def render_sidebar_controls() -> Dict[str, Any]:
             st.session_state['vertex_endpoint_id'] = endpoint_id
     
     if 'gcp_location' not in st.session_state or not st.session_state.get('gcp_location'):
-        gcp_loc = st.secrets.get("GCP_REGION", "us-central1")
-        st.session_state['gcp_location'] = gcp_loc if gcp_loc else "us-central1"
+        st.session_state['gcp_location'] = st.secrets.get("GCP_REGION", "us-central1")
     
-    # Initialize GCP credentials from service account if available
+    # Initialize GCP credentials
     try:
         if 'gcp_service_account' in st.secrets and not os.environ.get('GOOGLE_APPLICATION_CREDENTIALS'):
             import tempfile
-            # Write service account JSON to temp file for Google Cloud SDK
             gcp_creds = dict(st.secrets.gcp_service_account)
             with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
                 json.dump(gcp_creds, f)
                 os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = f.name
-            logger.info("✅ GCP credentials loaded from secrets.toml")
-            sidebar.success("✅ Service Account loaded from secrets")
     except Exception as e:
         logger.warning(f"Could not load GCP credentials: {e}")
-        sidebar.warning("⚠️ Service Account not found in secrets")
-        sidebar.info("Add [gcp_service_account] section to .streamlit/secrets.toml")
     
-    # Display GCP status in sidebar
-    gcp_configured = st.session_state.get('gcp_project_id') and st.session_state.get('vertex_endpoint_id')
-    if gcp_configured:
-        sidebar.caption(f"☁️ Vertex AI: {st.session_state['gcp_project_id']}")
-    else:
-        sidebar.caption("⚠️ GCP Vertex AI not configured")
+    # --------------------- Clean Status Display - NO WARNINGS! ---------------------
+    sidebar.markdown("### 📊 System Status")
     
-    # GCP Configuration expander
-    with sidebar.expander("☁️ GCP Vertex AI Settings", expanded=not gcp_configured):
-        st.write("Configure your trained ML model endpoint:")
-        
-        gcp_project_input = st.text_input(
-            "GCP Project ID",
-            value=st.session_state.get('gcp_project_id', ''),
-            placeholder="e.g., parlaydesk-ml-12345",
-            key="gcp_project_input",
-            help="Your Google Cloud project ID"
-        )
-        if gcp_project_input:
-            st.session_state['gcp_project_id'] = gcp_project_input
-        
-        vertex_endpoint_input = st.text_input(
-            "Vertex AI Endpoint ID", 
-            value=st.session_state.get('vertex_endpoint_id', ''),
-            placeholder="e.g., 1234567890123456789",
-            key="vertex_endpoint_input",
-            help="The numeric endpoint ID from Vertex AI"
-        )
-        if vertex_endpoint_input:
-            st.session_state['vertex_endpoint_id'] = vertex_endpoint_input
-        
-        gcp_location_input = st.text_input(
-            "GCP Location",
-            value=st.session_state.get('gcp_location', 'us-central1'),
-            placeholder="us-central1",
-            key="gcp_location_input",
-            help="The region where your endpoint is deployed"
-        )
-        if gcp_location_input:
-            st.session_state['gcp_location'] = gcp_location_input
-        
-        # Status check
-        if st.session_state.get('gcp_project_id') and st.session_state.get('vertex_endpoint_id'):
-            st.success("✅ GCP Vertex AI configured!")
-            st.caption(f"Project: {st.session_state['gcp_project_id']}")
-            st.caption(f"Endpoint: {st.session_state['vertex_endpoint_id']}")
-        else:
-            st.info("Enter your GCP credentials above, or add to Streamlit secrets:")
-            st.code('gcp_project_id = "your-project-id"\nvertex_endpoint_id = "1234567890123456789"\ngcp_location = "us-central1"', language="toml")
+    if st.session_state.get('api_key'):
+        sidebar.success("✅ TheOddsAPI: Configured")
     
-    # --------------------- Kalshi Status ---------------------
-    # Check if Kalshi is configured (will be loaded later in session init)
-    kalshi_key = get_secret("KALSHI_API_KEY", "") or os.environ.get("KALSHI_API_KEY", "")
-    kalshi_secret = get_secret("KALSHI_API_SECRET", "") or os.environ.get("KALSHI_API_SECRET", "")
-    if kalshi_key and kalshi_secret:
-        sidebar.caption(f"📈 Kalshi: Connected ({kalshi_key[:8]}...)")
-        # Show debug info
-        with sidebar.expander("🔧 Kalshi Debug"):
-            st.write(f"API Key: {kalshi_key[:12]}...")
-            st.write(f"Secret: {'Set' if kalshi_secret else 'Not set'}")
-            # Test Kalshi connection
-            try:
-                kalshi = st.session_state.get('kalshi_integrator')
-                if kalshi:
-                    markets = kalshi.get_sports_markets()
-                    st.write(f"Sports Markets Found: {len(markets) if markets else 0}")
-                    if markets and len(markets) > 0:
-                        st.write(f"Sample: {markets[0].get('title', 'N/A')[:50]}")
-                else:
-                    st.write("Kalshi integrator not in session")
-            except Exception as e:
-                st.write(f"Error: {str(e)[:100]}")
-    else:
-        sidebar.caption("⚠️ Kalshi not configured")
+    if st.session_state.get('gcp_project_id'):
+        sidebar.success(f"☁️ Vertex AI: {st.session_state['gcp_project_id']}")
     
-    # --------------------- API-Sports keys ---------------------
-    nfl_key_default, nfl_source_default = resolve_nfl_apisports_key()
-    st.session_state.setdefault('nfl_apisports_api_key', nfl_key_default)
-    st.session_state.setdefault('nfl_apisports_key_source', nfl_source_default)
-    nfl_key_input = sidebar.text_input(
-        "NFL API-Sports key",
-        value=st.session_state.get('nfl_apisports_api_key', ""),
-        type="password",
-        help="Used for live NFL context and historical model training.",
-    ).strip()
-    if nfl_key_input != st.session_state.get('nfl_apisports_api_key', ""):
-        st.session_state['nfl_apisports_api_key'] = nfl_key_input
-        st.session_state['nfl_apisports_key_source'] = "user"
-
-    nhl_key_default, nhl_source_default = resolve_nhl_apisports_key()
-    st.session_state.setdefault('nhl_apisports_api_key', nhl_key_default)
-    st.session_state.setdefault('nhl_apisports_key_source', nhl_source_default)
-    nhl_key_input = sidebar.text_input(
+    kalshi_key = st.secrets.get("KALSHI_API_KEY", "")
+    if kalshi_key:
+        sidebar.success("🔮 Kalshi: Connected")
+    
+    if st.session_state.get('news_api_key'):
+        sidebar.success("📰 Sentiment: Live")
+    
+    sidebar.markdown("---")
+    
+    # --------------------- Gemini Config (if needed) ---------------------
+    if GEMINI_AVAILABLE:
+        gemini_configured = show_gemini_config_ui()
+        if gemini_configured:
+            st.session_state['ai_provider'] = 'gemini'
+    
+    sidebar.markdown("---")
         "NHL API-Sports key",
         value=st.session_state.get('nhl_apisports_api_key', ""),
         type="password",
