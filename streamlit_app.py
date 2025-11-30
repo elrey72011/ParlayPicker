@@ -1324,32 +1324,19 @@ def render_sidebar_controls() -> Dict[str, Any]:
             pass
         return default
     
-    # Load GCP configuration from secrets/environment
-    if 'gcp_project_id' not in st.session_state or not st.session_state['gcp_project_id']:
-        gcp_project = (
-            os.environ.get("GCP_PROJECT_ID", "") or
-            os.environ.get("gcp_project_id", "") or
-            get_secret("gcp_project_id", "") or
-            get_secret("GCP_PROJECT_ID", "")
-        )
-        st.session_state['gcp_project_id'] = gcp_project
+    # Load GCP configuration from secrets/environment (FIXED VERSION)
+    if 'gcp_project_id' not in st.session_state or not st.session_state.get('gcp_project_id'):
+        gcp_project = st.secrets.get("GCP_PROJECT_ID", "") or st.secrets.get("gcp_project_id", "")
+        if gcp_project:
+            st.session_state['gcp_project_id'] = gcp_project
     
-    if 'vertex_endpoint_id' not in st.session_state or not st.session_state['vertex_endpoint_id']:
-        endpoint_id = (
-            os.environ.get("VERTEX_ENDPOINT_ID", "") or
-            os.environ.get("vertex_endpoint_id", "") or
-            get_secret("vertex_endpoint_id", "") or
-            get_secret("VERTEX_ENDPOINT_ID", "")
-        )
-        st.session_state['vertex_endpoint_id'] = endpoint_id
+    if 'vertex_endpoint_id' not in st.session_state or not st.session_state.get('vertex_endpoint_id'):
+        endpoint_id = st.secrets.get("VERTEX_ENDPOINT_ID", "") or st.secrets.get("vertex_endpoint_id", "")
+        if endpoint_id:
+            st.session_state['vertex_endpoint_id'] = endpoint_id
     
-    if 'gcp_location' not in st.session_state or not st.session_state['gcp_location']:
-        gcp_loc = (
-            os.environ.get("GCP_LOCATION", "") or
-            os.environ.get("gcp_location", "") or
-            get_secret("gcp_location", "") or
-            get_secret("GCP_LOCATION", "us-central1")
-        )
+    if 'gcp_location' not in st.session_state or not st.session_state.get('gcp_location'):
+        gcp_loc = st.secrets.get("GCP_REGION", "us-central1")
         st.session_state['gcp_location'] = gcp_loc if gcp_loc else "us-central1"
     
     # Initialize GCP credentials from service account if available
