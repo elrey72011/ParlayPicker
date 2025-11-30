@@ -11885,6 +11885,7 @@ if is_vertex_ai_enabled():
                     # ADD TO BEST BETS
                     # =====================================================
                     # Resolve commence time and local display
+                    game_time_display = vertex_result.get('commence_local_display')
                     commence_raw = None
                     game_time_display = vertex_result.get('commence_local_display')
                     if vertex_result:
