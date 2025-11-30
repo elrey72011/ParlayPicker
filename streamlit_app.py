@@ -11870,6 +11870,32 @@ if is_vertex_ai_enabled():
                         odds_str = "-110"
                     
                     # =====================================================
+                    # GET GAME TIME
+                    # =====================================================
+                    # Resolve commence time and local display
+                    commence_raw = None
+                    if vertex_result:
+                        commence_raw = (
+                            vertex_result.get('commence_time')
+                            or vertex_result.get('commence_raw')
+                        )
+                    if not commence_raw and result_game_id:
+                        matching_game_lookup = game_lookup.get(result_game_id)
+                        if matching_game_lookup:
+                            commence_raw = (
+                                matching_game_lookup.get('commence_time')
+                                or matching_game_lookup.get('commence_time_utc')
+                            )
+
+                    user_tz_label = st.session_state.get('user_timezone', 'UTC')
+                    game_time_display_safe = "TBD"
+                    if commence_raw:
+                        try:
+                            game_time_display_safe = format_game_time_local(commence_raw, user_tz_label)
+                        except Exception:
+                            game_time_display_safe = str(commence_raw)
+                    
+                    # =====================================================
                     # ADD TO BEST BETS
                     # =====================================================
                     kalshi_edge_pct = None
