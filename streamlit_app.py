@@ -18,8 +18,7 @@ import streamlit.components.v1 as components
 import pytz
 from pathlib import Path
 from collections import defaultdict
-
-from ml_model import get_model, score_games
+from google.cloud import aiplatform
 
 from app_core import (
     APISportsBasketballClient,
@@ -254,213 +253,87 @@ def prime_builtin_secrets() -> None:
 # Prime defaults as soon as the app imports
 prime_builtin_secrets()
 
+# Attempt to load the precomputed daily predictions from GCS once per session
+try:
+    if 'gcs_daily_predictions' not in st.session_state:
+        st.session_state['gcs_daily_predictions'] = load_daily_vertex_predictions_from_gcs()
+except Exception as exc:  # pragma: no cover - defensive guard for optional GCS access
+    logger.info("Daily Vertex predictions not loaded from GCS: %s", exc)
+
 # ============================================================
-# ML PREDICTION OPTIMIZATION FUNCTIONS
-# These functions speed up ML predictions by 5-10x using batching and caching
+# VERTEX AI HELPERS
+# All ML predictions now flow through the deployed Vertex AI endpoint
 # ============================================================
 
-class BatchMLPredictor:
-    """
-    Batch ML predictor that processes multiple games at once.
-    This is 10x faster than individual predictions.
-    """
-    
-    def __init__(self, base_predictor):
-        self.predictor = base_predictor
-    
-    def predict_games_batch(self, games: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """
-        Predict multiple games at once using vectorized operations.
-        
-        Args:
-            games: List of game dicts with 'home_team', 'away_team', 'sport_key'
-        
-        Returns:
-            List of prediction results
-        """
-        if not games:
-            return []
-        
-        results = []
-        for game in games:
-            try:
-                # Use the existing predict_game_outcome method
-                pred_result = self.predictor.predict_game_outcome(
-                    home_team=game['home_team'],
-                    away_team=game['away_team'],
-                    sport_key=game.get('sport_key', 'americanfootball_nfl')
-                )
-                
-                if pred_result:
-                    results.append({
-                        'game_id': game.get('id'),
-                        'home_team': game['home_team'],
-                        'away_team': game['away_team'],
-                        'home_win_prob': pred_result.get('home_win_prob', 0.5),
-                        'away_win_prob': pred_result.get('away_win_prob', 0.5),
-                        'confidence': pred_result.get('confidence', 0.5),
-                        'predicted_winner': pred_result.get('predicted_winner', ''),
-                        'ai_prob': pred_result.get('home_win_prob', 0.5),
-                        'ai_confidence': pred_result.get('confidence', 0.5),
-                        'ai_edge': pred_result.get('edge', 0.0)
-                    })
-            except Exception as e:
-                logger.warning(f"Batch prediction failed for {game.get('home_team')} vs {game.get('away_team')}: {e}")
-                # Add a default prediction
-                results.append({
-                    'game_id': game.get('id'),
-                    'home_team': game['home_team'],
-                    'away_team': game['away_team'],
-                    'home_win_prob': 0.5,
-                    'away_win_prob': 0.5,
-                    'confidence': 0.0,
-                    'predicted_winner': '',
-                    'ai_prob': 0.5,
-                    'ai_confidence': 0.0,
-                    'ai_edge': 0.0
-                })
-        
-        return results
+def call_vertex_sports_model(instances: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Invoke the configured Vertex AI endpoint for sports predictions."""
+
+    project = st.session_state.get("gcp_project_id")
+    endpoint_id = st.session_state.get("vertex_endpoint_id") or st.session_state.get("vertex_endpoint") or st.session_state.get("vertex_endpoint_id")
+    location = st.session_state.get("gcp_location") or st.session_state.get("gcp_region")
+
+    if not project or not endpoint_id or not location:
+        raise ValueError("Vertex AI configuration missing: project, endpoint ID, or location")
+
+    endpoint = aiplatform.Endpoint(
+        endpoint_name=f"projects/{project}/locations/{location}/endpoints/{endpoint_id}"
+    )
+    response = endpoint.predict(instances=instances)
+    return response.predictions
 
 
-def create_games_hash(games: List[Dict[str, str]]) -> str:
-    """Create a stable hash from list of games for caching."""
-    if not games:
-        return "empty"
-    games_str = "|".join(sorted([
-        f"{g.get('home_team', '')}-{g.get('away_team', '')}-{g.get('sport_key', '')}"
-        for g in games
-    ]))
-    return hashlib.md5(games_str.encode()).hexdigest()[:16]
+class VertexPredictor:
+    """Simple predictor wrapper that calls the Vertex AI endpoint."""
 
-
-def get_predictor_id() -> str:
-    """Get a unique ID for the current predictor state."""
-    ml_predictor = st.session_state.get('ml_predictor')
-    if not ml_predictor:
-        return "none"
-    
-    # Use training time or model version as ID
-    if hasattr(ml_predictor, 'last_trained'):
-        return str(ml_predictor.last_trained)
-    
-    return str(id(ml_predictor))
-
-
-@st.cache_data(ttl=1800)  # Cache for 30 minutes
-def batch_predict_ml_cached(
-    games_hash: str,
-    games_data: tuple,
-    predictor_id: str
-) -> Dict[str, Dict[str, Any]]:
-    """
-    Cached batch ML predictions - this is the key to 5-10x speedup.
-    
-    Args:
-        games_hash: Hash of game list for cache invalidation
-        games_data: Tuple of (home, away, sport_key) tuples
-        predictor_id: ID of the predictor to ensure cache invalidation on retrain
-    
-    Returns:
-        Dict mapping "home-away-sport" -> prediction result
-    """
-    # Get the actual predictor from session state
-    ml_predictor = st.session_state.get('ml_predictor')
-    if not ml_predictor:
-        return {}
-    
-    # Convert back to list of dicts
-    games = [
-        {
-            'home_team': home,
-            'away_team': away,
-            'sport_key': sport,
-            'id': f"{home}-{away}"
+    def predict_game_outcome(
+        self,
+        home_team: str,
+        away_team: str,
+        home_price: Optional[float] = None,
+        away_price: Optional[float] = None,
+        home_sentiment: float = 0.0,
+        away_sentiment: float = 0.0,
+        *,
+        sport_key: str = "",
+        context: Optional[Dict[str, Any]] = None,
+    ) -> Optional[Dict[str, Any]]:
+        instance: Dict[str, Any] = {
+            "home_team": home_team,
+            "away_team": away_team,
+            "home_moneyline": _safe_float(home_price),
+            "away_moneyline": _safe_float(away_price),
+            "home_sentiment": home_sentiment,
+            "away_sentiment": away_sentiment,
+            "sport_key": sport_key,
         }
-        for home, away, sport in games_data
-    ]
-    
-    # Batch predict
-    batch_predictor = BatchMLPredictor(ml_predictor)
-    results = batch_predictor.predict_games_batch(games)
-    
-    # Convert to lookup dict
-    results_dict = {}
-    for r, game in zip(results, games):
-        key = f"{r['home_team']}-{r['away_team']}-{game['sport_key']}"
-        results_dict[key] = r
-    
-    return results_dict
 
+        if context:
+            for key, value in context.items():
+                if isinstance(value, (dict, list, tuple, str, int, float, type(None))):
+                    instance[key] = value
 
-def predict_games_parallel(predictor, games: List[Dict], max_workers: int = 4) -> List[Dict]:
-    """
-    Use parallel processing for predictions (2-3x faster on multi-core).
-    This is a fallback if batch caching doesn't work.
-    """
-    def predict_single(game):
         try:
-            return predictor.predict_game_outcome(
-                game['home_team'],
-                game['away_team'],
-                game.get('sport_key', 'americanfootball_nfl')
-            )
-        except Exception as e:
-            logger.warning(f"Parallel prediction failed: {e}")
+            predictions = call_vertex_sports_model([instance])
+        except Exception as exc:  # pragma: no cover - runtime safety
+            logger.warning(f"Vertex prediction failed for {home_team} vs {away_team}: {exc}")
             return None
-    
-    results = []
-    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-        future_to_game = {
-            executor.submit(predict_single, game): game 
-            for game in games
+
+        if not predictions:
+            return None
+
+        payload = predictions[0] or {}
+        home_prob = float(payload.get("home_win_prob", payload.get("home_prob", 0.5)))
+        away_prob = float(payload.get("away_win_prob", 1 - home_prob))
+        confidence = float(payload.get("confidence", payload.get("ai_confidence", 0.5)))
+
+        return {
+            "home_prob": home_prob,
+            "home_win_prob": home_prob,
+            "away_win_prob": away_prob,
+            "confidence": confidence,
+            "edge": float(payload.get("edge", payload.get("ai_edge", 0.0))),
+            "predicted_winner": payload.get("predicted_winner") or (home_team if home_prob >= 0.5 else away_team),
         }
-        
-        for future in concurrent.futures.as_completed(future_to_game):
-            try:
-                result = future.result()
-                if result:
-                    results.append(result)
-            except Exception as e:
-                logger.warning(f"Prediction failed in parallel processing: {e}")
-    
-    return results
-
-
-# Placeholder classes for compatibility
-class EmbeddingCachePredictor:
-    """Placeholder for advanced caching - can be implemented later."""
-    def __init__(self, predictor, cache_ttl_hours=24):
-        self.predictor = predictor
-        self.cache_ttl_hours = cache_ttl_hours
-
-def hash_games(games: List[Dict]) -> str:
-    """Alias for create_games_hash for compatibility."""
-    return create_games_hash(games)
-
-def get_cached_predictions(games_hash: str, games: List[Dict], predictor_state: Any) -> List[Dict]:
-    """
-    Wrapper for batch_predict_ml_cached that returns a list instead of dict.
-    This maintains API compatibility.
-    """
-    # Convert games to hashable tuple format
-    games_tuple = tuple([
-        (g.get('home_team', ''), g.get('away_team', ''), g.get('sport_key', ''))
-        for g in games
-    ])
-    
-    predictor_id = get_predictor_id()
-    results_dict = batch_predict_ml_cached(games_hash, games_tuple, predictor_id)
-    
-    # Convert back to list
-    results_list = []
-    for game in games:
-        key = f"{game.get('home_team', '')}-{game.get('away_team', '')}-{game.get('sport_key', '')}"
-        result = results_dict.get(key)
-        if result:
-            results_list.append(result)
-    
-    return results_list
 
 # ============================================================
 # PERFORMANCE OPTIMIZATION HELPERS
@@ -499,41 +372,6 @@ def fetch_all_sports_parallel(api_key: str, sports: List[str]) -> Dict[str, Any]
                 st.sidebar.warning(f"⚠️ {sport_key}: {error[:50]}")
     
     return results
-
-
-@st.cache_resource
-def get_cached_ml_predictor(sport_key: str, cache_key: str):
-    """
-    Safe ML model caching. Uses the ml_predictor stored in
-    st.session_state, trained earlier in the historical training panel.
-    This fixes the recursion bug and prevents unnecessary retraining.
-    """
-    try:
-        ml_predictor = st.session_state.get("ml_predictor")
-        if ml_predictor is None:
-            logger.warning(
-                f"ML predictor not found in session_state for sport_key={sport_key}. "
-                f"Returning None from cache."
-            )
-            return None
-
-        return ml_predictor
-    except Exception as e:
-        logger.warning(
-            f"Error accessing cached ML predictor for {sport_key}: {e}"
-        )
-        return None
-
-
-def get_ml_predictor_smart(sport_key: str):
-    """
-    Smart wrapper that ensures Streamlit cache is invalidated per day
-    per sport. The actual ML predictor object is stored in session_state,
-    not built recursively.
-    """
-    today = date.today().isoformat()
-    cache_key = f"{sport_key}_{today}"
-    return get_cached_ml_predictor(sport_key, cache_key)
 
 
 def calculate_parlay_metrics_vectorized(legs: List[Dict]) -> Dict[str, float]:
@@ -981,6 +819,62 @@ def _parse_commence_time(raw_value: Any) -> Optional[datetime]:
             except (TypeError, ValueError, OverflowError, OSError):
                 return None
     return None
+
+
+def format_game_time_local(raw_value: Any, tz_name: Optional[str] = None) -> str:
+    """Convert a commence time value into a user-friendly local string."""
+
+    try:
+        commence_dt = _parse_commence_time(raw_value)
+        if commence_dt is None:
+            return "TBD"
+
+        tz_label = tz_name or st.session_state.get('user_timezone') or 'UTC'
+        try:
+            tz = pytz.timezone(tz_label)
+        except Exception:
+            tz = pytz.UTC
+
+        local_dt = commence_dt.astimezone(tz)
+        return local_dt.strftime("%a, %b %d — %I:%M %p %Z")
+    except Exception:
+        return "TBD"
+
+
+@st.cache_data(ttl=600)
+def load_daily_vertex_predictions_from_gcs(date_str: Optional[str] = None) -> pd.DataFrame:
+    """Load the precomputed Vertex batch CSV from GCS if available."""
+
+    bucket = os.getenv("GCS_BUCKET")
+    if not bucket:
+        return pd.DataFrame()
+
+    from google.cloud import storage
+
+    prefix = os.getenv("DAILY_PREDICTIONS_PREFIX", "vertex_predictions")
+    filename_template = os.getenv("DAILY_PREDICTIONS_FILENAME_TEMPLATE", "best_picks_{date}.csv")
+    run_date = date_str or datetime.utcnow().strftime("%Y%m%d")
+    filename = filename_template.format(date=run_date)
+    blob_name = f"{prefix.strip('/')}/{filename}"
+
+    client = storage.Client()
+    blob = client.bucket(bucket).blob(blob_name)
+
+    if not blob.exists():
+        return pd.DataFrame()
+
+    csv_bytes = blob.download_as_bytes()
+    df = pd.read_csv(io.BytesIO(csv_bytes))
+
+    # Normalize Game Time display
+    if "Game Time" in df.columns:
+        user_tz = st.session_state.get("user_timezone", "US/Eastern")
+        df["Game Time"] = df["Game Time"].apply(lambda val: format_game_time_local(val, user_tz))
+
+    if "blended_score" in df.columns:
+        df = df.sort_values("blended_score", ascending=False)
+
+    return df
 
 
 def _normalize_team_name(name: Optional[str]) -> str:
@@ -4729,6 +4623,67 @@ def integrate_kalshi_into_leg(
         0.95
     )
 
+
+def collect_kalshi_vertex_features(
+    home_team: str,
+    away_team: str,
+    sport_key: str,
+    base_prob_home: Optional[float],
+    base_prob_away: Optional[float],
+    use_kalshi: bool,
+) -> Dict[str, Any]:
+    """Gather Kalshi market signals to enrich the Vertex request payload.
+
+    Returns probabilities (if available) plus a confidence hint so the Vertex
+    model can consider market sentiment alongside sportsbook odds.
+    """
+
+    features: Dict[str, Any] = {
+        "kalshi_home_prob": None,
+        "kalshi_away_prob": None,
+        "kalshi_confidence_boost": 0.0,
+    }
+
+    if not use_kalshi:
+        return features
+
+    try:
+        kalshi = st.session_state.get('kalshi_integrator')
+    except Exception:
+        return features
+
+    if not kalshi:
+        return features
+
+    try:
+        home_snapshot = validate_with_kalshi(
+            kalshi,
+            home_team,
+            away_team,
+            "home",
+            base_prob_home if base_prob_home is not None else 0.5,
+            sport_key,
+        )
+        away_snapshot = validate_with_kalshi(
+            kalshi,
+            home_team,
+            away_team,
+            "away",
+            base_prob_away if base_prob_away is not None else 0.5,
+            sport_key,
+        )
+    except Exception:
+        return features
+
+    if home_snapshot.get("kalshi_available"):
+        features["kalshi_home_prob"] = home_snapshot.get("kalshi_prob")
+        features["kalshi_confidence_boost"] = home_snapshot.get("confidence_boost", 0.0)
+
+    if away_snapshot.get("kalshi_available"):
+        features["kalshi_away_prob"] = away_snapshot.get("kalshi_prob")
+
+    return features
+
 # ============ UTILITY FUNCTIONS ============
 def american_to_decimal(odds: float | int) -> float:
     """
@@ -5915,38 +5870,66 @@ def build_best_bets_per_game(
 
             mkts = event.get("markets") or {}
 
+            h2h_market = mkts.get("h2h") if isinstance(mkts, dict) else None
+            home_price = dig(h2h_market, "home.price") if h2h_market else None
+            away_price = dig(h2h_market, "away.price") if h2h_market else None
+            base_prob_home = implied_p_from_american(_safe_float(home_price)) if _is_reasonable_moneyline(home_price) else None
+            base_prob_away = implied_p_from_american(_safe_float(away_price)) if _is_reasonable_moneyline(away_price) else None
+
+            kalshi_vertex_features = collect_kalshi_vertex_features(
+                home,
+                away,
+                sport_key,
+                base_prob_home,
+                base_prob_away,
+                use_kalshi,
+            )
+
             ml_prediction_result = None
             if (
                 use_ml_predictions
                 and ml_predictor is not None
-                and "h2h" in mkts
+                and h2h_market is not None
+                and home_price is not None
+                and away_price is not None
             ):
-                home_price = dig(mkts["h2h"], "home.price")
-                away_price = dig(mkts["h2h"], "away.price")
-                if home_price is not None and away_price is not None:
-                    ml_context = {
-                        'sport_key': sport_key,
-                        'event_id': event_id,
-                        'apisports_home': apisports_payload_home,
-                        'apisports_away': apisports_payload_away,
-                        'sportsdata_home': sportsdata_payload_home,
-                        'sportsdata_away': sportsdata_payload_away,
-                    }
-                    try:
-                        ml_prediction_result = ml_predictor.predict_game_outcome(
-                            home,
-                            away,
-                            home_price,
-                            away_price,
-                            home_sentiment['score'],
-                            away_sentiment['score'],
-                            context=ml_context,
-                        )
-                    except Exception:
-                        ml_prediction_result = None
+                ml_context = {
+                    'sport_key': sport_key,
+                    'event_id': event_id,
+                    'apisports_home': apisports_payload_home,
+                    'apisports_away': apisports_payload_away,
+                    'sportsdata_home': sportsdata_payload_home,
+                    'sportsdata_away': sportsdata_payload_away,
+                    'kalshi_home_prob': kalshi_vertex_features.get('kalshi_home_prob'),
+                    'kalshi_away_prob': kalshi_vertex_features.get('kalshi_away_prob'),
+                    'kalshi_confidence_boost': kalshi_vertex_features.get('kalshi_confidence_boost'),
+                    'news_sentiment_home': home_sentiment.get('score', 0.0),
+                    'news_sentiment_away': away_sentiment.get('score', 0.0),
+                    'game_time': commence_time,
+                }
+                try:
+                    ml_prediction_result = ml_predictor.predict_game_outcome(
+                        home_team=home,
+                        away_team=away,
+                        home_price=home_price,
+                        away_price=away_price,
+                        home_sentiment=home_sentiment.get('score', 0.0),
+                        away_sentiment=away_sentiment.get('score', 0.0),
+                        sport_key=sport_key,
+                        context=ml_context,
+                    )
+                except Exception:
+                    ml_prediction_result = None
+
+                if ml_prediction_result:
+                    event_meta[event_id]['vertex_home_prob'] = ml_prediction_result.get('home_win_prob', ml_prediction_result.get('home_prob'))
+                    event_meta[event_id]['vertex_away_prob'] = ml_prediction_result.get('away_win_prob', ml_prediction_result.get('away_prob'))
+                    event_meta[event_id]['vertex_confidence'] = ml_prediction_result.get('confidence')
+                    event_meta[event_id]['vertex_edge'] = ml_prediction_result.get('edge')
+                    event_meta[event_id]['vertex_pick'] = ml_prediction_result.get('predicted_winner')
 
             # Moneyline legs
-            if "h2h" in mkts:
+            if h2h_market:
                 home_price = dig(mkts["h2h"], "home.price")
                 away_price = dig(mkts["h2h"], "away.price")
 
@@ -5959,10 +5942,10 @@ def build_best_bets_per_game(
                     ai_edge = 0.0
                     ml_prob = None
                     if ml_prediction_result:
-                        ai_prob = ml_prediction_result.get('home_prob', base_prob)
+                        ai_prob = ml_prediction_result.get('home_win_prob', ml_prediction_result.get('home_prob', base_prob))
                         ai_confidence = ml_prediction_result.get('confidence', 0.5)
                         ai_edge = ml_prediction_result.get('edge', 0.0)
-                        ml_prob = ml_prediction_result.get('home_prob')
+                        ml_prob = ml_prediction_result.get('home_win_prob', ml_prediction_result.get('home_prob'))
                     if ai_confidence >= min_ai_confidence:
                         decimal_odds = american_to_decimal_safe(home_price_val)
                         if decimal_odds is not None:
@@ -5989,6 +5972,11 @@ def build_best_bets_per_game(
                             if ml_prediction_result:
                                 leg_data['ai_model_source'] = ml_prediction_result.get('model_used')
                                 leg_data['ai_training_rows'] = ml_prediction_result.get('training_rows')
+                                leg_data['vertex_home_prob'] = ml_prediction_result.get('home_win_prob', ml_prediction_result.get('home_prob'))
+                                leg_data['vertex_away_prob'] = ml_prediction_result.get('away_win_prob', ml_prediction_result.get('away_prob'))
+                                leg_data['vertex_confidence'] = ml_prediction_result.get('confidence')
+                                leg_data['vertex_edge'] = ml_prediction_result.get('edge')
+                                leg_data['vertex_pick'] = ml_prediction_result.get('predicted_winner')
                                 component_breakdown = ml_prediction_result.get('component_probabilities')
                                 if isinstance(component_breakdown, dict) and component_breakdown:
                                     leg_data['ai_component_probabilities'] = component_breakdown
@@ -6018,10 +6006,10 @@ def build_best_bets_per_game(
                     ai_edge = 0.0
                     ml_prob = None
                     if ml_prediction_result:
-                        ai_prob = ml_prediction_result.get('away_prob', base_prob)
+                        ai_prob = ml_prediction_result.get('away_win_prob', ml_prediction_result.get('away_prob', base_prob))
                         ai_confidence = ml_prediction_result.get('confidence', 0.5)
                         ai_edge = ml_prediction_result.get('edge', 0.0)
-                        ml_prob = ml_prediction_result.get('away_prob')
+                        ml_prob = ml_prediction_result.get('away_win_prob', ml_prediction_result.get('away_prob'))
                     if ai_confidence >= min_ai_confidence:
                         decimal_odds = american_to_decimal_safe(away_price_val)
                         if decimal_odds is not None:
@@ -6048,6 +6036,11 @@ def build_best_bets_per_game(
                             if ml_prediction_result:
                                 leg_data['ai_model_source'] = ml_prediction_result.get('model_used')
                                 leg_data['ai_training_rows'] = ml_prediction_result.get('training_rows')
+                                leg_data['vertex_home_prob'] = ml_prediction_result.get('home_win_prob', ml_prediction_result.get('home_prob'))
+                                leg_data['vertex_away_prob'] = ml_prediction_result.get('away_win_prob', ml_prediction_result.get('away_prob'))
+                                leg_data['vertex_confidence'] = ml_prediction_result.get('confidence')
+                                leg_data['vertex_edge'] = ml_prediction_result.get('edge')
+                                leg_data['vertex_pick'] = ml_prediction_result.get('predicted_winner')
                                 component_breakdown = ml_prediction_result.get('component_probabilities')
                                 if isinstance(component_breakdown, dict) and component_breakdown:
                                     leg_data['ai_component_probabilities'] = component_breakdown
@@ -6481,6 +6474,7 @@ def build_best_bets_per_game(
             'League': best_option['league'],
             'Game': f"{best_option['away_team']} @ {best_option['home_team']}",
             'Commence (Local)': best_option['commence_display'],
+            'Game Time (Local)': best_option.get('commence_display'),
             'Market': best_option['market'],
             'Side': best_option['side'],
             'Selection': best_option['selection'],
@@ -8784,41 +8778,11 @@ min_ai_confidence = sidebar_state["min_ai_confidence"]
 min_parlay_probability = sidebar_state["min_parlay_probability"]
 max_parlay_probability = sidebar_state["max_parlay_probability"]
 
-# Manage historical ML components lazily so resource-heavy datasets are only
-# built when machine-learning predictions are enabled.
-builder_error = st.session_state.get('historical_builder_error')
 if use_ml_predictions:
-    builder = st.session_state.get('historical_data_builder')
-    if builder is None:
-        try:
-            builder = HistoricalDataBuilder(
-                resolve_odds_api_key,
-                days_back=120,
-                max_days_back=540,
-                min_rows_target=30,
-            )
-            st.session_state['historical_data_builder'] = builder
-            st.session_state.pop('historical_builder_error', None)
-            builder_error = None
-        except TypeError as builder_init_error:  # pragma: no cover - defensive guard
-            logger.exception("Failed to initialize HistoricalDataBuilder", exc_info=True)
-            builder = HistoricalDataBuilder(resolve_odds_api_key)
-            st.session_state['historical_data_builder'] = builder
-            st.session_state['historical_builder_error'] = str(builder_init_error)
-            builder_error = str(builder_init_error)
-
-    if st.session_state.get('ml_predictor') is None and builder is not None:
-        st.session_state['ml_predictor'] = HistoricalMLPredictor(builder)
+    if st.session_state.get('ml_predictor') is None:
+        st.session_state['ml_predictor'] = VertexPredictor()
 else:
-    builder = st.session_state.get('historical_data_builder')
-    if builder and hasattr(builder, 'reset_cache'):
-        try:
-            builder.reset_cache()
-        except Exception:  # pragma: no cover - defensive cache clear
-            logger.debug("Failed to reset historical dataset cache", exc_info=True)
     st.session_state.pop('ml_predictor', None)
-    builder_error = None
-    st.session_state['historical_builder_error'] = None
 
 ml_predictor_state = st.session_state.get('ml_predictor')
 ai_optimizer = st.session_state.get('ai_optimizer')
@@ -8982,28 +8946,15 @@ with st.expander("🔍 ML Predictor Status", expanded=False):
                 else:
                     st.info("ℹ️ Sentiment analyzer not loaded, using neutral sentiment (0.0)")
                 
-                # Try with all parameters
-                try:
-                    test_result = ml_predictor.predict_game_outcome(
-                        home_team="Kansas City Chiefs",
-                        away_team="Las Vegas Raiders",
-                        home_odds=-200,  # Example odds
-                        away_odds=+175,
-                        sentiment_home=sentiment_home,
-                        sentiment_away=sentiment_away,
-                        sport_key="americanfootball_nfl"
-                    )
-                except TypeError as e:
-                    # Fallback: without sport_key (HistoricalMLPredictor)
-                    st.info("ℹ️ Using HistoricalMLPredictor (doesn't accept sport_key parameter)")
-                    test_result = ml_predictor.predict_game_outcome(
-                        home_team="Kansas City Chiefs",
-                        away_team="Las Vegas Raiders",
-                        home_odds=-200,
-                        away_odds=+175,
-                        sentiment_home=sentiment_home,
-                        sentiment_away=sentiment_away
-                    )
+                test_result = ml_predictor.predict_game_outcome(
+                    home_team="Kansas City Chiefs",
+                    away_team="Las Vegas Raiders",
+                    home_price=-200,  # Example odds
+                    away_price=+175,
+                    home_sentiment=sentiment_home,
+                    away_sentiment=sentiment_away,
+                    sport_key="americanfootball_nfl",
+                )
                 
                 if test_result:
                     st.success("✅ ML Prediction successful!")
@@ -9062,30 +9013,6 @@ with main_tab1:
     else:
         if basketball_client.api_key != (nba_key or ""):
             basketball_client.update_api_key(nba_key or None, source=nba_source or "user")
-
-    ml_predictor = st.session_state.get('ml_predictor')
-    if ml_predictor and use_ml_predictions:
-        def _register_sportsdata(sport_key: str) -> None:
-            client = sportsdata_clients.get(sport_key)
-            if client is not None:
-                ml_predictor.register_sportsdata_client(sport_key, client)
-
-        if 'americanfootball_nfl' in active_sport_keys:
-            ml_predictor.register_client('americanfootball_nfl', apisports_client)
-        if 'icehockey_nhl' in active_sport_keys:
-            ml_predictor.register_client('icehockey_nhl', hockey_client)
-        if 'basketball_nba' in active_sport_keys:
-            ml_predictor.register_client('basketball_nba', basketball_client)
-
-        # SportsData.io-driven leagues (including college football) feed the ML datasets
-        for sd_sport in (
-            'americanfootball_nfl',
-            'icehockey_nhl',
-            'basketball_nba',
-            'americanfootball_ncaaf',
-            'basketball_ncaab',
-        ):
-            _register_sportsdata(sd_sport)
 
     # Quick configuration summary to reinforce sidebar selections
     config_cols = st.columns(3)
@@ -9672,166 +9599,169 @@ if is_vertex_ai_enabled():
                 
                 all_games = []
 
-                # Prefer theover.ai uploads for lines/spreads to avoid TheOddsAPI mismatches
-                used_theover = False
-                if 'theover_spreads_data' in locals() and theover_spreads_data is not None and not theover_spreads_data.empty:
-                    used_theover = True
-                    st.info("📥 Using theover.ai uploads for spreads/totals (skipping The Odds API lines)")
+                def _league_from_sport_key(sport_key: str) -> str:
+                    if not sport_key:
+                        return ""
+                    mapping = {
+                        'americanfootball_nfl': 'NFL',
+                        'americanfootball_ncaaf': 'NCAAF',
+                        'basketball_nba': 'NBA',
+                        'basketball_ncaab': 'NCAAB',
+                        'icehockey_nhl': 'NHL',
+                    }
+                    return mapping.get(sport_key.lower(), sport_key.upper())
 
-                    for _, row in theover_spreads_data.iterrows():
-                        # Get basic info
-                        home_team = row.get('home_team') or row.get('HomeTeam') or ''
-                        away_team = row.get('away_team') or row.get('AwayTeam') or ''
-                        league = (row.get('League') or row.get('league') or 'NBA').upper()
-                        pick = row.get('Pick') or row.get('pick') or ''
+                def _normalize_team(name: str) -> str:
+                    return (name or "").strip().lower()
 
-                        # Extract line value
-                        line_value = row.get('Line') or row.get('Spread') or row.get('line') or 0
+                def _compute_theover_fields(row: pd.Series) -> Dict[str, Any]:
+                    home_team = row.get('home_team') or row.get('HomeTeam') or ''
+                    away_team = row.get('away_team') or row.get('AwayTeam') or ''
+                    league = (row.get('League') or row.get('league') or 'NBA').upper()
+                    pick = row.get('Pick') or row.get('pick') or ''
+
+                    line_value = row.get('Line') or row.get('Spread') or row.get('line') or 0
+                    try:
+                        line_value = float(line_value) if line_value else 0
+                    except Exception:
+                        line_value = 0
+
+                    if league == 'NFL':
+                        sport_key = 'americanfootball_nfl'
+                    elif league == 'NBA':
+                        sport_key = 'basketball_nba'
+                    elif league == 'NHL':
+                        sport_key = 'icehockey_nhl'
+                    elif league == 'NCAAB':
+                        sport_key = 'basketball_ncaab'
+                    elif league == 'NCAAF':
+                        sport_key = 'americanfootball_ncaaf'
+                    else:
+                        sport_key = 'basketball_nba'
+
+                    is_nhl = league == 'NHL'
+
+                    if is_nhl:
+                        moneyline = line_value
+                        if moneyline > 0:
+                            pick_win_prob = 100 / (moneyline + 100)
+                        else:
+                            pick_win_prob = abs(moneyline) / (abs(moneyline) + 100)
+
+                        pick_is_home = (pick == home_team) or (
+                            pick and (pick.lower() in home_team.lower() or home_team.lower() in pick.lower())
+                        )
+
+                        if pick_is_home:
+                            home_implied_prob = pick_win_prob
+                            home_ml = int(moneyline)
+                            away_ml = int(-moneyline) if moneyline > 0 else int(100 * 100 / abs(moneyline))
+                        else:
+                            home_implied_prob = 1 - pick_win_prob
+                            away_ml = int(moneyline)
+                            home_ml = int(-moneyline) if moneyline > 0 else int(100 * 100 / abs(moneyline))
+
+                        theover_prob = home_implied_prob
+                        home_spread = 1.5
+                    else:
+                        pick_spread = line_value
+                        spread = abs(line_value)
+                        spread_shift = spread * 0.028
+                        pick_is_home = (pick == home_team) or (
+                            pick and (pick.lower() in home_team.lower() or home_team.lower() in pick.lower())
+                        )
+
+                        if line_value < 0:
+                            pick_win_prob = min(0.80, 0.50 + spread_shift)
+                        else:
+                            pick_win_prob = max(0.20, 0.50 - spread_shift)
+
+                        if pick_is_home:
+                            home_spread = line_value
+                            home_implied_prob = pick_win_prob
+                        else:
+                            home_spread = -line_value
+                            home_implied_prob = 1 - pick_win_prob
+
+                        theover_prob = home_implied_prob
+
+                        if home_implied_prob > 0.5:
+                            home_ml = int(-100 * home_implied_prob / (1 - home_implied_prob))
+                            away_ml = int(100 * (1 - home_implied_prob) / home_implied_prob)
+                        else:
+                            home_ml = int(100 * (1 - home_implied_prob) / home_implied_prob)
+                            away_ml = int(-100 * home_implied_prob / (1 - home_implied_prob))
+
+                    return {
+                        'home_team': home_team,
+                        'away_team': away_team,
+                        'league': league,
+                        'sport_key': sport_key,
+                        'theover_spread': line_value,
+                        'theover_pick': pick,
+                        'theover_probability': theover_prob,
+                        'theover_line': line_value,
+                        'is_moneyline': is_nhl,
+                        'home_ml_odds': home_ml,
+                        'away_ml_odds': away_ml,
+                        'home_spread': home_spread if not is_nhl else 1.5,
+                        'implied_home_prob': home_implied_prob,
+                    }
+
+                odds_api_key = resolve_odds_api_key()
+                odds_available = False
+
+                if odds_api_key:
+                    st.info("📥 Fetching games from The Odds API...")
+                    for sport in selected_sports:
                         try:
-                            line_value = float(line_value) if line_value else 0
-                        except:
-                            line_value = 0
+                            snapshot = fetch_oddsapi_snapshot(odds_api_key, sport)
+                            games = snapshot.get('events', [])
+                            for game in games:
+                                game['sport_key'] = sport
+                                game['league'] = _league_from_sport_key(sport)
+                            all_games.extend(games)
+                            st.success(f"✅ Fetched {len(games)} {sport} games")
+                            odds_available = True
+                        except Exception as e:
+                            st.warning(f"⚠️ Error fetching {sport}: {e}")
+                            logger.error(f"Error fetching {sport}: {e}")
 
-                        # Determine sport_key from league
-                        if league == 'NFL':
-                            sport_key = 'americanfootball_nfl'
-                        elif league == 'NBA':
-                            sport_key = 'basketball_nba'
-                        elif league == 'NHL':
-                            sport_key = 'icehockey_nhl'
-                        elif league == 'NCAAB':
-                            sport_key = 'basketball_ncaab'
-                        elif league == 'NCAAF':
-                            sport_key = 'americanfootball_ncaaf'
-                        else:
-                            sport_key = 'basketball_nba'
-
-                        # NHL uses MONEYLINES in the Line column (125, -150, etc.)
-                        # Other sports use point spreads (13.5, -7.5, etc.)
-                        is_nhl = league == 'NHL'
-
-                        if is_nhl:
-                            # Line is a moneyline for NHL
-                            moneyline = line_value
-                            spread = 1.5  # Standard puckline
-
-                            # Calculate probability from moneyline
-                            if moneyline > 0:
-                                # Underdog: +150 means 100/(150+100) = 40%
-                                pick_win_prob = 100 / (moneyline + 100)
-                            else:
-                                # Favorite: -150 means 150/(150+100) = 60%
-                                pick_win_prob = abs(moneyline) / (abs(moneyline) + 100)
-
-                            # Determine home/away probabilities based on pick
-                            pick_is_home = (pick == home_team) or (pick and (pick.lower() in home_team.lower() or home_team.lower() in pick.lower()))
-
-                            if pick_is_home:
-                                home_implied_prob = pick_win_prob
-                                home_ml = int(moneyline)
-                                away_ml = int(-moneyline) if moneyline > 0 else int(100 * 100 / abs(moneyline))
-                            else:
-                                home_implied_prob = 1 - pick_win_prob
-                                away_ml = int(moneyline)
-                                home_ml = int(-moneyline) if moneyline > 0 else int(100 * 100 / abs(moneyline))
-
-                            # theover_prob = HOME team win probability
-                            theover_prob = home_implied_prob
-                            home_spread = 1.5  # Standard puckline
-
-                        else:
-                            # Basketball/Football: Line is the PICKED team's spread!
-                            # Example: "Dallas @ Lakers, Pick: Dallas, Line: 10.5"
-                            # This means Dallas +10.5, Lakers are favorites
-
-                            pick_spread = line_value  # Line is already the picked team's spread!
-                            spread = abs(line_value)
-
-                            # Calculate probability from spread
-                            # Each point of spread ≈ 2.5-3% shift from 50%
-                            spread_shift = spread * 0.028  # ~2.8% per point
-
-                            # Determine if pick is home or away
-                            pick_is_home = (pick == home_team) or (pick and (pick.lower() in home_team.lower() or home_team.lower() in pick.lower()))
-
-                            # The pick_spread tells us if picked team is favorite or underdog
-                            # Negative = favorite, Positive = underdog
-                            if line_value < 0:
-                                # Picked team is favorite
-                                pick_win_prob = min(0.80, 0.50 + spread_shift)
-                            else:
-                                # Picked team is underdog
-                                pick_win_prob = max(0.20, 0.50 - spread_shift)
-
-                            # Calculate home_spread from pick_spread
-                            if pick_is_home:
-                                # Pick is home, home_spread = pick_spread
-                                home_spread = line_value
-                                home_implied_prob = pick_win_prob
-                            else:
-                                # Pick is away, home_spread is opposite
-                                home_spread = -line_value
-                                home_implied_prob = 1 - pick_win_prob
-
-                            # theover_probability = home team win probability
-                            theover_prob = home_implied_prob
-
-                            # Calculate American odds from probability
-                            if home_implied_prob > 0.5:
-                                home_ml = int(-100 * home_implied_prob / (1 - home_implied_prob))
-                                away_ml = int(100 * (1 - home_implied_prob) / home_implied_prob)
-                            else:
-                                home_ml = int(100 * (1 - home_implied_prob) / home_implied_prob)
-                                away_ml = int(-100 * home_implied_prob / (1 - home_implied_prob))
-
-                        # Store the spread FOR THE PICKED TEAM
-                        picked_team_spread = line_value  # Line is already for picked team!
-
-                        all_games.append({
-                            'home_team': home_team,
-                            'away_team': away_team,
-                            'sport_key': sport_key,
-                            'league': league,
-                            'commence_time': None,
-                            # TheOver.ai specific data
-                            'theover_spread': picked_team_spread,  # Already correct for picked team
-                            'theover_pick': pick,
-                            'theover_probability': theover_prob,  # Home team win probability
-                            'theover_line': line_value,  # Original line from CSV
-                            'is_moneyline': is_nhl,
-                            # Calculated odds
-                            'home_ml_odds': home_ml,
-                            'away_ml_odds': away_ml,
-                            # home_spread is the HOME team's spread (correctly calculated)
-                            'home_spread': home_spread if not is_nhl else 1.5,
-                            'implied_home_prob': home_implied_prob,
-                        })
-
-                    st.success(f"📊 Loaded {len(all_games)} games from theover.ai (spreads + NHL moneylines converted)")
-
-                # If no TheOver data is available, fall back to TheOddsAPI so analysis still runs
-                if not used_theover:
-                    odds_api_key = resolve_odds_api_key()
-                    odds_available = False
-
-                    if odds_api_key:
-                        st.info("📥 Fetching games from The Odds API...")
-                        for sport in selected_sports:
-                            try:
-                                snapshot = fetch_oddsapi_snapshot(odds_api_key, sport)
-                                games = snapshot.get('events', [])
-                                for game in games:
-                                    game['sport_key'] = sport
-                                all_games.extend(games)
-                                st.success(f"✅ Fetched {len(games)} {sport} games")
-                                odds_available = True
-                            except Exception as e:
-                                st.warning(f"⚠️ Error fetching {sport}: {e}")
-                                logger.error(f"Error fetching {sport}: {e}")
-
-                    if not odds_available:
-                        st.warning("⚠️ The Odds API not configured")
-                        st.info("💡 Upload theover.ai CSV files above to power Vertex AI analysis")
+                # Merge TheOver.ai data as supplemental features onto The Odds API lines
+                theover_rows_attached = 0
+                if 'theover_spreads_data' in locals() and theover_spreads_data is not None and not theover_spreads_data.empty:
+                    if all_games:
+                        over_map = {}
+                        for _, row in theover_spreads_data.iterrows():
+                            fields = _compute_theover_fields(row)
+                            key = (fields.get('league', '').upper(), _normalize_team(fields.get('home_team')), _normalize_team(fields.get('away_team')))
+                            over_map[key] = fields
+                        for game in all_games:
+                            key = (
+                                (game.get('league') or _league_from_sport_key(game.get('sport_key', ''))).upper(),
+                                _normalize_team(game.get('home_team', '')),
+                                _normalize_team(game.get('away_team', '')),
+                            )
+                            if key in over_map:
+                                game.update({k: v for k, v in over_map[key].items() if k not in {'home_team', 'away_team', 'league', 'sport_key'}})
+                                theover_rows_attached += 1
+                        st.info(
+                            "✅ Loaded lines from The Odds API. Using theover.ai uploads only as supplemental model inputs when available."
+                        )
+                        if theover_rows_attached:
+                            st.success(f"📊 Attached TheOver.ai data to {theover_rows_attached} games")
+                    elif theover_spreads_data is not None:
+                        # Odds API unavailable; fall back to theover rows to avoid an empty analysis
+                        st.info("ℹ️ The Odds API unavailable; using TheOver.ai uploads to seed analysis")
+                        for _, row in theover_spreads_data.iterrows():
+                            fields = _compute_theover_fields(row)
+                            all_games.append(fields)
+                        odds_available = odds_available or bool(all_games)
+                else:
+                    if odds_available:
+                        st.info("✅ Loaded lines from The Odds API (no TheOver.ai uploads found).")
+                    else:
+                        st.warning("⚠️ The Odds API not configured and no TheOver.ai uploads provided")
                 
                 if not all_games:
                     st.error("❌ No games found. Either:")
@@ -11463,6 +11393,20 @@ if is_vertex_ai_enabled():
 
                     home_team = vertex_result.get('home_team') or matching_game.get('home_team')
                     away_team = vertex_result.get('away_team') or matching_game.get('away_team')
+                    commence_raw = vertex_result.get('commence_time') or matching_game.get('commence_time')
+
+                    # Always define a display string to avoid NameError when commence time is missing
+                    user_tz_label = st.session_state.get('user_timezone', 'UTC')
+                    game_time_display = "TBD"
+                    if commence_raw:
+                        try:
+                            game_time_display = format_game_time_local(
+                                commence_raw,
+                                user_tz_label,
+                            )
+                        except Exception:
+                            # Fallback to raw commence string if formatting fails
+                            game_time_display = str(commence_raw)
 
                     raw_vertex_prob = _safe_float(vertex_result.get('vertex_probability'))
                     raw_confidence = _safe_float(vertex_result.get('confidence'))
@@ -11535,10 +11479,11 @@ if is_vertex_ai_enabled():
                                     'sport_key': vertex_result.get('sport') or matching_game.get('sport_key'),
                                     'home_team': home_team,
                                     'away_team': away_team,
-                                    'commence_time': vertex_result.get('commence_time') or matching_game.get('commence_time'),
+                                    'commence_time': commence_raw,
                                     'ml_probability': ai_prob_dec,
                                     'bookmaker': bookmaker_name,
                                     'best_american': odds,
+                                    'Game Time': game_time_display,
                                 }
 
                                 vertex_leg_rows.append(leg_entry)
@@ -11809,11 +11754,14 @@ if is_vertex_ai_enabled():
                     # =====================================================
                     # ADD TO BEST BETS
                     # =====================================================
+                    game_time_display_safe = game_time_display if 'game_time_display' in locals() else "TBD"
                     best_bets_rows.append({
                         'League': league,
                         'Game': f"{away_team} @ {home_team}",
+                        'Game Time': game_time_display_safe,
                         'THE PICK': pick_str,
                         'AI Win %': round(ai_win_prob, 1),
+                        'Win %': round(ai_win_prob, 1),
                         'Market %': round(market_implied_prob, 1),
                         'Edge': round(edge_pp, 1),
                         'EV': f"${ev_pct:.2f}",
@@ -11825,6 +11773,8 @@ if is_vertex_ai_enabled():
                         'Odds': odds_str,
                         'Confidence': round(confidence, 1),
                         'ML Source': ml_source_type,
+                        'Commence (UTC)': commence_raw,
+                        'kalshi_prob_raw': kalshi_pick_prob,
                     })
                 
                 # Display results
@@ -11833,16 +11783,64 @@ if is_vertex_ai_enabled():
                 
                 if best_bets_rows:
                     best_bets_df = pd.DataFrame(best_bets_rows)
-                    
-                    # Convert Edge to numeric for sorting
+                    user_tz_label = st.session_state.get('user_timezone', 'UTC')
+
+                    if 'Game Time' not in best_bets_df.columns and 'Commence (UTC)' in best_bets_df.columns:
+                        best_bets_df['Game Time'] = best_bets_df['Commence (UTC)']
+
+                    best_bets_df['Game Time'] = best_bets_df['Game Time'].apply(
+                        lambda val: format_game_time_local(val, user_tz_label) if pd.notna(val) else "TBD"
+                    )
+
+                    if 'Win %' not in best_bets_df.columns and 'AI Win %' in best_bets_df.columns:
+                        best_bets_df['Win %'] = best_bets_df['AI Win %']
+
+                    best_bets_df['model_prob'] = pd.to_numeric(best_bets_df.get('Win %'), errors='coerce') / 100.0
+                    kalshi_pct = pd.to_numeric(best_bets_df.get('Kalshi %'), errors='coerce')
+                    if 'kalshi_prob_raw' in best_bets_df.columns:
+                        kalshi_pct = kalshi_pct.fillna(pd.to_numeric(best_bets_df['kalshi_prob_raw'], errors='coerce'))
+
+                    best_bets_df['kalshi_prob'] = kalshi_pct / 100.0
+                    best_bets_df['kalshi_edge'] = best_bets_df['model_prob'] - best_bets_df['kalshi_prob']
+                    best_bets_df['blended_score'] = best_bets_df['model_prob']
+
+                    with_kalshi = best_bets_df['kalshi_prob'].notna()
+                    best_bets_df.loc[with_kalshi, 'blended_score'] = (
+                        0.5 * best_bets_df.loc[with_kalshi, 'model_prob']
+                        + 0.5 * best_bets_df.loc[with_kalshi, 'kalshi_edge']
+                    )
+
+                    best_bets_df['kalshi_prob_pct'] = best_bets_df['kalshi_prob'] * 100
+                    best_bets_df['kalshi_edge_pct'] = best_bets_df['kalshi_edge'] * 100
+
+                    # Convert Edge to numeric for sorting/metrics
                     best_bets_df['Edge_numeric'] = pd.to_numeric(best_bets_df['Edge'], errors='coerce')
-                    
-                    # Sort by Edge (highest first) - this shows the best value bets first
-                    best_bets_df = best_bets_df.sort_values('Edge_numeric', ascending=False)
-                    
+
+                    # Sort by blended score to include market sentiment
+                    best_bets_df = best_bets_df.sort_values('blended_score', ascending=False)
+
                     # Add rank column
                     best_bets_df.insert(0, 'Rank', range(1, len(best_bets_df) + 1))
-                    
+
+                    # Surface the daily batch predictions saved to GCS for easy comparison
+                    gcs_batch_df = st.session_state.get('gcs_daily_predictions')
+                    if gcs_batch_df is not None and not gcs_batch_df.empty:
+                        gcs_cols = [
+                            'Rank', 'league', 'game', 'Game Time', 'the_pick', 'Win %',
+                            'Kalshi %', 'kalshi_prob', 'kalshi_edge', 'blended_score'
+                        ]
+                        gcs_cols = [col for col in gcs_cols if col in gcs_batch_df.columns]
+
+                        st.subheader("☁️ Vertex batch predictions (from GCS)")
+                        st.caption(
+                            "Automatically loaded from the daily Vertex batch CSV stored in your configured GCS bucket."
+                        )
+                        st.dataframe(
+                            gcs_batch_df[gcs_cols],
+                            use_container_width=True,
+                            hide_index=True,
+                        )
+
                     # Calculate summary stats
                     total_games = len(best_bets_df)
                     avg_edge = best_bets_df['Edge_numeric'].mean() if 'Edge_numeric' in best_bets_df.columns else 0
@@ -11851,7 +11849,7 @@ if is_vertex_ai_enabled():
                     kalshi_agrees = len(best_bets_df[best_bets_df['Kalshi'] == '✅']) if 'Kalshi' in best_bets_df.columns else 0
                     sentiment_agrees = len(best_bets_df[best_bets_df['Sentiment'] == '✅']) if 'Sentiment' in best_bets_df.columns else 0
 
-                    st.success(f"🎯 **{total_games} Games Analyzed - Edge + Consensus Ranking**")
+                    st.success(f"🎯 **{total_games} Games Analyzed - Blended (Model + Kalshi) Ranking**")
 
                     # Display metrics
                     col1, col2, col3, col4 = st.columns(4)
@@ -11893,15 +11891,20 @@ if is_vertex_ai_enabled():
                             st.info(f"📊 Using spread-derived probabilities (each point ≈ 2.8% shift from 50%)")
                         st.markdown("---")
                     
-                    # Display columns - new edge-based format
-                    display_cols = ['Rank', 'League', 'Game', 'THE PICK', 'AI Win %', 'Market %', 
-                                   'Edge', 'EV', 'Consensus', 'Sentiment', 'Kalshi', 'Kalshi %', 
-                                   'TheOver %', 'Odds', 'Confidence']
+                    # Display columns - include game time and Kalshi-derived signals
+                    best_bets_df['Blended Score %'] = best_bets_df['blended_score'] * 100
+
+                    display_cols = [
+                        'Rank', 'League', 'Game', 'Game Time', 'THE PICK', 'AI Win %', 'Market %',
+                        'Edge', 'EV', 'Consensus', 'Sentiment', 'Kalshi', 'Kalshi %',
+                        'kalshi_prob_pct', 'kalshi_edge_pct', 'Blended Score %',
+                        'TheOver %', 'Odds', 'Confidence'
+                    ]
                     display_cols = [c for c in display_cols if c in best_bets_df.columns]
-                    
+
                     # Show the best bets table
-                    st.subheader("🏆 BEST BETS - Ranked by Edge")
-                    st.caption("Edge = AI Win % - Market Implied %. Positive edge = potential value.")
+                    st.subheader("🏆 BEST BETS - Ranked by Blended Model + Kalshi Signal")
+                    st.caption("Blended score = 50% model probability + 50% model vs. Kalshi edge. Edge still shown for context.")
                     st.dataframe(
                         best_bets_df[display_cols],
                         use_container_width=True,
@@ -11919,8 +11922,15 @@ if is_vertex_ai_enabled():
                                 hide_index=True
                             )
                     
-                    # CSV Download
-                    csv_buffer = best_bets_df[display_cols].to_csv(index=False)
+                    # CSV Download (ensure Game Time and Kalshi signals are exported)
+                    export_cols = [
+                        'Rank', 'League', 'Game', 'Game Time', 'THE PICK', 'Win %', 'AI Win %', 'Market %',
+                        'Edge', 'EV', 'Consensus', 'Sentiment', 'Kalshi', 'Kalshi %', 'kalshi_prob',
+                        'kalshi_prob_pct', 'kalshi_edge', 'kalshi_edge_pct', 'Blended Score %', 'TheOver %',
+                        'Odds', 'Confidence'
+                    ]
+                    export_cols = [c for c in export_cols if c in best_bets_df.columns]
+                    csv_buffer = best_bets_df[export_cols].to_csv(index=False)
                     st.download_button(
                         "⬇️ Download Best Bets (CSV)",
                         data=csv_buffer,
@@ -12302,6 +12312,18 @@ if is_vertex_ai_enabled():
                                     hp = _dig(mkts["h2h"], "home.price")
                                     ap = _dig(mkts["h2h"], "away.price")
 
+                                    base_prob_home = implied_p_from_american(_safe_float(hp)) if _is_reasonable_moneyline(hp) else None
+                                    base_prob_away = implied_p_from_american(_safe_float(ap)) if _is_reasonable_moneyline(ap) else None
+
+                                    kalshi_vertex_features = collect_kalshi_vertex_features(
+                                        home,
+                                        away,
+                                        skey,
+                                        base_prob_home,
+                                        base_prob_away,
+                                        use_kalshi,
+                                    )
+
                                     ml_context = {
                                         "sport_key": skey,
                                         "event_id": eid,
@@ -12309,8 +12331,14 @@ if is_vertex_ai_enabled():
                                         "apisports_away": apisports_payload_away,
                                         "sportsdata_home": sportsdata_payload_home,
                                         "sportsdata_away": sportsdata_payload_away,
+                                        "kalshi_home_prob": kalshi_vertex_features.get("kalshi_home_prob"),
+                                        "kalshi_away_prob": kalshi_vertex_features.get("kalshi_away_prob"),
+                                        "kalshi_confidence_boost": kalshi_vertex_features.get("kalshi_confidence_boost"),
+                                        "news_sentiment_home": home_sentiment.get('score', 0.0),
+                                        "news_sentiment_away": away_sentiment.get('score', 0.0),
+                                        "game_time": commence_time,
                                     }
-                                    
+
                                     # CRITICAL FIX: Actually call the ML predictor!
                                     ml_prediction_result = None
                                     if use_ml_predictions and ml_predictor and hp is not None and ap is not None:
@@ -12319,7 +12347,12 @@ if is_vertex_ai_enabled():
                                             ml_prediction_result = ml_predictor.predict_game_outcome(
                                                 home_team=home,
                                                 away_team=away,
-                                                sport_key=skey
+                                                home_price=hp,
+                                                away_price=ap,
+                                                home_sentiment=home_sentiment.get('score', 0.0),
+                                                away_sentiment=away_sentiment.get('score', 0.0),
+                                                sport_key=skey,
+                                                context=ml_context,
                                             )
                                             if ml_prediction_result:
                                                 logger.info(
@@ -12375,6 +12408,11 @@ if is_vertex_ai_enabled():
                                                 if ml_prediction_result:
                                                     leg_data['ai_model_source'] = ml_prediction_result.get('model_used')
                                                     leg_data['ai_training_rows'] = ml_prediction_result.get('training_rows')
+                                                    leg_data['vertex_home_prob'] = ml_prediction_result.get('home_win_prob', ml_prediction_result.get('home_prob'))
+                                                    leg_data['vertex_away_prob'] = ml_prediction_result.get('away_win_prob', ml_prediction_result.get('away_prob'))
+                                                    leg_data['vertex_confidence'] = ml_prediction_result.get('confidence')
+                                                    leg_data['vertex_edge'] = ml_prediction_result.get('edge')
+                                                    leg_data['vertex_pick'] = ml_prediction_result.get('predicted_winner')
                                                     component_breakdown = ml_prediction_result.get('component_probabilities')
                                                     if isinstance(component_breakdown, dict) and component_breakdown:
                                                         leg_data['ai_component_probabilities'] = component_breakdown
@@ -12436,6 +12474,11 @@ if is_vertex_ai_enabled():
                                                 if ml_prediction_result:
                                                     leg_data['ai_model_source'] = ml_prediction_result.get('model_used')
                                                     leg_data['ai_training_rows'] = ml_prediction_result.get('training_rows')
+                                                    leg_data['vertex_home_prob'] = ml_prediction_result.get('home_win_prob', ml_prediction_result.get('home_prob'))
+                                                    leg_data['vertex_away_prob'] = ml_prediction_result.get('away_win_prob', ml_prediction_result.get('away_prob'))
+                                                    leg_data['vertex_confidence'] = ml_prediction_result.get('confidence')
+                                                    leg_data['vertex_edge'] = ml_prediction_result.get('edge')
+                                                    leg_data['vertex_pick'] = ml_prediction_result.get('predicted_winner')
                                                     component_breakdown = ml_prediction_result.get('component_probabilities')
                                                     if isinstance(component_breakdown, dict) and component_breakdown:
                                                         leg_data['ai_component_probabilities'] = component_breakdown
@@ -14801,7 +14844,7 @@ if st.button(
     st.write("📊 Found odds data for games:")
     st.info(f"**{len(odds_data)} games** ready for analysis")
 
-    # Score today's games with the local ML model for quick edges
+    # Score today's games with Vertex AI for quick edges
     today_records: List[Dict[str, Any]] = []
     for game in odds_data:
         home_team = game.get('home_team')
@@ -14844,11 +14887,31 @@ if st.button(
         today_games_df = pd.DataFrame(today_records)
 
         try:
-            _model, model_feature_names = get_model()
-            features_today = build_ml_features(today_games_df, model_feature_names)
-            scored_today = score_games(features_today)
-            today_games_df = scored_today
-            today_games_df['market_edge'] = today_games_df.get('implied_home_prob', pd.Series(dtype=float)) - 0.5
+            instances = []
+            for _, row in today_games_df.iterrows():
+                instances.append({
+                    "home_team": row['home_team'],
+                    "away_team": row['away_team'],
+                    "home_moneyline": _safe_float(row['home_odds']),
+                    "away_moneyline": _safe_float(row['away_odds']),
+                    "sport_key": row.get('sport_key', ''),
+                })
+
+            predictions = call_vertex_sports_model(instances)
+            home_probs = []
+            edges = []
+            implied_probs = []
+            for pred, (_, row) in zip(predictions, today_games_df.iterrows()):
+                implied_prob = implied_p_from_american(_safe_float(row['home_odds']))
+                implied_probs.append(implied_prob)
+                home_prob = float((pred or {}).get('home_win_prob', (pred or {}).get('home_prob', 0.5)))
+                home_probs.append(home_prob)
+                edges.append(home_prob - implied_prob)
+
+            today_games_df['implied_home_prob'] = implied_probs
+            today_games_df['model_home_prob'] = home_probs
+            today_games_df['model_edge'] = edges
+            today_games_df['market_edge'] = today_games_df['implied_home_prob'] - 0.5
 
             sort_mode = st.selectbox(
                 "Rank by:",
@@ -14876,10 +14939,10 @@ if st.button(
 
             st.subheader("🎯 Model-Powered Edges for Today's Games")
             st.dataframe(display_df, use_container_width=True, hide_index=True)
-            st.caption("Ranking uses your local ML model predictions against market-implied probabilities.")
+            st.caption("Ranking uses your Vertex AI predictions against market-implied probabilities.")
         except Exception as e:
-            logger.warning(f"ML scoring failed: {e}")
-            st.warning("⚠️ Could not load the local ML model. Continuing without model edges.")
+            logger.warning(f"Vertex scoring failed: {e}")
+            st.warning("⚠️ Could not fetch Vertex AI predictions. Continuing without model edges.")
     
     # Load available data sources
     st.write("---")
@@ -15008,8 +15071,8 @@ if st.button(
                         if outcome['name'] == home_team:
                             best_spread = outcome.get('point')
         
-        # Match ML predictions - NOW with all required parameters!
-        if 'ml' in data_sources:
+        # Match Vertex AI predictions - NOW with all required parameters!
+        if use_ml_predictions:
             ml_predictor = st.session_state.get('ml_predictor')
             if ml_predictor and best_moneyline_home and best_moneyline_away:
                 try:
@@ -15017,57 +15080,45 @@ if st.button(
                     sentiment_analyzer = st.session_state.get('sentiment_analyzer')
                     sentiment_home = 0.0  # Neutral default
                     sentiment_away = 0.0  # Neutral default
-                    
+
                     if sentiment_analyzer:
                         try:
                             # Try to get real sentiment
                             home_sentiment_result = sentiment_analyzer.get_sentiment(home_team)
                             away_sentiment_result = sentiment_analyzer.get_sentiment(away_team)
-                            
+
                             if home_sentiment_result and 'sentiment_score' in home_sentiment_result:
                                 sentiment_home = home_sentiment_result['sentiment_score']
                             if away_sentiment_result and 'sentiment_score' in away_sentiment_result:
                                 sentiment_away = away_sentiment_result['sentiment_score']
                         except Exception as e:
                             logger.warning(f"Sentiment analysis failed, using neutral: {e}")
-                    
-                    # Call ML predictor with ALL required parameters
-                    try:
-                        # Try newer predictor interface (with sport_key)
-                        ml_result = ml_predictor.predict_game_outcome(
-                            home_team=home_team,
-                            away_team=away_team,
-                            home_odds=best_moneyline_home,
-                            away_odds=best_moneyline_away,
-                            sentiment_home=sentiment_home,
-                            sentiment_away=sentiment_away,
-                            sport_key=game.get('sport_key')
-                        )
-                    except TypeError:
-                        # Fallback: call without sport_key (HistoricalMLPredictor)
-                        ml_result = ml_predictor.predict_game_outcome(
-                            home_team=home_team,
-                            away_team=away_team,
-                            home_odds=best_moneyline_home,
-                            away_odds=best_moneyline_away,
-                            sentiment_home=sentiment_home,
-                            sentiment_away=sentiment_away
-                        )
-                    
+
+                    ml_result = ml_predictor.predict_game_outcome(
+                        home_team=home_team,
+                        away_team=away_team,
+                        home_price=best_moneyline_home,
+                        away_price=best_moneyline_away,
+                        home_sentiment=sentiment_home,
+                        away_sentiment=sentiment_away,
+                        sport_key=game.get('sport_key') or '',
+                        context=context_data,
+                    )
+
                     if ml_result:
                         context_data['ml'] = {
                             'home_win_prob': ml_result.get('home_win_prob'),
                             'away_win_prob': ml_result.get('away_win_prob'),
                             'confidence': ml_result.get('confidence'),
                             'edge': ml_result.get('edge'),
-                            'model_used': ml_result.get('model_used', 'ML Model'),
+                            'model_used': 'Vertex AI Endpoint',
                             'sentiment_used': f"Home: {sentiment_home:.2f}, Away: {sentiment_away:.2f}"
                         }
-                        logger.info(f"✅ ML+Sentiment data matched for {away_team} @ {home_team}")
+                        logger.info(f"✅ Vertex AI data matched for {away_team} @ {home_team}")
                 except Exception as e:
-                    logger.warning(f"ML matching failed for {away_team} @ {home_team}: {e}")
+                    logger.warning(f"Vertex matching failed for {away_team} @ {home_team}: {e}")
             elif ml_predictor and not (best_moneyline_home and best_moneyline_away):
-                logger.warning(f"ML predictor available but odds missing for {away_team} @ {home_team}")
+                logger.warning(f"Vertex predictor available but odds missing for {away_team} @ {home_team}")
         
         # Match SportsData
         if 'sportsdata' in data_sources:
