@@ -70,13 +70,48 @@ def format_game_time_local(commence_raw: Any, user_tz_label: Optional[str] = Non
 # ---------------------------------------------------------------------------
 
 
-def build_single_best_from_best_bets(best_bets_df: pd.DataFrame) -> pd.DataFrame:
+def build_schedule_df(all_games_df: pd.DataFrame) -> pd.DataFrame:
+    """Build a schedule DataFrame with raw + local kickoff times."""
+
+    if all_games_df is None or all_games_df.empty:
+        return pd.DataFrame()
+
+    sched = all_games_df.copy()
+
+    if "league" not in sched.columns and "sport_key" in sched.columns:
+        sched["league"] = sched["sport_key"]
+
+    if "game" not in sched.columns and {"home_team", "away_team"}.issubset(sched.columns):
+        sched["game"] = sched["away_team"].astype(str) + " @ " + sched["home_team"].astype(str)
+
+    if "Commence (UTC)" not in sched.columns:
+        if "commence_time" in sched.columns:
+            sched["Commence (UTC)"] = sched["commence_time"]
+        elif "game_time" in sched.columns:
+            sched["Commence (UTC)"] = sched["game_time"]
+        else:
+            sched["Commence (UTC)"] = pd.NA
+
+    user_tz_label = st.session_state.get("user_timezone", "US/Eastern")
+    sched["Game Time"] = sched["Commence (UTC)"].apply(
+        lambda val: format_game_time_local(val, user_tz_label)
+        if pd.notna(val)
+        else "TBD"
+    )
+
+    return sched[[col for col in ["league", "game", "Commence (UTC)", "Game Time"] if col in sched.columns]].drop_duplicates()
+
+
+def build_single_best_from_best_bets(
+    best_bets_df: pd.DataFrame, schedule_df: Optional[pd.DataFrame] = None
+) -> pd.DataFrame:
     """Derive single-best rows from the already-prepared best_bets_df.
 
     This reuses the Streamlit UI table (which already carries local + UTC
     kickoff times and Vertex/AI win percentages) instead of rebuilding rows
     with placeholders. It keeps ML-driven Win % and preserves commence times
-    for export.
+    for export. When schedule data is available, merge it to guarantee real
+    kickoff values.
     """
 
     if best_bets_df is None or best_bets_df.empty:
@@ -101,6 +136,24 @@ def build_single_best_from_best_bets(best_bets_df: pd.DataFrame) -> pd.DataFrame
         }
     )
 
+    # Merge real kickoff data when available
+    if schedule_df is not None and not schedule_df.empty:
+        per_game_best = per_game_best.merge(
+            schedule_df[[
+                col
+                for col in ["league", "game", "Commence (UTC)", "Game Time"]
+                if col in schedule_df.columns
+            ]],
+            on=["league", "game"],
+            how="left",
+            suffixes=("", "_sched"),
+        )
+        for col in ["Game Time", "Commence (UTC)"]:
+            sched_col = f"{col}_sched"
+            if sched_col in per_game_best.columns:
+                per_game_best[col] = per_game_best[sched_col].combine_first(per_game_best.get(col))
+                per_game_best.drop(columns=[sched_col], inplace=True)
+
     user_tz_label = st.session_state.get("user_timezone", "US/Eastern")
 
     # Ensure Commence (UTC) exists by backfilling from alternate fields
@@ -119,8 +172,28 @@ def build_single_best_from_best_bets(best_bets_df: pd.DataFrame) -> pd.DataFrame
     per_game_best["Game Time"] = per_game_best.apply(_compute_game_time, axis=1)
 
     # Ensure Win % prefers ML-driven probabilities
-    if "Win %" not in per_game_best.columns and "AI Win %" in per_game_best.columns:
-        per_game_best["Win %"] = per_game_best["AI Win %"]
+    ml_prob_pct = None
+    if "ml_probability" in per_game_best.columns:
+        ml_prob = pd.to_numeric(per_game_best["ml_probability"], errors="coerce")
+        ml_prob_pct = ml_prob * 100.0
+
+    win_pct_series = (
+        pd.to_numeric(per_game_best["Win %"], errors="coerce")
+        if "Win %" in per_game_best.columns
+        else pd.Series([pd.NA] * len(per_game_best))
+    )
+    ai_win_series = (
+        pd.to_numeric(per_game_best["AI Win %"], errors="coerce")
+        if "AI Win %" in per_game_best.columns
+        else pd.Series([pd.NA] * len(per_game_best))
+    )
+
+    if "Win %" not in per_game_best.columns:
+        per_game_best["Win %"] = win_pct_series
+
+    per_game_best["Win %"] = win_pct_series.fillna(ai_win_series)
+    if ml_prob_pct is not None:
+        per_game_best["Win %"] = per_game_best["Win %"].fillna(ml_prob_pct)
 
     # Rank after grouping to keep a clean ordering
     per_game_best = per_game_best.sort_values(sort_col, ascending=False).reset_index(drop=True)
@@ -848,6 +921,8 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
         st.info("No games to analyze.")
         return
 
+    schedule_df = build_schedule_df(results_df)
+
     ml_counts = results_df["ml_source"].value_counts().to_dict()
     vertex_games = int(ml_counts.get("gcp_vertex", 0))
     spread_games = int(ml_counts.get("spread_derived", 0))
@@ -889,7 +964,7 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
     best_bets_df = st.session_state.get("best_bets_df")
     display_df = None
     if best_bets_df is not None and not best_bets_df.empty:
-        candidate = build_single_best_from_best_bets(best_bets_df)
+        candidate = build_single_best_from_best_bets(best_bets_df, schedule_df=schedule_df)
         if not candidate.empty:
             display_df = candidate
 
