@@ -20,16 +20,25 @@ def is_vertex_ai_enabled() -> bool:
     Returns True when we have enough config to *attempt* a Vertex / Gemini call.
     We treat either Streamlit secrets or an uploaded service-account JSON as valid.
     """
-    # Uploaded service account in the sidebar
-    if "gcp_service_account" in st.session_state:
-        return True
-
-    # Or service account in secrets (Streamlit Cloud style)
-    if "gcp_service_account" in st.secrets:
-        return True
-
-    # You could add extra checks here for ADC on GCP, but keep it simple for now.
-    return False
+    try:
+        # Check for service account in secrets.toml (preferred)
+        if 'gcp_service_account' in st.secrets:
+            project_id = st.secrets.get('gcp_project_id')
+            if project_id:
+                logger.info("✅ Vertex AI configured via secrets.toml")
+                return True
+        
+        # Fallback: Check session state (uploaded file)
+        if 'gcp_service_account' in st.session_state:
+            logger.info("✅ Vertex AI configured via uploaded file")
+            return True
+            
+        logger.warning("⚠️ Vertex AI not configured - no credentials found")
+        return False
+        
+    except Exception as e:
+        logger.error(f"Error checking Vertex AI config: {e}")
+        return False
 
 
 # Cache the model initialization
@@ -37,7 +46,7 @@ def is_vertex_ai_enabled() -> bool:
 def get_gemini_model(
     project_id: Optional[str] = None,
     location: Optional[str] = None,
-    model_name: str = "gemini-2.0-flash-001"  # ← CHANGE THIS
+    model_name: str = "gemini-2.0-flash-001"
 ) -> Optional[GenerativeModel]:
     """
     Initialize a Gemini model using either:
@@ -99,28 +108,6 @@ def get_gemini_model(
         logger.error("Vertex/Gemini init failed", exc_info=True)
         return None
 
-def is_vertex_ai_enabled() -> bool:
-    """Check if Vertex AI is properly configured"""
-    try:
-        # Check for service account in secrets.toml (preferred)
-        if 'gcp_service_account' in st.secrets:
-            project_id = st.secrets.get('gcp_project_id')
-            if project_id:
-                logger.info("✓ Vertex AI configured via secrets.toml")
-                return True
-        
-        # Fallback: Check session state (uploaded file)
-        if 'gcp_service_account' in st.session_state:
-            logger.info("✓ Vertex AI configured via uploaded file")
-            return True
-            
-        logger.warning("⚠️ Vertex AI not configured - no credentials found")
-        return False
-        
-    except Exception as e:
-        logger.error(f"Error checking Vertex AI config: {e}")
-        return False
-
 
 def get_vertex_ai_prediction(
     features: dict,
@@ -142,7 +129,7 @@ def get_vertex_ai_prediction(
             st.session_state["last_ml_source"] = "disabled"
             return None
 
-        # Build a simple prompt – you already had something similar
+        # Build a simple prompt
         prompt = f"""
 You are evaluating a betting matchup.
 
@@ -178,6 +165,7 @@ between 0 and 1 representing the probability that the home team wins.
         logger.error("Vertex AI prediction failed; falling back to spread-derived logic: %s", e, exc_info=True)
         st.session_state["last_ml_source"] = "error"
         return None
+
 
 def show_vertex_ai_prediction_section(home_team: str, away_team: str, league: str, 
                                        home_ml: float, away_ml: float, 
@@ -240,10 +228,10 @@ def show_credential_status():
     source = get_credential_source()
     
     if source == 'secrets.toml':
-        st.success("✓ Credentials loaded from secrets.toml")
+        st.success("✅ Credentials loaded from secrets.toml")
         st.caption("No file upload needed - using secrets configuration")
     elif source == 'uploaded_file':
-        st.success("✓ Credentials loaded from uploaded file")
+        st.success("✅ Credentials loaded from uploaded file")
     else:
         st.warning("⚠️ No GCP credentials found")
         st.caption("Add [gcp_service_account] section to secrets.toml or upload JSON file")
