@@ -9848,39 +9848,24 @@ if is_vertex_ai_enabled():
                                 'home_team': row.get('home_team', ''),
                                 'away_team': row.get('away_team', ''),
                                 'league': row.get('league', ''),
-                                'game_id': row.get('game_id') or row.get('id') or row.get('event_id'),
-                                'commence_time': row.get('commence_time'),
+                                # IDs / time used later to match odds and show Game Time
+                                'game_id': row.get('game_id') or row.get('event_id') or row.get('id'),
+                                'commence_time': row.get('commence_time') or row.get('kickoff') or row.get('start_time'),
+                                # Probabilities / picks
                                 'vertex_prob': row.get('vertex_ai_prob', 0.5),
-                                # Calculate meaningful confidence: base 50% + (edge * 500) capped at 95%
-                                # Edge of 0.10 (10%) = 50 + 50 = 100% confidence
-                                # Edge of 0.05 (5%) = 50 + 25 = 75% confidence
-                                'confidence': min(95, 50 + abs(row.get('vertex_ai_edge', 0)) * 500),
-                                'edge': row.get('vertex_ai_edge', 0),
-                                'has_edge': abs(row.get('vertex_ai_edge', 0)) > 0.03,
-                                'home_sentiment': row.get('home_sentiment', 0),
-                                'away_sentiment': row.get('away_sentiment', 0),
-                                'sentiment_diff': row.get('sentiment_diff', 0),
-                                'local_ml_prob': row.get('local_ml_prob', 0.5),
-                                'theover_probability': row.get('theover_probability', 0.5),
-                                'theover_spread': row.get('theover_spread', 0),
+                                'vertex_probability': row.get('vertex_ai_prob', 0.5),
+                                'theover_probability': row.get('theover_probability', None),
                                 'theover_pick': row.get('theover_pick', ''),
                                 'theover_total': row.get('theover_total', 0),
                                 'theover_total_pick': row.get('theover_total_pick', ''),
-                                'theover_total_probability': row.get('theover_total_probability', 0.5),
-                                'sharp_money_indicator': row.get('sharp_money_indicator', 0),
-                                'home_ml_odds': row.get('home_ml_odds') or row.get('home_ml', 0),
-                                'away_ml_odds': row.get('away_ml_odds') or row.get('away_ml', 0),
-                                'spread': row.get('home_spread') or row.get('theover_spread') or row.get('spread', 0),
-                                'total': row.get('total_line') or row.get('total', 0),
+                                'spread': row.get('home_spread', 0),
+                                'home_ml_odds': row.get('home_ml_odds', 0),
+                                'away_ml_odds': row.get('away_ml_odds', 0),
                                 'implied_home_prob': row.get('implied_home_prob', 0.5),
-                                # Kalshi prediction market data
+                                'sentiment_diff': row.get('sentiment_diff', 0),
                                 'kalshi_available': row.get('kalshi_available', False),
-                                'kalshi_prob': row.get('kalshi_prob', 0.5),
-                                'kalshi_alignment': row.get('kalshi_alignment', 0),
-                                'kalshi_validation_score': row.get('kalshi_validation_score', 0.5),
-                                'kalshi_agrees': row.get('kalshi_agrees', None),
-                                'kalshi_arbitrage_opportunity': row.get('kalshi_arbitrage_opportunity', False),
-                                'kalshi_synthetic': row.get('kalshi_synthetic', True),  # Indicates if synthetic data
+                                'kalshi_prob': row.get('kalshi_prob', None),
+                                'confidence': min(95, 50 + abs(row.get('vertex_ai_edge', 0)) * 500),
                             })
 
                         st.session_state['vertex_results'] = vertex_results
@@ -11753,38 +11738,40 @@ if is_vertex_ai_enabled():
                     
                     # =====================================================
                     # GET AI/ML PREDICTION
-                    # theover_probability = PICKED team's win probability (already correct!)
-                    # vertex_prob          = HOME team's win probability (0–1 or 0–100)
+                    # theover_probability = PICKED team's win probability (0–1 or 0–100)
+                    # vertex_probability / vertex_prob = HOME team's win prob (0–1 or 0–100)
                     # =====================================================
 
                     ai_win_prob = None
                     ml_source_type = 'unknown'
 
-                    # Prefer TheOver.ai probability if present (already mapped to picked team)
-                    theover_prob = vertex_result.get('theover_probability')
-                    if theover_prob is not None:
-                        if theover_prob <= 1:
-                            theover_prob = theover_prob * 100.0
-                        ai_win_prob = theover_prob
+                    # 1) Try TheOver.ai probability first (already for the PICKED team)
+                    theover_prob_raw = vertex_result.get('theover_probability')
+                    if theover_prob_raw is not None:
+                        # Normalize to 0–100
+                        theover_prob_pct = theover_prob_raw * 100.0 if theover_prob_raw <= 1 else theover_prob_raw
+                        ai_win_prob = theover_prob_pct
                         ml_source_type = 'theover'
                     else:
-                        vertex_ai_prob = (
+                        # 2) Fallback to Vertex AI (HOME team probability)
+                        vertex_raw = (
                             vertex_result.get('vertex_probability')
                             or vertex_result.get('vertex_ai_prob')
                             or vertex_result.get('vertex_prob')
                         )
 
-                        if vertex_ai_prob is not None:
-                            if vertex_ai_prob <= 1:
-                                vertex_ai_prob = vertex_ai_prob * 100.0
+                        if vertex_raw is not None:
+                            vertex_pct = vertex_raw * 100.0 if vertex_raw <= 1 else vertex_raw
 
+                            # Convert home probability -> picked team probability
                             if theover_picked_home:
-                                ai_win_prob = vertex_ai_prob
+                                ai_win_prob = vertex_pct
                             else:
-                                ai_win_prob = 100.0 - vertex_ai_prob
+                                ai_win_prob = 100.0 - vertex_pct
 
                             ml_source_type = 'vertex'
 
+                    # 3) Final safety fallback if both are missing
                     if ai_win_prob is None:
                         ai_win_prob = 50.0
                         ml_source_type = 'default'
@@ -11884,19 +11871,21 @@ if is_vertex_ai_enabled():
                     # =====================================================
                     # ADD TO BEST BETS
                     # =====================================================
-                    # Resolve commence time and local display
-                    game_time_display = vertex_result.get('commence_local_display')
-                    commence_raw = None
-                    game_time_display = vertex_result.get('commence_local_display')
-                    if vertex_result:
-                        commence_raw = (
-                            vertex_result.get('commence_time')
-                            or vertex_result.get('commence_raw')
-                        )
+                    # =====================================================
+                    # GAME TIME – use Vertex result first, then odds data
+                    # =====================================================
+                    commence_raw = (
+                        vertex_result.get('commence_time')
+                        or vertex_result.get('commence_raw')
+                    )
+
                     if not commence_raw and result_game_id:
                         matching_game = game_lookup.get(result_game_id)
                         if matching_game:
-                            commence_raw = matching_game.get('commence_time')
+                            commence_raw = (
+                                matching_game.get('commence_time')
+                                or matching_game.get('commence_time_utc')
+                            )
 
                     user_tz_label = st.session_state.get('user_timezone', 'UTC')
                     game_time_display_safe = game_time_display
