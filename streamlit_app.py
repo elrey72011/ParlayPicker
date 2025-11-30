@@ -11371,6 +11371,13 @@ if is_vertex_ai_enabled():
                 best_bets_rows: List[Dict[str, Any]] = []
                 vertex_leg_rows: List[Dict[str, Any]] = []
 
+                # Build lookup for commence time and odds metadata by game id
+                game_lookup: Dict[str, Dict[str, Any]] = {}
+                for game in odds_data:
+                    game_id = game.get("id")
+                    if game_id:
+                        game_lookup[game_id] = game
+
                 # Filter controls (already set above)
                 for vertex_result in vertex_results:
                     result_game_id = (
@@ -11382,12 +11389,7 @@ if is_vertex_ai_enabled():
                         logger.warning("Vertex result missing game identifier; skipping entry: %s", vertex_result)
                         continue
 
-                    matching_game = None
-                    for game in odds_data:
-                        if game.get('id') == result_game_id:
-                            matching_game = game
-                            break
-
+                    matching_game = game_lookup.get(result_game_id)
                     if not matching_game:
                         continue
 
@@ -11586,10 +11588,16 @@ if is_vertex_ai_enabled():
                 st.info(f"📊 Analyzing {len(vertex_results)} games for Best Bets (Edge + Consensus)")
                 
                 for vertex_result in vertex_results:
+                    result_game_id = (
+                        vertex_result.get('game_id')
+                        or vertex_result.get('id')
+                        or vertex_result.get('event_id')
+                    )
+
                     home_team = vertex_result.get('home_team', 'Home')
                     away_team = vertex_result.get('away_team', 'Away')
                     league = vertex_result.get('league', 'N/A').upper()
-                    
+
                     confidence = vertex_result.get('confidence', 50)
                     
                     # Apply minimum confidence filter ONLY if show_all_games is False
@@ -11754,7 +11762,21 @@ if is_vertex_ai_enabled():
                     # =====================================================
                     # ADD TO BEST BETS
                     # =====================================================
-                    game_time_display_safe = game_time_display if 'game_time_display' in locals() else "TBD"
+                    # Resolve commence time and local display
+                    commence_raw = vertex_result.get('commence_time')
+                    if not commence_raw and result_game_id:
+                        matching_game = game_lookup.get(result_game_id)
+                        if matching_game:
+                            commence_raw = matching_game.get('commence_time')
+
+                    user_tz_label = st.session_state.get('user_timezone', 'UTC')
+                    game_time_display_safe = "TBD"
+                    if commence_raw:
+                        try:
+                            game_time_display_safe = format_game_time_local(commence_raw, user_tz_label)
+                        except Exception:
+                            game_time_display_safe = str(commence_raw)
+
                     best_bets_rows.append({
                         'League': league,
                         'Game': f"{away_team} @ {home_team}",
@@ -11787,6 +11809,10 @@ if is_vertex_ai_enabled():
 
                     if 'Game Time' not in best_bets_df.columns and 'Commence (UTC)' in best_bets_df.columns:
                         best_bets_df['Game Time'] = best_bets_df['Commence (UTC)']
+
+                    # Debugging: surface a quick view of commence timestamps
+                    st.caption("Debug - first 5 commence times for Vertex best bets:")
+                    st.write(best_bets_df.get('Commence (UTC)', pd.Series(dtype=object)).head())
 
                     best_bets_df['Game Time'] = best_bets_df['Game Time'].apply(
                         lambda val: format_game_time_local(val, user_tz_label) if pd.notna(val) else "TBD"
