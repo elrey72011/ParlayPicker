@@ -9325,6 +9325,8 @@ with main_tab1:
                                         'home_team': row.get('home_team', ''),
                                         'away_team': row.get('away_team', ''),
                                         'league': row.get('league', ''),
+                                        'game_id': row.get('game_id') or row.get('id') or row.get('event_id'),
+                                        'commence_time': row.get('commence_time'),
                                         'vertex_prob': row.get('vertex_ai_prob', 0.5),
                                         'theover_probability': row.get('theover_probability', 0.5),
                                         'theover_pick': row.get('theover_pick', ''),
@@ -9840,16 +9842,18 @@ if is_vertex_ai_enabled():
                         show_vertex_master_analysis(results_df)
                         
                         # Store results in session_state for Best Bets and Parlays
-                        vertex_results = []
-                        for _, row in results_df.iterrows():
-                            vertex_results.append({
-                                'home_team': row.get('home_team', ''),
-                                'away_team': row.get('away_team', ''),
-                                'league': row.get('league', ''),
-                                'vertex_prob': row.get('vertex_ai_prob', 0.5),
-                                # Calculate meaningful confidence: base 50% + (edge * 500) capped at 95%
-                                # Edge of 0.10 (10%) = 50 + 50 = 100% confidence
-                                # Edge of 0.05 (5%) = 50 + 25 = 75% confidence
+                            vertex_results = []
+                            for _, row in results_df.iterrows():
+                                vertex_results.append({
+                                    'home_team': row.get('home_team', ''),
+                                    'away_team': row.get('away_team', ''),
+                                    'league': row.get('league', ''),
+                                    'game_id': row.get('game_id') or row.get('id') or row.get('event_id'),
+                                    'commence_time': row.get('commence_time'),
+                                    'vertex_prob': row.get('vertex_ai_prob', 0.5),
+                                    # Calculate meaningful confidence: base 50% + (edge * 500) capped at 95%
+                                    # Edge of 0.10 (10%) = 50 + 50 = 100% confidence
+                                    # Edge of 0.05 (5%) = 50 + 25 = 75% confidence
                                 'confidence': min(95, 50 + abs(row.get('vertex_ai_edge', 0)) * 500),
                                 'edge': row.get('vertex_ai_edge', 0),
                                 'has_edge': abs(row.get('vertex_ai_edge', 0)) > 0.03,
@@ -11410,7 +11414,11 @@ if is_vertex_ai_enabled():
                 # Build lookup for commence time and odds metadata by game id
                 game_lookup: Dict[str, Dict[str, Any]] = {}
                 for game in odds_data:
-                    game_id = game.get("id")
+                    game_id = (
+                        game.get('game_id')
+                        or game.get("id")
+                        or game.get("event_id")
+                    )
                     if game_id:
                         game_lookup[game_id] = game
 
@@ -11700,10 +11708,6 @@ if is_vertex_ai_enabled():
                         theover_pick = home_team
                         theover_picked_home = True
                     
-                    # Convert to percentage if needed
-                    if theover_prob is not None and theover_prob <= 1:
-                        theover_prob = theover_prob * 100
-                    
                     # =====================================================
                     # GET MARKET ODDS AND CALCULATE IMPLIED PROBABILITY
                     # =====================================================
@@ -11750,31 +11754,40 @@ if is_vertex_ai_enabled():
                     # =====================================================
                     # GET AI/ML PREDICTION
                     # theover_probability = PICKED team's win probability (already correct!)
-                    # vertex_probability/vertex_prob = may be HOME team's probability
+                    # vertex_prob          = HOME team's win probability (0–1 or 0–100)
                     # =====================================================
-                    
-                    # PREFER theover_probability since it's already the picked team's probability
-                    # This avoids complex inversion logic
-                    if theover_prob:
-                        # Use TheOver.ai probability directly - it's already for the picked team
+
+                    ai_win_prob = None
+                    ml_source_type = 'unknown'
+
+                    # Prefer TheOver.ai probability if present (already mapped to picked team)
+                    theover_prob = vertex_result.get('theover_probability')
+                    if theover_prob is not None:
+                        if theover_prob <= 1:
+                            theover_prob = theover_prob * 100.0
                         ai_win_prob = theover_prob
                         ml_source_type = 'theover'
                     else:
-                        # Fallback to Vertex AI probability (which is HOME team's probability)
-                        vertex_ai_prob = vertex_result.get('vertex_probability') or vertex_result.get('vertex_ai_prob') or vertex_result.get('vertex_prob')
-                        if vertex_ai_prob is not None and vertex_ai_prob <= 1:
-                            vertex_ai_prob = vertex_ai_prob * 100
-                        
+                        vertex_ai_prob = (
+                            vertex_result.get('vertex_probability')
+                            or vertex_result.get('vertex_ai_prob')
+                            or vertex_result.get('vertex_prob')
+                        )
+
                         if vertex_ai_prob is not None:
-                            # Convert HOME probability to PICKED team probability
+                            if vertex_ai_prob <= 1:
+                                vertex_ai_prob = vertex_ai_prob * 100.0
+
                             if theover_picked_home:
                                 ai_win_prob = vertex_ai_prob
                             else:
-                                ai_win_prob = 100 - vertex_ai_prob
+                                ai_win_prob = 100.0 - vertex_ai_prob
+
                             ml_source_type = 'vertex'
-                        else:
-                            ai_win_prob = 50
-                            ml_source_type = 'default'
+
+                    if ai_win_prob is None:
+                        ai_win_prob = 50.0
+                        ml_source_type = 'default'
                     
                     # =====================================================
                     # CALCULATE EDGE
@@ -11874,6 +11887,7 @@ if is_vertex_ai_enabled():
                     # Resolve commence time and local display
                     game_time_display = vertex_result.get('commence_local_display')
                     commence_raw = None
+                    game_time_display = vertex_result.get('commence_local_display')
                     if vertex_result:
                         commence_raw = (
                             vertex_result.get('commence_time')
@@ -11944,7 +11958,9 @@ if is_vertex_ai_enabled():
                     st.write(best_bets_df.get('Commence (UTC)', pd.Series(dtype=object)).head())
 
                     best_bets_df['Game Time'] = best_bets_df['Game Time'].apply(
-                        lambda val: format_game_time_local(val, user_tz_label) if pd.notna(val) else "TBD"
+                        lambda val: format_game_time_local(val, user_tz_label)
+                        if pd.notna(val) and val != "TBD"
+                        else "TBD"
                     )
 
                     if 'Win %' not in best_bets_df.columns and 'AI Win %' in best_bets_df.columns:
