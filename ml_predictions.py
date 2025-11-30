@@ -34,10 +34,10 @@ def is_vertex_ai_enabled() -> bool:
 
 # Cache the model initialization
 @st.cache_resource
-   def get_gemini_model(
-       project_id: Optional[str] = None,
-       location: Optional[str] = None,
-       model_name: str = "gemini-2.0-flash-001"  # ← CHANGE THIS
+def get_gemini_model(
+    project_id: Optional[str] = None,
+    location: Optional[str] = None,
+    model_name: str = "gemini-2.0-flash-001"  # ← CHANGE THIS
 ) -> Optional[GenerativeModel]:
     """
     Initialize a Gemini model using either:
