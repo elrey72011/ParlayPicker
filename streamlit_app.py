@@ -11416,6 +11416,13 @@ if is_vertex_ai_enabled():
 
                 # Filter controls (already set above)
                 for vertex_result in vertex_results:
+                    kalshi_vertex_features: dict = {}
+                    kalshi_home_prob = None
+                    kalshi_away_prob = None
+                    kalshi_pick_prob = None
+                    kalshi_available = False
+                    kalshi_agrees = False
+                    kalshi_disagrees = False
                     result_game_id = (
                         vertex_result.get('game_id')
                         or vertex_result.get('id')
@@ -11702,7 +11709,20 @@ if is_vertex_ai_enabled():
                     # =====================================================
                     home_ml = vertex_result.get('home_ml_odds') or -110
                     away_ml = vertex_result.get('away_ml_odds') or -110
-                    
+
+                    use_kalshi = bool(st.session_state.get("kalshi_enabled", True))
+                    base_prob_home = implied_p_from_american(home_ml) if _is_reasonable_moneyline(home_ml) else None
+                    base_prob_away = implied_p_from_american(away_ml) if _is_reasonable_moneyline(away_ml) else None
+
+                    kalshi_vertex_features = collect_kalshi_vertex_features(
+                        home_team,
+                        away_team,
+                        league.lower(),
+                        base_prob_home,
+                        base_prob_away,
+                        use_kalshi,
+                    ) or {}
+
                     # Determine which team TheOver picked
                     theover_pick_lower = theover_pick.lower() if theover_pick else ''
                     home_lower = home_team.lower()
@@ -11789,27 +11809,23 @@ if is_vertex_ai_enabled():
                     # Kalshi
                     kalshi_home_prob = kalshi_vertex_features.get('kalshi_home_prob')
                     kalshi_away_prob = kalshi_vertex_features.get('kalshi_away_prob')
-                    kalshi_available = kalshi_home_prob is not None or kalshi_away_prob is not None
-                    kalshi_pick_prob = None
                     if theover_picked_home:
-                        kalshi_pick_prob = (
-                            kalshi_home_prob * 100
-                            if kalshi_home_prob is not None and kalshi_home_prob <= 1
-                            else (kalshi_home_prob if kalshi_home_prob is not None else None)
+                        kalshi_pick_prob = kalshi_home_prob
+                    else:
+                        kalshi_pick_prob = kalshi_away_prob
+
+                    if kalshi_pick_prob is not None:
+                        kalshi_prob_pct = (
+                            kalshi_pick_prob * 100 if kalshi_pick_prob <= 1 else kalshi_pick_prob
                         )
                     else:
-                        kalshi_pick_prob = (
-                            kalshi_away_prob * 100
-                            if kalshi_away_prob is not None and kalshi_away_prob <= 1
-                            else (kalshi_away_prob if kalshi_away_prob is not None else None)
-                        )
+                        kalshi_prob_pct = None
 
-                    kalshi_agrees = False
-                    kalshi_disagrees = False
-                    if kalshi_pick_prob is not None:
-                        if kalshi_pick_prob >= 55:
+                    kalshi_available = kalshi_prob_pct is not None
+                    if kalshi_prob_pct is not None:
+                        if kalshi_prob_pct >= 55:
                             kalshi_agrees = True
-                        elif kalshi_pick_prob <= 45:
+                        elif kalshi_prob_pct <= 45:
                             kalshi_disagrees = True
                     
                     # Count consensus signals
@@ -11856,6 +11872,7 @@ if is_vertex_ai_enabled():
                     # ADD TO BEST BETS
                     # =====================================================
                     # Resolve commence time and local display
+                    game_time_display = vertex_result.get('commence_local_display')
                     commence_raw = None
                     if vertex_result:
                         commence_raw = (
@@ -11876,12 +11893,12 @@ if is_vertex_ai_enabled():
                             game_time_display_safe = str(commence_raw)
 
                     kalshi_edge_pct = None
-                    if kalshi_pick_prob is not None and market_implied_prob is not None:
-                        kalshi_edge_pct = kalshi_pick_prob - market_implied_prob
+                    if kalshi_prob_pct is not None and market_implied_prob is not None:
+                        kalshi_edge_pct = kalshi_prob_pct - market_implied_prob
 
                     blended_score_pct = ai_win_prob
-                    if kalshi_pick_prob is not None:
-                        blended_score_pct = 0.5 * ai_win_prob + 0.5 * kalshi_pick_prob
+                    if kalshi_prob_pct is not None:
+                        blended_score_pct = 0.5 * ai_win_prob + 0.5 * kalshi_prob_pct
 
                     best_bets_rows.append({
                         'League': league,
@@ -11895,16 +11912,19 @@ if is_vertex_ai_enabled():
                         'EV': f"${ev_pct:.2f}",
                         'Consensus': f"{consensus_count}/4",
                         'Sentiment': '✅' if sentiment_agrees else '❌',
-                        'Kalshi': '✅' if kalshi_agrees else ('❌' if kalshi_disagrees else ('—' if not kalshi_available else '⚠️')),
-                        'Kalshi %': f"{kalshi_pick_prob:.1f}" if kalshi_pick_prob is not None else '—',
-                        'kalshi_prob_pct': kalshi_pick_prob,
+                        'Kalshi': '✅' if kalshi_available and kalshi_agrees else (
+                            '❌' if kalshi_available and kalshi_disagrees else '—'
+                        ),
+                        'Kalshi %': f"{kalshi_prob_pct:.0f}" if kalshi_prob_pct is not None else '—',
+                        'kalshi_prob': kalshi_pick_prob,
+                        'kalshi_prob_pct': kalshi_prob_pct,
                         'kalshi_edge_pct': kalshi_edge_pct,
                         'TheOver %': f"{theover_prob:.0f}" if theover_prob else '—',
                         'Odds': odds_str,
                         'Confidence': round(confidence, 1),
                         'ML Source': ml_source_type,
                         'Commence (UTC)': commence_raw,
-                        'kalshi_prob_raw': kalshi_pick_prob,
+                        'kalshi_prob_raw': kalshi_prob_pct,
                         'blended_score_pct': blended_score_pct,
                     })
                 
