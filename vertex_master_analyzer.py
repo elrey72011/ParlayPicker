@@ -1,4 +1,3 @@
-
 """
 Vertex AI Master Analyzer
 Consolidates ALL data sources for ultimate best bet recommendations.
@@ -12,7 +11,6 @@ from typing import Any, Dict, List, Optional
 import numpy as np
 import pandas as pd
 import streamlit as st
-import pytz
 
 from ml_predictions import get_vertex_ai_prediction, is_vertex_ai_enabled
 
@@ -44,180 +42,6 @@ def implied_prob_from_american(odds: Optional[float]) -> Optional[float]:
     if dec is None or dec <= 1.0:
         return None
     return 1.0 / dec
-
-
-def format_game_time_local(commence_raw: Any, user_tz_label: Optional[str] = None) -> str:
-    """Format a commence/kickoff time into a friendly local string."""
-
-    if commence_raw is None or (isinstance(commence_raw, str) and commence_raw.strip() == ""):
-        return "TBD"
-
-    tz_label = user_tz_label or st.session_state.get("user_timezone") or "US/Eastern"
-    try:
-        dt = pd.to_datetime(commence_raw, utc=True)
-        tz = pytz.timezone(tz_label)
-        dt_local = dt.tz_convert(tz)
-        return dt_local.strftime("%a, %b %d — %I:%M %p %Z")
-    except Exception:
-        try:
-            return str(commence_raw)[:16]
-        except Exception:
-            return "TBD"
-
-
-# ---------------------------------------------------------------------------
-# Export helpers
-# ---------------------------------------------------------------------------
-
-
-def build_schedule_df(all_games_df: pd.DataFrame) -> pd.DataFrame:
-    """Build a schedule DataFrame with raw + local kickoff times."""
-
-    if all_games_df is None or all_games_df.empty:
-        return pd.DataFrame()
-
-    sched = all_games_df.copy()
-
-    if "league" not in sched.columns and "sport_key" in sched.columns:
-        sched["league"] = sched["sport_key"]
-
-    if "game" not in sched.columns and {"home_team", "away_team"}.issubset(sched.columns):
-        sched["game"] = sched["away_team"].astype(str) + " @ " + sched["home_team"].astype(str)
-
-    if "Commence (UTC)" not in sched.columns:
-        if "commence_time" in sched.columns:
-            sched["Commence (UTC)"] = sched["commence_time"]
-        elif "game_time" in sched.columns:
-            sched["Commence (UTC)"] = sched["game_time"]
-        else:
-            sched["Commence (UTC)"] = pd.NA
-
-    user_tz_label = st.session_state.get("user_timezone", "US/Eastern")
-    sched["Game Time"] = sched["Commence (UTC)"].apply(
-        lambda val: format_game_time_local(val, user_tz_label)
-        if pd.notna(val)
-        else "TBD"
-    )
-
-    return sched[[col for col in ["league", "game", "Commence (UTC)", "Game Time"] if col in sched.columns]].drop_duplicates()
-
-
-def build_single_best_from_best_bets(
-    best_bets_df: pd.DataFrame, schedule_df: Optional[pd.DataFrame] = None
-) -> pd.DataFrame:
-    """Derive single-best rows from the already-prepared best_bets_df.
-
-    This reuses the Streamlit UI table (which already carries local + UTC
-    kickoff times and Vertex/AI win percentages) instead of rebuilding rows
-    with placeholders. It keeps ML-driven Win % and preserves commence times
-    for export. When schedule data is available, merge it to guarantee real
-    kickoff values.
-    """
-
-    if best_bets_df is None or best_bets_df.empty:
-        return pd.DataFrame()
-
-    df = best_bets_df.copy()
-
-    # Choose the best row per game using blended_score when available
-    sort_col = "blended_score" if "blended_score" in df.columns else "Edge"
-    if sort_col not in df.columns:
-        return pd.DataFrame()
-
-    df_sorted = df.sort_values(["Game", sort_col], ascending=[True, False])
-    per_game_best = df_sorted.groupby("Game", as_index=False).first()
-
-    # Normalize column names for export
-    per_game_best = per_game_best.rename(
-        columns={
-            "League": "league",
-            "Game": "game",
-            "THE PICK": "the_pick",
-        }
-    )
-
-    # Merge real kickoff data when available
-    if schedule_df is not None and not schedule_df.empty:
-        per_game_best = per_game_best.merge(
-            schedule_df[[
-                col
-                for col in ["league", "game", "Commence (UTC)", "Game Time"]
-                if col in schedule_df.columns
-            ]],
-            on=["league", "game"],
-            how="left",
-            suffixes=("", "_sched"),
-        )
-        for col in ["Game Time", "Commence (UTC)"]:
-            sched_col = f"{col}_sched"
-            if sched_col in per_game_best.columns:
-                per_game_best[col] = per_game_best[sched_col].combine_first(per_game_best.get(col))
-                per_game_best.drop(columns=[sched_col], inplace=True)
-
-    user_tz_label = st.session_state.get("user_timezone", "US/Eastern")
-
-    # Ensure Commence (UTC) exists by backfilling from alternate fields
-    if "Commence (UTC)" not in per_game_best.columns:
-        per_game_best["Commence (UTC)"] = per_game_best.get("commence_time")
-
-    def _compute_game_time(row: pd.Series) -> str:
-        raw = row.get("Commence (UTC)")
-        if pd.notna(raw):
-            return format_game_time_local(raw, user_tz_label)
-        gt = row.get("Game Time")
-        if isinstance(gt, str) and gt.strip():
-            return gt
-        return "TBD"
-
-    per_game_best["Game Time"] = per_game_best.apply(_compute_game_time, axis=1)
-
-    # Ensure Win % prefers ML-driven probabilities
-    ml_prob_pct = None
-    if "ml_probability" in per_game_best.columns:
-        ml_prob = pd.to_numeric(per_game_best["ml_probability"], errors="coerce")
-        ml_prob_pct = ml_prob * 100.0
-
-    win_pct_series = (
-        pd.to_numeric(per_game_best["Win %"], errors="coerce")
-        if "Win %" in per_game_best.columns
-        else pd.Series([pd.NA] * len(per_game_best))
-    )
-    ai_win_series = (
-        pd.to_numeric(per_game_best["AI Win %"], errors="coerce")
-        if "AI Win %" in per_game_best.columns
-        else pd.Series([pd.NA] * len(per_game_best))
-    )
-
-    if "Win %" not in per_game_best.columns:
-        per_game_best["Win %"] = win_pct_series
-
-    per_game_best["Win %"] = win_pct_series.fillna(ai_win_series)
-    if ml_prob_pct is not None:
-        per_game_best["Win %"] = per_game_best["Win %"].fillna(ml_prob_pct)
-
-    # Rank after grouping to keep a clean ordering
-    per_game_best = per_game_best.sort_values(sort_col, ascending=False).reset_index(drop=True)
-    per_game_best.insert(0, "Rank", range(1, len(per_game_best) + 1))
-
-    export_cols = [
-        "Rank",
-        "league",
-        "game",
-        "Game Time",
-        "Commence (UTC)",
-        "the_pick",
-        "Win %",
-        "Favorite",
-        "Novig",
-        "TheOver",
-        "Sentiment",
-        "Kalshi",
-        "Kalshi %",
-        "EV",
-    ]
-
-    export_cols = [c for c in export_cols if c in per_game_best.columns]
-    return per_game_best[export_cols]
 
 
 # ---------------------------------------------------------------------------
@@ -709,7 +533,6 @@ class VertexMasterAnalyzer:
 
         rows: List[Dict[str, Any]] = []
         progress = st.progress(0)
-        user_tz_label = st.session_state.get("user_timezone", "US/Eastern")
 
         for idx, game in enumerate(games):
             try:
@@ -727,15 +550,6 @@ class VertexMasterAnalyzer:
                 else:
                     game_league = league
 
-                commence_raw = (
-                    game.get("commence_time")
-                    or game.get("commence")
-                    or game.get("commence_raw")
-                )
-                commence_display = format_game_time_local(commence_raw, user_tz_label)
-
-                if commence_raw:
-                    game["commence_time"] = commence_raw
                 feats = self.build_comprehensive_features(game, game_league)
                 vec = self.build_vertex_feature_vector(feats)
 
@@ -889,9 +703,7 @@ class VertexMasterAnalyzer:
                         "sentiment_diff": feats.get("sentiment_diff"),
                         "ev": ev,
                         # Game time and TheOver.ai consensus
-                        "commence_time": commence_raw,
-                        "game_time": commence_raw,
-                        "commence_display": commence_display,
+                        "game_time": game.get("commence_time"),
                         "theover_pick": theover_pick,  # TheOver.ai's pick for consensus
                         # Novig odds
                         "novig_home_spread": feats.get("novig_home_spread"),
@@ -920,8 +732,6 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
     if results_df is None or results_df.empty:
         st.info("No games to analyze.")
         return
-
-    schedule_df = build_schedule_df(results_df)
 
     ml_counts = results_df["ml_source"].value_counts().to_dict()
     vertex_games = int(ml_counts.get("gcp_vertex", 0))
@@ -961,92 +771,90 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
     st.markdown("---")
     st.subheader("🎯 SINGLE BEST PICK PER GAME")
 
-    best_bets_df = st.session_state.get("best_bets_df")
-    display_df = None
-    if best_bets_df is not None and not best_bets_df.empty:
-        candidate = build_single_best_from_best_bets(best_bets_df, schedule_df=schedule_df)
-        if not candidate.empty:
-            display_df = candidate
-
-    # Fallback to analyzer results when no best_bets_df is available
-    if display_df is None:
-        display_df = results_df.copy()
-        display_df = display_df.sort_values("win_prob", ascending=False).reset_index(drop=True)
-        display_df["Rank"] = display_df.index + 1
-        display_df["Win %"] = (display_df["win_prob"] * 100).round(1)
-        display_df["Favorite"] = display_df["is_favorite"].apply(
-            lambda x: "✅" if bool(x) else "🚨 Underdog"
-        )
-        display_df["Sentiment"] = display_df["sentiment_diff"].apply(
-            lambda x: "✅" if x is not None and x > 0 else "❌"
-        )
-        display_df["Kalshi"] = display_df["kalshi_alignment"].apply(
-            lambda x: "✅" if x is not None and x > 0.5 else "❌"
-        )
-        display_df["Kalshi %"] = (display_df["kalshi_prob"] * 100).round(0)
-        display_df["EV"] = display_df["ev"].map(lambda x: f"${x:.2f}")
-
-        user_tz_label = st.session_state.get("user_timezone", "US/Eastern")
-        if "commence_time" not in display_df.columns:
-            display_df["commence_time"] = display_df.get("game_time")
-        display_df["Commence (UTC)"] = display_df["commence_time"]
-        display_df["Game Time"] = display_df["commence_time"].apply(
-            lambda val: format_game_time_local(val, user_tz_label)
-        )
-        display_df["commence_display"] = display_df["Game Time"]
-
-        # NEW: TheOver.ai Consensus column
-        def format_consensus(row):
-            our_pick = row.get("pick_team", "")
-            theover_pick = row.get("theover_pick", "")
-
-            if not theover_pick or pd.isna(theover_pick):
-                return "—"  # No TheOver.ai data
-
-            # Check if picks match (case insensitive, partial match)
-            if our_pick and theover_pick:
-                if our_pick.lower() in theover_pick.lower() or theover_pick.lower() in our_pick.lower():
-                    return "✅ Agree"
-                else:
-                    return "❌ Disagree"
+    display_df = results_df.copy()
+    display_df = display_df.sort_values("win_prob", ascending=False).reset_index(drop=True)
+    display_df["Rank"] = display_df.index + 1
+    display_df["Win %"] = (display_df["win_prob"] * 100).round(1)
+    display_df["Favorite"] = display_df["is_favorite"].apply(lambda x: "✅" if bool(x) else "🚨 Underdog")
+    display_df["Sentiment"] = display_df["sentiment_diff"].apply(
+        lambda x: "✅" if x is not None and x > 0 else "❌"
+    )
+    display_df["Kalshi"] = display_df["kalshi_alignment"].apply(
+        lambda x: "✅" if x is not None and x > 0.5 else "❌"
+    )
+    display_df["Kalshi %"] = (display_df["kalshi_prob"] * 100).round(0)
+    display_df["EV"] = display_df["ev"].map(lambda x: f"${x:.2f}")
+    
+    # NEW: Format Game Time column
+    def format_game_time(time_str):
+        if pd.isna(time_str) or not time_str:
             return "—"
-
-        display_df["TheOver"] = display_df.apply(format_consensus, axis=1)
-
-        # NEW: Novig Odds column
-        def format_novig_odds(row):
-            pick_team = row.get("pick_team", "")
-            home_team = row.get("home_team", "")
-
-            novig_home = row.get("novig_home_spread")
-            novig_away = row.get("novig_away_spread")
-            novig_home_odds = row.get("novig_home_spread_odds")
-            novig_away_odds = row.get("novig_away_spread_odds")
-
-            # If no Novig data available
-            if pd.isna(novig_home) and pd.isna(novig_away):
-                return "—"
-
-            # Determine which spread to show based on picked team
-            if pick_team == home_team:
-                # Home team picked, show home spread
-                if not pd.isna(novig_home) and not pd.isna(novig_home_odds):
-                    return f"{novig_home:+.1f} ({int(novig_home_odds):+d})"
-                return "—"
+        try:
+            from datetime import datetime
+            import pytz
+            # Parse ISO time from TheOddsAPI
+            dt = datetime.fromisoformat(str(time_str).replace('Z', '+00:00'))
+            # Convert to Eastern Time for display
+            eastern = pytz.timezone('US/Eastern')
+            dt_eastern = dt.astimezone(eastern)
+            # Format as "Nov 29, 7:30 PM ET"
+            return dt_eastern.strftime("%b %d, %-I:%M %p ET")
+        except Exception:
+            return str(time_str)[:16] if time_str else "—"
+    
+    display_df["Game Time"] = display_df["game_time"].apply(format_game_time)
+    
+    # NEW: TheOver.ai Consensus column
+    def format_consensus(row):
+        our_pick = row.get("pick_team", "")
+        theover_pick = row.get("theover_pick", "")
+        
+        if not theover_pick or pd.isna(theover_pick):
+            return "—"  # No TheOver.ai data
+        
+        # Check if picks match (case insensitive, partial match)
+        if our_pick and theover_pick:
+            if our_pick.lower() in theover_pick.lower() or theover_pick.lower() in our_pick.lower():
+                return "✅ Agree"
             else:
-                # Away team picked, show away spread
-                if not pd.isna(novig_away) and not pd.isna(novig_away_odds):
-                    return f"{novig_away:+.1f} ({int(novig_away_odds):+d})"
-                return "—"
-
-        display_df["Novig"] = display_df.apply(format_novig_odds, axis=1)
+                return "❌ Disagree"
+        return "—"
+    
+    display_df["TheOver"] = display_df.apply(format_consensus, axis=1)
+    
+    # NEW: Novig Odds column
+    def format_novig_odds(row):
+        pick_team = row.get("pick_team", "")
+        home_team = row.get("home_team", "")
+        
+        novig_home = row.get("novig_home_spread")
+        novig_away = row.get("novig_away_spread")
+        novig_home_odds = row.get("novig_home_spread_odds")
+        novig_away_odds = row.get("novig_away_spread_odds")
+        
+        # If no Novig data available
+        if pd.isna(novig_home) and pd.isna(novig_away):
+            return "—"
+        
+        # Determine which spread to show based on picked team
+        if pick_team == home_team:
+            # Home team picked, show home spread
+            if not pd.isna(novig_home) and not pd.isna(novig_home_odds):
+                return f"{novig_home:+.1f} ({int(novig_home_odds):+d})"
+            return "—"
+        else:
+            # Away team picked, show away spread
+            if not pd.isna(novig_away) and not pd.isna(novig_away_odds):
+                return f"{novig_away:+.1f} ({int(novig_away_odds):+d})"
+            return "—"
+    
+    display_df["Novig"] = display_df.apply(format_novig_odds, axis=1)
 
     cols = [
         "Rank",
         "league",
         "game",
         "Game Time",
-        "Commence (UTC)",
         "the_pick",
         "Win %",
         "Favorite",
@@ -1057,7 +865,6 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
         "Kalshi %",
         "EV",
     ]
-    cols = [c for c in cols if c in display_df.columns]
 
     st.dataframe(
         display_df[cols],
