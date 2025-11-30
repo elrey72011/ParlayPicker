@@ -773,36 +773,8 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
 
     display_df = results_df.copy()
     
-    # FILTER: Only show games from today
-    from datetime import datetime, date
-    import pytz
-    
-    def is_today(time_str):
-        """Check if game is today in Eastern Time"""
-        if pd.isna(time_str) or not time_str:
-            return False
-        try:
-            # Parse ISO time from TheOddsAPI
-            dt = datetime.fromisoformat(str(time_str).replace('Z', '+00:00'))
-            # Convert to Eastern Time
-            eastern = pytz.timezone('US/Eastern')
-            dt_eastern = dt.astimezone(eastern)
-            # Get today's date in Eastern Time
-            today_eastern = datetime.now(eastern).date()
-            # Check if game is today
-            return dt_eastern.date() == today_eastern
-        except Exception:
-            return False
-    
-    # Filter to only today's games
-    display_df = display_df[display_df["game_time"].apply(is_today)].copy()
-    
-    if display_df.empty:
-        st.warning("⚠️ No games found for today. Showing all games.")
-        display_df = results_df.copy()
-    else:
-        today_eastern = datetime.now(pytz.timezone('US/Eastern')).strftime("%B %d, %Y")
-        st.info(f"📅 Showing only games for today: {today_eastern}")
+    # NOTE: Today-only filter removed - showing ALL analyzed games
+    # If you want to filter by date, add it back or filter in Excel
     
     display_df = display_df.sort_values("win_prob", ascending=False).reset_index(drop=True)
     display_df["Rank"] = display_df.index + 1
