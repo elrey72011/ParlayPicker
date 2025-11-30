@@ -1325,58 +1325,7 @@ def render_sidebar_controls() -> Dict[str, Any]:
             st.session_state['ai_provider'] = 'gemini'
     
     sidebar.markdown("---")
-        "NHL API-Sports key",
-        value=st.session_state.get('nhl_apisports_api_key', ""),
-        type="password",
-        help="Used for live NHL context and historical model training.",
-    ).strip()
-    if nhl_key_input != st.session_state.get('nhl_apisports_api_key', ""):
-        st.session_state['nhl_apisports_api_key'] = nhl_key_input
-        st.session_state['nhl_apisports_key_source'] = "user"
-
-    nba_key_default, nba_source_default = resolve_nba_apisports_key()
-    st.session_state.setdefault('nba_apisports_api_key', nba_key_default)
-    st.session_state.setdefault('nba_apisports_key_source', nba_source_default)
-    nba_key_input = sidebar.text_input(
-        "NBA API-Sports key",
-        value=st.session_state.get('nba_apisports_api_key', ""),
-        type="password",
-        help="Used for live NBA context and historical model training.",
-    ).strip()
-    if nba_key_input != st.session_state.get('nba_apisports_api_key', ""):
-        st.session_state['nba_apisports_api_key'] = nba_key_input
-        st.session_state['nba_apisports_key_source'] = "user"
-
-    sidebar.subheader("📈 SportsData.io keys")
-    for sport_key, cfg in SPORTSDATA_CONFIG.items():
-        session_key = f"{sport_key}_sportsdata_api_key"
-        source_session_key = f"{sport_key}_sportsdata_key_source"
-        widget_key = f"{sport_key}_sportsdata_widget"
-
-        if session_key not in st.session_state:
-            default_key, default_source = resolve_sportsdata_key(sport_key)
-            st.session_state[session_key] = default_key
-            st.session_state[source_session_key] = default_source
-
-        key_input = sidebar.text_input(
-            f"{cfg['label']} SportsData.io key",
-            value=st.session_state.get(session_key, ""),
-            type="password",
-            help=cfg.get('help', ""),
-            key=widget_key,
-        ).strip()
-
-        if key_input != st.session_state.get(session_key, ""):
-            st.session_state[session_key] = key_input
-            st.session_state[source_session_key] = "user" if key_input else None
-
-        if st.session_state.get(session_key):
-            sidebar.caption(f"{cfg['emoji']} SportsData.io {cfg['label']} key detected")
-        else:
-            sidebar.caption(
-                f"ℹ️ Add your SportsData.io {cfg['label']} key to enrich live metrics and ML features"
-            )
-
+    
     # --------------------- Time & sport filters ---------------------
     sidebar.subheader("📅 Filters")
     default_tz_name = st.session_state.get('user_timezone', 'America/New_York')
