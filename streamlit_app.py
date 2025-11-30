@@ -9734,54 +9734,93 @@ if is_vertex_ai_enabled():
                         st.success(f"✅ Analysis complete! Found {len(results_df)} opportunities")
                         show_vertex_master_analysis(results_df)
                         
-                        # Store results in session_state for Best Bets and Parlays
-                        vertex_results = []
-                        for _, row in results_df.iterrows():
-                            vertex_results.append({
-                                'home_team': row.get('home_team', ''),
-                                'away_team': row.get('away_team', ''),
-                                'league': row.get('league', ''),
-                                'vertex_prob': row.get('vertex_ai_prob', 0.5),
-                                # Calculate meaningful confidence: base 50% + (edge * 500) capped at 95%
-                                # Edge of 0.10 (10%) = 50 + 50 = 100% confidence
-                                # Edge of 0.05 (5%) = 50 + 25 = 75% confidence
-                                'confidence': min(95, 50 + abs(row.get('vertex_ai_edge', 0)) * 500),
-                                'edge': row.get('vertex_ai_edge', 0),
-                                'has_edge': abs(row.get('vertex_ai_edge', 0)) > 0.03,
-                                'home_sentiment': row.get('home_sentiment', 0),
-                                'away_sentiment': row.get('away_sentiment', 0),
-                                'sentiment_diff': row.get('sentiment_diff', 0),
-                                'local_ml_prob': row.get('local_ml_prob', 0.5),
-                                'theover_probability': row.get('theover_probability', 0.5),
-                                'theover_spread': row.get('theover_spread', 0),
-                                'theover_pick': row.get('theover_pick', ''),
-                                'theover_total': row.get('theover_total', 0),
-                                'theover_total_pick': row.get('theover_total_pick', ''),
-                                'theover_total_probability': row.get('theover_total_probability', 0.5),
-                                'sharp_money_indicator': row.get('sharp_money_indicator', 0),
-                                'home_ml_odds': row.get('home_ml_odds') or row.get('home_ml', 0),
-                                'away_ml_odds': row.get('away_ml_odds') or row.get('away_ml', 0),
-                                'spread': row.get('home_spread') or row.get('theover_spread') or row.get('spread', 0),
-                                'total': row.get('total_line') or row.get('total', 0),
-                                'implied_home_prob': row.get('implied_home_prob', 0.5),
-                                # Kalshi prediction market data
-                                'kalshi_available': row.get('kalshi_available', False),
-                                'kalshi_prob': row.get('kalshi_prob', 0.5),
-                                'kalshi_alignment': row.get('kalshi_alignment', 0),
-                                'kalshi_validation_score': row.get('kalshi_validation_score', 0.5),
-                                'kalshi_agrees': row.get('kalshi_agrees', None),
-                                'kalshi_arbitrage_opportunity': row.get('kalshi_arbitrage_opportunity', False),
-                                'kalshi_synthetic': row.get('kalshi_synthetic', True),  # Indicates if synthetic data
-                            })
+                        theover_merged = 0
+                
+                if 'theover_spreads_data' in locals() and theover_spreads_data is not None and not theover_spreads_data.empty:
+                    st.info("🔄 Merging TheOver.ai picks & probabilities (consensus validation only)...")
+                    
+                    # Helper function to normalize team names for matching
+                    def normalize_team_name(name):
+                        """Normalize team name for fuzzy matching"""
+                        name = str(name).lower().strip()
+                        # Remove common suffixes
+                        name = name.replace(' cavaliers', '').replace(' lakers', '').replace(' heat', '')
+                        name = name.replace(' celtics', '').replace(' warriors', '').replace(' thunder', '')
+                        # Normalize LA
+                        name = name.replace('l.a.', 'los angeles').replace('la ', 'los angeles ')
+                        # Remove periods and extra spaces
+                        name = name.replace('.', '').replace('  ', ' ')
+                        return name
+                    
+                    for game in all_games:
+                        home_team = game.get('home_team', '')
+                        away_team = game.get('away_team', '')
+                        home_norm = normalize_team_name(home_team)
+                        away_norm = normalize_team_name(away_team)
                         
-                        st.session_state['vertex_results'] = vertex_results
-                        st.session_state['vertex_analysis_complete'] = True
-                        st.session_state['vertex_timestamp'] = datetime.now()
-                        st.session_state['vertex_results_df'] = results_df
-                        
-                        st.info(f"💾 Stored {len(vertex_results)} games for Best Bets & Parlays. Scroll down to generate!")
-                    else:
-                        st.warning("⚠️ No results from analysis. Try adjusting your filters.")
+                        # Find matching TheOver.ai row
+                        for _, row in theover_spreads_data.iterrows():
+                            theover_home = str(row.get('HomeTeam', ''))
+                            theover_away = str(row.get('AwayTeam', ''))
+                            theover_home_norm = normalize_team_name(theover_home)
+                            theover_away_norm = normalize_team_name(theover_away)
+                            
+                            # Fuzzy team name matching with normalized names
+                            home_match = (theover_home_norm in home_norm or home_norm in theover_home_norm)
+                            away_match = (theover_away_norm in away_norm or away_norm in theover_away_norm)
+                            
+                            if home_match and away_match:
+                                # Get TheOver.ai pick
+                                theover_pick = str(row.get('Pick', ''))
+                                theover_line = row.get('Line', 0)
+                                
+                                try:
+                                    theover_line = float(theover_line) if theover_line else 0
+                                except:
+                                    theover_line = 0
+                                
+                                # Calculate probability from spread (2.8% per point)
+                                # If WinProbability column is empty, estimate from spread
+                                win_prob_value = row.get('WinProbability')
+                                
+                                if win_prob_value and str(win_prob_value).strip():
+                                    # Use provided probability
+                                    try:
+                                        win_prob_pct = float(win_prob_value)
+                                        win_prob = win_prob_pct / 100 if win_prob_pct > 1 else win_prob_pct
+                                    except:
+                                        # Fallback to spread calculation
+                                        if theover_line:
+                                            win_prob = 0.5 + (abs(theover_line) * 0.028)
+                                            win_prob = min(0.99, max(0.01, win_prob))
+                                        else:
+                                            win_prob = 0.5
+                                else:
+                                    # WinProbability is empty, calculate from spread
+                                    if theover_line:
+                                        win_prob = 0.5 + (abs(theover_line) * 0.028)
+                                        win_prob = min(0.99, max(0.01, win_prob))
+                                    else:
+                                        win_prob = 0.5
+                                
+                                # Determine if pick is home team (fuzzy match on pick name)
+                                pick_norm = normalize_team_name(theover_pick)
+                                pick_is_home = (pick_norm in home_norm or home_norm in pick_norm)
+                                
+                                # Convert to HOME team probability
+                                home_prob = win_prob if pick_is_home else (1.0 - win_prob)
+                                
+                                # Add TheOver.ai data to game (for consensus only!)
+                                game['theover_pick'] = theover_pick
+                                game['theover_probability'] = home_prob  # HOME team probability
+                                
+                                # DO NOT add theover_spread or theover_line!
+                                # Spreads come from TheOddsAPI bookmakers only!
+                                
+                                theover_merged += 1
+                                break  # Found match, move to next game
+                    
+                    st.success(f"✅ Merged TheOver.ai picks for {theover_merged}/{len(all_games)} games (using picks/probabilities, NOT their lines)")
                 
             except Exception as e:
                 st.error(f"❌ Error in master analysis: {str(e)}")
