@@ -11751,13 +11751,19 @@ if is_vertex_ai_enabled():
                     else:
                         pick_str = f"{pick_team} ML"
                     
-                    # Format odds string
-                    if pick_ml_odds_value and pick_ml_odds_value != 0:
-                        if pick_ml_odds_value > 0:
-                            odds_str = f"+{int(pick_ml_odds_value)}"
-                        else:
-                            odds_str = str(int(pick_ml_odds_value))
-                    else:
+                    # Format odds string with proper error handling
+                    odds_str = "-110"  # Default
+                    try:
+                        if pick_ml_odds_value is not None and pick_ml_odds_value != 0:
+                            # Check if it's a valid number (not NaN)
+                            if isinstance(pick_ml_odds_value, (int, float)) and not pd.isna(pick_ml_odds_value):
+                                odds_value = float(pick_ml_odds_value)
+                                if odds_value > 0:
+                                    odds_str = f"+{int(odds_value)}"
+                                else:
+                                    odds_str = str(int(odds_value))
+                    except (ValueError, TypeError, OverflowError):
+                        # If conversion fails, use default -110
                         odds_str = "-110"
                     
                     # =====================================================
