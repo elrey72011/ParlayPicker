@@ -11880,6 +11880,14 @@ if is_vertex_ai_enabled():
                     if kalshi_prob_pct is not None:
                         blended_score_pct = 0.5 * ai_win_prob + 0.5 * kalshi_prob_pct
 
+                    kalshi_edge_pct = None
+                    if kalshi_prob_pct is not None and market_implied_prob is not None:
+                        kalshi_edge_pct = kalshi_prob_pct - market_implied_prob
+
+                    blended_score_pct = ai_win_prob
+                    if kalshi_prob_pct is not None:
+                        blended_score_pct = 0.5 * ai_win_prob + 0.5 * kalshi_prob_pct
+
                     best_bets_rows.append({
                         'League': league,
                         'Game': f"{away_team} @ {home_team}",
