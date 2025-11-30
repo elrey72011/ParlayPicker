@@ -11431,7 +11431,29 @@ if is_vertex_ai_enabled():
 
                     home_team = vertex_result.get('home_team') or matching_game.get('home_team')
                     away_team = vertex_result.get('away_team') or matching_game.get('away_team')
-                    commence_raw = vertex_result.get('commence_time') or matching_game.get('commence_time')
+                    # =====================================================
+                    # GAME TIME – use Vertex result first, then odds data
+                    # =====================================================
+                    commence_raw = (
+                        vertex_result.get('commence_time')
+                        or vertex_result.get('commence_raw')
+                    )
+
+                    if not commence_raw and result_game_id:
+                        matching_game_lookup = game_lookup.get(result_game_id)
+                        if matching_game_lookup:
+                            commence_raw = (
+                                matching_game_lookup.get('commence_time')
+                                or matching_game_lookup.get('commence_time_utc')
+                            )
+
+                    user_tz_label = st.session_state.get('user_timezone', 'UTC')
+                    game_time_display_safe = "TBD"
+                    if commence_raw:
+                        try:
+                            game_time_display_safe = format_game_time_local(commence_raw, user_tz_label)
+                        except Exception:
+                            game_time_display_safe = str(commence_raw)
 
                     # Estimate sportsbook implied probabilities for Kalshi feature wiring
                     implied_home_prob = None
@@ -11459,27 +11481,6 @@ if is_vertex_ai_enabled():
                         implied_away_prob,
                         use_kalshi,
                     )
-
-                    # Always define a display string to avoid NameError when commence time is missing
-                    user_tz_label = st.session_state.get('user_timezone', 'UTC')
-                    game_time_display = vertex_result.get('commence_local_display') or "TBD"
-                    if not game_time_display and commence_raw:
-                        try:
-                            game_time_display = format_game_time_local(
-                                commence_raw,
-                                user_tz_label,
-                            )
-                        except Exception:
-                            # Fallback to raw commence string if formatting fails
-                            game_time_display = str(commence_raw)
-                    elif game_time_display == "TBD" and commence_raw:
-                        try:
-                            game_time_display = format_game_time_local(
-                                commence_raw,
-                                user_tz_label,
-                            )
-                        except Exception:
-                            game_time_display = str(commence_raw)
 
                     raw_vertex_prob = _safe_float(vertex_result.get('vertex_probability'))
                     raw_confidence = _safe_float(vertex_result.get('confidence'))
@@ -11556,7 +11557,7 @@ if is_vertex_ai_enabled():
                                     'ml_probability': ai_prob_dec,
                                     'bookmaker': bookmaker_name,
                                     'best_american': odds,
-                                    'Game Time': game_time_display,
+                                    'Game Time': game_time_display_safe,
                                 }
 
                                 vertex_leg_rows.append(leg_entry)
@@ -11871,29 +11872,13 @@ if is_vertex_ai_enabled():
                     # =====================================================
                     # ADD TO BEST BETS
                     # =====================================================
-                    # =====================================================
-                    # GAME TIME – use Vertex result first, then odds data
-                    # =====================================================
-                    commence_raw = (
-                        vertex_result.get('commence_time')
-                        or vertex_result.get('commence_raw')
-                    )
+                    kalshi_edge_pct = None
+                    if kalshi_prob_pct is not None and market_implied_prob is not None:
+                        kalshi_edge_pct = kalshi_prob_pct - market_implied_prob
 
-                    if not commence_raw and result_game_id:
-                        matching_game = game_lookup.get(result_game_id)
-                        if matching_game:
-                            commence_raw = (
-                                matching_game.get('commence_time')
-                                or matching_game.get('commence_time_utc')
-                            )
-
-                    user_tz_label = st.session_state.get('user_timezone', 'UTC')
-                    game_time_display_safe = game_time_display
-                    if not game_time_display_safe and commence_raw:
-                        try:
-                            game_time_display_safe = format_game_time_local(commence_raw, user_tz_label)
-                        except Exception:
-                            game_time_display_safe = str(commence_raw)
+                    blended_score_pct = ai_win_prob
+                    if kalshi_prob_pct is not None:
+                        blended_score_pct = 0.5 * ai_win_prob + 0.5 * kalshi_prob_pct
 
                     kalshi_edge_pct = None
                     if kalshi_prob_pct is not None and market_implied_prob is not None:
