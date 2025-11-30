@@ -11888,8 +11888,8 @@ if is_vertex_ai_enabled():
                             )
 
                     user_tz_label = st.session_state.get('user_timezone', 'UTC')
-                    game_time_display_safe = "TBD"
-                    if commence_raw:
+                    game_time_display_safe = game_time_display
+                    if not game_time_display_safe and commence_raw:
                         try:
                             game_time_display_safe = format_game_time_local(commence_raw, user_tz_label)
                         except Exception:
