@@ -9842,18 +9842,18 @@ if is_vertex_ai_enabled():
                         show_vertex_master_analysis(results_df)
                         
                         # Store results in session_state for Best Bets and Parlays
-                            vertex_results = []
-                            for _, row in results_df.iterrows():
-                                vertex_results.append({
-                                    'home_team': row.get('home_team', ''),
-                                    'away_team': row.get('away_team', ''),
-                                    'league': row.get('league', ''),
-                                    'game_id': row.get('game_id') or row.get('id') or row.get('event_id'),
-                                    'commence_time': row.get('commence_time'),
-                                    'vertex_prob': row.get('vertex_ai_prob', 0.5),
-                                    # Calculate meaningful confidence: base 50% + (edge * 500) capped at 95%
-                                    # Edge of 0.10 (10%) = 50 + 50 = 100% confidence
-                                    # Edge of 0.05 (5%) = 50 + 25 = 75% confidence
+                        vertex_results = []
+                        for _, row in results_df.iterrows():
+                            vertex_results.append({
+                                'home_team': row.get('home_team', ''),
+                                'away_team': row.get('away_team', ''),
+                                'league': row.get('league', ''),
+                                'game_id': row.get('game_id') or row.get('id') or row.get('event_id'),
+                                'commence_time': row.get('commence_time'),
+                                'vertex_prob': row.get('vertex_ai_prob', 0.5),
+                                # Calculate meaningful confidence: base 50% + (edge * 500) capped at 95%
+                                # Edge of 0.10 (10%) = 50 + 50 = 100% confidence
+                                # Edge of 0.05 (5%) = 50 + 25 = 75% confidence
                                 'confidence': min(95, 50 + abs(row.get('vertex_ai_edge', 0)) * 500),
                                 'edge': row.get('vertex_ai_edge', 0),
                                 'has_edge': abs(row.get('vertex_ai_edge', 0)) > 0.03,
@@ -9882,12 +9882,12 @@ if is_vertex_ai_enabled():
                                 'kalshi_arbitrage_opportunity': row.get('kalshi_arbitrage_opportunity', False),
                                 'kalshi_synthetic': row.get('kalshi_synthetic', True),  # Indicates if synthetic data
                             })
-                        
+
                         st.session_state['vertex_results'] = vertex_results
                         st.session_state['vertex_analysis_complete'] = True
                         st.session_state['vertex_timestamp'] = datetime.now()
                         st.session_state['vertex_results_df'] = results_df
-                        
+
                         st.info(f"💾 Stored {len(vertex_results)} games for Best Bets & Parlays. Scroll down to generate!")
                     else:
                         st.warning("⚠️ No results from analysis. Try adjusting your filters.")
