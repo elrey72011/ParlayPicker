@@ -6470,9 +6470,40 @@ def build_best_bets_per_game(
             ),
         )
 
+        # Build a consistent, local game time display for the BEST BETS table/CSV
+        game_time_display = best_option.get('commence_display')
+        if not game_time_display:
+            try:
+                game_time_display = format_game_time_local(
+                    best_option.get('commence_time'), timezone_label
+                )
+            except Exception:
+                game_time_display = best_option.get('commence_time') or "TBD"
+
+        kalshi_prob_pct = (
+            best_option['kalshi_prob'] * 100 if best_option['kalshi_prob'] is not None else None
+        )
+        kalshi_edge_pct = None
+        if best_option.get('implied_prob') is not None and best_option.get('kalshi_prob') is not None:
+            kalshi_edge_pct = (best_option['kalshi_prob'] - best_option['implied_prob']) * 100
+        kalshi_indicator = "—"
+        if kalshi_prob_pct is not None:
+            if kalshi_prob_pct >= 55:
+                kalshi_indicator = "✅"
+            elif kalshi_prob_pct <= 45:
+                kalshi_indicator = "❌"
+
+        ai_prob_pct = (
+            best_option['ai_prob_effective'] * 100 if best_option['ai_prob_effective'] is not None else None
+        )
+        blended_score_pct = ai_prob_pct
+        if kalshi_prob_pct is not None and ai_prob_pct is not None:
+            blended_score_pct = 0.5 * ai_prob_pct + 0.5 * kalshi_prob_pct
+
         row = {
             'League': best_option['league'],
             'Game': f"{best_option['away_team']} @ {best_option['home_team']}",
+            'Game Time': game_time_display,
             'Commence (Local)': best_option['commence_display'],
             'Game Time (Local)': best_option.get('commence_display'),
             'Market': best_option['market'],
@@ -6499,10 +6530,15 @@ def build_best_bets_per_game(
             'Kalshi Δ pp': best_option['kalshi_delta'] * 100 if best_option['kalshi_delta'] is not None else None,
             'Kalshi Edge %': best_option['kalshi_edge'] * 100 if best_option['kalshi_edge'] is not None else None,
             'Kalshi Verdict': best_option['kalshi_verdict'],
+            'Kalshi': kalshi_indicator,
+            'Kalshi %': f"{kalshi_prob_pct:.1f}" if kalshi_prob_pct is not None else '—',
+            'kalshi_prob_pct': kalshi_prob_pct,
+            'kalshi_edge_pct': kalshi_edge_pct,
             'Best Edge %': best_option['best_edge'] * 100 if best_option['best_edge'] is not None else None,
             'Best Edge Source': best_option['best_edge_source'],
             'Best Win Prob %': best_option['win_metric'] * 100 if best_option['win_metric'] is not None else None,
             'Win Prob Source': best_option['win_prob_source'],
+            'blended_score_pct': blended_score_pct,
             'Event ID': event_id,
             'Sport Key': best_option['sport_key'],
             'Commence (UTC)': best_option['commence_time'],
@@ -11397,10 +11433,37 @@ if is_vertex_ai_enabled():
                     away_team = vertex_result.get('away_team') or matching_game.get('away_team')
                     commence_raw = vertex_result.get('commence_time') or matching_game.get('commence_time')
 
+                    # Estimate sportsbook implied probabilities for Kalshi feature wiring
+                    implied_home_prob = None
+                    implied_away_prob = None
+                    try:
+                        for bookmaker in matching_game.get('bookmakers', []):
+                            for market in bookmaker.get('markets', []):
+                                if market.get('key') != 'h2h':
+                                    continue
+                                for outcome in market.get('outcomes', []):
+                                    price = _safe_float(outcome.get('price'))
+                                    if outcome.get('name') == home_team and price is not None:
+                                        implied_home_prob = implied_p_from_american(price)
+                                    if outcome.get('name') == away_team and price is not None:
+                                        implied_away_prob = implied_p_from_american(price)
+                    except Exception:
+                        implied_home_prob = implied_home_prob or None
+                        implied_away_prob = implied_away_prob or None
+
+                    kalshi_vertex_features = collect_kalshi_vertex_features(
+                        home_team,
+                        away_team,
+                        vertex_result.get('sport') or matching_game.get('sport_key'),
+                        implied_home_prob,
+                        implied_away_prob,
+                        use_kalshi,
+                    )
+
                     # Always define a display string to avoid NameError when commence time is missing
                     user_tz_label = st.session_state.get('user_timezone', 'UTC')
-                    game_time_display = "TBD"
-                    if commence_raw:
+                    game_time_display = vertex_result.get('commence_local_display') or "TBD"
+                    if not game_time_display and commence_raw:
                         try:
                             game_time_display = format_game_time_local(
                                 commence_raw,
@@ -11408,6 +11471,14 @@ if is_vertex_ai_enabled():
                             )
                         except Exception:
                             # Fallback to raw commence string if formatting fails
+                            game_time_display = str(commence_raw)
+                    elif game_time_display == "TBD" and commence_raw:
+                        try:
+                            game_time_display = format_game_time_local(
+                                commence_raw,
+                                user_tz_label,
+                            )
+                        except Exception:
                             game_time_display = str(commence_raw)
 
                     raw_vertex_prob = _safe_float(vertex_result.get('vertex_probability'))
@@ -11716,17 +11787,30 @@ if is_vertex_ai_enabled():
                         sentiment_agrees = sentiment_diff < 0
                     
                     # Kalshi
-                    kalshi_available = vertex_result.get('kalshi_available', False)
-                    kalshi_prob = vertex_result.get('kalshi_prob', 0.5)
-                    if kalshi_prob and kalshi_prob <= 1:
-                        kalshi_prob = kalshi_prob * 100
-                    
+                    kalshi_home_prob = kalshi_vertex_features.get('kalshi_home_prob')
+                    kalshi_away_prob = kalshi_vertex_features.get('kalshi_away_prob')
+                    kalshi_available = kalshi_home_prob is not None or kalshi_away_prob is not None
+                    kalshi_pick_prob = None
                     if theover_picked_home:
-                        kalshi_agrees = kalshi_available and kalshi_prob > 50
-                        kalshi_pick_prob = kalshi_prob if kalshi_available else None
+                        kalshi_pick_prob = (
+                            kalshi_home_prob * 100
+                            if kalshi_home_prob is not None and kalshi_home_prob <= 1
+                            else (kalshi_home_prob if kalshi_home_prob is not None else None)
+                        )
                     else:
-                        kalshi_agrees = kalshi_available and kalshi_prob < 50
-                        kalshi_pick_prob = (100 - kalshi_prob) if kalshi_available else None
+                        kalshi_pick_prob = (
+                            kalshi_away_prob * 100
+                            if kalshi_away_prob is not None and kalshi_away_prob <= 1
+                            else (kalshi_away_prob if kalshi_away_prob is not None else None)
+                        )
+
+                    kalshi_agrees = False
+                    kalshi_disagrees = False
+                    if kalshi_pick_prob is not None:
+                        if kalshi_pick_prob >= 55:
+                            kalshi_agrees = True
+                        elif kalshi_pick_prob <= 45:
+                            kalshi_disagrees = True
                     
                     # Count consensus signals
                     consensus_count = 0
@@ -11736,6 +11820,8 @@ if is_vertex_ai_enabled():
                         consensus_count += 1
                     if kalshi_agrees:
                         consensus_count += 1
+                    if kalshi_disagrees:
+                        consensus_count = max(0, consensus_count - 1)
                     if ai_win_prob > 55:  # AI has conviction
                         consensus_count += 1
                     
@@ -11782,12 +11868,20 @@ if is_vertex_ai_enabled():
                             commence_raw = matching_game.get('commence_time')
 
                     user_tz_label = st.session_state.get('user_timezone', 'UTC')
-                    game_time_display_safe = "TBD"
-                    if commence_raw:
+                    game_time_display_safe = game_time_display
+                    if not game_time_display_safe and commence_raw:
                         try:
                             game_time_display_safe = format_game_time_local(commence_raw, user_tz_label)
                         except Exception:
                             game_time_display_safe = str(commence_raw)
+
+                    kalshi_edge_pct = None
+                    if kalshi_pick_prob is not None and market_implied_prob is not None:
+                        kalshi_edge_pct = kalshi_pick_prob - market_implied_prob
+
+                    blended_score_pct = ai_win_prob
+                    if kalshi_pick_prob is not None:
+                        blended_score_pct = 0.5 * ai_win_prob + 0.5 * kalshi_pick_prob
 
                     best_bets_rows.append({
                         'League': league,
@@ -11801,14 +11895,17 @@ if is_vertex_ai_enabled():
                         'EV': f"${ev_pct:.2f}",
                         'Consensus': f"{consensus_count}/4",
                         'Sentiment': '✅' if sentiment_agrees else '❌',
-                        'Kalshi': '✅' if kalshi_agrees else ('❌' if kalshi_available else '—'),
-                        'Kalshi %': f"{kalshi_pick_prob:.0f}" if kalshi_pick_prob else '—',
+                        'Kalshi': '✅' if kalshi_agrees else ('❌' if kalshi_disagrees else ('—' if not kalshi_available else '⚠️')),
+                        'Kalshi %': f"{kalshi_pick_prob:.1f}" if kalshi_pick_prob is not None else '—',
+                        'kalshi_prob_pct': kalshi_pick_prob,
+                        'kalshi_edge_pct': kalshi_edge_pct,
                         'TheOver %': f"{theover_prob:.0f}" if theover_prob else '—',
                         'Odds': odds_str,
                         'Confidence': round(confidence, 1),
                         'ML Source': ml_source_type,
                         'Commence (UTC)': commence_raw,
                         'kalshi_prob_raw': kalshi_pick_prob,
+                        'blended_score_pct': blended_score_pct,
                     })
                 
                 # Display results
@@ -11833,23 +11930,26 @@ if is_vertex_ai_enabled():
                     if 'Win %' not in best_bets_df.columns and 'AI Win %' in best_bets_df.columns:
                         best_bets_df['Win %'] = best_bets_df['AI Win %']
 
-                    best_bets_df['model_prob'] = pd.to_numeric(best_bets_df.get('Win %'), errors='coerce') / 100.0
-                    kalshi_pct = pd.to_numeric(best_bets_df.get('Kalshi %'), errors='coerce')
+                    ai_prob_pct_series = pd.to_numeric(best_bets_df.get('Win %'), errors='coerce')
+                    kalshi_pct = pd.to_numeric(best_bets_df.get('kalshi_prob_pct'), errors='coerce')
+                    if 'Kalshi %' in best_bets_df.columns:
+                        kalshi_pct = kalshi_pct.fillna(pd.to_numeric(best_bets_df['Kalshi %'], errors='coerce'))
                     if 'kalshi_prob_raw' in best_bets_df.columns:
                         kalshi_pct = kalshi_pct.fillna(pd.to_numeric(best_bets_df['kalshi_prob_raw'], errors='coerce'))
 
-                    best_bets_df['kalshi_prob'] = kalshi_pct / 100.0
-                    best_bets_df['kalshi_edge'] = best_bets_df['model_prob'] - best_bets_df['kalshi_prob']
-                    best_bets_df['blended_score'] = best_bets_df['model_prob']
+                    best_bets_df['kalshi_prob_pct'] = kalshi_pct
+                    best_bets_df['model_prob'] = ai_prob_pct_series / 100.0
+                    best_bets_df['kalshi_prob'] = best_bets_df['kalshi_prob_pct'] / 100.0
+                    best_bets_df['kalshi_edge_pct'] = best_bets_df['kalshi_prob_pct'] - ai_prob_pct_series
+                    best_bets_df['kalshi_edge'] = best_bets_df['kalshi_edge_pct'] / 100.0
 
-                    with_kalshi = best_bets_df['kalshi_prob'].notna()
-                    best_bets_df.loc[with_kalshi, 'blended_score'] = (
-                        0.5 * best_bets_df.loc[with_kalshi, 'model_prob']
-                        + 0.5 * best_bets_df.loc[with_kalshi, 'kalshi_edge']
+                    best_bets_df['blended_score_pct'] = ai_prob_pct_series
+                    with_kalshi = best_bets_df['kalshi_prob_pct'].notna()
+                    best_bets_df.loc[with_kalshi, 'blended_score_pct'] = (
+                        0.5 * best_bets_df.loc[with_kalshi, 'blended_score_pct']
+                        + 0.5 * best_bets_df.loc[with_kalshi, 'kalshi_prob_pct']
                     )
-
-                    best_bets_df['kalshi_prob_pct'] = best_bets_df['kalshi_prob'] * 100
-                    best_bets_df['kalshi_edge_pct'] = best_bets_df['kalshi_edge'] * 100
+                    best_bets_df['blended_score'] = best_bets_df['blended_score_pct'] / 100.0
 
                     # Convert Edge to numeric for sorting/metrics
                     best_bets_df['Edge_numeric'] = pd.to_numeric(best_bets_df['Edge'], errors='coerce')
@@ -11930,7 +12030,7 @@ if is_vertex_ai_enabled():
                         st.markdown("---")
                     
                     # Display columns - include game time and Kalshi-derived signals
-                    best_bets_df['Blended Score %'] = best_bets_df['blended_score'] * 100
+                    best_bets_df['Blended Score %'] = best_bets_df['blended_score_pct'].round(1)
 
                     display_cols = [
                         'Rank', 'League', 'Game', 'Game Time', 'THE PICK', 'AI Win %', 'Market %',
