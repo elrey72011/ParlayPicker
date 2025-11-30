@@ -11391,10 +11391,19 @@ if is_vertex_ai_enabled():
                     home_team = vertex_result.get('home_team') or matching_game.get('home_team')
                     away_team = vertex_result.get('away_team') or matching_game.get('away_team')
                     commence_raw = vertex_result.get('commence_time') or matching_game.get('commence_time')
-                    game_time_display = format_game_time_local(
-                        commence_raw,
-                        st.session_state.get('user_timezone', 'UTC'),
-                    )
+
+                    # Always define a display string to avoid NameError when commence time is missing
+                    user_tz_label = st.session_state.get('user_timezone', 'UTC')
+                    game_time_display = "TBD"
+                    if commence_raw:
+                        try:
+                            game_time_display = format_game_time_local(
+                                commence_raw,
+                                user_tz_label,
+                            )
+                        except Exception:
+                            # Fallback to raw commence string if formatting fails
+                            game_time_display = str(commence_raw)
 
                     raw_vertex_prob = _safe_float(vertex_result.get('vertex_probability'))
                     raw_confidence = _safe_float(vertex_result.get('confidence'))
