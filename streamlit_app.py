@@ -11647,11 +11647,12 @@ if is_vertex_ai_enabled():
                         pick_team = away_team
                     
                     # Calculate market implied probability from ML odds
-                    if pick_ml_odds and pick_ml_odds != 0:
-                        if pick_ml_odds < 0:
-                            market_implied_prob = abs(pick_ml_odds) / (abs(pick_ml_odds) + 100) * 100
+                    pick_ml_odds_value = _safe_float(pick_ml_odds)
+                    if pick_ml_odds_value and pick_ml_odds_value != 0:
+                        if pick_ml_odds_value < 0:
+                            market_implied_prob = abs(pick_ml_odds_value) / (abs(pick_ml_odds_value) + 100) * 100
                         else:
-                            market_implied_prob = 100 / (pick_ml_odds + 100) * 100
+                            market_implied_prob = 100 / (pick_ml_odds_value + 100) * 100
                     else:
                         market_implied_prob = 50
                     
@@ -11692,11 +11693,11 @@ if is_vertex_ai_enabled():
                     
                     # Calculate Expected Value (EV)
                     # EV = (Win Prob * Potential Profit) - (Lose Prob * Stake)
-                    if pick_ml_odds and pick_ml_odds != 0:
-                        if pick_ml_odds > 0:
-                            potential_profit = pick_ml_odds / 100  # Per $1 bet
+                    if pick_ml_odds_value and pick_ml_odds_value != 0:
+                        if pick_ml_odds_value > 0:
+                            potential_profit = pick_ml_odds_value / 100  # Per $1 bet
                         else:
-                            potential_profit = 100 / abs(pick_ml_odds)
+                            potential_profit = 100 / abs(pick_ml_odds_value)
                         
                         ev_per_dollar = (ai_win_prob / 100 * potential_profit) - ((100 - ai_win_prob) / 100)
                         ev_pct = ev_per_dollar * 100
@@ -11751,11 +11752,11 @@ if is_vertex_ai_enabled():
                         pick_str = f"{pick_team} ML"
                     
                     # Format odds string
-                    if pick_ml_odds and pick_ml_odds != 0:
-                        if pick_ml_odds > 0:
-                            odds_str = f"+{int(pick_ml_odds)}"
+                    if pick_ml_odds_value and pick_ml_odds_value != 0:
+                        if pick_ml_odds_value > 0:
+                            odds_str = f"+{int(pick_ml_odds_value)}"
                         else:
-                            odds_str = str(int(pick_ml_odds))
+                            odds_str = str(int(pick_ml_odds_value))
                     else:
                         odds_str = "-110"
                     
