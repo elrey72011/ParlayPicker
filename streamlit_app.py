@@ -12045,6 +12045,105 @@ if is_vertex_ai_enabled():
 
     default_start = sel_date - timedelta(days=_day_window or 0)
     default_end = sel_date + timedelta(days=_day_window or 0)
+    
+def export_vertex_single_best_csv(best_bets_df: pd.DataFrame) -> None:
+    """
+    Build a 'single best pick per game' CSV from best_bets_df,
+    making sure Game Time and Commence (UTC) are populated,
+    and that Win % comes from the ML/Vertex-driven AI Win %.
+    """
+    if best_bets_df is None or best_bets_df.empty:
+        return
+
+    df = best_bets_df.copy()
+
+    # If we have a blended_score, use that; else fall back to Edge
+    sort_col = 'blended_score' if 'blended_score' in df.columns else 'Edge'
+    if sort_col not in df.columns:
+        # Nothing to rank on; bail out gracefully
+        return
+
+    # For each game, choose the row with highest blended_score/Edge
+    df_sorted = df.sort_values(['Game', sort_col], ascending=[True, False])
+    per_game_best = df_sorted.groupby('Game', as_index=False).first()
+
+    # Build export frame
+    export_df = per_game_best.copy()
+
+    # Rename to match your existing single-best CSV schema
+    export_df = export_df.rename(columns={
+        'League': 'league',
+        'Game': 'game',
+        'THE PICK': 'the_pick',
+    })
+
+    # Compute Game Time if needed
+    user_tz_label = st.session_state.get('user_timezone', 'UTC')
+
+    def _compute_game_time(row):
+        raw = row.get('Commence (UTC)')
+        if pd.isna(raw):
+            # Fallback: sometimes Game Time string may already exist
+            gt = row.get('Game Time')
+            if isinstance(gt, str) and gt.strip():
+                return gt
+            return "TBD"
+        return format_game_time_local(raw, user_tz_label)
+
+    export_df['Game Time'] = export_df.apply(_compute_game_time, axis=1)
+
+    # Ensure Commence (UTC) exists (even if null)
+    if 'Commence (UTC)' not in export_df.columns:
+        export_df['Commence (UTC)'] = None
+
+    # Make sure Win % comes from AI Win % (Vertex / TheOver)
+    if 'Win %' not in export_df.columns and 'AI Win %' in export_df.columns:
+        export_df['Win %'] = export_df['AI Win %']
+
+    # Add Rank
+    export_df.insert(0, 'Rank', range(1, len(export_df) + 1))
+
+    # Final column order for single-best CSV
+    export_cols = [
+        'Rank',
+        'league',
+        'game',
+        'Game Time',
+        'Commence (UTC)',
+        'the_pick',
+        'Win %',
+        'Favorite',     # if present
+        'Novig',        # if present
+        'TheOver',      # if present
+        'Sentiment',
+        'Kalshi',
+        'Kalshi %',
+        'EV',
+    ]
+    export_cols = [c for c in export_cols if c in export_df.columns]
+
+    csv_buffer = export_df[export_cols].to_csv(index=False)
+
+    st.download_button(
+        "⬇️ Download Vertex Single Best Picks (CSV)",
+        data=csv_buffer,
+        file_name=f"vertex_single_best_pick_{pd.Timestamp.now().strftime('%Y-%m-%d')}.csv",
+        mime="text/csv",
+        key="vertex_single_best_csv",
+    )
+
+    csv_buffer = best_bets_df[export_cols].to_csv(index=False)
+    st.download_button(
+        "⬇️ Download Best Bets (CSV)",
+        data=csv_buffer,
+        file_name=f"best_bets_{pd.Timestamp.now().strftime('%Y-%m-%d')}.csv",
+        mime="text/csv",
+        key="best_bets_csv"
+    )
+
+    # Store for parlay generation
+    st.session_state['best_bets_df'] = best_bets_df
+    st.session_state['single_best_picks'] = best_bets_df
 
     def is_within_date_window(iso_str) -> bool:
         """Return True when an event falls within the selected day ± window."""
