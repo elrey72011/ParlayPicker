@@ -35,6 +35,14 @@ from app_core import (
     SportsDataNHLClient,
 )
 
+# Add to streamlit_app.py at the very top after imports
+from ml_predictions import get_gemini_model
+test_model = get_gemini_model()
+if test_model:
+    st.success(f"✅ Model loaded: {test_model._model_name}")  # Shows actual model name
+else:
+    st.error("❌ Model failed to load")
+
 # Optional ml_predictions module
 try:
     from ml_predictions import show_vertex_ai_prediction_section, is_vertex_ai_enabled
