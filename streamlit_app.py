@@ -9625,6 +9625,8 @@ if is_vertex_ai_enabled():
                 selected_sports = []
                 if 'NCAAF' in st.session_state.get('selected_sports', []):
                     selected_sports.append('americanfootball_ncaaf')
+                if 'NFL' in st.session_state.get('selected_sports', []):
+                    selected_sports.append('americanfootball_nfl')
                 if 'NBA' in st.session_state.get('selected_sports', []):
                     selected_sports.append('basketball_nba')
                 if 'NCAAB' in st.session_state.get('selected_sports', []):
@@ -9633,7 +9635,7 @@ if is_vertex_ai_enabled():
                     selected_sports.append('icehockey_nhl')
                 
                 if not selected_sports:
-                    selected_sports = ['basketball_nba', 'americanfootball_ncaaf', 'basketball_ncaab', 'icehockey_nhl']
+                    selected_sports = ['basketball_nba', 'americanfootball_nfl', 'americanfootball_ncaaf', 'basketball_ncaab', 'icehockey_nhl']
                 
                 all_games = []
 
