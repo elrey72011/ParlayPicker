@@ -42,7 +42,7 @@ def is_vertex_ai_enabled() -> bool:
 
 
 # Cache the model initialization
-@st.cache_resource
+#@st.cache_resource
 def get_gemini_model(
     project_id: Optional[str] = None,
     location: Optional[str] = None,
