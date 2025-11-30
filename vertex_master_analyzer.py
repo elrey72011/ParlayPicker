@@ -807,14 +807,47 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
     display_df = display_df.sort_values("win_prob", ascending=False).reset_index(drop=True)
     display_df["Rank"] = display_df.index + 1
     display_df["Win %"] = (display_df["win_prob"] * 100).round(1)
-    display_df["Favorite"] = display_df["is_favorite"].apply(lambda x: "✅" if bool(x) else "🚨 Underdog")
+    
+    # Changed from emojis to text
+    display_df["Favorite"] = display_df["is_favorite"].apply(
+        lambda x: "Yes" if bool(x) else "No (Underdog)"
+    )
+    
+    # Sentiment: Show as +/- percentage impact
     display_df["Sentiment"] = display_df["sentiment_diff"].apply(
-        lambda x: "✅" if x is not None and x > 0 else "❌"
+        lambda x: f"+{x*100:.1f}%" if x is not None and x > 0 
+                 else f"{x*100:.1f}%" if x is not None and x < 0
+                 else "0.0%"
     )
-    display_df["Kalshi"] = display_df["kalshi_alignment"].apply(
-        lambda x: "✅" if x is not None and x > 0.5 else "❌"
-    )
+    
+    # Kalshi: Show alignment as text + percentage
+    def format_kalshi(row):
+        alignment = row.get("kalshi_alignment")
+        kalshi_prob = row.get("kalshi_prob")
+        
+        if alignment is None or pd.isna(alignment):
+            return "N/A"
+        
+        if alignment > 0.5:
+            return "Agree"
+        else:
+            return "Disagree"
+    
+    display_df["Kalshi"] = display_df.apply(format_kalshi, axis=1)
     display_df["Kalshi %"] = (display_df["kalshi_prob"] * 100).round(0)
+    
+    # Add Kalshi Edge column (difference between Kalshi prob and market prob)
+    def calc_kalshi_edge(row):
+        kalshi_prob = row.get("kalshi_prob")
+        # Assuming market_prob is around 50% for now, or calculate from odds
+        if kalshi_prob is not None and not pd.isna(kalshi_prob):
+            # Edge is how much Kalshi favors vs 50/50
+            edge = (kalshi_prob - 0.5) * 100
+            return f"{edge:+.1f}%"
+        return "—"
+    
+    display_df["Kalshi Edge"] = display_df.apply(calc_kalshi_edge, axis=1)
+    
     display_df["EV"] = display_df["ev"].map(lambda x: f"${x:.2f}")
     
     # NEW: Format Game Time column
@@ -836,21 +869,21 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
     
     display_df["Game Time"] = display_df["game_time"].apply(format_game_time)
     
-    # NEW: TheOver.ai Consensus column
+    # NEW: TheOver.ai Consensus column (text instead of emojis)
     def format_consensus(row):
         our_pick = row.get("pick_team", "")
         theover_pick = row.get("theover_pick", "")
         
         if not theover_pick or pd.isna(theover_pick):
-            return "—"  # No TheOver.ai data
+            return "N/A"  # No TheOver.ai data
         
         # Check if picks match (case insensitive, partial match)
         if our_pick and theover_pick:
             if our_pick.lower() in theover_pick.lower() or theover_pick.lower() in our_pick.lower():
-                return "✅ Agree"
+                return "Agree"
             else:
-                return "❌ Disagree"
-        return "—"
+                return "Disagree"
+        return "N/A"
     
     display_df["TheOver"] = display_df.apply(format_consensus, axis=1)
     
@@ -890,11 +923,12 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
         "the_pick",
         "Win %",
         "Favorite",
-        "Novig",     # NEW - Novig odds for picked team
+        "Novig",     # Novig odds for picked team
         "TheOver",
-        "Sentiment",
+        "Sentiment",  # Shows +/-% sentiment impact
         "Kalshi",
         "Kalshi %",
+        "Kalshi Edge",  # NEW - How much Kalshi favors this pick
         "EV",
     ]
 
