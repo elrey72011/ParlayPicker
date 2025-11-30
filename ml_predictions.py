@@ -47,7 +47,7 @@ def get_gemini_model(
     project_id: Optional[str] = None,
     location: Optional[str] = None,
     model_name: str = "gemini-2.0-flash-001"
-    _cache_version: int = 2  # ← ADD THIS to force new cache
+    _cache_version: int = 2,  # ← ADD THIS to force new cache
 ) -> Optional[GenerativeModel]:
     """
     Initialize a Gemini model using either:
