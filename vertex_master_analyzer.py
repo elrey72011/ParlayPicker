@@ -835,7 +835,7 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
         kalshi_prob = row.get("kalshi_prob")  # This is HOME team probability
         
         if kalshi_prob is None or pd.isna(kalshi_prob):
-            return "N/A"
+            return "—"
         
         # Check if we picked the home team
         pick_is_home = pick_team.lower() in home_team.lower() if (pick_team and home_team) else False
@@ -891,7 +891,7 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
         theover_pick = row.get("theover_pick", "")
         
         if not theover_pick or pd.isna(theover_pick):
-            return "N/A"  # No TheOver.ai data
+            return "—"  # No TheOver.ai data
         
         # Check if picks match (case insensitive, partial match)
         if our_pick and theover_pick:
@@ -899,7 +899,7 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
                 return "Agree"
             else:
                 return "Disagree"
-        return "N/A"
+        return "—"
     
     display_df["TheOver"] = display_df.apply(format_consensus, axis=1)
     
