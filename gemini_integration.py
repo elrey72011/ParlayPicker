@@ -67,7 +67,7 @@ class GeminiAnalyzer:
                 vertexai.init(project=self.project_id, location=self.region)
                 
                 # Create Gemini Pro model
-                self.model = GenerativeModel("gemini-1.5-pro")
+                self.model = GenerativeModel("gemini-2.0-flash-001")
                 
                 logger.info("✅ Gemini model initialized successfully")
             except Exception as e:
@@ -186,7 +186,7 @@ class GeminiAnalyzer:
                 'best_spread': best_spread,
                 'sources_used': self._get_sources_used(context_data),
                 'analysis_timestamp': datetime.now().isoformat(),
-                'model': 'gemini-1.5-pro'
+                'model': 'gemini-2.0-flash-001'
             }
             
         except json.JSONDecodeError as e:
@@ -397,7 +397,7 @@ CRITICAL RULES:
             'best_spread': best_spread,
             'sources_used': 'error',
             'analysis_timestamp': datetime.now().isoformat(),
-            'model': 'gemini-1.5-pro',
+            'model': 'gemini-2.0-flash-001',
             'error': error_msg
         }
 
