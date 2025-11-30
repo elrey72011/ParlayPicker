@@ -11754,10 +11754,11 @@ if is_vertex_ai_enabled():
                     # =====================================================
                     # ADD TO BEST BETS
                     # =====================================================
+                    game_time_display_safe = game_time_display if 'game_time_display' in locals() else "TBD"
                     best_bets_rows.append({
                         'League': league,
                         'Game': f"{away_team} @ {home_team}",
-                        'Game Time': game_time_display,
+                        'Game Time': game_time_display_safe,
                         'THE PICK': pick_str,
                         'AI Win %': round(ai_win_prob, 1),
                         'Win %': round(ai_win_prob, 1),
