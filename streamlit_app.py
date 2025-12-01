@@ -2093,7 +2093,7 @@ class KalshiIntegrator:
         self.api_key = api_key or os.environ.get("KALSHI_API_KEY")
         self.api_secret = api_secret or os.environ.get("KALSHI_API_SECRET")
         
-        # Kalshi API URLs - production uses elections subdomain
+        # Kalshi API URLs - production API (not elections subdomain)
         self.base_url = "https://api.elections.kalshi.com/trade-api/v2"
         self.demo_url = "https://demo-api.kalshi.co/trade-api/v2"
         
@@ -2158,7 +2158,6 @@ class KalshiIntegrator:
             # Message format: timestamp + method + path
             message = f"{timestamp}{method}{path}"
             
-            # Kalshi requires PSS padding, not PKCS1v15
             signature = self._private_key.sign(
                 message.encode('utf-8'),
                 padding.PSS(
@@ -2361,7 +2360,7 @@ class KalshiIntegrator:
             return copy.deepcopy(self._synthetic_markets)
 
         try:
-            endpoint = f"{self.api_url}/markets"
+            endpoint = "/markets"
             params = {
                 "limit": 100,
                 "status": status
@@ -2370,22 +2369,24 @@ class KalshiIntegrator:
             if category:
                 params["series_ticker"] = category.upper()
 
-            response = requests.get(endpoint, headers=self.headers, params=params, timeout=10)
+            # Use authenticated request method with RSA signature
+            response_data = self._make_authenticated_request("GET", endpoint, params=params)
 
-            if response.status_code == 200:
-                data = response.json()
-                markets = data.get("markets", [])
+            if response_data:
+                markets = response_data.get("markets", [])
                 if markets:
                     self.last_error = None
+                    logger.info(f"✅ Loaded {len(markets)} Kalshi markets")
                     return markets
                 else:
                     self.last_error = "Kalshi API returned no markets"
+                    logger.warning("Kalshi API returned empty markets list")
             else:
-                self.last_error = f"Kalshi API responded with status {response.status_code}"
+                logger.warning(f"Kalshi API failed: {self.last_error}")
 
         except Exception as e:
             self.last_error = str(e)
-            st.warning(f"Error fetching Kalshi markets: {str(e)}")
+            logger.warning(f"Error fetching Kalshi markets: {str(e)}")
 
         # Fallback to synthetic data when API fails or returns nothing
         self._using_synthetic_data = True
@@ -3774,7 +3775,7 @@ class KalshiIntegrator:
             return copy.deepcopy(self._synthetic_markets)
 
         try:
-            endpoint = f"{self.api_url}/markets"
+            endpoint = "/markets"
             params = {
                 "limit": 100,
                 "status": status
@@ -3783,22 +3784,24 @@ class KalshiIntegrator:
             if category:
                 params["series_ticker"] = category.upper()
 
-            response = requests.get(endpoint, headers=self.headers, params=params, timeout=10)
+            # Use authenticated request method with RSA signature
+            response_data = self._make_authenticated_request("GET", endpoint, params=params)
 
-            if response.status_code == 200:
-                data = response.json()
-                markets = data.get("markets", [])
+            if response_data:
+                markets = response_data.get("markets", [])
                 if markets:
                     self.last_error = None
+                    logger.info(f"✅ Loaded {len(markets)} Kalshi markets")
                     return markets
                 else:
                     self.last_error = "Kalshi API returned no markets"
+                    logger.warning("Kalshi API returned empty markets list")
             else:
-                self.last_error = f"Kalshi API responded with status {response.status_code}"
+                logger.warning(f"Kalshi API failed: {self.last_error}")
 
         except Exception as e:
             self.last_error = str(e)
-            st.warning(f"Error fetching Kalshi markets: {str(e)}")
+            logger.warning(f"Error fetching Kalshi markets: {str(e)}")
 
         # Fallback to synthetic data when API fails or returns nothing
         self._using_synthetic_data = True
