@@ -114,6 +114,8 @@ class KalshiIntegrator:
         url = f"{self.api_url}{endpoint}"
         timestamp = str(int(time_module.time() * 1000))
         
+        print(f"🌐 KALSHI: Request {method} {url}")
+        print(f"🌐 KALSHI: Params: {params}")
         logger.info(f"Kalshi API request: {method} {url} with params: {params}")
         
         headers = self.headers.copy()
@@ -128,8 +130,11 @@ class KalshiIntegrator:
             headers["KALSHI-ACCESS-SIGNATURE"] = signature
             headers["KALSHI-ACCESS-TIMESTAMP"] = timestamp
             
+            print(f"🔐 KALSHI: Auth configured (key: {self.api_key[:8]}...)")
             logger.debug(f"Signing: {timestamp}{method.upper()}{path_without_query}")
             logger.info(f"Using API URL: {self.api_url}")
+        else:
+            print("⚠️ KALSHI: No authentication configured!")
         
         try:
             if method.upper() == "GET":
@@ -137,38 +142,50 @@ class KalshiIntegrator:
             else:
                 response = requests.post(url, headers=headers, json=params, timeout=15)
             
+            print(f"📥 KALSHI: Response Status {response.status_code}")
             logger.info(f"Kalshi API response: Status {response.status_code}, URL: {response.url}")
             
             if response.status_code == 200:
                 try:
                     data = response.json()
+                    print(f"✅ KALSHI: Response keys: {list(data.keys())}")
                     logger.info(f"Response data keys: {list(data.keys())}")
                     if 'markets' in data:
+                        print(f"✅ KALSHI: Markets in response: {len(data.get('markets', []))}")
                         logger.info(f"Markets in response: {len(data.get('markets', []))}")
+                    if 'series' in data:
+                        print(f"✅ KALSHI: Series in response: {len(data.get('series', []))}")
                     self.last_error = None
                     return data
                 except Exception as json_error:
+                    print(f"❌ KALSHI: Failed to parse JSON: {json_error}")
                     logger.error(f"Failed to parse JSON response: {json_error}")
                     logger.error(f"Response text: {response.text[:500]}")
                     self.last_error = f"JSON parse error: {json_error}"
                     return None
             elif response.status_code == 401:
+                print(f"❌ KALSHI: Authentication failed (401)")
                 logger.warning(f"Kalshi API authentication failed - Response: {response.text[:200]}")
                 self.last_error = "Authentication failed"
             elif response.status_code == 403:
+                print(f"❌ KALSHI: Access forbidden (403)")
                 logger.warning(f"Kalshi API access forbidden - Response: {response.text[:200]}")
                 self.last_error = "Access forbidden"
             else:
+                print(f"❌ KALSHI: API error {response.status_code}")
                 logger.warning(f"Kalshi API error: {response.status_code} - {response.text[:200]}")
                 self.last_error = f"API error: {response.status_code}"
                 
         except requests.exceptions.ConnectionError as e:
+            print(f"❌ KALSHI: Connection error (network blocked?): {str(e)[:100]}")
             logger.error(f"Kalshi API connection error (network may be blocked): {e}")
             self.last_error = f"Connection blocked - check network settings"
         except requests.exceptions.Timeout:
+            print(f"❌ KALSHI: Request timeout")
             logger.warning("Kalshi API timeout")
             self.last_error = "Request timeout"
         except Exception as e:
+            print(f"❌ KALSHI: Request failed: {str(e)[:100]}")
             logger.error(f"Kalshi API request failed: {e}")
             import traceback
             logger.error(f"Traceback: {traceback.format_exc()}")
@@ -193,11 +210,13 @@ class KalshiIntegrator:
             endpoint = "/series"
             params = {"limit": 200}
             
+            print("🔍 KALSHI: Fetching series list...")  # Force output to logs
             logger.info("Fetching Kalshi series list...")
             response_data = self._make_authenticated_request("GET", endpoint, params=params)
             
             if response_data:
                 all_series = response_data.get("series", [])
+                print(f"🔍 KALSHI: Found {len(all_series)} total series")
                 logger.info(f"Found {len(all_series)} total series")
                 
                 # Filter for sports-related series
@@ -214,14 +233,22 @@ class KalshiIntegrator:
                     if any(keyword in ticker or keyword in title or keyword in category 
                            for keyword in sports_keywords):
                         sports_series.append(series)
+                        print(f"🏈 KALSHI: Found sports series: {series.get('ticker')} - {series.get('title')}")
                         logger.info(f"Found sports series: {series.get('ticker')} - {series.get('title')}")
                 
+                print(f"✅ KALSHI: Total {len(sports_series)} sports series found")
                 return sports_series
+            else:
+                print("❌ KALSHI: No response from /series endpoint")
+                logger.error("No response from /series endpoint")
             
             return []
             
         except Exception as e:
+            print(f"❌ KALSHI: Error fetching sports series: {e}")
             logger.error(f"Error fetching sports series: {e}")
+            import traceback
+            print(f"❌ KALSHI: Traceback: {traceback.format_exc()}")
             return []
     
     def get_markets(self, category: str = "sports", status: str = "open") -> List[Dict]:
