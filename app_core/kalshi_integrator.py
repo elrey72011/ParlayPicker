@@ -114,6 +114,8 @@ class KalshiIntegrator:
         url = f"{self.api_url}{endpoint}"
         timestamp = str(int(time_module.time() * 1000))
         
+        logger.info(f"Kalshi API request: {method} {url} with params: {params}")
+        
         headers = self.headers.copy()
         
         if self._auth_ready and self._private_key:
@@ -127,6 +129,7 @@ class KalshiIntegrator:
             headers["KALSHI-ACCESS-TIMESTAMP"] = timestamp
             
             logger.debug(f"Signing: {timestamp}{method.upper()}{path_without_query}")
+            logger.info(f"Using API URL: {self.api_url}")
         
         try:
             if method.upper() == "GET":
@@ -134,26 +137,41 @@ class KalshiIntegrator:
             else:
                 response = requests.post(url, headers=headers, json=params, timeout=15)
             
-            logger.debug(f"Kalshi API response: {response.status_code}")
+            logger.info(f"Kalshi API response: Status {response.status_code}, URL: {response.url}")
             
             if response.status_code == 200:
-                self.last_error = None
-                return response.json()
+                try:
+                    data = response.json()
+                    logger.info(f"Response data keys: {list(data.keys())}")
+                    if 'markets' in data:
+                        logger.info(f"Markets in response: {len(data.get('markets', []))}")
+                    self.last_error = None
+                    return data
+                except Exception as json_error:
+                    logger.error(f"Failed to parse JSON response: {json_error}")
+                    logger.error(f"Response text: {response.text[:500]}")
+                    self.last_error = f"JSON parse error: {json_error}"
+                    return None
             elif response.status_code == 401:
-                logger.warning(f"Kalshi API authentication failed - check API key and secret. Response: {response.text[:200]}")
+                logger.warning(f"Kalshi API authentication failed - Response: {response.text[:200]}")
                 self.last_error = "Authentication failed"
             elif response.status_code == 403:
-                logger.warning(f"Kalshi API access forbidden. Response: {response.text[:200]}")
+                logger.warning(f"Kalshi API access forbidden - Response: {response.text[:200]}")
                 self.last_error = "Access forbidden"
             else:
                 logger.warning(f"Kalshi API error: {response.status_code} - {response.text[:200]}")
                 self.last_error = f"API error: {response.status_code}"
                 
+        except requests.exceptions.ConnectionError as e:
+            logger.error(f"Kalshi API connection error (network may be blocked): {e}")
+            self.last_error = f"Connection blocked - check network settings"
         except requests.exceptions.Timeout:
             logger.warning("Kalshi API timeout")
             self.last_error = "Request timeout"
         except Exception as e:
-            logger.warning(f"Kalshi API request failed: {e}")
+            logger.error(f"Kalshi API request failed: {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
             self.last_error = str(e)
         
         return None
@@ -162,11 +180,55 @@ class KalshiIntegrator:
         """Check if Kalshi is properly configured"""
         return bool(self.api_key and self._auth_ready)
 
+    def get_sports_series(self) -> List[Dict]:
+        """Get all available sports series tickers from Kalshi
+        
+        Returns list of series with tickers like:
+        - KXNFL (NFL markets)
+        - KXNBA (NBA markets)  
+        - KXMLB (MLB markets)
+        etc.
+        """
+        try:
+            endpoint = "/series"
+            params = {"limit": 200}
+            
+            logger.info("Fetching Kalshi series list...")
+            response_data = self._make_authenticated_request("GET", endpoint, params=params)
+            
+            if response_data:
+                all_series = response_data.get("series", [])
+                logger.info(f"Found {len(all_series)} total series")
+                
+                # Filter for sports-related series
+                sports_keywords = ['NFL', 'NBA', 'MLB', 'NHL', 'UFC', 'SOCCER', 'TENNIS', 
+                                  'GOLF', 'FOOTBALL', 'BASKETBALL', 'BASEBALL', 'HOCKEY',
+                                  'SPORT', 'GAME']
+                
+                sports_series = []
+                for series in all_series:
+                    ticker = series.get('ticker', '').upper()
+                    title = series.get('title', '').upper()
+                    category = series.get('category', '').upper()
+                    
+                    if any(keyword in ticker or keyword in title or keyword in category 
+                           for keyword in sports_keywords):
+                        sports_series.append(series)
+                        logger.info(f"Found sports series: {series.get('ticker')} - {series.get('title')}")
+                
+                return sports_series
+            
+            return []
+            
+        except Exception as e:
+            logger.error(f"Error fetching sports series: {e}")
+            return []
+    
     def get_markets(self, category: str = "sports", status: str = "open") -> List[Dict]:
         """Fetch available Kalshi markets.
 
         Args:
-            category: 'sports', 'politics', 'economics', etc.
+            category: 'sports', 'politics', 'economics', etc. (used to filter series)
             status: 'open', 'closed', 'settled'
 
         Returns:
@@ -176,45 +238,63 @@ class KalshiIntegrator:
             return []
 
         try:
-            endpoint = "/markets"
-            params = {
-                "limit": 200,  # Increased limit
-                "status": status
-            }
-
-            # Try without any category filter first
-            logger.info(f"Fetching Kalshi markets with params: {params}")
+            # First, get sports series tickers
+            sports_series = self.get_sports_series()
             
-            # Use authenticated request method with RSA signature
-            response_data = self._make_authenticated_request("GET", endpoint, params=params)
-
-            if response_data:
-                markets = response_data.get("markets", [])
-                cursor = response_data.get("cursor")
+            if not sports_series:
+                logger.warning("No sports series found")
+                self.last_error = "No sports series available"
+                self._using_synthetic_data = True
+                return []
+            
+            logger.info(f"Found {len(sports_series)} sports series")
+            
+            # Collect markets from all sports series
+            all_markets = []
+            
+            for series in sports_series[:10]:  # Limit to first 10 series to avoid rate limits
+                series_ticker = series.get('ticker')
+                if not series_ticker:
+                    continue
                 
-                logger.info(f"Kalshi API returned {len(markets)} markets, cursor: {cursor}")
+                logger.info(f"Fetching markets for series: {series_ticker}")
                 
-                if markets:
-                    self.last_error = None
-                    logger.info(f"✅ Loaded {len(markets)} Kalshi markets")
+                endpoint = "/markets"
+                params = {
+                    "series_ticker": series_ticker,  # CRITICAL: Use series_ticker parameter
+                    "limit": 200,
+                    "status": status
+                }
+                
+                response_data = self._make_authenticated_request("GET", endpoint, params=params)
+                
+                if response_data:
+                    markets = response_data.get("markets", [])
+                    logger.info(f"Got {len(markets)} markets from {series_ticker}")
+                    all_markets.extend(markets)
                     
-                    # Log first few market tickers for debugging
-                    sample_tickers = [m.get('ticker', 'NO_TICKER') for m in markets[:5]]
-                    logger.info(f"Sample tickers: {sample_tickers}")
-                    
-                    return markets
-                else:
-                    self.last_error = "Kalshi API returned no markets"
-                    logger.warning(f"Kalshi API returned empty markets list. Response keys: {list(response_data.keys())}")
-                    logger.warning(f"Full response: {response_data}")
+                    if len(all_markets) >= 100:
+                        # We have enough markets, stop querying
+                        break
+            
+            if all_markets:
+                self.last_error = None
+                logger.info(f"✅ Loaded {len(all_markets)} total Kalshi sports markets")
+                
+                # Log sample tickers
+                sample_tickers = [m.get('ticker', 'NO_TICKER') for m in all_markets[:5]]
+                logger.info(f"Sample tickers: {sample_tickers}")
+                
+                return all_markets
             else:
-                logger.warning(f"Kalshi API failed: {self.last_error}")
+                self.last_error = "Kalshi API returned no markets"
+                logger.warning("No markets found in any sports series")
 
         except Exception as e:
             self.last_error = str(e)
-            logger.warning(f"Error fetching Kalshi markets: {str(e)}")
+            logger.error(f"Error fetching Kalshi markets: {str(e)}")
             import traceback
-            logger.warning(f"Traceback: {traceback.format_exc()}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
 
         # Return empty list if API fails (don't fallback to synthetic)
         self._using_synthetic_data = True
