@@ -2093,9 +2093,9 @@ class KalshiIntegrator:
         self.api_key = api_key or os.environ.get("KALSHI_API_KEY")
         self.api_secret = api_secret or os.environ.get("KALSHI_API_SECRET")
         
-        # Kalshi API URLs - production API (not elections subdomain)
-        self.base_url = "https://api.kalshi.com/trade-api/v2"
-        self.demo_url = "https://demo-api.kalshi.com/trade-api/v2"
+        # Kalshi API URLs - production uses elections subdomain
+        self.base_url = "https://api.elections.kalshi.com/trade-api/v2"
+        self.demo_url = "https://demo-api.kalshi.co/trade-api/v2"
         
         # Use production API if we have credentials
         self.api_url = self.base_url if self.api_key else self.demo_url
@@ -2158,9 +2158,13 @@ class KalshiIntegrator:
             # Message format: timestamp + method + path
             message = f"{timestamp}{method}{path}"
             
+            # Kalshi requires PSS padding, not PKCS1v15
             signature = self._private_key.sign(
                 message.encode('utf-8'),
-                padding.PKCS1v15(),
+                padding.PSS(
+                    mgf=padding.MGF1(hashes.SHA256()),
+                    salt_length=padding.PSS.DIGEST_LENGTH
+                ),
                 hashes.SHA256()
             )
             
