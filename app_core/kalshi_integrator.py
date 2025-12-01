@@ -170,8 +170,10 @@ class KalshiIntegrator:
                 "status": status
             }
 
-            if category:
-                params["series_ticker"] = category.upper()
+            # Don't filter by category - get all markets
+            # Kalshi doesn't use "series_ticker" parameter for filtering
+            # if category:
+            #     params["series_ticker"] = category.upper()
 
             # Use authenticated request method with RSA signature
             response_data = self._make_authenticated_request("GET", endpoint, params=params)
