@@ -23,8 +23,8 @@ class KalshiIntegrator:
         self.api_key = api_key or os.environ.get("KALSHI_API_KEY")
         self.api_secret = api_secret or os.environ.get("KALSHI_API_SECRET")
         
-        # Kalshi API URLs - try production first
-        self.base_url = "https://api.kalshi.com/trade-api/v2"
+        # Kalshi API URLs - use elections subdomain (verified working)
+        self.base_url = "https://api.elections.kalshi.com/trade-api/v2"
         self.demo_url = "https://demo-api.kalshi.co/trade-api/v2"
         
         # Use production API if we have credentials
