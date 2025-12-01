@@ -23,8 +23,8 @@ class KalshiIntegrator:
         self.api_key = api_key or os.environ.get("KALSHI_API_KEY")
         self.api_secret = api_secret or os.environ.get("KALSHI_API_SECRET")
         
-        # Kalshi API URLs - production uses elections subdomain
-        self.base_url = "https://api.elections.kalshi.com/trade-api/v2"
+        # Kalshi API URLs - try production first
+        self.base_url = "https://api.kalshi.com/trade-api/v2"
         self.demo_url = "https://demo-api.kalshi.co/trade-api/v2"
         
         # Use production API if we have credentials
@@ -166,33 +166,43 @@ class KalshiIntegrator:
         try:
             endpoint = "/markets"
             params = {
-                "limit": 100,
+                "limit": 200,  # Increased limit
                 "status": status
             }
 
-            # Don't filter by category - get all markets
-            # Kalshi doesn't use "series_ticker" parameter for filtering
-            # if category:
-            #     params["series_ticker"] = category.upper()
-
+            # Try without any category filter first
+            logger.info(f"Fetching Kalshi markets with params: {params}")
+            
             # Use authenticated request method with RSA signature
             response_data = self._make_authenticated_request("GET", endpoint, params=params)
 
             if response_data:
                 markets = response_data.get("markets", [])
+                cursor = response_data.get("cursor")
+                
+                logger.info(f"Kalshi API returned {len(markets)} markets, cursor: {cursor}")
+                
                 if markets:
                     self.last_error = None
                     logger.info(f"✅ Loaded {len(markets)} Kalshi markets")
+                    
+                    # Log first few market tickers for debugging
+                    sample_tickers = [m.get('ticker', 'NO_TICKER') for m in markets[:5]]
+                    logger.info(f"Sample tickers: {sample_tickers}")
+                    
                     return markets
                 else:
                     self.last_error = "Kalshi API returned no markets"
-                    logger.warning("Kalshi API returned empty markets list")
+                    logger.warning(f"Kalshi API returned empty markets list. Response keys: {list(response_data.keys())}")
+                    logger.warning(f"Full response: {response_data}")
             else:
                 logger.warning(f"Kalshi API failed: {self.last_error}")
 
         except Exception as e:
             self.last_error = str(e)
             logger.warning(f"Error fetching Kalshi markets: {str(e)}")
+            import traceback
+            logger.warning(f"Traceback: {traceback.format_exc()}")
 
         # Return empty list if API fails (don't fallback to synthetic)
         self._using_synthetic_data = True
