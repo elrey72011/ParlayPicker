@@ -104,7 +104,11 @@ class KalshiIntegrator:
             return ""
     
     def _make_authenticated_request(self, method: str, endpoint: str, params: dict = None) -> Optional[dict]:
-        """Make authenticated request to Kalshi API"""
+        """Make authenticated request to Kalshi API
+        
+        Important: Per Kalshi docs, we sign ONLY the path (without query params),
+        but send the full URL with query params in the actual request.
+        """
         import time as time_module
         
         url = f"{self.api_url}{endpoint}"
@@ -113,10 +117,16 @@ class KalshiIntegrator:
         headers = self.headers.copy()
         
         if self._auth_ready and self._private_key:
-            signature = self._sign_request(method.upper(), endpoint, timestamp)
+            # CRITICAL: Strip query parameters from endpoint before signing
+            # Per Kalshi docs: "Strip query parameters from path before signing"
+            path_without_query = endpoint.split('?')[0]
+            
+            signature = self._sign_request(method.upper(), path_without_query, timestamp)
             headers["KALSHI-ACCESS-KEY"] = self.api_key
             headers["KALSHI-ACCESS-SIGNATURE"] = signature
             headers["KALSHI-ACCESS-TIMESTAMP"] = timestamp
+            
+            logger.debug(f"Signing: {timestamp}{method.upper()}{path_without_query}")
         
         try:
             if method.upper() == "GET":
@@ -124,14 +134,16 @@ class KalshiIntegrator:
             else:
                 response = requests.post(url, headers=headers, json=params, timeout=15)
             
+            logger.debug(f"Kalshi API response: {response.status_code}")
+            
             if response.status_code == 200:
                 self.last_error = None
                 return response.json()
             elif response.status_code == 401:
-                logger.warning("Kalshi API authentication failed - check API key and secret")
+                logger.warning(f"Kalshi API authentication failed - check API key and secret. Response: {response.text[:200]}")
                 self.last_error = "Authentication failed"
             elif response.status_code == 403:
-                logger.warning("Kalshi API access forbidden")
+                logger.warning(f"Kalshi API access forbidden. Response: {response.text[:200]}")
                 self.last_error = "Access forbidden"
             else:
                 logger.warning(f"Kalshi API error: {response.status_code} - {response.text[:200]}")
