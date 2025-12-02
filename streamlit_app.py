@@ -3,15 +3,21 @@
 # v9.2 Update: Integrated Vertex-first architecture - Vertex AI now calculates probabilities
 # BEFORE Best Bets and Parlays are generated for consistent, high-quality predictions
 import os, io, json, itertools, re, copy, logging, hashlib, math
-import concurrent.futures  # For parallel API calls
-from functools import lru_cache  # For caching
-import time  # For performance monitoring
+import concurrent.futures
+from functools import lru_cache
+import time
 from html import escape
 from dataclasses import asdict
 from typing import Dict, Any, List, Tuple, Optional, Iterable, Sequence, Type
 from datetime import datetime, timedelta, date, timezone
+
 from app_core import KalshiIntegrator
-from app_core.ml_predictions import get_vertex_ai_prediction
+try:
+    from ml_predictions import get_vertex_ai_prediction
+except Exception:
+    def get_vertex_ai_prediction(*args, **kwargs):
+        return None
+
 import pandas as pd
 import numpy as np
 import requests
@@ -20,6 +26,7 @@ import streamlit.components.v1 as components
 import pytz
 from pathlib import Path
 from collections import defaultdict
+
 
 from app_core import (
     APISportsBasketballClient,
