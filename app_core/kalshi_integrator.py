@@ -348,23 +348,59 @@ class KalshiIntegrator:
         self._using_synthetic_data = True
         return []
     
-    def get_sports_markets(self) -> List[Dict]:
-        """Get all active sports betting markets"""
-        all_markets = self.get_markets()
-        
-        # Filter for sports-related markets
-        sports_keywords = ['NFL', 'NBA', 'MLB', 'NHL', 'UFC', 'SOCCER', 'TENNIS', 
-                          'GOLF', 'FOOTBALL', 'BASKETBALL', 'BASEBALL', 'HOCKEY']
-        
-        sports_markets = []
-        for market in all_markets:
-            title = market.get('title', '').upper()
-            ticker = market.get('ticker', '').upper()
-            
-            if any(keyword in title or keyword in ticker for keyword in sports_keywords):
-                sports_markets.append(market)
-        
-        return sports_markets
+    def get_sports_markets(
+        self,
+        leagues: Optional[List[str]] = None,
+        only_today: bool = False,
+    ) -> List[Dict[str, Any]]:
+        """
+        High-level helper used by the Streamlit app.
+
+        - Pulls **game-related** markets from the Kalshi elections API
+        - Supports multiple leagues
+        - Optionally filters to markets closing *today* only
+        """
+        if leagues is None:
+            # Leagues you support in the UI
+            leagues = ["NFL", "NBA", "NHL", "NCAAF", "NCAAB"]
+
+        all_markets: List[Dict[str, Any]] = []
+
+        for lg in leagues:
+            try:
+                lg_markets = self.get_game_markets_for_events(
+                    league=lg,
+                    only_today=only_today,
+                )
+                if lg_markets:
+                    all_markets.extend(lg_markets)
+            except Exception as e:
+                # Don’t crash on a single league
+                print(f"❌ KALSHI: error loading markets for {lg}: {e}")
+
+        # Update last_error so the UI can show a useful message
+        if not all_markets:
+            self.last_error = (
+                "Kalshi API returned no sports markets for the selected leagues/filters."
+            )
+        else:
+            self.last_error = None
+
+        return all_markets
+
+        only_today_markets = st.checkbox(
+            "Only show markets that close today",
+            value=False,
+            key="kalshi_only_today_main",
+        )
+    
+    if st.button("🔄 Load Kalshi Markets", type="primary"):
+        with st.spinner("Fetching Kalshi sports prediction markets from Kalshi..."):
+            markets = kalshi.get_sports_markets(
+                leagues=None,              # or ["NFL", "NBA", ...] if you want to restrict
+                only_today=only_today_markets,
+            )
+            st.session_state["kalshi_markets"] = markets
     
     def _get_today_timestamp_range(self) -> tuple:
         """Get UTC timestamp range for today (midnight to midnight)"""
