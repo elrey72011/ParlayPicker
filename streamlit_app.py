@@ -13522,7 +13522,7 @@ with main_tab4:
     
     kalshi = st.session_state.get('kalshi_integrator')
     
-        if analysis_mode == "🔍 Browse Kalshi Sports Markets":
+    if analysis_mode == "🔍 Browse Kalshi Sports Markets":
         st.subheader("🏈 Available Sports Betting Markets")
 
         # Load markets from Kalshi
