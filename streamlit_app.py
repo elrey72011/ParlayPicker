@@ -18,7 +18,7 @@ import streamlit.components.v1 as components
 import pytz
 from pathlib import Path
 from collections import defaultdict
-from kalshi_integrator import KalshiIntegrator  # or your actual path
+from app_core.kalshi_integrator import KalshiIntegrator
 
 from app_core import (
     APISportsBasketballClient,
