@@ -483,7 +483,9 @@ class KalshiIntegrator:
             Filtered list of markets closing today
         """
         if not markets:
-            return []
+            print("❌ ERROR: Kalshi returned no markets.")
+            print(f"Reason: {integrator.last_error or 'Unknown'}")
+            sys.exit(1)
         
         min_ts, max_ts = self._get_today_timestamp_range()
         
