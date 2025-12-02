@@ -394,7 +394,7 @@ class KalshiIntegrator:
             key="kalshi_only_today_main",
         )
     
-    if st.button("🔄 Load Kalshi Markets", type="primary"):
+    if st.button("🔄 Load Kalshi Markets", type="primary", key="load_kalshi_markets_main"):
         with st.spinner("Fetching Kalshi sports prediction markets from Kalshi..."):
             markets = kalshi.get_sports_markets(
                 leagues=None,              # or ["NFL", "NBA", ...] if you want to restrict
