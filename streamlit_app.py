@@ -10,7 +10,7 @@ from html import escape
 from dataclasses import asdict
 from typing import Dict, Any, List, Tuple, Optional, Iterable, Sequence, Type
 from datetime import datetime, timedelta, date, timezone
-from app_core.kalshi_integrator import price_to_prob
+from app_core import KalshiIntegrator
 from app_core.ml_predictions import get_vertex_ai_prediction
 import pandas as pd
 import numpy as np
@@ -20,7 +20,6 @@ import streamlit.components.v1 as components
 import pytz
 from pathlib import Path
 from collections import defaultdict
-from app_core import KalshiIntegrator  # this matches your __init__.py export :contentReference[oaicite:1]{index=1}
 
 from app_core import (
     APISportsBasketballClient,
@@ -13405,7 +13404,7 @@ with main_tab4:
                     league = m.get("league", "NBA")
 
                     yes_price = m.get("yes_ask_dollars")
-                    market_prob = price_to_prob(yes_price)
+                    market_prob = kalshi.price_to_prob(yes_price) if kalshi else None
                     if market_prob is None:
                         continue
 
@@ -13521,6 +13520,9 @@ with main_tab4:
     )
     
     kalshi = st.session_state.get('kalshi_integrator')
+        if kalshi is None:
+            kalshi = KalshiIntegrator()
+            st.session_state['kalshi_integrator'] = kalshi
     
     if analysis_mode == "🔍 Browse Kalshi Sports Markets":
         st.subheader("🏈 Available Sports Betting Markets")
