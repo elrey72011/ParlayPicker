@@ -394,13 +394,14 @@ class KalshiIntegrator:
             key="kalshi_only_today_main",
         )
     
-    if st.button("🔄 Load Kalshi Markets", type="primary", key="load_kalshi_markets_main"):
+    if st.button("🔄 Load Kalshi Markets", type="primary", key="kalshi_load_markets"):
         with st.spinner("Fetching Kalshi sports prediction markets from Kalshi..."):
             markets = kalshi.get_sports_markets(
                 leagues=None,              # or ["NFL", "NBA", ...] if you want to restrict
                 only_today=only_today_markets,
             )
             st.session_state["kalshi_markets"] = markets
+
     
     def _get_today_timestamp_range(self) -> tuple:
         """Get UTC timestamp range for today (midnight to midnight)"""
