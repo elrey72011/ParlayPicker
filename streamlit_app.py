@@ -18,7 +18,8 @@ import streamlit.components.v1 as components
 import pytz
 from pathlib import Path
 from collections import defaultdict
- 
+from kalshi_integrator import KalshiIntegrator  # or your actual path
+
 from app_core import (
     APISportsBasketballClient,
     APISportsFootballClient,
@@ -137,6 +138,24 @@ except ImportError:
         def __init__(self, *args, **kwargs): pass
 
 logger = logging.getLogger(__name__)
+
+st.subheader("Kalshi Debug")
+
+k = KalshiIntegrator()
+
+st.write("Has API key:", bool(getattr(k, "api_key", None)))
+st.write("Auth ready:", getattr(k, "_auth_ready", None))
+st.write("API URL:", getattr(k, "api_url", None))
+
+try:
+    markets = k.get_markets_for_league("NBA")  # or whatever method you use
+    st.write("Markets returned:", len(markets) if markets is not None else None)
+except Exception as e:
+    st.write("Exception when fetching markets:", str(e))
+    markets = None
+
+st.write("Last Kalshi message:", getattr(k, "last_message", None))
+st.write("Last Kalshi error:", getattr(k, "last_error", None))
 
 # ============================================================
 # ML PREDICTION OPTIMIZATION FUNCTIONS
