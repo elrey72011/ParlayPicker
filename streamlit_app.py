@@ -10,11 +10,18 @@ from html import escape
 from dataclasses import asdict
 from typing import Dict, Any, List, Tuple, Optional, Iterable, Sequence, Type
 from datetime import datetime, timedelta, date, timezone
-
 from app_core import KalshiIntegrator
 try:
+    from ml_predictions import show_vertex_ai_prediction_section, is_vertex_ai_enabled
+except ImportError:
+    def get_vertex_ai_prediction(*args, **kwargs):
+        return None
+
+# Optional core prediction function
+try:
     from ml_predictions import get_vertex_ai_prediction
-except Exception:
+except ImportError:
+    # Safe fallback: if ml_predictions or Vertex AI isn't available, just return None
     def get_vertex_ai_prediction(*args, **kwargs):
         return None
 
