@@ -13601,17 +13601,22 @@ if st.button("🤖 Analyze These Markets with Gemini", key="kalshi_ai_compare"):
     
     st.markdown("---")
     
+    # --- after Kalshi config + st.markdown("---") ---
+
     # Main Analysis Sections
     analysis_mode = st.radio(
         "Select Analysis Mode:",
         ["🔍 Browse Kalshi Sports Markets", "⚖️ Compare with Sportsbooks", "💎 Find Arbitrage Opportunities"],
-        horizontal=True
+        horizontal=True,
     )
     
-    kalshi = st.session_state.get('kalshi_integrator')
-        if kalshi is None:
-            kalshi = KalshiIntegrator()
-            st.session_state['kalshi_integrator'] = kalshi
+    kalshi = st.session_state.get("kalshi_integrator")
+    if kalshi is None:
+        kalshi = KalshiIntegrator(
+            st.session_state.get("kalshi_api_key", ""),
+            st.session_state.get("kalshi_api_secret", ""),
+        )
+        st.session_state["kalshi_integrator"] = kalshi
     
     if analysis_mode == "🔍 Browse Kalshi Sports Markets":
         st.subheader("🏈 Available Sports Betting Markets")
