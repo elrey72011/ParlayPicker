@@ -13326,7 +13326,7 @@ with main_tab3:
 
 # ===== TAB 4: KALSHI PREDICTION MARKETS =====
 with main_tab4:
-        if analysis_mode == "🔍 Browse Kalshi Sports Markets":
+    if analysis_mode == "🔍 Browse Kalshi Sports Markets":
         st.subheader("🏈 Available Sports Betting Markets")
 
         # Load markets from Kalshi
