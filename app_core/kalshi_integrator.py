@@ -471,25 +471,46 @@ class KalshiIntegrator:
     
     def filter_markets_closing_today(self, markets: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """Filter markets to only those closing today (in UTC)
-        
-        Args:
-            markets: List of market dictionaries with 'close_time' field
-            
-        Returns:
-            Filtered list of markets closing today
+    
+        Supports both:
+        - numeric ms timestamps (Kalshi's original style)
+        - ISO8601 strings like "2025-12-17T01:00:00Z"
         """
         if not markets:
             return []
-        
+    
+        from datetime import datetime, timezone
+    
+        # For numeric timestamps we still use today's ms range
         min_ts, max_ts = self._get_today_timestamp_range()
-        
-        filtered = []
+        today_utc = datetime.now(timezone.utc).date()
+    
+        filtered: List[Dict[str, Any]] = []
         for m in markets:
             close_ts = m.get("close_time")
-            if isinstance(close_ts, (int, float)) and min_ts <= close_ts <= max_ts:
-                filtered.append(m)
-        
+    
+            # Case 1: Kalshi returns ms since epoch
+            if isinstance(close_ts, (int, float)):
+                if min_ts <= close_ts <= max_ts:
+                    filtered.append(m)
+                continue
+    
+            # Case 2: Kalshi returns ISO8601 string (e.g. "2025-12-17T01:00:00Z")
+            if isinstance(close_ts, str):
+                try:
+                    s = close_ts
+                    if s.endswith("Z"):
+                        s = s.replace("Z", "+00:00")
+                    dt = datetime.fromisoformat(s)
+                    if dt.tzinfo is None:
+                        dt = dt.replace(tzinfo=timezone.utc)
+                    if dt.date() == today_utc:
+                        filtered.append(m)
+                except Exception:
+                    continue
+    
         return filtered
+
     
     def group_game_markets_by_event(self, markets: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
         """Group markets by event_ticker (one event = one game)
