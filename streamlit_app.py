@@ -13492,7 +13492,96 @@ with main_tab4:
                 kalshi_key, 
                 st.session_state.get('kalshi_api_secret', '')
             )
-    
+    # ------------------------------------------------------------
+# KALSHI PREDICTION MARKET — AI COMPARISON PANEL
+# ------------------------------------------------------------
+st.markdown("---")
+st.header("📊 Kalshi Prediction Markets")
+
+kalshi = KalshiIntegrator()
+
+# Step 1 — Choose league
+league_choice = st.selectbox(
+    "Select League",
+    ["NFL", "NBA", "NHL", "MLB", "NCAAF", "NCAAB"],
+    index=1,
+    key="kalshi_league_selector"
+)
+
+# Step 2 — Fetch markets
+try:
+    markets = kalshi.get_game_markets_for_events(league_choice)
+    filtered_markets = kalshi.filter_markets_closing_today(markets)
+except Exception as e:
+    st.error(f"Kalshi error: {e}")
+    filtered_markets = []
+
+st.write(f"Markets found: {len(filtered_markets)}")
+
+# Step 3 — Display markets
+if filtered_markets:
+    st.dataframe(pd.DataFrame(filtered_markets))
+
+# ------------------------------------------------------------
+# PART 2 — AI vs Kalshi comparison
+# ------------------------------------------------------------
+from app_core.kalshi_integrator import price_to_prob
+from app_core.ml_predictions import get_vertex_ai_prediction
+
+if st.button("🤖 Analyze These Markets with Gemini", key="kalshi_ai_compare"):
+    project_id = (
+        st.session_state.get("gcp_project_id")
+        or st.secrets.get("gcp_project_id")
+    )
+    location = st.session_state.get("gcp_region", "us-central1")
+
+    scored_rows = []
+
+    for m in filtered_markets[:30]:
+        title = m.get("title", "")
+        ticker = m.get("ticker", "")
+        league = m.get("league", league_choice)
+
+        yes_price = m.get("yes_ask_dollars")
+        market_prob = price_to_prob(yes_price)
+        if market_prob is None:
+            continue
+
+        features = {
+            "kalshi_yes_price": float(yes_price or 0),
+            "kalshi_no_price": float(m.get("no_ask_dollars") or 0),
+            "league": league,
+        }
+
+        ai_prob = get_vertex_ai_prediction(
+            features=features,
+            game_context=f"Kalshi market: {title}",
+            project_id=project_id,
+            location=location,
+        )
+        if ai_prob is None:
+            continue
+
+        edge = ai_prob - market_prob
+
+        scored_rows.append(
+            {
+                "League": league,
+                "Ticker": ticker,
+                "Title": title,
+                "Kalshi_Prob": round(market_prob, 3),
+                "AI_Prob": round(ai_prob, 3),
+                "Edge": round(edge, 3),
+            }
+        )
+
+    if not scored_rows:
+        st.warning("No markets could be scored with Gemini.")
+    else:
+        df = pd.DataFrame(scored_rows).sort_values("Edge", ascending=False)
+        st.markdown("### 📈 AI vs Kalshi – Best Value Opportunities")
+        st.dataframe(df)
+
     with col_kalshi2:
         kalshi_secret = st.text_input(
             "Kalshi API Secret (optional)",
