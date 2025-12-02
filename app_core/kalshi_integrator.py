@@ -272,33 +272,63 @@ class KalshiIntegrator:
             print(f"❌ KALSHI: Traceback: {traceback.format_exc()}")
             return []
     
-    def get_markets(self, category: str = "sports", status: str = "open") -> List[Dict]:
+    def get_markets(
+        self,
+        category: str = "sports",
+        status: str = "open",
+        series_ticker: str | None = None,
+    ) -> List[Dict]:
         """Fetch available Kalshi markets.
 
         Args:
-            category: 'sports', 'politics', 'economics', etc. (used to filter series)
+            category: Logical category label for callers ("sports", "all", etc.).
+                      This is *not* sent to Kalshi unless you really want to.
             status: 'open', 'closed', 'settled'
+            series_ticker: Optional Kalshi series ticker, e.g. "KXNBASPREAD".
 
         Returns:
             List of market dictionaries.
         """
-        if self._using_synthetic_data:
-            return []
-
         try:
-            # First, get sports series tickers
-            sports_series = self.get_sports_series()
-            
-            if not sports_series:
-                logger.warning("No sports series found")
-                self.last_error = "No sports series available"
-                self._using_synthetic_data = True
-                return []
-            
-            logger.info(f"Found {len(sports_series)} sports series")
-            
-            # Collect markets from all sports series
-            all_markets = []
+            endpoint = "/markets"
+            params: dict[str, Any] = {
+                "limit": 1000,      # give yourself plenty of room
+                "status": status,
+            }
+
+            # Only send series_ticker if explicitly provided, or if the caller
+            # passes a non-generic category like "KXNBASPREAD".
+            if series_ticker:
+                params["series_ticker"] = series_ticker.upper()
+            elif category and category.lower() not in ("sports", "all"):
+                # Treat category as a specific series ticker only if it's not
+                # one of our generic labels.
+                params["series_ticker"] = category.upper()
+
+            response_data = self._make_authenticated_request(
+                "GET", endpoint, params=params
+            )
+
+            if response_data:
+                markets = response_data.get("markets", [])
+                if markets:
+                    self.last_error = None
+                    logger.info(f"✅ Loaded {len(markets)} Kalshi markets")
+                    return markets
+                else:
+                    self.last_error = "Kalshi API returned no markets"
+                    logger.warning("Kalshi API returned empty markets list")
+            else:
+                logger.warning(f"Kalshi API failed: {self.last_error}")
+
+        except Exception as e:
+            self.last_error = str(e)
+            logger.warning(f"Error fetching Kalshi markets: {str(e)}")
+
+        # No synthetic fallback here – reflect actual API behavior
+        self._using_synthetic_data = False
+        return []
+
             
             for series in sports_series[:10]:  # Limit to first 10 series to avoid rate limits
                 series_ticker = series.get('ticker')
