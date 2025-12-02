@@ -18,7 +18,7 @@ import streamlit.components.v1 as components
 import pytz
 from pathlib import Path
 from collections import defaultdict
-from app_core.kalshi_integrator import KalshiIntegrator
+from app_core import KalshiIntegrator  # this matches your __init__.py export :contentReference[oaicite:1]{index=1}
 
 from app_core import (
     APISportsBasketballClient,
@@ -148,13 +148,13 @@ st.write("Auth ready:", getattr(k, "_auth_ready", None))
 st.write("API URL:", getattr(k, "api_url", None))
 
 try:
-    markets = k.get_markets_for_league("NBA")  # or whatever method you use
-    st.write("Markets returned:", len(markets) if markets is not None else None)
+    markets = k.get_game_markets_for_events("NBA")  # ✅ this method exists
+    st.write("NBA markets returned:", len(markets))
+    st.write("Sample markets:", markets[:5])
 except Exception as e:
     st.write("Exception when fetching markets:", str(e))
-    markets = None
+    markets = []
 
-st.write("Last Kalshi message:", getattr(k, "last_message", None))
 st.write("Last Kalshi error:", getattr(k, "last_error", None))
 
 # ============================================================
