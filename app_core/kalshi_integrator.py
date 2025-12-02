@@ -368,19 +368,18 @@ class KalshiIntegrator:
     
     def _get_today_timestamp_range(self) -> tuple:
         """Get UTC timestamp range for today (midnight to midnight)"""
-        from datetime import datetime, timezone
-        
         now = datetime.now(timezone.utc)
         today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
         today_end = now.replace(hour=23, minute=59, second=59, microsecond=999999)
-        
+
         # Kalshi uses milliseconds
         min_ts = int(today_start.timestamp() * 1000)
         max_ts = int(today_end.timestamp() * 1000)
-        
+
         return min_ts, max_ts
-    
-        def get_game_markets_for_events(
+
+
+    def get_game_markets_for_events(
         self,
         league: str = "NBA",
         only_today: bool = False,
@@ -421,14 +420,13 @@ class KalshiIntegrator:
 
         print(f"📈 KALSHI: Total {len(all_markets)} {league} game markets")
 
-        # -------------- NEW: Filter for today's markets -----------------
         if only_today:
             today_markets = self.filter_markets_closing_today(all_markets)
             print(f"🌞 KALSHI: {len(today_markets)} {league} markets closing today")
             return today_markets
-        # ---------------------------------------------------------------
 
         return all_markets
+
 
     def filter_markets_closing_today(
         self,
@@ -436,15 +434,11 @@ class KalshiIntegrator:
     ) -> List[Dict[str, Any]]:
         """
         Filter markets to only those closing today (based on UTC date).
-
-        Supports both:
-        - numeric ms timestamps (Kalshi's original style)
-        - ISO8601 strings like "2025-12-17T01:00:00Z"
+        Supports ISO8601 strings and ms timestamps.
         """
         if not markets:
             return []
 
-        # For numeric timestamps we still use the ms range
         min_ts, max_ts = self._get_today_timestamp_range()
         today_utc = datetime.now(timezone.utc).date()
 
@@ -453,29 +447,24 @@ class KalshiIntegrator:
         for m in markets:
             close_ts = m.get("close_time")
 
-            # Case 1: Kalshi returns ms since epoch
+            # Case 1: numeric timestamp
             if isinstance(close_ts, (int, float)):
                 if min_ts <= close_ts <= max_ts:
                     filtered.append(m)
                 continue
 
-            # Case 2: Kalshi returns ISO8601 string e.g. "2025-12-17T01:00:00Z"
+            # Case 2: ISO string
             if isinstance(close_ts, str):
                 try:
-                    s = close_ts
-                    # Handle trailing 'Z' as UTC
-                    if s.endswith("Z"):
-                        s = s.replace("Z", "+00:00")
+                    s = close_ts.replace("Z", "+00:00")
                     dt = datetime.fromisoformat(s)
-                    if dt.tzinfo is None:
-                        dt = dt.replace(tzinfo=timezone.utc)
                     if dt.date() == today_utc:
                         filtered.append(m)
                 except Exception:
-                    # If we can't parse it, just skip this market
                     continue
 
         return filtered
+
 
     def group_game_markets_by_event(
         self,
@@ -483,9 +472,6 @@ class KalshiIntegrator:
     ) -> Dict[str, List[Dict[str, Any]]]:
         """
         Group markets by event_ticker (one event = one game).
-
-        Returns:
-            Dict[event_ticker -> list of markets]
         """
         from collections import defaultdict
 
@@ -500,6 +486,7 @@ class KalshiIntegrator:
             grouped[event_ticker].append(m)
 
         return grouped
+
 
     def price_to_prob(price_dollars: Optional[float]) -> Optional[float]:
         """Convert Kalshi price (0-1 dollars) to implied probability
