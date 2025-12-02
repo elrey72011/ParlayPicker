@@ -24,14 +24,24 @@ class KalshiIntegrator:
     """
     
     def __init__(self, api_key: str = None, api_secret: str = None):
+        print("="*80)
+        print("🚀 KALSHI INTEGRATOR v2.0 - SECRETS VERSION - INITIALIZING")
+        print("="*80)
+        
         # Use Streamlit secrets if keys not provided directly
         try:
             self.api_key = api_key or st.secrets.get("KALSHI_API_KEY")
             self.api_secret = api_secret or st.secrets.get("KALSHI_API_SECRET")
+            print(f"🔑 KALSHI: API key loaded: {bool(self.api_key)}")
+            print(f"🔑 KALSHI: API secret loaded: {bool(self.api_secret)}")
+            if self.api_key:
+                print(f"🔑 KALSHI: Key preview: {self.api_key[:8]}...")
         except Exception:
             # Fallback if secrets not available (e.g., local testing)
+            print(f"⚠️ KALSHI: Secrets not available, using provided values")
             self.api_key = api_key
             self.api_secret = api_secret
+            print(f"🔑 KALSHI: Fallback - API key: {bool(self.api_key)}, secret: {bool(self.api_secret)}")
         
         # Kalshi API URLs - use elections subdomain (verified working)
         self.base_url = "https://api.elections.kalshi.com/trade-api/v2"
