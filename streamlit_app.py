@@ -12877,7 +12877,14 @@ with main_tab3:
                         selection = None
             
             # Add leg button
-            if selection is not None and st.button("➕ Add to Parlay", type="secondary"):
+            button_key = f"add_parlay_{selected_game['id']}_{bet_type}"
+            if selection is not None and st.button(
+                "➕ Add to Parlay",
+                type="secondary",
+                key=button_key,
+            ):
+                # existing add-to-parlay code
+
                 # Create leg data
                 leg = {
                     'event_id': selected_game['id'],
