@@ -12,6 +12,9 @@ numpy>=1.24.0
 # HTTP Requests
 requests>=2.31.0
 
+# Crypto for Kalshi auth
+cryptography>=42.0.0
+
 # Date/Time
 pytz>=2023.3
 
