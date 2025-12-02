@@ -270,6 +270,70 @@ class KalshiIntegrator:
             import traceback
             print(f"❌ KALSHI: Traceback: {traceback.format_exc()}")
             return []
+
+    def get_markets_by_sport(self, league: str) -> List[Dict[str, Any]]:
+        """Fetch markets for a specific league (e.g., NBA, NFL).
+
+        The Kalshi API organizes sports by series tickers like KXNBA or KXNFL.
+        This helper pulls markets for any series matching the requested league
+        prefix.
+        """
+        # Reset state for this fresh call
+        self.last_error = None
+        self._using_synthetic_data = False
+        all_markets: List[Dict[str, Any]] = []
+
+        try:
+            series_prefix = f"KX{league.upper()}"
+            logger.info(f"Fetching Kalshi markets for league {league} (prefix {series_prefix})")
+
+            # Get available series and filter by league prefix
+            series_response = self._make_authenticated_request("GET", "/series", params={"limit": 500})
+
+            if not series_response:
+                logger.warning(f"No response when fetching series for {league}")
+                self.last_error = self.last_error or f"Failed to fetch series for {league}"
+                return []
+
+            series_list = series_response.get("series", [])
+            matching_series = [s for s in series_list if s.get("ticker", "").upper().startswith(series_prefix)]
+
+            for series in matching_series:
+                series_ticker = series.get("ticker")
+                if not series_ticker:
+                    continue
+
+                params = {
+                    "series_ticker": series_ticker,
+                    "limit": 500,
+                    "status": "open",
+                }
+                response_data = self._make_authenticated_request("GET", "/markets", params=params)
+
+                if response_data:
+                    markets = response_data.get("markets", [])
+                    all_markets.extend(markets)
+
+            if not all_markets:
+                logger.warning(
+                    f"No Kalshi markets found for league {league} "
+                    f"(series prefix: {series_prefix})."
+                )
+                # Do NOT switch to synthetic mode – just report empty
+                self._using_synthetic_data = False
+                self.last_error = f"No Kalshi markets found for {league}"
+                return []
+
+            # Success – clear any previous errors
+            self.last_error = None
+            return all_markets
+
+        except Exception as e:
+            logger.error(f"Error fetching markets for {league}: {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            self.last_error = str(e)
+            return []
     
     def get_markets(self, category: str = "sports", status: str = "open") -> List[Dict]:
         """Fetch available Kalshi markets.

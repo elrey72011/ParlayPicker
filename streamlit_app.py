@@ -2355,10 +2355,6 @@ class KalshiIntegrator:
         Returns:
             List of market dictionaries.
         """
-        if self._using_synthetic_data:
-            self._ensure_synthetic_data()
-            return copy.deepcopy(self._synthetic_markets)
-
         try:
             endpoint = "/markets"
             params = {
@@ -2388,10 +2384,9 @@ class KalshiIntegrator:
             self.last_error = str(e)
             logger.warning(f"Error fetching Kalshi markets: {str(e)}")
 
-        # Fallback to synthetic data when API fails or returns nothing
-        self._using_synthetic_data = True
-        self._ensure_synthetic_data()
-        return copy.deepcopy(self._synthetic_markets)
+        # Do not fallback to synthetic data – just return empty to reflect API status
+        self._using_synthetic_data = False
+        return []
     
     def get_sports_markets(self) -> List[Dict]:
         """Get all active sports betting markets"""
@@ -2515,12 +2510,10 @@ class KalshiIntegrator:
         try:
             # Get all sports markets
             sports_markets = self.get_sports_markets()
-            
+
             if not sports_markets:
-                # Fall back to synthetic data
-                self._using_synthetic_data = True
-                self._ensure_synthetic_data()
-                sports_markets = self._synthetic_markets
+                self.last_error = self.last_error or "No Kalshi sports markets available"
+                return result
             
             # Search for matching market
             home_normalized = normalize_name(home_team)
@@ -3794,12 +3787,7 @@ def validate_with_kalshi(kalshi_integrator, home_team: str, away_team: str,
     try:
         markets = kalshi_integrator.get_sports_markets()
         if not markets:
-            try:
-                kalshi_integrator._using_synthetic_data = True
-                kalshi_integrator._ensure_synthetic_data()
-                markets = copy.deepcopy(getattr(kalshi_integrator, "_synthetic_markets", []))
-            except Exception:
-                markets = []
+            return None
 
         bet_team = home_team if side == 'home' else away_team
         other_team = away_team if side == 'home' else home_team
@@ -3837,40 +3825,7 @@ def validate_with_kalshi(kalshi_integrator, home_team: str, away_team: str,
             if result:
                 return result
 
-        synthetic_market = kalshi_integrator.get_synthetic_market_for_team(canonical_team)
-        if synthetic_market:
-            result = build_market_validation(synthetic_market, 'synthetic')
-            if result:
-                return result
-
-        synthetic_prob = kalshi_integrator.synthetic_probability(canonical_team, sport, sportsbook_prob)
-        diff = synthetic_prob - sportsbook_prob
-
-        if diff >= 0.06:
-            validation = 'kalshi_higher'
-            confidence_boost = 0.03
-            edge = diff
-        elif diff <= -0.06:
-            validation = 'strong_contradiction'
-            confidence_boost = -0.03
-            edge = abs(diff)
-        else:
-            validation = 'confirms'
-            confidence_boost = 0.02
-            edge = max(diff, 0)
-
-        return {
-            'kalshi_prob': synthetic_prob,
-            'kalshi_available': True,
-            'discrepancy': abs(diff),
-            'validation': validation,
-            'edge': edge,
-            'confidence_boost': confidence_boost,
-            'market_ticker': None,
-            'market_title': f"Synthetic confidence for {bet_team}",
-            'market_scope': 'synthetic_estimate',
-            'data_source': 'synthetic_estimate'
-        }
+        return None
 
     except Exception as e:
         # Error fetching Kalshi data
@@ -13392,20 +13347,18 @@ with main_tab4:
                 try:
                     markets = kalshi.get_sports_markets()
                     st.session_state['kalshi_markets'] = markets
-                    st.success(f"✅ Loaded {len(markets)} sports markets")
-                    if kalshi.using_synthetic_data():
-                        st.warning("🧪 Live Kalshi API unavailable – showing synthetic demo markets instead.")
+                    if markets:
+                        st.success(f"✅ Loaded {len(markets)} sports markets")
+                    else:
+                        st.warning("⚠️ No Kalshi markets found for the current filters.")
                         if kalshi.last_error:
-                            st.caption(f"Last API error: {kalshi.last_error}")
+                            st.caption(f"Last Kalshi message: {kalshi.last_error}")
                 except Exception as e:
                     st.error(f"Error loading markets: {str(e)}")
                     st.info("💡 Try demo mode without API keys to explore sample markets")
 
         if 'kalshi_markets' in st.session_state and st.session_state['kalshi_markets']:
             markets = st.session_state['kalshi_markets']
-
-            if kalshi and kalshi.using_synthetic_data():
-                st.info("🧪 Displaying locally generated Kalshi fallback data for exploration.")
 
             st.markdown(f"### 📋 {len(markets)} Markets Available")
             
