@@ -325,17 +325,21 @@ class KalshiIntegrator:
                         break
             
             if all_markets:
+                # ✅ Reset error state – we have real data now
                 self.last_error = None
-                logger.info(f"✅ Loaded {len(all_markets)} total Kalshi sports markets")
-                
-                # Log sample tickers
+                self._using_synthetic_data = False
+            
+                logger.info("Successfully pulled markets from sports series")
                 sample_tickers = [m.get('ticker', 'NO_TICKER') for m in all_markets[:5]]
                 logger.info(f"Sample tickers: {sample_tickers}")
-                
                 return all_markets
             else:
+                # ❌ No markets – mark as error/fallback
                 self.last_error = "Kalshi API returned no markets"
+                self._using_synthetic_data = True
                 logger.warning("No markets found in any sports series")
+                return []
+
 
         except Exception as e:
             self.last_error = str(e)
