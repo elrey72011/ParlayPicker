@@ -148,12 +148,15 @@ st.write("Auth ready:", getattr(k, "_auth_ready", None))
 st.write("API URL:", getattr(k, "api_url", None))
 
 try:
-    markets = k.get_game_markets_for_events("NBA")  # ✅ this method exists
-    st.write("NBA markets returned:", len(markets))
-    st.write("Sample markets:", markets[:5])
+    all_markets = k.get_game_markets_for_events("NBA")
+    today_markets = k.filter_markets_closing_today(all_markets)
+
+    st.write("NBA markets returned (all):", len(all_markets))
+    st.write("NBA markets returned (today only):", len(today_markets))
+    st.write("Sample markets:", today_markets[:5])
 except Exception as e:
     st.write("Exception when fetching markets:", str(e))
-    markets = []
+    today_markets = []
 
 st.write("Last Kalshi error:", getattr(k, "last_error", None))
 
