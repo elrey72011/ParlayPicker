@@ -13392,20 +13392,18 @@ with main_tab4:
                 try:
                     markets = kalshi.get_sports_markets()
                     st.session_state['kalshi_markets'] = markets
-                    st.success(f"✅ Loaded {len(markets)} sports markets")
-                    if kalshi.using_synthetic_data():
-                        st.warning("🧪 Live Kalshi API unavailable – showing synthetic demo markets instead.")
+                    if markets:
+                        st.success(f"✅ Loaded {len(markets)} sports markets")
+                    else:
+                        st.warning("⚠️ No Kalshi markets found for the current filters.")
                         if kalshi.last_error:
-                            st.caption(f"Last API error: {kalshi.last_error}")
+                            st.caption(f"Last Kalshi message: {kalshi.last_error}")
                 except Exception as e:
                     st.error(f"Error loading markets: {str(e)}")
                     st.info("💡 Try demo mode without API keys to explore sample markets")
 
         if 'kalshi_markets' in st.session_state and st.session_state['kalshi_markets']:
             markets = st.session_state['kalshi_markets']
-
-            if kalshi and kalshi.using_synthetic_data():
-                st.info("🧪 Displaying locally generated Kalshi fallback data for exploration.")
 
             st.markdown(f"### 📋 {len(markets)} Markets Available")
             
