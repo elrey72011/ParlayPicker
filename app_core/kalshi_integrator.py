@@ -6,8 +6,150 @@ This file goes in: app_core/kalshi_integrator.py or app_core/__init__.py
 import copy
 import time
 import logging
-import requests
+import requestsfrom datetime import datetime, timezone
+from typing import List, Dict, Any, Optional
+
+    def get_game_markets_for_events(
+        self,
+        league: str = "NBA",
+        only_today: bool = False,
+    ) -> List[Dict[str, Any]]:
+        """
+        Get game-related markets for a specific league (NBA, NFL, MLB, NHL, etc).
+
+        If only_today is True, only return markets whose close_time falls on
+        today's date (UTC).
+        """
+        try:
+            # 1) Pull all series
+            endpoint = "/series"
+            params = {"limit": 1000}
+            response_data = self._make_authenticated_request("GET", endpoint, params=params)
+
+            if not response_data:
+                logger.warning("❌ KALSHI: Failed to get series list")
+                self.last_error = "Kalshi /series returned no data"
+                return []
+
+            all_series = response_data.get("series", [])
+            logger.info(f"🔍 KALSHI: Found {len(all_series)} total series")
+
+            # 2) Filter to relevant game series for this league
+            league_prefix = f"KX{league.upper()}"
+            game_suffixes = ("SPREAD", "TOTAL", "GAME", "GAMES")
+
+            relevant_series: List[Dict[str, Any]] = []
+            for s in all_series:
+                ticker = s.get("ticker", "").upper()
+                if ticker.startswith(league_prefix) and any(
+                    suf in ticker for suf in game_suffixes
+                ):
+                    relevant_series.append(s)
+                    logger.info(f"  ✅ {ticker} ({league})")
+
+            logger.info(f"🎯 KALSHI: Found {len(relevant_series)} {league} game series")
+
+            if not relevant_series:
+                self.last_error = f"No game series found for {league}"
+                return []
+
+            # 3) For each relevant series, pull markets
+            all_markets: List[Dict[str, Any]] = []
+            for s in relevant_series:
+                series_ticker = s.get("ticker")
+                if not series_ticker:
+                    continue
+
+                logger.info(f"   ➤ Fetching markets for {series_ticker}")
+                endpoint = "/markets"
+                params = {
+                    "series_ticker": series_ticker,
+                    "limit": 1000,
+                    "status": "open",
+                }
+                response_data = self._make_authenticated_request(
+                    "GET", endpoint, params=params
+                )
+                if not response_data:
+                    continue
+
+                markets = response_data.get("markets", [])
+                logger.info(f"     → {series_ticker}: {len(markets)} markets")
+
+                # Enrich with league / series info
+                for m in markets:
+                    enriched = {
+                        "league": league,
+                        "series_ticker": series_ticker,
+                        "ticker": m.get("ticker"),
+                        "event_ticker": m.get("event_ticker"),
+                        "title": m.get("title"),
+                        "subtitle": m.get("subtitle"),
+                        "yes_bid": m.get("yes_bid"),
+                        "yes_ask": m.get("yes_ask"),
+                        "no_bid": m.get("no_bid"),
+                        "no_ask": m.get("no_ask"),
+                        "yes_bid_dollars": m.get("yes_bid_dollars"),
+                        "yes_ask_dollars": m.get("yes_ask_dollars"),
+                        "no_bid_dollars": m.get("no_bid_dollars"),
+                        "no_ask_dollars": m.get("no_ask_dollars"),
+                        "close_time": m.get("close_time"),
+                        "status": m.get("status"),
+                    }
+                    all_markets.append(enriched)
+
+            logger.info(f"📈 KALSHI: Total {len(all_markets)} {league} game markets")
+
+            # Optional: same “today only” logic you are using in debug
+            if only_today:
+                all_markets = self.filter_markets_closing_today(all_markets)
+                logger.info(
+                    f"🌞 KALSHI: {len(all_markets)} {league} markets closing today"
+                )
+
+            self.last_error = None if all_markets else f"No open markets for {league}"
+            return all_markets
+
+        except Exception as e:
+            logger.exception("❌ KALSHI error in get_game_markets_for_events")
+            self.last_error = str(e)
+            return []
+
+    def get_sports_markets(
+        self,
+        leagues: Optional[List[str]] = None,
+        only_today: bool = False,
+    ) -> List[Dict[str, Any]]:
+        """
+        Aggregate game markets across multiple leagues for the Streamlit UI.
+        """
+        if leagues is None:
+            leagues = ["NFL", "NBA", "NHL", "NCAAF", "NCAAB"]
+
+        all_markets: List[Dict[str, Any]] = []
+
+        for lg in leagues:
+            try:
+                lg_markets = self.get_game_markets_for_events(
+                    league=lg,
+                    only_today=only_today,
+                )
+                if lg_markets:
+                    all_markets.extend(lg_markets)
+            except Exception as e:
+                logger.warning(f"❌ KALSHI: error loading markets for {lg}: {e}")
+
+        if not all_markets:
+            self.last_error = (
+                "Kalshi API returned no sports markets for the selected leagues/filters."
+            )
+        else:
+            self.last_error = None
+
+        return all_markets
+
 import streamlit as st
+from datetime import datetime, timezone
 from typing import Dict, List, Any, Optional
 
 logger = logging.getLogger(__name__)
@@ -346,25 +488,8 @@ class KalshiIntegrator:
         # Return empty list if API fails (don't fallback to synthetic)
         self._using_synthetic_data = True
         return []
-    
-    def get_sports_markets(self) -> List[Dict]:
-        """Get all active sports betting markets"""
-        all_markets = self.get_markets()
-        
-        # Filter for sports-related markets
-        sports_keywords = ['NFL', 'NBA', 'MLB', 'NHL', 'UFC', 'SOCCER', 'TENNIS', 
-                          'GOLF', 'FOOTBALL', 'BASKETBALL', 'BASEBALL', 'HOCKEY']
-        
-        sports_markets = []
-        for market in all_markets:
-            title = market.get('title', '').upper()
-            ticker = market.get('ticker', '').upper()
-            
-            if any(keyword in title or keyword in ticker for keyword in sports_keywords):
-                sports_markets.append(market)
-        
-        return sports_markets
-    
+
+   
     def _get_today_timestamp_range(self) -> tuple:
         """Get UTC timestamp range for today (midnight to midnight)"""
         from datetime import datetime, timezone
@@ -379,95 +504,145 @@ class KalshiIntegrator:
         
         return min_ts, max_ts
     
-    def get_game_markets_for_events(self, league: str = "NBA") -> List[Dict[str, Any]]:
-        """Get game-related markets for a specific league (NBA, NFL, MLB, NHL, etc.)
-        
-        Args:
-            league: League code like "NBA", "NFL", "MLB", "NHL"
-            
-        Returns:
-            List of enriched market dictionaries with game data
+    def get_game_markets_for_events(
+        self,
+        league: str = "NBA",
+        only_today: bool = False,
+    ) -> List[Dict[str, Any]]:
+        """
+        Get game-related markets for a specific league (NBA, NFL, MLB, NHL, etc).
+
+        If only_today is True, only return markets whose close_time falls on
+        today's date (UTC).
         """
         try:
-            print(f"🏀 KALSHI: Fetching {league} game markets...")
-            
-            # Get all series
+            # 1) Pull all series
             endpoint = "/series"
             params = {"limit": 1000}
             response_data = self._make_authenticated_request("GET", endpoint, params=params)
-            
+
             if not response_data:
-                print(f"❌ KALSHI: Failed to get series list")
+                logger.warning("❌ KALSHI: Failed to get series list")
+                self.last_error = "Kalshi /series returned no data"
                 return []
-            
+
             all_series = response_data.get("series", [])
-            print(f"🔍 KALSHI: Found {len(all_series)} total series")
-            
-            # Filter to league prefix and game-ish suffixes
+            logger.info(f"🔍 KALSHI: Found {len(all_series)} total series")
+
+            # 2) Filter to relevant game series for this league
             league_prefix = f"KX{league.upper()}"
-            game_suffixes = ["GAME", "GAMES", "SPREAD", "TOTAL", "ANYTD", "PASSYDS", "RUSHYDS"]
-            
-            relevant_series = []
-            for series in all_series:
-                ticker = series.get('ticker', '').upper()
-                if ticker.startswith(league_prefix):
-                    if any(suffix in ticker for suffix in game_suffixes):
-                        relevant_series.append(series)
-                        print(f"  ✅ {ticker}")
-            
-            print(f"🎯 KALSHI: Found {len(relevant_series)} {league} game series")
-            
-            # Get markets for each series
-            all_markets = []
-            for series in relevant_series:
-                series_ticker = series.get('ticker')
+            game_suffixes = ("SPREAD", "TOTAL", "GAME", "GAMES")
+
+            relevant_series: List[Dict[str, Any]] = []
+            for s in all_series:
+                ticker = s.get("ticker", "").upper()
+                if ticker.startswith(league_prefix) and any(
+                    suf in ticker for suf in game_suffixes
+                ):
+                    relevant_series.append(s)
+                    logger.info(f"  ✅ {ticker} ({league})")
+
+            logger.info(f"🎯 KALSHI: Found {len(relevant_series)} {league} game series")
+
+            if not relevant_series:
+                self.last_error = f"No game series found for {league}"
+                return []
+
+            # 3) For each relevant series, pull markets
+            all_markets: List[Dict[str, Any]] = []
+            for s in relevant_series:
+                series_ticker = s.get("ticker")
                 if not series_ticker:
                     continue
-                
+
+                logger.info(f"   ➤ Fetching markets for {series_ticker}")
                 endpoint = "/markets"
                 params = {
                     "series_ticker": series_ticker,
                     "limit": 1000,
-                    "status": "open"
+                    "status": "open",
                 }
-                
-                response_data = self._make_authenticated_request("GET", endpoint, params=params)
-                
-                if response_data:
-                    markets = response_data.get("markets", [])
-                    print(f"  📊 {series_ticker}: {len(markets)} markets")
-                    
-                    # Enrich each market
-                    for m in markets:
-                        enriched = {
-                            "league": league,
-                            "series_ticker": series_ticker,
-                            "ticker": m.get("ticker"),
-                            "event_ticker": m.get("event_ticker"),
-                            "title": m.get("title"),
-                            "subtitle": m.get("subtitle"),
-                            "yes_bid": m.get("yes_bid"),
-                            "yes_ask": m.get("yes_ask"),
-                            "no_bid": m.get("no_bid"),
-                            "no_ask": m.get("no_ask"),
-                            "yes_bid_dollars": m.get("yes_bid_dollars"),
-                            "yes_ask_dollars": m.get("yes_ask_dollars"),
-                            "no_bid_dollars": m.get("no_bid_dollars"),
-                            "no_ask_dollars": m.get("no_ask_dollars"),
-                            "close_time": m.get("close_time"),
-                            "status": m.get("status"),
-                        }
-                        all_markets.append(enriched)
-            
-            print(f"✅ KALSHI: Total {len(all_markets)} {league} game markets")
+                response_data = self._make_authenticated_request(
+                    "GET", endpoint, params=params
+                )
+                if not response_data:
+                    continue
+
+                markets = response_data.get("markets", [])
+                logger.info(f"     → {series_ticker}: {len(markets)} markets")
+
+                # Enrich with league / series info
+                for m in markets:
+                    enriched = {
+                        "league": league,
+                        "series_ticker": series_ticker,
+                        "ticker": m.get("ticker"),
+                        "event_ticker": m.get("event_ticker"),
+                        "title": m.get("title"),
+                        "subtitle": m.get("subtitle"),
+                        "yes_bid": m.get("yes_bid"),
+                        "yes_ask": m.get("yes_ask"),
+                        "no_bid": m.get("no_bid"),
+                        "no_ask": m.get("no_ask"),
+                        "yes_bid_dollars": m.get("yes_bid_dollars"),
+                        "yes_ask_dollars": m.get("yes_ask_dollars"),
+                        "no_bid_dollars": m.get("no_bid_dollars"),
+                        "no_ask_dollars": m.get("no_ask_dollars"),
+                        "close_time": m.get("close_time"),
+                        "status": m.get("status"),
+                    }
+                    all_markets.append(enriched)
+
+            logger.info(f"📈 KALSHI: Total {len(all_markets)} {league} game markets")
+
+            # Optional: same “today only” logic you are using in debug
+            if only_today:
+                all_markets = self.filter_markets_closing_today(all_markets)
+                logger.info(
+                    f"🌞 KALSHI: {len(all_markets)} {league} markets closing today"
+                )
+
+            self.last_error = None if all_markets else f"No open markets for {league}"
             return all_markets
-            
+
         except Exception as e:
-            print(f"❌ KALSHI: Error fetching game markets: {e}")
-            logger.error(f"Error fetching game markets for {league}: {e}")
-            import traceback
-            print(f"Traceback: {traceback.format_exc()}")
+            logger.exception("❌ KALSHI error in get_game_markets_for_events")
+            self.last_error = str(e)
             return []
+
+    def get_sports_markets(
+        self,
+        leagues: Optional[List[str]] = None,
+        only_today: bool = False,
+    ) -> List[Dict[str, Any]]:
+        """
+        Aggregate game markets across multiple leagues for the Streamlit UI.
+        """
+        if leagues is None:
+            leagues = ["NFL", "NBA", "NHL", "NCAAF", "NCAAB"]
+
+        all_markets: List[Dict[str, Any]] = []
+
+        for lg in leagues:
+            try:
+                lg_markets = self.get_game_markets_for_events(
+                    league=lg,
+                    only_today=only_today,
+                )
+                if lg_markets:
+                    all_markets.extend(lg_markets)
+            except Exception as e:
+                logger.warning(f"❌ KALSHI: error loading markets for {lg}: {e}")
+
+        if not all_markets:
+            self.last_error = (
+                "Kalshi API returned no sports markets for the selected leagues/filters."
+            )
+        else:
+            self.last_error = None
+
+        return all_markets
+
     
     def filter_markets_closing_today(self, markets: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """Filter markets to only those closing today (in UTC)
