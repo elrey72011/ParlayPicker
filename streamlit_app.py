@@ -10,6 +10,8 @@ from html import escape
 from dataclasses import asdict
 from typing import Dict, Any, List, Tuple, Optional, Iterable, Sequence, Type
 from datetime import datetime, timedelta, date, timezone
+from app_core.kalshi_integrator import price_to_prob
+from app_core.ml_predictions import get_vertex_ai_prediction
 import pandas as pd
 import numpy as np
 import requests
@@ -13375,14 +13377,15 @@ with main_tab4:
     
     kalshi = st.session_state.get('kalshi_integrator')
     
-    if analysis_mode == "🔍 Browse Kalshi Sports Markets":
+        if analysis_mode == "🔍 Browse Kalshi Sports Markets":
         st.subheader("🏈 Available Sports Betting Markets")
-        
-        if st.button("🔄 Load Kalshi Markets", type="primary"):
+
+        # Load markets from Kalshi
+        if st.button("🔄 Load Kalshi Markets", type="primary", key="kalshi_load_markets"):
             with st.spinner("Fetching Kalshi markets..."):
                 try:
                     markets = kalshi.get_sports_markets()
-                    st.session_state['kalshi_markets'] = markets
+                    st.session_state["kalshi_markets"] = markets
                     if markets:
                         st.success(f"✅ Loaded {len(markets)} sports markets")
                     else:
@@ -13390,8 +13393,142 @@ with main_tab4:
                         if kalshi.last_error:
                             st.caption(f"Last Kalshi message: {kalshi.last_error}")
                 except Exception as e:
-                    st.error(f"Error loading markets: {str(e)}")
+                    st.error(f"Error loading markets: {e}")
                     st.info("💡 Try demo mode without API keys to explore sample markets")
+
+        # If we already have markets, show filters + AI analysis
+        if "kalshi_markets" in st.session_state and st.session_state["kalshi_markets"]:
+            markets = st.session_state["kalshi_markets"]
+
+            st.markdown(f"### 📋 {len(markets)} Markets Available")
+
+            # Filter + sort controls
+            col_filter1, col_filter2 = st.columns(2)
+            with col_filter1:
+                sport_filter = st.selectbox(
+                    "Filter by Sport",
+                    options=["All"] + ["NFL", "NBA", "MLB", "NHL", "UFC", "Soccer"],
+                    key="kalshi_sport_filter",
+                )
+
+            with col_filter2:
+                sort_by = st.selectbox(
+                    "Sort by",
+                    options=[
+                        "Volume (High to Low)",
+                        "Close Date (Soonest)",
+                        "Title (A-Z)",
+                    ],
+                    key="kalshi_sort",
+                )
+
+            # Apply filter
+            filtered_markets = markets
+            if sport_filter != "All":
+                filtered_markets = [
+                    m for m in markets
+                    if sport_filter.upper() in m.get("title", "").upper()
+                ]
+
+            # Apply sort
+            if sort_by == "Volume (High to Low)":
+                filtered_markets.sort(
+                    key=lambda x: x.get("volume", 0), reverse=True
+                )
+            elif sort_by == "Close Date (Soonest)":
+                filtered_markets.sort(
+                    key=lambda x: x.get("close_time", "")
+                )
+            else:
+                filtered_markets.sort(
+                    key=lambda x: x.get("title", "")
+                )
+
+            # 🔹 NEW: AI vs Kalshi button
+            if st.button("🤖 Analyze These Markets with Gemini", key="kalshi_ai_compare"):
+                project_id = (
+                    st.session_state.get("gcp_project_id")
+                    or st.secrets.get("gcp_project_id")
+                )
+                location = st.session_state.get("gcp_region") or "us-central1"
+
+                scored_rows = []
+
+                # Don’t hammer the API – cap to first N markets
+                for m in filtered_markets[:30]:
+                    title = m.get("title", "")
+                    ticker = m.get("ticker", "")
+                    league = m.get("league", "NBA")
+
+                    yes_price = m.get("yes_ask_dollars")
+                    market_prob = price_to_prob(yes_price)
+                    if market_prob is None:
+                        continue
+
+                    game_context = f"Kalshi market: {title} (league: {league})"
+                    features = {
+                        "kalshi_yes_price": float(yes_price or 0),
+                        "kalshi_no_price": float(m.get("no_ask_dollars") or 0),
+                        "league": league,
+                    }
+
+                    ai_prob = get_vertex_ai_prediction(
+                        features=features,
+                        game_context=game_context,
+                        project_id=project_id,
+                        location=location,
+                    )
+                    if ai_prob is None:
+                        continue
+
+                    edge = ai_prob - market_prob
+
+                    scored_rows.append(
+                        {
+                            "League": league,
+                            "Ticker": ticker,
+                            "Title": title,
+                            "Kalshi_Prob": round(market_prob, 3),
+                            "AI_Prob": round(ai_prob, 3),
+                            "Edge": round(edge, 3),
+                        }
+                    )
+
+                if not scored_rows:
+                    st.warning("No markets could be scored with Gemini.")
+                else:
+                    df = (
+                        pd.DataFrame(scored_rows)
+                        .sort_values("Edge", ascending=False)
+                        .reset_index(drop=True)
+                    )
+                    st.markdown("### 📈 AI vs Kalshi – Best Value Opportunities")
+                    st.dataframe(df, use_container_width=True)
+
+            # Existing per-market expander UI
+            for i, market in enumerate(filtered_markets[:20]):  # Show top 20
+                title = market.get("title", "Unknown Market")
+                ticker = market.get("ticker", "")
+                volume = market.get("volume", 0)
+
+                with st.expander(f"**{i+1}. {title}**"):
+                    col_m1, col_m2 = st.columns(2)
+
+                    with col_m1:
+                        st.write(f"**Ticker:** {ticker}")
+                        st.write(f"**Volume:** {volume:,} contracts")
+                        st.write(f"**Status:** {market.get('status', 'unknown')}")
+
+                    with col_m2:
+                        button_key = f"analyze_{ticker}_{i}"
+                        if st.button(f"📊 Analyze {ticker[:15]}", key=button_key):
+                            with st.spinner("Fetching market details..."):
+                                try:
+                                    orderbook = kalshi.get_orderbook(ticker)
+                                    # ... keep your existing orderbook display here ...
+                                except Exception as e:
+                                    st.error(f"Error fetching orderbook: {e}")
+
 
         if 'kalshi_markets' in st.session_state and st.session_state['kalshi_markets']:
             markets = st.session_state['kalshi_markets']
