@@ -380,107 +380,127 @@ class KalshiIntegrator:
         
         return min_ts, max_ts
     
-    def get_game_markets_for_events(self, league: str = "NBA", only_today: bool = False) -> List[Dict[str, Any]]:
-    """
-    Fetch ONLY game-related markets for a specific league (NBA, NFL, etc.)
-    This now supports filtering for markets that close *today*.
-    """
-    all_markets: List[Dict[str, Any]] = []
-    try:
-        series = self.get_sports_series()
-        league_series = [s for s in series if s.get("league", "").upper() == league.upper()]
+        def get_game_markets_for_events(
+        self,
+        league: str = "NBA",
+        only_today: bool = False,
+    ) -> List[Dict[str, Any]]:
+        """
+        Fetch ONLY game-related markets for a specific league (NBA, NFL, etc.).
+        If only_today is True, return only markets whose close_time is "today" (UTC).
+        """
+        all_markets: List[Dict[str, Any]] = []
 
-        print(f"📊 KALSHI: Found {len(league_series)} game-series for league {league}")
+        try:
+            series = self.get_sports_series()
+            league_series = [
+                s for s in series
+                if s.get("league", "").upper() == league.upper()
+            ]
 
-        for s in league_series[:10]:
-            ticker = s.get("ticker")
-            if not ticker:
-                continue
+            print(f"📊 KALSHI: Found {len(league_series)} game-series for league {league}")
 
-            print(f"   ➤ Fetching game markets for: {ticker}")
+            for s in league_series[:10]:
+                ticker = s.get("ticker")
+                if not ticker:
+                    continue
 
-            sub_markets = self._fetch_markets_for_series(
-                series_ticker=ticker,
-                extra_params={"status": "active"}
-            )
-            print(f"     → Got {len(sub_markets)} markets")
-            all_markets.extend(sub_markets)
+                print(f"   ➤ Fetching game markets for: {ticker}")
 
-    except Exception as e:
-        print(f"❌ KALSHI error in get_game_markets_for_events: {e}")
-        self.last_error = str(e)
-        return []
+                sub_markets = self._fetch_markets_for_series(
+                    series_ticker=ticker,
+                    extra_params={"status": "active"},
+                )
+                print(f"     → Got {len(sub_markets)} markets")
+                all_markets.extend(sub_markets)
 
-    print(f"📈 KALSHI: Total {len(all_markets)} {league} game markets")
+        except Exception as e:
+            print(f"❌ KALSHI error in get_game_markets_for_events: {e}")
+            self.last_error = str(e)
+            return []
 
-    # -------------- NEW: Filter for today's markets -----------------
-    if only_today:
-        today_markets = self.filter_markets_closing_today(all_markets)
-        print(f"🌞 KALSHI: {len(today_markets)} {league} markets closing today")
-        return today_markets
-    # ---------------------------------------------------------------
+        print(f"📈 KALSHI: Total {len(all_markets)} {league} game markets")
 
-    return all_markets
+        # -------------- NEW: Filter for today's markets -----------------
+        if only_today:
+            today_markets = self.filter_markets_closing_today(all_markets)
+            print(f"🌞 KALSHI: {len(today_markets)} {league} markets closing today")
+            return today_markets
+        # ---------------------------------------------------------------
 
-    
-    def filter_markets_closing_today(self, markets: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """Filter markets to only those closing today (UTC-based 'today')."""
-    if not markets:
-        return []
+        return all_markets
 
-    # For numeric timestamps we still use the ms range
-    min_ts, max_ts = self._get_today_timestamp_range()
-    today_utc = datetime.now(timezone.utc).date()
+    def filter_markets_closing_today(
+        self,
+        markets: List[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        """
+        Filter markets to only those closing today (based on UTC date).
 
-    filtered: List[Dict[str, Any]] = []
+        Supports both:
+        - numeric ms timestamps (Kalshi's original style)
+        - ISO8601 strings like "2025-12-17T01:00:00Z"
+        """
+        if not markets:
+            return []
 
-    for m in markets:
-        close_ts = m.get("close_time")
+        # For numeric timestamps we still use the ms range
+        min_ts, max_ts = self._get_today_timestamp_range()
+        today_utc = datetime.now(timezone.utc).date()
 
-        # Case 1: Kalshi returns ms since epoch
-        if isinstance(close_ts, (int, float)):
-            if min_ts <= close_ts <= max_ts:
-                filtered.append(m)
-            continue
+        filtered: List[Dict[str, Any]] = []
 
-        # Case 2: Kalshi returns ISO8601 string e.g. "2025-12-17T01:00:00Z"
-        if isinstance(close_ts, str):
-            try:
-                s = close_ts
-                # Handle trailing 'Z' as UTC
-                if s.endswith("Z"):
-                    s = s.replace("Z", "+00:00")
-                dt = datetime.fromisoformat(s)
-                if dt.tzinfo is None:
-                    dt = dt.replace(tzinfo=timezone.utc)
-                if dt.date() == today_utc:
+        for m in markets:
+            close_ts = m.get("close_time")
+
+            # Case 1: Kalshi returns ms since epoch
+            if isinstance(close_ts, (int, float)):
+                if min_ts <= close_ts <= max_ts:
                     filtered.append(m)
-            except Exception:
-                # If we can't parse it, just skip this market
                 continue
 
-    return filtered
-    
-    def group_game_markets_by_event(self, markets: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
-        """Group markets by event_ticker (one event = one game)
-        
-        Args:
-            markets: List of market dictionaries
-            
+            # Case 2: Kalshi returns ISO8601 string e.g. "2025-12-17T01:00:00Z"
+            if isinstance(close_ts, str):
+                try:
+                    s = close_ts
+                    # Handle trailing 'Z' as UTC
+                    if s.endswith("Z"):
+                        s = s.replace("Z", "+00:00")
+                    dt = datetime.fromisoformat(s)
+                    if dt.tzinfo is None:
+                        dt = dt.replace(tzinfo=timezone.utc)
+                    if dt.date() == today_utc:
+                        filtered.append(m)
+                except Exception:
+                    # If we can't parse it, just skip this market
+                    continue
+
+        return filtered
+
+    def group_game_markets_by_event(
+        self,
+        markets: List[Dict[str, Any]],
+    ) -> Dict[str, List[Dict[str, Any]]]:
+        """
+        Group markets by event_ticker (one event = one game).
+
         Returns:
-            Dictionary mapping event_ticker to list of markets for that event
+            Dict[event_ticker -> list of markets]
         """
         from collections import defaultdict
-        
-        grouped = defaultdict(list)
-        for m in markets:
-            event_ticker = m.get("event_ticker")
-            if event_ticker:
-                grouped[event_ticker].append(m)
-        
-        return dict(grouped)
-    
-    @staticmethod
+
+        grouped: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+
+        for m in markets or []:
+            event_ticker = (
+                m.get("event_ticker")
+                or m.get("ticker")
+                or "unknown_event"
+            )
+            grouped[event_ticker].append(m)
+
+        return grouped
+
     def price_to_prob(price_dollars: Optional[float]) -> Optional[float]:
         """Convert Kalshi price (0-1 dollars) to implied probability
         
