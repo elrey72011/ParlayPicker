@@ -378,105 +378,55 @@ class KalshiIntegrator:
 
         return min_ts, max_ts
 
-
-        def get_game_markets_for_events(
+    def get_game_markets_for_events(
         self,
         league: str = "NBA",
         only_today: bool = False,
     ) -> List[Dict[str, Any]]:
         """
-        Get game-related markets for a specific league (NBA, NFL, MLB, NHL, etc.)
-
-        Args:
-            league: League code like "NBA", "NFL", "MLB", "NHL"
-
-        Returns:
-            List of enriched market dictionaries with game data.
-            If only_today is True, only markets closing today (UTC) are returned.
+        Fetch ONLY game-related markets for a specific league (NBA, NFL, etc.).
+        If only_today is True, return only markets whose close_time is "today" (UTC).
         """
+        all_markets: List[Dict[str, Any]] = []
+
         try:
-            print(f"🏀 KALSHI: Fetching {league} game markets.")
+            series = self.get_sports_series()
+            league_series = [
+                s for s in series
+                if s.get("league", "").upper() == league.upper()
+            ]
 
-            # Get all series
-            endpoint = "/series"
-            params = {"limit": 1000}
-            response_data = self._make_authenticated_request("GET", endpoint, params=params)
+            print(f"📊 KALSHI: Found {len(league_series)} game-series for league {league}")
 
-            if not response_data:
-                print("❌ KALSHI: Failed to get series list")
-                return []
-
-            all_series = response_data.get("series", [])
-            print(f"🔍 KALSHI: Found {len(all_series)} total series")
-
-            # Filter to league prefix and game-ish suffixes (this is what worked in your script)
-            league_prefix = f"KX{league.upper()}"
-            game_suffixes = ["GAME", "GAMES", "SPREAD", "TOTAL", "ANYTD", "PASSYDS", "RUSHYDS"]
-
-            relevant_series = []
-            for series in all_series:
-                ticker = series.get("ticker", "").upper()
-                if ticker.startswith(league_prefix) and any(suffix in ticker for suffix in game_suffixes):
-                    relevant_series.append(series)
-                    print(f"  ✅ {ticker}")
-
-            print(f"🎯 KALSHI: Found {len(relevant_series)} {league} game series")
-
-            # Get markets for each series
-            all_markets: List[Dict[str, Any]] = []
-            for series in relevant_series:
-                series_ticker = series.get("ticker")
-                if not series_ticker:
+            for s in league_series[:10]:
+                ticker = s.get("ticker")
+                if not ticker:
                     continue
 
-                endpoint = "/markets"
-                params = {
-                    "series_ticker": series_ticker,
-                    "limit": 1000,
-                    "status": "open",
-                }
+                print(f"   ➤ Fetching game markets for: {ticker}")
 
-                response_data = self._make_authenticated_request("GET", endpoint, params=params)
-                if not response_data:
-                    continue
-
-                markets = response_data.get("markets", [])
-                print(f"  📊 {series_ticker}: {len(markets)} markets")
-
-                for m in markets:
-                    enriched = {
-                        "league": league,
-                        "series_ticker": series_ticker,
-                        "ticker": m.get("ticker"),
-                        "event_ticker": m.get("event_ticker"),
-                        "title": m.get("title"),
-                        "subtitle": m.get("subtitle"),
-                        "yes_bid": m.get("yes_bid"),
-                        "yes_ask": m.get("yes_ask"),
-                        "no_bid": m.get("no_bid"),
-                        "no_ask": m.get("no_ask"),
-                        "yes_bid_dollars": m.get("yes_bid_dollars"),
-                        "yes_ask_dollars": m.get("yes_ask_dollars"),
-                        "no_bid_dollars": m.get("no_bid_dollars"),
-                        "no_ask_dollars": m.get("no_ask_dollars"),
-                        "close_time": m.get("close_time"),
-                        "status": m.get("status"),
-                    }
-                    all_markets.append(enriched)
-
-            print(f"📈 KALSHI: Total {len(all_markets)} {league} game markets")
-
-            if only_today:
-                today_markets = self.filter_markets_closing_today(all_markets)
-                print(f"🌞 KALSHI: {len(today_markets)} {league} markets closing today")
-                return today_markets
-
-            return all_markets
+                sub_markets = self._fetch_markets_for_series(
+                    series_ticker=ticker,
+                    extra_params={"status": "active"},
+                )
+                print(f"     → Got {len(sub_markets)} markets")
+                all_markets.extend(sub_markets)
 
         except Exception as e:
             print(f"❌ KALSHI error in get_game_markets_for_events: {e}")
             self.last_error = str(e)
             return []
+
+        print(f"📈 KALSHI: Total {len(all_markets)} {league} game markets")
+
+        # -------------- Filter for today's markets (optional) -----------------
+        if only_today:
+            today_markets = self.filter_markets_closing_today(all_markets)
+            print(f"🌞 KALSHI: {len(today_markets)} {league} markets closing today")
+            return today_markets
+        # ---------------------------------------------------------------------
+
+        return all_markets
 
     def filter_markets_closing_today(
         self,
@@ -492,6 +442,7 @@ class KalshiIntegrator:
         if not markets:
             return []
 
+        # For numeric timestamps we still use the ms range
         min_ts, max_ts = self._get_today_timestamp_range()
         today_utc = datetime.now(timezone.utc).date()
 
@@ -506,7 +457,7 @@ class KalshiIntegrator:
                     filtered.append(m)
                 continue
 
-            # Case 2: ISO8601 string
+            # Case 2: Kalshi returns ISO8601 string e.g. "2025-12-17T01:00:00Z"
             if isinstance(close_ts, str):
                 try:
                     s = close_ts
@@ -521,6 +472,7 @@ class KalshiIntegrator:
                     continue
 
         return filtered
+
 
     def group_game_markets_by_event(
         self,
