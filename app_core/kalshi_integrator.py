@@ -3,11 +3,11 @@ Kalshi Integrator with Proper RSA-PSS Authentication
 This file goes in: app_core/kalshi_integrator.py or app_core/__init__.py
 """
 
-import os
 import copy
 import time
 import logging
 import requests
+import streamlit as st
 from typing import Dict, List, Any, Optional
 
 logger = logging.getLogger(__name__)
@@ -17,11 +17,21 @@ class KalshiIntegrator:
     
     Kalshi uses RSA signature authentication for API requests.
     The API key is a UUID and the secret is an RSA private key.
+    
+    Keys are loaded from Streamlit secrets:
+    - st.secrets["KALSHI_API_KEY"]
+    - st.secrets["KALSHI_API_SECRET"]
     """
     
     def __init__(self, api_key: str = None, api_secret: str = None):
-        self.api_key = api_key or os.environ.get("KALSHI_API_KEY")
-        self.api_secret = api_secret or os.environ.get("KALSHI_API_SECRET")
+        # Use Streamlit secrets if keys not provided directly
+        try:
+            self.api_key = api_key or st.secrets.get("KALSHI_API_KEY")
+            self.api_secret = api_secret or st.secrets.get("KALSHI_API_SECRET")
+        except Exception:
+            # Fallback if secrets not available (e.g., local testing)
+            self.api_key = api_key
+            self.api_secret = api_secret
         
         # Kalshi API URLs - use elections subdomain (verified working)
         self.base_url = "https://api.elections.kalshi.com/trade-api/v2"
