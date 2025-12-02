@@ -147,16 +147,22 @@ st.write("Has API key:", bool(getattr(k, "api_key", None)))
 st.write("Auth ready:", getattr(k, "_auth_ready", None))
 st.write("API URL:", getattr(k, "api_url", None))
 
-try:
-    all_markets = k.get_game_markets_for_events("NBA")
-    today_markets = k.filter_markets_closing_today(all_markets)
+debug_league = st.selectbox(
+    "Debug league",
+    ["NFL", "NBA", "NHL", "NCAAF", "NCAAB"],
+    index=1,  # default NBA
+    key="kalshi_debug_league",
+)
 
-    st.write("NBA markets returned (all):", len(all_markets))
-    st.write("NBA markets returned (today only):", len(today_markets))
-    st.write("Sample markets:", today_markets[:5])
+try:
+    all_markets = k.get_game_markets_for_events(debug_league)
+    today_markets = k.get_game_markets_for_events(debug_league, only_today=True)
+
+    st.write(f"{debug_league} markets returned (all):", len(all_markets))
+    st.write(f"{debug_league} markets returned (today only):", len(today_markets))
+    st.write("Sample markets:", today_markets[:5] if today_markets else all_markets[:5])
 except Exception as e:
     st.write("Exception when fetching markets:", str(e))
-    today_markets = []
 
 st.write("Last Kalshi error:", getattr(k, "last_error", None))
 
