@@ -12731,7 +12731,7 @@ with main_tab3:
             key="custom_date"
         )
     
-    if st.button("🔄 Load Games", type="primary"):
+    if st.button("🔄 Load Games", type="primary", key="load_games"):
         sport_label = format_sport_label(custom_sport)
         with st.spinner(f"Loading {sport_label} games..."):
             try:
