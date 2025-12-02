@@ -156,11 +156,12 @@ debug_league = st.selectbox(
 
 try:
     all_markets = k.get_game_markets_for_events(debug_league)
-    today_markets = k.get_game_markets_for_events(debug_league, only_today=True)
-
+    today_markets = k.filter_markets_closing_today(all_markets)
+    
     st.write(f"{debug_league} markets returned (all):", len(all_markets))
     st.write(f"{debug_league} markets returned (today only):", len(today_markets))
     st.write("Sample markets:", today_markets[:5] if today_markets else all_markets[:5])
+
 except Exception as e:
     st.write("Exception when fetching markets:", str(e))
 
