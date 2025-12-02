@@ -2,6 +2,7 @@
 # AI-Enhanced parlay finder with sentiment analysis, ML predictions, and live market data
 # v9.2 Update: Integrated Vertex-first architecture - Vertex AI now calculates probabilities
 # BEFORE Best Bets and Parlays are generated for consistent, high-quality predictions
+from __future__ import annotations
 import os, io, json, itertools, re, copy, logging, hashlib, math
 import concurrent.futures
 from functools import lru_cache
@@ -1838,6 +1839,17 @@ def format_sport_label(sport_key: Any) -> str:
 # ============ REAL SENTIMENT ANALYSIS ENGINE ============
 # (moved to app_core.sentiment so it can be reused without importing the
 # Streamlit UI. RealSentimentAnalyzer and SentimentAnalyzer are imported above.)
+
+try:
+    from app_core.ml import MLPredictor  # if you ever re-add it
+except Exception:
+    class MLPredictor:
+        """Stub ML predictor to keep legacy type hints from breaking the app."""
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def predict(self, *args, **kwargs):
+            return None
 
 # ============ AI PARLAY OPTIMIZER ============
 class AIOptimizer:
