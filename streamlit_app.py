@@ -16,6 +16,14 @@ try:
 except ImportError:
     def get_vertex_ai_prediction(*args, **kwargs):
         return None
+# Optional core prediction function for Vertex/Gemini
+try:
+    from ml_predictions import get_vertex_ai_prediction
+except ImportError:
+    # Safe fallback: if ml_predictions or Vertex AI isn't available, do nothing
+    def get_vertex_ai_prediction(*args, **kwargs):
+        return None
+
 
 # Optional core prediction function
 try:
@@ -13539,9 +13547,6 @@ if filtered_markets:
 # ------------------------------------------------------------
 # PART 2 — AI vs Kalshi comparison
 # ------------------------------------------------------------
-from app_core.kalshi_integrator import price_to_prob
-from app_core.ml_predictions import get_vertex_ai_prediction
-
 if st.button("🤖 Analyze These Markets with Gemini", key="kalshi_ai_compare"):
     project_id = (
         st.session_state.get("gcp_project_id")
