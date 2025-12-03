@@ -117,56 +117,52 @@ def get_vertex_ai_prediction(
     location: Optional[str] = None,
 ) -> Optional[float]:
     """
-    Call Gemini to get a win probability for the home team.
-    Returns None on failure so the caller can fall back to spread-derived logic.
+    Call Gemini/Vertex AI to get a win probability.
+    Returns None on ANY failure — we never default to 0.5.
     """
     try:
+        # 1. Check if ML is enabled
         if not is_vertex_ai_enabled():
             st.session_state["last_ml_source"] = "disabled"
             return None
 
+        # 2. Build/Load model
         model = get_gemini_model(project_id=project_id, location=location)
         if model is None:
             st.session_state["last_ml_source"] = "disabled"
             return None
 
-        # Build a simple prompt
-        prompt = f"""
-You are evaluating a betting matchup.
+        # 3. Build prompt
+        prompt = (
+            f"You are predicting sports outcomes.\n"
+            f"Context: {game_context}\n"
+            f"Features: {json.dumps(features)}\n"
+            f"Return ONLY a float between 0 and 1 representing "
+            f"the model's estimated probability that the event is TRUE.\n"
+        )
 
-Game context:
-{game_context}
-
-Structured features (JSON):
-{json.dumps(features, indent=2)}
-
-Return ONLY a JSON object with a single key "home_win_prob"
-between 0 and 1 representing the probability that the home team wins.
-"""
-
+        # 4. Call Gemini safely
         response = model.generate_content(prompt)
-        text = response.text or ""
-        # Simple JSON extraction
-        match = re.search(r"\{.*\}", text, re.DOTALL)
-        if not match:
-            logger.warning("Gemini response did not contain JSON: %s", text[:200])
-            st.session_state["last_ml_source"] = "parse_error"
+        raw = response.text if hasattr(response, "text") else str(response)
+
+        # 5. Try to extract a float
+        try:
+            p = float(raw.strip())
+        except Exception:
+            print("Vertex AI: Unable to parse response:", raw)
             return None
 
-        data = json.loads(match.group(0))
-        prob = float(data.get("home_win_prob", 0.5))
+        # 6. Probability must be valid
+        if not (0.0 < p < 1.0):
+            print("Vertex AI: Invalid prob (not 0–1):", p)
+            return None
 
-        # Clamp to [0.01, 0.99] to avoid degenerate edges
-        prob = max(0.01, min(0.99, prob))
-
-        st.session_state["last_ml_source"] = "gcp_vertex"
-        return prob
+        # Success
+        return p
 
     except Exception as e:
-        logger.error("Vertex AI prediction failed; falling back to spread-derived logic: %s", e, exc_info=True)
-        st.session_state["last_ml_source"] = "error"
+        print("Vertex AI error:", e)
         return None
-
 
 def show_vertex_ai_prediction_section(home_team: str, away_team: str, league: str, 
                                        home_ml: float, away_ml: float, 
