@@ -13459,11 +13459,24 @@ with main_tab4:
                     ticker = m.get("ticker", "")
                     league = m.get("league", "NBA")
 
-                    yes_price = m.get("yes_ask_dollars")
+                    # --- Robust Kalshi price extraction ---
+                    yes_price = None
+                    # Try all possible Kalshi fields
+                    for key in ["yes_ask_dollars", "yes_bid_dollars", "yes_ask", "yes_bid"]:
+                        val = m.get(key)
+                        if val not in (None, "", "0", 0, "0.0", "0.00"):
+                            yes_price = val
+                            break
+                    
+                    # If we still have nothing usable → skip this market
+                    if yes_price is None:
+                        continue
+                    
+                    # Convert
                     market_prob = kalshi.price_to_prob(yes_price) if kalshi else None
                     if market_prob is None:
                         continue
-
+                    
                     game_context = f"Kalshi market: {title} (league: {league})"
                     features = {
                         "kalshi_yes_price": float(yes_price or 0),
