@@ -523,3 +523,187 @@ class KalshiIntegrator:
         if price_dollars is None:
             return None
         return float(price_dollars)  # Kalshi prices are already probabilities
+    
+    def get_game_market(self, home_team: str, away_team: str, sport: str = "NBA") -> Dict[str, Any]:
+        """Get Kalshi market data for a specific game
+        
+        CRITICAL: This function was MISSING and needs to be added!
+        Called by vertex_master_analyzer.py but didn't exist in kalshi_integrator.py
+        
+        Args:
+            home_team: Home team name (e.g., "Oklahoma Sooners", "Los Angeles Lakers")
+            away_team: Away team name
+            sport: Sport code - "NBA", "NFL", "NHL", "NCAAB", "NCAAF"
+            
+        Returns:
+            Dictionary with:
+            - kalshi_available: bool
+            - kalshi_prob: float (home team win probability)
+            - ticker: str (Kalshi market ticker)
+            - title: str (market title)
+        """
+        try:
+            print(f"🔍 KALSHI: Looking for {away_team} @ {home_team} ({sport})")
+            
+            # Get all game markets for this league
+            all_markets = self.get_game_markets_for_events(league=sport.upper())
+            
+            if not all_markets:
+                print(f"⚠️  KALSHI: No markets found for {sport}")
+                return {
+                    "kalshi_available": False,
+                    "kalshi_prob": 0.5,
+                    "ticker": None,
+                    "title": None
+                }
+            
+            print(f"📊 KALSHI: Found {len(all_markets)} total {sport} markets")
+            
+            # Normalize team names (remove mascots, clean up)
+            home_normalized = self._normalize_team_name(home_team)
+            away_normalized = self._normalize_team_name(away_team)
+            
+            print(f"🔤 KALSHI: Normalized teams:")
+            print(f"  Home: '{home_team}' → '{home_normalized}'")
+            print(f"  Away: '{away_team}' → '{away_normalized}'")
+            
+            # Find matching market
+            best_match = None
+            best_score = 0
+            
+            for market in all_markets:
+                title = market.get("title", "").upper()
+                subtitle = market.get("subtitle", "").upper()
+                full_text = f"{title} {subtitle}"
+                
+                # Check if both teams appear in the market title
+                home_in_title = home_normalized.upper() in full_text
+                away_in_title = away_normalized.upper() in full_text
+                
+                if home_in_title and away_in_title:
+                    # Calculate match score (prefer GAME markets over SPREAD/TOTAL)
+                    score = 1.0
+                    if "GAME" in market.get("series_ticker", "").upper():
+                        score += 0.5
+                    if market.get("subtitle") and " WIN" in market.get("subtitle", "").upper():
+                        score += 0.3
+                        
+                    if score > best_score:
+                        best_score = score
+                        best_match = market
+                        print(f"  ✅ Match: {title} (score: {score})")
+            
+            if not best_match:
+                print(f"❌ KALSHI: No match found for {away_team} @ {home_team}")
+                return {
+                    "kalshi_available": False,
+                    "kalshi_prob": 0.5,
+                    "ticker": None,
+                    "title": None
+                }
+            
+            # Extract probability from the market
+            # Kalshi markets show probability as yes_ask (buy YES price)
+            yes_ask = best_match.get("yes_ask_dollars")
+            yes_bid = best_match.get("yes_bid_dollars")
+            
+            # Use midpoint of bid/ask if both available
+            if yes_ask is not None and yes_bid is not None:
+                kalshi_prob = (yes_ask + yes_bid) / 2
+            elif yes_ask is not None:
+                kalshi_prob = yes_ask
+            elif yes_bid is not None:
+                kalshi_prob = yes_bid
+            else:
+                kalshi_prob = 0.5
+            
+            print(f"✅ KALSHI: Found market: {best_match.get('title')}")
+            print(f"✅ KALSHI: Home win probability: {kalshi_prob * 100:.1f}%")
+            
+            return {
+                "kalshi_available": True,
+                "kalshi_prob": float(kalshi_prob),
+                "ticker": best_match.get("ticker"),
+                "title": best_match.get("title"),
+                "subtitle": best_match.get("subtitle"),
+                "series_ticker": best_match.get("series_ticker")
+            }
+            
+        except Exception as e:
+            print(f"❌ KALSHI: Error in get_game_market: {e}")
+            import traceback
+            print(f"Traceback: {traceback.format_exc()}")
+            return {
+                "kalshi_available": False,
+                "kalshi_prob": 0.5,
+                "ticker": None,
+                "title": None
+            }
+    
+    def _normalize_team_name(self, team_name: str) -> str:
+        """Normalize team name by removing mascots and common suffixes
+        
+        Examples:
+            "Oklahoma Sooners" → "Oklahoma"
+            "Los Angeles Lakers" → "Los Angeles"
+            "Wake Forest Demon Deacons" → "Wake Forest"
+            "St. John's Red Storm" → "St John's"
+        """
+        if not team_name:
+            return ""
+        
+        # Common mascots to remove (NCAAB + NBA + NFL + NHL)
+        mascots = [
+            # NCAAB Common
+            "Sooners", "Demon Deacons", "Tar Heels", "Wildcats", "Blue Devils",
+            "Cavaliers", "Jayhawks", "Spartans", "Wolverines", "Buckeyes",
+            "Hoosiers", "Terrapins", "Badgers", "Hawkeyes", "Illini",
+            "Boilermakers", "Cornhuskers", "Scarlet Knights", "Golden Gophers",
+            "Nittany Lions", "Fighting Irish", "Orange", "Cardinals", "Panthers",
+            "Eagles", "Bulldogs", "Tigers", "Bears", "Aggies", "Rebels",
+            "Commodores", "Volunteers", "Gamecocks", "Gators", "Crimson Tide",
+            "War Eagles", "Razorbacks", "Red Storm", "Friars",
+            "Musketeers", "Flyers", "Billikens", "Blue Jays", "Golden Eagles",
+            "Pirates", "Hoyas", "Huskies", "Gaels", "Broncos", "Rams",
+            "Aztecs", "Wolf Pack", "Aces", "Hilltoppers", "Colonels",
+            # NBA
+            "Lakers", "Clippers", "Warriors", "Kings", "Suns", "Mavericks",
+            "Rockets", "Spurs", "Grizzlies", "Pelicans", "Thunder", "Trail Blazers",
+            "Blazers", "Jazz", "Nuggets", "Timberwolves", "Wolves", "Bucks", "Bulls", "Pacers",
+            "Pistons", "Celtics", "Nets", "Knicks", "76ers", "Sixers", "Raptors",
+            "Heat", "Magic", "Hawks", "Hornets", "Wizards",
+            # NFL
+            "49ers", "Niners", "Seahawks", "Cardinals", "Rams", "Cowboys", "Giants",
+            "Eagles", "Football Team", "Commanders", "Packers", "Vikings", "Lions",
+            "Saints", "Falcons", "Buccaneers", "Bucs", "Chiefs", "Chargers",
+            "Raiders", "Broncos", "Texans", "Colts", "Jaguars", "Jags", "Titans",
+            "Ravens", "Steelers", "Browns", "Bengals", "Bills", "Dolphins",
+            "Patriots", "Pats", "Jets",
+            # NHL
+            "Bruins", "Sabres", "Red Wings", "Panthers", "Canadiens", "Habs",
+            "Senators", "Sens", "Lightning", "Bolts", "Maple Leafs", "Leafs",
+            "Hurricanes", "Canes", "Blue Jackets", "Jackets",
+            "Devils", "Islanders", "Isles", "Rangers", "Flyers", "Penguins", "Pens",
+            "Capitals", "Caps", "Blackhawks", "Hawks", "Avalanche", "Avs", "Stars", "Wild",
+            "Predators", "Preds", "Blues", "Jets", "Ducks", "Coyotes", "Flames",
+            "Oilers", "Canucks", "Nucks", "Golden Knights", "Knights", "Kraken", "Sharks", "Kings"
+        ]
+        
+        # Remove state abbreviations and clean
+        team_clean = team_name.strip()
+        team_clean = team_clean.replace(" St.", " State")  # Handle St. abbreviation
+        team_clean = team_clean.replace(" St ", " State ")
+        
+        # Split and remove mascot if found
+        words = team_clean.split()
+        
+        # Check if last word(s) is a mascot
+        for i in range(len(words), 0, -1):
+            potential_mascot = " ".join(words[i-1:])
+            if potential_mascot in mascots:
+                # Remove mascot, keep everything before it
+                result = " ".join(words[:i-1])
+                return result if result else team_clean
+        
+        # No mascot found, return as-is
+        return team_clean
