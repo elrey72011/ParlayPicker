@@ -3806,7 +3806,10 @@ def validate_with_kalshi(kalshi_integrator, home_team: str, away_team: str,
         if kalshi_prob is None:
             return None
 
-        diff = kalshi_prob - sportsbook_prob
+        # FIXED: Edge = Your model prob - Kalshi crowd prob
+        # Positive edge = You're more confident than the crowd (VALUE BET!)
+        # Negative edge = Crowd is more confident than you
+        diff = sportsbook_prob - kalshi_prob
         synthetic_market = market.get('synthetic', False)
 
         mild_threshold = 0.05 if scope == 'head_to_head' else 0.04
