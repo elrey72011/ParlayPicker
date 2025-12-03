@@ -1853,7 +1853,7 @@ except Exception:
 ENABLE_LEGACY_LOCAL_ML = False
 
 if ENABLE_LEGACY_LOCAL_ML:
-
+    pass  # Legacy ML disabled
 # ============ AI PARLAY OPTIMIZER ============
 class AIOptimizer:
     """Optimizes parlay selection using AI insights"""
@@ -8003,60 +8003,60 @@ min_ai_confidence = sidebar_state["min_ai_confidence"]
 min_parlay_probability = sidebar_state["min_parlay_probability"]
 max_parlay_probability = sidebar_state["max_parlay_probability"]
 
-# ===== LEGACY LOCAL ML TRAINING (DISABLED – WE NOW USE VERTEX/GEMINI) =====
+# ================================================================
+#  LEGACY LOCAL ML TRAINING SYSTEM (FULLY DISABLED & HIDDEN)
+#  This entire subsystem is deprecated and replaced by Vertex AI.
+#  Wrapped inside an always-false guard so Python never evaluates it.
+# ================================================================
+
 ENABLE_LEGACY_LOCAL_ML = False
 
 if ENABLE_LEGACY_LOCAL_ML:
-    # everything from class AIOptimizer down through the historical
-    # training / builder / predictor UI goes inside this block
-
+    # Legacy classes - will never execute
     class AIOptimizer:
-        ...
-        # leave the body unchanged, just indented under the if
+        """Legacy AI optimizer (disabled)."""
+        def __init__(self, *args, **kwargs):
+            pass
 
-    # any code that does:
-    # builder = HistoricalDataBuilder(...)
-    # ml_predictor = HistoricalMLPredictor(...)
-    # MLPredictor(...)
-    # and the associated Streamlit UI for “ML Training Playground”
+        def optimize(self, *args, **kwargs):
+            return None
 
+    class HistoricalDataBuilder:
+        """Legacy data builder (disabled)."""
+        def __init__(self, *args, **kwargs):
+            pass
+        def build(self, *args, **kwargs):
+            return None
 
-# Manage historical ML components lazily so resource-heavy datasets are only
-# built when machine-learning predictions are enabled.
-builder_error = st.session_state.get('historical_builder_error')
-if use_ml_predictions:
-    builder = st.session_state.get('historical_data_builder')
-    if builder is None:
-        try:
-            builder = HistoricalDataBuilder(
-                resolve_odds_api_key,
-                days_back=120,
-                max_days_back=540,
-                min_rows_target=30,
-            )
-            st.session_state['historical_data_builder'] = builder
-            st.session_state.pop('historical_builder_error', None)
-            builder_error = None
-        except TypeError as builder_init_error:  # pragma: no cover - defensive guard
-            logger.exception("Failed to initialize HistoricalDataBuilder", exc_info=True)
-            builder = HistoricalDataBuilder(resolve_odds_api_key)
-            st.session_state['historical_data_builder'] = builder
-            st.session_state['historical_builder_error'] = str(builder_init_error)
-            builder_error = str(builder_init_error)
-
-    if st.session_state.get('ml_predictor') is None and builder is not None:
-        st.session_state['ml_predictor'] = HistoricalMLPredictor(builder)
+    class HistoricalMLPredictor:
+        """Legacy ML predictor (disabled)."""
+        def __init__(self, *args, **kwargs):
+            pass
+        def predict(self, *args, **kwargs):
+            return None
 else:
-    builder = st.session_state.get('historical_data_builder')
-    if builder and hasattr(builder, 'reset_cache'):
-        try:
-            builder.reset_cache()
-        except Exception:  # pragma: no cover - defensive cache clear
-            logger.debug("Failed to reset historical dataset cache", exc_info=True)
-    st.session_state.pop('ml_predictor', None)
-    builder_error = None
-    st.session_state['historical_builder_error'] = None
+    # Stub classes for when legacy ML is disabled (always)
+    class AIOptimizer:
+        """Stub AI optimizer - legacy ML disabled."""
+        def __init__(self, sentiment_analyzer, ml_predictor):
+            self.sentiment = sentiment_analyzer
+            self.ml = ml_predictor
+        
+        def score_parlay(self, legs):
+            return {
+                'score': 0.0,
+                'ai_ev': 0.0,
+                'confidence': 0.0,
+                'edge': 0.0,
+                'correlation_factor': 1.0
+            }
 
+# Legacy ML initialization disabled - set everything to None
+st.session_state['historical_data_builder'] = None
+st.session_state['ml_predictor'] = None
+st.session_state['historical_builder_error'] = None
+
+# Initialize AI optimizer with stub
 ml_predictor_state = st.session_state.get('ml_predictor')
 ai_optimizer = st.session_state.get('ai_optimizer')
 if (
@@ -8068,6 +8068,7 @@ if (
         st.session_state['sentiment_analyzer'],
         ml_predictor_state,
     )
+
 
 # Initialize advanced analyzers
 if 'sharp_detector' not in st.session_state:
