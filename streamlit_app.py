@@ -5812,6 +5812,29 @@ def _names_match(candidate: str, *targets: str, threshold: float = TEAM_FUZZY_TH
     return False
 
 
+LEAGUE_MAP = {
+    "ncaab": "ncaab",
+    "ncaam": "ncaab",
+    "ncaa bk": "ncaab",
+    "college basketball": "ncaab",
+    "ncaa basketball": "ncaab",
+    "nba": "nba",
+    "nfl": "nfl",
+    "ncaaf": "ncaaf",
+    "ncaa football": "ncaaf",
+    "college football": "ncaaf",
+    "nhl": "nhl",
+}
+
+
+def normalize_league_label(raw: str) -> str:
+    """Normalize league strings from various sources."""
+    if not raw:
+        return ""
+    norm = raw.strip().lower()
+    return LEAGUE_MAP.get(norm, norm)
+
+
 LEAGUE_KEYWORDS: Dict[str, List[str]] = {
     "nfl": ["nfl", "national football league"],
     "nba": ["nba", "national basketball association"],
@@ -5842,8 +5865,8 @@ def _league_matches(leg_league: str, candidate_league: str) -> bool:
     if not leg_league or not candidate_league:
         return True
 
-    leg_norm = leg_league.lower().strip()
-    cand_norm = candidate_league.lower().strip()
+    leg_norm = normalize_league_label(leg_league)
+    cand_norm = normalize_league_label(candidate_league)
     if not cand_norm:
         return True
 
@@ -6081,7 +6104,7 @@ def _resolve_theover_entry(
     at >= TEAM_FUZZY_THRESHOLD (80 by default) in either order, and dates are allowed to
     differ by up to DATE_TOLERANCE_DAYS.
     """
-    league_norm = (league or '').lower().strip()
+    league_norm = normalize_league_label(league)
     best_entry = None
     best_swapped = False
     best_score = 0.0
@@ -6689,27 +6712,28 @@ def match_theover_to_leg(
         dataset = prepare_theover_dataset(theover_data, hint)
 
     if not dataset:
-        return None
+        return {'match_debug': 'no_theover_dataset', 'failure_stage': 'market', 'team_score': 0.0}
 
     records = dataset.get('records') if isinstance(dataset, dict) else None
     if not records:
-        return None
+        return {'match_debug': 'no_theover_records', 'failure_stage': 'market', 'team_score': 0.0}
 
     leg_home = leg.get('home_team')
     leg_away = leg.get('away_team')
     if not (leg_home and leg_away):
-        return None
+        return {'match_debug': 'missing_leg_team', 'failure_stage': 'team', 'team_score': 0.0}
 
-    leg_league = SPORT_KEY_TO_LEAGUE.get(leg.get('sport_key'), '').lower()
+    leg_league_raw = SPORT_KEY_TO_LEAGUE.get(leg.get('sport_key'), leg.get('league', '')) or ''
+    leg_league = normalize_league_label(leg_league_raw)
 
     selected_entry = None
     swapped = False
 
-    def _attempt_match(ignore_league: bool = False) -> Tuple[Optional[Dict[str, Any]], bool, float]:
+    def _attempt_match(candidate_records: List[Dict[str, Any]], ignore_league: bool = False) -> Tuple[Optional[Dict[str, Any]], bool, float]:
         best_entry_local = None
         best_swapped_local = False
         best_score_local = 0.0
-        for entry in records:
+        for entry in candidate_records:
             if not ignore_league and not _league_matches(leg_league, entry.get('league_norm', '')):
                 continue
             entry_dates = entry.get('dates', [])
@@ -6735,30 +6759,45 @@ def match_theover_to_leg(
 
         return best_entry_local, best_swapped_local, best_score_local
 
-    selected_entry, swapped, team_score = _attempt_match(False)
+    league_filtered = [r for r in records if _league_matches(leg_league, r.get('league_norm', ''))]
+    if not league_filtered:
+        return {'match_debug': 'no_league_match', 'failure_stage': 'league', 'team_score': 0.0}
+
+    selected_entry, swapped, team_score = _attempt_match(league_filtered, False)
     if not selected_entry:
-        selected_entry, swapped, team_score = _attempt_match(True)
+        selected_entry, swapped, team_score = _attempt_match(records, True)
 
     if not selected_entry:
-        return {'match_debug': 'no_theover_match_for_leg', 'matches': None, 'team_score': 0.0}
+        return {'match_debug': 'no_theover_match_for_leg', 'failure_stage': 'team', 'team_score': 0.0}
 
     market_type = (leg.get('type') or leg.get('market') or '').lower()
     match_payload = None
+    failure_stage = None
     if 'total' in market_type:
         match_payload = _match_theover_total_leg(leg, selected_entry)
+        failure_stage = 'line' if (selected_entry.get('totals') or {}) else 'market'
     elif 'spread' in market_type:
         match_payload = _match_theover_spread_leg(leg, selected_entry, swapped)
+        failure_stage = 'line' if (selected_entry.get('spreads') or {}) else 'market'
     else:
         match_payload = _match_theover_ml_leg(leg, selected_entry, swapped)
+        failure_stage = 'market' if not (selected_entry.get('ml') or {}) else 'market'
 
     if match_payload is None:
-        return {'match_debug': f"no_theover_match_payload market={market_type} score={team_score}", 'matches': None, 'team_score': team_score}
+        return {
+            'match_debug': f"no_theover_match_payload market={market_type} score={team_score}",
+            'matches': None,
+            'team_score': team_score,
+            'failure_stage': failure_stage or 'market',
+        }
 
+    match_payload['failure_stage'] = None
     match_payload['match_debug'] = match_payload.get('match_debug') or f"team_score={team_score:.2f} market={market_type}"
     match_payload['team_score'] = team_score
     return match_payload
 
 
+# Main function that merges TheOver.ai projections into ParlayPicker legs.
 def apply_theover_probabilities_to_legs(
     legs: List[Dict[str, Any]],
     theover_ml_data: Optional[pd.DataFrame] = None,
@@ -6793,6 +6832,10 @@ def apply_theover_probabilities_to_legs(
     theover_cache: Dict[int, Dict[str, Any]] = {}
     match_attempts = 0
     match_success = 0
+    fail_league = 0
+    fail_team = 0
+    fail_market = 0
+    fail_line = 0
 
     if prepared_theover_ml or prepared_theover_spreads or prepared_theover_totals:
         for leg in legs:
@@ -6813,6 +6856,8 @@ def apply_theover_probabilities_to_legs(
                 match_info = None
 
             match_attempts += 1
+
+            failure_stage = match_info.get('failure_stage') if isinstance(match_info, dict) else None
 
             if match_info and (
                 match_info.get('model_probability') is not None
@@ -6856,6 +6901,17 @@ def apply_theover_probabilities_to_legs(
                     leg['theover_match_debug'] = match_info.get('match_debug', 'no_theover_probability')
                 else:
                     leg['theover_match_debug'] = 'no_theover_match_found'
+
+                if failure_stage == 'league':
+                    fail_league += 1
+                elif failure_stage == 'team':
+                    fail_team += 1
+                elif failure_stage == 'line':
+                    fail_line += 1
+                elif failure_stage == 'market':
+                    fail_market += 1
+                else:
+                    fail_team += 1
     else:
         for leg in legs:
             if 'ai_prob_pre_theover' in leg:
@@ -6866,6 +6922,16 @@ def apply_theover_probabilities_to_legs(
             leg.pop('theover_predicted_team', None)
             leg['theover_match_debug'] = 'no_theover_dataset_loaded'
 
+    logger.info(
+        "TheOver merge summary: matched=%d/%d fail_league=%d fail_team=%d fail_market=%d fail_line=%d",
+        match_success,
+        match_attempts,
+        fail_league,
+        fail_team,
+        fail_market,
+        fail_line,
+    )
+
     return {
         'prepared_ml': prepared_theover_ml,
         'prepared_spreads': prepared_theover_spreads,
@@ -6874,6 +6940,10 @@ def apply_theover_probabilities_to_legs(
         'dataset_for_leg': _dataset_for_leg,
         'match_attempts': match_attempts,
         'match_success': match_success,
+        'fail_league': fail_league,
+        'fail_team': fail_team,
+        'fail_market': fail_market,
+        'fail_line': fail_line,
     }
 
 
@@ -11075,6 +11145,15 @@ if is_vertex_ai_enabled():
                         theover_ml_data=theover_ml_data,
                         theover_spreads_data=theover_spreads_data,
                         theover_totals_data=theover_totals_data,
+                    )
+                    logger.info(
+                        "TheOver merge summary: matched=%d/%d fail_league=%d fail_team=%d fail_market=%d fail_line=%d",
+                        theover_context.get('match_success', 0),
+                        theover_context.get('match_attempts', 0),
+                        theover_context.get('fail_league', 0),
+                        theover_context.get('fail_team', 0),
+                        theover_context.get('fail_market', 0),
+                        theover_context.get('fail_line', 0),
                     )
                     st.info(
                         f"✅ Merged TheOver.ai picks for {theover_context.get('match_success', 0)}/"
