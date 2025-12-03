@@ -126,7 +126,7 @@ def get_vertex_ai_prediction(
             st.session_state["last_ml_source"] = "disabled"
             return None
 
-        # 2. Build/Load model
+        # 2. Build / load Gemini model
         model = get_gemini_model(project_id=project_id, location=location)
         if model is None:
             st.session_state["last_ml_source"] = "disabled"
@@ -134,30 +134,29 @@ def get_vertex_ai_prediction(
 
         # 3. Build prompt
         prompt = (
-            f"You are predicting sports outcomes.\n"
+            "You are predicting sports outcomes.\n"
             f"Context: {game_context}\n"
             f"Features: {json.dumps(features)}\n"
-            f"Return ONLY a float between 0 and 1 representing "
-            f"the model's estimated probability that the event is TRUE.\n"
+            "Return ONLY a float between 0 and 1 representing "
+            "the model's estimated probability that the event is TRUE.\n"
         )
 
-        # 4. Call Gemini safely
+        # 4. Call Gemini
         response = model.generate_content(prompt)
         raw = response.text if hasattr(response, "text") else str(response)
 
-        # 5. Try to extract a float
+        # 5. Parse a float
         try:
             p = float(raw.strip())
         except Exception:
             print("Vertex AI: Unable to parse response:", raw)
             return None
 
-        # 6. Probability must be valid
+        # 6. Validate range
         if not (0.0 < p < 1.0):
             print("Vertex AI: Invalid prob (not 0–1):", p)
             return None
 
-        # Success
         return p
 
     except Exception as e:
