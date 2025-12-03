@@ -1850,6 +1850,9 @@ except Exception:
 
         def predict(self, *args, **kwargs):
             return None
+ENABLE_LEGACY_LOCAL_ML = False
+
+if ENABLE_LEGACY_LOCAL_ML:
 
 # ============ AI PARLAY OPTIMIZER ============
 class AIOptimizer:
@@ -7999,6 +8002,24 @@ use_ml_predictions = sidebar_state["use_ml_predictions"]
 min_ai_confidence = sidebar_state["min_ai_confidence"]
 min_parlay_probability = sidebar_state["min_parlay_probability"]
 max_parlay_probability = sidebar_state["max_parlay_probability"]
+
+# ===== LEGACY LOCAL ML TRAINING (DISABLED – WE NOW USE VERTEX/GEMINI) =====
+ENABLE_LEGACY_LOCAL_ML = False
+
+if ENABLE_LEGACY_LOCAL_ML:
+    # everything from class AIOptimizer down through the historical
+    # training / builder / predictor UI goes inside this block
+
+    class AIOptimizer:
+        ...
+        # leave the body unchanged, just indented under the if
+
+    # any code that does:
+    # builder = HistoricalDataBuilder(...)
+    # ml_predictor = HistoricalMLPredictor(...)
+    # MLPredictor(...)
+    # and the associated Streamlit UI for “ML Training Playground”
+
 
 # Manage historical ML components lazily so resource-heavy datasets are only
 # built when machine-learning predictions are enabled.
