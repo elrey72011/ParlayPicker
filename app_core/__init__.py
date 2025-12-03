@@ -16,7 +16,7 @@ from .sportsdata import (
     SportsDataNHLClient,
     SportsDataTeamInsight,
 )
-from .kalshi_integrator import KalshiIntegrator, price_to_prob
+from .kalshi_integrator import KalshiIntegrator
 from .sentiment import RealSentimentAnalyzer, SentimentAnalyzer
 
 __all__ = [
