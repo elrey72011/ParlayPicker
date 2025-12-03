@@ -6860,8 +6860,21 @@ def build_combos_ai(
                 skip_combo = True
                 break
             d *= leg_d
-            p_market *= c.get("p", 0.5)
-            p_ai *= c.get("ai_prob", c.get("p", 0.5))
+            prob_market = _safe_float(c.get("p"))
+            ai_prob_val = _safe_float(c.get("ai_prob"))
+            if ai_prob_val is None:
+                ai_prob_val = prob_market
+
+            # If we still don't have a probability, bail out instead of using 0.5
+            if prob_market is None or ai_prob_val is None:
+                skip_combo = True
+                break
+
+            if ai_prob_val == 0.5:
+                logger.warning("AI probability is exactly 0.5 for leg %s", c)
+
+            p_market *= prob_market
+            p_ai *= ai_prob_val
         
         if skip_combo or d <= 0:
             continue  # Skip this combo if odds are invalid

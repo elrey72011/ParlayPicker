@@ -12,6 +12,8 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
+from app_core.team_name_matcher import TeamNameMatcher
+from app_core.kalshi_integrator import price_to_prob
 from ml_predictions import get_vertex_ai_prediction, is_vertex_ai_enabled
 
 logger = logging.getLogger(__name__)
@@ -327,7 +329,7 @@ class VertexMasterAnalyzer:
 
     def _get_local_ml_features(self, game: Dict[str, Any]) -> Dict[str, Any]:
         if not self.local_ml:
-            return {"local_ml_prob": 0.5, "local_ml_confidence": 0.0}
+            return {"local_ml_prob": None, "local_ml_confidence": 0.0}
 
         try:
             pred = self.local_ml.predict_game_outcome(
@@ -336,12 +338,12 @@ class VertexMasterAnalyzer:
                 sport_key=game.get("sport_key"),
             )
             return {
-                "local_ml_prob": float(pred.get("home_win_prob", 0.5)),
+                "local_ml_prob": float(pred.get("home_win_prob")) if pred.get("home_win_prob") is not None else None,
                 "local_ml_confidence": float(pred.get("confidence", 0.0)),
             }
         except Exception as e:
             logger.warning(f"Local ML prediction error: {e}")
-            return {"local_ml_prob": 0.5, "local_ml_confidence": 0.0}
+            return {"local_ml_prob": None, "local_ml_confidence": 0.0}
 
     # ---- TheOver.ai + Kalshi -----------------------------------------
 
@@ -355,20 +357,20 @@ class VertexMasterAnalyzer:
                 return default
 
         return {
-            "theover_has_pick": 1 if game.get("theover_probability") not in (None, 0.5) else 0,
+            "theover_has_pick": 1 if game.get("theover_probability") is not None else 0,
             "theover_pick": game.get("theover_pick") or "",
-            "theover_probability": sf(game.get("theover_probability", 0.5), 0.5),
+            "theover_probability": sf(game.get("theover_probability"), np.nan),
             "theover_spread": sf(game.get("theover_spread", 0.0), 0.0),
             "theover_total": sf(game.get("theover_total", 0.0), 0.0),
             "theover_total_pick": game.get("theover_total_pick") or "",
-            "theover_total_probability": sf(game.get("theover_total_probability", 0.5), 0.5),
+            "theover_total_probability": sf(game.get("theover_total_probability"), np.nan),
         }
 
     def _get_kalshi_features(self, game: Dict[str, Any]) -> Dict[str, Any]:
         feats = {
             "kalshi_available": False,
-            "kalshi_prob": 0.5,
-            "kalshi_alignment": 0.5,
+            "kalshi_prob": None,
+            "kalshi_alignment": None,
         }
         if not self.kalshi:
             return feats
@@ -395,20 +397,34 @@ class VertexMasterAnalyzer:
                     home_team=home_team, away_team=away_team, sport=sport
                 )
 
+            prob = None
             if kalshi_data and kalshi_data.get("kalshi_available"):
-                prob = float(kalshi_data.get("kalshi_prob", 0.5))
+                raw_prob = kalshi_data.get("kalshi_prob")
+                prob = price_to_prob(raw_prob)
+                if prob is None and raw_prob is not None:
+                    try:
+                        prob = float(raw_prob)
+                    except Exception:
+                        prob = None
             else:
                 # Synthetic: very light-weight blend of implied + theover
-                implied = game.get("implied_home_prob", 0.5) or 0.5
-                theo = game.get("theover_probability", implied) or implied
-                prob = float(0.7 * theo + 0.3 * implied)
+                implied = game.get("implied_home_prob")
+                theo = game.get("theover_probability")
+                pieces = [p for p in [implied, theo] if p is not None]
+                if pieces:
+                    prob = float(np.mean(pieces))
+
+            if prob is None:
+                return feats
 
             prob = max(0.15, min(0.85, prob))
             feats["kalshi_available"] = True
             feats["kalshi_prob"] = prob
 
-            implied = game.get("implied_home_prob", 0.5) or 0.5
-            feats["kalshi_alignment"] = 1.0 - abs(prob - implied)
+            implied = game.get("implied_home_prob")
+            feats["kalshi_alignment"] = (
+                1.0 - abs(prob - implied) if implied is not None else None
+            )
         except Exception as e:
             logger.warning(f"Kalshi feature error: {e}")
 
@@ -441,26 +457,24 @@ class VertexMasterAnalyzer:
         implied_home = feats.get("implied_home_prob")
         if implied_home is None:
             implied_home = implied_prob_from_american(feats.get("home_ml_odds"))
-        if implied_home is None:
-            implied_home = 0.5
-        d["implied_home_prob"] = float(implied_home)
+        d["implied_home_prob"] = float(implied_home) if implied_home is not None else None
 
         # Consensus blend
         probs = [
-            d["implied_home_prob"],
-            sg("local_ml_prob", 0.5),
-            sg("theover_probability", 0.5),
+            d.get("implied_home_prob"),
+            feats.get("local_ml_prob"),
+            feats.get("theover_probability"),
         ]
         if feats.get("kalshi_available"):
-            probs.append(sg("kalshi_prob", 0.5))
-            probs.append(sg("kalshi_prob", 0.5))  # double weight Kalshi
+            kp = feats.get("kalshi_prob")
+            probs.extend([kp, kp])  # double weight Kalshi when present
         valid = [p for p in probs if p is not None and not pd.isna(p)]
-        d["consensus_prob"] = float(np.mean(valid)) if valid else 0.5
+        d["consensus_prob"] = float(np.mean(valid)) if valid else None
 
         d["kalshi_validation_score"] = (
-            1.0 - abs(sg("kalshi_prob", 0.5) - d["consensus_prob"])
-            if feats.get("kalshi_available")
-            else 0.5
+            1.0 - abs(feats.get("kalshi_prob") - d["consensus_prob"])
+            if feats.get("kalshi_available") and d.get("consensus_prob") is not None and feats.get("kalshi_prob") is not None
+            else None
         )
 
         return d
@@ -561,6 +575,7 @@ class VertexMasterAnalyzer:
                 # ------------------------------------------------------------------
                 ml_source = "spread_derived"
                 home_win_prob: Optional[float] = None
+                implied_home_prob = feats.get("implied_home_prob")
 
                 if vertex_enabled:
                     try:
@@ -606,22 +621,31 @@ class VertexMasterAnalyzer:
                 # ------------------------------------------------------------------
                 if home_win_prob is None:
                     spread = feats.get("home_spread")
-                    implied = feats.get("implied_home_prob", 0.5) or 0.5
+                    implied = implied_home_prob
                     try:
                         if spread is not None and not pd.isna(spread):
                             spread = float(spread)
-                            # Negative spread (favorite) -> > 0.5
                             home_win_prob = max(0.15, min(0.85, 0.5 - spread * 0.028))
-                        else:
+                            ml_source = "spread_derived"
+                        elif implied is not None:
                             home_win_prob = float(implied)
+                            ml_source = "spread_derived"
                     except Exception:
-                        home_win_prob = float(implied)
-                    ml_source = "spread_derived"
+                        home_win_prob = None
 
-                # 3) Final fallback: straight consensus if still None
+                # 3) Final fallback: consensus if still None
+                if home_win_prob is None and feats.get("consensus_prob") is not None:
+                    try:
+                        home_win_prob = float(feats.get("consensus_prob"))
+                        ml_source = "fallback_heuristic"
+                    except Exception:
+                        home_win_prob = None
+
                 if home_win_prob is None:
-                    home_win_prob = float(feats.get("consensus_prob", 0.5) or 0.5)
-                    ml_source = "fallback_heuristic"
+                    logger.warning("Skipping game %s vs %s - no usable probability", away_team, home_team)
+                    continue
+
+                home_win_prob = max(0.0, min(1.0, home_win_prob))
 
                 # Track source usage
                 if ml_source in ml_sources_used:
@@ -665,23 +689,59 @@ class VertexMasterAnalyzer:
                 # Determine which side is actual favorite based on moneylines
                 home_ml = feats.get("home_ml_odds")
                 away_ml = feats.get("away_ml_odds")
-                home_ip = implied_prob_from_american(home_ml) or 0.5
-                away_ip = implied_prob_from_american(away_ml) or 0.5
+                home_ip = implied_prob_from_american(home_ml)
+                away_ip = implied_prob_from_american(away_ml)
 
-                home_is_favorite = home_ip >= away_ip
-                pick_is_favorite = home_is_favorite if pick_team == home_team else (not home_is_favorite)
+                home_is_favorite = None
+                if home_ip is not None and away_ip is not None:
+                    home_is_favorite = home_ip >= away_ip
+                pick_is_favorite = None
+                if home_is_favorite is not None:
+                    pick_is_favorite = home_is_favorite if pick_team == home_team else (not home_is_favorite)
 
                 # Probability for the picked team
                 away_win_prob = 1.0 - home_win_prob
                 pick_win_prob = home_win_prob if pick_team == home_team else away_win_prob
 
-                # EV: assume stake = 1 unit using picked team's ML
                 pick_ml = home_ml if pick_team == home_team else away_ml
+                pick_market_prob = implied_prob_from_american(pick_ml)
+                edge_vs_market = (
+                    pick_win_prob - pick_market_prob
+                    if pick_market_prob is not None
+                    else None
+                )
+
+                # EV: assume stake = 1 unit using picked team's ML
                 dec = american_to_decimal(pick_ml)
                 if dec is None:
                     ev = 0.0
                 else:
                     ev = pick_win_prob * (dec - 1.0) - (1.0 - pick_win_prob)
+
+                kalshi_prob = feats.get("kalshi_prob")
+                edge_vs_kalshi = (
+                    pick_win_prob - kalshi_prob if kalshi_prob is not None else None
+                )
+
+                theover_pick = feats.get("theover_pick") or ""
+                theover_prob = feats.get("theover_probability")
+                theover_alignment = None
+                if theover_pick:
+                    normalized_pick = TeamNameMatcher.normalize(pick_team)
+                    normalized_theover = TeamNameMatcher.normalize(theover_pick)
+                    if normalized_pick and normalized_theover:
+                        similarity = TeamNameMatcher.similarity_score(
+                            normalized_pick, normalized_theover
+                        )
+                        theover_alignment = "Agree" if similarity >= 0.8 else "Disagree"
+                theover_edge = (
+                    pick_win_prob - theover_prob if theover_prob is not None else None
+                )
+                theover_debug = (
+                    f"pick={pick_team} vs theover={theover_pick}; prob={theover_prob}"
+                    if theover_pick
+                    else ""
+                )
 
                 rows.append(
                     {
@@ -698,10 +758,16 @@ class VertexMasterAnalyzer:
                         "is_favorite": pick_is_favorite,
                         "home_ml_odds": home_ml,
                         "away_ml_odds": away_ml,
-                        "kalshi_prob": feats.get("kalshi_prob"),
+                        "kalshi_prob": kalshi_prob,
                         "kalshi_alignment": feats.get("kalshi_alignment"),
                         "sentiment_diff": feats.get("sentiment_diff"),
                         "ev": ev,
+                        "market_prob": pick_market_prob,
+                        "edge_vs_market": edge_vs_market,
+                        "edge_vs_kalshi": edge_vs_kalshi,
+                        "theover_edge": theover_edge,
+                        "theover_alignment": theover_alignment,
+                        "theover_match_debug": theover_debug,
                         # Game time and TheOver.ai consensus
                         "game_time": game.get("commence_time"),
                         "theover_pick": theover_pick,  # TheOver.ai's pick for consensus
@@ -810,6 +876,18 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
     display_df = display_df.sort_values("win_prob", ascending=False).reset_index(drop=True)
     display_df["Rank"] = display_df.index + 1
     display_df["Win %"] = (display_df["win_prob"] * 100).round(1)
+    display_df["Market %"] = display_df["market_prob"].apply(
+        lambda p: p * 100 if p is not None and not pd.isna(p) else np.nan
+    )
+    display_df["Edge vs Market %"] = display_df["edge_vs_market"].apply(
+        lambda e: e * 100 if e is not None and not pd.isna(e) else np.nan
+    )
+    display_df["Edge vs Kalshi %"] = display_df["edge_vs_kalshi"].apply(
+        lambda e: e * 100 if e is not None and not pd.isna(e) else np.nan
+    )
+    display_df["TheOver Edge %"] = display_df["theover_edge"].apply(
+        lambda e: e * 100 if e is not None and not pd.isna(e) else np.nan
+    )
     
     # Changed from emojis to text
     display_df["Favorite"] = display_df["is_favorite"].apply(
@@ -890,20 +968,23 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
     
     # NEW: TheOver.ai Consensus column (text instead of emojis)
     def format_consensus(row):
+        if row.get("theover_alignment"):
+            return row.get("theover_alignment")
+
         our_pick = row.get("pick_team", "")
         theover_pick = row.get("theover_pick", "")
-        
+
         if not theover_pick or pd.isna(theover_pick):
-            return "—"  # No TheOver.ai data
-        
+            return ""  # No TheOver.ai data
+
         # Check if picks match (case insensitive, partial match)
         if our_pick and theover_pick:
             if our_pick.lower() in theover_pick.lower() or theover_pick.lower() in our_pick.lower():
                 return "Agree"
             else:
                 return "Disagree"
-        return "—"
-    
+        return ""
+
     display_df["TheOver"] = display_df.apply(format_consensus, axis=1)
     
     # NEW: Novig Odds column
@@ -941,12 +1022,16 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
         "Game Time",
         "the_pick",
         "Win %",
+        "Market %",
+        "Edge vs Market %",
         "Favorite",
         "Novig",     # Novig odds for picked team
         "TheOver",
+        "TheOver Edge %",
         "Sentiment",  # Shows +/-% sentiment impact
         "Kalshi",
         "Kalshi %",
+        "Edge vs Kalshi %",
         "Kalshi Edge",  # NEW - How much Kalshi favors this pick
         "EV",
     ]
@@ -957,7 +1042,17 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
         hide_index=True,
     )
 
-    csv = display_df[cols].to_csv(index=False)
+    csv_cols = cols + [
+        "win_prob",
+        "market_prob",
+        "edge_vs_market",
+        "kalshi_prob",
+        "edge_vs_kalshi",
+        "theover_edge",
+        "theover_match_debug",
+    ]
+
+    csv = display_df[csv_cols].to_csv(index=False)
     st.download_button(
         "📥 Download Single Best Pick Per Game (CSV)",
         data=csv,
