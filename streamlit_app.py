@@ -8886,18 +8886,18 @@ if is_vertex_ai_enabled():
                             
                             # Handle None or invalid predictions
                             if ai_home_prob is None or pd.isna(ai_home_prob):
-                                # Fall back to the *market* probability instead of 0.5
+                                # Fall back to the market's implied home probability instead of a fake 50/50
                                 ai_home_prob = home_prob_market
-                                ai_source = "market_only"
+                                ai_prob_source = "market_only"
                             else:
-                                ai_source = "vertex_ai"
+                                ai_prob_source = "vertex_ai"
                             
-                            # Ensure it's a decimal (if somehow a percentage sneaks through)
+                            # Ensure it's a decimal (defensive, in case a percentage sneaks through)
                             if ai_home_prob > 1:
                                 ai_home_prob = ai_home_prob / 100.0
                             
                             ai_away_prob = 1 - ai_home_prob
-                            
+                           
                             # Determine best pick (higher AI probability)
                             if ai_home_prob >= ai_away_prob:
                                 pick_team = home_team
