@@ -852,13 +852,16 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
     display_df["Kalshi"] = display_df.apply(format_kalshi, axis=1)
     display_df["Kalshi %"] = (display_df["kalshi_prob"] * 100).round(0)
     
-    # Add Kalshi Edge column (difference between Kalshi prob and market prob)
+    # Add Kalshi Edge column (YOUR model prob - Kalshi crowd prob)
     def calc_kalshi_edge(row):
         kalshi_prob = row.get("kalshi_prob")
-        # Assuming market_prob is around 50% for now, or calculate from odds
-        if kalshi_prob is not None and not pd.isna(kalshi_prob):
-            # Edge is how much Kalshi favors vs 50/50
-            edge = (kalshi_prob - 0.5) * 100
+        win_prob = row.get("win_prob")  # Your model's probability
+        
+        if kalshi_prob is not None and not pd.isna(kalshi_prob) and win_prob is not None:
+            # FIXED: Edge = Your confidence - Kalshi crowd confidence
+            # Positive edge = You're MORE confident than the crowd (VALUE BET!)
+            # Negative edge = Crowd is MORE confident than you
+            edge = (win_prob - kalshi_prob) * 100
             return f"{edge:+.1f}%"
         return "—"
     
