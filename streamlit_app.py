@@ -12,6 +12,7 @@ from dataclasses import asdict
 from typing import Dict, Any, List, Tuple, Optional, Iterable, Sequence, Type
 from datetime import datetime, timedelta, date, timezone
 from app_core import KalshiIntegrator
+from app_core.team_name_matcher import TeamNameMatcher
 try:
     from ml_predictions import show_vertex_ai_prediction_section, is_vertex_ai_enabled
 except ImportError:
@@ -5768,23 +5769,45 @@ def build_best_bets_per_game(
 
     return best_df.reset_index(drop=True), enriched_legs
 
+TEAM_FUZZY_THRESHOLD = 0.80  # Minimum similarity (0-1) for team name matches
+MAX_SPREAD_DIFF = 1.0  # pts tolerance when matching TheOver spread lines
+MAX_TOTAL_DIFF = 1.0  # pts tolerance when matching TheOver total lines
+DATE_TOLERANCE_DAYS = 1  # days tolerance when comparing commence dates to TheOver rows
+
+
 def _tokenize_name(name: str) -> List[str]:
     return [token for token in re.split(r"[^a-z0-9]+", (name or "").lower()) if token]
 
 
-def _names_match(candidate: str, *targets: str) -> bool:
-    candidate = (candidate or "").lower().strip()
-    if not candidate:
+def _normalize_team_for_match(name: str) -> str:
+    """Normalize a team string using the shared matcher (drops mascots/punctuation)."""
+    try:
+        return TeamNameMatcher.normalize(name)
+    except Exception:
+        return " ".join(_tokenize_name(name))
+
+
+def _team_similarity(name_a: str, name_b: str) -> float:
+    """Return a fuzzy similarity ratio between two team names (0-1)."""
+    norm_a = _normalize_team_for_match(name_a)
+    norm_b = _normalize_team_for_match(name_b)
+    if not norm_a or not norm_b:
+        return 0.0
+    return TeamNameMatcher.similarity_score(norm_a, norm_b)
+
+
+def _names_match(candidate: str, *targets: str, threshold: float = TEAM_FUZZY_THRESHOLD) -> bool:
+    candidate_norm = _normalize_team_for_match(candidate)
+    if not candidate_norm:
         return False
-    candidate_tokens = set(_tokenize_name(candidate))
     for target in targets:
-        target_clean = (target or "").lower()
-        if not target_clean:
+        target_norm = _normalize_team_for_match(target)
+        if not target_norm:
             continue
-        if candidate in target_clean or target_clean in candidate:
+        similarity = _team_similarity(candidate_norm, target_norm)
+        if similarity >= threshold:
             return True
-        target_tokens = set(_tokenize_name(target_clean))
-        if candidate_tokens and candidate_tokens.issubset(target_tokens):
+        if candidate_norm in target_norm or target_norm in candidate_norm:
             return True
     return False
 
@@ -6017,20 +6040,80 @@ def _coerce_line(row: pd.Series, fallback_text: Any = None) -> Tuple[Optional[fl
     return None, None
 
 
+def _coerce_game_date(raw: Any) -> Optional[date]:
+    if raw is None:
+        return None
+    try:
+        parsed = pd.to_datetime(raw, errors='coerce')
+    except Exception:
+        return None
+    if pd.isna(parsed):
+        return None
+    try:
+        return parsed.date()
+    except Exception:
+        return None
+
+
+def _entry_date_match(entry_dates: List[date], game_date: Optional[date]) -> bool:
+    """Check if a game date is reasonably close to stored TheOver dates."""
+    if not entry_dates or game_date is None:
+        return True
+    for candidate in entry_dates:
+        if candidate is None:
+            return True
+        if abs((game_date - candidate).days) <= DATE_TOLERANCE_DAYS:
+            return True
+    return False
+
+
 def _resolve_theover_entry(
     records: List[Dict[str, Any]],
     league: str,
     home: str,
     away: str,
+    game_date: Optional[date] = None,
 ) -> Tuple[Dict[str, Any], bool]:
+    """
+    Resolve (or create) a normalized theover.ai entry.
+
+    Current criteria: leagues must be compatible, both home/away names must fuzzy-match
+    at >= TEAM_FUZZY_THRESHOLD (80 by default) in either order, and dates are allowed to
+    differ by up to DATE_TOLERANCE_DAYS.
+    """
     league_norm = (league or '').lower().strip()
+    best_entry = None
+    best_swapped = False
+    best_score = 0.0
+
     for entry in records:
         if not _league_matches(league_norm, entry.get('league_norm', '')):
             continue
-        if _names_match(entry.get('home'), home) and _names_match(entry.get('away'), away):
-            return entry, False
-        if _names_match(entry.get('home'), away) and _names_match(entry.get('away'), home):
-            return entry, True
+        entry_dates = entry.get('dates', [])
+        if not _entry_date_match(entry_dates, game_date):
+            continue
+
+        forward_home = _team_similarity(entry.get('home'), home)
+        forward_away = _team_similarity(entry.get('away'), away)
+        reverse_home = _team_similarity(entry.get('home'), away)
+        reverse_away = _team_similarity(entry.get('away'), home)
+
+        forward_score = min(forward_home, forward_away)
+        reverse_score = min(reverse_home, reverse_away)
+
+        if forward_score >= TEAM_FUZZY_THRESHOLD and forward_score > best_score:
+            best_entry = entry
+            best_swapped = False
+            best_score = forward_score
+        if reverse_score >= TEAM_FUZZY_THRESHOLD and reverse_score > best_score:
+            best_entry = entry
+            best_swapped = True
+            best_score = reverse_score
+
+    if best_entry:
+        if game_date and isinstance(best_entry.get('dates'), list) and game_date not in best_entry['dates']:
+            best_entry['dates'].append(game_date)
+        return best_entry, best_swapped
 
     entry = {
         'league': league,
@@ -6042,6 +6125,7 @@ def _resolve_theover_entry(
         'ml': {'home': None, 'away': None},
         'spreads': {},
         'totals': {},
+        'dates': [game_date] if game_date else [],
     }
     records.append(entry)
     return entry, False
@@ -6301,6 +6385,7 @@ def prepare_theover_dataset(
         league_raw = str(row.get('league', row.get('sport', ''))).strip()
         home_raw = str(row.get('home_team', row.get('hometeam', row.get('home', '')))).strip()
         away_raw = str(row.get('away_team', row.get('awayteam', row.get('away', '')))).strip()
+        game_date = _coerce_game_date(row.get('date') or row.get('game_date') or row.get('commence_time'))
         
         # Parse "Game" column format: "Away Team @ Home Team" (from CSV exports)
         if not (home_raw and away_raw):
@@ -6314,7 +6399,7 @@ def prepare_theover_dataset(
         if not (home_raw and away_raw):
             continue
 
-        entry, swapped = _resolve_theover_entry(records, league_raw, home_raw, away_raw)
+        entry, swapped = _resolve_theover_entry(records, league_raw, home_raw, away_raw, game_date)
         market_type = _infer_theover_market(row, explicit_market)
 
         if market_type == 'spread':
@@ -6412,9 +6497,9 @@ def _match_theover_ml_leg(leg: Dict[str, Any], entry: Dict[str, Any], swapped: b
 def _match_theover_spread_leg(leg: Dict[str, Any], entry: Dict[str, Any], swapped: bool) -> Optional[Dict[str, Any]]:
     section = entry.get('spreads') or {}
     target_line = _safe_float(leg.get('point'))
-    line_key, bucket = _find_line_bucket(section, target_line, tolerance=1.5)
+    line_key, bucket = _find_line_bucket(section, target_line, tolerance=MAX_SPREAD_DIFF)
     if bucket is None and section:
-        # Fall back to the closest available line even if it is outside tolerance
+        # Fall back to the closest available line if it is within tolerance
         closest_key = None
         closest_bucket = None
         closest_diff = None
@@ -6433,6 +6518,9 @@ def _match_theover_spread_leg(leg: Dict[str, Any], entry: Dict[str, Any], swappe
         if closest_bucket is None and None in section:
             closest_key = None
             closest_bucket = section.get(None)
+            closest_diff = None
+        if closest_diff is not None and closest_diff > MAX_SPREAD_DIFF:
+            closest_bucket = None
         line_key, bucket = closest_key, closest_bucket
     if bucket is None:
         return None
@@ -6476,6 +6564,14 @@ def _match_theover_spread_leg(leg: Dict[str, Any], entry: Dict[str, Any], swappe
     elif matches is False:
         signal = '⚠️'
 
+    payload_line = payload.get('line') if payload.get('line') is not None else target_line
+    line_diff = None
+    try:
+        if payload_line is not None and target_line is not None:
+            line_diff = abs(float(payload_line) - float(target_line))
+    except Exception:
+        line_diff = None
+
     return {
         'pick': leg.get('team'),
         'matches': matches,
@@ -6484,15 +6580,16 @@ def _match_theover_spread_leg(leg: Dict[str, Any], entry: Dict[str, Any], swappe
         'model_probability': probability,
         'probability_source': payload.get('source'),
         'predicted_team': entry.get('home') if recommended_side == 'home' else (entry.get('away') if recommended_side == 'away' else None),
-        'spread_line': payload.get('line') if payload.get('line') is not None else target_line,
+        'spread_line': payload_line,
         'row_index': payload.get('row_index'),
+        'match_debug': f"match=spread line={payload_line} target={target_line} diff={line_diff} swapped={swapped}",
     }
 
 
 def _match_theover_total_leg(leg: Dict[str, Any], entry: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     section = entry.get('totals') or {}
     target_line = _safe_float(leg.get('point'))
-    line_key, bucket = _find_line_bucket(section, target_line, tolerance=1.5)
+    line_key, bucket = _find_line_bucket(section, target_line, tolerance=MAX_TOTAL_DIFF)
     if bucket is None and section:
         closest_key = None
         closest_bucket = None
@@ -6512,6 +6609,9 @@ def _match_theover_total_leg(leg: Dict[str, Any], entry: Dict[str, Any]) -> Opti
         if closest_bucket is None and None in section:
             closest_key = None
             closest_bucket = section.get(None)
+            closest_diff = None
+        if closest_diff is not None and closest_diff > MAX_TOTAL_DIFF:
+            closest_bucket = None
         line_key, bucket = closest_key, closest_bucket
     if bucket is None:
         return None
@@ -6550,8 +6650,16 @@ def _match_theover_total_leg(leg: Dict[str, Any], entry: Dict[str, Any]) -> Opti
     elif matches is False:
         signal = '⚠️'
 
+    payload_line = payload.get('line') if payload.get('line') is not None else leg.get('point')
+    line_diff = None
+    try:
+        if payload_line is not None and target_line is not None:
+            line_diff = abs(float(payload_line) - float(target_line))
+    except Exception:
+        line_diff = None
+
     return {
-        'pick': f"{direction.title()} {payload.get('line') if payload.get('line') is not None else leg.get('point')}",
+        'pick': f"{direction.title()} {payload_line}",
         'matches': matches,
         'signal': signal,
         'league': entry.get('league'),
@@ -6559,6 +6667,7 @@ def _match_theover_total_leg(leg: Dict[str, Any], entry: Dict[str, Any]) -> Opti
         'probability_source': payload.get('source'),
         'predicted_team': direction.title(),
         'row_index': payload.get('row_index'),
+        'match_debug': f"match=total dir={direction} line={payload_line} target={target_line} diff={line_diff}",
     }
 
 
@@ -6596,29 +6705,58 @@ def match_theover_to_leg(
     selected_entry = None
     swapped = False
 
-    def _attempt_match(ignore_league: bool = False) -> Tuple[Optional[Dict[str, Any]], bool]:
+    def _attempt_match(ignore_league: bool = False) -> Tuple[Optional[Dict[str, Any]], bool, float]:
+        best_entry_local = None
+        best_swapped_local = False
+        best_score_local = 0.0
         for entry in records:
             if not ignore_league and not _league_matches(leg_league, entry.get('league_norm', '')):
                 continue
-            if _names_match(entry.get('home'), leg_home) and _names_match(entry.get('away'), leg_away):
-                return entry, False
-            if _names_match(entry.get('home'), leg_away) and _names_match(entry.get('away'), leg_home):
-                return entry, True
-        return None, False
+            entry_dates = entry.get('dates', [])
+            if not _entry_date_match(entry_dates, _coerce_game_date(leg.get('commence_time'))):
+                continue
 
-    selected_entry, swapped = _attempt_match(False)
+            forward_home = _team_similarity(entry.get('home'), leg_home)
+            forward_away = _team_similarity(entry.get('away'), leg_away)
+            reverse_home = _team_similarity(entry.get('home'), leg_away)
+            reverse_away = _team_similarity(entry.get('away'), leg_home)
+
+            forward_score = min(forward_home, forward_away)
+            reverse_score = min(reverse_home, reverse_away)
+
+            if forward_score >= TEAM_FUZZY_THRESHOLD and forward_score > best_score_local:
+                best_entry_local = entry
+                best_swapped_local = False
+                best_score_local = forward_score
+            if reverse_score >= TEAM_FUZZY_THRESHOLD and reverse_score > best_score_local:
+                best_entry_local = entry
+                best_swapped_local = True
+                best_score_local = reverse_score
+
+        return best_entry_local, best_swapped_local, best_score_local
+
+    selected_entry, swapped, team_score = _attempt_match(False)
     if not selected_entry:
-        selected_entry, swapped = _attempt_match(True)
+        selected_entry, swapped, team_score = _attempt_match(True)
 
     if not selected_entry:
-        return None
+        return {'match_debug': 'no_theover_match_for_leg', 'matches': None, 'team_score': 0.0}
 
     market_type = (leg.get('type') or leg.get('market') or '').lower()
+    match_payload = None
     if 'total' in market_type:
-        return _match_theover_total_leg(leg, selected_entry)
-    if 'spread' in market_type:
-        return _match_theover_spread_leg(leg, selected_entry, swapped)
-    return _match_theover_ml_leg(leg, selected_entry, swapped)
+        match_payload = _match_theover_total_leg(leg, selected_entry)
+    elif 'spread' in market_type:
+        match_payload = _match_theover_spread_leg(leg, selected_entry, swapped)
+    else:
+        match_payload = _match_theover_ml_leg(leg, selected_entry, swapped)
+
+    if match_payload is None:
+        return {'match_debug': f"no_theover_match_payload market={market_type} score={team_score}", 'matches': None, 'team_score': team_score}
+
+    match_payload['match_debug'] = match_payload.get('match_debug') or f"team_score={team_score:.2f} market={market_type}"
+    match_payload['team_score'] = team_score
+    return match_payload
 
 
 def apply_theover_probabilities_to_legs(
@@ -6653,6 +6791,8 @@ def apply_theover_probabilities_to_legs(
         return prepared_theover_ml
 
     theover_cache: Dict[int, Dict[str, Any]] = {}
+    match_attempts = 0
+    match_success = 0
 
     if prepared_theover_ml or prepared_theover_spreads or prepared_theover_totals:
         for leg in legs:
@@ -6664,6 +6804,7 @@ def apply_theover_probabilities_to_legs(
                 leg.pop('theover_probability_delta', None)
                 leg.pop('theover_match', None)
                 leg.pop('theover_predicted_team', None)
+                leg['theover_match_debug'] = 'no_theover_dataset_for_leg'
                 continue
 
             try:
@@ -6671,11 +6812,18 @@ def apply_theover_probabilities_to_legs(
             except Exception:
                 match_info = None
 
-            if match_info:
+            match_attempts += 1
+
+            if match_info and (
+                match_info.get('model_probability') is not None
+                or match_info.get('implied_probability') is not None
+            ):
                 theover_cache[id(leg)] = match_info
                 leg['theover_match'] = match_info
                 if match_info.get('predicted_team'):
                     leg['theover_predicted_team'] = match_info.get('predicted_team')
+                leg['theover_match_debug'] = match_info.get('match_debug', 'matched_theover')
+                match_success += 1
 
                 base_ai_prob = leg.get('ai_prob_pre_theover', leg.get('ai_prob', leg.get('p', 0.5)))
                 leg['ai_prob_pre_theover'] = base_ai_prob
@@ -6696,6 +6844,7 @@ def apply_theover_probabilities_to_legs(
                     leg['ai_prob'] = base_ai_prob
                     leg.pop('theover_probability', None)
                     leg.pop('theover_probability_delta', None)
+                    leg['theover_match_debug'] = match_info.get('match_debug', 'match_without_probability')
             else:
                 if 'ai_prob_pre_theover' in leg:
                     leg['ai_prob'] = leg['ai_prob_pre_theover']
@@ -6703,6 +6852,10 @@ def apply_theover_probabilities_to_legs(
                 leg.pop('theover_probability_delta', None)
                 leg.pop('theover_match', None)
                 leg.pop('theover_predicted_team', None)
+                if match_info:
+                    leg['theover_match_debug'] = match_info.get('match_debug', 'no_theover_probability')
+                else:
+                    leg['theover_match_debug'] = 'no_theover_match_found'
     else:
         for leg in legs:
             if 'ai_prob_pre_theover' in leg:
@@ -6711,6 +6864,7 @@ def apply_theover_probabilities_to_legs(
             leg.pop('theover_probability_delta', None)
             leg.pop('theover_match', None)
             leg.pop('theover_predicted_team', None)
+            leg['theover_match_debug'] = 'no_theover_dataset_loaded'
 
     return {
         'prepared_ml': prepared_theover_ml,
@@ -6718,6 +6872,8 @@ def apply_theover_probabilities_to_legs(
         'prepared_totals': prepared_theover_totals,
         'cache': theover_cache,
         'dataset_for_leg': _dataset_for_leg,
+        'match_attempts': match_attempts,
+        'match_success': match_success,
     }
 
 
@@ -6860,8 +7016,21 @@ def build_combos_ai(
                 skip_combo = True
                 break
             d *= leg_d
-            p_market *= c.get("p", 0.5)
-            p_ai *= c.get("ai_prob", c.get("p", 0.5))
+            prob_market = _safe_float(c.get("p"))
+            ai_prob_val = _safe_float(c.get("ai_prob"))
+            if ai_prob_val is None:
+                ai_prob_val = prob_market
+
+            # If we still don't have a probability, bail out instead of using 0.5
+            if prob_market is None or ai_prob_val is None:
+                skip_combo = True
+                break
+
+            if ai_prob_val == 0.5:
+                logger.warning("AI probability is exactly 0.5 for leg %s", c)
+
+            p_market *= prob_market
+            p_ai *= ai_prob_val
         
         if skip_combo or d <= 0:
             continue  # Skip this combo if odds are invalid
@@ -9262,9 +9431,9 @@ if is_vertex_ai_enabled():
                                 'implied_home_prob': row.get('implied_home_prob', 0.5),
                                 # Kalshi prediction market data
                                 'kalshi_available': row.get('kalshi_available', False),
-                                'kalshi_prob': row.get('kalshi_prob', 0.5),
-                                'kalshi_alignment': row.get('kalshi_alignment', 0),
-                                'kalshi_validation_score': row.get('kalshi_validation_score', 0.5),
+                                'kalshi_prob': row.get('kalshi_prob'),
+                                'kalshi_alignment': row.get('kalshi_alignment'),
+                                'kalshi_validation_score': row.get('kalshi_validation_score'),
                                 'kalshi_agrees': row.get('kalshi_agrees', None),
                                 'kalshi_arbitrage_opportunity': row.get('kalshi_arbitrage_opportunity', False),
                                 'kalshi_synthetic': row.get('kalshi_synthetic', True),  # Indicates if synthetic data
@@ -10901,11 +11070,15 @@ if is_vertex_ai_enabled():
                                 vertex_leg_rows.append(leg_entry)
 
                 if theover_ml_data is not None or theover_spreads_data is not None or theover_totals_data is not None:
-                    apply_theover_probabilities_to_legs(
+                    theover_context = apply_theover_probabilities_to_legs(
                         vertex_leg_rows,
                         theover_ml_data=theover_ml_data,
                         theover_spreads_data=theover_spreads_data,
                         theover_totals_data=theover_totals_data,
+                    )
+                    st.info(
+                        f"✅ Merged TheOver.ai picks for {theover_context.get('match_success', 0)}/"
+                        f"{theover_context.get('match_attempts', 0)} candidate legs"
                     )
 
                 for leg in vertex_leg_rows:
@@ -10971,6 +11144,7 @@ if is_vertex_ai_enabled():
                         'theover.ai %': theover_prob_effective * 100 if theover_prob_effective is not None else None,
                         'theover Δ pp': theover_delta_effective * 100 if theover_delta_effective is not None else None,
                         'theover Source': leg.get('theover_probability_source'),
+                        'theover Match Debug': leg.get('theover_match_debug'),
                         'SportsData Prob %': None,
                         'SportsData Δ pp': None,
                         'Kalshi Prob %': None,
