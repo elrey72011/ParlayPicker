@@ -7,6 +7,10 @@ This fixes the 15% → 95%+ match rate issue by properly normalizing team names
 from difflib import SequenceMatcher
 from typing import Optional, List, Tuple
 
+
+# Default fuzzy threshold used across TheOver matching flows
+TEAM_FUZZY_THRESHOLD = 0.80
+
 class TeamNameMatcher:
     """Handles fuzzy matching between TheOver.ai CSV names and app team names"""
     
@@ -126,7 +130,7 @@ class TeamNameMatcher:
         cls,
         csv_team: str,
         app_teams: List[str],
-        threshold: float = 0.75
+        threshold: float = TEAM_FUZZY_THRESHOLD,
     ) -> Optional[str]:
         """
         Find best matching team name from app_teams list
@@ -179,7 +183,7 @@ class TeamNameMatcher:
         csv_home: str,
         csv_away: str,
         app_games: List[Tuple[str, str]],
-        threshold: float = 0.75
+        threshold: float = TEAM_FUZZY_THRESHOLD
     ) -> Optional[Tuple[str, str]]:
         """
         Match a game (home + away) from CSV to app games list
