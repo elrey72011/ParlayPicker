@@ -9275,9 +9275,9 @@ if is_vertex_ai_enabled():
                                 'implied_home_prob': row.get('implied_home_prob', 0.5),
                                 # Kalshi prediction market data
                                 'kalshi_available': row.get('kalshi_available', False),
-                                'kalshi_prob': row.get('kalshi_prob', 0.5),
-                                'kalshi_alignment': row.get('kalshi_alignment', 0),
-                                'kalshi_validation_score': row.get('kalshi_validation_score', 0.5),
+                                'kalshi_prob': row.get('kalshi_prob'),
+                                'kalshi_alignment': row.get('kalshi_alignment'),
+                                'kalshi_validation_score': row.get('kalshi_validation_score'),
                                 'kalshi_agrees': row.get('kalshi_agrees', None),
                                 'kalshi_arbitrage_opportunity': row.get('kalshi_arbitrage_opportunity', False),
                                 'kalshi_synthetic': row.get('kalshi_synthetic', True),  # Indicates if synthetic data
