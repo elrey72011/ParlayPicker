@@ -9395,62 +9395,85 @@ if is_vertex_ai_enabled():
                 # Merge TheOver.ai picks/probabilities for consensus validation
                 # DO NOT use their Line column (unreliable signs)
                 # =========================================================================
-                theover_merged = 0
-                
-                if 'theover_spreads_data' in locals() and theover_spreads_data is not None and not theover_spreads_data.empty:
+                theover_merged_game_indexes = set()
+
+                # Only proceed if we actually have TheOver spreads
+                if (
+                    'theover_spreads_data' in locals()
+                    and theover_spreads_data is not None
+                    and not theover_spreads_data.empty
+                ):
                     st.info("🔄 Merging TheOver.ai picks & probabilities...")
-                    
-                    import difflib
-                    
-                    for game in all_games:
-                        home_team = game.get('home_team', '')
-                        away_team = game.get('away_team', '')
-                        
-                        best_match = None
-                        best_ratio = 0
-                        
-                        # Find best matching TheOver.ai row using fuzzy matching
-                        for _, row in theover_spreads_data.iterrows():
-                            theover_home = str(row.get('HomeTeam', ''))
-                            theover_away = str(row.get('AwayTeam', ''))
-                            
-                            # Calculate match quality
-                            home_match_ratio = difflib.SequenceMatcher(None, home_team.lower(), theover_home.lower()).ratio()
-                            away_match_ratio = difflib.SequenceMatcher(None, away_team.lower(), theover_away.lower()).ratio()
-                            combined_ratio = (home_match_ratio + away_match_ratio) / 2
-                            
-                            if combined_ratio > best_ratio and combined_ratio >= 0.7:
-                                best_ratio = combined_ratio
-                                best_match = row
-                        
-                        if best_match is not None:
-                            theover_pick = str(best_match.get('Pick', ''))
-                            theover_line = best_match.get('Line')
-                            
-                            try:
-                                theover_line_float = float(theover_line) if theover_line else 0
-                            except:
-                                theover_line_float = 0
-                            
-                            # Calculate probability from spread (2.8% per point)
-                            if theover_line_float:
-                                win_prob = 0.5 + (abs(theover_line_float) * 0.028)
-                                win_prob = min(0.99, max(0.51, win_prob))
-                            else:
-                                win_prob = 0.5
-                            
-                            # Determine if pick is home team using fuzzy match
-                            pick_ratio = difflib.SequenceMatcher(None, theover_pick.lower(), home_team.lower()).ratio()
-                            pick_is_home = pick_ratio >= 0.7
-                            
-                            home_prob = win_prob if pick_is_home else (1.0 - win_prob)
-                            
-                            game['theover_pick'] = theover_pick
-                            game['theover_probability'] = home_prob
-                            
-                            theover_merged += 1
-                    
-                    st.success(f"✅ Merged TheOver.ai picks for {theover_merged}/{len(all_games)} games")
+
+                    matcher = TeamNameMatcher()
+
+                    # Build list of (home, away) tuples for the matcher
+                    app_games = []
+                    app_index_map = {}
+                    for idx, game in enumerate(all_games):
+                        home_team = game.get("home_team", "") or ""
+                        away_team = game.get("away_team", "") or ""
+                        if not home_team or not away_team:
+                            continue
+                        key = (home_team, away_team)
+                        app_games.append(key)
+                        app_index_map[key] = idx
+
+                    # Iterate over each TheOver.ai spread row and attach it to the best matching app game
+                    for _, row in theover_spreads_data.iterrows():
+                        csv_home = str(row.get("HomeTeam") or row.get("home_team") or "").strip()
+                        csv_away = str(row.get("AwayTeam") or row.get("away_team") or "").strip()
+                        if not csv_home or not csv_away:
+                            continue
+
+                        match = matcher.match_game(csv_home, csv_away, app_games, threshold=0.72)
+                        if not match:
+                            # could not confidently match this TheOver row
+                            continue
+
+                        game_idx = app_index_map.get(match)
+                        if game_idx is None:
+                            continue
+
+                        game = all_games[game_idx]
+
+                        # --- Extract pick + line from TheOver row ---
+                        theover_pick = str(row.get("Pick", "")).strip()
+                        theover_line = row.get("Line")
+
+                        try:
+                            theover_line_float = float(theover_line) if theover_line not in (None, "") else 0.0
+                        except Exception:
+                            theover_line_float = 0.0
+
+                        # --- Convert line into a rough win probability ---
+                        # 2.8 percentage points per point of spread; clamp to [0.51, 0.99]
+                        if theover_line_float:
+                            win_prob = 0.5 + (abs(theover_line_float) * 0.028)
+                            win_prob = max(0.51, min(0.99, win_prob))
+                        else:
+                            win_prob = 0.5  # no line → neutral
+
+                        # Is the pick on the home team or the away team?
+                        # Use fuzzy match between pick text and home team name
+                        pick_home_score = TeamNameMatcher.similarity_score(
+                            TeamNameMatcher.normalize(theover_pick),
+                            TeamNameMatcher.normalize(game.get("home_team", "")),
+                        )
+                        pick_is_home = pick_home_score >= 0.7
+
+                        # Store probability as "probability home team covers/wins"
+                        home_prob = win_prob if pick_is_home else (1.0 - win_prob)
+
+                        game["theover_pick"] = theover_pick
+                        game["theover_probability"] = home_prob
+                        game["theover_probability_source"] = "theover_spread_line"
+                        theover_merged_game_indexes.add(game_idx)
+
+                    st.success(
+                        f"✅ Merged TheOver.ai picks for "
+                        f"{len(theover_merged_game_indexes)}/{len(all_games)} games"
+                    )
                 else:
                     st.info("ℹ️ No TheOver.ai data uploaded - using TheOddsAPI only")
                 
