@@ -7,7 +7,7 @@ plus spread-derived and fallback logic.
 import logging
 import re
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -18,6 +18,55 @@ from app_core.kalshi_integrator import price_to_prob
 from ml_predictions import get_vertex_ai_prediction, is_vertex_ai_enabled
 
 logger = logging.getLogger(__name__)
+
+
+# -------------------------------
+# Normalization helpers
+# -------------------------------
+
+
+def normalize_team(name: str) -> str:
+    """Lowercase, strip punctuation, and smooth common variations for matching."""
+
+    if not isinstance(name, str):
+        return ""
+
+    s = name.lower().strip()
+    s = re.sub(r"[^\w\s]", "", s)  # remove punctuation
+    s = s.replace("st ", "state ").replace("st.", "state ")
+    s = s.replace("univ", "university")
+    s = s.replace("university of ", "")
+    s = s.replace("ucla bruins", "ucla").replace("ucla ", "ucla")
+    s = s.replace("san jose st", "san jose state")
+    s = re.sub(r"\s+", " ", s)
+    return s
+
+
+def normalize_league(value: str) -> str:
+    """Normalize sport/league labels for matching between datasets."""
+
+    if not isinstance(value, str):
+        return ""
+
+    v = value.lower().strip()
+    if "ncaab" in v or "ncaam" in v or "college basketball" in v or "ncaa" in v:
+        return "ncaab"
+    if "ncaaf" in v or "college football" in v:
+        return "ncaaf"
+    if "nba" in v:
+        return "nba"
+    if "nhl" in v:
+        return "nhl"
+    return v
+
+
+def split_game(game: str) -> Tuple[Optional[str], Optional[str]]:
+    """Return (home, away) parsed from strings like 'Away @ Home'."""
+
+    if not isinstance(game, str) or "@" not in game:
+        return None, None
+    away, home = [g.strip() for g in game.split("@", 1)]
+    return home, away
 
 
 # Fuzzy/team matching thresholds used across Kalshi + TheOver enrichment
@@ -770,8 +819,9 @@ class VertexMasterAnalyzer:
         market_type: str,
         selection: str,
         ai_prob: Optional[float],
+        pick_line: Optional[float],
     ) -> Dict[str, Any]:
-        """Return TheOver alignment/edge per candidate type."""
+        """Return TheOver alignment/edge per candidate type using structured alignment labels."""
 
         selection = selection.lower()
         alignment = None
@@ -779,42 +829,72 @@ class VertexMasterAnalyzer:
         edge = None
         debug = feats.get("theover_match_debug") or "no_match_found"
 
+        pick_team: Optional[str] = None
+        pick_side: Optional[str] = None
+        pick_line: Optional[float] = None
+        selection_line = pick_line
+
         if market_type == "Total":
             base_prob = feats.get("theover_total_probability")
             pick_label = feats.get("theover_total_pick") or ""
+            pick_line = feats.get("theover_total") if feats.get("theover_total") is not None else None
             if base_prob is not None and not pd.isna(base_prob):
+                pick_side = "over" if isinstance(pick_label, str) and "over" in pick_label.lower() else "under"
                 prob = base_prob if selection == "over" else (1.0 - base_prob)
                 if ai_prob is not None:
                     edge = ai_prob - prob
-                if pick_label:
-                    if (selection == "over" and str(pick_label).lower().startswith("over")) or (
-                        selection == "under" and str(pick_label).lower().startswith("under")
-                    ):
-                        alignment = "Agree"
+
+                if selection in {"over", "under"} and pick_side in {"over", "under"}:
+                    if selection_line is not None and pick_line is not None:
+                        if abs(float(selection_line) - float(pick_line)) <= MAX_LINE_DIFF and selection == pick_side:
+                            alignment = "Aligned"
+                        elif selection != pick_side:
+                            alignment = "Opposite Side"
+                        else:
+                            alignment = "Different Line"
                     else:
-                        alignment = "Disagree"
+                        alignment = "Aligned" if selection == pick_side else "Opposite Side"
         else:
             base_prob = feats.get("theover_probability")
             pick_label = feats.get("theover_pick") or ""
+            pick_line = feats.get("theover_spread") if feats.get("theover_spread") is not None else None
             if base_prob is not None and not pd.isna(base_prob):
                 is_home = selection == "home"
+                pick_team = pick_label or None
+                pick_norm = TeamNameMatcher.normalize(pick_label)
+                home_norm = TeamNameMatcher.normalize(feats.get("home_team") or "")
+                away_norm = TeamNameMatcher.normalize(feats.get("away_team") or "")
+                if pick_norm and home_norm and TeamNameMatcher.similarity_score(pick_norm, home_norm) >= TEAM_FUZZY_THRESHOLD:
+                    pick_side = "home"
+                elif pick_norm and away_norm and TeamNameMatcher.similarity_score(pick_norm, away_norm) >= TEAM_FUZZY_THRESHOLD:
+                    pick_side = "away"
+
                 prob = base_prob if is_home else (1.0 - base_prob)
                 if ai_prob is not None:
                     edge = ai_prob - prob
-                if pick_label:
-                    normalized_pick = TeamNameMatcher.normalize(pick_label)
-                    target_team = feats.get("home_team") if is_home else feats.get("away_team")
-                    if target_team and normalized_pick:
-                        similarity = TeamNameMatcher.similarity_score(
-                            TeamNameMatcher.normalize(target_team), normalized_pick
-                        )
-                        alignment = "Agree" if similarity >= TEAM_FUZZY_THRESHOLD else "Disagree"
+
+                if selection in {"home", "away"} and pick_side in {"home", "away"}:
+                    if selection_line is not None and pick_line is not None:
+                        if abs(float(selection_line) - float(pick_line)) <= MAX_LINE_DIFF and selection == pick_side:
+                            alignment = "Aligned"
+                        elif selection != pick_side:
+                            alignment = "Opposite Side"
+                        else:
+                            alignment = "Different Line"
+                    else:
+                        alignment = "Aligned" if selection == pick_side else "Opposite Side"
+
+        if alignment is None:
+            alignment = "Unknown" if prob is not None else "No Coverage"
 
         return {
             "theover_probability_for_pick": prob,
             "theover_edge": edge,
             "theover_alignment": alignment,
             "theover_match_debug": debug,
+            "theover_pick_team": pick_team,
+            "theover_pick_side": pick_side,
+            "theover_pick_line": pick_line,
         }
 
     def _format_pick_text(
@@ -934,7 +1014,7 @@ class VertexMasterAnalyzer:
             kalshi_for_pick = kalshi_prob if selection == "home" else (1.0 - kalshi_prob)
             edge_vs_kalshi = ai_prob - kalshi_for_pick
 
-        theover_info = self._calc_theover_support(feats, market_type, selection, ai_prob)
+        theover_info = self._calc_theover_support(feats, market_type, selection, ai_prob, line)
 
         # Favorite indicator is only relevant for home/away selections
         home_ml = feats.get("home_ml_odds")
@@ -976,6 +1056,9 @@ class VertexMasterAnalyzer:
             "theover_alignment": theover_info.get("theover_alignment"),
             "theover_match_debug": theover_info.get("theover_match_debug"),
             "theover_probability_for_pick": theover_info.get("theover_probability_for_pick"),
+            "theover_pick_team": theover_info.get("theover_pick_team"),
+            "theover_pick_side": theover_info.get("theover_pick_side"),
+            "theover_pick_line": theover_info.get("theover_pick_line"),
             "game_time": feats.get("game_time"),
             "theover_pick": feats.get("theover_pick"),
             "theover_total_pick": feats.get("theover_total_pick"),
@@ -1218,8 +1301,9 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
     display_df["Edge vs Kalshi %"] = display_df["edge_vs_kalshi"].apply(
         lambda e: e * 100 if e is not None and not pd.isna(e) else "N/A"
     )
-    display_df["TheOver Edge %"] = display_df["theover_edge"].apply(
-        lambda e: e * 100 if e is not None and not pd.isna(e) else "N/A"
+    display_df["theover_edge_raw"] = display_df.get("theover_probability_for_pick")
+    display_df["TheOver Edge %"] = display_df["theover_edge_raw"].apply(
+        lambda e: e * 100 if e is not None and not pd.isna(e) else ""
     )
 
     display_df["Market Type"] = display_df.get("pick_market_type", "")
@@ -1318,9 +1402,13 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
         return "N/A"
     
     display_df["Kalshi Edge"] = display_df.apply(calc_kalshi_edge, axis=1)
-    
+
     display_df["EV"] = display_df["ev"].map(lambda x: f"${x:.2f}")
-    
+
+    # Normalize pick market type casing
+    if "pick_market_type" in display_df.columns:
+        display_df["pick_market_type"] = display_df["pick_market_type"].astype(str).str.lower()
+
     # NEW: Format Game Time column
     def format_game_time(time_str):
         if pd.isna(time_str) or not time_str:
@@ -1340,35 +1428,36 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
     
     display_df["Game Time"] = display_df["game_time"].apply(format_game_time)
     
-    # NEW: TheOver.ai Consensus column (text instead of emojis)
-    def format_consensus(row):
-        if row.get("theover_alignment"):
-            return row.get("theover_alignment")
+    # TheOver alignment/edge columns derived from keyed matches
+    display_df["TheOver"] = display_df.get("theover_alignment", pd.Series([])).fillna("No Coverage")
+    display_df["theover_edge_raw"] = display_df.get("theover_probability_for_pick")
+    display_df["TheOver Edge %"] = display_df["theover_edge_raw"].apply(
+        lambda x: f"{float(x) * 100:.1f}" if pd.notna(x) else ""
+    )
 
-        market_type = row.get("pick_market_type")
-        pick_sel = (row.get("pick_selection") or "").lower()
+    # Kalshi status indicator
+    def classify_kalshi_status(row: pd.Series) -> str:
+        prob = row.get("kalshi_prob") or row.get("Kalshi %")
+        debug = str(row.get("kalshi_match_debug") or row.get("Kalshi") or "")
 
-        if market_type == "Total":
-            theover_pick = (row.get("theover_total_pick") or "").lower()
-            if not theover_pick:
-                return "No TheOver match"
-            return "Agree" if theover_pick.startswith(pick_sel) else "Disagree"
+        try:
+            if prob is not None and str(prob) != "" and not pd.isna(float(prob)):
+                return "Matched"
+        except Exception:
+            pass
 
-        our_pick = row.get("pick_team", "")
-        theover_pick = row.get("theover_pick", "")
+        dlow = debug.lower()
+        if "no kalshi match" in dlow or "no_market" in dlow or "no markets" in dlow:
+            return "No market on Kalshi"
+        if "symbol" in dlow or "name mismatch" in dlow:
+            return "Symbol / name mismatch"
+        if "api" in dlow and ("empty" in dlow or "error" in dlow or "no response" in dlow):
+            return "Kalshi API error / empty"
+        if debug:
+            return debug
+        return "No Kalshi data"
 
-        if not theover_pick or pd.isna(theover_pick):
-            return "No TheOver match"  # No TheOver.ai data
-
-        # Check if picks match (case insensitive, partial match)
-        if our_pick and theover_pick:
-            if our_pick.lower() in theover_pick.lower() or theover_pick.lower() in our_pick.lower():
-                return "Agree"
-            else:
-                return "Disagree"
-        return "No TheOver match"
-
-    display_df["TheOver"] = display_df.apply(format_consensus, axis=1)
+    display_df["kalshi_status"] = display_df.apply(classify_kalshi_status, axis=1)
     
     # NEW: Novig Odds column
     def format_novig_odds(row):
@@ -1442,11 +1531,17 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
         "pick_line",
         "pick_odds",
         "pick_selection",
+        "theover_pick_team",
+        "theover_pick_side",
+        "theover_pick_line",
+        "theover_edge_raw",
+        "theover_alignment",
         "kalshi_prob",
         "edge_vs_kalshi",
         "kalshi_match_debug",
         "theover_edge",
         "theover_match_debug",
+        "kalshi_status",
     ]
 
     csv = display_df[csv_cols].to_csv(index=False)
