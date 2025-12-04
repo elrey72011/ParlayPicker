@@ -2558,10 +2558,10 @@ class KalshiIntegrator:
         home_normalized = normalize_name(home_team)
         away_normalized = normalize_name(away_team)
             
-            for market in sports_markets:
-                title = market.get('title', '') or ''
-                ticker = market.get('ticker', '') or ''
-                market_text = f"{title} {ticker}"
+        for market in sports_markets:
+            title = market.get('title', '') or ''
+            ticker = market.get('ticker', '') or ''
+            market_text = f"{title} {ticker}"
                 
                 # Check if this market matches both teams
                 home_match = teams_match(home_team, market_text)
