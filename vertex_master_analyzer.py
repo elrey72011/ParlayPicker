@@ -1381,7 +1381,9 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
     
     display_df["Kalshi"] = display_df.apply(format_kalshi, axis=1)
     display_df["Kalshi %"] = display_df["kalshi_prob"].apply(
-        lambda p: round(p * 100) if p is not None and not pd.isna(p) else "N/A"
+        lambda p: round(float(p) * 100.0, 1)
+        if p is not None and not pd.isna(p)
+        else np.nan
     )
     
     # Add Kalshi Edge column (YOUR model prob - Kalshi crowd prob)
@@ -1396,8 +1398,13 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
             edge = (win_prob - kalshi_prob) * 100
             return f"{edge:+.1f}%"
         return "N/A"
-    
+
     display_df["Kalshi Edge"] = display_df.apply(calc_kalshi_edge, axis=1)
+
+    logger.info(
+        "Kalshi probs sample: %s",
+        display_df["Kalshi %"].dropna().head(10).tolist(),
+    )
 
     display_df["EV"] = display_df["ev"].map(lambda x: f"${x:.2f}")
 

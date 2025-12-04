@@ -10,6 +10,8 @@ import requests
 import streamlit as st
 from typing import Dict, List, Any, Optional
 
+from app_core.team_name_matcher import TeamNameMatcher
+
 logger = logging.getLogger(__name__)
 
 
@@ -543,123 +545,137 @@ class KalshiIntegrator:
         return float(price_dollars)  # Kalshi prices are already probabilities
     
     def get_game_market(self, home_team: str, away_team: str, sport: str = "NBA") -> Dict[str, Any]:
-        """Get Kalshi market data for a specific game
-        
-        CRITICAL: This function was MISSING and needs to be added!
-        Called by vertex_master_analyzer.py but didn't exist in kalshi_integrator.py
-        
-        Args:
-            home_team: Home team name (e.g., "Oklahoma Sooners", "Los Angeles Lakers")
-            away_team: Away team name
-            sport: Sport code - "NBA", "NFL", "NHL", "NCAAB", "NCAAF"
-            
-        Returns:
-            Dictionary with:
-            - kalshi_available: bool
-            - kalshi_prob: float (home team win probability)
-            - ticker: str (Kalshi market ticker)
-            - title: str (market title)
-        """
+        """Find and return Kalshi market data for a specific game."""
+
+        result: Dict[str, Any] = {
+            "kalshi_available": False,
+            "kalshi_prob": None,
+            "kalshi_home_prob": None,
+            "kalshi_away_prob": None,
+            "market_ticker": None,
+            "market_title": None,
+            "confidence": 0.0,
+        }
+
+        def normalize_name(name: str) -> str:
+            return re.sub(r"[^a-z]", "", (name or "").lower())
+
+        def teams_match(bet_team: str, market_text: str) -> bool:
+            bet_norm = TeamNameMatcher.normalize(bet_team).upper()
+            text_norm = TeamNameMatcher.normalize(market_text).upper()
+            if bet_norm and bet_norm in text_norm:
+                return True
+            bet_simple = normalize_name(bet_team)
+            text_simple = normalize_name(market_text)
+            return bool(bet_simple) and bet_simple in text_simple
+
+        def extract_yes_levels(orderbook: Dict[str, Any]) -> Optional[List[Dict[str, Any]]]:
+            candidates = [
+                orderbook.get("yes"),
+                (orderbook.get("bids") or {}).get("yes")
+                if isinstance(orderbook.get("bids"), dict)
+                else None,
+                orderbook.get("yes_bids"),
+                (orderbook.get("orderbook") or {}).get("yes")
+                if isinstance(orderbook.get("orderbook"), dict)
+                else None,
+                (orderbook.get("orderbook", {}).get("bids") or {}).get("yes")
+                if isinstance(orderbook.get("orderbook"), dict)
+                and isinstance(orderbook.get("orderbook", {}).get("bids"), dict)
+                else None,
+            ]
+            for levels in candidates:
+                if levels:
+                    return levels
+            return None
+
         try:
-            print(f"🔍 KALSHI: Looking for {away_team} @ {home_team} ({sport})")
-            
-            # Get all game markets for this league
-            all_markets = self.get_game_markets_for_events(league=sport.upper())
-            
-            if not all_markets:
-                print(f"⚠️  KALSHI: No markets found for {sport}")
-                return {
-                    "kalshi_available": False,
-                    "kalshi_prob": None,
-                    "ticker": None,
-                    "title": None
-                }
-            
-            print(f"📊 KALSHI: Found {len(all_markets)} total {sport} markets")
-            
-            # Normalize team names (remove mascots, clean up)
-            home_normalized = self._normalize_team_name(home_team)
-            away_normalized = self._normalize_team_name(away_team)
-            
-            print(f"🔤 KALSHI: Normalized teams:")
-            print(f"  Home: '{home_team}' → '{home_normalized}'")
-            print(f"  Away: '{away_team}' → '{away_normalized}'")
-            
-            # Find matching market
-            best_match = None
-            best_score = 0
-            
-            for market in all_markets:
-                title = market.get("title", "").upper()
-                subtitle = market.get("subtitle", "").upper()
-                full_text = f"{title} {subtitle}"
-                
-                # Check if both teams appear in the market title
-                home_in_title = home_normalized.upper() in full_text
-                away_in_title = away_normalized.upper() in full_text
-                
-                if home_in_title and away_in_title:
-                    # Calculate match score (prefer GAME markets over SPREAD/TOTAL)
-                    score = 1.0
-                    if "GAME" in market.get("series_ticker", "").upper():
-                        score += 0.5
-                    if market.get("subtitle") and " WIN" in market.get("subtitle", "").upper():
-                        score += 0.3
-                        
-                    if score > best_score:
-                        best_score = score
-                        best_match = market
-                        print(f"  ✅ Match: {title} (score: {score})")
-            
-            if not best_match:
-                print(f"❌ KALSHI: No match found for {away_team} @ {home_team}")
-                return {
-                    "kalshi_available": False,
-                    "kalshi_prob": None,
-                    "ticker": None,
-                    "title": None
-                }
+            sports_markets = self.get_sports_markets()
+            if not sports_markets:
+                self.last_error = self.last_error or "No Kalshi sports markets available"
+                return result
 
-            # Extract probability from the market using the most reliable YES price available
-            yes_price = None
-            for key in ["yes_ask_dollars", "yes_bid_dollars", "yes_ask", "yes_bid"]:
-                val = best_match.get(key)
-                if val not in (None, "", "0", 0, "0.0", "0.00"):
-                    yes_price = val
-                    break
+            best_market = None
+            best_score = 0.0
 
-            kalshi_prob = price_to_prob(yes_price)
+            for market in sports_markets:
+                title = (market.get("title") or "")
+                ticker = (market.get("ticker") or "")
+                market_text = f"{title} {ticker}"
+
+                home_match = teams_match(home_team, market_text)
+                away_match = teams_match(away_team, market_text)
+                if not (home_match and away_match):
+                    continue
+
+                score = 1.0
+                if market.get("series_ticker") and "GAME" in str(market.get("series_ticker")).upper():
+                    score += 0.5
+
+                if score > best_score:
+                    best_score = score
+                    best_market = market
+
+            if not best_market:
+                result["kalshi_match_debug"] = "no_market_match"
+                return result
+
+            ticker = best_market.get("ticker")
+            title = best_market.get("title")
+
+            kalshi_prob = None
+            used_key = None
+            price_cents = None
+            if ticker:
+                orderbook = self.get_orderbook(ticker) or {}
+                levels = extract_yes_levels(orderbook)
+                if levels:
+                    level = levels[0] if isinstance(levels, list) and levels else None
+                    if isinstance(level, dict):
+                        price_cents = (
+                            level.get("price")
+                            or level.get("bid")
+                            or level.get("px")
+                        )
+                        used_key = "yes"
+                if price_cents is not None:
+                    try:
+                        kalshi_prob = float(price_cents) / 100.0
+                        logger.info(
+                            "Kalshi orderbook for %s: YES price=%s -> prob=%.3f",
+                            ticker,
+                            price_cents,
+                            kalshi_prob,
+                        )
+                    except Exception:
+                        kalshi_prob = None
+
             if kalshi_prob is None:
-                print("❌ KALSHI: Unable to derive probability from market pricing")
-                return {
-                    "kalshi_available": False,
-                    "kalshi_prob": None,
-                    "ticker": best_match.get("ticker"),
-                    "title": best_match.get("title"),
+                kalshi_prob = 0.5
+                logger.warning(
+                    "Kalshi orderbook missing YES price for %s, defaulting to 0.5",
+                    ticker,
+                )
+                used_key = used_key or "orderbook_empty"
+
+            result.update(
+                {
+                    "kalshi_available": True,
+                    "kalshi_prob": kalshi_prob,
+                    "kalshi_home_prob": kalshi_prob,
+                    "kalshi_away_prob": 1.0 - kalshi_prob if kalshi_prob is not None else None,
+                    "market_ticker": ticker,
+                    "market_title": title,
+                    "confidence": 0.8 if not best_market.get("synthetic") else 0.5,
+                    "kalshi_match_debug": f"matched_ticker={ticker} used_price_key={used_key}",
                 }
+            )
 
-            print(f"✅ KALSHI: Found market: {best_match.get('title')}")
-            print(f"✅ KALSHI: Home win probability: {kalshi_prob * 100:.1f}%")
+            return result
 
-            return {
-                "kalshi_available": True,
-                "kalshi_prob": float(kalshi_prob),
-                "ticker": best_match.get("ticker"),
-                "title": best_match.get("title"),
-                "subtitle": best_match.get("subtitle"),
-                "series_ticker": best_match.get("series_ticker")
-            }
-            
         except Exception as e:
-            print(f"❌ KALSHI: Error in get_game_market: {e}")
-            import traceback
-            print(f"Traceback: {traceback.format_exc()}")
-            return {
-                "kalshi_available": False,
-                "kalshi_prob": None,
-                "ticker": None,
-                "title": None
-            }
+            logger.warning(f"Error getting Kalshi game market: {e}")
+            return result
     
     def _normalize_team_name(self, team_name: str) -> str:
         """Normalize team name by removing mascots and common suffixes
