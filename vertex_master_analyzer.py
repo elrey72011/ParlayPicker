@@ -1292,18 +1292,23 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
         except Exception:
             return False
     
+    # ... inside show_vertex_master_analysis ...
+
     # Filter to only today's calendar day
     games_before_filter = len(display_df)
-    display_df = display_df[display_df["game_time"].apply(is_today_calendar_day)].copy()
+    
+    # FIXED: Add a toggle or check if user wants all games
+    # For now, we disable the strict filter or make it optional
+    # display_df = display_df[display_df["game_time"].apply(is_today_calendar_day)].copy()
+    
+    # Instead of filtering, just sort them so today's games are first
+    display_df["is_today"] = display_df["game_time"].apply(is_today_calendar_day)
+    display_df = display_df.sort_values(["is_today", "win_prob"], ascending=[False, False])
+    
     games_after_filter = len(display_df)
     
-    if display_df.empty:
-        st.warning("⚠️ No games found for today. Showing all games.")
-        display_df = results_df.copy()
-    else:
-        today_eastern = datetime.now(pytz.timezone('US/Eastern')).strftime("%B %d, %Y")
-        filtered_count = games_before_filter - games_after_filter
-        st.info(f"📅 Showing {games_after_filter} games for today ({today_eastern}) - Filtered out {filtered_count} games from other days")
+    # Update the info message
+    st.info(f"📅 Showing all {games_after_filter} upcoming games (Sorted by Today -> Best Win %)")
     
     display_df = display_df.sort_values("win_prob", ascending=False).reset_index(drop=True)
     display_df["Rank"] = display_df.index + 1
