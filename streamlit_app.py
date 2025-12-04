@@ -3784,9 +3784,7 @@ def validate_with_kalshi(kalshi_integrator, home_team: str, away_team: str,
         if kalshi_prob is None:
             return None
 
-        # FIXED: Edge = Your model prob - Kalshi crowd prob
-        # Positive edge = You're more confident than the crowd (VALUE BET!)
-        # Negative edge = Crowd is more confident than you
+        # Edge = Your model prob - Kalshi crowd prob
         diff = sportsbook_prob - kalshi_prob
         synthetic_market = market.get('synthetic', False)
 
@@ -3829,6 +3827,7 @@ def validate_with_kalshi(kalshi_integrator, home_team: str, away_team: str,
             'data_source': 'synthetic' if synthetic_market else 'kalshi'
         }
 
+    # --- MAIN TRY/EXCEPT BLOCK ---
     try:
         markets = kalshi_integrator.get_sports_markets()
         if not markets:
