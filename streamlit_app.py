@@ -5855,6 +5855,24 @@ def normalize_team(name: str) -> str:
     return s.strip()
 
 
+def normalize_league(value: str) -> str:
+    """Normalize league/sport labels for matching."""
+
+    if not isinstance(value, str):
+        return ""
+
+    v = value.lower().strip()
+    if "ncaab" in v or "ncaam" in v or "college basketball" in v or "ncaa" in v:
+        return "ncaab"
+    if "ncaaf" in v or "college football" in v:
+        return "ncaaf"
+    if "nba" in v:
+        return "nba"
+    if "nhl" in v:
+        return "nhl"
+    return v
+
+
 def split_game(game: str) -> Tuple[Optional[str], Optional[str]]:
     """
     Convert strings like 'Sacramento Kings @ Houston Rockets' -> (home, away).
@@ -5871,6 +5889,53 @@ def _team_match(n1: str, n2: str) -> bool:
     """Loose match: exact or substring either way."""
 
     return n1 == n2 or n1 in n2 or n2 in n1
+
+
+def parse_pick_row(row: pd.Series) -> Tuple[Optional[str], Optional[float], Optional[str]]:
+    """Parse a pick into structured fields (market type, line, selection)."""
+
+    def _norm_market(val: Any) -> Optional[str]:
+        if val is None:
+            return None
+        s = str(val).lower()
+        if "spread" in s:
+            return "spread"
+        if "total" in s or "over" in s or "under" in s:
+            return "total"
+        if "moneyline" in s or s == "ml":
+            return "moneyline"
+        return None
+
+    market_type = _norm_market(row.get("pick_market_type") or row.get("Market Type") or row.get("Market"))
+    pick_line = _safe_float(row.get("pick_line") or row.get("Line") or row.get("line"))
+    game_str = row.get("game") or row.get("Game")
+    home_team, away_team = split_game(game_str)
+    pick_text = str(row.get("the_pick") or row.get("THE PICK") or row.get("the_pick_display") or "").strip()
+    pick_selection: Optional[str] = None
+
+    if market_type == "total" or any(token in pick_text.lower() for token in ["over", "under"]):
+        market_type = "total"
+        pick_selection = "over" if "over" in pick_text.lower() else ("under" if "under" in pick_text.lower() else None)
+    elif market_type in {"spread", "moneyline"}:
+        norm_pick = normalize_team(pick_text)
+        nhome = normalize_team(home_team) if home_team else ""
+        naway = normalize_team(away_team) if away_team else ""
+        if norm_pick and nhome and _team_match(norm_pick, nhome):
+            pick_selection = "home"
+        elif norm_pick and naway and _team_match(norm_pick, naway):
+            pick_selection = "away"
+    else:
+        norm_pick = normalize_team(pick_text)
+        nhome = normalize_team(home_team) if home_team else ""
+        naway = normalize_team(away_team) if away_team else ""
+        if norm_pick and nhome and _team_match(norm_pick, nhome):
+            market_type = "spread"
+            pick_selection = "home"
+        elif norm_pick and naway and _team_match(norm_pick, naway):
+            market_type = "spread"
+            pick_selection = "away"
+
+    return market_type, pick_line, pick_selection
 
 
 def add_theover_alignment(
@@ -5895,158 +5960,125 @@ def add_theover_alignment(
     spreads = theover_spreads_df.copy() if isinstance(theover_spreads_df, pd.DataFrame) else pd.DataFrame()
     totals = theover_totals_df.copy() if isinstance(theover_totals_df, pd.DataFrame) else pd.DataFrame()
 
-    def _resolve_col(df: pd.DataFrame, candidates: Sequence[str]) -> Optional[str]:
-        for cand in candidates:
-            if cand in df.columns:
-                return cand
-        return None
-
-    def _prepare_theover(df: pd.DataFrame) -> pd.DataFrame:
-        working = df.copy()
-        league_col = _resolve_col(working, ["league", "League", "sport", "Sport"])
-        home_col = _resolve_col(working, ["HomeTeam", "home_team", "home"])
-        away_col = _resolve_col(working, ["AwayTeam", "away_team", "away"])
-        pick_col = _resolve_col(working, ["Pick", "pick", "selection", "side"])
-        line_col = _resolve_col(working, ["Line", "line", "spread", "total"])
-
-        if not all([league_col, home_col, away_col, pick_col]):
-            return pd.DataFrame()
-
-        working["norm_league"] = working[league_col].apply(lambda v: str(v).lower().strip())
-        working["norm_home"] = working[home_col].apply(normalize_team)
-        working["norm_away"] = working[away_col].apply(normalize_team)
-        working["pick_col"] = pick_col
-        working["line_col"] = line_col
-        return working
-
-    spreads = _prepare_theover(spreads)
-    totals = _prepare_theover(totals)
-
-    def find_candidate(df: pd.DataFrame, league: str, nhome: str, naway: str) -> Optional[pd.Series]:
+    for df in (spreads, totals):
         if df.empty:
-            return None
-        subset = df[df["norm_league"] == league]
-        if subset.empty:
-            subset = df
-        exact = subset[(subset["norm_home"] == nhome) & (subset["norm_away"] == naway)]
-        if not exact.empty:
-            return exact.iloc[0]
-        for _, r in subset.iterrows():
-            if _team_match(nhome, r["norm_home"]) and _team_match(naway, r["norm_away"]):
-                return r
-        return None
+            continue
+        df["norm_league"] = df["League"].apply(normalize_league)
+        df["norm_home"] = df["HomeTeam"].apply(normalize_team)
+        df["norm_away"] = df["AwayTeam"].apply(normalize_team)
+        df["match_key"] = df["norm_league"] + "|" + df["norm_home"] + "|" + df["norm_away"]
+
+    spreads_map = {row["match_key"]: row for _, row in spreads.iterrows()} if not spreads.empty else {}
+    totals_map = {row["match_key"]: row for _, row in totals.iterrows()} if not totals.empty else {}
 
     theover_pick_team: List[Optional[str]] = []
     theover_pick_side: List[Optional[str]] = []
     theover_pick_line: List[Optional[Any]] = []
     theover_alignment: List[str] = []
-
-    def _extract(row: pd.Series, candidates: Sequence[str]) -> Optional[Any]:
-        for cand in candidates:
-            if cand in row.index:
-                return row.get(cand)
-        return None
+    theover_edge_raw: List[Optional[float]] = []
+    theover_summary: List[str] = []
 
     for _, row in best_df.iterrows():
-        league = str(_extract(row, ["league", "League"]) or "").lower().strip()
-        game_str = _extract(row, ["game", "Game"])
+        league_val = row.get("league") or row.get("League")
+        game_str = row.get("game") or row.get("Game")
         home, away = split_game(game_str)
-        if not home or not away:
+        market_type, pick_line, pick_selection = parse_pick_row(row)
+
+        if not league_val or not home or not away or market_type not in {"spread", "total", "moneyline"}:
             theover_pick_team.append(None)
             theover_pick_side.append(None)
             theover_pick_line.append(None)
             theover_alignment.append("No Coverage")
+            theover_edge_raw.append(None)
+            theover_summary.append("No TheOver match")
             continue
 
+        league_norm = normalize_league(str(league_val))
         nhome, naway = normalize_team(home), normalize_team(away)
-        market = str(_extract(row, ["pick_market_type", "Market Type", "Market"]) or "").lower()
-        if not market:
+        match_key = f"{league_norm}|{nhome}|{naway}"
+        swap_key = f"{league_norm}|{naway}|{nhome}"
+
+        dataset_map = spreads_map if market_type == "spread" or market_type == "moneyline" else totals_map
+        cand = dataset_map.get(match_key) or dataset_map.get(swap_key)
+
+        if cand is None:
             theover_pick_team.append(None)
             theover_pick_side.append(None)
             theover_pick_line.append(None)
             theover_alignment.append("No Coverage")
+            theover_edge_raw.append(None)
+            theover_summary.append("No TheOver match")
             continue
 
-        if "spread" in market:
-            df = spreads
-        elif any(token in market for token in ("total", "over", "under")):
-            df = totals
-        else:
-            theover_pick_team.append(None)
-            theover_pick_side.append(None)
-            theover_pick_line.append(None)
-            theover_alignment.append("No Coverage")
-            continue
-
-        cand = find_candidate(df, league, nhome, naway)
-        if cand is None or pd.isna(cand.get("pick_col")):
-            theover_pick_team.append(None)
-            theover_pick_side.append(None)
-            theover_pick_line.append(None)
-            theover_alignment.append("No Coverage")
-            continue
-
-        pick_val = str(cand.get(cand.get("pick_col"), "")).strip()
-        line_raw = cand.get(cand.get("line_col")) if cand.get("line_col") else None
+        pick_val = str(cand.get("Pick", "")).strip()
         try:
-            their_line = float(line_raw)
+            their_line = float(cand.get("Line")) if cand.get("Line") not in (None, "") else None
         except Exception:
             their_line = None
 
-        our_side = str(_extract(row, ["pick_selection", "pick_side", "Side"]) or "").lower()
-        if not our_side:
-            sel_val = str(_extract(row, ["Selection", "selection"]) or "")
-            sel_norm = normalize_team(sel_val)
-            our_side = "home" if sel_norm and _team_match(sel_norm, nhome) else "away"
-
-        our_line_raw = _extract(row, ["pick_line", "Line", "line"])
-        try:
-            our_line = float(our_line_raw)
-        except Exception:
-            our_line = None
-
-        if "spread" in market:
-            theover_pick_team.append(pick_val)
-            side_norm = normalize_team(pick_val)
-            their_side = "home" if _team_match(side_norm, nhome) else "away"
-            theover_pick_side.append(their_side)
-        else:
-            theover_pick_team.append(None)
-            theover_pick_side.append(pick_val.lower())
+        if market_type == "total":
             their_side = pick_val.lower()
+            theover_pick_team.append(None)
+        else:
+            norm_pick = normalize_team(pick_val)
+            their_side = "home" if _team_match(norm_pick, nhome) else "away"
+            theover_pick_team.append(pick_val)
 
-        theover_pick_line.append(line_raw)
+        theover_pick_side.append(their_side)
+        theover_pick_line.append(cand.get("Line"))
+        edge_val = _safe_float(cand.get("WinProbability"))
+        theover_edge_raw.append(edge_val)
 
-        if our_line is None or their_line is None:
+        if pick_selection is None or pick_line is None or their_line is None or their_side is None:
             theover_alignment.append("Unknown")
+            theover_summary.append("No TheOver match" if edge_val is None else "Unknown")
             continue
 
-        if "spread" in market:
-            if our_side in {"home", "away"} and their_side in {"home", "away"}:
-                if our_side == their_side and abs(our_line - their_line) <= line_tolerance:
-                    theover_alignment.append("Aligned")
-                elif our_side != their_side:
-                    theover_alignment.append("Opposite Side")
-                else:
-                    theover_alignment.append("Different Line")
-            else:
-                theover_alignment.append("Unknown")
+        aligned = abs(pick_line - their_line) <= line_tolerance and pick_selection == their_side
+        opposite = pick_selection in {"home", "away"} and their_side in {"home", "away"} and pick_selection != their_side
+        opposite |= pick_selection in {"over", "under"} and their_side in {"over", "under"} and pick_selection != their_side
+
+        if aligned:
+            theover_alignment.append("Aligned")
+            theover_summary.append("Aligned")
+        elif opposite:
+            theover_alignment.append("Opposite Side")
+            theover_summary.append("Opposite Side")
         else:
-            if our_side in {"over", "under"} and their_side in {"over", "under"}:
-                if our_side == their_side and abs(our_line - their_line) <= line_tolerance:
-                    theover_alignment.append("Aligned")
-                elif our_side != their_side:
-                    theover_alignment.append("Opposite Side")
-                else:
-                    theover_alignment.append("Different Line")
-            else:
-                theover_alignment.append("Unknown")
+            theover_alignment.append("Different Line")
+            theover_summary.append("Different Line")
 
     out = best_df.copy()
     out["theover_pick_team"] = theover_pick_team
     out["theover_pick_side"] = theover_pick_side
     out["theover_pick_line"] = theover_pick_line
+    out["theover_edge_raw"] = theover_edge_raw
     out["theover_alignment"] = theover_alignment
+    out["TheOver"] = theover_summary
+    out["TheOver Edge %"] = [f"{val*100:.1f}" if val is not None else "" for val in theover_edge_raw]
+    return out
+
+
+def apply_pick_parsing(best_df: pd.DataFrame) -> pd.DataFrame:
+    """Add structured pick_market_type, pick_line, pick_selection columns to ranked rows."""
+
+    if best_df is None or best_df.empty:
+        return best_df
+
+    market_types: List[Optional[str]] = []
+    pick_lines: List[Optional[float]] = []
+    pick_selections: List[Optional[str]] = []
+
+    for _, row in best_df.iterrows():
+        mtype, pline, psel = parse_pick_row(row)
+        market_types.append(mtype)
+        pick_lines.append(pline)
+        pick_selections.append(psel)
+
+    out = best_df.copy()
+    out["pick_market_type"] = market_types
+    out["pick_line"] = pick_lines
+    out["pick_selection"] = pick_selections
     return out
 
 
@@ -6065,19 +6097,23 @@ def add_kalshi_status(best_df: pd.DataFrame) -> pd.DataFrame:
                 prob = row.get(cand)
                 break
 
-        debug_val = str(row.get("kalshi_match_debug") or row.get("Kalshi Match Debug") or "")
+        debug_val = str(row.get("kalshi_match_debug") or row.get("Kalshi Match Debug") or row.get("Kalshi") or "")
 
-        prob_val = _safe_float(prob)
+        try:
+            prob_val = _safe_float(prob)
+        except Exception:
+            prob_val = None
+
         if prob_val is not None:
             return "Matched"
 
         dlow = debug_val.lower()
-        if "no_market" in dlow or "no markets" in dlow:
+        if "no kalshi match" in dlow or "no_market" in dlow or "no markets" in dlow:
             return "No market on Kalshi"
-        if "no_symbol" in dlow or "symbol" in dlow:
-            return "Symbol/name mismatch"
-        if "api_empty" in dlow or "no_response" in dlow:
-            return "Kalshi API returned no markets"
+        if "symbol" in dlow or "name mismatch" in dlow:
+            return "Symbol / name mismatch"
+        if "api" in dlow and ("empty" in dlow or "error" in dlow or "no response" in dlow):
+            return "Kalshi API error / empty"
         if debug_val:
             return debug_val
         return "No Kalshi data"
@@ -7253,10 +7289,6 @@ def match_theover_to_leg(
     match_payload['team_score'] = team_score
     return match_payload
 
-    match_payload['failure_stage'] = None
-    match_payload['match_debug'] = match_payload.get('match_debug') or f"team_score={team_score:.2f} market={market_type}"
-    match_payload['team_score'] = team_score
-    return match_payload
 
 # Main function that merges TheOver.ai projections into ParlayPicker legs.
 def apply_theover_probabilities_to_legs(
@@ -12238,6 +12270,9 @@ if is_vertex_ai_enabled():
                 
                     if best_bets_rows:
                         best_bets_df = pd.DataFrame(best_bets_rows)
+
+                    # Add structured pick fields
+                    best_bets_df = apply_pick_parsing(best_bets_df)
 
                     # Enrich with external alignment/status metadata
                     best_bets_df = add_theover_alignment(
