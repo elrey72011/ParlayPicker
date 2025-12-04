@@ -9,6 +9,8 @@ import re
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
+import pytz
+
 import numpy as np
 import pandas as pd
 import streamlit as st
@@ -73,6 +75,20 @@ def split_game(game: str) -> Tuple[Optional[str], Optional[str]]:
 TEAM_FUZZY_THRESHOLD = 0.8
 MAX_LINE_DIFF = 1.5  # allowable difference in spread/total when picking closest match
 BEST_PICK_PRIORITY_EDGE = 1  # primary sort on edge, then EV
+
+
+def is_today_calendar_day(time_str) -> bool:
+    """Return True if the given ISO timestamp is on today's calendar day in US/Eastern."""
+    if pd.isna(time_str) or not time_str:
+        return False
+    try:
+        dt = datetime.fromisoformat(str(time_str).replace("Z", "+00:00"))
+        eastern = pytz.timezone("US/Eastern")
+        dt_et = dt.astimezone(eastern)
+        today_et = datetime.now(eastern).date()
+        return dt_et.date() == today_et
+    except Exception:
+        return False
 
 
 # ---------------------------------------------------------------------------
@@ -570,19 +586,10 @@ class VertexMasterAnalyzer:
             feats["kalshi_match_debug"] = "kalshi_not_configured"
             return feats
 
-        try:
-            home_team = game.get("home_team", "")
-            away_team = game.get("away_team", "")
-            target_line = game.get("home_spread")
-
-            markets = []
-            if hasattr(self.kalshi, "get_sports_markets"):
-                markets = self.kalshi.get_sports_markets() or []
-
-            best_market = None
+        def _pass(markets: List[Dict[str, Any]], enforce_line: bool) -> Tuple[Optional[Dict[str, Any]], float, float]:
+            best_mkt = None
             best_score = 0.0
             best_line_diff = 999.0
-
             for market in markets:
                 title = market.get("title", "") or ""
                 ticker = market.get("ticker", "") or ""
@@ -598,7 +605,6 @@ class VertexMasterAnalyzer:
                 if sim_score < TEAM_FUZZY_THRESHOLD:
                     continue
 
-                # Try to infer line from title/ticker if present
                 line_match = re.search(r"([+-]?\d+\.?\d*)", market_text)
                 line_val = None
                 if line_match:
@@ -607,21 +613,44 @@ class VertexMasterAnalyzer:
                     except Exception:
                         line_val = None
 
-                line_diff = abs((target_line or 0) - line_val) if (target_line is not None and line_val is not None) else None
-                if line_diff is not None and line_diff > MAX_LINE_DIFF:
+                line_diff = (
+                    abs((target_line or 0) - line_val)
+                    if (target_line is not None and line_val is not None)
+                    else None
+                )
+                if enforce_line and line_diff is not None and line_diff > MAX_LINE_DIFF:
                     continue
 
-                score_tuple = (sim_score, -(line_diff or 0))
                 if sim_score > best_score or (sim_score == best_score and (line_diff or 999) < best_line_diff):
-                    best_market = market
+                    best_mkt = market
                     best_score = sim_score
                     best_line_diff = line_diff if line_diff is not None else best_line_diff
+            return best_mkt, best_score, best_line_diff
+
+        try:
+            home_team = game.get("home_team", "")
+            away_team = game.get("away_team", "")
+            target_line = game.get("home_spread")
+
+            markets: List[Dict[str, Any]] = []
+            if hasattr(self.kalshi, "get_sports_markets"):
+                try:
+                    markets = self.kalshi.get_sports_markets() or []
+                except Exception as e:
+                    logger.warning(f"Kalshi markets error: {e}")
+                    feats["kalshi_match_debug"] = f"kalshi_error={e}"
+                    return feats
+
+            best_market, _, best_line_diff = _pass(markets, enforce_line=True)
+            if best_market is None:
+                best_market, _, best_line_diff = _pass(markets, enforce_line=False)
 
             if not best_market:
                 feats["kalshi_match_debug"] = "no_market_match"
                 return feats
 
             yes_price = None
+            used_key = ""
             for key in ["yes_ask_dollars", "yes_bid_dollars", "yes_ask", "yes_bid"]:
                 val = best_market.get(key)
                 if val not in (None, "", "0", 0, "0.0", "0.00"):
@@ -653,7 +682,7 @@ class VertexMasterAnalyzer:
 
         except Exception as e:
             logger.warning(f"Kalshi feature error: {e}")
-            feats["kalshi_match_debug"] = f"error={e}"
+            feats["kalshi_match_debug"] = f"kalshi_error={e}"
 
         return feats
 
@@ -1254,55 +1283,26 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
     st.subheader("🎯 SINGLE BEST PICK PER GAME")
 
     display_df = results_df.copy()
-    
-    # FILTER: Only show games from TODAY (00:00 to 23:59 ET)
-    #from datetime import datetime
-    #import pytz
-    
-    #def is_today_calendar_day(time_str):
-    #   """Check if game is on today's calendar day in Eastern Time (00:00-23:59)"""
-    #    if pd.isna(time_str) or not time_str:
-    #        return False
-    #    try:
-    #        # Parse ISO time from TheOddsAPI
-    #        dt = datetime.fromisoformat(str(time_str).replace('Z', '+00:00'))
-    #        # Convert to Eastern Time
-    #        eastern = pytz.timezone('US/Eastern')
-    #        dt_eastern = dt.astimezone(eastern)
-    #        # Get today's date in Eastern Time
-    #        today_eastern = datetime.now(eastern).date()
-    #        # Check if game date matches today's date
-    #        return dt_eastern.date() == today_eastern
-    #    except Exception:
-    #        return False
-    
-    # ... inside show_vertex_master_analysis ...
-
-    # Filter to only today's calendar day
-    # games_before_filter = len(display_df)
-    
-    # FIXED: Add a toggle or check if user wants all games
-    # For now, we disable the strict filter or make it optional
-    # COMMENT THIS OUT to show all analyzed games (including tomorrow's):
-    # display_df = display_df[display_df["game_time"].apply(is_today_calendar_day)].copy()
-    
-    # REPLACE WITH THIS:
-    # Show ALL games, sorted by date
-    display_df["sort_time"] = pd.to_datetime(display_df["game_time"], errors='coerce')
-    display_df = display_df.sort_values(["sort_time", "win_prob"], ascending=[True, False])
-    
-    st.info(f"📅 Showing all {len(display_df)} analyzed games")
-    
-    # Instead of filtering, just sort them so today's games are first
+    display_df["sort_time"] = pd.to_datetime(display_df["game_time"], errors="coerce")
+    display_df = display_df.sort_values("sort_time", ascending=True)
     display_df["is_today"] = display_df["game_time"].apply(is_today_calendar_day)
-    display_df = display_df.sort_values(["is_today", "win_prob"], ascending=[False, False])
-    
-    games_after_filter = len(display_df)
-    
-    # Update the info message
-    st.info(f"📅 Showing all {games_after_filter} upcoming games (Sorted by Today -> Best Win %)")
-    
-    display_df = display_df.sort_values("win_prob", ascending=False).reset_index(drop=True)
+
+    def league_display(val: str) -> str:
+        v = normalize_league(str(val))
+        mapping = {"nba": "NBA", "ncaab": "NCAAB", "ncaaf": "NCAAF", "nhl": "NHL"}
+        return mapping.get(v, v.upper()) if v else ""
+
+    if "league" in display_df.columns:
+        league_source = display_df["league"]
+    elif "sport_key" in display_df.columns:
+        league_source = display_df["sport_key"]
+    else:
+        league_source = ""
+    display_df["League"] = league_source.apply(league_display) if hasattr(league_source, "apply") else league_display(league_source)
+
+    display_df = display_df.sort_values(
+        ["is_today", "sort_time", "win_prob"], ascending=[False, True, False]
+    ).reset_index(drop=True)
     display_df["Rank"] = display_df.index + 1
     display_df["Win %"] = (display_df["win_prob"] * 100).round(1)
     display_df["Market %"] = display_df["market_prob"].apply(
@@ -1508,6 +1508,7 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
 
     cols = [
         "Rank",
+        "League",
         "league",
         "game",
         "Game Time",
