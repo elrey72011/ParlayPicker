@@ -627,7 +627,28 @@ class KalshiIntegrator:
             kalshi_prob = None
             used_key = None
             price_cents = None
-            if ticker:
+
+            # 1) Use any implied probability provided directly in the market payload
+            for prob_field in [
+                "implied_result_prob",
+                "implied_prob",
+                "yes_bid_dollars",
+                "yes_ask_dollars",
+                "last_price",
+                "last_trade_price",
+                "yes_bid",
+                "yes_ask",
+            ]:
+                if prob_field in best_market and best_market.get(prob_field) not in (None, ""):
+                    prob_candidate = price_to_prob(best_market.get(prob_field))
+                    if prob_candidate is not None:
+                        kalshi_prob = prob_candidate
+                        used_key = prob_field
+                        break
+
+            # 2) Otherwise, inspect the live orderbook for YES bids
+            orderbook = {}
+            if kalshi_prob is None and ticker:
                 orderbook = self.get_orderbook(ticker) or {}
                 levels = extract_yes_levels(orderbook)
                 if levels:
@@ -638,27 +659,30 @@ class KalshiIntegrator:
                             or level.get("bid")
                             or level.get("px")
                         )
-                        used_key = "yes"
-                if price_cents is not None:
-                    try:
-                        kalshi_prob = float(price_cents) / 100.0
-                        logger.info(
-                            "Kalshi orderbook for %s: YES price=%s -> prob=%.3f",
-                            ticker,
-                            price_cents,
-                            kalshi_prob,
-                        )
-                    except Exception:
-                        kalshi_prob = None
+                        used_key = used_key or "orderbook_yes"
+                    if price_cents is not None:
+                        try:
+                            kalshi_prob = float(price_cents) / 100.0
+                            kalshi_prob = max(0.0, min(1.0, kalshi_prob))
+                            logger.info(
+                                "Kalshi YES price for %s: %s -> prob=%.3f",
+                                ticker,
+                                price_cents,
+                                kalshi_prob,
+                            )
+                        except Exception:
+                            kalshi_prob = None
 
+            # 3) Synthetic fallback only when explicitly marked synthetic
             if kalshi_prob is None and best_market.get("synthetic"):
                 kalshi_prob = self._synthetic_probability(home_team, sport)
                 used_key = used_key or "synthetic"
 
             if kalshi_prob is None:
                 logger.warning(
-                    "Kalshi orderbook missing YES price for %s; leaving kalshi_prob=None",
+                    "Kalshi: no usable YES price for %s (orderbook/markets shape: %s)",
                     ticker,
+                    orderbook,
                 )
                 result.update(
                     {
@@ -679,11 +703,11 @@ class KalshiIntegrator:
                     "kalshi_available": True,
                     "kalshi_prob": kalshi_prob,
                     "kalshi_home_prob": kalshi_prob,
-                    "kalshi_away_prob": 1.0 - kalshi_prob if kalshi_prob is not None else None,
+                    "kalshi_away_prob": 1.0 - kalshi_prob,
                     "market_ticker": ticker,
                     "market_title": title,
                     "confidence": 0.8 if not best_market.get("synthetic") else 0.5,
-                    "kalshi_match_debug": f"matched_ticker={ticker} used_price_key={used_key}",
+                    "kalshi_match_debug": f"matched_ticker={ticker} title={title} prob={kalshi_prob:.3f} used_price_key={used_key}",
                 }
             )
 

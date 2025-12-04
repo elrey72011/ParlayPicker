@@ -1062,6 +1062,7 @@ class VertexMasterAnalyzer:
             "is_favorite": pick_is_favorite,
             "home_ml_odds": home_ml,
             "away_ml_odds": away_ml,
+            "kalshi_home_prob": feats.get("kalshi_prob"),
             "kalshi_prob": kalshi_for_pick,
             "kalshi_alignment": feats.get("kalshi_alignment"),
             "kalshi_match_debug": feats.get("kalshi_match_debug", ""),
@@ -1356,25 +1357,41 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
     # Kalshi: Show alignment as text + percentage
     def format_kalshi(row):
         """
-        Determine if Kalshi agrees with our AI pick using the pick-specific
-        probability stored in `kalshi_prob`.
+        Determine if Kalshi agrees with our AI pick.
 
-        - Kalshi > 0.55 => Agree
-        - Kalshi < 0.45 => Disagree
-        - Otherwise => Neutral
+        - Neutral band: 45%–55%
+        - If we picked home: Kalshi > 55% => Agree, <45% => Disagree
+        - If we picked away: Kalshi < 45% => Agree, >55% => Disagree
         """
         market_type = str(row.get("pick_market_type") or "").lower()
         if market_type == "total":
             return "No Kalshi match"
 
-        kalshi_prob = row.get("kalshi_prob")  # Probability for our pick
-        if kalshi_prob is None or pd.isna(kalshi_prob):
+        kalshi_prob_pick = row.get("kalshi_prob")  # Probability relative to our pick
+        if kalshi_prob_pick is None or pd.isna(kalshi_prob_pick):
             return "No Kalshi match"
 
-        if 0.45 <= kalshi_prob <= 0.55:
+        pick_selection = str(row.get("pick_selection") or "").lower()
+        if pick_selection not in ("home", "away"):
+            return "No Kalshi match"
+
+        # Reconstruct home-team probability if we stored pick-specific probability
+        home_prob = row.get("kalshi_home_prob")
+        if home_prob is None and not pd.isna(kalshi_prob_pick):
+            if pick_selection == "home":
+                home_prob = float(kalshi_prob_pick)
+            elif pick_selection == "away":
+                home_prob = 1.0 - float(kalshi_prob_pick)
+
+        if home_prob is None or pd.isna(home_prob):
+            return "No Kalshi match"
+
+        if 0.45 <= home_prob <= 0.55:
             return "Neutral"
 
-        return "Agree" if kalshi_prob > 0.55 else "Disagree"
+        if pick_selection == "home":
+            return "Agree" if home_prob > 0.55 else "Disagree"
+        return "Agree" if home_prob < 0.45 else "Disagree"
     
     display_df["Kalshi"] = display_df.apply(format_kalshi, axis=1)
     display_df["Kalshi %"] = display_df["kalshi_prob"].apply(
