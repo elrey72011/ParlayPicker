@@ -237,11 +237,12 @@ def show_credential_status():
 def process_moneyline_with_ml_predictions(*args, **kwargs):
     """Legacy function for compatibility"""
     logger.warning("process_moneyline_with_ml_predictions called but not implemented - using Vertex AI instead")
+    # Return a clear "no prediction" payload instead of fake 50/50 defaults
     return {
-        'home_prob': 0.5,
-        'away_prob': 0.5,
-        'confidence': 0.5,
-        'edge': 0.0,
+        'home_prob': None,
+        'away_prob': None,
+        'confidence': None,
+        'edge': None,
         'model_used': 'vertex_ai',
         'prediction_successful': False
     }
