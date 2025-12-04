@@ -2531,25 +2531,25 @@ class KalshiIntegrator:
             return re.sub(r'[^a-z]', '', name.lower())
         
         def teams_match(bet_team: str, market_text: str) -> bool:
-        """Check if a bet team matches text in a market using robust TeamNameMatcher."""
-        # Use the robust matcher from app_core to normalize (strips mascots, fixes abbreviations)
-        bet_norm = TeamNameMatcher.normalize(bet_team).upper()
-        market_norm = TeamNameMatcher.normalize(market_text).upper()
-        
-        # 1. Direct match of normalized strings
-        if bet_norm in market_norm:
-            return True
+            """Check if a bet team matches text in a market using robust TeamNameMatcher."""
+            # Use the robust matcher from app_core to normalize (strips mascots, fixes abbreviations)
+            bet_norm = TeamNameMatcher.normalize(bet_team).upper()
+            market_norm = TeamNameMatcher.normalize(market_text).upper()
             
-        # 2. Token intersection for partial matches (e.g. "Utah State" in "Utah State vs...")
-        bet_tokens = set(bet_norm.split())
-        market_tokens = set(market_norm.split())
-        
-        # Filter out common words to avoid weak matches
-        ignored = {"STATE", "TECH", "A&M", "NORTH", "SOUTH", "EAST", "WEST", "CITY"}
-        sig_tokens = {t for t in bet_tokens if t not in ignored and len(t) > 2}
-        
-        if sig_tokens and sig_tokens.issubset(market_tokens):
-            return True
+            # 1. Direct match of normalized strings
+            if bet_norm in market_norm:
+                return True
+                
+            # 2. Token intersection for partial matches (e.g. "Utah State" in "Utah State vs...")
+            bet_tokens = set(bet_norm.split())
+            market_tokens = set(market_norm.split())
+            
+            # Filter out common words to avoid weak matches
+            ignored = {"STATE", "TECH", "A&M", "NORTH", "SOUTH", "EAST", "WEST", "CITY"}
+            sig_tokens = {t for t in bet_tokens if t not in ignored and len(t) > 2}
+            
+            if sig_tokens and sig_tokens.issubset(market_tokens):
+                return True
             
         # 3. Fuzzy match fallback for typos
         return TeamNameMatcher.similarity_score(bet_norm, market_norm) >= 0.8
