@@ -1375,6 +1375,13 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
     st.subheader("🎯 SINGLE BEST PICK PER GAME")
 
     display_df = results_df.copy()
+    # Ensure Kalshi columns exist even when Kalshi is disabled or missing
+    if "kalshi_available" not in display_df.columns:
+        display_df["kalshi_available"] = False
+    if "kalshi_prob" not in display_df.columns:
+        display_df["kalshi_prob"] = None
+    if "kalshi_match_debug" not in display_df.columns:
+        display_df["kalshi_match_debug"] = "no_kalshi_column"
     display_df["sort_time"] = pd.to_datetime(display_df["game_time"], errors="coerce")
     display_df = display_df.sort_values("sort_time", ascending=True)
     display_df["is_today"] = display_df["game_time"].apply(is_today_calendar_day)
