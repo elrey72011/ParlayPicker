@@ -3725,31 +3725,15 @@ def validate_with_kalshi(kalshi_integrator, home_team: str, away_team: str,
         return unique_variations
     
     def teams_match(bet_team: str, market_text: str) -> bool:
-        """Check if a bet team matches text in a market without short false-positives."""
+        """Check if a bet team matches text in a market."""
         bet_variations = normalize_team_name(bet_team)
         market_upper = re.sub(r"[^A-Z0-9 ]", " ", market_text.upper().replace('_', ' '))
-        market_compact = market_upper.replace(' ', '')
-        market_tokens = set(re.findall(r"[A-Z0-9]+", market_upper))
-
+        
+        # FIXED: Use simple substring matching for college teams
+        # If the core name "Utah State" is in the market title "Utah State vs...", it's a match
         for variation in bet_variations:
-            variation_upper = variation.upper()
-            variation_clean = re.sub(r"[^A-Z0-9 ]", " ", variation_upper).strip()
-            variation_compact = variation_clean.replace(' ', '')
-
-            if not variation_compact:
-                continue
-
-            # Longer variations (team names, extended abbreviations) can match anywhere in the text
-            if len(variation_compact) >= 4 and variation_compact in market_compact:
-                return True
-
-            # Compare token-by-token to avoid matching "LA" with "ATLANTA"
-            variation_tokens = re.findall(r"[A-Z0-9]+", variation_clean)
-            if variation_tokens and all(token in market_tokens for token in variation_tokens):
-                return True
-
-            # Allow short tokens (NY, LA, SF) only on whole-word matches
-            if len(variation_compact) <= 3 and variation_clean in market_tokens:
+            variation_clean = re.sub(r"[^A-Z0-9 ]", " ", variation.upper()).strip()
+            if len(variation_clean) > 3 and variation_clean in market_upper:
                 return True
 
         return False
@@ -6784,6 +6768,14 @@ def _ingest_theover_spread_row(
     bucket = entry.setdefault('spreads', {}).setdefault(line_key, {'home': None, 'away': None})
 
     prob_value, prob_source = _coerce_probability(row, THEOVER_SPREAD_PROB_CANDIDATES)
+    
+    # FIXED: If probability is missing but we have a line, calculate heuristic
+    if prob_value is None and line_value is not None:
+        # Simple heuristic: 50% + (line * 2.8%)
+        # e.g. -1.0 line -> 52.8%, -3.0 -> 58.4%
+        prob_value = 0.5 + min(0.35, abs(line_value) * 0.028)
+        prob_source = "line_heuristic"
+
     if prob_value is None:
         generic_prob, generic_source = _coerce_probability(row, THEOVER_GENERIC_PROB_CANDIDATES)
         if generic_prob is not None:
@@ -6796,7 +6788,7 @@ def _ingest_theover_spread_row(
     pick_val = str(row.get('selection', row.get('pick', ''))).strip()
     side = None
     
-    # First check the "side" column directly (from CSV exports)
+    # Logic to determine side (home/away)
     side_val = str(row.get('side', '')).strip().lower()
     if side_val in ('home', 'away'):
         side = side_val
@@ -6828,7 +6820,6 @@ def _ingest_theover_spread_row(
         'line': line_value,
         'row_index': idx,
     }
-
 
 def _ingest_theover_total_row(
     entry: Dict[str, Any],
