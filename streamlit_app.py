@@ -3649,6 +3649,7 @@ def validate_with_kalshi(kalshi_integrator, home_team: str, away_team: str,
     - "Memphis Grizzlies" matches "Memphis"
     - "New York Knicks" matches "New York K"  
     - "Los Angeles Lakers" matches "LA Lakers"
+    - "Utah State Aggies" matches "Utah St"
     
     Returns:
         'kalshi_prob': Kalshi market probability
@@ -3711,13 +3712,31 @@ def validate_with_kalshi(kalshi_integrator, home_team: str, away_team: str,
         """Check if a bet team matches text in a market."""
         bet_variations = normalize_team_name(bet_team)
         market_upper = re.sub(r"[^A-Z0-9 ]", " ", market_text.upper().replace('_', ' '))
-        
-        # FIXED: Use simple substring matching for college teams
-        # If the core name "Utah State" is in the market title "Utah State vs...", it's a match
+        market_tokens = set(re.findall(r"[A-Z0-9]+", market_upper))
+
         for variation in bet_variations:
-            variation_clean = re.sub(r"[^A-Z0-9 ]", " ", variation.upper()).strip()
-            if len(variation_clean) > 3 and variation_clean in market_upper:
+            variation_upper = variation.upper()
+            
+            # Clean up variations to help match "Utah State Aggies" to "Utah State"
+            core_name = variation_upper
+            
+            variation_clean = re.sub(r"[^A-Z0-9 ]", " ", core_name).strip()
+            variation_compact = variation_clean.replace(' ', '')
+
+            if not variation_compact:
+                continue
+
+            # 1. Direct substring match (Best for "Utah State" in "Utah State vs...")
+            if variation_clean in market_upper:
                 return True
+
+            # 2. Token overlap (Fall back for partial matches)
+            variation_tokens = re.findall(r"[A-Z0-9]+", variation_clean)
+            if variation_tokens:
+                # If all significant tokens (len > 2) are present
+                sig_tokens = [t for t in variation_tokens if len(t) > 2]
+                if sig_tokens and all(token in market_tokens for token in sig_tokens):
+                    return True
 
         return False
     
@@ -3817,8 +3836,6 @@ def validate_with_kalshi(kalshi_integrator, home_team: str, away_team: str,
 
         bet_team = home_team if side == 'home' else away_team
         other_team = away_team if side == 'home' else home_team
-
-        canonical_team = find_canonical_team_name(bet_team) or bet_team.upper()
 
         matching_market = None
         fallback_market = None
