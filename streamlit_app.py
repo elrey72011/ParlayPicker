@@ -6021,11 +6021,15 @@ def add_theover_alignment(
         nhome, naway = normalize_team(home), normalize_team(away)
         return f"{league_norm}|{nhome}|{naway}"
 
-    def find_theover_row(row: pd.Series, spreads_df: pd.DataFrame, totals_df: pd.DataFrame) -> Optional[pd.Series]:
+    def find_theover_row(
+        row: pd.Series, spreads_df: pd.DataFrame, totals_df: pd.DataFrame
+    ) -> Tuple[Optional[pd.Series], str]:
         key = row.get("match_key") or _build_match_key_for_row(row)
         mtype = row.get("pick_market_type")
-        if not key or mtype not in {"spread", "moneyline", "total"}:
-            return None
+        if not key:
+            return None, "missing_match_key"
+        if mtype not in {"spread", "moneyline", "total"}:
+            return None, f"unsupported_market_type={mtype}"
 
         if mtype in {"spread", "moneyline"}:
             df = spreads_df
@@ -6033,14 +6037,17 @@ def add_theover_alignment(
             df = totals_df
 
         candidates = df[df["theover_key"] == key]
-        if candidates.empty:
-            parts = key.split("|")
-            if len(parts) == 3:
-                swapped = f"{parts[0]}|{parts[2]}|{parts[1]}"
-                candidates = df[df["theover_key"] == swapped]
-        if candidates.empty:
-            return None
-        return candidates.iloc[0]
+        if not candidates.empty:
+            return candidates.iloc[0], f"matched_key={key}"
+
+        parts = key.split("|")
+        if len(parts) == 3:
+            swapped = f"{parts[0]}|{parts[2]}|{parts[1]}"
+            candidates = df[df["theover_key"] == swapped]
+            if not candidates.empty:
+                return candidates.iloc[0], f"matched_swapped_key={swapped}"
+
+        return None, f"no_match_for_key={key}"
 
     def classify_theover_alignment(row: pd.Series, theover_row: Optional[pd.Series]):
         if theover_row is None:
@@ -6096,12 +6103,13 @@ def add_theover_alignment(
     theover_alignment: List[str] = []
     theover_edge_raw: List[Optional[float]] = []
     theover_summary: List[str] = []
+    theover_match_debug: List[str] = []
 
     out = best_df.copy()
     out["match_key"] = out.apply(_build_match_key_for_row, axis=1)
 
     for _, row in out.iterrows():
-        cand = find_theover_row(row, spreads_clean, totals_clean)
+        cand, match_debug = find_theover_row(row, spreads_clean, totals_clean)
         alignment, team_val, side_val, edge_val, line_val = classify_theover_alignment(row, cand)
 
         theover_pick_team.append(team_val)
@@ -6111,6 +6119,7 @@ def add_theover_alignment(
         theover_edge_raw.append(edge_val)
         # Always mirror the structured alignment; no legacy Agree/Disagree placeholders.
         theover_summary.append(alignment)
+        theover_match_debug.append(match_debug)
 
     out["theover_pick_team"] = theover_pick_team
     out["theover_pick_side"] = theover_pick_side
@@ -6119,6 +6128,7 @@ def add_theover_alignment(
     out["theover_alignment"] = theover_alignment
     out["TheOver"] = theover_summary
     out["TheOver Edge %"] = [f"{val*100:.1f}" if val is not None else "" for val in theover_edge_raw]
+    out["theover_match_debug"] = theover_match_debug
     return out
 
 
@@ -6188,8 +6198,6 @@ def add_kalshi_status(best_df: pd.DataFrame) -> pd.DataFrame:
 def _tokenize_name(name: str) -> List[str]:
     return [token for token in re.split(r"[^a-z0-9]+", normalize_team_name(name)) if token]
 
-def _build_match_key(league: str, home: str, away: str, game_datetime: Optional[datetime]) -> Tuple[str, str, str, Optional[date]]:
-    """Create a deterministic match key for TheOver/OddsAPI joins."""
 
 def _normalize_team_for_match(name: str) -> str:
     """Normalize a team string using the shared matcher (drops mascots/punctuation)."""
@@ -6199,6 +6207,8 @@ def _normalize_team_for_match(name: str) -> str:
     except Exception:
         return " ".join(_tokenize_name(name))
 
+def _build_match_key(league: str, home: str, away: str, game_datetime: Optional[datetime]) -> Tuple[str, str, str, Optional[date]]:
+    """Create a deterministic match key for TheOver/OddsAPI joins."""
 
 def _team_similarity(name_a: str, name_b: str) -> float:
     """Return a fuzzy similarity ratio between two team names (0-1)."""
@@ -7354,6 +7364,13 @@ def match_theover_to_leg(
     match_payload['team_score'] = team_score
     return match_payload
 
+    if match_payload is None:
+        return {
+            'match_debug': f"no_theover_match_payload market={market_type} score={team_score:.2f}",
+            'matches': None,
+            'team_score': team_score,
+            'failure_stage': failure_stage or 'market',
+        }
 
 # Main function that merges TheOver.ai projections into ParlayPicker legs.
 def apply_theover_probabilities_to_legs(
@@ -9362,6 +9379,12 @@ with main_tab1:
     theover_ml_data = _collect_theover_dataset("#### 🤖 Moneyline ML projections", "theover_ml")
     theover_spreads_data = _collect_theover_dataset("#### 📐 Spread projections", "theover_spreads")
     theover_totals_data = _collect_theover_dataset("#### 📈 Totals (Over/Under) projections", "theover_totals")
+
+    # TheOver enablement is driven by spreads/totals only (ML is optional and may be absent)
+    theover_enabled = (
+        (theover_spreads_data is not None and not theover_spreads_data.empty)
+        or (theover_totals_data is not None and not theover_totals_data.empty)
+    )
     
     with st.sidebar.expander("🔍 Vertex AI Status"):
         try:
@@ -10175,42 +10198,44 @@ if is_vertex_ai_enabled():
                     if normalized is not None and not normalized.empty:
                         theover_frames.append(normalized)
 
-                if not theover_frames:
+                if not theover_enabled:
                     st.info("ℹ️ No TheOver.ai data uploaded - using TheOddsAPI only")
                 else:
-                    theover_df = pd.concat(theover_frames, ignore_index=True)
+                    st.info("[DEBUG] TheOver data loaded successfully")
+                    theover_df = pd.concat(theover_frames, ignore_index=True) if theover_frames else pd.DataFrame()
                     _debug_df("TheOver combined", theover_df)
 
                     # Build key lookups with a deterministic best-row selection per key
-                    main_best = theover_df.groupby("theover_key").apply(_choose_best_row).reset_index(drop=True)
-                    swap_best = theover_df.groupby("theover_swap_key").apply(_choose_best_row).reset_index(drop=True)
+                    if not theover_df.empty:
+                        main_best = theover_df.groupby("theover_key").apply(_choose_best_row).reset_index(drop=True)
+                        swap_best = theover_df.groupby("theover_swap_key").apply(_choose_best_row).reset_index(drop=True)
 
-                    merged = odds_df.merge(
-                        main_best,
-                        left_on="odds_key",
-                        right_on="theover_key",
-                        how="left",
-                        suffixes=("", "_theover"),
-                    )
+                        merged = odds_df.merge(
+                            main_best,
+                            left_on="odds_key",
+                            right_on="theover_key",
+                            how="left",
+                            suffixes=("", "_theover"),
+                        )
 
-                    matched_games = merged["theover_key"].notna().sum()
-                    total_odds_games = len(odds_df)
-                    total_theover_games = len(theover_df)
-
-                    if matched_games < total_theover_games:
-                        swap_map = {row["theover_swap_key"]: row for _, row in swap_best.iterrows()}
-                        for idx, row in merged[merged["theover_key"].isna()].iterrows():
-                            swap_key = row.get("odds_swap_key")
-                            candidate = swap_map.get(swap_key)
-                            if candidate is None:
-                                continue
-                            for col, val in candidate.items():
-                                merged.at[idx, col] = val
                         matched_games = merged["theover_key"].notna().sum()
+                        total_odds_games = len(odds_df)
+                        total_theover_games = len(theover_df)
 
-                    st.info(
-                        f"TheOver coverage: {total_theover_games} rows; initial matches: {matched_games}/{total_odds_games}"
-                    )
+                        if matched_games < total_theover_games:
+                            swap_map = {row["theover_swap_key"]: row for _, row in swap_best.iterrows()}
+                            for idx, row in merged[merged["theover_key"].isna()].iterrows():
+                                swap_key = row.get("odds_swap_key")
+                                candidate = swap_map.get(swap_key)
+                                if candidate is None:
+                                    continue
+                                for col, val in candidate.items():
+                                    merged.at[idx, col] = val
+                            matched_games = merged["theover_key"].notna().sum()
+
+                        st.info(
+                            f"TheOver coverage: {total_theover_games} rows; initial matches: {matched_games}/{total_odds_games}"
+                        )
 
                     # Extract unmatched samples for inspection
                     unmatched_odds = merged[merged["theover_key"].isna()][
@@ -11966,7 +11991,7 @@ if is_vertex_ai_enabled():
 
                                 vertex_leg_rows.append(leg_entry)
 
-                if theover_ml_data is not None or theover_spreads_data is not None or theover_totals_data is not None:
+                if theover_enabled:
                     theover_context = apply_theover_probabilities_to_legs(
                         vertex_leg_rows,
                         theover_ml_data=theover_ml_data,
@@ -12464,6 +12489,7 @@ if is_vertex_ai_enabled():
                         'theover_pick_line',
                         'theover_edge_raw',
                         'theover_alignment',
+                        'theover_match_debug',
                         'kalshi_status',
                     ]
                     export_cols = [c for c in export_cols if c in best_bets_df.columns]
@@ -13154,7 +13180,7 @@ if is_vertex_ai_enabled():
                 
                 progress_bar.progress(1.0)
                 
-                if theover_ml_data is not None or theover_spreads_data is not None or theover_totals_data is not None:
+                if theover_enabled:
                     try:
                         apply_theover_probabilities_to_legs(
                             all_legs,
