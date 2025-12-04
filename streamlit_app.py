@@ -2530,40 +2530,38 @@ class KalshiIntegrator:
             """Normalize team name for matching"""
             return re.sub(r'[^a-z]', '', name.lower())
         
-        def teams_match(team: str, text: str) -> bool:
-            """Check if team name appears in text"""
-            team_lower = team.lower()
-            text_lower = text.lower()
+        def teams_match(bet_team: str, market_text: str) -> bool:
+        """Check if a bet team matches text in a market."""
+        # Ensure normalize_team_name is available (it should be defined just above this function)
+        bet_variations = normalize_team_name(bet_team)
+        market_upper = re.sub(r"[^A-Z0-9 ]", " ", market_text.upper().replace('_', ' '))
+        market_tokens = set(re.findall(r"[A-Z0-9]+", market_upper))
+
+        for variation in bet_variations:
+            variation_upper = variation.upper()
             
-            # Direct match
-            if team_lower in text_lower:
+            # Clean up variations to help match "Utah State Aggies" to "Utah State"
+            core_name = variation_upper
+            
+            variation_clean = re.sub(r"[^A-Z0-9 ]", " ", core_name).strip()
+            variation_compact = variation_clean.replace(' ', '')
+
+            if not variation_compact:
+                continue
+
+            # 1. Direct substring match (Best for "Utah State" in "Utah State vs...")
+            if variation_clean in market_upper:
                 return True
-            
-            # Try individual words (for "New York" matching "Knicks" market)
-            team_words = team_lower.split()
-            for word in team_words:
-                if len(word) > 3 and word in text_lower:
+
+            # 2. Token overlap (Fall back for partial matches)
+            variation_tokens = re.findall(r"[A-Z0-9]+", variation_clean)
+            if variation_tokens:
+                # If all significant tokens (len > 2) are present
+                sig_tokens = [t for t in variation_tokens if len(t) > 2]
+                if sig_tokens and all(token in market_tokens for token in sig_tokens):
                     return True
-            
-            # Check abbreviations
-            abbrev_map = {
-                'new york': ['ny', 'knicks', 'yankees', 'mets', 'giants', 'jets', 'rangers', 'islanders'],
-                'los angeles': ['la', 'lakers', 'clippers', 'dodgers', 'rams', 'chargers', 'kings'],
-                'golden state': ['gs', 'warriors'],
-                'oklahoma city': ['okc', 'thunder'],
-                'san antonio': ['sa', 'spurs'],
-                'san francisco': ['sf', '49ers', 'giants'],
-                'tampa bay': ['tb', 'bucs', 'rays', 'lightning'],
-                'green bay': ['gb', 'packers'],
-            }
-            
-            for city, abbrevs in abbrev_map.items():
-                if city in team_lower:
-                    for abbr in abbrevs:
-                        if abbr in text_lower:
-                            return True
-            
-            return False
+
+        return False
         
         try:
             # Get all sports markets
