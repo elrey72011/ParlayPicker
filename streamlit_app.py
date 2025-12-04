@@ -6254,6 +6254,11 @@ def _build_match_key(league: str, home: str, away: str, game_datetime: Optional[
     game_date = _coerce_game_date(game_datetime)
     return league_norm, home_norm, away_norm, game_date
 
+    league_norm = normalize_sport_or_league(league)
+    home_norm = normalize_team_name(home)
+    away_norm = normalize_team_name(away)
+    game_date = _coerce_game_date(game_datetime)
+    return league_norm, home_norm, away_norm, game_date
 
 def _names_match(candidate: str, *targets: str, threshold: float = TEAM_FUZZY_THRESHOLD) -> bool:
     candidate_norm = _normalize_team_for_match(candidate)
