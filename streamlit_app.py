@@ -10117,6 +10117,8 @@ if is_vertex_ai_enabled():
                             best_idx = idx
                     return group.loc[best_idx] if best_idx is not None else group.iloc[0]
 
+                # REPLACE the existing _normalize_dataframe function with this:
+
                 def _normalize_dataframe(
                     df: pd.DataFrame,
                     label: str,
@@ -10129,16 +10131,18 @@ if is_vertex_ai_enabled():
                     if df is None or df.empty:
                         return None
                     working = df.copy()
+                    
+                    # Find columns
                     sport_col = _find_first_column(working.columns, sport_candidates)
                     home_col = _find_first_column(working.columns, home_candidates)
                     away_col = _find_first_column(working.columns, away_candidates)
                     time_col = _find_first_column(working.columns, time_candidates)
 
-                    # FIXED: Allow time_col to be missing for TheOver datasets
+                    # Allow time_col to be missing for TheOver datasets
                     if not all([sport_col, home_col, away_col]):
                         return None
 
-                    # FIXED: Backfill date if missing (defaults to today)
+                    # Backfill date if missing (defaults to today)
                     if not time_col and key_prefix == "theover":
                         fallback_date = datetime.now().date()
                         working["game_dt"] = pd.to_datetime(fallback_date)
@@ -10149,15 +10153,14 @@ if is_vertex_ai_enabled():
                             lambda x: x.date() if isinstance(x, datetime) else None
                         )
                     else:
-                        # OddsAPI must have a time column
-                        return None
+                        return None # OddsAPI needs time
 
                     working["norm_sport"] = working[sport_col].apply(normalize_sport_or_league)
                     working["norm_home"] = working[home_col].apply(normalize_team_name)
                     working["norm_away"] = working[away_col].apply(normalize_team_name)
                     
                     # FIXED: Generate keys WITHOUT DATE to improve matching rate
-                    # This ensures "4 Dec" files match "5 Dec" API games if teams match
+                    # This matches "4 Dec" CSVs with "5 Dec" API games automatically
                     working[f"{key_prefix}_key"] = (
                         working["norm_sport"]
                         + "|"
@@ -10166,7 +10169,7 @@ if is_vertex_ai_enabled():
                         + working["norm_away"]
                     )
                     
-                    # Swap key for reversed home/away
+                    # Swap key for reversed home/away (e.g. NBA home/away designation differences)
                     working[f"{key_prefix}_swap_key"] = (
                         working["norm_sport"]
                         + "|"
@@ -10342,7 +10345,7 @@ if is_vertex_ai_enabled():
                     ].head(50)
 
                     matched_keys = set(theover_combined["theover_key"].dropna())
-                    # FIXED: Safer unmatched calculation
+                    # FIXED: Safer unmatched calculation prevents KeyError
                     if not theover_df.empty and "theover_key" in theover_df.columns:
                         matched_keys = set(theover_combined["theover_key"].dropna())
                         unmatched_theover = theover_df[
