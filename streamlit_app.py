@@ -2411,45 +2411,35 @@ class KalshiIntegrator:
         return self._synthetic_probability(team, sport_key, sportsbook_prob)
     
     def get_markets(self, category: str = "sports", status: str = "open") -> List[Dict]:
-        """Fetch available Kalshi markets.
-
-        Args:
-            category: 'sports', 'politics', 'economics', etc.
-            status: 'open', 'closed', 'settled'
-
-        Returns:
-            List of market dictionaries.
-        """
+        """Fetch available Kalshi markets with increased limit."""
         try:
             endpoint = "/markets"
+            # INCREASED LIMIT to 1000 to ensure we get all active games
             params = {
-                "limit": 100,
+                "limit": 1000,  
                 "status": status
             }
 
             if category:
                 params["series_ticker"] = category.upper()
 
-            # Use authenticated request method with RSA signature
             response_data = self._make_authenticated_request("GET", endpoint, params=params)
 
             if response_data:
                 markets = response_data.get("markets", [])
                 if markets:
                     self.last_error = None
-                    logger.info(f"✅ Loaded {len(markets)} Kalshi markets")
+                    # logger.info(f"✅ Loaded {len(markets)} Kalshi markets")
                     return markets
                 else:
                     self.last_error = "Kalshi API returned no markets"
-                    logger.warning("Kalshi API returned empty markets list")
             else:
-                logger.warning(f"Kalshi API failed: {self.last_error}")
+                # logger.warning(f"Kalshi API failed: {self.last_error}")
+                pass
 
         except Exception as e:
             self.last_error = str(e)
-            logger.warning(f"Error fetching Kalshi markets: {str(e)}")
-
-        # Do not fallback to synthetic data – just return empty to reflect API status
+            
         self._using_synthetic_data = False
         return []
     
@@ -2457,9 +2447,12 @@ class KalshiIntegrator:
         """Get all active sports betting markets"""
         all_markets = self.get_markets()
         
-        # Filter for sports-related markets
-        sports_keywords = ['NFL', 'NBA', 'MLB', 'NHL', 'UFC', 'SOCCER', 'TENNIS', 
-                          'GOLF', 'FOOTBALL', 'BASKETBALL', 'BASEBALL', 'HOCKEY']
+        # ADDED: NCAA, NCAAB, NCAAF, COLLEGE to capture college sports
+        sports_keywords = [
+            'NFL', 'NBA', 'MLB', 'NHL', 'UFC', 'SOCCER', 'TENNIS', 
+            'GOLF', 'FOOTBALL', 'BASKETBALL', 'BASEBALL', 'HOCKEY',
+            'NCAA', 'NCAAB', 'NCAAF', 'COLLEGE'
+        ]
         
         sports_markets = []
         for market in all_markets:
