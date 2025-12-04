@@ -3746,6 +3746,16 @@ def validate_with_kalshi(kalshi_integrator, home_team: str, away_team: str,
             'confidence_boost': 0
         }
 
+    except Exception as e:
+        # Fail gracefully
+        return {
+            'kalshi_prob': None,
+            'kalshi_available': False,
+            'validation': 'error',
+            'edge': 0,
+            'confidence_boost': 0
+        }
+
     # --- MAIN TRY/EXCEPT BLOCK ---
     try:
         markets = kalshi_integrator.get_sports_markets()
