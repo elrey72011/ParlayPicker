@@ -583,20 +583,28 @@ class VertexMasterAnalyzer:
             best_score = 0.0
             best_line_diff = 999.0
 
+            # ... inside _get_kalshi_features method ...
+
             for market in markets:
                 title = market.get("title", "") or ""
                 ticker = market.get("ticker", "") or ""
-                market_text = f"{title} {ticker}"
+                market_text = f"{title} {ticker}".upper()
 
-                home_score = TeamNameMatcher.similarity_score(
-                    TeamNameMatcher.normalize(home_team), TeamNameMatcher.normalize(market_text)
-                )
-                away_score = TeamNameMatcher.similarity_score(
-                    TeamNameMatcher.normalize(away_team), TeamNameMatcher.normalize(market_text)
-                )
+                # Normalize names using TeamNameMatcher
+                norm_home = TeamNameMatcher.normalize(home_team).upper()
+                norm_away = TeamNameMatcher.normalize(away_team).upper()
+                
+                # 1. Try Fuzzy Match
+                home_score = TeamNameMatcher.similarity_score(norm_home, TeamNameMatcher.normalize(title).upper())
+                away_score = TeamNameMatcher.similarity_score(norm_away, TeamNameMatcher.normalize(title).upper())
                 sim_score = min(home_score, away_score)
-                if sim_score < TEAM_FUZZY_THRESHOLD:
-                    continue
+                
+                # 2. Try Direct Substring Match (Fix for "Utah St" vs "Utah State")
+                # If the normalized team name appears directly in the market text
+                is_substring_match = (norm_home in market_text) and (norm_away in market_text)
+                
+                if sim_score < 0.65 and not is_substring_match:
+                    continue  # Skip if neither fuzzy nor substring match works
 
                 # Try to infer line from title/ticker if present
                 line_match = re.search(r"([+-]?\d+\.?\d*)", market_text)
@@ -608,8 +616,16 @@ class VertexMasterAnalyzer:
                         line_val = None
 
                 line_diff = abs((target_line or 0) - line_val) if (target_line is not None and line_val is not None) else None
-                if line_diff is not None and line_diff > MAX_LINE_DIFF:
+                if line_diff is not None and line_diff > 2.5: # Relaxed line tolerance
                     continue
+
+                # Boost score if substring match
+                final_score = 1.0 if is_substring_match else sim_score
+                
+                if final_score > best_score:
+                    best_market = market
+                    best_score = final_score
+                    best_line_diff = line_diff if line_diff is not None else best_line_diff
 
                 score_tuple = (sim_score, -(line_diff or 0))
                 if sim_score > best_score or (sim_score == best_score and (line_diff or 999) < best_line_diff):
