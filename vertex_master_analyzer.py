@@ -5,16 +5,90 @@ Rewritten clean version – no Anthropic, uses Google Gemini (Vertex AI)
 plus spread-derived and fallback logic.
 """
 import logging
+import re
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
+
+import pytz
 
 import numpy as np
 import pandas as pd
 import streamlit as st
 
+from app_core.team_name_matcher import TeamNameMatcher
+from app_core.kalshi_integrator import price_to_prob
 from ml_predictions import get_vertex_ai_prediction, is_vertex_ai_enabled
 
 logger = logging.getLogger(__name__)
+
+
+# -------------------------------
+# Normalization helpers
+# -------------------------------
+
+
+def normalize_team(name: str) -> str:
+    """Lowercase, strip punctuation, and smooth common variations for matching."""
+
+    if not isinstance(name, str):
+        return ""
+
+    s = name.lower().strip()
+    s = re.sub(r"[^\w\s]", "", s)  # remove punctuation
+    s = s.replace("st ", "state ").replace("st.", "state ")
+    s = s.replace("univ", "university")
+    s = s.replace("university of ", "")
+    s = s.replace("ucla bruins", "ucla").replace("ucla ", "ucla")
+    s = s.replace("san jose st", "san jose state")
+    s = re.sub(r"\s+", " ", s)
+    return s
+
+
+def normalize_league(value: str) -> str:
+    """Normalize sport/league labels for matching between datasets."""
+
+    if not isinstance(value, str):
+        return ""
+
+    v = value.lower().strip()
+    if "ncaab" in v or "ncaam" in v or "college basketball" in v or "ncaa" in v:
+        return "ncaab"
+    if "ncaaf" in v or "college football" in v:
+        return "ncaaf"
+    if "nba" in v:
+        return "nba"
+    if "nhl" in v:
+        return "nhl"
+    return v
+
+
+def split_game(game: str) -> Tuple[Optional[str], Optional[str]]:
+    """Return (home, away) parsed from strings like 'Away @ Home'."""
+
+    if not isinstance(game, str) or "@" not in game:
+        return None, None
+    away, home = [g.strip() for g in game.split("@", 1)]
+    return home, away
+
+
+# Fuzzy/team matching thresholds used across Kalshi + TheOver enrichment
+TEAM_FUZZY_THRESHOLD = 0.8
+MAX_LINE_DIFF = 1.5  # allowable difference in spread/total when picking closest match
+BEST_PICK_PRIORITY_EDGE = 1  # primary sort on edge, then EV
+
+
+def is_today_calendar_day(time_str) -> bool:
+    """Return True if the given ISO timestamp is on today's calendar day in US/Eastern."""
+    if pd.isna(time_str) or not time_str:
+        return False
+    try:
+        dt = datetime.fromisoformat(str(time_str).replace("Z", "+00:00"))
+        eastern = pytz.timezone("US/Eastern")
+        dt_et = dt.astimezone(eastern)
+        today_et = datetime.now(eastern).date()
+        return dt_et.date() == today_et
+    except Exception:
+        return False
 
 
 # ---------------------------------------------------------------------------
@@ -132,6 +206,8 @@ class VertexMasterAnalyzer:
             "away_ml_odds": game.get("away_ml_odds"),
             "home_spread": game.get("home_spread"),
             "away_spread": game.get("away_spread"),
+            "home_spread_odds": game.get("home_spread_odds"),
+            "away_spread_odds": game.get("away_spread_odds"),
             "total_line": game.get("total_line") or game.get("theover_total"),
             "over_odds": game.get("over_odds"),
             "under_odds": game.get("under_odds"),
@@ -327,7 +403,7 @@ class VertexMasterAnalyzer:
 
     def _get_local_ml_features(self, game: Dict[str, Any]) -> Dict[str, Any]:
         if not self.local_ml:
-            return {"local_ml_prob": 0.5, "local_ml_confidence": 0.0}
+            return {"local_ml_prob": None, "local_ml_confidence": 0.0}
 
         try:
             pred = self.local_ml.predict_game_outcome(
@@ -336,16 +412,18 @@ class VertexMasterAnalyzer:
                 sport_key=game.get("sport_key"),
             )
             return {
-                "local_ml_prob": float(pred.get("home_win_prob", 0.5)),
+                "local_ml_prob": float(pred.get("home_win_prob")) if pred.get("home_win_prob") is not None else None,
                 "local_ml_confidence": float(pred.get("confidence", 0.0)),
             }
         except Exception as e:
             logger.warning(f"Local ML prediction error: {e}")
-            return {"local_ml_prob": 0.5, "local_ml_confidence": 0.0}
+            return {"local_ml_prob": None, "local_ml_confidence": 0.0}
 
     # ---- TheOver.ai + Kalshi -----------------------------------------
 
     def _get_theover_features(self, game: Dict[str, Any]) -> Dict[str, Any]:
+        """Attach TheOver.ai data to a game with forgiving fuzzy matching."""
+
         def sf(val: Any, default: float) -> float:
             try:
                 if val is None or pd.isna(val):
@@ -354,65 +432,169 @@ class VertexMasterAnalyzer:
             except Exception:
                 return default
 
-        return {
-            "theover_has_pick": 1 if game.get("theover_probability") not in (None, 0.5) else 0,
+        base = {
+            "theover_has_pick": 1 if game.get("theover_probability") is not None else 0,
             "theover_pick": game.get("theover_pick") or "",
-            "theover_probability": sf(game.get("theover_probability", 0.5), 0.5),
+            "theover_probability": sf(game.get("theover_probability"), np.nan),
             "theover_spread": sf(game.get("theover_spread", 0.0), 0.0),
             "theover_total": sf(game.get("theover_total", 0.0), 0.0),
             "theover_total_pick": game.get("theover_total_pick") or "",
-            "theover_total_probability": sf(game.get("theover_total_probability", 0.5), 0.5),
+            "theover_total_probability": sf(game.get("theover_total_probability"), np.nan),
+            "theover_match_debug": "prepopulated" if game.get("theover_probability") is not None else "no_match_found",
         }
+
+        # If we already have a valid probability, keep it
+        if not pd.isna(base["theover_probability"]):
+            return base
+
+        # Nothing pre-populated; try to match against uploaded TheOver data
+        if not self.theover:
+            base["theover_match_debug"] = "no_theover_dataset"
+            return base
+
+        def _teams_similarity(home: str, away: str, candidate_home: str, candidate_away: str) -> float:
+            h_score = TeamNameMatcher.similarity_score(
+                TeamNameMatcher.normalize(home), TeamNameMatcher.normalize(candidate_home)
+            )
+            a_score = TeamNameMatcher.similarity_score(
+                TeamNameMatcher.normalize(away), TeamNameMatcher.normalize(candidate_away)
+            )
+            return min(h_score, a_score)
+
+        def _choose_best_match(df: pd.DataFrame, market_type: str, target_line: Optional[float]) -> Optional[pd.Series]:
+            best_row = None
+            best_score = 0.0
+            best_line_diff = 999.0
+            for _, row in df.iterrows():
+                sim = _teams_similarity(
+                    game.get("home_team", ""),
+                    game.get("away_team", ""),
+                    row.get("HomeTeam") or row.get("home_team", ""),
+                    row.get("AwayTeam") or row.get("away_team", ""),
+                )
+                if sim < TEAM_FUZZY_THRESHOLD:
+                    continue
+
+                # Pick closest line if we have one; otherwise prioritise similarity only
+                cand_line = row.get("Line") if "Line" in row else row.get("line")
+                try:
+                    cand_line_val = float(cand_line) if cand_line not in (None, "", "-") else None
+                except Exception:
+                    cand_line_val = None
+
+                line_diff = abs((target_line or 0) - cand_line_val) if (target_line is not None and cand_line_val is not None) else None
+                if line_diff is not None and line_diff > MAX_LINE_DIFF:
+                    continue
+
+                score_tuple = (sim, -(line_diff or 0))
+                if sim > best_score or (sim == best_score and (line_diff or 999) < best_line_diff):
+                    best_score = sim
+                    best_row = row
+                    best_line_diff = line_diff if line_diff is not None else best_line_diff
+
+            return best_row
+
+        # Try spreads first, then totals
+        match_row = None
+        match_type = ""
+        line_hint = game.get("home_spread") or game.get("theover_spread")
+        spreads_df = self.theover.get("spreads")
+        totals_df = self.theover.get("totals")
+
+        if spreads_df is not None and not spreads_df.empty:
+            match_row = _choose_best_match(spreads_df, "Spread", line_hint)
+            match_type = "Spread" if match_row is not None else ""
+
+        if match_row is None and totals_df is not None and not totals_df.empty:
+            line_hint = game.get("total_line") or game.get("theover_total")
+            match_row = _choose_best_match(totals_df, "Total", line_hint)
+            match_type = "Total" if match_row is not None else ""
+
+        if match_row is None:
+            base["theover_match_debug"] = "no_match_found"
+            return base
+
+        pick = match_row.get("Pick") or match_row.get("pick") or ""
+        line_val = match_row.get("Line") if "Line" in match_row else match_row.get("line")
+        try:
+            line_val_f = float(line_val) if line_val not in (None, "", "-") else None
+        except Exception:
+            line_val_f = None
+
+        prob_col = match_row.get("Probability") if "Probability" in match_row else match_row.get("probability")
+        try:
+            prob_val = float(prob_col) if prob_col not in (None, "", "-") else None
+        except Exception:
+            prob_val = None
+
+        # If probability missing, derive from spread/total magnitude
+        if prob_val is None and line_val_f is not None:
+            prob_val = 0.5 + min(0.35, abs(line_val_f) * 0.028)
+
+        # Determine if pick refers to home team
+        pick_is_home = False
+        if pick:
+            pick_is_home = TeamNameMatcher.similarity_score(
+                TeamNameMatcher.normalize(pick), TeamNameMatcher.normalize(game.get("home_team", ""))
+            ) >= TEAM_FUZZY_THRESHOLD
+
+        if prob_val is not None:
+            prob_val = max(0.0, min(1.0, prob_val))
+            # Totals: probability refers directly to Over/Under pick instead of home/away
+            if match_type == "Total":
+                over_prob = prob_val if str(pick).lower().startswith("over") else (1.0 - prob_val)
+                base.update(
+                    {
+                        "theover_has_pick": 1,
+                        "theover_pick": base.get("theover_pick", ""),
+                        "theover_probability": base.get("theover_probability", np.nan),
+                        "theover_total": line_val_f if match_type == "Total" else base.get("theover_total", 0.0),
+                        "theover_total_pick": pick,
+                        "theover_total_probability": over_prob,
+                        "theover_match_debug": f"match={match_type}, line_diff={(line_hint - line_val_f) if (line_hint is not None and line_val_f is not None) else 'n/a'}, pick={pick}",
+                    }
+                )
+            else:
+                home_prob = prob_val if pick_is_home else (1.0 - prob_val)
+                base.update(
+                    {
+                        "theover_has_pick": 1,
+                        "theover_pick": pick,
+                        "theover_probability": home_prob,
+                        "theover_spread": line_val_f if match_type == "Spread" else base.get("theover_spread", 0.0),
+                        "theover_total": line_val_f if match_type == "Total" else base.get("theover_total", 0.0),
+                        "theover_total_pick": base.get("theover_total_pick", ""),
+                        "theover_total_probability": base.get("theover_total_probability", np.nan),
+                        "theover_match_debug": f"match={match_type}, line_diff={(line_hint - line_val_f) if (line_hint is not None and line_val_f is not None) else 'n/a'}, pick={pick}",
+                    }
+                )
+        else:
+            base["theover_match_debug"] = "matched_no_probability"
+
+        return base
 
     def _get_kalshi_features(self, game: Dict[str, Any]) -> Dict[str, Any]:
-        feats = {
-            "kalshi_available": False,
-            "kalshi_prob": 0.5,
-            "kalshi_alignment": 0.5,
-        }
-        if not self.kalshi:
-            return feats
+        """
+        TEMPORARY DIAGNOSTIC IMPLEMENTATION
 
+        Ignores the real Kalshi API and returns a synthetic probability so we
+        can verify that Kalshi values flow correctly through the master analysis
+        and export pipeline.
+        """
+        implied = game.get("implied_home_prob")
         try:
-            home_team = game.get("home_team", "")
-            away_team = game.get("away_team", "")
-            sport_key = (game.get("sport_key") or "").lower()
+            implied = float(implied) if implied is not None else None
+        except Exception:
+            implied = None
 
-            if "nba" in sport_key:
-                sport = "NBA"
-            elif "nfl" in sport_key:
-                sport = "NFL"
-            elif "ncaab" in sport_key:
-                sport = "NCAAB"
-            elif "ncaaf" in sport_key:
-                sport = "NCAAF"
-            else:
-                sport = "NBA"
+        prob = implied if implied is not None else 0.60
 
-            kalshi_data = None
-            if hasattr(self.kalshi, "get_game_market"):
-                kalshi_data = self.kalshi.get_game_market(
-                    home_team=home_team, away_team=away_team, sport=sport
-                )
-
-            if kalshi_data and kalshi_data.get("kalshi_available"):
-                prob = float(kalshi_data.get("kalshi_prob", 0.5))
-            else:
-                # Synthetic: very light-weight blend of implied + theover
-                implied = game.get("implied_home_prob", 0.5) or 0.5
-                theo = game.get("theover_probability", implied) or implied
-                prob = float(0.7 * theo + 0.3 * implied)
-
-            prob = max(0.15, min(0.85, prob))
-            feats["kalshi_available"] = True
-            feats["kalshi_prob"] = prob
-
-            implied = game.get("implied_home_prob", 0.5) or 0.5
-            feats["kalshi_alignment"] = 1.0 - abs(prob - implied)
-        except Exception as e:
-            logger.warning(f"Kalshi feature error: {e}")
-
-        return feats
+        return {
+            "kalshi_available": True,
+            "kalshi_prob": prob,
+            "kalshi_alignment": None,
+            "kalshi_match_debug": "DEBUG_SYNTHETIC_PROB",
+        }
 
     # ---- Derived features --------------------------------------------
 
@@ -441,26 +623,24 @@ class VertexMasterAnalyzer:
         implied_home = feats.get("implied_home_prob")
         if implied_home is None:
             implied_home = implied_prob_from_american(feats.get("home_ml_odds"))
-        if implied_home is None:
-            implied_home = 0.5
-        d["implied_home_prob"] = float(implied_home)
+        d["implied_home_prob"] = float(implied_home) if implied_home is not None else None
 
         # Consensus blend
         probs = [
-            d["implied_home_prob"],
-            sg("local_ml_prob", 0.5),
-            sg("theover_probability", 0.5),
+            d.get("implied_home_prob"),
+            feats.get("local_ml_prob"),
+            feats.get("theover_probability"),
         ]
         if feats.get("kalshi_available"):
-            probs.append(sg("kalshi_prob", 0.5))
-            probs.append(sg("kalshi_prob", 0.5))  # double weight Kalshi
+            kp = feats.get("kalshi_prob")
+            probs.extend([kp, kp])  # double weight Kalshi when present
         valid = [p for p in probs if p is not None and not pd.isna(p)]
-        d["consensus_prob"] = float(np.mean(valid)) if valid else 0.5
+        d["consensus_prob"] = float(np.mean(valid)) if valid else None
 
         d["kalshi_validation_score"] = (
-            1.0 - abs(sg("kalshi_prob", 0.5) - d["consensus_prob"])
-            if feats.get("kalshi_available")
-            else 0.5
+            1.0 - abs(feats.get("kalshi_prob") - d["consensus_prob"])
+            if feats.get("kalshi_available") and d.get("consensus_prob") is not None and feats.get("kalshi_prob") is not None
+            else None
         )
 
         return d
@@ -515,6 +695,319 @@ class VertexMasterAnalyzer:
                 cleaned.append(0.0)
         return cleaned
 
+    # ---- candidate helpers ------------------------------------------
+
+    def _derive_home_probability(self, feats: Dict[str, Any]) -> Optional[float]:
+        """Estimate home win probability without defaulting to 50/50."""
+        implied_home_prob = feats.get("implied_home_prob")
+        spread = feats.get("home_spread")
+        consensus = feats.get("consensus_prob")
+
+        try:
+            if spread is not None and not pd.isna(spread):
+                spread_val = float(spread)
+                return max(0.15, min(0.85, 0.5 - spread_val * 0.028))
+            if implied_home_prob is not None:
+                return float(implied_home_prob)
+            if consensus is not None:
+                return float(consensus)
+        except Exception:
+            return None
+        return None
+
+    def _spread_cover_probability(self, feats: Dict[str, Any]) -> Optional[float]:
+        """Heuristic for the probability the HOME side covers the spread."""
+        spread = feats.get("home_spread")
+        try:
+            if spread is None or pd.isna(spread):
+                return None
+            spread_val = float(spread)
+            return max(0.1, min(0.9, 0.5 - spread_val * 0.028))
+        except Exception:
+            return None
+
+    def _heuristic_probability(
+        self, market_type: str, selection: str, feats: Dict[str, Any]
+    ) -> Optional[float]:
+        """Fallback probability estimates per market type without using 0.5 defaults."""
+
+        selection = selection.lower()
+        if market_type == "ML":
+            base = self._derive_home_probability(feats)
+            if base is None:
+                return None
+            return base if selection == "home" else (1.0 - base)
+
+        if market_type == "Spread":
+            base = self._spread_cover_probability(feats)
+            if base is None:
+                return None
+            return base if selection == "home" else (1.0 - base)
+
+        if market_type == "Total":
+            total_prob = feats.get("theover_total_probability")
+            if total_prob is None or pd.isna(total_prob):
+                return None
+            return total_prob if selection == "over" else (1.0 - total_prob)
+
+        return None
+
+    def _calc_theover_support(
+        self,
+        feats: Dict[str, Any],
+        market_type: str,
+        selection: str,
+        ai_prob: Optional[float],
+        pick_line: Optional[float],
+    ) -> Dict[str, Any]:
+        """Return TheOver alignment/edge per candidate type using structured alignment labels."""
+
+        selection = selection.lower()
+        alignment = None
+        prob = None
+        edge = None
+        debug = feats.get("theover_match_debug") or "no_match_found"
+
+        pick_team: Optional[str] = None
+        pick_side: Optional[str] = None
+        pick_line: Optional[float] = None
+        selection_line = pick_line
+
+        if market_type == "Total":
+            base_prob = feats.get("theover_total_probability")
+            pick_label = feats.get("theover_total_pick") or ""
+            pick_line = feats.get("theover_total") if feats.get("theover_total") is not None else None
+            if base_prob is not None and not pd.isna(base_prob):
+                pick_side = "over" if isinstance(pick_label, str) and "over" in pick_label.lower() else "under"
+                prob = base_prob if selection == "over" else (1.0 - base_prob)
+                if ai_prob is not None:
+                    edge = ai_prob - prob
+
+                if selection in {"over", "under"} and pick_side in {"over", "under"}:
+                    if selection_line is not None and pick_line is not None:
+                        if abs(float(selection_line) - float(pick_line)) <= MAX_LINE_DIFF and selection == pick_side:
+                            alignment = "Aligned"
+                        elif selection != pick_side:
+                            alignment = "Opposite Side"
+                        else:
+                            alignment = "Different Line"
+                    else:
+                        alignment = "Aligned" if selection == pick_side else "Opposite Side"
+        else:
+            base_prob = feats.get("theover_probability")
+            pick_label = feats.get("theover_pick") or ""
+            pick_line = feats.get("theover_spread") if feats.get("theover_spread") is not None else None
+            if base_prob is not None and not pd.isna(base_prob):
+                is_home = selection == "home"
+                pick_team = pick_label or None
+                pick_norm = TeamNameMatcher.normalize(pick_label)
+                home_norm = TeamNameMatcher.normalize(feats.get("home_team") or "")
+                away_norm = TeamNameMatcher.normalize(feats.get("away_team") or "")
+                if pick_norm and home_norm and TeamNameMatcher.similarity_score(pick_norm, home_norm) >= TEAM_FUZZY_THRESHOLD:
+                    pick_side = "home"
+                elif pick_norm and away_norm and TeamNameMatcher.similarity_score(pick_norm, away_norm) >= TEAM_FUZZY_THRESHOLD:
+                    pick_side = "away"
+
+                prob = base_prob if is_home else (1.0 - base_prob)
+                if ai_prob is not None:
+                    edge = ai_prob - prob
+
+                if selection in {"home", "away"} and pick_side in {"home", "away"}:
+                    if selection_line is not None and pick_line is not None:
+                        if abs(float(selection_line) - float(pick_line)) <= MAX_LINE_DIFF and selection == pick_side:
+                            alignment = "Aligned"
+                        elif selection != pick_side:
+                            alignment = "Opposite Side"
+                        else:
+                            alignment = "Different Line"
+                    else:
+                        alignment = "Aligned" if selection == pick_side else "Opposite Side"
+
+        if alignment is None:
+            alignment = "Unknown" if prob is not None else "No Coverage"
+
+        return {
+            "theover_probability_for_pick": prob,
+            "theover_edge": edge,
+            "theover_alignment": alignment,
+            "theover_match_debug": debug,
+            "theover_pick_team": pick_team,
+            "theover_pick_side": pick_side,
+            "theover_pick_line": pick_line,
+        }
+
+    def _format_pick_text(
+        self,
+        market_type: str,
+        selection: str,
+        line: Optional[float],
+        home_team: str,
+        away_team: str,
+    ) -> str:
+        """Human readable pick string that encodes market type and line."""
+
+        if market_type == "ML":
+            team = home_team if selection == "home" else away_team
+            return f"{team} ML"
+        if market_type == "Spread":
+            team = home_team if selection == "home" else away_team
+            if line is None:
+                return f"{team} Spread"
+            sign = "+" if line > 0 else ""
+            return f"{team} {sign}{line:.1f} Spread"
+        if market_type == "Total":
+            if line is None:
+                return f"{selection.title()} Total"
+            return f"{selection.title()} {line:.1f} Total"
+        return selection
+
+    def _evaluate_candidate(
+        self,
+        feats: Dict[str, Any],
+        market_type: str,
+        selection: str,
+        line: Optional[float],
+        odds: Optional[float],
+        game_league: str,
+        vertex_enabled: bool,
+        numeric_vec: List[float],
+    ) -> Optional[Dict[str, Any]]:
+        """Build a single candidate bet with AI + market metrics."""
+
+        if odds is None or pd.isna(odds):
+            return None
+
+        market_prob = implied_prob_from_american(odds)
+        if market_prob is None:
+            return None
+
+        home_team = feats.get("home_team", "Home")
+        away_team = feats.get("away_team", "Away")
+
+        feature_payload = {
+            "league": game_league,
+            "home_team": home_team,
+            "away_team": away_team,
+            "market_type": market_type,
+            "selection": selection,
+            "line": line,
+            "odds": odds,
+            "numeric_features": numeric_vec,
+            "home_ml_odds": feats.get("home_ml_odds"),
+            "away_ml_odds": feats.get("away_ml_odds"),
+            "home_spread": feats.get("home_spread"),
+            "total_line": feats.get("total_line"),
+            "implied_home_prob": feats.get("implied_home_prob"),
+            "theover_probability": feats.get("theover_probability"),
+            "theover_total_probability": feats.get("theover_total_probability"),
+            "kalshi_prob": feats.get("kalshi_prob"),
+            "local_ml_prob": feats.get("local_ml_prob"),
+            "consensus_prob": feats.get("consensus_prob"),
+        }
+
+        context = (
+            f"{game_league} game: {away_team} at {home_team}. "
+            f"Market={market_type}, selection={selection}, line={line}, odds={odds}."
+        )
+
+        ai_prob = None
+        if vertex_enabled:
+            try:
+                ai_prob = get_vertex_ai_prediction(feature_payload, context)
+            except Exception as e:
+                logger.warning(
+                    "Vertex AI prediction failed for %s %s line %s: %s",
+                    market_type,
+                    selection,
+                    line,
+                    e,
+                )
+
+        if ai_prob is None:
+            ai_prob = self._heuristic_probability(market_type, selection, feats)
+            ai_source = "heuristic"
+        else:
+            ai_source = "vertex_ai"
+
+        if ai_prob is None:
+            return None
+
+        try:
+            ai_prob = float(ai_prob)
+        except Exception:
+            return None
+
+        ai_prob = max(0.0, min(1.0, ai_prob))
+        edge = ai_prob - market_prob
+
+        dec = american_to_decimal(odds)
+        ev = ai_prob * (dec - 1.0) - (1.0 - ai_prob) if dec is not None else 0.0
+
+        pick_text = self._format_pick_text(market_type, selection, line, home_team, away_team)
+
+        # Kalshi comparison is only meaningful for home/away style markets
+        kalshi_prob = feats.get("kalshi_prob")
+        kalshi_for_pick = None
+        edge_vs_kalshi = None
+        if kalshi_prob is not None and not pd.isna(kalshi_prob) and market_type in ("ML", "Spread"):
+            kalshi_for_pick = kalshi_prob if selection == "home" else (1.0 - kalshi_prob)
+            edge_vs_kalshi = ai_prob - kalshi_for_pick
+
+        theover_info = self._calc_theover_support(feats, market_type, selection, ai_prob, line)
+
+        # Favorite indicator is only relevant for home/away selections
+        home_ml = feats.get("home_ml_odds")
+        away_ml = feats.get("away_ml_odds")
+        pick_is_favorite = None
+        if market_type in ("ML", "Spread"):
+            home_ip = implied_prob_from_american(home_ml)
+            away_ip = implied_prob_from_american(away_ml)
+            if home_ip is not None and away_ip is not None:
+                home_is_favorite = home_ip >= away_ip
+                pick_is_favorite = home_is_favorite if selection == "home" else (not home_is_favorite)
+
+        return {
+            "league": game_league,
+            "game": f"{away_team} @ {home_team}",
+            "home_team": home_team,
+            "away_team": away_team,
+            "the_pick": pick_text,
+            "pick_team": home_team if selection == "home" else (away_team if selection == "away" else selection.title()),
+            "pick_selection": selection,
+            "pick_spread": line if market_type == "Spread" else np.nan,
+            "pick_market_type": market_type,
+            "pick_line": line,
+            "pick_odds": odds,
+            "win_prob": ai_prob,
+            "market_prob": market_prob,
+            "edge_vs_market": edge,
+            "edge_vs_kalshi": edge_vs_kalshi,
+            "ml_source": ai_source,
+            "is_favorite": pick_is_favorite,
+            "home_ml_odds": home_ml,
+            "away_ml_odds": away_ml,
+            "kalshi_home_prob": feats.get("kalshi_prob"),
+            "kalshi_prob": kalshi_for_pick,
+            "kalshi_alignment": feats.get("kalshi_alignment"),
+            "kalshi_match_debug": feats.get("kalshi_match_debug", ""),
+            "sentiment_diff": feats.get("sentiment_diff"),
+            "ev": ev,
+            "theover_edge": theover_info.get("theover_edge"),
+            "theover_alignment": theover_info.get("theover_alignment"),
+            "theover_match_debug": theover_info.get("theover_match_debug"),
+            "theover_probability_for_pick": theover_info.get("theover_probability_for_pick"),
+            "theover_pick_team": theover_info.get("theover_pick_team"),
+            "theover_pick_side": theover_info.get("theover_pick_side"),
+            "theover_pick_line": theover_info.get("theover_pick_line"),
+            "game_time": feats.get("game_time"),
+            "theover_pick": feats.get("theover_pick"),
+            "theover_total_pick": feats.get("theover_total_pick"),
+            "novig_home_spread": feats.get("novig_home_spread"),
+            "novig_away_spread": feats.get("novig_away_spread"),
+            "novig_home_spread_odds": feats.get("novig_home_spread_odds"),
+            "novig_away_spread_odds": feats.get("novig_away_spread_odds"),
+        }
+
     def analyze_all_games(self, games: List[Dict[str, Any]], league: str = "NBA") -> pd.DataFrame:
         """Run Vertex / Gemini + fallbacks across all games.
 
@@ -526,9 +1019,8 @@ class VertexMasterAnalyzer:
         vertex_enabled = is_vertex_ai_enabled()
 
         ml_sources_used = {
-            "gcp_vertex": 0,
-            "spread_derived": 0,
-            "fallback_heuristic": 0,
+            "vertex_ai": 0,
+            "heuristic": 0,
         }
 
         rows: List[Dict[str, Any]] = []
@@ -556,162 +1048,93 @@ class VertexMasterAnalyzer:
                 home_team = feats.get("home_team")
                 away_team = feats.get("away_team")
 
-                # ------------------------------------------------------------------
-                # 1) Try Vertex / Gemini
-                # ------------------------------------------------------------------
-                ml_source = "spread_derived"
-                home_win_prob: Optional[float] = None
+                candidates: List[Dict[str, Any]] = []
 
-                if vertex_enabled:
-                    try:
-                        feature_payload = {
-                            "league": game_league,
-                            "home_team": home_team,
-                            "away_team": away_team,
-                            "home_ml_odds": feats.get("home_ml_odds"),
-                            "away_ml_odds": feats.get("away_ml_odds"),
-                            "home_spread": feats.get("home_spread"),
-                            "total_line": feats.get("total_line"),
-                            "implied_home_prob": feats.get("implied_home_prob"),
-                            "theover_probability": feats.get("theover_probability"),
-                            "theover_spread": feats.get("theover_spread"),
-                            "theover_total": feats.get("theover_total"),
-                            "theover_total_probability": feats.get("theover_total_probability"),
-                            "kalshi_prob": feats.get("kalshi_prob"),
-                            "local_ml_prob": feats.get("local_ml_prob"),
-                            "consensus_prob": feats.get("consensus_prob"),
-                            "numeric_features": vec,
-                        }
-
-                        context = (
-                            f"{game_league} game: {away_team} at {home_team}. "
-                            f"Sportsbook spread (home): {feats.get('home_spread')}. "
-                            f"TheOver pick: {game.get('theover_pick')} "
-                            f"with line {game.get('theover_spread')}."
-                        )
-
-                        home_win_prob = get_vertex_ai_prediction(feature_payload, context)
-                        if home_win_prob is not None:
-                            ml_source = "gcp_vertex"
-                    except Exception as e:
-                        logger.warning(
-                            "Vertex AI prediction failed for %s vs %s: %s",
-                            away_team,
-                            home_team,
-                            e,
-                        )
-
-                # ------------------------------------------------------------------
-                # 2) Fallback: spread-derived 2.8% per point formula
-                # ------------------------------------------------------------------
-                if home_win_prob is None:
-                    spread = feats.get("home_spread")
-                    implied = feats.get("implied_home_prob", 0.5) or 0.5
-                    try:
-                        if spread is not None and not pd.isna(spread):
-                            spread = float(spread)
-                            # Negative spread (favorite) -> > 0.5
-                            home_win_prob = max(0.15, min(0.85, 0.5 - spread * 0.028))
-                        else:
-                            home_win_prob = float(implied)
-                    except Exception:
-                        home_win_prob = float(implied)
-                    ml_source = "spread_derived"
-
-                # 3) Final fallback: straight consensus if still None
-                if home_win_prob is None:
-                    home_win_prob = float(feats.get("consensus_prob", 0.5) or 0.5)
-                    ml_source = "fallback_heuristic"
-
-                # Track source usage
-                if ml_source in ml_sources_used:
-                    ml_sources_used[ml_source] += 1
-
-                # ------------------------------------------------------------------
-                # Recommended pick - use AI probability to pick the team
-                # DON'T use TheOver.ai's pick (it can be wrong!)
-                # ------------------------------------------------------------------
-                # Pick the team with higher AI win probability
-                if home_win_prob >= 0.5:
-                    pick_team = home_team
-                else:
-                    pick_team = away_team
-
-                # Get TheOver.ai pick for consensus/comparison only
-                theover_pick = feats.get("theover_pick") or ""
-
-                # ------------------------------------------------------------------
-                # Spread value for picked team
-                # ALWAYS use home_spread from TheOddsAPI (reliable)
-                # DON'T use theover_spread (unreliable signs)
-                # ------------------------------------------------------------------
-                home_spread = feats.get("home_spread") or 0.0
-                try:
-                    home_spread = float(home_spread)
-                except Exception:
-                    home_spread = 0.0
-
-                # Calculate picked team's spread based on home_spread
-                if pick_team == home_team:
-                    pick_spread = home_spread  # Home picked, use home spread as-is
-                else:
-                    pick_spread = -home_spread  # Away picked, flip the sign
-
-                try:
-                    pick_spread = float(pick_spread)
-                except Exception:
-                    pick_spread = 0.0
-
-                # Determine which side is actual favorite based on moneylines
                 home_ml = feats.get("home_ml_odds")
                 away_ml = feats.get("away_ml_odds")
-                home_ip = implied_prob_from_american(home_ml) or 0.5
-                away_ip = implied_prob_from_american(away_ml) or 0.5
+                for selection, odds in (("home", home_ml), ("away", away_ml)):
+                    cand = self._evaluate_candidate(
+                        feats,
+                        market_type="ML",
+                        selection=selection,
+                        line=None,
+                        odds=odds,
+                        game_league=game_league,
+                        vertex_enabled=vertex_enabled,
+                        numeric_vec=vec,
+                    )
+                    if cand:
+                        candidates.append(cand)
 
-                home_is_favorite = home_ip >= away_ip
-                pick_is_favorite = home_is_favorite if pick_team == home_team else (not home_is_favorite)
+                home_spread = feats.get("home_spread")
+                away_spread = feats.get("away_spread")
+                try:
+                    if away_spread is None and home_spread is not None:
+                        away_spread = -float(home_spread)
+                    if home_spread is None and away_spread is not None:
+                        home_spread = -float(away_spread)
+                except Exception:
+                    pass
 
-                # Probability for the picked team
-                away_win_prob = 1.0 - home_win_prob
-                pick_win_prob = home_win_prob if pick_team == home_team else away_win_prob
+                for selection, line, odds in (
+                    ("home", home_spread, feats.get("home_spread_odds")),
+                    ("away", away_spread, feats.get("away_spread_odds")),
+                ):
+                    cand = self._evaluate_candidate(
+                        feats,
+                        market_type="Spread",
+                        selection=selection,
+                        line=line,
+                        odds=odds,
+                        game_league=game_league,
+                        vertex_enabled=vertex_enabled,
+                        numeric_vec=vec,
+                    )
+                    if cand:
+                        candidates.append(cand)
 
-                # EV: assume stake = 1 unit using picked team's ML
-                pick_ml = home_ml if pick_team == home_team else away_ml
-                dec = american_to_decimal(pick_ml)
-                if dec is None:
-                    ev = 0.0
-                else:
-                    ev = pick_win_prob * (dec - 1.0) - (1.0 - pick_win_prob)
+                total_line = feats.get("total_line")
+                over_odds = feats.get("over_odds")
+                under_odds = feats.get("under_odds")
+                for selection, odds in (("over", over_odds), ("under", under_odds)):
+                    cand = self._evaluate_candidate(
+                        feats,
+                        market_type="Total",
+                        selection=selection,
+                        line=total_line,
+                        odds=odds,
+                        game_league=game_league,
+                        vertex_enabled=vertex_enabled,
+                        numeric_vec=vec,
+                    )
+                    if cand:
+                        candidates.append(cand)
 
-                rows.append(
-                    {
-                        "league": game_league,
-                        "game": f"{away_team} @ {home_team}",
-                        "home_team": home_team,
-                        "away_team": away_team,
-                        "the_pick": f"{pick_team} {pick_spread:+.1f}",
-                        "pick_team": pick_team,
-                        "pick_spread": pick_spread,
-                        "win_prob": pick_win_prob,
-                        "home_win_prob": home_win_prob,
-                        "ml_source": ml_source,
-                        "is_favorite": pick_is_favorite,
-                        "home_ml_odds": home_ml,
-                        "away_ml_odds": away_ml,
-                        "kalshi_prob": feats.get("kalshi_prob"),
-                        "kalshi_alignment": feats.get("kalshi_alignment"),
-                        "sentiment_diff": feats.get("sentiment_diff"),
-                        "ev": ev,
-                        # Game time and TheOver.ai consensus
-                        "game_time": game.get("commence_time"),
-                        "theover_pick": theover_pick,  # TheOver.ai's pick for consensus
-                        # Novig odds
-                        "novig_home_spread": feats.get("novig_home_spread"),
-                        "novig_away_spread": feats.get("novig_away_spread"),
-                        "novig_home_spread_odds": feats.get("novig_home_spread_odds"),
-                        "novig_away_spread_odds": feats.get("novig_away_spread_odds"),
-                    }
-                )
+                valid_candidates = [
+                    c
+                    for c in candidates
+                    if c.get("win_prob") is not None and c.get("market_prob") is not None
+                ]
+
+                if not valid_candidates:
+                    logger.warning(
+                        "Skipping game %s vs %s - no usable candidates", away_team, home_team
+                    )
+                    continue
+
+                def _sort_key(cand: Dict[str, Any]):
+                    edge_val = cand.get("edge_vs_market")
+                    ev_val = cand.get("ev", -999)
+                    return (edge_val if edge_val is not None else -999, ev_val)
+
+                best_candidate = sorted(valid_candidates, key=_sort_key, reverse=True)[0]
+
+                # Track source usage for the winning candidate
+                src = best_candidate.get("ml_source")
+                if src in ml_sources_used:
+                    ml_sources_used[src] += 1
+
+                rows.append(best_candidate)
             except Exception as e:
                 logger.error(f"Error analyzing game: {e}", exc_info=True)
 
@@ -734,9 +1157,8 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
         return
 
     ml_counts = results_df["ml_source"].value_counts().to_dict()
-    vertex_games = int(ml_counts.get("gcp_vertex", 0))
-    spread_games = int(ml_counts.get("spread_derived", 0))
-    fallback_games = int(ml_counts.get("fallback_heuristic", 0))
+    vertex_games = int(ml_counts.get("vertex_ai", 0))
+    heuristic_games = int(ml_counts.get("heuristic", 0))
 
     st.subheader("🧠 ML Prediction Source Summary")
 
@@ -744,12 +1166,12 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
     with c1:
         st.metric("Google Gemini (Vertex AI)", f"{vertex_games} games")
     with c2:
-        st.metric("📊 Spread-Derived", f"{spread_games} games")
+        st.metric("📊 Vertex fallback / heuristics", f"{heuristic_games} games")
     with c3:
-        st.metric("🪫 Fallback Heuristics", f"{fallback_games} games")
+        st.metric("🧮 Total Candidates", f"{len(results_df)} games")
 
-    if vertex_games == 0 and spread_games > 0:
-        st.info("Using spread × 2.8% formula for all games (Vertex AI not used).")
+    if vertex_games == 0 and heuristic_games > 0:
+        st.info("Using heuristic probabilities for all games (Vertex AI not used).")
 
     st.markdown("---")
     st.subheader("🏆 Vertex AI Master Analysis - Complete Rankings")
@@ -772,49 +1194,101 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
     st.subheader("🎯 SINGLE BEST PICK PER GAME")
 
     display_df = results_df.copy()
-    
-    # FILTER: Only show games from TODAY (00:00 to 23:59 ET)
-    from datetime import datetime
-    import pytz
-    
-    def is_today_calendar_day(time_str):
-        """Check if game is on today's calendar day in Eastern Time (00:00-23:59)"""
-        if pd.isna(time_str) or not time_str:
-            return False
-        try:
-            # Parse ISO time from TheOddsAPI
-            dt = datetime.fromisoformat(str(time_str).replace('Z', '+00:00'))
-            # Convert to Eastern Time
-            eastern = pytz.timezone('US/Eastern')
-            dt_eastern = dt.astimezone(eastern)
-            # Get today's date in Eastern Time
-            today_eastern = datetime.now(eastern).date()
-            # Check if game date matches today's date
-            return dt_eastern.date() == today_eastern
-        except Exception:
-            return False
-    
-    # Filter to only today's calendar day
-    games_before_filter = len(display_df)
-    display_df = display_df[display_df["game_time"].apply(is_today_calendar_day)].copy()
-    games_after_filter = len(display_df)
-    
-    if display_df.empty:
-        st.warning("⚠️ No games found for today. Showing all games.")
-        display_df = results_df.copy()
+    # Ensure Kalshi columns exist even when Kalshi is disabled or missing
+    if "kalshi_available" not in display_df.columns:
+        display_df["kalshi_available"] = False
+    if "kalshi_prob" not in display_df.columns:
+        display_df["kalshi_prob"] = None
+    if "kalshi_match_debug" not in display_df.columns:
+        display_df["kalshi_match_debug"] = "no_kalshi_column"
+    display_df["sort_time"] = pd.to_datetime(display_df["game_time"], errors="coerce")
+    display_df = display_df.sort_values("sort_time", ascending=True)
+    display_df["is_today"] = display_df["game_time"].apply(is_today_calendar_day)
+
+    def league_display(val: str) -> str:
+        v = normalize_league(str(val))
+        mapping = {"nba": "NBA", "ncaab": "NCAAB", "ncaaf": "NCAAF", "nhl": "NHL"}
+        return mapping.get(v, v.upper()) if v else ""
+
+    if "league" in display_df.columns:
+        league_source = display_df["league"]
+    elif "sport_key" in display_df.columns:
+        league_source = display_df["sport_key"]
     else:
-        today_eastern = datetime.now(pytz.timezone('US/Eastern')).strftime("%B %d, %Y")
-        filtered_count = games_before_filter - games_after_filter
-        st.info(f"📅 Showing {games_after_filter} games for today ({today_eastern}) - Filtered out {filtered_count} games from other days")
-    
-    display_df = display_df.sort_values("win_prob", ascending=False).reset_index(drop=True)
+        league_source = ""
+    display_df["League"] = league_source.apply(league_display) if hasattr(league_source, "apply") else league_display(league_source)
+
+    display_df = display_df.sort_values(
+        ["is_today", "sort_time", "win_prob"], ascending=[False, True, False]
+    ).reset_index(drop=True)
     display_df["Rank"] = display_df.index + 1
     display_df["Win %"] = (display_df["win_prob"] * 100).round(1)
+    display_df["Market %"] = display_df["market_prob"].apply(
+        lambda p: p * 100 if p is not None and not pd.isna(p) else np.nan
+    )
+    display_df["Edge vs Market %"] = display_df["edge_vs_market"].apply(
+        lambda e: e * 100 if e is not None and not pd.isna(e) else np.nan
+    )
+    display_df.loc[
+        ~display_df["kalshi_available"].fillna(False),
+        ["kalshi_prob"],
+    ] = None
+
+    def _edge_vs_kalshi(row: pd.Series) -> float:
+        if not row.get("kalshi_available"):
+            return float("nan")
+        p_ai = row.get("win_prob")
+        p_k = row.get("kalshi_prob")
+        if p_ai is None or pd.isna(p_ai) or p_k is None or pd.isna(p_k):
+            return float("nan")
+        return (p_ai - p_k) * 100.0
+
+    display_df["Edge vs Kalshi %"] = display_df.apply(_edge_vs_kalshi, axis=1)
+    display_df["theover_edge_raw"] = display_df.get("theover_probability_for_pick")
+    display_df["TheOver Edge %"] = display_df["theover_edge_raw"].apply(
+        lambda e: e * 100 if e is not None and not pd.isna(e) else ""
+    )
+
+    display_df["Market Type"] = display_df.get("pick_market_type", "")
+
+    def format_line(row):
+        line_val = row.get("pick_line")
+        mkt = row.get("pick_market_type")
+        if line_val is None or pd.isna(line_val):
+            return "—" if mkt != "Spread" else "—"
+        try:
+            line_f = float(line_val)
+        except Exception:
+            return "—"
+        if mkt == "Spread":
+            return f"{line_f:+.1f}"
+        if mkt == "Total":
+            return f"{line_f:.1f}"
+        return "—"
+
+    display_df["Line"] = display_df.apply(format_line, axis=1)
+
+    def format_odds(odds_val):
+        if odds_val is None or pd.isna(odds_val):
+            return "—"
+        try:
+            odds_f = float(odds_val)
+        except Exception:
+            return "—"
+        return f"+{int(odds_f)}" if odds_f > 0 else f"{int(odds_f)}"
+
+    display_df["Odds"] = display_df["pick_odds"].apply(format_odds)
     
     # Changed from emojis to text
-    display_df["Favorite"] = display_df["is_favorite"].apply(
-        lambda x: "Yes" if bool(x) else "No (Underdog)"
-    )
+    def favorite_label(row):
+        if row.get("pick_market_type") == "Total":
+            return "—"
+        val = row.get("is_favorite")
+        if val is None or pd.isna(val):
+            return "—"
+        return "Yes" if bool(val) else "No (Underdog)"
+
+    display_df["Favorite"] = display_df.apply(favorite_label, axis=1)
     
     # Sentiment: Show as +/- percentage impact
     display_df["Sentiment"] = display_df["sentiment_diff"].apply(
@@ -825,32 +1299,39 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
     
     # Kalshi: Show alignment as text + percentage
     def format_kalshi(row):
-        """
-        Determine if Kalshi agrees with our AI pick.
-        - If we picked home team: Kalshi should show >50% for home
-        - If we picked away team: Kalshi should show <50% for home (favoring away)
-        """
+        """Determine Kalshi agreement with a neutral band around 50%."""
+        market_type = str(row.get("pick_market_type") or "").lower()
+        kalshi_prob = row.get("kalshi_prob")
+        kalshi_available = bool(row.get("kalshi_available"))
+
+        if market_type == "total":
+            return "No Kalshi match"
+        if not kalshi_available or kalshi_prob is None or pd.isna(kalshi_prob):
+            return "No Kalshi match"
+
         pick_team = row.get("pick_team", "")
         home_team = row.get("home_team", "")
-        kalshi_prob = row.get("kalshi_prob")  # This is HOME team probability
-        
-        if kalshi_prob is None or pd.isna(kalshi_prob):
-            return "—"
-        
-        # Check if we picked the home team
-        pick_is_home = pick_team.lower() in home_team.lower() if (pick_team and home_team) else False
-        
-        # If we picked home team, Kalshi should show >50%
-        # If we picked away team, Kalshi should show <50%
+        if not pick_team or not home_team:
+            return "No Kalshi match"
+
+        pick_is_home = str(pick_team).strip().lower() == str(home_team).strip().lower()
+
+        if 0.45 <= kalshi_prob <= 0.55:
+            return "Neutral"
+
         if pick_is_home:
-            # We picked home, does Kalshi agree (>50%)?
-            return "Agree" if kalshi_prob > 0.50 else "Disagree"
-        else:
-            # We picked away, does Kalshi agree (<50%)?
-            return "Agree" if kalshi_prob < 0.50 else "Disagree"
-    
+            return "Agree" if kalshi_prob > 0.55 else "Disagree"
+        return "Agree" if kalshi_prob < 0.45 else "Disagree"
+
     display_df["Kalshi"] = display_df.apply(format_kalshi, axis=1)
-    display_df["Kalshi %"] = (display_df["kalshi_prob"] * 100).round(0)
+    display_df["Kalshi %"] = display_df.apply(
+        lambda row: round(row["kalshi_prob"] * 100)
+        if row.get("kalshi_available")
+        and row.get("kalshi_prob") is not None
+        and not pd.isna(row.get("kalshi_prob"))
+        else "N/A",
+        axis=1,
+    )
     
     # Add Kalshi Edge column (YOUR model prob - Kalshi crowd prob)
     def calc_kalshi_edge(row):
@@ -863,12 +1344,21 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
             # Negative edge = Crowd is MORE confident than you
             edge = (win_prob - kalshi_prob) * 100
             return f"{edge:+.1f}%"
-        return "—"
-    
+        return "N/A"
+
     display_df["Kalshi Edge"] = display_df.apply(calc_kalshi_edge, axis=1)
-    
+
+    logger.info(
+        "Kalshi probs sample: %s",
+        display_df["Kalshi %"].dropna().head(10).tolist(),
+    )
+
     display_df["EV"] = display_df["ev"].map(lambda x: f"${x:.2f}")
-    
+
+    # Normalize pick market type casing
+    if "pick_market_type" in display_df.columns:
+        display_df["pick_market_type"] = display_df["pick_market_type"].astype(str).str.lower()
+
     # NEW: Format Game Time column
     def format_game_time(time_str):
         if pd.isna(time_str) or not time_str:
@@ -888,23 +1378,36 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
     
     display_df["Game Time"] = display_df["game_time"].apply(format_game_time)
     
-    # NEW: TheOver.ai Consensus column (text instead of emojis)
-    def format_consensus(row):
-        our_pick = row.get("pick_team", "")
-        theover_pick = row.get("theover_pick", "")
-        
-        if not theover_pick or pd.isna(theover_pick):
-            return "—"  # No TheOver.ai data
-        
-        # Check if picks match (case insensitive, partial match)
-        if our_pick and theover_pick:
-            if our_pick.lower() in theover_pick.lower() or theover_pick.lower() in our_pick.lower():
-                return "Agree"
-            else:
-                return "Disagree"
-        return "—"
-    
-    display_df["TheOver"] = display_df.apply(format_consensus, axis=1)
+    # TheOver alignment/edge columns derived from keyed matches
+    display_df["TheOver"] = display_df.get("theover_alignment", pd.Series([])).fillna("No Coverage")
+    display_df["theover_edge_raw"] = display_df.get("theover_probability_for_pick")
+    display_df["TheOver Edge %"] = display_df["theover_edge_raw"].apply(
+        lambda x: f"{float(x) * 100:.1f}" if pd.notna(x) else ""
+    )
+
+    # Kalshi status indicator
+    def classify_kalshi_status(row: pd.Series) -> str:
+        prob = row.get("kalshi_prob") or row.get("Kalshi %")
+        debug = str(row.get("kalshi_match_debug") or row.get("Kalshi") or "")
+
+        try:
+            if prob is not None and str(prob) != "" and not pd.isna(float(prob)):
+                return "Matched"
+        except Exception:
+            pass
+
+        dlow = debug.lower()
+        if "no kalshi match" in dlow or "no_market" in dlow or "no markets" in dlow:
+            return "No market on Kalshi"
+        if "symbol" in dlow or "name mismatch" in dlow:
+            return "Symbol / name mismatch"
+        if "api" in dlow and ("empty" in dlow or "error" in dlow or "no response" in dlow):
+            return "Kalshi API error / empty"
+        if debug:
+            return debug
+        return "No Kalshi data"
+
+    display_df["kalshi_status"] = display_df.apply(classify_kalshi_status, axis=1)
     
     # NEW: Novig Odds column
     def format_novig_odds(row):
@@ -934,19 +1437,33 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
     
     display_df["Novig"] = display_df.apply(format_novig_odds, axis=1)
 
+    # Ensure debug columns are always readable strings
+    if "kalshi_match_debug" in display_df.columns:
+        display_df["kalshi_match_debug"] = display_df["kalshi_match_debug"].fillna("no_match_found")
+    if "theover_match_debug" in display_df.columns:
+        display_df["theover_match_debug"] = display_df["theover_match_debug"].fillna("no_match_found")
+
     cols = [
         "Rank",
+        "League",
         "league",
         "game",
         "Game Time",
         "the_pick",
+        "Market Type",
+        "Line",
+        "Odds",
         "Win %",
+        "Market %",
+        "Edge vs Market %",
         "Favorite",
         "Novig",     # Novig odds for picked team
         "TheOver",
+        "TheOver Edge %",
         "Sentiment",  # Shows +/-% sentiment impact
         "Kalshi",
         "Kalshi %",
+        "Edge vs Kalshi %",
         "Kalshi Edge",  # NEW - How much Kalshi favors this pick
         "EV",
     ]
@@ -957,7 +1474,28 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
         hide_index=True,
     )
 
-    csv = display_df[cols].to_csv(index=False)
+    csv_cols = cols + [
+        "win_prob",
+        "market_prob",
+        "edge_vs_market",
+        "pick_market_type",
+        "pick_line",
+        "pick_odds",
+        "pick_selection",
+        "theover_pick_team",
+        "theover_pick_side",
+        "theover_pick_line",
+        "theover_edge_raw",
+        "theover_alignment",
+        "kalshi_prob",
+        "edge_vs_kalshi",
+        "kalshi_match_debug",
+        "theover_edge",
+        "theover_match_debug",
+        "kalshi_status",
+    ]
+
+    csv = display_df[csv_cols].to_csv(index=False)
     st.download_button(
         "📥 Download Single Best Pick Per Game (CSV)",
         data=csv,
