@@ -6254,29 +6254,6 @@ def _build_match_key(league: str, home: str, away: str, game_datetime: Optional[
     game_date = _coerce_game_date(game_datetime)
     return league_norm, home_norm, away_norm, game_date
 
-def _team_similarity(name_a: str, name_b: str) -> float:
-    """Return a fuzzy similarity ratio between two team names (0-1)."""
-    norm_a = _normalize_team_for_match(name_a)
-    norm_b = _normalize_team_for_match(name_b)
-    if not norm_a or not norm_b:
-        return 0.0
-    return TeamNameMatcher.similarity_score(norm_a, norm_b)
-
-
-def _build_match_key(league: str, home: str, away: str, game_datetime: Optional[datetime]) -> Tuple[str, str, str, Optional[date]]:
-    """Create a deterministic match key for TheOver/OddsAPI joins."""
-
-    league_norm = normalize_sport_or_league(league)
-    home_norm = normalize_team_name(home)
-    away_norm = normalize_team_name(away)
-    game_date = _coerce_game_date(game_datetime)
-    return league_norm, home_norm, away_norm, game_date
-
-    league_norm = normalize_sport_or_league(league)
-    home_norm = normalize_team_name(home)
-    away_norm = normalize_team_name(away)
-    game_date = _coerce_game_date(game_datetime)
-    return league_norm, home_norm, away_norm, game_date
 
 def _names_match(candidate: str, *targets: str, threshold: float = TEAM_FUZZY_THRESHOLD) -> bool:
     candidate_norm = _normalize_team_for_match(candidate)
@@ -10162,14 +10139,22 @@ if is_vertex_ai_enabled():
                             f"[DEBUG] {label} column choices -> sport={sport_col}, home={home_col}, away={away_col}, time={time_col}"
                         )
 
-                    if not all([sport_col, home_col, away_col, time_col]):
+                    if not all([sport_col, home_col, away_col]):
                         return None
 
                     working["norm_sport"] = working[sport_col].apply(normalize_sport_or_league)
                     working["norm_home"] = working[home_col].apply(normalize_team_name)
                     working["norm_away"] = working[away_col].apply(normalize_team_name)
-                    working["game_dt"] = working[time_col].apply(_coerce_dt)
-                    working["game_date"] = working["game_dt"].apply(lambda x: x.date() if isinstance(x, datetime) else None)
+
+                    if time_col:
+                        working["game_dt"] = working[time_col].apply(_coerce_dt)
+                        working["game_date"] = working["game_dt"].apply(
+                            lambda x: x.date() if isinstance(x, datetime) else None
+                        )
+                    else:
+                        working["game_dt"] = pd.NaT
+                        working["game_date"] = None
+
                     working[f"{key_prefix}_key"] = (
                         working["norm_sport"]
                         + "|"
@@ -10356,9 +10341,15 @@ if is_vertex_ai_enabled():
                     ].head(50)
 
                     matched_keys = set(theover_combined["theover_key"].dropna())
-                    unmatched_theover = theover_df[
-                        ~theover_df["theover_key"].isin(matched_keys)
-                    ][["norm_sport", "norm_home", "norm_away", "game_dt", "theover_key"]].head(50)
+
+                    if theover_df is None or theover_df.empty or "theover_key" not in theover_df.columns:
+                        unmatched_theover = pd.DataFrame(
+                            columns=["norm_sport", "norm_home", "norm_away", "game_dt", "theover_key"]
+                        )
+                    else:
+                        unmatched_theover = theover_df[
+                            ~theover_df["theover_key"].isin(matched_keys)
+                        ][["norm_sport", "norm_home", "norm_away", "game_dt", "theover_key"]].head(50)
 
                     if DEBUG_THEOVER_MERGE:
                         with st.expander("Unmatched OddsAPI games (sample)", expanded=False):
