@@ -6207,6 +6207,8 @@ def _normalize_team_for_match(name: str) -> str:
     except Exception:
         return " ".join(_tokenize_name(name))
 
+def _build_match_key(league: str, home: str, away: str, game_datetime: Optional[datetime]) -> Tuple[str, str, str, Optional[date]]:
+    """Create a deterministic match key for TheOver/OddsAPI joins."""
 
 def _team_similarity(name_a: str, name_b: str) -> float:
     """Return a fuzzy similarity ratio between two team names (0-1)."""
@@ -7362,6 +7364,13 @@ def match_theover_to_leg(
     match_payload['team_score'] = team_score
     return match_payload
 
+    if match_payload is None:
+        return {
+            'match_debug': f"no_theover_match_payload market={market_type} score={team_score:.2f}",
+            'matches': None,
+            'team_score': team_score,
+            'failure_stage': failure_stage or 'market',
+        }
 
 # Main function that merges TheOver.ai projections into ParlayPicker legs.
 def apply_theover_probabilities_to_legs(
