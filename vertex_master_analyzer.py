@@ -1299,7 +1299,7 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
     
     # FIXED: Add a toggle or check if user wants all games
     # For now, we disable the strict filter or make it optional
-    # COMMENT THIS OUT:
+    # COMMENT THIS OUT to show all analyzed games (including tomorrow's):
     # display_df = display_df[display_df["game_time"].apply(is_today_calendar_day)].copy()
     
     # REPLACE WITH THIS:
