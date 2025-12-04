@@ -2554,9 +2554,9 @@ class KalshiIntegrator:
         # 3. Fuzzy match fallback for typos
         return TeamNameMatcher.similarity_score(bet_norm, market_norm) >= 0.8
             
-            # Search for matching market
-            home_normalized = normalize_name(home_team)
-            away_normalized = normalize_name(away_team)
+        # Search for matching market
+        home_normalized = normalize_name(home_team)
+        away_normalized = normalize_name(away_team)
             
             for market in sports_markets:
                 title = market.get('title', '') or ''
