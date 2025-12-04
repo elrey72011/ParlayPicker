@@ -574,243 +574,27 @@ class VertexMasterAnalyzer:
         return base
 
     def _get_kalshi_features(self, game: Dict[str, Any]) -> Dict[str, Any]:
-        """Populate Kalshi features using the integrator's game-level helper."""
+        """
+        TEMPORARY DIAGNOSTIC IMPLEMENTATION
 
-        feats = {
-            "kalshi_available": False,
-            "kalshi_prob": None,
-            "kalshi_alignment": None,
-            "kalshi_match_debug": "no_match_found",
-            "kalshi_home_prob": None,
-            "kalshi_away_prob": None,
-        }
-
-        if not self.kalshi:
-            feats["kalshi_match_debug"] = "kalshi_not_configured"
-            feats["kalshi_home_prob"] = None
-            feats["kalshi_away_prob"] = None
-            return feats
-
-        def _pass(markets: List[Dict[str, Any]], enforce_line: bool) -> Tuple[Optional[Dict[str, Any]], float, float]:
-            best_mkt = None
-            best_score = 0.0
-            best_line_diff = 999.0
-            for market in markets:
-                title = market.get("title", "") or ""
-                ticker = market.get("ticker", "") or ""
-                market_text = f"{title} {ticker}"
-
-                home_score = TeamNameMatcher.similarity_score(
-                    TeamNameMatcher.normalize(home_team), TeamNameMatcher.normalize(market_text)
-                )
-                away_score = TeamNameMatcher.similarity_score(
-                    TeamNameMatcher.normalize(away_team), TeamNameMatcher.normalize(market_text)
-                )
-                sim_score = min(home_score, away_score)
-                if sim_score < TEAM_FUZZY_THRESHOLD:
-                    continue
-
-                line_match = re.search(r"([+-]?\d+\.?\d*)", market_text)
-                line_val = None
-                if line_match:
-                    try:
-                        line_val = float(line_match.group(1))
-                    except Exception:
-                        line_val = None
-
-                line_diff = (
-                    abs((target_line or 0) - line_val)
-                    if (target_line is not None and line_val is not None)
-                    else None
-                )
-                if enforce_line and line_diff is not None and line_diff > MAX_LINE_DIFF:
-                    continue
-
-                if sim_score > best_score or (sim_score == best_score and (line_diff or 999) < best_line_diff):
-                    best_mkt = market
-                    best_score = sim_score
-                    best_line_diff = line_diff if line_diff is not None else best_line_diff
-            return best_mkt, best_score, best_line_diff
-
+        Ignores the real Kalshi API and returns a synthetic probability so we
+        can verify that Kalshi values flow correctly through the master analysis
+        and export pipeline.
+        """
+        implied = game.get("implied_home_prob")
         try:
-            home_team = game.get("home_team", "")
-            away_team = game.get("away_team", "")
-            target_line = game.get("home_spread")
-            try:
-                target_line = float(target_line) if target_line is not None else None
-            except Exception:
-                target_line = None
+            implied = float(implied) if implied is not None else None
+        except Exception:
+            implied = None
 
-            markets: List[Dict[str, Any]] = []
-            if hasattr(self.kalshi, "get_sports_markets"):
-                markets = self.kalshi.get_sports_markets() or []
-            logger.info(
-                "Kalshi: get_sports_markets returned %d markets for game %s vs %s",
-                len(markets),
-                home_team,
-                away_team,
-            )
+        prob = implied if implied is not None else 0.60
 
-            if not markets:
-                feats["kalshi_match_debug"] = "no_markets_from_kalshi"
-                feats["kalshi_home_prob"] = None
-                feats["kalshi_away_prob"] = None
-                logger.warning(
-                    "Kalshi: no markets available (check API keys / network). game=%s vs %s",
-                    home_team,
-                    away_team,
-                )
-                return feats
-            norm_home = TeamNameMatcher.normalize(home_team).upper()
-            norm_away = TeamNameMatcher.normalize(away_team).upper()
-
-            # First pass: exact substring presence for both teams
-            best_market = None
-            best_line_diff = 999.0
-            candidates: List[Dict[str, Any]] = []
-            for market in markets:
-                title = (market.get("title") or "")
-                ticker = (market.get("ticker") or "")
-                text = f"{title} {ticker}".upper()
-                if norm_home in text and norm_away in text:
-                    candidates.append(market)
-
-            if candidates:
-                for market in candidates:
-                    line = market.get("yes_strike") or market.get("strike") or None
-                    try:
-                        line = float(line) if line is not None else None
-                    except Exception:
-                        line = None
-
-                    if target_line is not None and line is not None:
-                        line_diff = abs(float(target_line) - float(line))
-                    else:
-                        line_diff = 0.0
-
-                    if best_market is None or line_diff < best_line_diff:
-                        best_market = market
-                        best_line_diff = line_diff
-            else:
-                # Fallback: fuzzy similarity over all markets
-                best_score = 0.0
-                for market in markets:
-                    title = (market.get("title") or "")
-                    ticker = (market.get("ticker") or "")
-                    market_text = f"{title} {ticker}"
-
-                    home_score = TeamNameMatcher.similarity_score(
-                        TeamNameMatcher.normalize(home_team),
-                        TeamNameMatcher.normalize(market_text),
-                    )
-                    away_score = TeamNameMatcher.similarity_score(
-                        TeamNameMatcher.normalize(away_team),
-                        TeamNameMatcher.normalize(market_text),
-                    )
-                    combined = (home_score + away_score) / 2.0
-                    if combined > best_score:
-                        best_score = combined
-                        best_market = market
-
-            if best_market is None:
-                feats["kalshi_match_debug"] = "no_market_match"
-                feats["kalshi_home_prob"] = None
-                feats["kalshi_away_prob"] = None
-                logger.info(
-                    "Kalshi: no matching market found for %s vs %s out of %d markets",
-                    home_team,
-                    away_team,
-                    len(markets),
-                )
-                return feats
-
-            logger.info(
-                "Kalshi: best market for %s vs %s -> ticker=%s, title=%s",
-                home_team,
-                away_team,
-                best_market.get("ticker"),
-                best_market.get("title"),
-            )
-
-            yes_price = None
-            used_key = None
-            for key in ["yes_ask_dollars", "yes_bid_dollars", "yes_ask", "yes_bid"]:
-                val = best_market.get(key)
-                if val not in (None, "", "0", 0, "0.0", "0.00"):
-                    yes_price = val
-                    used_key = key
-                    break
-
-            if yes_price is None:
-                feats["kalshi_match_debug"] = "no_yes_price"
-                feats["kalshi_home_prob"] = None
-                feats["kalshi_away_prob"] = None
-                logger.warning(
-                    "Kalshi: best market has no usable YES price for %s vs %s. keys tested=%s, raw_market=%s",
-                    home_team,
-                    away_team,
-                    ["yes_ask_dollars", "yes_bid_dollars", "yes_ask", "yes_bid"],
-                    best_market,
-                )
-                return feats
-
-            prob = price_to_prob(yes_price)
-            if prob is None:
-                feats["kalshi_match_debug"] = "invalid_price"
-                feats["kalshi_home_prob"] = None
-                feats["kalshi_away_prob"] = None
-                logger.warning(
-                    "Kalshi: invalid YES price=%s for %s vs %s (key=%s, market=%s)",
-                    yes_price,
-                    home_team,
-                    away_team,
-                    used_key,
-                    best_market,
-                )
-                return feats
-
-            prob = max(0.0, min(1.0, prob))
-            logger.info(
-                "Kalshi: final prob=%.3f for %s vs %s (ticker=%s, key=%s)",
-                prob,
-                home_team,
-                away_team,
-                best_market.get("ticker"),
-                used_key,
-            )
-
-            feats.update(
-                {
-                    "kalshi_available": True,
-                    "kalshi_prob": prob,
-                    "kalshi_home_prob": prob,
-                    "kalshi_away_prob": 1.0 - prob,
-                    "kalshi_alignment": None,
-                    "kalshi_match_debug": f"matched_ticker={best_market.get('ticker')} title={best_market.get('title')}",
-                }
-            )
-
-            implied = game.get("implied_home_prob")
-            if implied is not None and feats["kalshi_prob"] is not None:
-                try:
-                    implied_f = float(implied)
-                    kp = float(feats["kalshi_prob"])
-                    feats["kalshi_alignment"] = (
-                        "Aligned" if abs(implied_f - kp) < 0.05 else "Neutral"
-                    )
-                except Exception:
-                    feats["kalshi_alignment"] = None
-
-        except Exception as e:
-            logger.exception("Kalshi feature error for game %s vs %s: %s", home_team, away_team, e)
-            feats["kalshi_available"] = False
-            feats["kalshi_prob"] = None
-            feats["kalshi_home_prob"] = None
-            feats["kalshi_away_prob"] = None
-            feats["kalshi_alignment"] = None
-            feats["kalshi_match_debug"] = f"error={type(e).__name__}: {e}"
-
-        return feats
+        return {
+            "kalshi_available": True,
+            "kalshi_prob": prob,
+            "kalshi_alignment": None,
+            "kalshi_match_debug": "DEBUG_SYNTHETIC_PROB",
+        }
 
     # ---- Derived features --------------------------------------------
 
