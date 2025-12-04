@@ -2563,40 +2563,40 @@ class KalshiIntegrator:
             ticker = market.get('ticker', '') or ''
             market_text = f"{title} {ticker}"
                 
-                # Check if this market matches both teams
-                home_match = teams_match(home_team, market_text)
-                away_match = teams_match(away_team, market_text)
+            # Check if this market matches both teams
+            home_match = teams_match(home_team, market_text)
+            away_match = teams_match(away_team, market_text)
                 
-                if home_match and away_match:
-                    # Found matching market!
-                    ticker = market.get('ticker', '')
+            if home_match and away_match:
+                # Found matching market!
+                ticker = market.get('ticker', '')
                     
-                    # Get orderbook to determine probabilities
-                    orderbook = self.get_orderbook(ticker) if ticker else {}
+                # Get orderbook to determine probabilities
+                orderbook = self.get_orderbook(ticker) if ticker else {}
                     
-                    yes_bids = orderbook.get('yes', [])
-                    no_bids = orderbook.get('no', [])
+                yes_bids = orderbook.get('yes', [])
+                no_bids = orderbook.get('no', [])
                     
-                    if yes_bids:
-                        # Price is in cents, convert to probability
-                        yes_price = yes_bids[0].get('price', 50)
-                        kalshi_prob = yes_price / 100.0
-                    elif market.get('synthetic'):
-                        # Use synthetic probability
-                        kalshi_prob = self._synthetic_probability(home_team, sport)
-                    else:
-                        kalshi_prob = 0.5
+                if yes_bids:
+                    # Price is in cents, convert to probability
+                    yes_price = yes_bids[0].get('price', 50)
+                    kalshi_prob = yes_price / 100.0
+                elif market.get('synthetic'):
+                    # Use synthetic probability
+                    kalshi_prob = self._synthetic_probability(home_team, sport)
+                else:
+                    kalshi_prob = 0.5
                     
-                    result['kalshi_available'] = True
-                    result['kalshi_prob'] = kalshi_prob
-                    result['kalshi_home_prob'] = kalshi_prob
-                    result['kalshi_away_prob'] = 1 - kalshi_prob
-                    result['market_ticker'] = ticker
-                    result['market_title'] = title
-                    result['confidence'] = 0.8 if not market.get('synthetic') else 0.5
+                result['kalshi_available'] = True
+                result['kalshi_prob'] = kalshi_prob
+                result['kalshi_home_prob'] = kalshi_prob
+                result['kalshi_away_prob'] = 1 - kalshi_prob
+                result['market_ticker'] = ticker
+                result['market_title'] = title
+                result['confidence'] = 0.8 if not market.get('synthetic') else 0.5
                     
-                    logger.info(f"Kalshi match found for {home_team} vs {away_team}: {ticker} = {kalshi_prob:.2%}")
-                    return result
+                logger.info(f"Kalshi match found for {home_team} vs {away_team}: {ticker} = {kalshi_prob:.2%}")
+                return result
             
             # No direct match found - try synthetic market
             if not result['kalshi_available']:
