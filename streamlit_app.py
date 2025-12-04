@@ -10027,8 +10027,6 @@ if is_vertex_ai_enabled():
                             best_idx = idx
                     return group.loc[best_idx] if best_idx is not None else group.iloc[0]
 
-                # REPLACE the existing _normalize_dataframe function with this:
-
                 def _normalize_dataframe(
                     df: pd.DataFrame,
                     label: str,
@@ -10046,35 +10044,44 @@ if is_vertex_ai_enabled():
                     away_col = _find_first_column(working.columns, away_candidates)
                     time_col = _find_first_column(working.columns, time_candidates)
 
-                    # FIXED: Allow time_col to be missing for TheOver datasets
-                    if not all([sport_col, home_col, away_col]):
-                        return None
+                    if DEBUG_THEOVER_MERGE:
+                        st.write(
+                            f"[DEBUG] {label} column choices -> sport={sport_col}, home={home_col}, away={away_col}, time={time_col}"
+                        )
 
-                    # FIXED: Backfill date if missing (defaults to today)
-                    if not time_col and key_prefix == "theover":
-                        fallback_date = datetime.now().date()
-                        working["game_dt"] = pd.to_datetime(fallback_date)
-                        working["game_date"] = fallback_date
-                    elif time_col:
-                        working["game_dt"] = working[time_col].apply(_coerce_dt)
-                        working["game_date"] = working["game_dt"].apply(lambda x: x.date() if isinstance(x, datetime) else None)
-                    else:
+                    if not all([sport_col, home_col, away_col]):
                         return None
 
                     working["norm_sport"] = working[sport_col].apply(normalize_sport_or_league)
                     working["norm_home"] = working[home_col].apply(normalize_team_name)
                     working["norm_away"] = working[away_col].apply(normalize_team_name)
-                    
-                    # FIXED: Dateless keys for better matching
+
+                    if time_col:
+                        working["game_dt"] = working[time_col].apply(_coerce_dt)
+                        working["game_date"] = working["game_dt"].apply(
+                            lambda x: x.date() if isinstance(x, datetime) else None
+                        )
+                    else:
+                        working["game_dt"] = pd.NaT
+                        working["game_date"] = None
+
                     working[f"{key_prefix}_key"] = (
-                        working["norm_sport"] + "|" + 
-                        working["norm_home"] + "|" + 
-                        working["norm_away"]
+                        working["norm_sport"]
+                        + "|"
+                        + working["norm_home"]
+                        + "|"
+                        + working["norm_away"]
+                        + "|"
+                        + working["game_date"].astype(str)
                     )
                     working[f"{key_prefix}_swap_key"] = (
-                        working["norm_sport"] + "|" + 
-                        working["norm_away"] + "|" + 
-                        working["norm_home"]
+                        working["norm_sport"]
+                        + "|"
+                        + working["norm_away"]
+                        + "|"
+                        + working["norm_home"]
+                        + "|"
+                        + working["game_date"].astype(str)
                     )
                     working[f"{key_prefix}_source"] = label
                     return working
@@ -10091,7 +10098,7 @@ if is_vertex_ai_enabled():
                 away_candidates_odds = ["away_team", "away"]
                 time_candidates_odds = ["commence_time", "start_time", "game_time"]
 
-                odds_df = display_df = display_df(
+                odds_df = _normalize_dataframe(
                     odds_df,
                     "OddsAPI",
                     sport_candidates_odds,
@@ -10244,14 +10251,15 @@ if is_vertex_ai_enabled():
                     ].head(50)
 
                     matched_keys = set(theover_combined["theover_key"].dropna())
-                    # FIXED: Safer unmatched calculation prevents KeyError
-                    if not theover_df.empty and "theover_key" in theover_df.columns:
-                        matched_keys = set(theover_combined["theover_key"].dropna())
+
+                    if theover_df is None or theover_df.empty or "theover_key" not in theover_df.columns:
+                        unmatched_theover = pd.DataFrame(
+                            columns=["norm_sport", "norm_home", "norm_away", "game_dt", "theover_key"]
+                        )
+                    else:
                         unmatched_theover = theover_df[
                             ~theover_df["theover_key"].isin(matched_keys)
                         ][["norm_sport", "norm_home", "norm_away", "game_dt", "theover_key"]].head(50)
-                    else:
-                        unmatched_theover = pd.DataFrame()
 
                     if DEBUG_THEOVER_MERGE:
                         with st.expander("Unmatched OddsAPI games (sample)", expanded=False):
@@ -15693,7 +15701,7 @@ from datetime import datetime
 use_gemini = GEMINI_AVAILABLE and st.session_state.get('gcp_project_id')
 use_claude = False  # DISABLED - Using Gemini only
 
-    # Show Gemini status
+# Show Gemini status
 if use_gemini:
     st.success("🧠 Using Google Gemini AI (Vertex AI) - 24x cheaper than Claude!")
     gcp_project = st.session_state.get('gcp_project_id', 'Not set')
