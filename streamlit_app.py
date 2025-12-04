@@ -5842,7 +5842,11 @@ def normalize_sport_or_league(value: str) -> str:
 
 
 def normalize_team(name: str) -> str:
-    """Lowercase, strip punctuation, and smooth common variations for matching."""
+    """Lowercase, strip punctuation, and smooth common variations for matching.
+
+    This is intentionally strict to avoid legacy/preloaded matches: only teams that
+    normalize to the exact same token sequence will be considered equivalent.
+    """
 
     if not isinstance(name, str):
         return ""
@@ -5988,16 +5992,26 @@ def add_theover_alignment(
     spreads = theover_spreads_df.copy() if isinstance(theover_spreads_df, pd.DataFrame) else pd.DataFrame()
     totals = theover_totals_df.copy() if isinstance(theover_totals_df, pd.DataFrame) else pd.DataFrame()
 
-    for df in (spreads, totals):
-        if df.empty:
-            continue
-        df["norm_league"] = df["League"].apply(normalize_league)
-        df["norm_home"] = df["HomeTeam"].apply(normalize_team)
-        df["norm_away"] = df["AwayTeam"].apply(normalize_team)
-        df["match_key"] = df["norm_league"] + "|" + df["norm_home"] + "|" + df["norm_away"]
+    def _prepare(df: pd.DataFrame) -> Dict[str, pd.Series]:
+        if df is None or df.empty:
+            return {}
 
-    spreads_map = {row["match_key"]: row for _, row in spreads.iterrows()} if not spreads.empty else {}
-    totals_map = {row["match_key"]: row for _, row in totals.iterrows()} if not totals.empty else {}
+        required = ["League", "HomeTeam", "AwayTeam"]
+        missing = [col for col in required if col not in df.columns]
+        if missing:
+            return {}
+
+        cleaned = df.dropna(subset=required).copy()
+        cleaned["norm_league"] = cleaned["League"].apply(normalize_league)
+        cleaned["norm_home"] = cleaned["HomeTeam"].apply(normalize_team)
+        cleaned["norm_away"] = cleaned["AwayTeam"].apply(normalize_team)
+        cleaned["match_key"] = cleaned["norm_league"] + "|" + cleaned["norm_home"] + "|" + cleaned["norm_away"]
+
+        # Use exact key lookups only; no partial/fuzzy fallbacks here to avoid false positives.
+        return {row["match_key"]: row for _, row in cleaned.iterrows()}
+
+    spreads_map = _prepare(spreads)
+    totals_map = _prepare(totals)
 
     def find_theover_row(row: pd.Series) -> Optional[pd.Series]:
         market_type = row.get("pick_market_type")
@@ -6014,6 +6028,7 @@ def add_theover_alignment(
         swap_key = f"{league_norm}|{naway}|{nhome}"
 
         dataset_map = spreads_map if market_type in {"spread", "moneyline"} else totals_map
+        # Strictly require a row keyed by the normalized tuple; if not present, treat as no coverage.
         return dataset_map.get(match_key) or dataset_map.get(swap_key)
 
     def classify_theover_alignment(row: pd.Series, theover_row: Optional[pd.Series]):
@@ -6080,7 +6095,8 @@ def add_theover_alignment(
         theover_pick_line.append(line_val)
         theover_alignment.append(alignment)
         theover_edge_raw.append(edge_val)
-        theover_summary.append(alignment if cand is not None else "No TheOver match")
+        # Always mirror the structured alignment; no legacy Agree/Disagree placeholders.
+        theover_summary.append(alignment)
 
     out = best_df.copy()
     out["theover_pick_team"] = theover_pick_team
@@ -6168,6 +6184,8 @@ def _normalize_team_for_match(name: str) -> str:
     except Exception:
         return " ".join(_tokenize_name(name))
 
+def _build_match_key(league: str, home: str, away: str, game_datetime: Optional[datetime]) -> Tuple[str, str, str, Optional[date]]:
+    """Create a deterministic match key for TheOver/OddsAPI joins."""
 
 def _team_similarity(name_a: str, name_b: str) -> float:
     """Return a fuzzy similarity ratio between two team names (0-1)."""
