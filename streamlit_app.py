@@ -3,7 +3,7 @@
 # v9.2 Update: Integrated Vertex-first architecture - Vertex AI now calculates probabilities
 # BEFORE Best Bets and Parlays are generated for consistent, high-quality predictions
 from __future__ import annotations
-import os, io, json, itertools, re, copy, logging, hashlib, math
+import os, io, json, itertools, re, copy, logging, hashlib, math, difflib
 import concurrent.futures
 from functools import lru_cache
 import time
@@ -5774,6 +5774,7 @@ MAX_SPREAD_DIFF = 1.0  # pts tolerance when matching TheOver spread lines
 MAX_TOTAL_DIFF = 1.0  # pts tolerance when matching TheOver total lines
 DATE_TOLERANCE_DAYS = 1  # days tolerance when comparing commence dates to TheOver rows
 DATE_TOLERANCE_HOURS = 3  # hours tolerance when comparing commence times to TheOver rows
+DEBUG_THEOVER_MERGE = True  # Toggle verbose TheOver merge diagnostics
 
 
 def normalize_team_name(name: str) -> str:
@@ -5790,15 +5791,17 @@ def normalize_team_name(name: str) -> str:
     cleaned = (name or "").lower().strip()
     cleaned = re.sub(r"[^a-z0-9\s]", " ", cleaned)
 
-    # Canonical replacements for frequent abbreviations
+    # Canonical replacements for frequent abbreviations and punctuation
     replacements = [
         (r"\bst\.\b", "state"),
         (r"\bst\b", "state"),
-        (r"\bs\.\s?jose st\b", "san jose state"),
-        (r"\bsan jose st\b", "san jose state"),
+        (r"\bu\.\b", "university"),
+        (r"\buniv\b", "university"),
         (r"\buci\b", "uc irvine"),
         (r"\buc irvine\b", "uc irvine"),
         (r"\buc\s?sd\b", "uc san diego"),
+        (r"\bs\.\s?jose st\b", "san jose state"),
+        (r"\bsan jose st\b", "san jose state"),
         (r"\bamerican u\b", "american university"),
         (r"\bamerican u\.\b", "american university"),
     ]
@@ -5806,8 +5809,31 @@ def normalize_team_name(name: str) -> str:
     for pattern, repl in replacements:
         cleaned = re.sub(pattern, repl, cleaned)
 
-    cleaned = " ".join(cleaned.split())
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
     return cleaned
+
+
+def normalize_sport_or_league(value: str) -> str:
+    """Map league/sport strings into a common normalized form."""
+
+    if not value:
+        return ""
+
+    raw = value.lower().strip()
+    aliases = {
+        'basketball_ncaab': 'ncaab',
+        'ncaab': 'ncaab',
+        'ncaam': 'ncaab',
+        'ncaa bk': 'ncaab',
+        'college basketball': 'ncaab',
+        'basketball_nba': 'nba',
+        'nba': 'nba',
+        'icehockey_nhl': 'nhl',
+        'nhl': 'nhl',
+        'american football_nfl': 'nfl',
+        'nfl': 'nfl',
+    }
+    return aliases.get(raw, raw)
 
 
 def _tokenize_name(name: str) -> List[str]:
@@ -5830,6 +5856,16 @@ def _team_similarity(name_a: str, name_b: str) -> float:
     if not norm_a or not norm_b:
         return 0.0
     return TeamNameMatcher.similarity_score(norm_a, norm_b)
+
+
+def _build_match_key(league: str, home: str, away: str, game_datetime: Optional[datetime]) -> Tuple[str, str, str, Optional[date]]:
+    """Create a deterministic match key for TheOver/OddsAPI joins."""
+
+    league_norm = normalize_sport_or_league(league)
+    home_norm = normalize_team_name(home)
+    away_norm = normalize_team_name(away)
+    game_date = _coerce_game_date(game_datetime)
+    return league_norm, home_norm, away_norm, game_date
 
 
 def _names_match(candidate: str, *targets: str, threshold: float = TEAM_FUZZY_THRESHOLD) -> bool:
@@ -6505,6 +6541,7 @@ def prepare_theover_dataset(
 
     for idx, row in df.iterrows():
         league_raw = str(row.get('league', row.get('sport', ''))).strip()
+        league_norm = normalize_sport_or_league(league_raw)
         home_raw = str(row.get('home_team', row.get('hometeam', row.get('home', '')))).strip()
         away_raw = str(row.get('away_team', row.get('awayteam', row.get('away', '')))).strip()
         game_datetime = _coerce_game_datetime(row.get('date') or row.get('game_date') or row.get('commence_time'))
@@ -6523,6 +6560,23 @@ def prepare_theover_dataset(
             continue
 
         entry, swapped = _resolve_theover_entry(records, league_raw, home_raw, away_raw, game_date, game_datetime)
+        entry['league_norm'] = league_norm
+
+        match_key = _build_match_key(league_norm, home_raw, away_raw, game_datetime)
+        swapped_key = _build_match_key(league_norm, away_raw, home_raw, game_datetime)
+        entry.setdefault('match_keys', set()).add(match_key)
+        entry['match_keys'].add(swapped_key)
+        try:
+            df.at[idx, 'theover_match_key'] = ":".join(
+                [
+                    str(match_key[0]),
+                    match_key[1],
+                    match_key[2],
+                    match_key[3].isoformat() if match_key[3] else '',
+                ]
+            )
+        except Exception:
+            df.at[idx, 'theover_match_key'] = ''
         market_type = _infer_theover_market(row, explicit_market)
 
         if market_type == 'spread':
@@ -6532,11 +6586,17 @@ def prepare_theover_dataset(
         else:
             _ingest_theover_ml_row(entry, row, swapped, idx, home_raw, away_raw)
 
+    match_key_map: Dict[Tuple[str, str, str, Optional[date]], Dict[str, Any]] = {}
+    for entry in records:
+        for key in entry.get('match_keys', set()):
+            match_key_map.setdefault(key, entry)
+
     return {
         '_prepared_theover': True,
         'dataframe': df,
         'records': records,
         'market_type': explicit_market,
+        'match_key_map': match_key_map,
     }
 
 
@@ -6827,52 +6887,88 @@ def match_theover_to_leg(
     leg_league_raw = SPORT_KEY_TO_LEAGUE.get(leg.get('sport_key'), leg.get('league', '')) or ''
     leg_league = normalize_league_label(leg_league_raw)
 
+    key_map = dataset.get('match_key_map') if isinstance(dataset, dict) else {}
+    leg_key = _build_match_key(leg_league_raw, leg_home, leg_away, _coerce_game_datetime(leg.get('commence_time')))
+
     selected_entry = None
     swapped = False
+    team_score = 0.0
+    if key_map:
+        swapped_key = (leg_key[0], leg_key[2], leg_key[1], leg_key[3])
+        if leg_key in key_map:
+            selected_entry = key_map.get(leg_key)
+            swapped = False
+            team_score = 1.0
+        elif swapped_key in key_map:
+            selected_entry = key_map.get(swapped_key)
+            swapped = True
+            team_score = 1.0
 
-    def _attempt_match(candidate_records: List[Dict[str, Any]], ignore_league: bool = False) -> Tuple[Optional[Dict[str, Any]], bool, float]:
-        best_entry_local = None
-        best_swapped_local = False
-        best_score_local = 0.0
-        for entry in candidate_records:
-            if not ignore_league and not _league_matches(leg_league, entry.get('league_norm', '')):
+    if selected_entry is None:
+        def _attempt_match(candidate_records: List[Dict[str, Any]], ignore_league: bool = False) -> Tuple[Optional[Dict[str, Any]], bool, float]:
+            best_entry_local = None
+            best_swapped_local = False
+            best_score_local = 0.0
+            for entry in candidate_records:
+                if not ignore_league and not _league_matches(leg_league, entry.get('league_norm', '')):
+                    continue
+                entry_dates = entry.get('dates', [])
+                entry_datetimes = entry.get('datetimes', [])
+                leg_datetime = _coerce_game_datetime(leg.get('commence_time'))
+                if not _entry_date_match(entry_dates, _coerce_game_date(leg.get('commence_time')), entry_datetimes, leg_datetime):
+                    continue
+
+                forward_home = _team_similarity(entry.get('home'), leg_home)
+                forward_away = _team_similarity(entry.get('away'), leg_away)
+                reverse_home = _team_similarity(entry.get('home'), leg_away)
+                reverse_away = _team_similarity(entry.get('away'), leg_home)
+
+                forward_score = min(forward_home, forward_away)
+                reverse_score = min(reverse_home, reverse_away)
+
+                if forward_score >= TEAM_FUZZY_THRESHOLD and forward_score > best_score_local:
+                    best_entry_local = entry
+                    best_swapped_local = False
+                    best_score_local = forward_score
+                if reverse_score >= TEAM_FUZZY_THRESHOLD and reverse_score > best_score_local:
+                    best_entry_local = entry
+                    best_swapped_local = True
+                    best_score_local = reverse_score
+
+            return best_entry_local, best_swapped_local, best_score_local
+
+        league_filtered = [r for r in records if _league_matches(leg_league, r.get('league_norm', ''))]
+        if not league_filtered:
+            return {
+                'match_debug': f"no_league_match leg={leg_league}",
+                'failure_stage': 'league',
+                'team_score': 0.0,
+            }
+
+        selected_entry, swapped, team_score = _attempt_match(league_filtered, False)
+        if not selected_entry:
+            selected_entry, swapped, team_score = _attempt_match(records, True)
+
+    if selected_entry is None:
+        leg_matchup = f"{normalize_team_name(leg_home)} vs {normalize_team_name(leg_away)}"
+        best_ratio = 0.0
+        best_entry = None
+        best_swapped = False
+        for entry in records:
+            entry_matchup = f"{normalize_team_name(entry.get('home'))} vs {normalize_team_name(entry.get('away'))}"
+            ratio = difflib.SequenceMatcher(None, leg_matchup, entry_matchup).ratio()
+            if not _league_matches(leg_league, entry.get('league_norm', '')):
                 continue
-            entry_dates = entry.get('dates', [])
-            entry_datetimes = entry.get('datetimes', [])
-            leg_datetime = _coerce_game_datetime(leg.get('commence_time'))
-            if not _entry_date_match(entry_dates, _coerce_game_date(leg.get('commence_time')), entry_datetimes, leg_datetime):
-                continue
-
-            forward_home = _team_similarity(entry.get('home'), leg_home)
-            forward_away = _team_similarity(entry.get('away'), leg_away)
-            reverse_home = _team_similarity(entry.get('home'), leg_away)
-            reverse_away = _team_similarity(entry.get('away'), leg_home)
-
-            forward_score = min(forward_home, forward_away)
-            reverse_score = min(reverse_home, reverse_away)
-
-            if forward_score >= TEAM_FUZZY_THRESHOLD and forward_score > best_score_local:
-                best_entry_local = entry
-                best_swapped_local = False
-                best_score_local = forward_score
-            if reverse_score >= TEAM_FUZZY_THRESHOLD and reverse_score > best_score_local:
-                best_entry_local = entry
-                best_swapped_local = True
-                best_score_local = reverse_score
-
-        return best_entry_local, best_swapped_local, best_score_local
-
-    league_filtered = [r for r in records if _league_matches(leg_league, r.get('league_norm', ''))]
-    if not league_filtered:
-        return {
-            'match_debug': f"no_league_match leg={leg_league}",
-            'failure_stage': 'league',
-            'team_score': 0.0,
-        }
-
-    selected_entry, swapped, team_score = _attempt_match(league_filtered, False)
-    if not selected_entry:
-        selected_entry, swapped, team_score = _attempt_match(records, True)
+            if ratio >= 0.85 and ratio > best_ratio:
+                # ensure date still aligns
+                if _entry_date_match(entry.get('dates', []), _coerce_game_date(leg.get('commence_time')), entry.get('datetimes', []), _coerce_game_datetime(leg.get('commence_time'))):
+                    best_ratio = ratio
+                    best_entry = entry
+                    best_swapped = False
+        if best_entry:
+            selected_entry = best_entry
+            swapped = best_swapped
+            team_score = best_ratio
 
     if not selected_entry:
         return {
@@ -6932,23 +7028,49 @@ def apply_theover_probabilities_to_legs(
         else None
     )
 
+    if DEBUG_THEOVER_MERGE:
+        for label, dataset in (
+            ('ML', prepared_theover_ml),
+            ('Spreads', prepared_theover_spreads),
+            ('Totals', prepared_theover_totals),
+        ):
+            df = dataset.get('dataframe') if isinstance(dataset, dict) else None
+            if df is not None:
+                unique_leagues = sorted({normalize_sport_or_league(val) for val in df.get('league', df.get('sport', pd.Series())).dropna().unique().tolist()}) if not df.empty else []
+                st.write(
+                    f"[DEBUG] TheOver {label} rows={len(df)} leagues={unique_leagues}",
+                    df[['league', 'home_team', 'away_team', 'commence_time']].head(10)
+                    if {'league', 'home_team', 'away_team', 'commence_time'}.issubset(set(df.columns))
+                    else df.head(10),
+                )
+
     def _collect_theover_identities(dataset: Optional[Dict[str, Any]]) -> Dict[Tuple[str, str, str, Optional[date]], Dict[str, Any]]:
         identity_map: Dict[Tuple[str, str, str, Optional[date]], Dict[str, Any]] = {}
         if not dataset or not isinstance(dataset, dict):
             return identity_map
         for entry in dataset.get('records', []) or []:
-            ident = _game_identity(entry.get('league'), entry.get('home'), entry.get('away'), (entry.get('datetimes') or [None])[0])
-            if ident:
-                identity_map.setdefault(ident, {
+            for key in entry.get('match_keys', set()):
+                identity_map.setdefault(key, {
                     'league': entry.get('league_norm') or entry.get('league'),
                     'home': entry.get('home'),
                     'away': entry.get('away'),
                     'date': entry.get('dates', [None])[0],
+                    'match_key': key,
                 })
         return identity_map
 
     theover_identity_map: Dict[Tuple[str, str, str, Optional[date]], Dict[str, Any]] = {}
+    theover_record_keys: Set[Tuple[str, str, str, Optional[date]]] = set()
     for dataset in (prepared_theover_ml, prepared_theover_spreads, prepared_theover_totals):
+        if dataset:
+            for entry in dataset.get('records', []) or []:
+                primary_key = _build_match_key(
+                    entry.get('league_norm') or entry.get('league'),
+                    entry.get('home'),
+                    entry.get('away'),
+                    (entry.get('datetimes') or [None])[0],
+                )
+                theover_record_keys.add(primary_key)
         theover_identity_map.update(_collect_theover_identities(dataset))
 
     def _dataset_for_leg(leg_dict: Dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -6974,14 +7096,20 @@ def apply_theover_probabilities_to_legs(
 
     odds_identity_map: Dict[Tuple[str, str, str, Optional[date]], Dict[str, Any]] = {}
     for leg in legs:
-        ident = _game_identity(leg.get('league') or leg.get('sport_key'), leg.get('home_team'), leg.get('away_team'), leg.get('commence_time'))
-        if ident:
-            odds_identity_map.setdefault(ident, {
-                'league': leg.get('league') or leg.get('sport_key'),
-                'home': leg.get('home_team'),
-                'away': leg.get('away_team'),
-                'date': _coerce_game_date(leg.get('commence_time')),
-            })
+        ident = _build_match_key(
+            leg.get('league') or leg.get('sport_key'),
+            leg.get('home_team'),
+            leg.get('away_team'),
+            leg.get('commence_time'),
+        )
+        leg['odds_match_key'] = ident
+        odds_identity_map.setdefault(ident, {
+            'league': leg.get('league') or leg.get('sport_key'),
+            'home': leg.get('home_team'),
+            'away': leg.get('away_team'),
+            'date': _coerce_game_date(leg.get('commence_time')),
+            'match_key': ident,
+        })
 
     matched_game_identities: Set[Tuple[str, str, str, Optional[date]]] = set()
 
@@ -7019,7 +7147,7 @@ def apply_theover_probabilities_to_legs(
                 leg['theover_match_debug'] = match_info.get('match_debug', 'matched_theover')
                 match_success += 1
 
-                identity = _game_identity(
+                identity = leg.get('odds_match_key') or _build_match_key(
                     leg.get('league') or leg.get('sport_key'),
                     leg.get('home_team'),
                     leg.get('away_team'),
@@ -7083,9 +7211,10 @@ def apply_theover_probabilities_to_legs(
             fail_market += 1
 
     total_odds_games = len(odds_identity_map)
-    total_theover_games = len(theover_identity_map)
-    unmatched_odds_samples = [info for ident, info in odds_identity_map.items() if ident not in matched_game_identities][:5]
-    unmatched_theover_samples = [info for ident, info in theover_identity_map.items() if ident not in matched_game_identities][:5]
+    total_theover_games = len(theover_record_keys) if theover_record_keys else len(theover_identity_map)
+    sample_size = 20 if DEBUG_THEOVER_MERGE else 5
+    unmatched_odds_samples = [info for ident, info in odds_identity_map.items() if ident not in matched_game_identities][:sample_size]
+    unmatched_theover_samples = [info for ident, info in theover_identity_map.items() if ident not in matched_game_identities][:sample_size]
 
     logger.info(
         "TheOver merge summary: matched_legs=%d/%d matched_games=%d/%d theover_games=%d fail_league=%d fail_team=%d fail_market=%d fail_line=%d",
@@ -11362,12 +11491,13 @@ if is_vertex_ai_enabled():
 
                     unmatched_odds_samples = theover_context.get('unmatched_odds_samples') or []
                     unmatched_theover_samples = theover_context.get('unmatched_theover_samples') or []
+                    sample_size = 20 if DEBUG_THEOVER_MERGE else 5
                     if unmatched_odds_samples:
-                        st.caption("Unmatched OddsAPI games (sample):")
-                        st.dataframe(pd.DataFrame(unmatched_odds_samples).head(5))
+                        with st.expander("Unmatched OddsAPI games (sample)"):
+                            st.dataframe(pd.DataFrame(unmatched_odds_samples).head(sample_size))
                     if unmatched_theover_samples:
-                        st.caption("Unmatched TheOver.ai games (sample):")
-                        st.dataframe(pd.DataFrame(unmatched_theover_samples).head(5))
+                        with st.expander("Unmatched TheOver.ai games (sample)"):
+                            st.dataframe(pd.DataFrame(unmatched_theover_samples).head(sample_size))
 
                 for leg in vertex_leg_rows:
                     implied_prob_dec = _safe_float(leg.get('p'))
