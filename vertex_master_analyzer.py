@@ -1299,16 +1299,15 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
     
     # FIXED: Add a toggle or check if user wants all games
     # For now, we disable the strict filter or make it optional
+    # COMMENT THIS OUT:
     # display_df = display_df[display_df["game_time"].apply(is_today_calendar_day)].copy()
-
-    # Show ALL games, just sort them by time
-    display_df = results_df.copy()
     
-    # Sort by Date then Win Probability
+    # REPLACE WITH THIS:
+    # Show ALL games, sorted by date
     display_df["sort_time"] = pd.to_datetime(display_df["game_time"], errors='coerce')
     display_df = display_df.sort_values(["sort_time", "win_prob"], ascending=[True, False])
     
-    st.info(f"📅 Showing all {len(display_df)} analyzed games (Sorted by Time)")
+    st.info(f"📅 Showing all {len(display_df)} analyzed games")
     
     # Instead of filtering, just sort them so today's games are first
     display_df["is_today"] = display_df["game_time"].apply(is_today_calendar_day)
