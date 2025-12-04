@@ -5993,19 +5993,43 @@ def add_theover_alignment(
     totals = theover_totals_df.copy() if isinstance(theover_totals_df, pd.DataFrame) else pd.DataFrame()
 
     def _prepare(df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Normalize a raw TheOver dataframe into one that always has a
+        'theover_key' column, even if it's empty. This prevents KeyError
+        when no TheOver data is available.
+        """
+        base_cols = [
+            "League",
+            "HomeTeam",
+            "AwayTeam",
+            "norm_league",
+            "norm_home",
+            "norm_away",
+            "theover_key",
+        ]
+
+        # If there is no data at all, return an empty frame with theover_key defined
         if df is None or df.empty:
-            return pd.DataFrame()
+            return pd.DataFrame(columns=base_cols)
 
         required = ["League", "HomeTeam", "AwayTeam"]
         missing = [col for col in required if col not in df.columns]
+
+        # If required columns are missing, also return an empty frame
         if missing:
-            return pd.DataFrame()
+            return pd.DataFrame(columns=base_cols)
 
         cleaned = df.dropna(subset=required).copy()
         cleaned["norm_league"] = cleaned["League"].apply(normalize_league)
         cleaned["norm_home"] = cleaned["HomeTeam"].apply(normalize_team)
         cleaned["norm_away"] = cleaned["AwayTeam"].apply(normalize_team)
-        cleaned["theover_key"] = cleaned["norm_league"] + "|" + cleaned["norm_home"] + "|" + cleaned["norm_away"]
+        cleaned["theover_key"] = (
+            cleaned["norm_league"]
+            + "|"
+            + cleaned["norm_home"]
+            + "|"
+            + cleaned["norm_away"]
+        )
         return cleaned
 
     spreads_clean = _prepare(spreads)
@@ -6035,6 +6059,10 @@ def add_theover_alignment(
             df = spreads_df
         else:
             df = totals_df
+
+        # If this dataframe has no theover_key or is empty, we can't match anything
+        if df is None or df.empty or "theover_key" not in df.columns:
+            return None, "no_theover_data"
 
         candidates = df[df["theover_key"] == key]
         if not candidates.empty:
@@ -6226,6 +6254,11 @@ def _build_match_key(league: str, home: str, away: str, game_datetime: Optional[
     game_date = _coerce_game_date(game_datetime)
     return league_norm, home_norm, away_norm, game_date
 
+    league_norm = normalize_sport_or_league(league)
+    home_norm = normalize_team_name(home)
+    away_norm = normalize_team_name(away)
+    game_date = _coerce_game_date(game_datetime)
+    return league_norm, home_norm, away_norm, game_date
 
 def _names_match(candidate: str, *targets: str, threshold: float = TEAM_FUZZY_THRESHOLD) -> bool:
     candidate_norm = _normalize_team_for_match(candidate)
