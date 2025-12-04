@@ -12,6 +12,24 @@ from typing import Dict, List, Any, Optional
 
 logger = logging.getLogger(__name__)
 
+
+def price_to_prob(price) -> Optional[float]:
+    """Convert a Kalshi price (dollars or fraction) to probability.
+
+    Returns None when the input cannot be parsed instead of defaulting to 0.5.
+    """
+    if price is None or price == "":
+        return None
+    try:
+        p = float(price)
+    except (TypeError, ValueError):
+        return None
+    if p > 1.01:
+        p = p / 100.0
+    if 0 <= p <= 1:
+        return p
+    return None
+
 class KalshiIntegrator:
     """Integrates Kalshi prediction market odds and analysis
     
@@ -552,7 +570,7 @@ class KalshiIntegrator:
                 print(f"⚠️  KALSHI: No markets found for {sport}")
                 return {
                     "kalshi_available": False,
-                    "kalshi_prob": 0.5,
+                    "kalshi_prob": None,
                     "ticker": None,
                     "title": None
                 }
@@ -597,29 +615,32 @@ class KalshiIntegrator:
                 print(f"❌ KALSHI: No match found for {away_team} @ {home_team}")
                 return {
                     "kalshi_available": False,
-                    "kalshi_prob": 0.5,
+                    "kalshi_prob": None,
                     "ticker": None,
                     "title": None
                 }
-            
-            # Extract probability from the market
-            # Kalshi markets show probability as yes_ask (buy YES price)
-            yes_ask = best_match.get("yes_ask_dollars")
-            yes_bid = best_match.get("yes_bid_dollars")
-            
-            # Use midpoint of bid/ask if both available
-            if yes_ask is not None and yes_bid is not None:
-                kalshi_prob = (yes_ask + yes_bid) / 2
-            elif yes_ask is not None:
-                kalshi_prob = yes_ask
-            elif yes_bid is not None:
-                kalshi_prob = yes_bid
-            else:
-                kalshi_prob = 0.5
-            
+
+            # Extract probability from the market using the most reliable YES price available
+            yes_price = None
+            for key in ["yes_ask_dollars", "yes_bid_dollars", "yes_ask", "yes_bid"]:
+                val = best_match.get(key)
+                if val not in (None, "", "0", 0, "0.0", "0.00"):
+                    yes_price = val
+                    break
+
+            kalshi_prob = price_to_prob(yes_price)
+            if kalshi_prob is None:
+                print("❌ KALSHI: Unable to derive probability from market pricing")
+                return {
+                    "kalshi_available": False,
+                    "kalshi_prob": None,
+                    "ticker": best_match.get("ticker"),
+                    "title": best_match.get("title"),
+                }
+
             print(f"✅ KALSHI: Found market: {best_match.get('title')}")
             print(f"✅ KALSHI: Home win probability: {kalshi_prob * 100:.1f}%")
-            
+
             return {
                 "kalshi_available": True,
                 "kalshi_prob": float(kalshi_prob),
@@ -635,7 +656,7 @@ class KalshiIntegrator:
             print(f"Traceback: {traceback.format_exc()}")
             return {
                 "kalshi_available": False,
-                "kalshi_prob": 0.5,
+                "kalshi_prob": None,
                 "ticker": None,
                 "title": None
             }
