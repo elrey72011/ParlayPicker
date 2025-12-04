@@ -1256,38 +1256,51 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
     display_df = results_df.copy()
     
     # FILTER: Only show games from TODAY (00:00 to 23:59 ET)
-    from datetime import datetime
-    import pytz
+    #from datetime import datetime
+    #import pytz
     
-    def is_today_calendar_day(time_str):
-        """Check if game is on today's calendar day in Eastern Time (00:00-23:59)"""
-        if pd.isna(time_str) or not time_str:
-            return False
-        try:
-            # Parse ISO time from TheOddsAPI
-            dt = datetime.fromisoformat(str(time_str).replace('Z', '+00:00'))
-            # Convert to Eastern Time
-            eastern = pytz.timezone('US/Eastern')
-            dt_eastern = dt.astimezone(eastern)
-            # Get today's date in Eastern Time
-            today_eastern = datetime.now(eastern).date()
-            # Check if game date matches today's date
-            return dt_eastern.date() == today_eastern
-        except Exception:
-            return False
+    #def is_today_calendar_day(time_str):
+    #   """Check if game is on today's calendar day in Eastern Time (00:00-23:59)"""
+    #    if pd.isna(time_str) or not time_str:
+    #        return False
+    #    try:
+    #        # Parse ISO time from TheOddsAPI
+    #        dt = datetime.fromisoformat(str(time_str).replace('Z', '+00:00'))
+    #        # Convert to Eastern Time
+    #        eastern = pytz.timezone('US/Eastern')
+    #        dt_eastern = dt.astimezone(eastern)
+    #        # Get today's date in Eastern Time
+    #        today_eastern = datetime.now(eastern).date()
+    #        # Check if game date matches today's date
+    #        return dt_eastern.date() == today_eastern
+    #    except Exception:
+    #        return False
     
+    # ... inside show_vertex_master_analysis ...
+
     # Filter to only today's calendar day
-    games_before_filter = len(display_df)
-    display_df = display_df[display_df["game_time"].apply(is_today_calendar_day)].copy()
+    # games_before_filter = len(display_df)
+    
+    # FIXED: Add a toggle or check if user wants all games
+    # For now, we disable the strict filter or make it optional
+    # COMMENT THIS OUT to show all analyzed games (including tomorrow's):
+    # display_df = display_df[display_df["game_time"].apply(is_today_calendar_day)].copy()
+    
+    # REPLACE WITH THIS:
+    # Show ALL games, sorted by date
+    display_df["sort_time"] = pd.to_datetime(display_df["game_time"], errors='coerce')
+    display_df = display_df.sort_values(["sort_time", "win_prob"], ascending=[True, False])
+    
+    st.info(f"📅 Showing all {len(display_df)} analyzed games")
+    
+    # Instead of filtering, just sort them so today's games are first
+    display_df["is_today"] = display_df["game_time"].apply(is_today_calendar_day)
+    display_df = display_df.sort_values(["is_today", "win_prob"], ascending=[False, False])
+    
     games_after_filter = len(display_df)
     
-    if display_df.empty:
-        st.warning("⚠️ No games found for today. Showing all games.")
-        display_df = results_df.copy()
-    else:
-        today_eastern = datetime.now(pytz.timezone('US/Eastern')).strftime("%B %d, %Y")
-        filtered_count = games_before_filter - games_after_filter
-        st.info(f"📅 Showing {games_after_filter} games for today ({today_eastern}) - Filtered out {filtered_count} games from other days")
+    # Update the info message
+    st.info(f"📅 Showing all {games_after_filter} upcoming games (Sorted by Today -> Best Win %)")
     
     display_df = display_df.sort_values("win_prob", ascending=False).reset_index(drop=True)
     display_df["Rank"] = display_df.index + 1
