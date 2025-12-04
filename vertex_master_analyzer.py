@@ -574,7 +574,7 @@ class VertexMasterAnalyzer:
         return base
 
     def _get_kalshi_features(self, game: Dict[str, Any]) -> Dict[str, Any]:
-        """Find the best matching Kalshi market with fuzzy team matching and closest line."""
+        """Populate Kalshi features using the integrator's game-level helper."""
 
         feats = {
             "kalshi_available": False,
@@ -582,6 +582,7 @@ class VertexMasterAnalyzer:
             "kalshi_alignment": None,
             "kalshi_match_debug": "no_match_found",
         }
+
         if not self.kalshi:
             feats["kalshi_match_debug"] = "kalshi_not_configured"
             return feats
@@ -630,58 +631,40 @@ class VertexMasterAnalyzer:
         try:
             home_team = game.get("home_team", "")
             away_team = game.get("away_team", "")
-            target_line = game.get("home_spread")
+            league = game.get("league") or game.get("sport_key") or "NBA"
 
-            markets: List[Dict[str, Any]] = []
-            if hasattr(self.kalshi, "get_sports_markets"):
-                try:
-                    markets = self.kalshi.get_sports_markets() or []
-                except Exception as e:
-                    logger.warning(f"Kalshi markets error: {e}")
-                    feats["kalshi_match_debug"] = f"kalshi_error={e}"
-                    return feats
+            market_info = self.kalshi.get_game_market(home_team, away_team, sport=str(league)) or {}
 
-            best_market, _, best_line_diff = _pass(markets, enforce_line=True)
-            if best_market is None:
-                best_market, _, best_line_diff = _pass(markets, enforce_line=False)
+            feats["kalshi_available"] = bool(market_info.get("kalshi_available"))
+            feats["kalshi_prob"] = market_info.get("kalshi_prob")
+            feats["kalshi_alignment"] = None
 
-            if not best_market:
+            if not feats["kalshi_available"]:
                 feats["kalshi_match_debug"] = "no_market_match"
-                return feats
+            else:
+                ticker = market_info.get("market_ticker")
+                title = market_info.get("market_title")
+                conf = market_info.get("confidence")
+                feats["kalshi_match_debug"] = (
+                    f"matched_ticker={ticker} title={title} confidence={conf}"
+                )
 
-            yes_price = None
-            used_key = ""
-            for key in ["yes_ask_dollars", "yes_bid_dollars", "yes_ask", "yes_bid"]:
-                val = best_market.get(key)
-                if val not in (None, "", "0", 0, "0.0", "0.00"):
-                    yes_price = val
-                    used_key = key
-                    break
-            if yes_price is None:
-                feats["kalshi_match_debug"] = "no_yes_price"
-                return feats
-
-            prob = price_to_prob(yes_price)
-            if prob is None:
-                feats["kalshi_match_debug"] = "invalid_price"
-                return feats
-
-            prob = max(0.0, min(1.0, prob))
-            feats.update(
-                {
-                    "kalshi_available": True,
-                    "kalshi_prob": prob,
-                    "kalshi_alignment": None,
-                    "kalshi_match_debug": f"matched_ticker={best_market.get('ticker')} used_price_key={used_key} line_diff={best_line_diff}",
-                }
-            )
-
-            implied = game.get("implied_home_prob")
-            if implied is not None:
-                feats["kalshi_alignment"] = 1.0 - abs(prob - implied)
+                implied = game.get("implied_home_prob")
+                if implied is not None and feats["kalshi_prob"] is not None:
+                    try:
+                        implied_f = float(implied)
+                        kp = float(feats["kalshi_prob"])
+                        feats["kalshi_alignment"] = (
+                            "Aligned" if abs(implied_f - kp) < 0.05 else "Neutral"
+                        )
+                    except Exception:
+                        feats["kalshi_alignment"] = None
 
         except Exception as e:
             logger.warning(f"Kalshi feature error: {e}")
+            feats["kalshi_available"] = False
+            feats["kalshi_prob"] = None
+            feats["kalshi_alignment"] = None
             feats["kalshi_match_debug"] = f"kalshi_error={e}"
 
         return feats
