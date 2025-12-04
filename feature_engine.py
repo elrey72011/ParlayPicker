@@ -1,4 +1,4 @@
-# Save this as: parlaypicker/src/feature_engine.py
+# feature_engine.py
 import pandas as pd
 import numpy as np
 
