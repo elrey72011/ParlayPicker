@@ -2504,115 +2504,110 @@ class KalshiIntegrator:
             st.warning(f"Error fetching orderbook: {str(e)}")
             return {}
     
-    def get_game_market(self, home_team: str, away_team: str, sport: str = 'NBA') -> Dict:
+    def get_game_market(self, home_team: str, away_team: str, sport: str = "NBA") -> Dict:
         """
         Find and return Kalshi market data for a specific game.
-        
+
         Args:
-            home_team: Home team name
-            away_team: Away team name  
-            sport: Sport type (NBA, NFL, NHL, NCAAB, etc.)
-            
+            home_team: Home team name.
+            away_team: Away team name.
+            sport: Sport type (NBA, NFL, NHL, NCAAB, etc.).
+
         Returns:
             Dict with kalshi_available, kalshi_prob, market_ticker, etc.
         """
-        result = {
-            'kalshi_available': False,
-            'kalshi_prob': 0.5,
-            'kalshi_home_prob': 0.5,
-            'kalshi_away_prob': 0.5,
-            'market_ticker': None,
-            'market_title': None,
-            'confidence': 0,
+        result: Dict[str, Any] = {
+            "kalshi_available": False,
+            "kalshi_prob": 0.5,
+            "kalshi_home_prob": 0.5,
+            "kalshi_away_prob": 0.5,
+            "market_ticker": None,
+            "market_title": None,
+            "confidence": 0.0,
         }
-        
+
         def normalize_name(name: str) -> str:
-            """Normalize team name for matching"""
-            return re.sub(r'[^a-z]', '', name.lower())
-        
+            """Normalize a team name into an a–z only string."""
+            return re.sub(r"[^a-z]", "", name.lower())
+
         def teams_match(bet_team: str, market_text: str) -> bool:
-            """Check if a bet team matches text in a market using robust TeamNameMatcher."""
-            # Use the robust matcher from app_core to normalize (strips mascots, fixes abbreviations)
+            """
+            Use TeamNameMatcher to check if bet_team appears in the market text.
+            TeamNameMatcher already strips mascots and handles abbreviations.
+            """
             bet_norm = TeamNameMatcher.normalize(bet_team).upper()
-            market_norm = TeamNameMatcher.normalize(market_text).upper()
-            
-            # 1. Direct match of normalized strings
-            if bet_norm in market_norm:
+            text_norm = TeamNameMatcher.normalize(market_text).upper()
+            if bet_norm in text_norm:
                 return True
-                
-            # 2. Token intersection for partial matches (e.g. "Utah State" in "Utah State vs...")
-            bet_tokens = set(bet_norm.split())
-            market_tokens = set(market_norm.split())
-            
-            # Filter out common words to avoid weak matches
-            ignored = {"STATE", "TECH", "A&M", "NORTH", "SOUTH", "EAST", "WEST", "CITY"}
-            sig_tokens = {t for t in bet_tokens if t not in ignored and len(t) > 2}
-            
-            if sig_tokens and sig_tokens.issubset(market_tokens):
-                return True
-            
-        # 3. Fuzzy match fallback for typos
-        return TeamNameMatcher.similarity_score(bet_norm, market_norm) >= 0.8
-            
-        # Search for matching market
-        home_normalized = normalize_name(home_team)
-        away_normalized = normalize_name(away_team)
-            
-        for market in sports_markets:
-            title = market.get('title', '') or ''
-            ticker = market.get('ticker', '') or ''
-            market_text = f"{title} {ticker}"
-                
-            # Check if this market matches both teams
-            home_match = teams_match(home_team, market_text)
-            away_match = teams_match(away_team, market_text)
-                
-            if home_match and away_match:
-                # Found matching market!
-                ticker = market.get('ticker', '')
-                    
-                # Get orderbook to determine probabilities
-                orderbook = self.get_orderbook(ticker) if ticker else {}
-                    
-                yes_bids = orderbook.get('yes', [])
-                no_bids = orderbook.get('no', [])
-                    
-                if yes_bids:
-                    # Price is in cents, convert to probability
-                    yes_price = yes_bids[0].get('price', 50)
-                    kalshi_prob = yes_price / 100.0
-                elif market.get('synthetic'):
-                    # Use synthetic probability
-                    kalshi_prob = self._synthetic_probability(home_team, sport)
-                else:
-                    kalshi_prob = 0.5
-                    
-                result['kalshi_available'] = True
-                result['kalshi_prob'] = kalshi_prob
-                result['kalshi_home_prob'] = kalshi_prob
-                result['kalshi_away_prob'] = 1 - kalshi_prob
-                result['market_ticker'] = ticker
-                result['market_title'] = title
-                result['confidence'] = 0.8 if not market.get('synthetic') else 0.5
-                    
-                logger.info(f"Kalshi match found for {home_team} vs {away_team}: {ticker} = {kalshi_prob:.2%}")
+
+            # Fallback super-simple check
+            bet_simple = normalize_name(bet_team)
+            text_simple = normalize_name(market_text)
+            return bool(bet_simple) and bet_simple in text_simple
+
+        try:
+            # 1) Get all sports markets available on Kalshi
+            sports_markets = self.get_sports_markets()
+            if not sports_markets:
+                self.last_error = self.last_error or "No Kalshi sports markets available"
                 return result
-            
-            # No direct match found - try synthetic market
-            if not result['kalshi_available']:
+
+            # 2) Try to find a market mentioning BOTH home and away teams
+            for market in sports_markets:
+                title = (market.get("title") or "") or ""
+                ticker = (market.get("ticker") or "") or ""
+                market_text = f"{title} {ticker}"
+
+                home_match = teams_match(home_team, market_text)
+                away_match = teams_match(away_team, market_text)
+                if not (home_match and away_match):
+                    continue
+
+                # 3) Found a candidate market – pull the orderbook for probability
+                kalshi_prob = 0.5
+                if ticker:
+                    orderbook = self.get_orderbook(ticker) or {}
+                    yes_bids = orderbook.get("yes", [])
+                    if yes_bids:
+                        # Prices are in cents; convert to probability in [0,1]
+                        yes_price = yes_bids[0].get("price", 50)
+                        kalshi_prob = yes_price / 100.0
+                    elif market.get("synthetic"):
+                        kalshi_prob = self._synthetic_probability(home_team, sport)
+
+                result["kalshi_available"] = True
+                result["kalshi_prob"] = kalshi_prob
+                result["kalshi_home_prob"] = kalshi_prob
+                result["kalshi_away_prob"] = 1.0 - kalshi_prob
+                result["market_ticker"] = ticker
+                result["market_title"] = title
+                result["confidence"] = 0.8 if not market.get("synthetic") else 0.5
+
+                logger.info(
+                    "Kalshi match found for %s vs %s: %s = %.2f%%",
+                    home_team,
+                    away_team,
+                    ticker,
+                    kalshi_prob * 100.0,
+                )
+                return result
+
+            # 4) No direct market found – fall back to synthetic if available
+            if not result["kalshi_available"]:
                 synthetic = self.get_synthetic_market_for_team(home_team)
                 if synthetic:
-                    result['kalshi_available'] = True
-                    result['kalshi_prob'] = self._synthetic_probability(home_team, sport)
-                    result['kalshi_home_prob'] = result['kalshi_prob']
-                    result['kalshi_away_prob'] = 1 - result['kalshi_prob']
-                    result['market_ticker'] = synthetic.get('ticker')
-                    result['market_title'] = f"Synthetic: {home_team}"
-                    result['confidence'] = 0.4  # Lower confidence for synthetic
-                    
-            except Exception as e:
-                logger.warning(f"Error getting Kalshi game market: {e}")
-        
+                    prob = self._synthetic_probability(home_team, sport)
+                    result["kalshi_available"] = True
+                    result["kalshi_prob"] = prob
+                    result["kalshi_home_prob"] = prob
+                    result["kalshi_away_prob"] = 1.0 - prob
+                    result["market_ticker"] = synthetic.get("ticker")
+                    result["market_title"] = f"Synthetic: {home_team}"
+                    result["confidence"] = 0.4  # lower confidence for synthetic-only
+
+        except Exception as e:
+            logger.warning(f"Error getting Kalshi game market: {e}")
+
         return result
     
     def compare_with_sportsbook(
@@ -6157,6 +6152,17 @@ def _build_match_key(league: str, home: str, away: str, game_datetime: Optional[
     game_date = _coerce_game_date(game_datetime)
     return league_norm, home_norm, away_norm, game_date
 
+def _team_similarity(name_a: str, name_b: str) -> float:
+    """Return a fuzzy similarity ratio between two team names (0-1)."""
+    norm_a = _normalize_team_for_match(name_a)
+    norm_b = _normalize_team_for_match(name_b)
+    if not norm_a or not norm_b:
+        return 0.0
+    return TeamNameMatcher.similarity_score(norm_a, norm_b)
+
+
+def _build_match_key(league: str, home: str, away: str, game_datetime: Optional[datetime]) -> Tuple[str, str, str, Optional[date]]:
+    """Create a deterministic match key for TheOver/OddsAPI joins."""
 
 def _names_match(candidate: str, *targets: str, threshold: float = TEAM_FUZZY_THRESHOLD) -> bool:
     candidate_norm = _normalize_team_for_match(candidate)
