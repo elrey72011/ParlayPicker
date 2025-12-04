@@ -9668,94 +9668,245 @@ if is_vertex_ai_enabled():
                     st.stop()
                 
                 st.success(f"✅ Loaded {len(all_games)} total games from TheOddsAPI with real sportsbook lines")
-                
+
                 # =========================================================================
                 # SUPPLEMENTAL DATA: TheOver.ai Picks & Probabilities (NOT Lines!)
                 # Merge TheOver.ai picks/probabilities for consensus validation
                 # DO NOT use their Line column (unreliable signs)
                 # =========================================================================
-                theover_merged_game_indexes = set()
+                def _debug_df(label: str, df: Optional[pd.DataFrame]):
+                    if not DEBUG_THEOVER_MERGE:
+                        return
+                    if df is None:
+                        st.write(f"[DEBUG] {label}: None")
+                        return
+                    st.write(
+                        f"[DEBUG] {label} shape={df.shape} columns={df.columns.tolist()}",
+                        df.head(20)
+                    )
 
-                # Only proceed if we actually have TheOver spreads
-                if (
-                    'theover_spreads_data' in locals()
-                    and theover_spreads_data is not None
-                    and not theover_spreads_data.empty
-                ):
-                    st.info("🔄 Merging TheOver.ai picks & probabilities...")
-
-                    matcher = TeamNameMatcher()
-
-                    # Build list of (home, away) tuples for the matcher
-                    app_games = []
-                    app_index_map = {}
-                    for idx, game in enumerate(all_games):
-                        home_team = game.get("home_team", "") or ""
-                        away_team = game.get("away_team", "") or ""
-                        if not home_team or not away_team:
-                            continue
-                        key = (home_team, away_team)
-                        app_games.append(key)
-                        app_index_map[key] = idx
-
-                    # Iterate over each TheOver.ai spread row and attach it to the best matching app game
-                    for _, row in theover_spreads_data.iterrows():
-                        csv_home = str(row.get("HomeTeam") or row.get("home_team") or "").strip()
-                        csv_away = str(row.get("AwayTeam") or row.get("away_team") or "").strip()
-                        if not csv_home or not csv_away:
-                            continue
-
-                        match = matcher.match_game(csv_home, csv_away, app_games, threshold=0.72)
-                        if not match:
-                            # could not confidently match this TheOver row
-                            continue
-
-                        game_idx = app_index_map.get(match)
-                        if game_idx is None:
-                            continue
-
-                        game = all_games[game_idx]
-
-                        # --- Extract pick + line from TheOver row ---
-                        theover_pick = str(row.get("Pick", "")).strip()
-                        theover_line = row.get("Line")
-
+                def _coerce_dt(val: Any) -> Optional[datetime]:
+                    try:
+                        parsed = pd.to_datetime(val, errors="coerce", utc=True)
+                    except Exception:
+                        return None
+                    if parsed is None or pd.isna(parsed):
+                        return None
+                    try:
+                        parsed = parsed.tz_convert(None)
+                    except Exception:
                         try:
-                            theover_line_float = float(theover_line) if theover_line not in (None, "") else 0.0
+                            parsed = parsed.tz_localize(None)
                         except Exception:
-                            theover_line_float = 0.0
+                            pass
+                    return parsed.to_pydatetime() if hasattr(parsed, "to_pydatetime") else parsed
 
-                        # --- Convert line into a rough win probability ---
-                        # 2.8 percentage points per point of spread; clamp to [0.51, 0.99]
-                        if theover_line_float:
-                            win_prob = 0.5 + (abs(theover_line_float) * 0.028)
-                            win_prob = max(0.51, min(0.99, win_prob))
-                        else:
-                            win_prob = 0.5  # no line → neutral
+                def _choose_best_row(group: pd.DataFrame) -> pd.Series:
+                    if len(group) == 1:
+                        return group.iloc[0]
+                    prob_cols = [
+                        c
+                        for c in group.columns
+                        if re.search(r"prob|edge", c, re.IGNORECASE)
+                    ]
+                    best_idx = None
+                    best_score = -math.inf
+                    for idx, row in group.iterrows():
+                        row_score = -math.inf
+                        for col in prob_cols:
+                            val = _safe_float(row.get(col))
+                            if val is not None:
+                                row_score = max(row_score, val)
+                        if row_score == -math.inf:
+                            row_score = 0.0
+                        if row_score > best_score:
+                            best_score = row_score
+                            best_idx = idx
+                    return group.loc[best_idx] if best_idx is not None else group.iloc[0]
 
-                        # Is the pick on the home team or the away team?
-                        # Use fuzzy match between pick text and home team name
-                        pick_home_score = TeamNameMatcher.similarity_score(
-                            TeamNameMatcher.normalize(theover_pick),
-                            TeamNameMatcher.normalize(game.get("home_team", "")),
+                def _normalize_dataframe(
+                    df: pd.DataFrame,
+                    label: str,
+                    sport_candidates: List[str],
+                    home_candidates: List[str],
+                    away_candidates: List[str],
+                    time_candidates: List[str],
+                    key_prefix: str,
+                ) -> Optional[pd.DataFrame]:
+                    if df is None or df.empty:
+                        return None
+                    working = df.copy()
+                    sport_col = _find_first_column(working.columns, sport_candidates)
+                    home_col = _find_first_column(working.columns, home_candidates)
+                    away_col = _find_first_column(working.columns, away_candidates)
+                    time_col = _find_first_column(working.columns, time_candidates)
+
+                    if DEBUG_THEOVER_MERGE:
+                        st.write(
+                            f"[DEBUG] {label} column choices -> sport={sport_col}, home={home_col}, away={away_col}, time={time_col}"
                         )
-                        pick_is_home = pick_home_score >= 0.7
 
-                        # Store probability as "probability home team covers/wins"
-                        home_prob = win_prob if pick_is_home else (1.0 - win_prob)
+                    if not all([sport_col, home_col, away_col, time_col]):
+                        return None
 
-                        game["theover_pick"] = theover_pick
-                        game["theover_probability"] = home_prob
-                        game["theover_probability_source"] = "theover_spread_line"
-                        theover_merged_game_indexes.add(game_idx)
+                    working["norm_sport"] = working[sport_col].apply(normalize_sport_or_league)
+                    working["norm_home"] = working[home_col].apply(normalize_team_name)
+                    working["norm_away"] = working[away_col].apply(normalize_team_name)
+                    working["game_dt"] = working[time_col].apply(_coerce_dt)
+                    working["game_date"] = working["game_dt"].apply(lambda x: x.date() if isinstance(x, datetime) else None)
+                    working[f"{key_prefix}_key"] = (
+                        working["norm_sport"]
+                        + "|"
+                        + working["norm_home"]
+                        + "|"
+                        + working["norm_away"]
+                        + "|"
+                        + working["game_date"].astype(str)
+                    )
+                    working[f"{key_prefix}_swap_key"] = (
+                        working["norm_sport"]
+                        + "|"
+                        + working["norm_away"]
+                        + "|"
+                        + working["norm_home"]
+                        + "|"
+                        + working["game_date"].astype(str)
+                    )
+                    working[f"{key_prefix}_source"] = label
+                    return working
+
+                _debug_df("TheOver ML raw", theover_ml_data if 'theover_ml_data' in locals() else None)
+                _debug_df("TheOver Spreads raw", theover_spreads_data if 'theover_spreads_data' in locals() else None)
+                _debug_df("TheOver Totals raw", theover_totals_data if 'theover_totals_data' in locals() else None)
+
+                odds_df = pd.DataFrame(all_games)
+                _debug_df("OddsAPI games raw", odds_df)
+
+                sport_candidates_odds = ["league", "sport_key", "sport"]
+                home_candidates_odds = ["home_team", "home"]
+                away_candidates_odds = ["away_team", "away"]
+                time_candidates_odds = ["commence_time", "start_time", "game_time"]
+
+                odds_df = _normalize_dataframe(
+                    odds_df,
+                    "OddsAPI",
+                    sport_candidates_odds,
+                    home_candidates_odds,
+                    away_candidates_odds,
+                    time_candidates_odds,
+                    "odds",
+                )
+
+                if odds_df is None or odds_df.empty:
+                    st.info("ℹ️ No OddsAPI games to merge with TheOver.ai")
+                    st.stop()
+
+                theover_frames: List[pd.DataFrame] = []
+                sport_candidates_theover = ["league", "sport", "League", "Sport"]
+                home_candidates_theover = ["home_team", "HomeTeam", "home", "Home"]
+                away_candidates_theover = ["away_team", "AwayTeam", "away", "Away"]
+                time_candidates_theover = ["date", "game_date", "commence_time", "game_datetime", "datetime", "start_time"]
+
+                for label, df in (
+                    ("ML", theover_ml_data if 'theover_ml_data' in locals() else None),
+                    ("Spreads", theover_spreads_data if 'theover_spreads_data' in locals() else None),
+                    ("Totals", theover_totals_data if 'theover_totals_data' in locals() else None),
+                ):
+                    normalized = _normalize_dataframe(
+                        df,
+                        label,
+                        sport_candidates_theover,
+                        home_candidates_theover,
+                        away_candidates_theover,
+                        time_candidates_theover,
+                        "theover",
+                    )
+                    if normalized is not None and not normalized.empty:
+                        theover_frames.append(normalized)
+
+                if not theover_frames:
+                    st.info("ℹ️ No TheOver.ai data uploaded - using TheOddsAPI only")
+                else:
+                    theover_df = pd.concat(theover_frames, ignore_index=True)
+                    _debug_df("TheOver combined", theover_df)
+
+                    # Build key lookups with a deterministic best-row selection per key
+                    main_best = theover_df.groupby("theover_key").apply(_choose_best_row).reset_index(drop=True)
+                    swap_best = theover_df.groupby("theover_swap_key").apply(_choose_best_row).reset_index(drop=True)
+
+                    merged = odds_df.merge(
+                        main_best,
+                        left_on="odds_key",
+                        right_on="theover_key",
+                        how="left",
+                        suffixes=("", "_theover"),
+                    )
+
+                    matched_games = merged["theover_key"].notna().sum()
+                    total_odds_games = len(odds_df)
+                    total_theover_games = len(theover_df)
+
+                    if matched_games < total_theover_games:
+                        swap_map = {row["theover_swap_key"]: row for _, row in swap_best.iterrows()}
+                        for idx, row in merged[merged["theover_key"].isna()].iterrows():
+                            swap_key = row.get("odds_swap_key")
+                            candidate = swap_map.get(swap_key)
+                            if candidate is None:
+                                continue
+                            for col, val in candidate.items():
+                                merged.at[idx, col] = val
+                        matched_games = merged["theover_key"].notna().sum()
+
+                    st.info(
+                        f"TheOver coverage: {total_theover_games} rows; initial matches: {matched_games}/{total_odds_games}"
+                    )
+
+                    # Extract unmatched samples for inspection
+                    unmatched_odds = merged[merged["theover_key"].isna()][
+                        ["norm_sport", "norm_home", "norm_away", "game_dt", "odds_key"]
+                    ].head(50)
+
+                    matched_keys = set(merged["theover_key"].dropna())
+                    unmatched_theover = theover_df[
+                        ~theover_df["theover_key"].isin(matched_keys)
+                    ][["norm_sport", "norm_home", "norm_away", "game_dt", "theover_key"]].head(50)
+
+                    if DEBUG_THEOVER_MERGE:
+                        with st.expander("Unmatched OddsAPI games (sample)", expanded=False):
+                            st.write(unmatched_odds)
+                        with st.expander("Unmatched TheOver.ai games (sample)", expanded=False):
+                            st.write(unmatched_theover)
+
+                    # Push merged TheOver picks back into the games list
+                    prob_candidates = [
+                        "prob", "probability", "model_probability", "win_probability", "edge", "edge_pct"
+                    ]
+                    pick_candidates = ["pick", "selection", "side"]
+                    line_candidates = ["line", "spread", "total", "total_line", "spread_line"]
+
+                    for idx, row in merged.iterrows():
+                        if pd.isna(row.get("theover_key")):
+                            continue
+                        pick_col = _find_first_column(row.index, pick_candidates)
+                        pick_val = str(row.get(pick_col, "")).strip() if pick_col else ""
+                        line_val, _ = _coerce_line(row, pick_val)
+                        prob_val, prob_source = _coerce_probability(row, prob_candidates)
+                        if prob_val is None and line_val is not None:
+                            prob_val = max(0.0, min(0.99, 0.5 + abs(line_val) * 0.028))
+                            prob_source = "line_heuristic"
+
+                        game_idx = row.name
+                        if game_idx >= len(all_games):
+                            continue
+                        game = all_games[game_idx]
+                        game["theover_pick"] = pick_val
+                        game["theover_probability"] = prob_val
+                        game["theover_probability_source"] = prob_source or "theover"
 
                     st.success(
-                        f"✅ Merged TheOver.ai picks for "
-                        f"{len(theover_merged_game_indexes)}/{len(all_games)} games"
+                        f"✅ Merged TheOver.ai picks for {matched_games}/{total_odds_games} games"
                     )
-                else:
-                    st.info("ℹ️ No TheOver.ai data uploaded - using TheOddsAPI only")
-                
+
                 # =========================================================================
                 # Continue with analysis
                 # =========================================================================
