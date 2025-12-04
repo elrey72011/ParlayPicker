@@ -631,44 +631,133 @@ class VertexMasterAnalyzer:
         try:
             home_team = game.get("home_team", "")
             away_team = game.get("away_team", "")
-            league = game.get("league") or game.get("sport_key") or "NBA"
 
-            market_info = self.kalshi.get_game_market(home_team, away_team, sport=str(league)) or {}
+            markets: List[Dict[str, Any]] = []
+            if hasattr(self.kalshi, "get_sports_markets"):
+                markets = self.kalshi.get_sports_markets() or []
+            logger.info(
+                "Kalshi: get_sports_markets returned %d markets for game %s vs %s",
+                len(markets),
+                home_team,
+                away_team,
+            )
 
-            feats["kalshi_available"] = bool(market_info.get("kalshi_available"))
-            feats["kalshi_prob"] = market_info.get("kalshi_prob")
-            feats["kalshi_alignment"] = None
-
-            debug_val = market_info.get("kalshi_match_debug")
-
-            if not feats["kalshi_available"]:
-                feats["kalshi_match_debug"] = debug_val or "no_market_match"
-            else:
-                ticker = market_info.get("market_ticker")
-                title = market_info.get("market_title")
-                conf = market_info.get("confidence")
-                feats["kalshi_match_debug"] = (
-                    debug_val
-                    or f"matched_ticker={ticker} title={title} confidence={conf}"
+            if not markets:
+                feats["kalshi_match_debug"] = "no_markets_from_kalshi"
+                logger.warning(
+                    "Kalshi: no markets available (check API keys / network). game=%s vs %s",
+                    home_team,
+                    away_team,
                 )
+                return feats
 
-                implied = game.get("implied_home_prob")
-                if implied is not None and feats["kalshi_prob"] is not None:
-                    try:
-                        implied_f = float(implied)
-                        kp = float(feats["kalshi_prob"])
-                        feats["kalshi_alignment"] = (
-                            "Aligned" if abs(implied_f - kp) < 0.05 else "Neutral"
-                        )
-                    except Exception:
-                        feats["kalshi_alignment"] = None
+            best_market = None
+            best_score = 0.0
+            for market in markets:
+                title = (market.get("title") or "")
+                ticker = (market.get("ticker") or "")
+                market_text = f"{title} {ticker}"
+
+                home_score = TeamNameMatcher.similarity_score(
+                    TeamNameMatcher.normalize(home_team),
+                    TeamNameMatcher.normalize(market_text),
+                )
+                away_score = TeamNameMatcher.similarity_score(
+                    TeamNameMatcher.normalize(away_team),
+                    TeamNameMatcher.normalize(market_text),
+                )
+                combined = (home_score + away_score) / 2.0
+                if combined > best_score:
+                    best_score = combined
+                    best_market = market
+
+            if best_market is None:
+                feats["kalshi_match_debug"] = "no_market_match"
+                logger.info(
+                    "Kalshi: no matching market found for %s vs %s out of %d markets",
+                    home_team,
+                    away_team,
+                    len(markets),
+                )
+                return feats
+
+            logger.info(
+                "Kalshi: best market for %s vs %s -> ticker=%s, title=%s",
+                home_team,
+                away_team,
+                best_market.get("ticker"),
+                best_market.get("title"),
+            )
+
+            yes_price = None
+            used_key = None
+            for key in ["yes_ask_dollars", "yes_bid_dollars", "yes_ask", "yes_bid"]:
+                val = best_market.get(key)
+                if val not in (None, "", "0", 0, "0.0", "0.00"):
+                    yes_price = val
+                    used_key = key
+                    break
+
+            if yes_price is None:
+                feats["kalshi_match_debug"] = "no_yes_price"
+                logger.warning(
+                    "Kalshi: best market has no usable YES price for %s vs %s. keys tested=%s, raw_market=%s",
+                    home_team,
+                    away_team,
+                    ["yes_ask_dollars", "yes_bid_dollars", "yes_ask", "yes_bid"],
+                    best_market,
+                )
+                return feats
+
+            prob = price_to_prob(yes_price)
+            if prob is None:
+                feats["kalshi_match_debug"] = "invalid_price"
+                logger.warning(
+                    "Kalshi: invalid YES price=%s for %s vs %s (key=%s, market=%s)",
+                    yes_price,
+                    home_team,
+                    away_team,
+                    used_key,
+                    best_market,
+                )
+                return feats
+
+            prob = max(0.0, min(1.0, prob))
+            logger.info(
+                "Kalshi: final prob=%.3f for %s vs %s (ticker=%s, key=%s)",
+                prob,
+                home_team,
+                away_team,
+                best_market.get("ticker"),
+                used_key,
+            )
+
+            feats.update(
+                {
+                    "kalshi_available": True,
+                    "kalshi_prob": prob,
+                    "kalshi_alignment": None,
+                    "kalshi_match_debug": f"matched_ticker={best_market.get('ticker')} title={best_market.get('title')}",
+                }
+            )
+
+            implied = game.get("implied_home_prob")
+            if implied is not None and feats["kalshi_prob"] is not None:
+                try:
+                    implied_f = float(implied)
+                    kp = float(feats["kalshi_prob"])
+                    feats["kalshi_alignment"] = (
+                        "Aligned" if abs(implied_f - kp) < 0.05 else "Neutral"
+                    )
+                except Exception:
+                    feats["kalshi_alignment"] = None
 
         except Exception as e:
-            logger.warning(f"Kalshi feature error: {e}")
+            logger.exception("Kalshi feature error for game %s vs %s: %s", home_team, away_team, e)
             feats["kalshi_available"] = False
             feats["kalshi_prob"] = None
             feats["kalshi_alignment"] = None
-            feats["kalshi_match_debug"] = f"kalshi_error={e}"
+            feats["kalshi_match_debug"] = f"error={type(e).__name__}: {e}"
 
         return feats
 
@@ -1365,6 +1454,9 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
         """
         market_type = str(row.get("pick_market_type") or "").lower()
         if market_type == "total":
+            return "No Kalshi match"
+
+        if not row.get("kalshi_available"):
             return "No Kalshi match"
 
         kalshi_prob_pick = row.get("kalshi_prob")  # Probability relative to our pick

@@ -162,12 +162,24 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 st.subheader("Kalshi Debug")
+kalshi = st.session_state.get("kalshi_integrator") or KalshiIntegrator(
+    st.session_state.get("kalshi_key"),
+    st.session_state.get("kalshi_secret"),
+)
+st.session_state["kalshi_integrator"] = kalshi
 
-k = KalshiIntegrator()
+st.write("Has API key:", bool(getattr(kalshi, "api_key", None)))
+st.write("Auth ready:", getattr(kalshi, "_auth_ready", None))
+st.write("API URL:", getattr(kalshi, "api_url", None))
 
-st.write("Has API key:", bool(getattr(k, "api_key", None)))
-st.write("Auth ready:", getattr(k, "_auth_ready", None))
-st.write("API URL:", getattr(k, "api_url", None))
+with st.expander("Kalshi API Health Check", expanded=False):
+    try:
+        markets = kalshi.get_sports_markets() or []
+        st.write("Total markets from Kalshi:", len(markets))
+        st.write("Sample markets:", markets[:5])
+        st.write("Last Kalshi error:", getattr(kalshi, "last_error", None))
+    except Exception as e:
+        st.error(f"Kalshi health check error: {e}")
 
 debug_league = st.selectbox(
     "Debug league",
@@ -177,9 +189,9 @@ debug_league = st.selectbox(
 )
 
 try:
-    all_markets = k.get_game_markets_for_events(debug_league)
-    today_markets = k.filter_markets_closing_today(all_markets)
-    
+    all_markets = kalshi.get_game_markets_for_events(debug_league)
+    today_markets = kalshi.filter_markets_closing_today(all_markets)
+
     st.write(f"{debug_league} markets returned (all):", len(all_markets))
     st.write(f"{debug_league} markets returned (today only):", len(today_markets))
     st.write("Sample markets:", today_markets[:5] if today_markets else all_markets[:5])
@@ -187,7 +199,7 @@ try:
 except Exception as e:
     st.write("Exception when fetching markets:", str(e))
 
-st.write("Last Kalshi error:", getattr(k, "last_error", None))
+st.write("Last Kalshi error:", getattr(kalshi, "last_error", None))
 
 # ============================================================
 # ML PREDICTION OPTIMIZATION FUNCTIONS
