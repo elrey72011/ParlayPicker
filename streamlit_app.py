@@ -6062,7 +6062,7 @@ def add_theover_alignment(
 
         # If this dataframe has no theover_key or is empty, we can't match anything
         if df is None or df.empty or "theover_key" not in df.columns:
-            return None, "no_theover_data"
+            return None, "no_theover_data_for_market_type"
 
         candidates = df[df["theover_key"] == key]
         if not candidates.empty:
@@ -6235,6 +6235,24 @@ def _normalize_team_for_match(name: str) -> str:
     except Exception:
         return " ".join(_tokenize_name(name))
 
+
+def _team_similarity(name_a: str, name_b: str) -> float:
+    """Return a fuzzy similarity ratio between two team names (0-1)."""
+    norm_a = _normalize_team_for_match(name_a)
+    norm_b = _normalize_team_for_match(name_b)
+    if not norm_a or not norm_b:
+        return 0.0
+    return TeamNameMatcher.similarity_score(norm_a, norm_b)
+
+
+def _build_match_key(league: str, home: str, away: str, game_datetime: Optional[datetime]) -> Tuple[str, str, str, Optional[date]]:
+    """Create a deterministic match key for TheOver/OddsAPI joins."""
+
+    league_norm = normalize_sport_or_league(league)
+    home_norm = normalize_team_name(home)
+    away_norm = normalize_team_name(away)
+    game_date = _coerce_game_date(game_datetime)
+    return league_norm, home_norm, away_norm, game_date
 
 def _team_similarity(name_a: str, name_b: str) -> float:
     """Return a fuzzy similarity ratio between two team names (0-1)."""
