@@ -639,14 +639,17 @@ class VertexMasterAnalyzer:
             feats["kalshi_prob"] = market_info.get("kalshi_prob")
             feats["kalshi_alignment"] = None
 
+            debug_val = market_info.get("kalshi_match_debug")
+
             if not feats["kalshi_available"]:
-                feats["kalshi_match_debug"] = "no_market_match"
+                feats["kalshi_match_debug"] = debug_val or "no_market_match"
             else:
                 ticker = market_info.get("market_ticker")
                 title = market_info.get("market_title")
                 conf = market_info.get("confidence")
                 feats["kalshi_match_debug"] = (
-                    f"matched_ticker={ticker} title={title} confidence={conf}"
+                    debug_val
+                    or f"matched_ticker={ticker} title={title} confidence={conf}"
                 )
 
                 implied = game.get("implied_home_prob")
@@ -1353,37 +1356,31 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
     # Kalshi: Show alignment as text + percentage
     def format_kalshi(row):
         """
-        Determine if Kalshi agrees with our AI pick.
-        - If we picked home team: Kalshi should show >50% for home
-        - If we picked away team: Kalshi should show <50% for home (favoring away)
+        Determine if Kalshi agrees with our AI pick using the pick-specific
+        probability stored in `kalshi_prob`.
+
+        - Kalshi > 0.55 => Agree
+        - Kalshi < 0.45 => Disagree
+        - Otherwise => Neutral
         """
-        if row.get("pick_market_type") == "Total":
+        market_type = str(row.get("pick_market_type") or "").lower()
+        if market_type == "total":
             return "No Kalshi match"
 
-        pick_team = row.get("pick_team", "")
-        home_team = row.get("home_team", "")
-        kalshi_prob = row.get("kalshi_prob")  # This is HOME team probability
-
+        kalshi_prob = row.get("kalshi_prob")  # Probability for our pick
         if kalshi_prob is None or pd.isna(kalshi_prob):
             return "No Kalshi match"
-        
-        # Check if we picked the home team
-        pick_is_home = pick_team.lower() in home_team.lower() if (pick_team and home_team) else False
-        
-        # If we picked home team, Kalshi should show >50%
-        # If we picked away team, Kalshi should show <50%
-        if pick_is_home:
-            # We picked home, does Kalshi agree (>50%)?
-            return "Agree" if kalshi_prob > 0.50 else "Disagree"
-        else:
-            # We picked away, does Kalshi agree (<50%)?
-            return "Agree" if kalshi_prob < 0.50 else "Disagree"
+
+        if 0.45 <= kalshi_prob <= 0.55:
+            return "Neutral"
+
+        return "Agree" if kalshi_prob > 0.55 else "Disagree"
     
     display_df["Kalshi"] = display_df.apply(format_kalshi, axis=1)
     display_df["Kalshi %"] = display_df["kalshi_prob"].apply(
-        lambda p: round(float(p) * 100.0, 1)
+        lambda p: round(float(p) * 100.0)
         if p is not None and not pd.isna(p)
-        else np.nan
+        else "N/A"
     )
     
     # Add Kalshi Edge column (YOUR model prob - Kalshi crowd prob)

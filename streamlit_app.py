@@ -2518,12 +2518,13 @@ class KalshiIntegrator:
         """
         result: Dict[str, Any] = {
             "kalshi_available": False,
-            "kalshi_prob": 0.5,
-            "kalshi_home_prob": 0.5,
-            "kalshi_away_prob": 0.5,
+            "kalshi_prob": None,
+            "kalshi_home_prob": None,
+            "kalshi_away_prob": None,
             "market_ticker": None,
             "market_title": None,
             "confidence": 0.0,
+            "kalshi_match_debug": "no_market_match",
         }
 
         def normalize_name(name: str) -> str:
@@ -2564,24 +2565,73 @@ class KalshiIntegrator:
                     continue
 
                 # 3) Found a candidate market – pull the orderbook for probability
-                kalshi_prob = 0.5
+                kalshi_prob = None
+                used_key = None
+                price_cents = None
                 if ticker:
                     orderbook = self.get_orderbook(ticker) or {}
-                    yes_bids = orderbook.get("yes", [])
-                    if yes_bids:
-                        # Prices are in cents; convert to probability in [0,1]
-                        yes_price = yes_bids[0].get("price", 50)
-                        kalshi_prob = yes_price / 100.0
-                    elif market.get("synthetic"):
-                        kalshi_prob = self._synthetic_probability(home_team, sport)
+                    yes_candidates = [
+                        orderbook.get("yes"),
+                        (orderbook.get("bids") or {}).get("yes")
+                        if isinstance(orderbook.get("bids"), dict)
+                        else None,
+                        orderbook.get("yes_bids"),
+                        (orderbook.get("orderbook") or {}).get("yes")
+                        if isinstance(orderbook.get("orderbook"), dict)
+                        else None,
+                    ]
+                    levels = next((lvl for lvl in yes_candidates if lvl), None)
+                    if levels:
+                        level = levels[0] if isinstance(levels, list) and levels else None
+                        if isinstance(level, dict):
+                            price_cents = (
+                                level.get("price")
+                                or level.get("bid")
+                                or level.get("px")
+                            )
+                            used_key = "yes"
+                    if price_cents is not None:
+                        try:
+                            kalshi_prob = float(price_cents) / 100.0
+                            logger.info(
+                                "Kalshi YES price for %s: %s -> prob=%.3f",
+                                ticker,
+                                price_cents,
+                                kalshi_prob,
+                            )
+                        except Exception:
+                            kalshi_prob = None
+
+                if kalshi_prob is None and market.get("synthetic"):
+                    kalshi_prob = self._synthetic_probability(home_team, sport)
+                    used_key = used_key or "synthetic"
+
+                if kalshi_prob is None:
+                    logger.warning(
+                        "Kalshi orderbook missing YES price for %s; leaving kalshi_prob=None",
+                        ticker,
+                    )
+                    result.update(
+                        {
+                            "kalshi_available": False,
+                            "kalshi_prob": None,
+                            "kalshi_home_prob": None,
+                            "kalshi_away_prob": None,
+                            "market_ticker": ticker,
+                            "market_title": title,
+                            "kalshi_match_debug": "orderbook_missing_yes_price",
+                        }
+                    )
+                    return result
 
                 result["kalshi_available"] = True
                 result["kalshi_prob"] = kalshi_prob
                 result["kalshi_home_prob"] = kalshi_prob
-                result["kalshi_away_prob"] = 1.0 - kalshi_prob
+                result["kalshi_away_prob"] = 1.0 - kalshi_prob if kalshi_prob is not None else None
                 result["market_ticker"] = ticker
                 result["market_title"] = title
                 result["confidence"] = 0.8 if not market.get("synthetic") else 0.5
+                result["kalshi_match_debug"] = f"matched_ticker={ticker} used_price_key={used_key}"
 
                 logger.info(
                     "Kalshi match found for %s vs %s: %s = %.2f%%",

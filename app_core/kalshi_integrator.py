@@ -555,6 +555,7 @@ class KalshiIntegrator:
             "market_ticker": None,
             "market_title": None,
             "confidence": 0.0,
+            "kalshi_match_debug": "no_market_match",
         }
 
         def normalize_name(name: str) -> str:
@@ -650,13 +651,28 @@ class KalshiIntegrator:
                     except Exception:
                         kalshi_prob = None
 
+            if kalshi_prob is None and best_market.get("synthetic"):
+                kalshi_prob = self._synthetic_probability(home_team, sport)
+                used_key = used_key or "synthetic"
+
             if kalshi_prob is None:
-                kalshi_prob = 0.5
                 logger.warning(
-                    "Kalshi orderbook missing YES price for %s, defaulting to 0.5",
+                    "Kalshi orderbook missing YES price for %s; leaving kalshi_prob=None",
                     ticker,
                 )
-                used_key = used_key or "orderbook_empty"
+                result.update(
+                    {
+                        "kalshi_available": False,
+                        "kalshi_prob": None,
+                        "kalshi_home_prob": None,
+                        "kalshi_away_prob": None,
+                        "market_ticker": ticker,
+                        "market_title": title,
+                        "confidence": 0.0,
+                        "kalshi_match_debug": "orderbook_missing_yes_price",
+                    }
+                )
+                return result
 
             result.update(
                 {
