@@ -10139,22 +10139,29 @@ if is_vertex_ai_enabled():
                             f"[DEBUG] {label} column choices -> sport={sport_col}, home={home_col}, away={away_col}, time={time_col}"
                         )
 
+                    # FIXED: Allow time_col to be missing for TheOver datasets
                     if not all([sport_col, home_col, away_col]):
+                        return None
+
+                    # FIXED: Backfill date if missing
+                    if not time_col and key_prefix == "theover":
+                        # Use today's date if CSV has no date column
+                        fallback_date = datetime.now().date()
+                        working["game_dt"] = pd.to_datetime(fallback_date)
+                        working["game_date"] = fallback_date
+                    elif time_col:
+                        working["game_dt"] = working[time_col].apply(_coerce_dt)
+                        working["game_date"] = working["game_dt"].apply(lambda x: x.date() if isinstance(x, datetime) else None)
+                    else:
+                        # OddsAPI must have a time column
                         return None
 
                     working["norm_sport"] = working[sport_col].apply(normalize_sport_or_league)
                     working["norm_home"] = working[home_col].apply(normalize_team_name)
                     working["norm_away"] = working[away_col].apply(normalize_team_name)
-
-                    if time_col:
-                        working["game_dt"] = working[time_col].apply(_coerce_dt)
-                        working["game_date"] = working["game_dt"].apply(
-                            lambda x: x.date() if isinstance(x, datetime) else None
-                        )
-                    else:
-                        working["game_dt"] = pd.NaT
-                        working["game_date"] = None
-
+                    
+                    # FIXED: Key generation - use date if available, but matching relies heavily on Team+Sport
+                    # We keep the date in the key for strictness, but ensure we have a valid date from the backfill above.
                     working[f"{key_prefix}_key"] = (
                         working["norm_sport"]
                         + "|"
