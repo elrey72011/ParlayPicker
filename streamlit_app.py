@@ -5992,44 +5992,55 @@ def add_theover_alignment(
     spreads = theover_spreads_df.copy() if isinstance(theover_spreads_df, pd.DataFrame) else pd.DataFrame()
     totals = theover_totals_df.copy() if isinstance(theover_totals_df, pd.DataFrame) else pd.DataFrame()
 
-    def _prepare(df: pd.DataFrame) -> Dict[str, pd.Series]:
+    def _prepare(df: pd.DataFrame) -> pd.DataFrame:
         if df is None or df.empty:
-            return {}
+            return pd.DataFrame()
 
         required = ["League", "HomeTeam", "AwayTeam"]
         missing = [col for col in required if col not in df.columns]
         if missing:
-            return {}
+            return pd.DataFrame()
 
         cleaned = df.dropna(subset=required).copy()
         cleaned["norm_league"] = cleaned["League"].apply(normalize_league)
         cleaned["norm_home"] = cleaned["HomeTeam"].apply(normalize_team)
         cleaned["norm_away"] = cleaned["AwayTeam"].apply(normalize_team)
-        cleaned["match_key"] = cleaned["norm_league"] + "|" + cleaned["norm_home"] + "|" + cleaned["norm_away"]
+        cleaned["theover_key"] = cleaned["norm_league"] + "|" + cleaned["norm_home"] + "|" + cleaned["norm_away"]
+        return cleaned
 
-        # Use exact key lookups only; no partial/fuzzy fallbacks here to avoid false positives.
-        return {row["match_key"]: row for _, row in cleaned.iterrows()}
+    spreads_clean = _prepare(spreads)
+    totals_clean = _prepare(totals)
 
-    spreads_map = _prepare(spreads)
-    totals_map = _prepare(totals)
-
-    def find_theover_row(row: pd.Series) -> Optional[pd.Series]:
-        market_type = row.get("pick_market_type")
-        league_val = row.get("league") or row.get("League")
-        game_str = row.get("game") or row.get("Game")
+    def _build_match_key_for_row(row: pd.Series) -> str:
+        league_val = row.get("league") or row.get("League") or ""
+        game_str = row.get("game") or row.get("Game") or ""
         home, away = split_game(game_str)
-
-        if market_type not in {"spread", "moneyline", "total"} or not league_val or not home or not away:
-            return None
-
+        if not league_val or not home or not away:
+            return ""
         league_norm = normalize_league(str(league_val))
         nhome, naway = normalize_team(home), normalize_team(away)
-        match_key = f"{league_norm}|{nhome}|{naway}"
-        swap_key = f"{league_norm}|{naway}|{nhome}"
+        return f"{league_norm}|{nhome}|{naway}"
 
-        dataset_map = spreads_map if market_type in {"spread", "moneyline"} else totals_map
-        # Strictly require a row keyed by the normalized tuple; if not present, treat as no coverage.
-        return dataset_map.get(match_key) or dataset_map.get(swap_key)
+    def find_theover_row(row: pd.Series, spreads_df: pd.DataFrame, totals_df: pd.DataFrame) -> Optional[pd.Series]:
+        key = row.get("match_key") or _build_match_key_for_row(row)
+        mtype = row.get("pick_market_type")
+        if not key or mtype not in {"spread", "moneyline", "total"}:
+            return None
+
+        if mtype in {"spread", "moneyline"}:
+            df = spreads_df
+        else:
+            df = totals_df
+
+        candidates = df[df["theover_key"] == key]
+        if candidates.empty:
+            parts = key.split("|")
+            if len(parts) == 3:
+                swapped = f"{parts[0]}|{parts[2]}|{parts[1]}"
+                candidates = df[df["theover_key"] == swapped]
+        if candidates.empty:
+            return None
+        return candidates.iloc[0]
 
     def classify_theover_alignment(row: pd.Series, theover_row: Optional[pd.Series]):
         if theover_row is None:
@@ -6086,8 +6097,11 @@ def add_theover_alignment(
     theover_edge_raw: List[Optional[float]] = []
     theover_summary: List[str] = []
 
-    for _, row in best_df.iterrows():
-        cand = find_theover_row(row)
+    out = best_df.copy()
+    out["match_key"] = out.apply(_build_match_key_for_row, axis=1)
+
+    for _, row in out.iterrows():
+        cand = find_theover_row(row, spreads_clean, totals_clean)
         alignment, team_val, side_val, edge_val, line_val = classify_theover_alignment(row, cand)
 
         theover_pick_team.append(team_val)
@@ -6098,7 +6112,6 @@ def add_theover_alignment(
         # Always mirror the structured alignment; no legacy Agree/Disagree placeholders.
         theover_summary.append(alignment)
 
-    out = best_df.copy()
     out["theover_pick_team"] = theover_pick_team
     out["theover_pick_side"] = theover_pick_side
     out["theover_pick_line"] = theover_pick_line
@@ -6175,6 +6188,8 @@ def add_kalshi_status(best_df: pd.DataFrame) -> pd.DataFrame:
 def _tokenize_name(name: str) -> List[str]:
     return [token for token in re.split(r"[^a-z0-9]+", normalize_team_name(name)) if token]
 
+def _build_match_key(league: str, home: str, away: str, game_datetime: Optional[datetime]) -> Tuple[str, str, str, Optional[date]]:
+    """Create a deterministic match key for TheOver/OddsAPI joins."""
 
 def _normalize_team_for_match(name: str) -> str:
     """Normalize a team string using the shared matcher (drops mascots/punctuation)."""
@@ -6184,8 +6199,6 @@ def _normalize_team_for_match(name: str) -> str:
     except Exception:
         return " ".join(_tokenize_name(name))
 
-def _build_match_key(league: str, home: str, away: str, game_datetime: Optional[datetime]) -> Tuple[str, str, str, Optional[date]]:
-    """Create a deterministic match key for TheOver/OddsAPI joins."""
 
 def _team_similarity(name_a: str, name_b: str) -> float:
     """Return a fuzzy similarity ratio between two team names (0-1)."""
