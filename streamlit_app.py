@@ -2531,45 +2531,28 @@ class KalshiIntegrator:
             return re.sub(r'[^a-z]', '', name.lower())
         
         def teams_match(bet_team: str, market_text: str) -> bool:
-            """Check if a bet team matches text in a market."""
-            # Ensure normalize_team_name is available (it should be defined just above this function)
-            bet_variations = normalize_team_name(bet_team)
-            market_upper = re.sub(r"[^A-Z0-9 ]", " ", market_text.upper().replace('_', ' '))
-            market_tokens = set(re.findall(r"[A-Z0-9]+", market_upper))
-
-            for variation in bet_variations:
-                variation_upper = variation.upper()
-                
-                # Clean up variations to help match "Utah State Aggies" to "Utah State"
-                core_name = variation_upper
-                
-                variation_clean = re.sub(r"[^A-Z0-9 ]", " ", core_name).strip()
-                variation_compact = variation_clean.replace(' ', '')
-    
-                if not variation_compact:
-                    continue
-    
-                # 1. Direct substring match (Best for "Utah State" in "Utah State vs...")
-                if variation_clean in market_upper:
-                    return True
-    
-                # 2. Token overlap (Fall back for partial matches)
-                variation_tokens = re.findall(r"[A-Z0-9]+", variation_clean)
-                if variation_tokens:
-                    # If all significant tokens (len > 2) are present
-                    sig_tokens = [t for t in variation_tokens if len(t) > 2]
-                    if sig_tokens and all(token in market_tokens for token in sig_tokens):
-                        return True
-    
-            return False
+        """Check if a bet team matches text in a market using robust TeamNameMatcher."""
+        # Use the robust matcher from app_core to normalize (strips mascots, fixes abbreviations)
+        bet_norm = TeamNameMatcher.normalize(bet_team).upper()
+        market_norm = TeamNameMatcher.normalize(market_text).upper()
         
-        try:
-            # Get all sports markets
-            sports_markets = self.get_sports_markets()
-
-            if not sports_markets:
-                self.last_error = self.last_error or "No Kalshi sports markets available"
-                return result
+        # 1. Direct match of normalized strings
+        if bet_norm in market_norm:
+            return True
+            
+        # 2. Token intersection for partial matches (e.g. "Utah State" in "Utah State vs...")
+        bet_tokens = set(bet_norm.split())
+        market_tokens = set(market_norm.split())
+        
+        # Filter out common words to avoid weak matches
+        ignored = {"STATE", "TECH", "A&M", "NORTH", "SOUTH", "EAST", "WEST", "CITY"}
+        sig_tokens = {t for t in bet_tokens if t not in ignored and len(t) > 2}
+        
+        if sig_tokens and sig_tokens.issubset(market_tokens):
+            return True
+            
+        # 3. Fuzzy match fallback for typos
+        return TeamNameMatcher.similarity_score(bet_norm, market_norm) >= 0.8
             
             # Search for matching market
             home_normalized = normalize_name(home_team)
