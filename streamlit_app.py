@@ -10031,51 +10031,40 @@ if is_vertex_ai_enabled():
                     if df is None or df.empty:
                         return None
                     working = df.copy()
-                    
-                    # Find columns
                     sport_col = _find_first_column(working.columns, sport_candidates)
                     home_col = _find_first_column(working.columns, home_candidates)
                     away_col = _find_first_column(working.columns, away_candidates)
                     time_col = _find_first_column(working.columns, time_candidates)
 
-                    # Allow time_col to be missing for TheOver datasets
+                    # FIXED: Allow time_col to be missing for TheOver datasets
                     if not all([sport_col, home_col, away_col]):
                         return None
 
-                    # Backfill date if missing (defaults to today)
+                    # FIXED: Backfill date if missing (defaults to today)
                     if not time_col and key_prefix == "theover":
                         fallback_date = datetime.now().date()
                         working["game_dt"] = pd.to_datetime(fallback_date)
                         working["game_date"] = fallback_date
                     elif time_col:
                         working["game_dt"] = working[time_col].apply(_coerce_dt)
-                        working["game_date"] = working["game_dt"].apply(
-                            lambda x: x.date() if isinstance(x, datetime) else None
-                        )
+                        working["game_date"] = working["game_dt"].apply(lambda x: x.date() if isinstance(x, datetime) else None)
                     else:
-                        return None # OddsAPI needs time
+                        return None
 
                     working["norm_sport"] = working[sport_col].apply(normalize_sport_or_league)
                     working["norm_home"] = working[home_col].apply(normalize_team_name)
                     working["norm_away"] = working[away_col].apply(normalize_team_name)
                     
-                    # FIXED: Generate keys WITHOUT DATE to improve matching rate
-                    # This matches "4 Dec" CSVs with "5 Dec" API games automatically
+                    # FIXED: Dateless keys for better matching
                     working[f"{key_prefix}_key"] = (
-                        working["norm_sport"]
-                        + "|"
-                        + working["norm_home"]
-                        + "|"
-                        + working["norm_away"]
+                        working["norm_sport"] + "|" + 
+                        working["norm_home"] + "|" + 
+                        working["norm_away"]
                     )
-                    
-                    # Swap key for reversed home/away (e.g. NBA home/away designation differences)
                     working[f"{key_prefix}_swap_key"] = (
-                        working["norm_sport"]
-                        + "|"
-                        + working["norm_away"]
-                        + "|"
-                        + working["norm_home"]
+                        working["norm_sport"] + "|" + 
+                        working["norm_away"] + "|" + 
+                        working["norm_home"]
                     )
                     working[f"{key_prefix}_source"] = label
                     return working
@@ -10092,7 +10081,7 @@ if is_vertex_ai_enabled():
                 away_candidates_odds = ["away_team", "away"]
                 time_candidates_odds = ["commence_time", "start_time", "game_time"]
 
-                odds_df = _normalize_dataframe(
+                odds_df = display_df = display_df(
                     odds_df,
                     "OddsAPI",
                     sport_candidates_odds,
