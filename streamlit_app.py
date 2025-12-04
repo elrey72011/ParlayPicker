@@ -6188,6 +6188,8 @@ def add_kalshi_status(best_df: pd.DataFrame) -> pd.DataFrame:
 def _tokenize_name(name: str) -> List[str]:
     return [token for token in re.split(r"[^a-z0-9]+", normalize_team_name(name)) if token]
 
+def _build_match_key(league: str, home: str, away: str, game_datetime: Optional[datetime]) -> Tuple[str, str, str, Optional[date]]:
+    """Create a deterministic match key for TheOver/OddsAPI joins."""
 
 def _normalize_team_for_match(name: str) -> str:
     """Normalize a team string using the shared matcher (drops mascots/punctuation)."""
