@@ -581,10 +581,14 @@ class VertexMasterAnalyzer:
             "kalshi_prob": None,
             "kalshi_alignment": None,
             "kalshi_match_debug": "no_match_found",
+            "kalshi_home_prob": None,
+            "kalshi_away_prob": None,
         }
 
         if not self.kalshi:
             feats["kalshi_match_debug"] = "kalshi_not_configured"
+            feats["kalshi_home_prob"] = None
+            feats["kalshi_away_prob"] = None
             return feats
 
         def _pass(markets: List[Dict[str, Any]], enforce_line: bool) -> Tuple[Optional[Dict[str, Any]], float, float]:
@@ -644,6 +648,8 @@ class VertexMasterAnalyzer:
 
             if not markets:
                 feats["kalshi_match_debug"] = "no_markets_from_kalshi"
+                feats["kalshi_home_prob"] = None
+                feats["kalshi_away_prob"] = None
                 logger.warning(
                     "Kalshi: no markets available (check API keys / network). game=%s vs %s",
                     home_team,
@@ -673,6 +679,8 @@ class VertexMasterAnalyzer:
 
             if best_market is None:
                 feats["kalshi_match_debug"] = "no_market_match"
+                feats["kalshi_home_prob"] = None
+                feats["kalshi_away_prob"] = None
                 logger.info(
                     "Kalshi: no matching market found for %s vs %s out of %d markets",
                     home_team,
@@ -700,6 +708,8 @@ class VertexMasterAnalyzer:
 
             if yes_price is None:
                 feats["kalshi_match_debug"] = "no_yes_price"
+                feats["kalshi_home_prob"] = None
+                feats["kalshi_away_prob"] = None
                 logger.warning(
                     "Kalshi: best market has no usable YES price for %s vs %s. keys tested=%s, raw_market=%s",
                     home_team,
@@ -712,6 +722,8 @@ class VertexMasterAnalyzer:
             prob = price_to_prob(yes_price)
             if prob is None:
                 feats["kalshi_match_debug"] = "invalid_price"
+                feats["kalshi_home_prob"] = None
+                feats["kalshi_away_prob"] = None
                 logger.warning(
                     "Kalshi: invalid YES price=%s for %s vs %s (key=%s, market=%s)",
                     yes_price,
@@ -736,6 +748,8 @@ class VertexMasterAnalyzer:
                 {
                     "kalshi_available": True,
                     "kalshi_prob": prob,
+                    "kalshi_home_prob": prob,
+                    "kalshi_away_prob": 1.0 - prob,
                     "kalshi_alignment": None,
                     "kalshi_match_debug": f"matched_ticker={best_market.get('ticker')} title={best_market.get('title')}",
                 }
@@ -756,6 +770,8 @@ class VertexMasterAnalyzer:
             logger.exception("Kalshi feature error for game %s vs %s: %s", home_team, away_team, e)
             feats["kalshi_available"] = False
             feats["kalshi_prob"] = None
+            feats["kalshi_home_prob"] = None
+            feats["kalshi_away_prob"] = None
             feats["kalshi_alignment"] = None
             feats["kalshi_match_debug"] = f"error={type(e).__name__}: {e}"
 
@@ -1387,9 +1403,21 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
     display_df["Edge vs Market %"] = display_df["edge_vs_market"].apply(
         lambda e: e * 100 if e is not None and not pd.isna(e) else np.nan
     )
-    display_df["Edge vs Kalshi %"] = display_df["edge_vs_kalshi"].apply(
-        lambda e: e * 100 if e is not None and not pd.isna(e) else "N/A"
-    )
+    display_df.loc[
+        ~display_df["kalshi_available"].fillna(False),
+        ["kalshi_prob"],
+    ] = None
+
+    def _edge_vs_kalshi(row: pd.Series) -> float:
+        if not row.get("kalshi_available"):
+            return float("nan")
+        p_ai = row.get("win_prob")
+        p_k = row.get("kalshi_prob")
+        if p_ai is None or pd.isna(p_ai) or p_k is None or pd.isna(p_k):
+            return float("nan")
+        return (p_ai - p_k) * 100.0
+
+    display_df["Edge vs Kalshi %"] = display_df.apply(_edge_vs_kalshi, axis=1)
     display_df["theover_edge_raw"] = display_df.get("theover_probability_for_pick")
     display_df["TheOver Edge %"] = display_df["theover_edge_raw"].apply(
         lambda e: e * 100 if e is not None and not pd.isna(e) else ""
@@ -1445,51 +1473,38 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
     
     # Kalshi: Show alignment as text + percentage
     def format_kalshi(row):
-        """
-        Determine if Kalshi agrees with our AI pick.
-
-        - Neutral band: 45%–55%
-        - If we picked home: Kalshi > 55% => Agree, <45% => Disagree
-        - If we picked away: Kalshi < 45% => Agree, >55% => Disagree
-        """
+        """Determine Kalshi agreement with a neutral band around 50%."""
         market_type = str(row.get("pick_market_type") or "").lower()
+        kalshi_prob = row.get("kalshi_prob")
+        kalshi_available = bool(row.get("kalshi_available"))
+
         if market_type == "total":
             return "No Kalshi match"
-
-        if not row.get("kalshi_available"):
+        if not kalshi_available or kalshi_prob is None or pd.isna(kalshi_prob):
             return "No Kalshi match"
 
-        kalshi_prob_pick = row.get("kalshi_prob")  # Probability relative to our pick
-        if kalshi_prob_pick is None or pd.isna(kalshi_prob_pick):
+        pick_team = row.get("pick_team", "")
+        home_team = row.get("home_team", "")
+        if not pick_team or not home_team:
             return "No Kalshi match"
 
-        pick_selection = str(row.get("pick_selection") or "").lower()
-        if pick_selection not in ("home", "away"):
-            return "No Kalshi match"
+        pick_is_home = str(pick_team).strip().lower() == str(home_team).strip().lower()
 
-        # Reconstruct home-team probability if we stored pick-specific probability
-        home_prob = row.get("kalshi_home_prob")
-        if home_prob is None and not pd.isna(kalshi_prob_pick):
-            if pick_selection == "home":
-                home_prob = float(kalshi_prob_pick)
-            elif pick_selection == "away":
-                home_prob = 1.0 - float(kalshi_prob_pick)
-
-        if home_prob is None or pd.isna(home_prob):
-            return "No Kalshi match"
-
-        if 0.45 <= home_prob <= 0.55:
+        if 0.45 <= kalshi_prob <= 0.55:
             return "Neutral"
 
-        if pick_selection == "home":
-            return "Agree" if home_prob > 0.55 else "Disagree"
-        return "Agree" if home_prob < 0.45 else "Disagree"
-    
+        if pick_is_home:
+            return "Agree" if kalshi_prob > 0.55 else "Disagree"
+        return "Agree" if kalshi_prob < 0.45 else "Disagree"
+
     display_df["Kalshi"] = display_df.apply(format_kalshi, axis=1)
-    display_df["Kalshi %"] = display_df["kalshi_prob"].apply(
-        lambda p: round(float(p) * 100.0)
-        if p is not None and not pd.isna(p)
-        else "N/A"
+    display_df["Kalshi %"] = display_df.apply(
+        lambda row: round(row["kalshi_prob"] * 100)
+        if row.get("kalshi_available")
+        and row.get("kalshi_prob") is not None
+        and not pd.isna(row.get("kalshi_prob"))
+        else "N/A",
+        axis=1,
     )
     
     # Add Kalshi Edge column (YOUR model prob - Kalshi crowd prob)
