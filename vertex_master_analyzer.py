@@ -635,6 +635,11 @@ class VertexMasterAnalyzer:
         try:
             home_team = game.get("home_team", "")
             away_team = game.get("away_team", "")
+            target_line = game.get("home_spread")
+            try:
+                target_line = float(target_line) if target_line is not None else None
+            except Exception:
+                target_line = None
 
             markets: List[Dict[str, Any]] = []
             if hasattr(self.kalshi, "get_sports_markets"):
@@ -656,26 +661,56 @@ class VertexMasterAnalyzer:
                     away_team,
                 )
                 return feats
+            norm_home = TeamNameMatcher.normalize(home_team).upper()
+            norm_away = TeamNameMatcher.normalize(away_team).upper()
 
+            # First pass: exact substring presence for both teams
             best_market = None
-            best_score = 0.0
+            best_line_diff = 999.0
+            candidates: List[Dict[str, Any]] = []
             for market in markets:
                 title = (market.get("title") or "")
                 ticker = (market.get("ticker") or "")
-                market_text = f"{title} {ticker}"
+                text = f"{title} {ticker}".upper()
+                if norm_home in text and norm_away in text:
+                    candidates.append(market)
 
-                home_score = TeamNameMatcher.similarity_score(
-                    TeamNameMatcher.normalize(home_team),
-                    TeamNameMatcher.normalize(market_text),
-                )
-                away_score = TeamNameMatcher.similarity_score(
-                    TeamNameMatcher.normalize(away_team),
-                    TeamNameMatcher.normalize(market_text),
-                )
-                combined = (home_score + away_score) / 2.0
-                if combined > best_score:
-                    best_score = combined
-                    best_market = market
+            if candidates:
+                for market in candidates:
+                    line = market.get("yes_strike") or market.get("strike") or None
+                    try:
+                        line = float(line) if line is not None else None
+                    except Exception:
+                        line = None
+
+                    if target_line is not None and line is not None:
+                        line_diff = abs(float(target_line) - float(line))
+                    else:
+                        line_diff = 0.0
+
+                    if best_market is None or line_diff < best_line_diff:
+                        best_market = market
+                        best_line_diff = line_diff
+            else:
+                # Fallback: fuzzy similarity over all markets
+                best_score = 0.0
+                for market in markets:
+                    title = (market.get("title") or "")
+                    ticker = (market.get("ticker") or "")
+                    market_text = f"{title} {ticker}"
+
+                    home_score = TeamNameMatcher.similarity_score(
+                        TeamNameMatcher.normalize(home_team),
+                        TeamNameMatcher.normalize(market_text),
+                    )
+                    away_score = TeamNameMatcher.similarity_score(
+                        TeamNameMatcher.normalize(away_team),
+                        TeamNameMatcher.normalize(market_text),
+                    )
+                    combined = (home_score + away_score) / 2.0
+                    if combined > best_score:
+                        best_score = combined
+                        best_market = market
 
             if best_market is None:
                 feats["kalshi_match_debug"] = "no_market_match"
