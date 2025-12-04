@@ -587,6 +587,47 @@ class VertexMasterAnalyzer:
             feats["kalshi_match_debug"] = "kalshi_not_configured"
             return feats
 
+        def _pass(markets: List[Dict[str, Any]], enforce_line: bool) -> Tuple[Optional[Dict[str, Any]], float, float]:
+            best_mkt = None
+            best_score = 0.0
+            best_line_diff = 999.0
+            for market in markets:
+                title = market.get("title", "") or ""
+                ticker = market.get("ticker", "") or ""
+                market_text = f"{title} {ticker}"
+
+                home_score = TeamNameMatcher.similarity_score(
+                    TeamNameMatcher.normalize(home_team), TeamNameMatcher.normalize(market_text)
+                )
+                away_score = TeamNameMatcher.similarity_score(
+                    TeamNameMatcher.normalize(away_team), TeamNameMatcher.normalize(market_text)
+                )
+                sim_score = min(home_score, away_score)
+                if sim_score < TEAM_FUZZY_THRESHOLD:
+                    continue
+
+                line_match = re.search(r"([+-]?\d+\.?\d*)", market_text)
+                line_val = None
+                if line_match:
+                    try:
+                        line_val = float(line_match.group(1))
+                    except Exception:
+                        line_val = None
+
+                line_diff = (
+                    abs((target_line or 0) - line_val)
+                    if (target_line is not None and line_val is not None)
+                    else None
+                )
+                if enforce_line and line_diff is not None and line_diff > MAX_LINE_DIFF:
+                    continue
+
+                if sim_score > best_score or (sim_score == best_score and (line_diff or 999) < best_line_diff):
+                    best_mkt = market
+                    best_score = sim_score
+                    best_line_diff = line_diff if line_diff is not None else best_line_diff
+            return best_mkt, best_score, best_line_diff
+
         try:
             home_team = game.get("home_team", "")
             away_team = game.get("away_team", "")
