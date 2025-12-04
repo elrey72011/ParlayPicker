@@ -7253,6 +7253,10 @@ def match_theover_to_leg(
     match_payload['team_score'] = team_score
     return match_payload
 
+    match_payload['failure_stage'] = None
+    match_payload['match_debug'] = match_payload.get('match_debug') or f"team_score={team_score:.2f} market={market_type}"
+    match_payload['team_score'] = team_score
+    return match_payload
 
 # Main function that merges TheOver.ai projections into ParlayPicker legs.
 def apply_theover_probabilities_to_legs(
