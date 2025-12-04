@@ -10341,15 +10341,13 @@ if is_vertex_ai_enabled():
                     ].head(50)
 
                     matched_keys = set(theover_combined["theover_key"].dropna())
-
-                    if theover_df is None or theover_df.empty or "theover_key" not in theover_df.columns:
-                        unmatched_theover = pd.DataFrame(
-                            columns=["norm_sport", "norm_home", "norm_away", "game_dt", "theover_key"]
-                        )
-                    else:
+                    # FIXED: Check if df is valid before accessing column
+                    if not theover_df.empty and "theover_key" in theover_df.columns:
                         unmatched_theover = theover_df[
                             ~theover_df["theover_key"].isin(matched_keys)
                         ][["norm_sport", "norm_home", "norm_away", "game_dt", "theover_key"]].head(50)
+                    else:
+                        unmatched_theover = pd.DataFrame()
 
                     if DEBUG_THEOVER_MERGE:
                         with st.expander("Unmatched OddsAPI games (sample)", expanded=False):
