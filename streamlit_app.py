@@ -2610,8 +2610,8 @@ class KalshiIntegrator:
                     result['market_title'] = f"Synthetic: {home_team}"
                     result['confidence'] = 0.4  # Lower confidence for synthetic
                     
-        except Exception as e:
-            logger.warning(f"Error getting Kalshi game market: {e}")
+            except Exception as e:
+                logger.warning(f"Error getting Kalshi game market: {e}")
         
         return result
     
