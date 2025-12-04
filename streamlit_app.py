@@ -10342,8 +10342,9 @@ if is_vertex_ai_enabled():
                     ].head(50)
 
                     matched_keys = set(theover_combined["theover_key"].dropna())
-                    # FIXED: Check if df is valid before accessing column
+                    # FIXED: Safer unmatched calculation
                     if not theover_df.empty and "theover_key" in theover_df.columns:
+                        matched_keys = set(theover_combined["theover_key"].dropna())
                         unmatched_theover = theover_df[
                             ~theover_df["theover_key"].isin(matched_keys)
                         ][["norm_sport", "norm_home", "norm_away", "game_dt", "theover_key"]].head(50)
