@@ -5849,8 +5849,19 @@ def normalize_team(name: str) -> str:
 
     s = name.lower().strip()
     s = re.sub(r"[^\w\s]", "", s)  # remove punctuation
-    s = s.replace("st ", "state ").replace("st.", "state ")
-    s = s.replace("univ", "university")
+
+    replacements = [
+        ("st ", "state "),
+        ("st.", "state "),
+        ("univ", "university"),
+        ("university of ", ""),
+        ("ucla bruins", "ucla"),
+        ("ucla ", "ucla"),
+        ("san jose st", "san jose state"),
+    ]
+    for old, new in replacements:
+        s = s.replace(old, new)
+
     s = re.sub(r"\s+", " ", s)
     return s.strip()
 
@@ -5906,34 +5917,51 @@ def parse_pick_row(row: pd.Series) -> Tuple[Optional[str], Optional[float], Opti
             return "moneyline"
         return None
 
-    market_type = _norm_market(row.get("pick_market_type") or row.get("Market Type") or row.get("Market"))
+    game = row.get("game") or row.get("Game") or ""
+    the_pick = str(row.get("the_pick") or row.get("THE PICK") or row.get("the_pick_display") or "")
+    mtype_hint = row.get("pick_market_type") or row.get("Market Type") or row.get("Market")
+    market_type = _norm_market(mtype_hint)
+
+    # Attempt numeric line parsing
     pick_line = _safe_float(row.get("pick_line") or row.get("Line") or row.get("line"))
-    game_str = row.get("game") or row.get("Game")
-    home_team, away_team = split_game(game_str)
-    pick_text = str(row.get("the_pick") or row.get("THE PICK") or row.get("the_pick_display") or "").strip()
+    if pick_line is None:
+        try:
+            pick_line = float(_extract_number(the_pick)) if _extract_number(the_pick) is not None else None
+        except Exception:
+            pick_line = None
+
+    home_team, away_team = split_game(game)
+    home_norm = normalize_team(home_team)
+    away_norm = normalize_team(away_team)
     pick_selection: Optional[str] = None
 
-    if market_type == "total" or any(token in pick_text.lower() for token in ["over", "under"]):
-        market_type = "total"
-        pick_selection = "over" if "over" in pick_text.lower() else ("under" if "under" in pick_text.lower() else None)
+    # Infer market type if still unknown
+    pick_lower = the_pick.lower()
+    if market_type is None:
+        if "over" in pick_lower or "under" in pick_lower or "total" in pick_lower:
+            market_type = "total"
+        elif "spread" in pick_lower:
+            market_type = "spread"
+        elif "ml" in pick_lower or "moneyline" in pick_lower:
+            market_type = "moneyline"
+
+    if market_type == "total":
+        if "over" in pick_lower:
+            pick_selection = "over"
+        elif "under" in pick_lower:
+            pick_selection = "under"
     elif market_type in {"spread", "moneyline"}:
-        norm_pick = normalize_team(pick_text)
-        nhome = normalize_team(home_team) if home_team else ""
-        naway = normalize_team(away_team) if away_team else ""
-        if norm_pick and nhome and _team_match(norm_pick, nhome):
+        pick_norm = normalize_team(the_pick)
+        if pick_norm and home_norm and _team_match(pick_norm, home_norm):
             pick_selection = "home"
-        elif norm_pick and naway and _team_match(norm_pick, naway):
+        elif pick_norm and away_norm and _team_match(pick_norm, away_norm):
             pick_selection = "away"
-    else:
-        norm_pick = normalize_team(pick_text)
-        nhome = normalize_team(home_team) if home_team else ""
-        naway = normalize_team(away_team) if away_team else ""
-        if norm_pick and nhome and _team_match(norm_pick, nhome):
-            market_type = "spread"
-            pick_selection = "home"
-        elif norm_pick and naway and _team_match(norm_pick, naway):
-            market_type = "spread"
-            pick_selection = "away"
+        else:
+            # fallback based on line sign when team text is ambiguous
+            if pick_line is not None and pick_line < 0:
+                pick_selection = "home"
+            elif pick_line is not None:
+                pick_selection = "away"
 
     return market_type, pick_line, pick_selection
 
@@ -5971,6 +5999,71 @@ def add_theover_alignment(
     spreads_map = {row["match_key"]: row for _, row in spreads.iterrows()} if not spreads.empty else {}
     totals_map = {row["match_key"]: row for _, row in totals.iterrows()} if not totals.empty else {}
 
+    def find_theover_row(row: pd.Series) -> Optional[pd.Series]:
+        market_type = row.get("pick_market_type")
+        league_val = row.get("league") or row.get("League")
+        game_str = row.get("game") or row.get("Game")
+        home, away = split_game(game_str)
+
+        if market_type not in {"spread", "moneyline", "total"} or not league_val or not home or not away:
+            return None
+
+        league_norm = normalize_league(str(league_val))
+        nhome, naway = normalize_team(home), normalize_team(away)
+        match_key = f"{league_norm}|{nhome}|{naway}"
+        swap_key = f"{league_norm}|{naway}|{nhome}"
+
+        dataset_map = spreads_map if market_type in {"spread", "moneyline"} else totals_map
+        return dataset_map.get(match_key) or dataset_map.get(swap_key)
+
+    def classify_theover_alignment(row: pd.Series, theover_row: Optional[pd.Series]):
+        if theover_row is None:
+            return "No Coverage", None, None, None, None
+
+        pick_market_type, pick_line, pick_selection = parse_pick_row(row)
+        pick_val = str(theover_row.get("Pick", "")).strip()
+        try:
+            their_line = float(theover_row.get("Line")) if theover_row.get("Line") not in (None, "") else None
+        except Exception:
+            their_line = None
+
+        game_str = row.get("game") or row.get("Game") or ""
+        home_team, away_team = split_game(game_str)
+        nhome = normalize_team(home_team)
+        naway = normalize_team(away_team)
+
+        their_side: Optional[str] = None
+        their_team: Optional[str] = None
+
+        if pick_market_type == "total":
+            their_side = pick_val.lower() if isinstance(pick_val, str) else None
+            their_team = None
+        else:
+            pick_norm = normalize_team(pick_val)
+            if pick_norm and _team_match(pick_norm, nhome):
+                their_side = "home"
+            elif pick_norm and _team_match(pick_norm, naway):
+                their_side = "away"
+            their_team = pick_val or None
+
+        edge_val = _safe_float(theover_row.get("WinProbability"))
+
+        if pick_selection is None or pick_line is None or their_line is None or their_side is None:
+            return "Unknown", their_team, their_side, edge_val, their_line
+
+        aligned = abs(pick_line - their_line) <= line_tolerance and pick_selection == their_side
+        opposite = pick_selection in {"home", "away"} and their_side in {"home", "away"} and pick_selection != their_side
+        opposite |= pick_selection in {"over", "under"} and their_side in {"over", "under"} and pick_selection != their_side
+
+        if aligned:
+            alignment = "Aligned"
+        elif opposite:
+            alignment = "Opposite Side"
+        else:
+            alignment = "Different Line"
+
+        return alignment, their_team, their_side, edge_val, their_line
+
     theover_pick_team: List[Optional[str]] = []
     theover_pick_side: List[Optional[str]] = []
     theover_pick_line: List[Optional[Any]] = []
@@ -5979,74 +6072,15 @@ def add_theover_alignment(
     theover_summary: List[str] = []
 
     for _, row in best_df.iterrows():
-        league_val = row.get("league") or row.get("League")
-        game_str = row.get("game") or row.get("Game")
-        home, away = split_game(game_str)
-        market_type, pick_line, pick_selection = parse_pick_row(row)
+        cand = find_theover_row(row)
+        alignment, team_val, side_val, edge_val, line_val = classify_theover_alignment(row, cand)
 
-        if not league_val or not home or not away or market_type not in {"spread", "total", "moneyline"}:
-            theover_pick_team.append(None)
-            theover_pick_side.append(None)
-            theover_pick_line.append(None)
-            theover_alignment.append("No Coverage")
-            theover_edge_raw.append(None)
-            theover_summary.append("No TheOver match")
-            continue
-
-        league_norm = normalize_league(str(league_val))
-        nhome, naway = normalize_team(home), normalize_team(away)
-        match_key = f"{league_norm}|{nhome}|{naway}"
-        swap_key = f"{league_norm}|{naway}|{nhome}"
-
-        dataset_map = spreads_map if market_type == "spread" or market_type == "moneyline" else totals_map
-        cand = dataset_map.get(match_key) or dataset_map.get(swap_key)
-
-        if cand is None:
-            theover_pick_team.append(None)
-            theover_pick_side.append(None)
-            theover_pick_line.append(None)
-            theover_alignment.append("No Coverage")
-            theover_edge_raw.append(None)
-            theover_summary.append("No TheOver match")
-            continue
-
-        pick_val = str(cand.get("Pick", "")).strip()
-        try:
-            their_line = float(cand.get("Line")) if cand.get("Line") not in (None, "") else None
-        except Exception:
-            their_line = None
-
-        if market_type == "total":
-            their_side = pick_val.lower()
-            theover_pick_team.append(None)
-        else:
-            norm_pick = normalize_team(pick_val)
-            their_side = "home" if _team_match(norm_pick, nhome) else "away"
-            theover_pick_team.append(pick_val)
-
-        theover_pick_side.append(their_side)
-        theover_pick_line.append(cand.get("Line"))
-        edge_val = _safe_float(cand.get("WinProbability"))
+        theover_pick_team.append(team_val)
+        theover_pick_side.append(side_val)
+        theover_pick_line.append(line_val)
+        theover_alignment.append(alignment)
         theover_edge_raw.append(edge_val)
-
-        if pick_selection is None or pick_line is None or their_line is None or their_side is None:
-            theover_alignment.append("Unknown")
-            theover_summary.append("No TheOver match" if edge_val is None else "Unknown")
-            continue
-
-        aligned = abs(pick_line - their_line) <= line_tolerance and pick_selection == their_side
-        opposite = pick_selection in {"home", "away"} and their_side in {"home", "away"} and pick_selection != their_side
-        opposite |= pick_selection in {"over", "under"} and their_side in {"over", "under"} and pick_selection != their_side
-
-        if aligned:
-            theover_alignment.append("Aligned")
-            theover_summary.append("Aligned")
-        elif opposite:
-            theover_alignment.append("Opposite Side")
-            theover_summary.append("Opposite Side")
-        else:
-            theover_alignment.append("Different Line")
-            theover_summary.append("Different Line")
+        theover_summary.append(alignment if cand is not None else "No TheOver match")
 
     out = best_df.copy()
     out["theover_pick_team"] = theover_pick_team
@@ -12389,8 +12423,20 @@ if is_vertex_ai_enabled():
                                 hide_index=True
                             )
                     
-                    # CSV Download
-                    csv_buffer = best_bets_df[display_cols].to_csv(index=False)
+                    # CSV Download with structured alignment/status fields
+                    export_cols = display_cols + [
+                        'pick_market_type',
+                        'pick_line',
+                        'pick_selection',
+                        'theover_pick_team',
+                        'theover_pick_side',
+                        'theover_pick_line',
+                        'theover_edge_raw',
+                        'theover_alignment',
+                        'kalshi_status',
+                    ]
+                    export_cols = [c for c in export_cols if c in best_bets_df.columns]
+                    csv_buffer = best_bets_df[export_cols].to_csv(index=False)
                     st.download_button(
                         "⬇️ Download Best Bets (CSV)",
                         data=csv_buffer,
@@ -12439,6 +12485,7 @@ if is_vertex_ai_enabled():
                     )
 
             if best_bets_df is not None and not best_bets_df.empty:
+                best_bets_df = apply_pick_parsing(best_bets_df)
                 best_bets_df = add_theover_alignment(
                     best_bets_df,
                     theover_spreads_data if 'theover_spreads_data' in locals() else None,
