@@ -8311,8 +8311,12 @@ if 'kalshi_integrator' not in st.session_state:
         logger.info(f"Kalshi API key found: {kalshi_key[:8]}...")
     else:
         logger.info("Kalshi API keys not configured")
-    
+
     st.session_state['kalshi_integrator'] = KalshiIntegrator(kalshi_key, kalshi_secret)
+    kalshi_obj = st.session_state.get('kalshi_integrator')
+    logger.info(f"[Kalshi INIT] integrator_created={kalshi_obj is not None}")
+    if kalshi_obj is None:
+        logger.info("[Kalshi INIT] Missing API key or secret")
 if not _session_client_or_none('apisports_nfl_client', APISportsFootballClient):
     stored_key = st.session_state.get('nfl_apisports_api_key')
     stored_source = st.session_state.get('nfl_apisports_key_source')
@@ -8925,8 +8929,13 @@ with main_tab1:
                                     'totals': theover_totals_data,
                                 },
                                 kalshi_integrator=kalshi_int,
+                                use_kalshi=st.session_state.get('kalshi_enabled', True),
                             )
-                            
+                            logger.info(
+                                f"[Kalshi ANALYZER] use_kalshi={analyzer.use_kalshi}, "
+                                f"integrator_is_none={analyzer.kalshi is None}"
+                            )
+
                             results_df = analyzer.analyze_all_games(all_games, league='multi')
                             
                             if not results_df.empty:
@@ -9696,8 +9705,19 @@ if is_vertex_ai_enabled():
                         'ml': theover_ml_data if 'theover_ml_data' in locals() else None,
                     },
                     kalshi_integrator=kalshi_int,
+                    use_kalshi=st.session_state.get('kalshi_enabled', True),
                 )
-                
+                kalshi_obj = getattr(analyzer, "kalshi", None)
+                use_kalshi = getattr(analyzer, "use_kalshi", None)
+                logger.info(
+                    f"[VMA BUTTON] Run Vertex AI Master Analysis clicked | "
+                    f"use_kalshi={use_kalshi} kalshi_is_none={kalshi_obj is None}"
+                )
+                logger.info(
+                    f"[Kalshi ANALYZER] use_kalshi={analyzer.use_kalshi}, "
+                    f"integrator_is_none={analyzer.kalshi is None}"
+                )
+
                 results_df = analyzer.analyze_all_games(all_games, league='multi')
                 
                 if not results_df.empty:
