@@ -5,16 +5,13 @@ from google.cloud import aiplatform
 import sys
 import os
 
-# Ensure we can find app_core
+# --- 1. SETUP IMPORTS ---
+# Add project root to path so we can import from app_core and config
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-# --- IMPORTS FROM YOUR REPO ---
 from config import THE_ODDS_API_KEY, VERTEX_CONFIG, MASTER_DATA_FILE
+# This now correctly looks inside the 'app_core' folder
 from app_core.feature_engine import prepare_features_for_inference
-
-# Optional: Uncomment these if you are ready to use them
-# from app_core.kalshi_integrator import get_kalshi_markets 
-# from theover_vertex_analyzer import get_ai_scores
 
 def fetch_todays_odds():
     """Fetches LIVE upcoming odds from The Odds API"""
@@ -36,7 +33,6 @@ def fetch_todays_odds():
             
             if isinstance(data, list):
                 for game in data:
-                    # Basic extraction
                     row = {
                         'game_id': game['id'], 
                         'sport': sport, 
@@ -45,7 +41,7 @@ def fetch_todays_odds():
                         'away_team': game['away_team'],
                         'home_score': np.nan, 
                         'away_score': np.nan,
-                        # Defaults that will be filled by rolling stats logic or feature engine
+                        # Defaults (will be filled by rolling stats logic)
                         'home_win_pct': 0.5, 
                         'away_win_pct': 0.5, 
                         'spread_normalized': 0.0 
@@ -68,18 +64,17 @@ def get_vertex_predictions(df):
     endpoint_name = f"projects/{VERTEX_CONFIG['project_id']}/locations/{VERTEX_CONFIG['location']}/endpoints/{VERTEX_CONFIG['endpoint_id']}"
     endpoint = aiplatform.Endpoint(endpoint_name)
     
-    # 1. Select ONLY feature columns from config
+    # 1. Select ONLY feature columns
     features = VERTEX_CONFIG['feature_cols']
+    clean_df = df.copy()
     
     # Ensure all columns exist
-    clean_df = df.copy()
     for col in features:
         if col not in clean_df.columns:
             clean_df[col] = 0.0
             
+    # 2. Strict Type Conversion (Fixes 'Unicode-3' Error)
     clean_df = clean_df[features].fillna(0.0)
-    
-    # 2. Convert to list of floats (Strict type enforcement)
     X_pred = []
     for row in clean_df.values:
         clean_row = []
@@ -96,12 +91,12 @@ def get_vertex_predictions(df):
         df['ml_win_prob'] = preds
     except Exception as e:
         print(f"❌ Vertex Prediction Error: {e}")
-        df['ml_win_prob'] = 0.5 # Default neutral if failure
+        df['ml_win_prob'] = 0.5 
         
     return df
 
 def main():
-    # 1. Load History (using path from config)
+    # 1. Load History
     try:
         history = pd.read_csv(MASTER_DATA_FILE)
         print(f"✅ Loaded history: {len(history)} games")
@@ -115,25 +110,21 @@ def main():
         print("❌ No games found today.")
         return
 
-    # 3. Engineer Features (Rolling stats, etc.)
+    # 3. Engineer Features
     ready_df = prepare_features_for_inference(history, today)
     
     # 4. Predict
     results = get_vertex_predictions(ready_df)
     
     # 5. Calculate Edge & Save
-    # Edge = Model Prob - 50% (You can improve this by scraping real implied odds later)
     results['edge'] = results['ml_win_prob'] - 0.5  
     results = results.sort_values('edge', ascending=False)
     
     print("\n🚀 TOP PICKS:")
-    display_cols = ['sport', 'home_team', 'away_team', 'ml_win_prob', 'edge']
-    print(results[display_cols].head(5))
+    print(results[['sport', 'home_team', 'away_team', 'ml_win_prob', 'edge']].head(5))
     
-    # Save to output directory if possible
-    output_file = "todays_picks.csv"
-    results.to_csv(output_file, index=False)
-    print(f"\n✅ Saved to {output_file}")
+    results.to_csv("todays_picks.csv", index=False)
+    print("\n✅ Saved to todays_picks.csv")
 
 if __name__ == "__main__":
     main()
