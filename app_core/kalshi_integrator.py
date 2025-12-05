@@ -172,8 +172,15 @@ def match_game_to_kalshi(
             reason="no_events",
         )
 
-    norm_home = normalize_name(home_team)
-    norm_away = normalize_name(away_team)
+    def _meaningful_tokens(s: str) -> List[str]:
+        if not s:
+            return []
+        tokens = _normalize_market_text(s).split()
+        stopwords = {"state", "university", "fc", "cf", "club", "the", "and", "at"}
+        return [t for t in tokens if len(t) > 2 and t not in stopwords]
+
+    home_tokens = set(_meaningful_tokens(home_team))
+    away_tokens = set(_meaningful_tokens(away_team))
     game_date = game_dt.date() if game_dt else None
 
     best_market: Optional[Dict[str, Any]] = None
@@ -191,26 +198,22 @@ def match_game_to_kalshi(
         title = market.get("title") or ""
         subtitle = market.get("subtitle") or ""
         ticker = market.get("ticker") or ""
-        market_text = normalize_name(" ".join([title, subtitle, ticker]))
+        market_text = _normalize_market_text(title, subtitle, ticker)
+        market_tokens = set(market_text.split())
 
-        home_ratio = SequenceMatcher(None, norm_home, market_text).ratio() if norm_home else 0.0
-        away_ratio = SequenceMatcher(None, norm_away, market_text).ratio() if norm_away else 0.0
+        home_overlap = len(home_tokens & market_tokens)
+        away_overlap = len(away_tokens & market_tokens)
 
-        home_hit = bool(norm_home) and (norm_home in market_text or home_ratio >= TEAM_FUZZY_THRESHOLD)
-        away_hit = bool(norm_away) and (norm_away in market_text or away_ratio >= TEAM_FUZZY_THRESHOLD)
+        team_hits = 0
+        if home_overlap > 0:
+            team_hits += 1
+        if away_overlap > 0:
+            team_hits += 1
 
-        team_score = 0.0
-        if home_hit:
-            team_score += max(1.0, home_ratio)
-        if away_hit:
-            team_score += max(1.0, away_ratio)
-
-        if team_score > 0:
-            any_team_hit = True
-        else:
-            if max(home_ratio, away_ratio) > 0:
-                any_team_hit = True
+        if team_hits == 0:
             continue
+
+        any_team_hit = True
 
         market_dt = _parse_market_date(market.get("close_time") or market.get("event_date"))
         date_ok = False
@@ -228,12 +231,9 @@ def match_game_to_kalshi(
         else:
             continue
 
-        score = team_score + (0.5 if date_ok else 0)
-        if expected := LEAGUE_SERIES_MAP.get(league_norm, ""):
-            if series.startswith(expected):
-                score += 0.25
+        score = float(home_overlap + away_overlap)
         if ticker and "GAME" in ticker.upper():
-            score += 0.1
+            score += 0.5
 
         if score > best_score:
             best_score = score
@@ -245,6 +245,12 @@ def match_game_to_kalshi(
             reason = "date_mismatch"
         logging.info(
             f"[Kalshi f_k_g] NO MATCH | home={home_team} away={away_team} date={game_dt} reason={reason}"
+        )
+        logger.info(
+            "fetch_kalshi_for_game: no_market_match home=%s away=%s date=%s",
+            home_team,
+            away_team,
+            game_dt,
         )
         return KalshiMatchResult(
             matched=False,
@@ -320,6 +326,15 @@ def match_game_to_kalshi(
         )
 
     probability = max(0.0, min(1.0, float(probability)))
+
+    logger.info(
+        "fetch_kalshi_for_game: MATCH home=%s away=%s date=%s title=%s ticker=%s",
+        home_team,
+        away_team,
+        game_dt,
+        best_market.get("title"),
+        best_market.get("ticker"),
+    )
 
     result = KalshiMatchResult(
         matched=True,
