@@ -9,7 +9,7 @@ import json
 import logging
 import os
 from functools import lru_cache
-from typing import Iterable, List, Optional
+from typing import Iterable, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -25,6 +25,9 @@ except Exception:  # pragma: no cover - allow module import without SDK
     aiplatform = None
 
 logger = logging.getLogger(__name__)
+
+# Human-readable model label for surfaced metadata/exports
+VERTEX_MODEL_DISPLAY_NAME = "parlaypicker-v3-stripped (Vertex XGBoost)"
 
 # ---------------------------------------------------------------------------
 # Configuration helpers
@@ -196,20 +199,21 @@ def predict_win_probabilities(df: pd.DataFrame, feature_columns: Iterable[str]) 
         return None
 
 
-def score_with_vertex(df: pd.DataFrame, feature_cols: Iterable[str]) -> tuple[pd.Series, str]:
-    """Score a DataFrame with Vertex and return probabilities + status.
+def score_with_vertex(df: pd.DataFrame, feature_cols: Iterable[str]) -> tuple[pd.Series, str, str]:
+    """Score a DataFrame with Vertex and return probabilities + status + model.
 
     The status string is "vertex" on success or "fallback:<reason>" on
-    failure. Returned Series always aligns with ``df.index``.
+    failure. Returned Series always aligns with ``df.index`` and includes
+    the human-readable model name for export visibility.
     """
 
     try:
         if not is_vertex_prediction_configured():
-            return pd.Series(np.nan, index=df.index), "fallback:not_configured"
+            return pd.Series(np.nan, index=df.index), "fallback:not_configured", VERTEX_MODEL_DISPLAY_NAME
 
         endpoint = _get_vertex_endpoint()
         if endpoint is None:
-            return pd.Series(np.nan, index=df.index), "fallback:endpoint"
+            return pd.Series(np.nan, index=df.index), "fallback:endpoint", VERTEX_MODEL_DISPLAY_NAME
 
         df_payload = df.copy()
         for col in feature_cols:
@@ -229,11 +233,11 @@ def score_with_vertex(df: pd.DataFrame, feature_cols: Iterable[str]) -> tuple[pd
             else:
                 probs.append(float(entry))
         series = pd.Series(np.array(probs, dtype=float), index=df.index)
-        return series, "vertex"
+        return series, "vertex", VERTEX_MODEL_DISPLAY_NAME
     except Exception as exc:  # pragma: no cover - network boundary
         print(f"[Vertex] Error: {exc}")
         logger.warning("Vertex prediction failed in score_with_vertex: %s", exc)
-        return pd.Series(np.nan, index=df.index), "fallback:error"
+        return pd.Series(np.nan, index=df.index), "fallback:error", VERTEX_MODEL_DISPLAY_NAME
 
 
 def quick_vertex_sanity_check():

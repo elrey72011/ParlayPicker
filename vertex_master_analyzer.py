@@ -18,6 +18,7 @@ import streamlit as st
 from app_core.team_name_matcher import TeamNameMatcher
 from app_core.kalshi_integrator import fetch_kalshi_for_game, price_to_prob
 from app_core.vertex_ai_endpoint import (
+    VERTEX_MODEL_DISPLAY_NAME,
     VERTEX_FEATURE_COLUMNS,
     is_vertex_prediction_configured,
     score_with_vertex,
@@ -1358,13 +1359,15 @@ class VertexMasterAnalyzer:
         df.attrs["ml_sources_used"] = ml_sources_used
 
         ai_status = "fallback:not_run"
+        ai_model = VERTEX_MODEL_DISPLAY_NAME
         if not df.empty:
             feature_df = pd.DataFrame(vertex_feature_rows, index=df.index)
-            probs_series, ai_status = score_with_vertex(feature_df, VERTEX_FEATURE_COLUMNS)
+            probs_series, ai_status, ai_model = score_with_vertex(feature_df, VERTEX_FEATURE_COLUMNS)
             df["AI Win %"] = (probs_series * 100).round(1)
             df["ai_status"] = ai_status
+            df["AI Model"] = ai_model
             print(
-                f"[Vertex] status={ai_status}, n_rows={len(df)}, n_valid_probs={df['AI Win %'].notna().sum()}"
+                f"[Vertex] status={ai_status}, model={ai_model}, n_rows={len(df)}, n_valid_probs={df['AI Win %'].notna().sum()}"
             )
 
             if ai_status == "vertex":
@@ -1385,6 +1388,8 @@ class VertexMasterAnalyzer:
             df["AI Win %"] = pd.Series(np.nan, index=df.index)
         if "ai_status" not in df.columns:
             df["ai_status"] = ai_status
+        if "AI Model" not in df.columns:
+            df["AI Model"] = ai_model
 
         logger.info("VertexMasterAnalyzer: results_df columns = %s", list(df.columns))
         try:
@@ -1486,6 +1491,8 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
         display_df["AI Win %"] = (win_series * 100).round(1)
     if "ai_status" not in display_df.columns:
         display_df["ai_status"] = "unknown"
+    if "AI Model" not in display_df.columns:
+        display_df["AI Model"] = VERTEX_MODEL_DISPLAY_NAME
     display_df["sort_time"] = pd.to_datetime(display_df["game_time"], errors="coerce")
     display_df = display_df.sort_values("sort_time", ascending=True)
     display_df["is_today"] = display_df["game_time"].apply(is_today_calendar_day)
@@ -1752,6 +1759,7 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
     csv_cols = cols + [
         "win_prob",
         "AI Win %",
+        "AI Model",
         "market_prob",
         "edge_vs_market",
         "pick_market_type",
