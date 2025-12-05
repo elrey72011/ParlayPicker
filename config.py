@@ -180,8 +180,6 @@ NOTIFICATION_CONFIG = {
     'notify_on': ['high_value_bets', 'model_training_complete', 'errors']
 }
 
-# ... existing imports ...
-
 # --- ADD THESE NEW KEYS ---
 # The Odds API (for live odds)
 THE_ODDS_API_KEY = os.getenv('THE_ODDS_API_KEY', 'b722c798f7bca605da45a09dba155152')
