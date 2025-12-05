@@ -179,3 +179,27 @@ NOTIFICATION_CONFIG = {
     'webhook_url': os.getenv('SLACK_WEBHOOK_URL', ''),
     'notify_on': ['high_value_bets', 'model_training_complete', 'errors']
 }
+
+# --- ADD THESE NEW KEYS ---
+# The Odds API (for live odds)
+THE_ODDS_API_KEY = os.getenv('THE_ODDS_API_KEY', 'b722c798f7bca605da45a09dba155152')
+
+# Vertex AI Configuration
+VERTEX_CONFIG = {
+    'project_id': GCP_CONFIG['project_id'],
+    'location': GCP_CONFIG['location'],
+    'endpoint_id': os.getenv('VERTEX_ENDPOINT_ID', '155434660283809792'), # Your Working ID
+    'feature_cols': [
+        "home_win_pct", "away_win_pct", "home_avg_points", "away_avg_points",
+        "home_form_last5", "away_form_last5", "home_pd_last5", "away_pd_last5",
+        "home_sos_last5", "away_sos_last5", "win_pct_diff", "avg_points_diff",
+        "form_diff", "pd_last5_diff", "sos_diff", "def_rating_diff", "streak_diff",
+        "spread_normalized", "public_betting_centered", "sharp_vs_public",
+        "rest_advantage", "back_to_back", "primetime_game", "division_game",
+        "injuries_impact", "weather_factor", "line_movement", "total_movement",
+        "model_consensus", "theover_probability"
+    ]
+}
+
+# Path to your master history file
+MASTER_DATA_FILE = DATA_DIR / 'master_all_sports.csv'
