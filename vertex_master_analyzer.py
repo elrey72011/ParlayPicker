@@ -1774,7 +1774,7 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
         "kalshi_prob",
         "edge_vs_kalshi",
         "kalshi_match_debug",
-        "theover_edge",
+        "theover_edge", 
         "theover_match_debug",
         "kalshi_status",
         "ai_status",
