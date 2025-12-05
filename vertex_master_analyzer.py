@@ -16,7 +16,10 @@ import pandas as pd
 import streamlit as st
 
 from app_core.team_name_matcher import TeamNameMatcher
-from app_core.kalshi_integrator import fetch_kalshi_for_game, price_to_prob
+from app_core.kalshi_integrator import (
+    get_match_for_game,
+    KalshiMatchResult,
+)
 from app_core.vertex_ai_endpoint import (
     VERTEX_MODEL_DISPLAY_NAME,
     VERTEX_FEATURE_COLUMNS,
@@ -598,11 +601,13 @@ class VertexMasterAnalyzer:
             "kalshi_label": None,
             "kalshi_volume": None,
             "kalshi_confidence": None,
+            "kalshi_status": "no_market_match",
         }
 
         # If Kalshi is not configured, bail out cleanly
         if not getattr(self, "kalshi", None) or not getattr(self, "use_kalshi", True):
             feats["kalshi_match_debug"] = "kalshi_not_configured" if not getattr(self, "kalshi", None) else "kalshi_disabled"
+            feats["kalshi_status"] = feats["kalshi_match_debug"]
             return feats
 
         try:
@@ -621,29 +626,45 @@ class VertexMasterAnalyzer:
                         game_dt = None
 
                 # Delegate to the integrator as the single source of truth
-                market_info = fetch_kalshi_for_game(
+                market_info = get_match_for_game(
+                    league,
                     home,
                     away,
                     game_dt,
                     integrator=self.kalshi,
-                ) or {}
-
-            prob = market_info.get("kalshi_probability") if "kalshi_probability" in market_info else market_info.get("kalshi_prob")
-            available = prob is not None
-
-            if not available or prob is None:
-                feats["kalshi_available"] = False
-                feats["kalshi_prob"] = None
-                feats["kalshi_alignment"] = None
-                feats["kalshi_match_debug"] = market_info.get(
-                    "kalshi_match_debug", "no_market_match"
                 )
+
+            # Handle KalshiMatchResult or legacy dicts
+            is_match_result = isinstance(market_info, dict) and "matched" in market_info
+            if is_match_result:
+                result: KalshiMatchResult = market_info  # type: ignore[assignment]
+                feats["kalshi_status"] = result.get("reason", "no_market_match")
+                feats["kalshi_match_debug"] = result.get("raw_event_id") or result.get("reason", "no_match_found")
+                if not result.get("matched"):
+                    return feats
+
+                prob = result.get("probability")
+                label = result.get("label")
+            else:
+                prob = market_info.get("kalshi_probability") if isinstance(market_info, dict) else None
+                label = market_info.get("kalshi_label") if isinstance(market_info, dict) else None
+                feats["kalshi_status"] = (
+                    market_info.get("kalshi_match_debug")
+                    if isinstance(market_info, dict)
+                    else "no_market_match"
+                )
+                feats["kalshi_match_debug"] = feats["kalshi_status"]
+                if prob is None:
+                    return feats
+
+            if prob is None:
                 return feats
 
             try:
                 prob = float(prob)
             except Exception:
                 feats["kalshi_match_debug"] = f"invalid_prob={prob}"
+                feats["kalshi_status"] = feats["kalshi_match_debug"]
                 feats["kalshi_available"] = False
                 feats["kalshi_prob"] = None
                 return feats
@@ -653,13 +674,11 @@ class VertexMasterAnalyzer:
             feats["kalshi_available"] = True
             feats["kalshi_prob"] = prob
             feats["kalshi_home_prob"] = prob
-            feats["kalshi_label"] = market_info.get("kalshi_label") or market_info.get("market_title")
-            feats["kalshi_volume"] = market_info.get("kalshi_volume")
-            feats["kalshi_confidence"] = market_info.get("confidence")
-            feats["kalshi_match_debug"] = market_info.get(
-                "kalshi_match_debug",
-                f"matched_ticker={market_info.get('market_ticker')} prob={prob:.3f}",
-            )
+            feats["kalshi_label"] = label or (market_info.get("kalshi_label") if isinstance(market_info, dict) else None)
+            feats["kalshi_volume"] = market_info.get("kalshi_volume") if isinstance(market_info, dict) else None
+            feats["kalshi_confidence"] = market_info.get("confidence") if isinstance(market_info, dict) else None
+            feats["kalshi_match_debug"] = market_info.get("kalshi_match_debug", feats.get("kalshi_match_debug")) if isinstance(market_info, dict) else feats.get("kalshi_match_debug")
+            feats["kalshi_status"] = market_info.get("kalshi_match_debug", feats.get("kalshi_status")) if isinstance(market_info, dict) else feats.get("kalshi_status")
 
             model_p = game.get("implied_home_prob") or game.get("win_prob")
             try:
@@ -1133,6 +1152,7 @@ class VertexMasterAnalyzer:
         kalshi_attempts = 0
         kalshi_hits = 0
         kalshi_errors = 0
+        kalshi_fail_reasons: Dict[str, int] = {}
 
         vertex_feature_rows: List[Dict[str, Any]] = []
 
@@ -1169,14 +1189,21 @@ class VertexMasterAnalyzer:
                                 game_dt = datetime.fromisoformat(str(game_time).replace("Z", "+00:00"))
                             except Exception:
                                 game_dt = None
-                        kalshi_info = fetch_kalshi_for_game(
+                        kalshi_info = get_match_for_game(
+                            game_league,
                             home_team or "",
                             away_team or "",
                             game_dt,
                             integrator=self.kalshi,
                         )
-                        if kalshi_info:
+                        if isinstance(kalshi_info, dict) and kalshi_info.get("matched"):
                             kalshi_hits += 1
+                        else:
+                            reason = None
+                            if isinstance(kalshi_info, dict):
+                                reason = kalshi_info.get("reason")
+                            reason = reason or "no_match"
+                            kalshi_fail_reasons[reason] = kalshi_fail_reasons.get(reason, 0) + 1
                     except Exception as e:
                         kalshi_errors += 1
                         print(
@@ -1336,12 +1363,6 @@ class VertexMasterAnalyzer:
                         else None
                     )
                     best_candidate.setdefault("kalshi_label", kalshi_feats.get("kalshi_label"))
-                elif DEBUG_FORCE_KALSHI:
-                    best_candidate.setdefault("kalshi_available", False)
-                    best_candidate.setdefault("kalshi_prob", None)
-                    best_candidate.setdefault("kalshi_label", "No Kalshi match")
-                    best_candidate.setdefault("kalshi_match_debug", "no_market_match")
-
                 # Track source usage for the winning candidate
                 src = best_candidate.get("ml_source")
                 if src in ml_sources_used:
@@ -1418,7 +1439,7 @@ class VertexMasterAnalyzer:
             logger.info("VertexMasterAnalyzer: unable to compute Kalshi summary")
 
         print(
-            f"[Kalshi] hits={kalshi_hits}, attempts={kalshi_attempts}, errors={kalshi_errors}"
+            f"[Kalshi] attempts={kalshi_attempts}, hits={kalshi_hits}, errors={kalshi_errors}, failures={kalshi_fail_reasons}"
         )
         return df
 
@@ -1480,6 +1501,8 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
         display_df["kalshi_prob"] = None
     if "kalshi_match_debug" not in display_df.columns:
         display_df["kalshi_match_debug"] = "no_kalshi_column"
+    if "kalshi_status" not in display_df.columns:
+        display_df["kalshi_status"] = "no_kalshi_column"
     if "kalshi_label" not in display_df.columns:
         display_df["kalshi_label"] = None
     if "kalshi_volume" not in display_df.columns:
@@ -1681,6 +1704,9 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
 
     # Kalshi status indicator
     def classify_kalshi_status(row: pd.Series) -> str:
+        existing = str(row.get("kalshi_status") or "").strip()
+        if existing:
+            return existing
         prob = row.get("kalshi_prob") or row.get("Kalshi %")
         debug = str(row.get("kalshi_match_debug") or row.get("Kalshi") or "")
 
