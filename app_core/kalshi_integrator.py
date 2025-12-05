@@ -64,7 +64,7 @@ class KalshiIntegrator:
             print(f"🔑 KALSHI: Fallback - API key: {bool(self.api_key)}, secret: {bool(self.api_secret)}")
         
         # Kalshi API URLs - use elections subdomain (verified working)
-        self.base_url = "https://api.elections.kalshi.com/trade-api/v2"
+        self.base_url = "https://api.kalshi.com/trade-api/v2"
         self.demo_url = "https://demo-api.kalshi.co/trade-api/v2"
         
         # Use production API if we have credentials
