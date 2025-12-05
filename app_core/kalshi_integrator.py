@@ -8,6 +8,7 @@ import time
 import logging
 import re
 import string
+from difflib import SequenceMatcher
 from datetime import datetime
 import pytz
 import requests
@@ -19,15 +20,27 @@ from app_core.team_name_matcher import TeamNameMatcher
 logger = logging.getLogger(__name__)
 
 
-class KalshiMatchResult(TypedDict):
+class KalshiMatchResult(TypedDict, total=False):
     matched: bool
     label: str
     probability: Optional[float]
     raw_event_id: Optional[str]
+    league: str
     reason: str
 
 
 SUPPORTED_LEAGUES = {"nba", "nfl", "mlb", "ncaaf", "ncaab", "nhl"}
+LEAGUE_SERIES_MAP = {
+    "nba": "KXNBA",
+    "nfl": "KXNFL",
+    "mlb": "KXMLB",
+    "nhl": "KXNHL",
+    "ncaaf": "KXNCAAF",
+    "ncaab": "KXNCAAB",
+}
+
+TEAM_FUZZY_THRESHOLD = 0.6
+MAX_LINE_DIFF = 3.0
 
 
 def price_to_prob(price) -> Optional[float]:
@@ -65,13 +78,6 @@ def _parse_market_date(raw) -> Optional[datetime]:
     if raw is None or raw == "":
         return None
 
-
-def normalize_name(s: str) -> str:
-    s = s or ""
-    s = s.lower()
-    s = re.sub(r"[^a-z0-9 ]+", " ", s)
-    s = re.sub(r"\s+", " ", s).strip()
-    return s
     try:
         # Kalshi close_time may be milliseconds since epoch
         if isinstance(raw, (int, float)):
@@ -82,15 +88,23 @@ def normalize_name(s: str) -> str:
         return None
 
 
-def get_match_for_game(
+def normalize_name(s: str) -> str:
+    s = s or ""
+    s = s.lower()
+    s = re.sub(r"[^a-z0-9 ]+", " ", s)
+    s = re.sub(r"\s+", " ", s).strip()
+    return s
+
+
+def match_game_to_kalshi(
     league: str,
     home_team: str,
     away_team: str,
-    game_date: Optional[datetime],
+    game_time: Optional[datetime],
     integrator: "KalshiIntegrator" = None,
     status: Optional[str] = "open",
 ) -> KalshiMatchResult:
-    """Attempt to match a game to a Kalshi market with detailed reasons."""
+    """Attempt to match a game to a Kalshi market with explicit reasons."""
 
     league_norm = normalize_name(league)
     if league_norm and league_norm not in SUPPORTED_LEAGUES:
@@ -99,6 +113,7 @@ def get_match_for_game(
             label="",
             probability=None,
             raw_event_id=None,
+            league=league_norm,
             reason="league_not_supported",
         )
 
@@ -109,8 +124,19 @@ def get_match_for_game(
             label="",
             probability=None,
             raw_event_id=None,
+            league=league_norm,
             reason="api_error:no_integrator",
         )
+
+    # Normalize game time
+    game_dt: Optional[datetime] = None
+    if isinstance(game_time, datetime):
+        game_dt = game_time
+    elif game_time:
+        try:
+            game_dt = datetime.fromisoformat(str(game_time).replace("Z", "+00:00"))
+        except Exception:
+            game_dt = None
 
     try:
         markets = kalshi.get_markets(status=status)
@@ -123,6 +149,7 @@ def get_match_for_game(
             label="",
             probability=None,
             raw_event_id=None,
+            league=league_norm,
             reason=f"api_error:{short_err}",
         )
 
@@ -132,11 +159,13 @@ def get_match_for_game(
             label="",
             probability=None,
             raw_event_id=None,
+            league=league_norm,
             reason="no_events",
         )
 
     norm_home = normalize_name(home_team)
     norm_away = normalize_name(away_team)
+    game_date = game_dt.date() if game_dt else None
 
     best_market: Optional[Dict[str, Any]] = None
     best_score = 0.0
@@ -144,28 +173,41 @@ def get_match_for_game(
     any_date_hit = False
 
     for market in markets:
+        series = str(market.get("series_ticker") or "").upper()
+        if league_norm and league_norm in LEAGUE_SERIES_MAP:
+            expected = LEAGUE_SERIES_MAP[league_norm]
+            if expected and series and not series.startswith(expected):
+                continue
+
         title = market.get("title") or ""
         subtitle = market.get("subtitle") or ""
         ticker = market.get("ticker") or ""
         market_text = normalize_name(" ".join([title, subtitle, ticker]))
 
-        # Team name presence (partial match allowed)
-        team_hits = 0
-        if norm_home and norm_home in market_text:
-            team_hits += 1
-        if norm_away and norm_away in market_text:
-            team_hits += 1
+        home_ratio = SequenceMatcher(None, norm_home, market_text).ratio() if norm_home else 0.0
+        away_ratio = SequenceMatcher(None, norm_away, market_text).ratio() if norm_away else 0.0
 
-        if team_hits:
+        home_hit = bool(norm_home) and (norm_home in market_text or home_ratio >= TEAM_FUZZY_THRESHOLD)
+        away_hit = bool(norm_away) and (norm_away in market_text or away_ratio >= TEAM_FUZZY_THRESHOLD)
+
+        team_score = 0.0
+        if home_hit:
+            team_score += max(1.0, home_ratio)
+        if away_hit:
+            team_score += max(1.0, away_ratio)
+
+        if team_score > 0:
             any_team_hit = True
         else:
+            if max(home_ratio, away_ratio) > 0:
+                any_team_hit = True
             continue
 
-        market_date = _parse_market_date(market.get("close_time") or market.get("event_date"))
+        market_dt = _parse_market_date(market.get("close_time") or market.get("event_date"))
         date_ok = False
-        if game_date and market_date:
+        if game_date and market_dt:
             try:
-                diff_days = abs((market_date.date() - game_date.date()).days)
+                diff_days = abs((market_dt.date() - game_date).days)
                 date_ok = diff_days <= 1
             except Exception:
                 date_ok = False
@@ -177,9 +219,12 @@ def get_match_for_game(
         else:
             continue
 
-        score = float(team_hits)
+        score = team_score + (0.5 if date_ok else 0)
+        if expected := LEAGUE_SERIES_MAP.get(league_norm, ""):
+            if series.startswith(expected):
+                score += 0.25
         if ticker and "GAME" in ticker.upper():
-            score += 0.5
+            score += 0.1
 
         if score > best_score:
             best_score = score
@@ -194,7 +239,18 @@ def get_match_for_game(
             label="",
             probability=None,
             raw_event_id=None,
+            league=league_norm,
             reason=reason,
+        )
+
+    if best_score < TEAM_FUZZY_THRESHOLD:
+        return KalshiMatchResult(
+            matched=False,
+            label="",
+            probability=None,
+            raw_event_id=str(best_market.get("ticker") or best_market.get("id")),
+            league=league_norm,
+            reason="below_threshold",
         )
 
     prob_fields = [
@@ -237,6 +293,7 @@ def get_match_for_game(
                 label="",
                 probability=None,
                 raw_event_id=str(best_market.get("ticker") or best_market.get("id")),
+                league=league_norm,
                 reason=f"api_error:{short_err}",
             )
 
@@ -246,30 +303,45 @@ def get_match_for_game(
             label="",
             probability=None,
             raw_event_id=str(best_market.get("ticker") or best_market.get("id")),
+            league=league_norm,
             reason="no_price",
         )
 
     probability = max(0.0, min(1.0, float(probability)))
-    volume = (
-        best_market.get("volume")
-        or best_market.get("yes_bid_size")
-        or best_market.get("no_bid_size")
-        or best_market.get("volume_yes")
-        or 0
-    )
 
     result = KalshiMatchResult(
         matched=True,
         label=best_market.get("title") or best_market.get("ticker") or "",
         probability=probability,
         raw_event_id=str(best_market.get("ticker") or best_market.get("id")),
+        league=league_norm,
         reason="ok",
     )
 
     print(
-        f"[Kalshi] league={league} game={home_team} vs {away_team} date={game_date} -> {result['reason']}"
+        f"[Kalshi] league={league} game={home_team} vs {away_team} date={game_time} -> {result['reason']}"
     )
     return result
+
+
+def get_match_for_game(
+    league: str,
+    home_team: str,
+    away_team: str,
+    game_date: Optional[datetime],
+    integrator: "KalshiIntegrator" = None,
+    status: Optional[str] = "open",
+) -> KalshiMatchResult:
+    """Compatibility wrapper that delegates to match_game_to_kalshi."""
+
+    return match_game_to_kalshi(
+        league=league,
+        home_team=home_team,
+        away_team=away_team,
+        game_time=game_date,
+        integrator=integrator,
+        status=status,
+    )
 
 
 def fetch_kalshi_for_game(

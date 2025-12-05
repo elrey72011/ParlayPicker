@@ -17,8 +17,8 @@ import streamlit as st
 
 from app_core.team_name_matcher import TeamNameMatcher
 from app_core.kalshi_integrator import (
-    get_match_for_game,
     KalshiMatchResult,
+    match_game_to_kalshi,
 )
 from app_core.vertex_ai_endpoint import (
     VERTEX_MODEL_DISPLAY_NAME,
@@ -626,7 +626,7 @@ class VertexMasterAnalyzer:
                         game_dt = None
 
                 # Delegate to the integrator as the single source of truth
-                market_info = get_match_for_game(
+                market_info = match_game_to_kalshi(
                     league,
                     home,
                     away,
@@ -677,8 +677,9 @@ class VertexMasterAnalyzer:
             feats["kalshi_label"] = label or (market_info.get("kalshi_label") if isinstance(market_info, dict) else None)
             feats["kalshi_volume"] = market_info.get("kalshi_volume") if isinstance(market_info, dict) else None
             feats["kalshi_confidence"] = market_info.get("confidence") if isinstance(market_info, dict) else None
-            feats["kalshi_match_debug"] = market_info.get("kalshi_match_debug", feats.get("kalshi_match_debug")) if isinstance(market_info, dict) else feats.get("kalshi_match_debug")
-            feats["kalshi_status"] = market_info.get("kalshi_match_debug", feats.get("kalshi_status")) if isinstance(market_info, dict) else feats.get("kalshi_status")
+            if not is_match_result:
+                feats["kalshi_match_debug"] = market_info.get("kalshi_match_debug", feats.get("kalshi_match_debug")) if isinstance(market_info, dict) else feats.get("kalshi_match_debug")
+                feats["kalshi_status"] = market_info.get("kalshi_match_debug", feats.get("kalshi_status")) if isinstance(market_info, dict) else feats.get("kalshi_status")
 
             model_p = game.get("implied_home_prob") or game.get("win_prob")
             try:
@@ -1183,17 +1184,11 @@ class VertexMasterAnalyzer:
                     kalshi_attempts += 1
                     try:
                         game_time = game.get("commence_time") or game.get("game_time")
-                        game_dt = None
-                        if game_time:
-                            try:
-                                game_dt = datetime.fromisoformat(str(game_time).replace("Z", "+00:00"))
-                            except Exception:
-                                game_dt = None
-                        kalshi_info = get_match_for_game(
+                        kalshi_info = match_game_to_kalshi(
                             game_league,
                             home_team or "",
                             away_team or "",
-                            game_dt,
+                            game_time,
                             integrator=self.kalshi,
                         )
                         if isinstance(kalshi_info, dict) and kalshi_info.get("matched"):
@@ -1206,6 +1201,8 @@ class VertexMasterAnalyzer:
                             kalshi_fail_reasons[reason] = kalshi_fail_reasons.get(reason, 0) + 1
                     except Exception as e:
                         kalshi_errors += 1
+                        reason = f"api_error:{type(e).__name__}"
+                        kalshi_fail_reasons[reason] = kalshi_fail_reasons.get(reason, 0) + 1
                         print(
                             f"[Kalshi] Error for game {home_team} vs {away_team}: {e}"
                         )
@@ -1652,13 +1649,6 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
 
     display_df["Kalshi Edge"] = display_df.apply(calc_kalshi_edge, axis=1)
 
-    if DEBUG_FORCE_KALSHI:
-        missing_mask = ~display_df["kalshi_available"].fillna(False)
-        display_df.loc[missing_mask, "Kalshi"] = "DEBUG-Kalshi"
-        display_df.loc[missing_mask, "Kalshi %"] = display_df.loc[missing_mask, "Market %"]
-        display_df.loc[missing_mask, "Edge vs Kalshi %"] = 0.0
-        display_df.loc[missing_mask, "Kalshi Edge"] = 0.0
-
     no_kalshi_mask = ~display_df["kalshi_available"].fillna(False)
     display_df.loc[no_kalshi_mask, "Kalshi"] = "No Kalshi match"
     display_df.loc[no_kalshi_mask, "Kalshi %"] = np.nan
@@ -1875,3 +1865,42 @@ def vertex_prediction_sanity_sample() -> None:
 
     probs = predict_win_probabilities(df, VERTEX_FEATURE_COLUMNS)
     print("Sanity sample Vertex probabilities:", probs)
+
+
+def debug_kalshi_analysis(df: pd.DataFrame) -> None:
+    """Run Kalshi matching on a DataFrame and print a summary."""
+
+    kalshi_attempts = 0
+    kalshi_hits = 0
+    kalshi_fail_reasons: Dict[str, int] = {}
+
+    for _, row in df.iterrows():
+        league = str(row.get("league") or row.get("League") or "").lower()
+        home_team, away_team = split_game(str(row.get("game") or ""))
+        game_time = (
+            row.get("game_time_raw")
+            or row.get("Game Time Raw")
+            or row.get("game_time")
+            or row.get("commence_time")
+        )
+
+        kalshi_attempts += 1
+        result = match_game_to_kalshi(league, home_team or "", away_team or "", game_time)
+        if result.get("matched"):
+            kalshi_hits += 1
+        else:
+            reason = result.get("reason", "unknown")
+            kalshi_fail_reasons[reason] = kalshi_fail_reasons.get(reason, 0) + 1
+
+    print(f"[Kalshi DEBUG] attempts={kalshi_attempts}, hits={kalshi_hits}, failures={kalshi_fail_reasons}")
+
+
+if __name__ == "__main__":
+    import sys
+
+    if len(sys.argv) > 1:
+        import pandas as pd
+
+        path = sys.argv[1]
+        df = pd.read_csv(path)
+        debug_kalshi_analysis(df)
