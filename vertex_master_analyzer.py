@@ -1780,6 +1780,8 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
         "AI Model",
         "ai_status",
         "win_prob",
+        "AI Win %",
+        "AI Model",
         "market_prob",
         "edge_vs_market",
         "pick_market_type",
@@ -1794,9 +1796,10 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
         "kalshi_prob",
         "edge_vs_kalshi",
         "kalshi_match_debug",
-        "theover_edge",
+        "theover_edge", 
         "theover_match_debug",
         "kalshi_status",
+        "ai_status",
     ]
 
     print("[Export] Columns in CSV:", csv_cols)
