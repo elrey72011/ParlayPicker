@@ -36,6 +36,146 @@ def price_to_prob(price) -> Optional[float]:
         return p
     return None
 
+
+def _normalize_market_text(*parts: str) -> str:
+    """Normalize free text for matching: lowercase, strip punctuation, collapse spaces."""
+
+    joined = " ".join([p or "" for p in parts])
+    cleaned = joined.lower()
+    cleaned = re.sub(r"[\.,\-_/]", " ", cleaned)
+    cleaned = cleaned.translate(str.maketrans("", "", string.punctuation))
+    cleaned = re.sub(r"\s+", " ", cleaned)
+    return cleaned.strip()
+
+
+def _parse_market_date(raw) -> Optional[datetime]:
+    """Parse Kalshi timestamps (ms or iso) into a date for day-level matching."""
+
+    if raw is None or raw == "":
+        return None
+    try:
+        # Kalshi close_time may be milliseconds since epoch
+        if isinstance(raw, (int, float)):
+            return datetime.fromtimestamp(float(raw) / 1000.0)
+        # ISO timestamp string
+        return datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+    except Exception:
+        return None
+
+
+def fetch_kalshi_for_game(
+    home_team: str,
+    away_team: str,
+    game_date: Optional[datetime],
+    integrator: "KalshiIntegrator" = None,
+    status: Optional[str] = "open",
+) -> Optional[Dict[str, Any]]:
+    """Return Kalshi market info for a given game or None if not matched.
+
+    This helper avoids synthetic fallbacks: if no market is matched, it returns None
+    instead of inventing a neutral 50% probability.
+    """
+
+    kalshi = integrator or KalshiIntegrator()
+    if kalshi is None:
+        return None
+
+    try:
+        markets = kalshi.get_markets(status=status)
+    except Exception as exc:  # pragma: no cover - defensive logging path
+        logger.warning("fetch_kalshi_for_game: failed to fetch markets: %s", exc)
+        return None
+
+    norm_home = _normalize_market_text(home_team)
+    norm_away = _normalize_market_text(away_team)
+
+    best_market: Optional[Dict[str, Any]] = None
+    best_score = 0.0
+
+    for market in markets:
+        title = market.get("title") or ""
+        subtitle = market.get("subtitle") or ""
+        ticker = market.get("ticker") or ""
+        market_text = _normalize_market_text(title, subtitle, ticker)
+
+        # Team name presence (partial match allowed)
+        team_hits = 0
+        if norm_home and norm_home in market_text:
+            team_hits += 1
+        if norm_away and norm_away in market_text:
+            team_hits += 1
+
+        if team_hits == 0:
+            continue
+
+        # Date proximity (same calendar day)
+        market_date = _parse_market_date(market.get("close_time") or market.get("event_date"))
+        if game_date and market_date and market_date.date() != game_date.date():
+            continue
+
+        score = float(team_hits)
+        if ticker and "GAME" in ticker.upper():
+            score += 0.5
+
+        if score > best_score:
+            best_score = score
+            best_market = market
+
+    if not best_market:
+        return None
+
+    prob_fields = [
+        "yes_bid_dollars",
+        "yes_ask_dollars",
+        "last_price",
+        "last_trade_price",
+        "yes_bid",
+        "yes_ask",
+    ]
+
+    probability: Optional[float] = None
+    for field in prob_fields:
+        candidate = best_market.get(field)
+        prob_candidate = price_to_prob(candidate)
+        if prob_candidate is not None:
+            probability = prob_candidate
+            break
+
+    # Fall back to live orderbook if available
+    if probability is None and best_market.get("ticker"):
+        try:
+            order = kalshi.get_orderbook(best_market.get("ticker")) or {}
+            yes_levels = None
+            for key in ("yes", "orderbook_yes", "levels"):
+                level = (order.get(key) or order.get("orderbook", {}).get(key) or {})
+                if level:
+                    yes_levels = level
+                    break
+            if isinstance(yes_levels, list) and yes_levels:
+                price_val = yes_levels[0].get("price") or yes_levels[0].get("bid")
+                if price_val is not None:
+                    probability = price_to_prob(price_val)
+        except Exception:
+            probability = None
+
+    if probability is None:
+        return None
+
+    probability = max(0.0, min(1.0, float(probability)))
+    volume = (
+        best_market.get("volume")
+        or best_market.get("yes_bid_size")
+        or best_market.get("no_bid_size")
+        or best_market.get("volume_yes")
+        or 0
+    )
+
+    return {
+        "kalshi_label": best_market.get("title") or best_market.get("ticker"),
+        "kalshi_probability": probability,
+        "kalshi_volume": volume if volume is not None else 0,
+    }
+
 class KalshiIntegrator:
     """Integrates Kalshi prediction market odds and analysis
     

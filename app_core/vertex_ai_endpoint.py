@@ -196,6 +196,46 @@ def predict_win_probabilities(df: pd.DataFrame, feature_columns: Iterable[str]) 
         return None
 
 
+def score_with_vertex(df: pd.DataFrame, feature_cols: Iterable[str]) -> tuple[pd.Series, str]:
+    """Score a DataFrame with Vertex and return probabilities + status.
+
+    The status string is "vertex" on success or "fallback:<reason>" on
+    failure. Returned Series always aligns with ``df.index``.
+    """
+
+    try:
+        if not is_vertex_prediction_configured():
+            return pd.Series(np.nan, index=df.index), "fallback:not_configured"
+
+        endpoint = _get_vertex_endpoint()
+        if endpoint is None:
+            return pd.Series(np.nan, index=df.index), "fallback:endpoint"
+
+        df_payload = df.copy()
+        for col in feature_cols:
+            if col not in df_payload.columns:
+                df_payload[col] = 0.0
+        df_payload = df_payload[list(feature_cols)].apply(pd.to_numeric, errors="coerce").fillna(0.0)
+        instances = df_payload.values.tolist()
+        prediction = endpoint.predict(instances=instances, timeout=5)
+        raw_preds = prediction.predictions or []
+        probs: List[float] = []
+        for entry in raw_preds:
+            if isinstance(entry, (list, tuple)):
+                if len(entry) == 1:
+                    probs.append(float(entry[0]))
+                else:
+                    probs.append(float(entry[-1]))
+            else:
+                probs.append(float(entry))
+        series = pd.Series(np.array(probs, dtype=float), index=df.index)
+        return series, "vertex"
+    except Exception as exc:  # pragma: no cover - network boundary
+        print(f"[Vertex] Error: {exc}")
+        logger.warning("Vertex prediction failed in score_with_vertex: %s", exc)
+        return pd.Series(np.nan, index=df.index), "fallback:error"
+
+
 def quick_vertex_sanity_check():
     """Tiny sanity check to run in a REPL without Streamlit."""
     sample = pd.DataFrame(
