@@ -8925,6 +8925,7 @@ with main_tab1:
                                     'totals': theover_totals_data,
                                 },
                                 kalshi_integrator=kalshi_int,
+                                use_kalshi=st.session_state.get('kalshi_enabled', True),
                             )
                             
                             results_df = analyzer.analyze_all_games(all_games, league='multi')
@@ -9696,6 +9697,7 @@ if is_vertex_ai_enabled():
                         'ml': theover_ml_data if 'theover_ml_data' in locals() else None,
                     },
                     kalshi_integrator=kalshi_int,
+                    use_kalshi=st.session_state.get('kalshi_enabled', True),
                 )
                 
                 results_df = analyzer.analyze_all_games(all_games, league='multi')
