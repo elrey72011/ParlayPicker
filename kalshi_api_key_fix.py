@@ -262,6 +262,7 @@ def create_vertex_master_analyzer():
         local_ml_predictor=st.session_state.get('ml_predictor'),
         theover_data=theover_data,
         kalshi_integrator=st.session_state.get('kalshi_integrator'),
+        use_kalshi=st.session_state.get('kalshi_enabled', True),
     )
     
     # Log what's available
