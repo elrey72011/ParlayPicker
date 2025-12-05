@@ -107,6 +107,10 @@ def match_game_to_kalshi(
     """Attempt to match a game to a Kalshi market with explicit reasons."""
 
     league_norm = normalize_name(league)
+    logging.info(
+        f"[Kalshi f_k_g] match_game_to_kalshi league={league_norm} home={home_team} "
+        f"away={away_team} time={game_time} status={status} integrator_none={integrator is None}"
+    )
     if league_norm and league_norm not in SUPPORTED_LEAGUES:
         return KalshiMatchResult(
             matched=False,
@@ -152,6 +156,11 @@ def match_game_to_kalshi(
             league=league_norm,
             reason=f"api_error:{short_err}",
         )
+
+    logging.info(
+        f"[Kalshi f_k_g] candidate_markets={len(markets) if markets is not None else 0} "
+        f"example={(markets[0].get('title') or markets[0].get('ticker')) if markets else 'NONE'} status={status}"
+    )
 
     if not markets:
         return KalshiMatchResult(
@@ -234,6 +243,9 @@ def match_game_to_kalshi(
         reason = "team_mismatch"
         if any_team_hit and not any_date_hit:
             reason = "date_mismatch"
+        logging.info(
+            f"[Kalshi f_k_g] NO MATCH | home={home_team} away={away_team} date={game_dt} reason={reason}"
+        )
         return KalshiMatchResult(
             matched=False,
             label="",
@@ -353,7 +365,15 @@ def fetch_kalshi_for_game(
 ) -> Optional[Dict[str, Any]]:
     """Legacy wrapper retained for compatibility. Prefer get_match_for_game."""
 
+    logging.info(
+        f"[Kalshi f_k_g] home={home_team} away={away_team} date={game_date} "
+        f"integrator_none={integrator is None} status={status}"
+    )
+
     result = get_match_for_game("", home_team, away_team, game_date, integrator, status)
+    logging.info(
+        f"[Kalshi f_k_g] result_type={type(result)} keys={list(result.keys()) if isinstance(result, dict) else None}"
+    )
     if result.get("matched"):
         return {
             "kalshi_label": result.get("label"),
@@ -361,6 +381,9 @@ def fetch_kalshi_for_game(
             "kalshi_volume": None,
             "kalshi_match_debug": result.get("reason"),
         }
+    logging.info(
+        f"[Kalshi f_k_g] NO MATCH for home={home_team} away={away_team} date={game_date}"
+    )
     return {
         "kalshi_label": None,
         "kalshi_probability": None,

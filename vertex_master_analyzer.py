@@ -604,6 +604,17 @@ class VertexMasterAnalyzer:
             "kalshi_status": "no_market_match",
         }
 
+        game_id = game.get("game_id") or game.get("id") or game.get("matchup") or game.get("game")
+        league = game.get("league") or game.get("sport") or game.get("sport_key")
+        home_team = game.get("home_team") or game.get("home") or game.get("home_name")
+        away_team = game.get("away_team") or game.get("away") or game.get("away_name")
+        game_time = game.get("commence_time") or game.get("game_time") or game.get("Game Time Raw")
+
+        logging.info(
+            f"[Kalshi FEATURES] league={league} home={home_team} away={away_team} "
+            f"time={game_time} use_kalshi={self.use_kalshi} integrator_none={self.kalshi is None}"
+        )
+
         # If Kalshi is not configured, bail out cleanly
         if not getattr(self, "kalshi", None) or not getattr(self, "use_kalshi", True):
             feats["kalshi_match_debug"] = "kalshi_not_configured" if not getattr(self, "kalshi", None) else "kalshi_disabled"
@@ -633,6 +644,11 @@ class VertexMasterAnalyzer:
                     game_dt,
                     integrator=self.kalshi,
                 )
+
+            logging.info(
+                f"[Kalshi FETCH] home={home} away={away} dt={game_dt} "
+                f"market_keys={list(market_info.keys()) if isinstance(market_info, dict) else type(market_info)}"
+            )
 
             # Handle KalshiMatchResult or legacy dicts
             is_match_result = isinstance(market_info, dict) and "matched" in market_info
@@ -680,6 +696,12 @@ class VertexMasterAnalyzer:
             if not is_match_result:
                 feats["kalshi_match_debug"] = market_info.get("kalshi_match_debug", feats.get("kalshi_match_debug")) if isinstance(market_info, dict) else feats.get("kalshi_match_debug")
                 feats["kalshi_status"] = market_info.get("kalshi_match_debug", feats.get("kalshi_status")) if isinstance(market_info, dict) else feats.get("kalshi_status")
+
+            logging.info(
+                f"[Kalshi RESULT] home={home_team} away={away_team} "
+                f"available={feats['kalshi_available']} prob={feats['kalshi_prob']} "
+                f"debug={feats['kalshi_match_debug']}"
+            )
 
             model_p = game.get("implied_home_prob") or game.get("win_prob")
             try:
@@ -1140,6 +1162,10 @@ class VertexMasterAnalyzer:
 
         Returns a DataFrame with one row per game.
         """
+        logging.info(
+            f"[VMA] run_full_master_analysis | use_kalshi={getattr(self, 'use_kalshi', None)} "
+            f"kalshi_is_none={getattr(self, 'kalshi', None) is None}"
+        )
         if not games:
             return pd.DataFrame()
 
@@ -1818,8 +1844,13 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
         "ai_status",
     ]
 
-    print("[Export] Columns in CSV:", csv_cols)
-    print("[Export] Sample row:", display_df.head(1).to_dict())
+    logging.info("[Export] Columns in CSV: %s", csv_cols)
+    logging.info(
+        "[Kalshi CSV] sample Kalshi values: %s",
+        display_df[["League", "game", "Kalshi", "Kalshi %", "kalshi_match_debug"]]
+        .head(5)
+        .to_dict("records"),
+    )
 
     csv = display_df[csv_cols].to_csv(index=False)
     st.download_button(
