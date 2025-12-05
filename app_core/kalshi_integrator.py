@@ -369,10 +369,19 @@ class KalshiIntegrator:
     
     def get_sports_markets(self) -> List[Dict]:
         """Get all active sports betting markets"""
-        all_markets = self.get_markets()
-        
+        try:
+            all_markets = self.get_markets()
+            all_markets = all_markets or []
+            logger.info("Kalshi get_sports_markets → %d markets", len(all_markets))
+            if all_markets[:3]:
+                logger.info("Kalshi sample markets: %s", all_markets[:3])
+        except Exception as e:
+            logger.warning("Kalshi get_sports_markets error: %s", e)
+            self.last_error = str(e)
+            return []
+
         # Filter for sports-related markets
-        sports_keywords = ['NFL', 'NBA', 'MLB', 'NHL', 'UFC', 'SOCCER', 'TENNIS', 
+        sports_keywords = ['NFL', 'NBA', 'MLB', 'NHL', 'UFC', 'SOCCER', 'TENNIS',
                           'GOLF', 'FOOTBALL', 'BASKETBALL', 'BASEBALL', 'HOCKEY']
         
         sports_markets = []

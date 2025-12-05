@@ -1226,7 +1226,13 @@ class VertexMasterAnalyzer:
         try:
             logger.info(
                 "VertexMasterAnalyzer: sample Kalshi fields: %s",
-                df[["kalshi_available", "kalshi_prob"]].head(5).to_dict("records"),
+                df[[
+                    "kalshi_available",
+                    "kalshi_prob",
+                    "kalshi_match_debug",
+                ]]
+                .head(5)
+                .to_dict("records"),
             )
         except Exception:
             logger.info("VertexMasterAnalyzer: Kalshi columns not available for sample logging")
