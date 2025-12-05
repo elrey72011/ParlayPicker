@@ -81,7 +81,7 @@ def split_game(game: str) -> Tuple[Optional[str], Optional[str]]:
 TEAM_FUZZY_THRESHOLD = 0.8
 MAX_LINE_DIFF = 1.5  # allowable difference in spread/total when picking closest match
 BEST_PICK_PRIORITY_EDGE = 1  # primary sort on edge, then EV
-DEBUG_FORCE_KALSHI = True  # set to False in production to use only real Kalshi matches
+DEBUG_FORCE_KALSHI = False  # set to False in production to use only real Kalshi matches
 
 
 def is_today_calendar_day(time_str) -> bool:
@@ -1418,7 +1418,7 @@ class VertexMasterAnalyzer:
             logger.info("VertexMasterAnalyzer: unable to compute Kalshi summary")
 
         print(
-            f"[Kalshi] attempts={kalshi_attempts}, hits={kalshi_hits}, errors={kalshi_errors}"
+            f"[Kalshi] hits={kalshi_hits}, attempts={kalshi_attempts}, errors={kalshi_errors}"
         )
         return df
 
@@ -1493,6 +1493,12 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
         display_df["ai_status"] = "unknown"
     if "AI Model" not in display_df.columns:
         display_df["AI Model"] = VERTEX_MODEL_DISPLAY_NAME
+
+    ai_status_val = display_df["ai_status"].iloc[0] if not display_df.empty else "unknown"
+    ai_model_val = display_df["AI Model"].iloc[0] if not display_df.empty else VERTEX_MODEL_DISPLAY_NAME
+    print(
+        f"[Vertex] status={ai_status_val}, model={ai_model_val}, valid_probs={display_df['AI Win %'].notna().sum()} / {len(display_df)}"
+    )
     display_df["sort_time"] = pd.to_datetime(display_df["game_time"], errors="coerce")
     display_df = display_df.sort_values("sort_time", ascending=True)
     display_df["is_today"] = display_df["game_time"].apply(is_today_calendar_day)
@@ -1630,6 +1636,12 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
         display_df.loc[missing_mask, "Edge vs Kalshi %"] = 0.0
         display_df.loc[missing_mask, "Kalshi Edge"] = 0.0
 
+    no_kalshi_mask = ~display_df["kalshi_available"].fillna(False)
+    display_df.loc[no_kalshi_mask, "Kalshi"] = "No Kalshi match"
+    display_df.loc[no_kalshi_mask, "Kalshi %"] = np.nan
+    display_df.loc[no_kalshi_mask, "Edge vs Kalshi %"] = np.nan
+    display_df.loc[no_kalshi_mask, "Kalshi Edge"] = np.nan
+
     logger.info(
         "Kalshi probs sample: %s",
         display_df["Kalshi %"].dropna().head(10).tolist(),
@@ -1756,7 +1768,17 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
         hide_index=True,
     )
 
+    if "AI Win %" not in display_df.columns:
+        display_df["AI Win %"] = (display_df.get("win_prob", pd.Series(np.nan, index=display_df.index)) * 100).round(1)
+    if "AI Model" not in display_df.columns:
+        display_df["AI Model"] = VERTEX_MODEL_DISPLAY_NAME
+    if "ai_status" not in display_df.columns:
+        display_df["ai_status"] = "unknown"
+
     csv_cols = cols + [
+        "AI Win %",
+        "AI Model",
+        "ai_status",
         "win_prob",
         "AI Win %",
         "AI Model",
@@ -1779,6 +1801,9 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
         "kalshi_status",
         "ai_status",
     ]
+
+    print("[Export] Columns in CSV:", csv_cols)
+    print("[Export] Sample row:", display_df.head(1).to_dict())
 
     csv = display_df[csv_cols].to_csv(index=False)
     st.download_button(
