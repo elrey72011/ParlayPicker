@@ -11212,7 +11212,7 @@ if is_vertex_ai_enabled():
                 if 'ML Model' in enriched_df.columns:
                     ml_model_val = str(enriched_df.at[idx, 'ML Model']) if 'ML Model' in enriched_df.columns else ''
                     if ml_model_val in ('', '—', 'nan', 'Fallback (Not Available)'):
-                        enriched_df.at[idx, 'ML Model'] = 'Vertex AI Backfill'
+                        enriched_df.at[idx, 'ML Model'] = match.get('model_used') or 'Vertex AI Backfill'
 
             existing_theover = row.get('theover.ai %')
             if pd.isna(existing_theover) or existing_theover in ('', '—', None):
@@ -11662,7 +11662,7 @@ if is_vertex_ai_enabled():
                     
                     # Kalshi
                     kalshi_available = vertex_result.get('kalshi_available', False)
-                    kalshi_prob = vertex_result.get('kalshi_prob', 0.5)
+                    kalshi_prob = vertex_result.get('kalshi_prob')
                     if kalshi_prob and kalshi_prob <= 1:
                         kalshi_prob = kalshi_prob * 100
                     
@@ -11719,6 +11719,7 @@ if is_vertex_ai_enabled():
                     # =====================================================
                     # ADD TO BEST BETS
                     # =====================================================
+                    model_used = vertex_result.get('model_used') or ml_source_type or 'Vertex AI'
                     best_bets_rows.append({
                         'League': league,
                         'Game': f"{away_team} @ {home_team}",
@@ -11731,10 +11732,12 @@ if is_vertex_ai_enabled():
                         'Sentiment': '✅' if sentiment_agrees else '❌',
                         'Kalshi': '✅' if kalshi_agrees else ('❌' if kalshi_available else '—'),
                         'Kalshi %': f"{kalshi_pick_prob:.0f}" if kalshi_pick_prob else '—',
+                        'Kalshi Prob %': round(kalshi_prob, 1) if kalshi_prob is not None else None,
+                        'kalshi_prob': kalshi_prob if kalshi_available else None,
                         'TheOver %': f"{theover_prob:.0f}" if theover_prob else '—',
                         'Odds': odds_str,
                         'Confidence': round(confidence, 1),
-                        'ML Source': ml_source_type,
+                        'ML Model': model_used,
                     })
                 
                 # Display results
@@ -11785,43 +11788,58 @@ if is_vertex_ai_enabled():
                     with col4:
                         st.metric("Kalshi + Sentiment", f"{kalshi_agrees}K / {sentiment_agrees}S")
                     
-                    # ML Source Summary
-                    if 'ML Source' in best_bets_df.columns:
-                        ml_counts = best_bets_df['ML Source'].value_counts()
-                        vertex_count = ml_counts.get('vertex', 0) + ml_counts.get('gcp_vertex', 0)
-                        theover_count = ml_counts.get('theover', 0)
-                        spread_count = ml_counts.get('spread_derived', 0)
-                        fallback_count = ml_counts.get('fallback_heuristic', 0) + ml_counts.get('unknown', 0) + ml_counts.get('default', 0)
-                        
+                    # ML Model Summary
+                    if 'ML Model' in best_bets_df.columns:
+                        ml_model_series = best_bets_df['ML Model'].fillna('Unknown').astype(str)
+
+                        def _bucket_model(name: str) -> str:
+                            lower = name.lower()
+                            if 'vertex' in lower:
+                                return 'Vertex AI'
+                            if 'historical' in lower or 'logistic' in lower or 'ensemble' in lower:
+                                return 'Historical ML'
+                            if 'theover' in lower:
+                                return 'theover.ai'
+                            return 'Fallback/Heuristic'
+
+                        bucketed = ml_model_series.map(_bucket_model)
+                        counts = bucketed.value_counts()
+
                         st.markdown("---")
                         st.subheader("🤖 ML Prediction Source Summary")
                         ml_col1, ml_col2, ml_col3, ml_col4 = st.columns(4)
-                        
+
                         with ml_col1:
+                            vertex_count = counts.get('Vertex AI', 0)
                             if vertex_count > 0:
                                 st.success(f"☁️ **GCP Vertex AI**\n\n{vertex_count} games")
                             else:
                                 st.info(f"☁️ GCP Vertex AI\n\n{vertex_count} games")
                                 st.caption("Configure GCP endpoint for custom model")
-                        
+
                         with ml_col2:
+                            theover_count = counts.get('theover.ai', 0)
                             if theover_count > 0:
-                                st.info(f"🎯 **TheOver.ai**\n\n{theover_count} games")
+                                st.success(f"🤝 **theover.ai**\n\n{theover_count} games")
                             else:
-                                st.info(f"🎯 TheOver.ai\n\n{theover_count} games")
-                        
+                                st.info(f"🤝 theover.ai\n\n{theover_count} games")
+                                st.caption("Upload theover.ai CSV for alignment")
+
                         with ml_col3:
-                            if spread_count > 0:
-                                st.info(f"📊 **Spread-Derived**\n\n{spread_count} games")
-                                st.caption("Using spread × 2.8% formula")
+                            historical_count = counts.get('Historical ML', 0)
+                            if historical_count > 0:
+                                st.warning(f"📊 **Historical Models**\n\n{historical_count} games")
                             else:
-                                st.info(f"📊 Spread-Derived\n\n{spread_count} games")
-                        
+                                st.info(f"📊 Historical Models\n\n{historical_count} games")
+                                st.caption("Legacy logistic/ensemble blends")
+
                         with ml_col4:
+                            fallback_count = counts.get('Fallback/Heuristic', 0)
                             if fallback_count > 0:
-                                st.warning(f"🔄 **Fallback**\n\n{fallback_count} games")
+                                st.error(f"🧮 **Fallback/Heuristic**\n\n{fallback_count} games")
                             else:
-                                st.info(f"🔄 Fallback\n\n{fallback_count} games")
+                                st.info(f"🧮 Fallback/Heuristic\n\n{fallback_count} games")
+                                st.caption("Low-confidence games excluded from ML")
                         
                         # Show Kalshi integration status
                         if kalshi_agrees > 0:
@@ -11864,6 +11882,7 @@ if is_vertex_ai_enabled():
                     
                     # CSV Download with structured alignment/status fields
                     export_cols = display_cols + [
+                        'Kalshi Prob %',
                         'pick_market_type',
                         'pick_line',
                         'pick_selection',
@@ -15377,6 +15396,7 @@ if st.button(
         # Analyze with Gemini or Claude
         if use_gemini:
             try:
+                model_used = (context_data.get('ml') or {}).get('model_used')
                 result = analyzer.analyze_game(
                     home_team=home_team,
                     away_team=away_team,
@@ -15402,7 +15422,8 @@ if st.button(
                     'sources_used': result.get('sources_used', 'market odds'),
                     'best_moneyline': best_moneyline,
                     'best_spread': best_spread,
-                    'ai_provider': 'gemini'
+                    'ai_provider': 'gemini',
+                    'model_used': model_used or result.get('model_used')
                 })
                 logger.info(f"✅ Gemini analyzed: {away_team} @ {home_team}")
                 
@@ -15424,7 +15445,8 @@ if st.button(
                     'sources_used': 'error',
                     'best_moneyline': best_moneyline,
                     'best_spread': best_spread,
-                    'ai_provider': 'gemini_error'
+                    'ai_provider': 'gemini_error',
+                    'model_used': model_used or 'gemini_error'
                 })
         
         elif use_claude:
