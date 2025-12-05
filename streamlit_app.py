@@ -9853,7 +9853,9 @@ if is_vertex_ai_enabled():
                     results_df['Rank'] = range(1, len(results_df) + 1)
                     
                     # Reorder columns
-                    display_cols = ['Rank', 'League', 'Game', 'THE PICK', 'AI Win %', 'Market %', 'Edge', 'Favorite', 'EV', 'Odds']
+                    display_cols = ['Rank', 'League', 'Game', 'THE PICK', 'AI Win %', 'Market %', 
+                                   'Edge', 'EV', 'Consensus', 'ML Model', 'Sentiment', 'Kalshi', 
+                                   'Kalshi %', 'TheOver %', 'Odds', 'Confidence']
                     results_df = results_df[display_cols]
                     
                     st.success(f"✅ Analyzed {len(results_df)} games!")
