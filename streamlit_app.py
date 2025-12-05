@@ -2614,10 +2614,6 @@ class KalshiIntegrator:
                         except Exception:
                             kalshi_prob = None
 
-                if kalshi_prob is None and market.get("synthetic"):
-                    kalshi_prob = self._synthetic_probability(home_team, sport)
-                    used_key = used_key or "synthetic"
-
                 if kalshi_prob is None:
                     logger.warning(
                         "Kalshi orderbook missing YES price for %s; leaving kalshi_prob=None",
@@ -2653,19 +2649,6 @@ class KalshiIntegrator:
                     kalshi_prob * 100.0,
                 )
                 return result
-
-            # 4) No direct market found – fall back to synthetic if available
-            if not result["kalshi_available"]:
-                synthetic = self.get_synthetic_market_for_team(home_team)
-                if synthetic:
-                    prob = self._synthetic_probability(home_team, sport)
-                    result["kalshi_available"] = True
-                    result["kalshi_prob"] = prob
-                    result["kalshi_home_prob"] = prob
-                    result["kalshi_away_prob"] = 1.0 - prob
-                    result["market_ticker"] = synthetic.get("ticker")
-                    result["market_title"] = f"Synthetic: {home_team}"
-                    result["confidence"] = 0.4  # lower confidence for synthetic-only
 
         except Exception as e:
             logger.warning(f"Error getting Kalshi game market: {e}")
