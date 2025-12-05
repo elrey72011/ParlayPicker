@@ -1227,11 +1227,13 @@ class VertexMasterAnalyzer:
             logger.info(
                 "VertexMasterAnalyzer: sample Kalshi fields: %s",
                 df[[
+                    "home_team",
+                    "away_team",
                     "kalshi_available",
                     "kalshi_prob",
                     "kalshi_match_debug",
                 ]]
-                .head(5)
+                .head(10)
                 .to_dict("records"),
             )
         except Exception:
