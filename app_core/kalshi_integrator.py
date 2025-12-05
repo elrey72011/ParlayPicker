@@ -594,6 +594,12 @@ class KalshiIntegrator:
             sports_markets = self.get_sports_markets()
             if not sports_markets:
                 self.last_error = self.last_error or "No Kalshi sports markets available"
+                logger.info(
+                    "Kalshi get_game_market: %s vs %s -> %s",
+                    home_team,
+                    away_team,
+                    result,
+                )
                 return result
 
             best_market = None
@@ -619,6 +625,12 @@ class KalshiIntegrator:
 
             if not best_market:
                 result["kalshi_match_debug"] = "no_market_match"
+                logger.info(
+                    "Kalshi get_game_market: %s vs %s -> %s",
+                    home_team,
+                    away_team,
+                    result,
+                )
                 return result
 
             ticker = best_market.get("ticker")
@@ -696,6 +708,12 @@ class KalshiIntegrator:
                         "kalshi_match_debug": "orderbook_missing_yes_price",
                     }
                 )
+                logger.info(
+                    "Kalshi get_game_market: %s vs %s -> %s",
+                    home_team,
+                    away_team,
+                    result,
+                )
                 return result
 
             result.update(
@@ -710,11 +728,22 @@ class KalshiIntegrator:
                     "kalshi_match_debug": f"matched_ticker={ticker} title={title} prob={kalshi_prob:.3f} used_price_key={used_key}",
                 }
             )
-
+            logger.info(
+                "Kalshi get_game_market: %s vs %s -> %s",
+                home_team,
+                away_team,
+                result,
+            )
             return result
 
         except Exception as e:
             logger.warning(f"Error getting Kalshi game market: {e}")
+            logger.info(
+                "Kalshi get_game_market: %s vs %s -> %s",
+                home_team,
+                away_team,
+                result,
+            )
             return result
     
     def _normalize_team_name(self, team_name: str) -> str:

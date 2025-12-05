@@ -574,27 +574,80 @@ class VertexMasterAnalyzer:
         return base
 
     def _get_kalshi_features(self, game: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        TEMPORARY DIAGNOSTIC IMPLEMENTATION
+        """Fetch Kalshi probability for a game via the shared integrator."""
 
-        Ignores the real Kalshi API and returns a synthetic probability so we
-        can verify that Kalshi values flow correctly through the master analysis
-        and export pipeline.
-        """
-        implied = game.get("implied_home_prob")
-        try:
-            implied = float(implied) if implied is not None else None
-        except Exception:
-            implied = None
-
-        prob = implied if implied is not None else 0.60
-
-        return {
-            "kalshi_available": True,
-            "kalshi_prob": prob,
+        feats: Dict[str, Any] = {
+            "kalshi_available": False,
+            "kalshi_prob": None,
             "kalshi_alignment": None,
-            "kalshi_match_debug": "DEBUG_SYNTHETIC_PROB",
+            "kalshi_match_debug": "no_match_found",
         }
+
+        # If Kalshi is not configured, bail out cleanly
+        if not getattr(self, "kalshi", None):
+            feats["kalshi_match_debug"] = "kalshi_not_configured"
+            return feats
+
+        try:
+            home = game.get("home_team", "")
+            away = game.get("away_team", "")
+            league = game.get("league") or game.get("sport_key") or "NBA"
+
+            market_info = self.kalshi.get_game_market(home, away, sport=str(league)) or {}
+
+            available = bool(market_info.get("kalshi_available"))
+            prob = market_info.get("kalshi_prob")
+
+            if not available or prob is None:
+                feats["kalshi_available"] = False
+                feats["kalshi_prob"] = None
+                feats["kalshi_match_debug"] = market_info.get(
+                    "kalshi_match_debug", "no_market_match"
+                )
+                return feats
+
+            try:
+                prob = float(prob)
+            except Exception:
+                feats["kalshi_match_debug"] = f"invalid_prob={prob}"
+                return feats
+
+            prob = max(0.0, min(1.0, prob))
+
+            feats["kalshi_available"] = True
+            feats["kalshi_prob"] = prob
+            feats["kalshi_match_debug"] = market_info.get(
+                "kalshi_match_debug",
+                f"matched_ticker={market_info.get('market_ticker')} prob={prob:.3f}",
+            )
+
+            model_p = game.get("implied_home_prob") or game.get("win_prob")
+            try:
+                model_p = float(model_p) if model_p is not None else None
+            except Exception:
+                model_p = None
+
+            if model_p is not None:
+                if abs(model_p - prob) < 0.05:
+                    feats["kalshi_alignment"] = "Neutral"
+                elif model_p > prob:
+                    feats["kalshi_alignment"] = "Model > Kalshi"
+                else:
+                    feats["kalshi_alignment"] = "Kalshi > Model"
+
+            return feats
+
+        except Exception as e:
+            logger.warning(
+                "Kalshi _get_kalshi_features error for %s vs %s: %s",
+                game.get("home_team"),
+                game.get("away_team"),
+                e,
+            )
+            feats["kalshi_match_debug"] = f"error={type(e).__name__}: {e}"
+            feats["kalshi_available"] = False
+            feats["kalshi_prob"] = None
+            return feats
 
     # ---- Derived features --------------------------------------------
 
