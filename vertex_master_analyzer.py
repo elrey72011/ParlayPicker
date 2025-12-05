@@ -1129,6 +1129,29 @@ class VertexMasterAnalyzer:
 
                 best_candidate = sorted(valid_candidates, key=_sort_key, reverse=True)[0]
 
+                # Merge explicit Kalshi features for this game so downstream tables/export always
+                # have kalshi_* columns populated even when the winning pick is a Total and the
+                # candidate-level kalshi_prob was left unset.
+                kalshi_feats: Dict[str, Any] = {}
+                try:
+                    kalshi_feats = self._get_kalshi_features(game) or {}
+                except Exception as e:
+                    logger.warning(
+                        "Kalshi feature error for game %s vs %s: %s",
+                        game.get("home_team"),
+                        game.get("away_team"),
+                        e,
+                    )
+                    kalshi_feats = {
+                        "kalshi_available": False,
+                        "kalshi_prob": None,
+                        "kalshi_alignment": None,
+                        "kalshi_match_debug": f"error={type(e).__name__}",
+                    }
+
+                for k, v in kalshi_feats.items():
+                    best_candidate[k] = v
+
                 # Track source usage for the winning candidate
                 src = best_candidate.get("ml_source")
                 if src in ml_sources_used:
@@ -1142,6 +1165,14 @@ class VertexMasterAnalyzer:
 
         df = pd.DataFrame(rows)
         df.attrs["ml_sources_used"] = ml_sources_used
+        logger.info("VertexMasterAnalyzer: results_df columns = %s", list(df.columns))
+        try:
+            logger.info(
+                "VertexMasterAnalyzer: sample Kalshi fields: %s",
+                df[["kalshi_available", "kalshi_prob"]].head(5).to_dict("records"),
+            )
+        except Exception:
+            logger.info("VertexMasterAnalyzer: Kalshi columns not available for sample logging")
         return df
 
 
@@ -1194,6 +1225,7 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
     st.subheader("🎯 SINGLE BEST PICK PER GAME")
 
     display_df = results_df.copy()
+    logger.info("show_vertex_master_analysis: columns = %s", list(display_df.columns))
     # Ensure Kalshi columns exist even when Kalshi is disabled or missing
     if "kalshi_available" not in display_df.columns:
         display_df["kalshi_available"] = False

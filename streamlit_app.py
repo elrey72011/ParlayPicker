@@ -9924,9 +9924,10 @@ if is_vertex_ai_enabled():
     st.markdown("---")
     st.subheader("🌟 Vertex AI Master Analysis (Advanced)")
     st.caption("Comprehensive analysis combining TheOddsAPI, TheOver.ai, sentiment, and more.")
-    
+
     from vertex_master_analyzer import VertexMasterAnalyzer, show_vertex_master_analysis
-    
+
+    # MASTER ANALYSIS ENTRY POINT: results_df is built here and passed to show_vertex_master_analysis
     if st.button("🌟 Run Vertex AI Master Analysis", key="vertex_master_btn", type="secondary"):
         with st.spinner("Running comprehensive AI analysis... Consolidating all data sources..."):
             try:
