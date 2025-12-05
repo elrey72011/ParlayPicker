@@ -2423,45 +2423,35 @@ class KalshiIntegrator:
         return self._synthetic_probability(team, sport_key, sportsbook_prob)
     
     def get_markets(self, category: str = "sports", status: str = "open") -> List[Dict]:
-        """Fetch available Kalshi markets.
-
-        Args:
-            category: 'sports', 'politics', 'economics', etc.
-            status: 'open', 'closed', 'settled'
-
-        Returns:
-            List of market dictionaries.
-        """
+        """Fetch available Kalshi markets with increased limit."""
         try:
             endpoint = "/markets"
+            # INCREASED LIMIT to 1000 to ensure we get all active games
             params = {
-                "limit": 100,
+                "limit": 1000,  
                 "status": status
             }
 
             if category:
                 params["series_ticker"] = category.upper()
 
-            # Use authenticated request method with RSA signature
             response_data = self._make_authenticated_request("GET", endpoint, params=params)
 
             if response_data:
                 markets = response_data.get("markets", [])
                 if markets:
                     self.last_error = None
-                    logger.info(f"✅ Loaded {len(markets)} Kalshi markets")
+                    # logger.info(f"✅ Loaded {len(markets)} Kalshi markets")
                     return markets
                 else:
                     self.last_error = "Kalshi API returned no markets"
-                    logger.warning("Kalshi API returned empty markets list")
             else:
-                logger.warning(f"Kalshi API failed: {self.last_error}")
+                # logger.warning(f"Kalshi API failed: {self.last_error}")
+                pass
 
         except Exception as e:
             self.last_error = str(e)
-            logger.warning(f"Error fetching Kalshi markets: {str(e)}")
-
-        # Do not fallback to synthetic data – just return empty to reflect API status
+            
         self._using_synthetic_data = False
         return []
     
@@ -2469,9 +2459,12 @@ class KalshiIntegrator:
         """Get all active sports betting markets"""
         all_markets = self.get_markets()
         
-        # Filter for sports-related markets
-        sports_keywords = ['NFL', 'NBA', 'MLB', 'NHL', 'UFC', 'SOCCER', 'TENNIS', 
-                          'GOLF', 'FOOTBALL', 'BASKETBALL', 'BASEBALL', 'HOCKEY']
+        # ADDED: NCAA, NCAAB, NCAAF, COLLEGE to capture college sports
+        sports_keywords = [
+            'NFL', 'NBA', 'MLB', 'NHL', 'UFC', 'SOCCER', 'TENNIS', 
+            'GOLF', 'FOOTBALL', 'BASKETBALL', 'BASEBALL', 'HOCKEY',
+            'NCAA', 'NCAAB', 'NCAAF', 'COLLEGE'
+        ]
         
         sports_markets = []
         for market in all_markets:
@@ -3691,188 +3684,119 @@ def validate_with_kalshi(kalshi_integrator, home_team: str, away_team: str,
                         side: str, sportsbook_prob: float, sport: str) -> Dict:
     """
     IMPROVED: Validate sportsbook odds with Kalshi prediction market
-    
-    Now handles team name variations like:
-    - "Memphis Grizzlies" matches "Memphis"
-    - "New York Knicks" matches "New York K"  
-    - "Los Angeles Lakers" matches "LA Lakers"
-    
-    Returns:
-        'kalshi_prob': Kalshi market probability
-        'discrepancy': Difference between markets
-        'validation': 'confirms', 'contradicts', or 'unavailable'
-        'edge': Additional edge from Kalshi vs sportsbook
-        'confidence_boost': How much to boost confidence (0-0.20)
     """
     
     def normalize_team_name(team: str) -> List[str]:
         """Generate multiple variations of a team name for flexible matching"""
+        if not team: return []
         team_upper = team.upper()
         variations = [team_upper, team_upper.replace(" ", "")]
-
-        # Split into parts and add individual words
+        
+        # Split into parts
         parts = team_upper.split()
         for part in parts:
-            if len(part) > 2:  # Skip very short words
-                variations.append(part)
+            if len(part) > 2: variations.append(part)
 
-        # Special handling for common abbreviations
+        # Common abbreviations
         abbreviations = {
-            'NEW YORK': ['NY', 'NEW YORK K', 'N.Y.'],
-            'LOS ANGELES': ['LA', 'L.A.'],
-            'SAN FRANCISCO': ['SF', 'S.F.'],
-            'GOLDEN STATE': ['GS'],
-            'OKLAHOMA CITY': ['OKC'],
-            'WASHINGTON': ['WSH'],
+            'NEW YORK': ['NY', 'N.Y.'], 'LOS ANGELES': ['LA', 'L.A.'],
+            'SAN FRANCISCO': ['SF'], 'GOLDEN STATE': ['GS'],
+            'OKLAHOMA CITY': ['OKC'], 'WASHINGTON': ['WSH'],
+            'UTAH STATE': ['UTAH ST'], 'KANSAS STATE': ['KANSAS ST']
         }
-
+        
         for city, abbrevs in abbreviations.items():
-            if team_upper.startswith(city):
+            if city in team_upper:
                 variations.extend(abbrevs)
 
-        # Kalshi-specific abbreviation support
+        # Kalshi-specific map
         for canonical, abbrs in KALSHI_TEAM_ABBREVIATIONS.items():
-            canonical_upper = canonical.upper()
-            canonical_words = canonical_upper.split()
-
-            # Direct matches (exact, contains, or shared keywords)
-            if (
-                team_upper == canonical_upper
-                or canonical_upper in team_upper
-                or team_upper in canonical_upper
-                or any(word in canonical_words for word in parts if len(word) > 2)
-            ):
+            if canonical in team_upper or team_upper in canonical:
                 variations.extend(abbrs)
 
-        # Remove duplicates while preserving order
-        seen = set()
-        unique_variations = []
-        for variation in variations:
-            if variation not in seen:
-                seen.add(variation)
-                unique_variations.append(variation)
-
-        return unique_variations
+        return list(set(variations))
     
     def teams_match(bet_team: str, market_text: str) -> bool:
-        """Check if a bet team matches text in a market without short false-positives."""
+        """Check if a bet team matches text in a market."""
         bet_variations = normalize_team_name(bet_team)
         market_upper = re.sub(r"[^A-Z0-9 ]", " ", market_text.upper().replace('_', ' '))
-        market_compact = market_upper.replace(' ', '')
-        market_tokens = set(re.findall(r"[A-Z0-9]+", market_upper))
-
+        
+        # 1. Direct substring matching (most reliable for colleges)
         for variation in bet_variations:
-            variation_upper = variation.upper()
-            variation_clean = re.sub(r"[^A-Z0-9 ]", " ", variation_upper).strip()
-            variation_compact = variation_clean.replace(' ', '')
-
-            if not variation_compact:
-                continue
-
-            # Longer variations (team names, extended abbreviations) can match anywhere in the text
-            if len(variation_compact) >= 4 and variation_compact in market_compact:
+            clean_var = re.sub(r"[^A-Z0-9 ]", " ", variation).strip()
+            if len(clean_var) > 3 and clean_var in market_upper:
                 return True
-
-            # Compare token-by-token to avoid matching "LA" with "ATLANTA"
-            variation_tokens = re.findall(r"[A-Z0-9]+", variation_clean)
-            if variation_tokens and all(token in market_tokens for token in variation_tokens):
-                return True
-
-            # Allow short tokens (NY, LA, SF) only on whole-word matches
-            if len(variation_compact) <= 3 and variation_clean in market_tokens:
-                return True
-
+        
         return False
-    
+
     def extract_probability(orderbook: Dict[str, Any]) -> Optional[float]:
-        if not orderbook:
-            return None
-
+        if not orderbook: return None
         yes_bids = orderbook.get('yes', [])
-        no_bids = orderbook.get('no', [])
-
-        if yes_bids:
-            price = yes_bids[0].get('price')
-            if price is not None:
-                return price / 100.0
-
-        if no_bids:
-            price = no_bids[0].get('price')
-            if price is not None:
-                return 1.0 - (price / 100.0)
-
-        return None
-
-    def find_canonical_team_name(team: str) -> Optional[str]:
-        team_upper = team.upper()
-        squeezed = team_upper.replace(" ", "")
-
-        for canonical, abbrs in KALSHI_TEAM_ABBREVIATIONS.items():
-            if canonical == team_upper or canonical.replace(" ", "") == squeezed:
-                return canonical
-            if canonical in team_upper or team_upper in canonical:
-                return canonical
-            for abbr in abbrs:
-                abbr_clean = abbr.upper().replace(" ", "")
-                if abbr_clean and abbr_clean in squeezed:
-                    return canonical
+        if yes_bids: return yes_bids[0].get('price', 0) / 100.0
         return None
 
     def build_market_validation(market: Dict[str, Any], scope: str) -> Optional[Dict[str, Any]]:
-        if not market:
-            return None
-
-        orderbook = kalshi_integrator.get_orderbook(market.get('ticker', '')) if market.get('ticker') else {}
+        if not market: return None
+        orderbook = kalshi_integrator.get_orderbook(market.get('ticker', ''))
         kalshi_prob = extract_probability(orderbook)
+        
+        if kalshi_prob is None: return None
 
-        if kalshi_prob is None:
-            return None
-
-        # FIXED: Edge = Your model prob - Kalshi crowd prob
-        # Positive edge = You're more confident than the crowd (VALUE BET!)
-        # Negative edge = Crowd is more confident than you
         diff = sportsbook_prob - kalshi_prob
-        synthetic_market = market.get('synthetic', False)
-
-        mild_threshold = 0.05 if scope == 'head_to_head' else 0.04
-        strong_threshold = 0.10 if scope == 'head_to_head' else 0.08
-        base_boost = 0.08 if scope == 'head_to_head' else 0.05
-        boost_multiplier = 0.6 if synthetic_market else 1.0
-
-        if diff >= strong_threshold:
-            validation = 'strong_kalshi_higher'
-            confidence_boost = base_boost * 1.2 * boost_multiplier
-            edge = diff
-        elif diff >= mild_threshold:
-            validation = 'kalshi_higher'
-            confidence_boost = base_boost * boost_multiplier
-            edge = diff
-        elif diff <= -strong_threshold:
-            validation = 'strong_contradiction'
-            confidence_boost = -base_boost * boost_multiplier
-            edge = abs(diff)
-        elif diff <= -mild_threshold:
-            validation = 'kalshi_lower'
-            confidence_boost = -base_boost * 0.6 * boost_multiplier
-            edge = abs(diff)
-        else:
-            validation = 'confirms'
-            confidence_boost = base_boost * 0.5 * boost_multiplier
-            edge = max(diff, 0)
+        synthetic = market.get('synthetic', False)
+        
+        if diff >= 0.08: validation = 'strong_kalshi_higher'
+        elif diff >= 0.04: validation = 'kalshi_higher'
+        elif diff <= -0.08: validation = 'strong_contradiction'
+        elif diff <= -0.04: validation = 'kalshi_lower'
+        else: validation = 'confirms'
 
         return {
             'kalshi_prob': kalshi_prob,
             'kalshi_available': True,
             'discrepancy': abs(diff),
             'validation': validation,
-            'edge': edge,
-            'confidence_boost': confidence_boost,
+            'edge': diff,
+            'confidence_boost': 0.05 if validation == 'confirms' else 0,
             'market_ticker': market.get('ticker'),
-            'market_title': market.get('title'),
-            'market_scope': scope,
-            'data_source': 'synthetic' if synthetic_market else 'kalshi'
+            'data_source': 'synthetic' if synthetic else 'kalshi'
         }
 
+    # --- MAIN TRY BLOCK (This was missing causing SyntaxError) ---
+    try:
+        markets = kalshi_integrator.get_sports_markets()
+        if not markets: return None
+
+        # Check both home and away teams
+        for market in markets:
+            title = f"{market.get('title', '')} {market.get('ticker', '')}".upper()
+            
+            if teams_match(home_team, title) and teams_match(away_team, title):
+                return build_market_validation(market, 'head_to_head')
+        
+        return None
+
+    except Exception as e:
+        # Fail gracefully
+        return {
+            'kalshi_prob': None,
+            'kalshi_available': False,
+            'validation': 'error',
+            'edge': 0,
+            'confidence_boost': 0
+        }
+
+    except Exception as e:
+        # Fail gracefully
+        return {
+            'kalshi_prob': None,
+            'kalshi_available': False,
+            'validation': 'error',
+            'edge': 0,
+            'confidence_boost': 0
+        }
+
+    # --- MAIN TRY/EXCEPT BLOCK ---
     try:
         markets = kalshi_integrator.get_sports_markets()
         if not markets:
@@ -3880,8 +3804,6 @@ def validate_with_kalshi(kalshi_integrator, home_team: str, away_team: str,
 
         bet_team = home_team if side == 'home' else away_team
         other_team = away_team if side == 'home' else home_team
-
-        canonical_team = find_canonical_team_name(bet_team) or bet_team.upper()
 
         matching_market = None
         fallback_market = None
@@ -6814,6 +6736,14 @@ def _ingest_theover_spread_row(
     bucket = entry.setdefault('spreads', {}).setdefault(line_key, {'home': None, 'away': None})
 
     prob_value, prob_source = _coerce_probability(row, THEOVER_SPREAD_PROB_CANDIDATES)
+    
+    # FIXED: If probability is missing but we have a line, calculate heuristic
+    if prob_value is None and line_value is not None:
+        # Simple heuristic: 50% + (line * 2.8%)
+        # e.g. -1.0 line -> 52.8%, -3.0 -> 58.4%
+        prob_value = 0.5 + min(0.35, abs(line_value) * 0.028)
+        prob_source = "line_heuristic"
+
     if prob_value is None:
         generic_prob, generic_source = _coerce_probability(row, THEOVER_GENERIC_PROB_CANDIDATES)
         if generic_prob is not None:
@@ -6826,7 +6756,7 @@ def _ingest_theover_spread_row(
     pick_val = str(row.get('selection', row.get('pick', ''))).strip()
     side = None
     
-    # First check the "side" column directly (from CSV exports)
+    # Logic to determine side (home/away)
     side_val = str(row.get('side', '')).strip().lower()
     if side_val in ('home', 'away'):
         side = side_val
@@ -6858,7 +6788,6 @@ def _ingest_theover_spread_row(
         'line': line_value,
         'row_index': idx,
     }
-
 
 def _ingest_theover_total_row(
     entry: Dict[str, Any],

@@ -110,57 +110,63 @@ def get_gemini_model(
         return None
 
 
-def get_vertex_ai_prediction(
-    features: dict,
-    game_context: str,
-    project_id: Optional[str] = None,
-    location: Optional[str] = None,
-) -> Optional[float]:
+from google.cloud import aiplatform
+
+# Replace this with the ID from your screenshot/verify.py output
+# Endpoint: parlaypicker-xgb-v3-master-endpoint
+ENDPOINT_ID = "6435317312558989312" 
+PROJECT_ID = "elite-hangar-479017-m8"
+LOCATION = "us-central1"
+
+def get_vertex_ai_prediction(features_dict, game_context=None):
     """
-    Call Gemini/Vertex AI to get a win probability.
-    Returns None on ANY failure — we never default to 0.5.
+    Get prediction from your custom trained XGBoost model.
     """
     try:
-        # 1. Check if ML is enabled
-        if not is_vertex_ai_enabled():
-            st.session_state["last_ml_source"] = "disabled"
-            return None
+        # 1. Define the exact feature order your model expects 
+        # (Must match FEATURE_NAMES from train_vertex_model.py)
+        expected_features = [
+            "home_win_pct", "away_win_pct", "home_avg_points", "away_avg_points",
+            "home_def_rating", "away_def_rating", "spread_normalized", "home_last_5",
+            "away_last_5", "home_home_record", "away_away_record", "head_to_head",
+            "rest_advantage", "injuries_impact", "weather_factor", "public_betting_pct",
+            "sharp_money_indicator", "line_movement", "total_movement", "model_consensus",
+            "theover_probability", "implied_home_prob", "home_streak", "away_streak",
+            "division_game", "back_to_back", "primetime_game"
+        ]
+        
+        # 2. Convert dictionary to sorted list (XGBoost expects an array, not a dict)
+        instance_list = []
+        for feature in expected_features:
+            # Default to 0.5 or 0 if feature is missing
+            val = features_dict.get(feature, 0.0)
+            try:
+                instance_list.append(float(val))
+            except:
+                instance_list.append(0.0)
 
-        # 2. Build / load Gemini model
-        model = get_gemini_model(project_id=project_id, location=location)
-        if model is None:
-            st.session_state["last_ml_source"] = "disabled"
-            return None
-
-        # 3. Build prompt
-        prompt = (
-            "You are predicting sports outcomes.\n"
-            f"Context: {game_context}\n"
-            f"Features: {json.dumps(features)}\n"
-            "Return ONLY a float between 0 and 1 representing "
-            "the model's estimated probability that the event is TRUE.\n"
+        # 3. Initialize Endpoint
+        endpoint = aiplatform.Endpoint(
+            endpoint_name=f"projects/{PROJECT_ID}/locations/{LOCATION}/endpoints/{ENDPOINT_ID}"
         )
 
-        # 4. Call Gemini
-        response = model.generate_content(prompt)
-        raw = response.text if hasattr(response, "text") else str(response)
-
-        # 5. Parse a float
-        try:
-            p = float(raw.strip())
-        except Exception:
-            print("Vertex AI: Unable to parse response:", raw)
-            return None
-
-        # 6. Validate range
-        if not (0.0 < p < 1.0):
-            print("Vertex AI: Invalid prob (not 0–1):", p)
-            return None
-
-        return p
+        # 4. Make Prediction
+        prediction = endpoint.predict(instances=[instance_list])
+        
+        # Vertex usually returns [probability_class_0, probability_class_1]
+        # Assuming class 1 is "Home Win"
+        probs = prediction.predictions[0] 
+        
+        # Handle different return formats (scalar vs list)
+        if isinstance(probs, list):
+            home_win_prob = probs[1] # Probability of class 1
+        else:
+            home_win_prob = probs    # Scalar probability
+            
+        return float(home_win_prob)
 
     except Exception as e:
-        print("Vertex AI error:", e)
+        print(f"❌ Custom Model Prediction Failed: {e}")
         return None
 
 def show_vertex_ai_prediction_section(home_team: str, away_team: str, league: str, 
