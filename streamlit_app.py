@@ -2159,142 +2159,142 @@ class AIOptimizer:
 
 # ============ KALSHI INTEGRATION ============
 
-class KalshiIntegrator:
-    """Integrates Kalshi prediction market odds and analysis
+#class KalshiIntegrator:
+#    """Integrates Kalshi prediction market odds and analysis
     
-    Kalshi uses RSA signature authentication for API requests.
-    The API key is a UUID and the secret is an RSA private key.
-    """
+ #   Kalshi uses RSA signature authentication for API requests.
+  #  The API key is a UUID and the secret is an RSA private key.
+   # """
     
-    def __init__(self, api_key: str = None, api_secret: str = None):
-        self.api_key = api_key or os.environ.get("KALSHI_API_KEY")
-        self.api_secret = api_secret or os.environ.get("KALSHI_API_SECRET")
+    #def __init__(self, api_key: str = None, api_secret: str = None):
+     #   self.api_key = api_key or os.environ.get("KALSHI_API_KEY")
+      #  self.api_secret = api_secret or os.environ.get("KALSHI_API_SECRET")
         
         # Kalshi API URLs - production API (not elections subdomain)
-        self.base_url = "https://api.elections.kalshi.com/trade-api/v2"
-        self.demo_url = "https://demo-api.kalshi.co/trade-api/v2"
+      #  self.base_url = "https://api.elections.kalshi.com/trade-api/v2"
+      #  self.demo_url = "https://demo-api.kalshi.co/trade-api/v2"
         
         # Use production API if we have credentials
-        self.api_url = self.base_url if self.api_key else self.demo_url
+      #  self.api_url = self.base_url if self.api_key else self.demo_url
         
-        self.headers = {
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-        }
+      #  self.headers = {
+      #      "Content-Type": "application/json",
+      #      "Accept": "application/json",
+      #  }
         
         # RSA key for signing (parsed from api_secret)
-        self._private_key = None
-        self._auth_ready = False
+      #  self._private_key = None
+      #  self._auth_ready = False
         
-        if self.api_key and self.api_secret:
-            try:
-                from cryptography.hazmat.primitives import serialization
-                from cryptography.hazmat.backends import default_backend
+      #  if self.api_key and self.api_secret:
+      #      try:
+      #          from cryptography.hazmat.primitives import serialization
+      #          from cryptography.hazmat.backends import default_backend
                 
                 # Clean up the key if needed
-                key_data = self.api_secret.strip()
-                if not key_data.startswith('-----BEGIN'):
-                    key_data = f"-----BEGIN RSA PRIVATE KEY-----\n{key_data}\n-----END RSA PRIVATE KEY-----"
+      #          key_data = self.api_secret.strip()
+      #          if not key_data.startswith('-----BEGIN'):
+      #              key_data = f"-----BEGIN RSA PRIVATE KEY-----\n{key_data}\n-----END RSA PRIVATE KEY-----"
                 
-                self._private_key = serialization.load_pem_private_key(
-                    key_data.encode(),
-                    password=None,
-                    backend=default_backend()
-                )
-                self._auth_ready = True
-                logger.info(f"✅ Kalshi RSA key loaded successfully (key: {self.api_key[:8]}...)")
-            except ImportError:
-                logger.warning("cryptography library not installed - Kalshi auth disabled")
-                self._private_key = None
-            except Exception as e:
-                logger.warning(f"Could not load Kalshi RSA key: {e}")
-                self._private_key = None
+      #          self._private_key = serialization.load_pem_private_key(
+      #              key_data.encode(),
+      #              password=None,
+      #              backend=default_backend()
+      #          )
+      #          self._auth_ready = True
+      #          logger.info(f"✅ Kalshi RSA key loaded successfully (key: {self.api_key[:8]}...)")
+      #      except ImportError:
+      #          logger.warning("cryptography library not installed - Kalshi auth disabled")
+      #          self._private_key = None
+      #      except Exception as e:
+      #          logger.warning(f"Could not load Kalshi RSA key: {e}")
+      #          self._private_key = None
 
         # Synthetic fallback cache when Kalshi API is unavailable
-        self._using_synthetic_data = False
-        self._synthetic_markets: List[Dict[str, Any]] = []
-        self._synthetic_orderbooks: Dict[str, Dict[str, List[Dict[str, Any]]]] = {}
-        self._synthetic_market_by_team: Dict[str, Dict[str, Any]] = {}
-        self.last_error: Optional[str] = None
+      #  self._using_synthetic_data = False
+      #  self._synthetic_markets: List[Dict[str, Any]] = []
+      #  self._synthetic_orderbooks: Dict[str, Dict[str, List[Dict[str, Any]]]] = {}
+      #  self._synthetic_market_by_team: Dict[str, Dict[str, Any]] = {}
+      #  self.last_error: Optional[str] = None
         
         # Cache for API responses
-        self._markets_cache = None
-        self._cache_time = None
-        self._cache_duration = 300  # 5 minutes
+      #  self._markets_cache = None
+      #  self._cache_time = None
+      #  self._cache_duration = 300  # 5 minutes
         
-    def _sign_request(self, method: str, path: str, timestamp: str) -> str:
-        """Create RSA signature for Kalshi API request"""
-        if not self._private_key:
-            return ""
+  #  def _sign_request(self, method: str, path: str, timestamp: str) -> str:
+  #      """Create RSA signature for Kalshi API request"""
+  #      if not self._private_key:
+  #          return ""
         
-        try:
-            from cryptography.hazmat.primitives import hashes
-            from cryptography.hazmat.primitives.asymmetric import padding
-            import base64
+  #      try:
+  #          from cryptography.hazmat.primitives import hashes
+  #          from cryptography.hazmat.primitives.asymmetric import padding
+  #          import base64
             
             # Message format: timestamp + method + path
-            message = f"{timestamp}{method}{path}"
+  #          message = f"{timestamp}{method}{path}"
             
-            signature = self._private_key.sign(
-                message.encode('utf-8'),
-                padding.PSS(
-                    mgf=padding.MGF1(hashes.SHA256()),
-                    salt_length=padding.PSS.DIGEST_LENGTH
-                ),
-                hashes.SHA256()
-            )
+  #          signature = self._private_key.sign(
+  #              message.encode('utf-8'),
+  #              padding.PSS(
+  #                  mgf=padding.MGF1(hashes.SHA256()),
+  #                  salt_length=padding.PSS.DIGEST_LENGTH
+  #              ),
+  #              hashes.SHA256()
+  #          )
             
-            return base64.b64encode(signature).decode('utf-8')
-        except Exception as e:
-            logger.warning(f"Error signing Kalshi request: {e}")
-            return ""
+  #          return base64.b64encode(signature).decode('utf-8')
+  #      except Exception as e:
+  #          logger.warning(f"Error signing Kalshi request: {e}")
+  #          return ""
     
-    def _make_authenticated_request(self, method: str, endpoint: str, params: dict = None) -> Optional[dict]:
-        """Make authenticated request to Kalshi API"""
-        import time as time_module
+  #  def _make_authenticated_request(self, method: str, endpoint: str, params: dict = None) -> Optional[dict]:
+  #      """Make authenticated request to Kalshi API"""
+  #      import time as time_module
         
-        url = f"{self.api_url}{endpoint}"
-        timestamp = str(int(time_module.time() * 1000))
+  #      url = f"{self.api_url}{endpoint}"
+  #      timestamp = str(int(time_module.time() * 1000))
         
-        headers = self.headers.copy()
+  #      headers = self.headers.copy()
         
-        if self._auth_ready and self._private_key:
-            signature = self._sign_request(method.upper(), endpoint, timestamp)
-            headers["KALSHI-ACCESS-KEY"] = self.api_key
-            headers["KALSHI-ACCESS-SIGNATURE"] = signature
-            headers["KALSHI-ACCESS-TIMESTAMP"] = timestamp
+  #      if self._auth_ready and self._private_key:
+  #          signature = self._sign_request(method.upper(), endpoint, timestamp)
+  #          headers["KALSHI-ACCESS-KEY"] = self.api_key
+  #          headers["KALSHI-ACCESS-SIGNATURE"] = signature
+  #          headers["KALSHI-ACCESS-TIMESTAMP"] = timestamp
         
-        try:
-            if method.upper() == "GET":
-                response = requests.get(url, headers=headers, params=params, timeout=15)
-            else:
-                response = requests.post(url, headers=headers, json=params, timeout=15)
+  #      try:
+  #          if method.upper() == "GET":
+  #              response = requests.get(url, headers=headers, params=params, timeout=15)
+  #          else:
+  #              response = requests.post(url, headers=headers, json=params, timeout=15)
             
-            if response.status_code == 200:
-                self.last_error = None
-                return response.json()
-            elif response.status_code == 401:
-                logger.warning("Kalshi API authentication failed - check API key and secret")
-                self.last_error = "Authentication failed"
-            elif response.status_code == 403:
-                logger.warning("Kalshi API access forbidden")
-                self.last_error = "Access forbidden"
-            else:
-                logger.warning(f"Kalshi API error: {response.status_code} - {response.text[:200]}")
-                self.last_error = f"API error: {response.status_code}"
+  #          if response.status_code == 200:
+  #              self.last_error = None
+  #              return response.json()
+  #          elif response.status_code == 401:
+  #              logger.warning("Kalshi API authentication failed - check API key and secret")
+  #              self.last_error = "Authentication failed"
+  #          elif response.status_code == 403:
+  #              logger.warning("Kalshi API access forbidden")
+  #              self.last_error = "Access forbidden"
+  #          else:
+  #              logger.warning(f"Kalshi API error: {response.status_code} - {response.text[:200]}")
+  #              self.last_error = f"API error: {response.status_code}"
                 
-        except requests.exceptions.Timeout:
-            logger.warning("Kalshi API timeout")
-            self.last_error = "Request timeout"
-        except Exception as e:
-            logger.warning(f"Kalshi API request failed: {e}")
-            self.last_error = str(e)
+  #      except requests.exceptions.Timeout:
+  #          logger.warning("Kalshi API timeout")
+  #          self.last_error = "Request timeout"
+  #      except Exception as e:
+  #          logger.warning(f"Kalshi API request failed: {e}")
+  #          self.last_error = str(e)
         
-        return None
+  #      return None
     
-    def is_configured(self) -> bool:
-        """Check if Kalshi is properly configured"""
-        return bool(self.api_key and self._auth_ready)
+  #  def is_configured(self) -> bool:
+  #      """Check if Kalshi is properly configured"""
+  #      return bool(self.api_key and self._auth_ready)
 
     # -------------------- Synthetic helpers --------------------
     def _synthetic_probability(self, team: str, sport_key: Optional[str] = None,
