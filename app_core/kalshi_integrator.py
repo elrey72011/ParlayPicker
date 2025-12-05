@@ -6,6 +6,10 @@ This file goes in: app_core/kalshi_integrator.py or app_core/__init__.py
 import copy
 import time
 import logging
+import re
+import string
+from datetime import datetime
+import pytz
 import requests
 import streamlit as st
 from typing import Dict, List, Any, Optional
@@ -111,9 +115,11 @@ class KalshiIntegrator:
         self.last_error: Optional[str] = None
         
         # Cache for API responses
-        self._markets_cache = None
-        self._cache_time = None
+        self._markets_cache: Dict[str, List[Dict[str, Any]]] = {}
+        self._cache_time: Dict[str, float] = {}
         self._cache_duration = 300  # 5 minutes
+        self._match_attempts = 0
+        self._match_success = 0
         
     def _sign_request(self, method: str, path: str, timestamp: str) -> str:
         """Create RSA signature for Kalshi API request"""
@@ -291,7 +297,7 @@ class KalshiIntegrator:
             print(f"❌ KALSHI: Traceback: {traceback.format_exc()}")
             return []
     
-    def get_markets(self, category: str = "sports", status: str = "open") -> List[Dict]:
+    def get_markets(self, category: str = "sports", status: Optional[str] = "open") -> List[Dict]:
         """Fetch available Kalshi markets.
 
         Args:
@@ -303,6 +309,16 @@ class KalshiIntegrator:
         """
         if self._using_synthetic_data:
             return []
+
+        cache_key = status or "all"
+        now = time.time()
+        if (
+            cache_key in self._markets_cache
+            and cache_key in self._cache_time
+            and now - self._cache_time[cache_key] < self._cache_duration
+        ):
+            logger.info("Kalshi get_markets cache hit for status=%s", cache_key)
+            return copy.deepcopy(self._markets_cache.get(cache_key, []))
 
         try:
             # First, get sports series tickers
@@ -330,8 +346,9 @@ class KalshiIntegrator:
                 params = {
                     "series_ticker": series_ticker,  # CRITICAL: Use series_ticker parameter
                     "limit": 200,
-                    "status": status
                 }
+                if status:
+                    params["status"] = status
                 
                 response_data = self._make_authenticated_request("GET", endpoint, params=params)
                 
@@ -352,6 +369,8 @@ class KalshiIntegrator:
                 sample_tickers = [m.get('ticker', 'NO_TICKER') for m in all_markets[:5]]
                 logger.info(f"Sample tickers: {sample_tickers}")
                 
+                self._markets_cache[cache_key] = all_markets
+                self._cache_time[cache_key] = now
                 return all_markets
             else:
                 self.last_error = "Kalshi API returned no markets"
@@ -553,8 +572,18 @@ class KalshiIntegrator:
             return None
         return float(price_dollars)  # Kalshi prices are already probabilities
     
-    def get_game_market(self, home_team: str, away_team: str, sport: str = "NBA") -> Dict[str, Any]:
-        """Find and return Kalshi market data for a specific game."""
+    def get_game_market(
+        self,
+        home_team: str,
+        away_team: str,
+        sport: str = "NBA",
+        game_time: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Find and return Kalshi market data for a specific game.
+
+        The matching is intentionally forgiving (punctuation/spacing-insensitive) and
+        attempts partial matches to handle Kalshi's abbreviations.
+        """
 
         result: Dict[str, Any] = {
             "kalshi_available": False,
@@ -568,16 +597,23 @@ class KalshiIntegrator:
         }
 
         def normalize_name(name: str) -> str:
-            return re.sub(r"[^a-z]", "", (name or "").lower())
+            cleaned = TeamNameMatcher.normalize(name)
+            cleaned = re.sub(r"[^a-z0-9 ]", " ", (cleaned or "").lower())
+            cleaned = cleaned.translate(str.maketrans("", "", string.punctuation))
+            return " ".join(cleaned.split())
+
+        def normalize_market_text(title: str, subtitle: str = "", ticker: str = "") -> str:
+            parts = [title or "", subtitle or "", ticker or ""]
+            joined = " ".join(parts)
+            joined = joined.replace("_", " ").replace(".", " ")
+            return normalize_name(joined)
 
         def teams_match(bet_team: str, market_text: str) -> bool:
-            bet_norm = TeamNameMatcher.normalize(bet_team).upper()
-            text_norm = TeamNameMatcher.normalize(market_text).upper()
-            if bet_norm and bet_norm in text_norm:
-                return True
-            bet_simple = normalize_name(bet_team)
-            text_simple = normalize_name(market_text)
-            return bool(bet_simple) and bet_simple in text_simple
+            bet_norm = normalize_name(bet_team)
+            if not bet_norm:
+                return False
+            text_norm = normalize_name(market_text)
+            return bet_norm in text_norm or text_norm in bet_norm
 
         def extract_yes_levels(orderbook: Dict[str, Any]) -> Optional[List[Dict[str, Any]]]:
             candidates = [
@@ -600,6 +636,7 @@ class KalshiIntegrator:
             return None
 
         try:
+            self._match_attempts += 1
             sports_markets = self.get_sports_markets()
             if not sports_markets:
                 self.last_error = self.last_error or "No Kalshi sports markets available"
@@ -614,19 +651,42 @@ class KalshiIntegrator:
             best_market = None
             best_score = 0.0
 
+            # Normalize teams once
+            norm_home = normalize_name(home_team)
+            norm_away = normalize_name(away_team)
+
+            game_date = None
+            if game_time:
+                try:
+                    dt = datetime.fromisoformat(str(game_time).replace("Z", "+00:00"))
+                    game_date = dt.date()
+                except Exception:
+                    game_date = None
+
             for market in sports_markets:
                 title = (market.get("title") or "")
+                subtitle = market.get("subtitle") or ""
                 ticker = (market.get("ticker") or "")
-                market_text = f"{title} {ticker}"
+                market_text = normalize_market_text(title, subtitle, ticker)
 
-                home_match = teams_match(home_team, market_text)
-                away_match = teams_match(away_team, market_text)
+                home_match = teams_match(norm_home, market_text)
+                away_match = teams_match(norm_away, market_text)
                 if not (home_match and away_match):
                     continue
 
                 score = 1.0
                 if market.get("series_ticker") and "GAME" in str(market.get("series_ticker")).upper():
                     score += 0.5
+
+                close_time = market.get("close_time")
+                if close_time and game_date:
+                    try:
+                        close_dt = datetime.fromtimestamp(float(close_time) / 1000.0, tz=pytz.UTC)
+                        close_et = close_dt.astimezone(pytz.timezone("US/Eastern"))
+                        if close_et.date() == game_date:
+                            score += 0.4
+                    except Exception:
+                        pass
 
                 if score > best_score:
                     best_score = score
@@ -728,10 +788,18 @@ class KalshiIntegrator:
                     "kalshi_away_prob": 1.0 - kalshi_prob,
                     "market_ticker": ticker,
                     "market_title": title,
-                    "confidence": 0.8 if not best_market.get("synthetic") else 0.5,
+                    "kalshi_label": title or ticker,
+                    "kalshi_volume": best_market.get("volume")
+                    or best_market.get("yes_bid_size")
+                    or best_market.get("no_bid_size")
+                    or best_market.get("volume_yes"),
+                    "confidence": min(1.0, 0.6 + best_score / 3.0)
+                    if not best_market.get("synthetic")
+                    else 0.5,
                     "kalshi_match_debug": f"matched_ticker={ticker} title={title} prob={kalshi_prob:.3f} used_price_key={used_key}",
                 }
             )
+            self._match_success += 1
             logger.info(
                 "Kalshi get_game_market: %s vs %s -> %s",
                 home_team,

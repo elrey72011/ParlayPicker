@@ -135,6 +135,7 @@ class VertexMasterAnalyzer:
         local_ml_predictor: Any = None,
         theover_data: Optional[Dict[str, pd.DataFrame]] = None,
         kalshi_integrator: Any = None,
+        use_kalshi: bool = True,
     ) -> None:
         self.odds_api = odds_api_client
         self.sportsdata = sportsdata_clients or {}
@@ -143,6 +144,8 @@ class VertexMasterAnalyzer:
         self.local_ml = local_ml_predictor
         self.theover = theover_data or {}
         self.kalshi = kalshi_integrator
+        # Allow UI/ENV to disable Kalshi without removing the integrator instance
+        self.use_kalshi = bool(use_kalshi and st.session_state.get("kalshi_enabled", True))
 
     # ------------------------------------------------------------------
     # Feature builders
@@ -581,11 +584,14 @@ class VertexMasterAnalyzer:
             "kalshi_prob": None,
             "kalshi_alignment": None,
             "kalshi_match_debug": "no_match_found",
+            "kalshi_label": None,
+            "kalshi_volume": None,
+            "kalshi_confidence": None,
         }
 
         # If Kalshi is not configured, bail out cleanly
-        if not getattr(self, "kalshi", None):
-            feats["kalshi_match_debug"] = "kalshi_not_configured"
+        if not getattr(self, "kalshi", None) or not getattr(self, "use_kalshi", True):
+            feats["kalshi_match_debug"] = "kalshi_not_configured" if not getattr(self, "kalshi", None) else "kalshi_disabled"
             return feats
 
         try:
@@ -594,7 +600,12 @@ class VertexMasterAnalyzer:
             league = game.get("league") or game.get("sport_key") or "NBA"
 
             # Delegate to the integrator as the single source of truth
-            market_info = self.kalshi.get_game_market(home, away, sport=str(league)) or {}
+            market_info = self.kalshi.get_game_market(
+                home,
+                away,
+                sport=str(league),
+                game_time=game.get("commence_time") or game.get("game_time"),
+            ) or {}
 
             available = bool(market_info.get("kalshi_available"))
             prob = market_info.get("kalshi_prob")
@@ -620,6 +631,9 @@ class VertexMasterAnalyzer:
 
             feats["kalshi_available"] = True
             feats["kalshi_prob"] = prob
+            feats["kalshi_label"] = market_info.get("kalshi_label") or market_info.get("market_title")
+            feats["kalshi_volume"] = market_info.get("kalshi_volume")
+            feats["kalshi_confidence"] = market_info.get("confidence")
             feats["kalshi_match_debug"] = market_info.get(
                 "kalshi_match_debug",
                 f"matched_ticker={market_info.get('market_ticker')} prob={prob:.3f}",
@@ -1238,6 +1252,15 @@ class VertexMasterAnalyzer:
             )
         except Exception:
             logger.info("VertexMasterAnalyzer: Kalshi columns not available for sample logging")
+        try:
+            kalshi_matches = int(df.get("kalshi_available", pd.Series([])).fillna(False).sum())
+            logger.info(
+                "VertexMasterAnalyzer: Kalshi match summary -> %d matched / %d games",
+                kalshi_matches,
+                len(df),
+            )
+        except Exception:
+            logger.info("VertexMasterAnalyzer: unable to compute Kalshi summary")
         return df
 
 
@@ -1298,6 +1321,12 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
         display_df["kalshi_prob"] = None
     if "kalshi_match_debug" not in display_df.columns:
         display_df["kalshi_match_debug"] = "no_kalshi_column"
+    if "kalshi_label" not in display_df.columns:
+        display_df["kalshi_label"] = None
+    if "kalshi_volume" not in display_df.columns:
+        display_df["kalshi_volume"] = None
+    if "kalshi_confidence" not in display_df.columns:
+        display_df["kalshi_confidence"] = None
     display_df["sort_time"] = pd.to_datetime(display_df["game_time"], errors="coerce")
     display_df = display_df.sort_values("sort_time", ascending=True)
     display_df["is_today"] = display_df["game_time"].apply(is_today_calendar_day)
@@ -1328,7 +1357,7 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
     )
     display_df.loc[
         ~display_df["kalshi_available"].fillna(False),
-        ["kalshi_prob"],
+        ["kalshi_prob", "kalshi_label", "kalshi_confidence", "kalshi_volume"],
     ] = None
 
     def _edge_vs_kalshi(row: pd.Series) -> float:
@@ -1396,37 +1425,22 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
     
     # Kalshi: Show alignment as text + percentage
     def format_kalshi(row):
-        """Determine Kalshi agreement with a neutral band around 50%."""
-        market_type = str(row.get("pick_market_type") or "").lower()
+        """Display the matched Kalshi market label (or fallback message)."""
         kalshi_prob = row.get("kalshi_prob")
         kalshi_available = bool(row.get("kalshi_available"))
+        label = row.get("kalshi_label") or row.get("market_title")
 
-        if market_type == "total":
-            return "No Kalshi match"
         if not kalshi_available or kalshi_prob is None or pd.isna(kalshi_prob):
             return "No Kalshi match"
-
-        pick_team = row.get("pick_team", "")
-        home_team = row.get("home_team", "")
-        if not pick_team or not home_team:
-            return "No Kalshi match"
-
-        pick_is_home = str(pick_team).strip().lower() == str(home_team).strip().lower()
-
-        if 0.45 <= kalshi_prob <= 0.55:
-            return "Neutral"
-
-        if pick_is_home:
-            return "Agree" if kalshi_prob > 0.55 else "Disagree"
-        return "Agree" if kalshi_prob < 0.45 else "Disagree"
+        return label or "Kalshi match"
 
     display_df["Kalshi"] = display_df.apply(format_kalshi, axis=1)
     display_df["Kalshi %"] = display_df.apply(
-        lambda row: round(row["kalshi_prob"] * 100)
+        lambda row: round(float(row["kalshi_prob"]) * 100, 1)
         if row.get("kalshi_available")
         and row.get("kalshi_prob") is not None
         and not pd.isna(row.get("kalshi_prob"))
-        else "N/A",
+        else np.nan,
         axis=1,
     )
     
@@ -1434,14 +1448,14 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
     def calc_kalshi_edge(row):
         kalshi_prob = row.get("kalshi_prob")
         win_prob = row.get("win_prob")  # Your model's probability
-        
+
         if kalshi_prob is not None and not pd.isna(kalshi_prob) and win_prob is not None:
             # FIXED: Edge = Your confidence - Kalshi crowd confidence
             # Positive edge = You're MORE confident than the crowd (VALUE BET!)
             # Negative edge = Crowd is MORE confident than you
             edge = (win_prob - kalshi_prob) * 100
-            return f"{edge:+.1f}%"
-        return "N/A"
+            return edge
+        return np.nan
 
     display_df["Kalshi Edge"] = display_df.apply(calc_kalshi_edge, axis=1)
 
