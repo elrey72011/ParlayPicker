@@ -17,7 +17,11 @@ import streamlit as st
 
 from app_core.team_name_matcher import TeamNameMatcher
 from app_core.kalshi_integrator import price_to_prob
-from ml_predictions import get_vertex_ai_prediction, is_vertex_ai_enabled
+from app_core.vertex_ai_endpoint import (
+    VERTEX_FEATURE_COLUMNS,
+    is_vertex_prediction_configured,
+    predict_win_probabilities,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -723,48 +727,69 @@ class VertexMasterAnalyzer:
     def build_vertex_feature_vector(self, feats: Dict[str, Any]) -> List[float]:
         """Map comprehensive features -> numeric vector for Vertex."""
 
-        def sg(key: str, default: float) -> float:
+        row = self.build_vertex_feature_row(feats)
+        cleaned: List[float] = []
+        for col in VERTEX_FEATURE_COLUMNS:
+            val = row.get(col, 0.0)
+            try:
+                cleaned.append(float(val))
+            except Exception:
+                cleaned.append(0.0)
+        return cleaned
+
+    def build_vertex_feature_row(self, feats: Dict[str, Any]) -> Dict[str, float]:
+        """Construct the ordered feature row expected by the deployed Vertex model."""
+
+        def gv(key: str, default: float = 0.0) -> float:
             val = feats.get(key, default)
             try:
-                if val is None or pd.isna(val):
+                if val is None or (isinstance(val, float) and pd.isna(val)):
                     return default
                 return float(val)
             except Exception:
                 return default
 
-        vec = [
-            sg("home_win_pct", 0.5),
-            sg("away_win_pct", 0.5),
-            sg("win_pct_diff", 0.0),
-            sg("home_avg_points", 100.0) / 100.0,
-            sg("away_avg_points", 100.0) / 100.0,
-            sg("home_avg_points_allowed", 100.0) / 100.0,
-            sg("away_avg_points_allowed", 100.0) / 100.0,
-            sg("form_momentum_diff", 0.0) / 5.0,
-            sg("implied_home_prob", 0.5),
-            sg("home_spread", 0.0) / 20.0,
-            sg("total_line", 200.0) / 200.0,
-            sg("sentiment_diff", 0.0),
-            sg("local_ml_prob", 0.5),
-            sg("theover_probability", 0.5),
-            sg("consensus_prob", 0.5),
-            sg("theover_total", 200.0) / 200.0,
-            sg("theover_total_probability", 0.5),
-            1.0 if feats.get("kalshi_available") else 0.0,
-            sg("kalshi_prob", 0.5),
-            sg("kalshi_alignment", 0.5),
-        ]
+        home_avg = gv("home_avg_points", 0.0)
+        away_avg = gv("away_avg_points", 0.0)
+        win_pct_diff = gv("win_pct_diff", gv("home_win_pct", 0.5) - gv("away_win_pct", 0.5))
+        form_diff = gv("home_last_5_wins", 0.0) - gv("away_last_5_wins", 0.0)
+        consensus = gv("consensus_prob", gv("implied_home_prob", 0.5))
+        spread_norm = gv("home_spread", 0.0)
 
-        cleaned: List[float] = []
-        for v in vec:
-            try:
-                if v is None or (isinstance(v, float) and np.isnan(v)):
-                    cleaned.append(0.0)
-                else:
-                    cleaned.append(float(v))
-            except Exception:
-                cleaned.append(0.0)
-        return cleaned
+        row = {
+            "home_win_pct": gv("home_win_pct", 0.5),
+            "away_win_pct": gv("away_win_pct", 0.5),
+            "home_avg_points": home_avg,
+            "away_avg_points": away_avg,
+            "home_form_last5": gv("home_last_5_wins", 0.0),
+            "away_form_last5": gv("away_last_5_wins", 0.0),
+            "home_pd_last5": gv("home_pd_last5", 0.0),
+            "away_pd_last5": gv("away_pd_last5", 0.0),
+            "home_sos_last5": gv("home_sos_last5", 0.0),
+            "away_sos_last5": gv("away_sos_last5", 0.0),
+            "win_pct_diff": win_pct_diff,
+            "avg_points_diff": home_avg - away_avg,
+            "form_diff": form_diff,
+            "pd_last5_diff": gv("pd_last5_diff", gv("home_pd_last5", 0.0) - gv("away_pd_last5", 0.0)),
+            "sos_diff": gv("sos_diff", gv("home_sos_last5", 0.0) - gv("away_sos_last5", 0.0)),
+            "def_rating_diff": gv("def_rating_diff", gv("home_def_rating", 0.0) - gv("away_def_rating", 0.0)),
+            "streak_diff": gv("streak_diff", gv("home_streak", 0.0) - gv("away_streak", 0.0)),
+            "spread_normalized": spread_norm,
+            "public_betting_centered": gv("public_betting_centered", gv("sentiment_diff", 0.0)),
+            "sharp_vs_public": gv("sharp_vs_public", 0.0),
+            "rest_advantage": gv("rest_advantage", 0.0),
+            "back_to_back": gv("back_to_back", 0.0),
+            "primetime_game": gv("primetime_game", 0.0),
+            "division_game": gv("division_game", 0.0),
+            "injuries_impact": gv("injuries_impact", 0.0),
+            "weather_factor": gv("weather_factor", 0.0),
+            "line_movement": gv("line_movement", 0.0),
+            "total_movement": gv("total_movement", 0.0),
+            "model_consensus": consensus,
+            "theover_probability": gv("theover_probability", 0.5),
+        }
+
+        return row
 
     # ---- candidate helpers ------------------------------------------
 
@@ -942,6 +967,7 @@ class VertexMasterAnalyzer:
         game_league: str,
         vertex_enabled: bool,
         numeric_vec: List[float],
+        vertex_home_prob: Optional[float] = None,
     ) -> Optional[Dict[str, Any]]:
         """Build a single candidate bet with AI + market metrics."""
 
@@ -982,23 +1008,15 @@ class VertexMasterAnalyzer:
         )
 
         ai_prob = None
-        if vertex_enabled:
-            try:
-                ai_prob = get_vertex_ai_prediction(feature_payload, context)
-            except Exception as e:
-                logger.warning(
-                    "Vertex AI prediction failed for %s %s line %s: %s",
-                    market_type,
-                    selection,
-                    line,
-                    e,
-                )
+        ai_source = "heuristic"
+        if vertex_enabled and vertex_home_prob is not None:
+            if market_type in ("ML", "Spread"):
+                ai_prob = vertex_home_prob if selection == "home" else (1.0 - vertex_home_prob)
+                ai_source = "vertex_ai"
 
         if ai_prob is None:
             ai_prob = self._heuristic_probability(market_type, selection, feats)
-            ai_source = "heuristic"
-        else:
-            ai_source = "vertex_ai"
+            ai_source = "heuristic" if ai_prob is not None else ai_source
 
         if ai_prob is None:
             return None
@@ -1087,7 +1105,7 @@ class VertexMasterAnalyzer:
         if not games:
             return pd.DataFrame()
 
-        vertex_enabled = is_vertex_ai_enabled()
+        vertex_enabled = is_vertex_prediction_configured()
 
         ml_sources_used = {
             "vertex_ai": 0,
@@ -1116,6 +1134,24 @@ class VertexMasterAnalyzer:
                 feats = self.build_comprehensive_features(game, game_league)
                 vec = self.build_vertex_feature_vector(feats)
 
+                vertex_home_prob = None
+                if vertex_enabled:
+                    try:
+                        feature_row = self.build_vertex_feature_row(feats)
+                        probs = predict_win_probabilities(
+                            pd.DataFrame([feature_row]), VERTEX_FEATURE_COLUMNS
+                        )
+                        if probs is not None and len(probs) > 0:
+                            vertex_home_prob = float(probs[0])
+                            feats["vertex_home_prob"] = vertex_home_prob
+                    except Exception as e:
+                        logger.warning(
+                            "Vertex endpoint prediction failed for %s vs %s: %s",
+                            feats.get("home_team"),
+                            feats.get("away_team"),
+                            e,
+                        )
+
                 home_team = feats.get("home_team")
                 away_team = feats.get("away_team")
 
@@ -1133,6 +1169,7 @@ class VertexMasterAnalyzer:
                         game_league=game_league,
                         vertex_enabled=vertex_enabled,
                         numeric_vec=vec,
+                        vertex_home_prob=vertex_home_prob,
                     )
                     if cand:
                         candidates.append(cand)
@@ -1160,6 +1197,7 @@ class VertexMasterAnalyzer:
                         game_league=game_league,
                         vertex_enabled=vertex_enabled,
                         numeric_vec=vec,
+                        vertex_home_prob=vertex_home_prob,
                     )
                     if cand:
                         candidates.append(cand)
@@ -1177,6 +1215,7 @@ class VertexMasterAnalyzer:
                         game_league=game_league,
                         vertex_enabled=vertex_enabled,
                         numeric_vec=vec,
+                        vertex_home_prob=vertex_home_prob,
                     )
                     if cand:
                         candidates.append(cand)
@@ -1613,3 +1652,40 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
         file_name=f"vertex_single_best_pick_{datetime.now().strftime('%Y%m%d')}.csv",
         mime="text/csv",
     )
+
+
+def vertex_prediction_sanity_sample() -> None:
+    """Quick sanity check to verify Vertex endpoint connectivity."""
+
+    sample_rows = [
+        {
+            "home_win_pct": 0.6,
+            "away_win_pct": 0.4,
+            "home_avg_points": 112,
+            "away_avg_points": 107,
+            "home_last_5_wins": 3,
+            "away_last_5_wins": 2,
+            "home_spread": -3.5,
+            "implied_home_prob": 0.58,
+            "theover_probability": 0.55,
+        },
+        {
+            "home_win_pct": 0.48,
+            "away_win_pct": 0.52,
+            "home_avg_points": 105,
+            "away_avg_points": 109,
+            "home_last_5_wins": 1,
+            "away_last_5_wins": 4,
+            "home_spread": 4.5,
+            "implied_home_prob": 0.42,
+            "theover_probability": 0.47,
+        },
+    ]
+
+    df = pd.DataFrame(sample_rows)
+    for col in VERTEX_FEATURE_COLUMNS:
+        if col not in df.columns:
+            df[col] = 0.0
+
+    probs = predict_win_probabilities(df, VERTEX_FEATURE_COLUMNS)
+    print("Sanity sample Vertex probabilities:", probs)
