@@ -248,7 +248,7 @@ def create_vertex_master_analyzer():
     Create VertexMasterAnalyzer with ALL initialized clients
     Call this BEFORE analyzing each game
     """
-    from vertex_master_analyzer import VertexMasterAnalyzer
+    from app_core.vertex_master_analyzer import VertexMasterAnalyzer
     
     # Get theover data if available
     theover_data = st.session_state.get('theover_data', {})
@@ -262,6 +262,7 @@ def create_vertex_master_analyzer():
         local_ml_predictor=st.session_state.get('ml_predictor'),
         theover_data=theover_data,
         kalshi_integrator=st.session_state.get('kalshi_integrator'),
+        use_kalshi=st.session_state.get('kalshi_enabled', True),
     )
     
     # Log what's available

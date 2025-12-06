@@ -16,8 +16,18 @@ import pandas as pd
 import streamlit as st
 
 from app_core.team_name_matcher import TeamNameMatcher
-from app_core.kalshi_integrator import price_to_prob
-from ml_predictions import get_vertex_ai_prediction, is_vertex_ai_enabled
+from app_core.kalshi_integrator import (
+    KalshiMatchResult,
+    fetch_kalshi_for_game,
+    match_game_to_kalshi,
+)
+from app_core.vertex_ai_endpoint import (
+    VERTEX_MODEL_DISPLAY_NAME,
+    VERTEX_FEATURE_COLUMNS,
+    is_vertex_prediction_configured,
+    score_with_vertex,
+    predict_win_probabilities,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +85,7 @@ def split_game(game: str) -> Tuple[Optional[str], Optional[str]]:
 TEAM_FUZZY_THRESHOLD = 0.8
 MAX_LINE_DIFF = 1.5  # allowable difference in spread/total when picking closest match
 BEST_PICK_PRIORITY_EDGE = 1  # primary sort on edge, then EV
+DEBUG_FORCE_KALSHI = False  # set to False in production to use only real Kalshi matches
 
 
 def is_today_calendar_day(time_str) -> bool:
@@ -135,6 +146,7 @@ class VertexMasterAnalyzer:
         local_ml_predictor: Any = None,
         theover_data: Optional[Dict[str, pd.DataFrame]] = None,
         kalshi_integrator: Any = None,
+        use_kalshi: bool = True,
     ) -> None:
         self.odds_api = odds_api_client
         self.sportsdata = sportsdata_clients or {}
@@ -143,12 +155,16 @@ class VertexMasterAnalyzer:
         self.local_ml = local_ml_predictor
         self.theover = theover_data or {}
         self.kalshi = kalshi_integrator
+        # Allow UI/ENV to disable Kalshi without removing the integrator instance
+        self.use_kalshi = bool(use_kalshi and st.session_state.get("kalshi_enabled", True))
 
     # ------------------------------------------------------------------
     # Feature builders
     # ------------------------------------------------------------------
 
-    def build_comprehensive_features(self, game: Dict[str, Any], league: str) -> Dict[str, Any]:
+    def build_comprehensive_features(
+        self, game: Dict[str, Any], league: str, kalshi_info: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
         """Build a comprehensive feature dict for a game.
 
         The incoming *game* object is already pre-processed in streamlit_app
@@ -183,7 +199,7 @@ class VertexMasterAnalyzer:
         features.update(self._get_theover_features(game))
 
         # 7) Kalshi prediction market validation
-        features.update(self._get_kalshi_features(game))
+        features.update(self._get_kalshi_features(game, kalshi_info))
 
         # 8) Derived / engineered features
         features.update(self._calculate_derived_features(features))
@@ -573,7 +589,9 @@ class VertexMasterAnalyzer:
 
         return base
 
-    def _get_kalshi_features(self, game: Dict[str, Any]) -> Dict[str, Any]:
+    def _get_kalshi_features(
+        self, game: Dict[str, Any], prefetch_info: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
         """Fetch Kalshi probability for a game via the shared integrator."""
 
         feats: Dict[str, Any] = {
@@ -581,11 +599,27 @@ class VertexMasterAnalyzer:
             "kalshi_prob": None,
             "kalshi_alignment": None,
             "kalshi_match_debug": "no_match_found",
+            "kalshi_label": None,
+            "kalshi_volume": None,
+            "kalshi_confidence": None,
+            "kalshi_status": "no_market_match",
         }
 
+        game_id = game.get("game_id") or game.get("id") or game.get("matchup") or game.get("game")
+        league = game.get("league") or game.get("sport") or game.get("sport_key")
+        home_team = game.get("home_team") or game.get("home") or game.get("home_name")
+        away_team = game.get("away_team") or game.get("away") or game.get("away_name")
+        game_time = game.get("commence_time") or game.get("game_time") or game.get("Game Time Raw")
+
+        logging.info(
+            f"[Kalshi FEATURES] league={league} home={home_team} away={away_team} "
+            f"time={game_time} use_kalshi={self.use_kalshi} integrator_none={self.kalshi is None}"
+        )
+
         # If Kalshi is not configured, bail out cleanly
-        if not getattr(self, "kalshi", None):
-            feats["kalshi_match_debug"] = "kalshi_not_configured"
+        if not getattr(self, "kalshi", None) or not getattr(self, "use_kalshi", True):
+            feats["kalshi_match_debug"] = "kalshi_not_configured" if not getattr(self, "kalshi", None) else "kalshi_disabled"
+            feats["kalshi_status"] = feats["kalshi_match_debug"]
             return feats
 
         try:
@@ -593,25 +627,59 @@ class VertexMasterAnalyzer:
             away = game.get("away_team", "")
             league = game.get("league") or game.get("sport_key") or "NBA"
 
-            # Delegate to the integrator as the single source of truth
-            market_info = self.kalshi.get_game_market(home, away, sport=str(league)) or {}
+            market_info = prefetch_info
+            game_time = game.get("commence_time") or game.get("game_time")
+            game_dt = None
+            if game_time:
+                try:
+                    game_dt = datetime.fromisoformat(str(game_time).replace("Z", "+00:00"))
+                except Exception:
+                    game_dt = None
 
-            available = bool(market_info.get("kalshi_available"))
-            prob = market_info.get("kalshi_prob")
-
-            if not available or prob is None:
-                feats["kalshi_available"] = False
-                feats["kalshi_prob"] = None
-                feats["kalshi_alignment"] = None
-                feats["kalshi_match_debug"] = market_info.get(
-                    "kalshi_match_debug", "no_market_match"
+            if market_info is None:
+                market_info = fetch_kalshi_for_game(
+                    home,
+                    away,
+                    game_dt,
+                    integrator=self.kalshi,
                 )
+
+            logging.info(
+                f"[Kalshi FETCH] home={home} away={away} dt={game_dt} "
+                f"market_keys={list(market_info.keys()) if isinstance(market_info, dict) else type(market_info)}"
+            )
+
+            # Handle KalshiMatchResult or legacy dicts
+            is_match_result = isinstance(market_info, dict) and "matched" in market_info
+            if is_match_result:
+                result: KalshiMatchResult = market_info  # type: ignore[assignment]
+                feats["kalshi_status"] = result.get("reason", "no_market_match")
+                feats["kalshi_match_debug"] = result.get("raw_event_id") or result.get("reason", "no_match_found")
+                if not result.get("matched"):
+                    return feats
+
+                prob = result.get("probability")
+                label = result.get("label")
+            else:
+                prob = market_info.get("kalshi_probability") if isinstance(market_info, dict) else None
+                label = market_info.get("kalshi_label") if isinstance(market_info, dict) else None
+                feats["kalshi_status"] = (
+                    market_info.get("kalshi_match_debug")
+                    if isinstance(market_info, dict)
+                    else "no_market_match"
+                )
+                feats["kalshi_match_debug"] = feats["kalshi_status"]
+                if prob is None:
+                    return feats
+
+            if prob is None:
                 return feats
 
             try:
                 prob = float(prob)
             except Exception:
                 feats["kalshi_match_debug"] = f"invalid_prob={prob}"
+                feats["kalshi_status"] = feats["kalshi_match_debug"]
                 feats["kalshi_available"] = False
                 feats["kalshi_prob"] = None
                 return feats
@@ -620,9 +688,18 @@ class VertexMasterAnalyzer:
 
             feats["kalshi_available"] = True
             feats["kalshi_prob"] = prob
-            feats["kalshi_match_debug"] = market_info.get(
-                "kalshi_match_debug",
-                f"matched_ticker={market_info.get('market_ticker')} prob={prob:.3f}",
+            feats["kalshi_home_prob"] = prob
+            feats["kalshi_label"] = label or (market_info.get("kalshi_label") if isinstance(market_info, dict) else None)
+            feats["kalshi_volume"] = market_info.get("kalshi_volume") if isinstance(market_info, dict) else None
+            feats["kalshi_confidence"] = market_info.get("confidence") if isinstance(market_info, dict) else None
+            if not is_match_result:
+                feats["kalshi_match_debug"] = market_info.get("kalshi_match_debug", feats.get("kalshi_match_debug")) if isinstance(market_info, dict) else feats.get("kalshi_match_debug")
+                feats["kalshi_status"] = market_info.get("kalshi_match_debug", feats.get("kalshi_status")) if isinstance(market_info, dict) else feats.get("kalshi_status")
+
+            logging.info(
+                f"[Kalshi RESULT] home={home_team} away={away_team} "
+                f"available={feats['kalshi_available']} prob={feats['kalshi_prob']} "
+                f"debug={feats['kalshi_match_debug']}"
             )
 
             model_p = game.get("implied_home_prob") or game.get("win_prob")
@@ -709,48 +786,69 @@ class VertexMasterAnalyzer:
     def build_vertex_feature_vector(self, feats: Dict[str, Any]) -> List[float]:
         """Map comprehensive features -> numeric vector for Vertex."""
 
-        def sg(key: str, default: float) -> float:
+        row = self.build_vertex_feature_row(feats)
+        cleaned: List[float] = []
+        for col in VERTEX_FEATURE_COLUMNS:
+            val = row.get(col, 0.0)
+            try:
+                cleaned.append(float(val))
+            except Exception:
+                cleaned.append(0.0)
+        return cleaned
+
+    def build_vertex_feature_row(self, feats: Dict[str, Any]) -> Dict[str, float]:
+        """Construct the ordered feature row expected by the deployed Vertex model."""
+
+        def gv(key: str, default: float = 0.0) -> float:
             val = feats.get(key, default)
             try:
-                if val is None or pd.isna(val):
+                if val is None or (isinstance(val, float) and pd.isna(val)):
                     return default
                 return float(val)
             except Exception:
                 return default
 
-        vec = [
-            sg("home_win_pct", 0.5),
-            sg("away_win_pct", 0.5),
-            sg("win_pct_diff", 0.0),
-            sg("home_avg_points", 100.0) / 100.0,
-            sg("away_avg_points", 100.0) / 100.0,
-            sg("home_avg_points_allowed", 100.0) / 100.0,
-            sg("away_avg_points_allowed", 100.0) / 100.0,
-            sg("form_momentum_diff", 0.0) / 5.0,
-            sg("implied_home_prob", 0.5),
-            sg("home_spread", 0.0) / 20.0,
-            sg("total_line", 200.0) / 200.0,
-            sg("sentiment_diff", 0.0),
-            sg("local_ml_prob", 0.5),
-            sg("theover_probability", 0.5),
-            sg("consensus_prob", 0.5),
-            sg("theover_total", 200.0) / 200.0,
-            sg("theover_total_probability", 0.5),
-            1.0 if feats.get("kalshi_available") else 0.0,
-            sg("kalshi_prob", 0.5),
-            sg("kalshi_alignment", 0.5),
-        ]
+        home_avg = gv("home_avg_points", 0.0)
+        away_avg = gv("away_avg_points", 0.0)
+        win_pct_diff = gv("win_pct_diff", gv("home_win_pct", 0.5) - gv("away_win_pct", 0.5))
+        form_diff = gv("home_last_5_wins", 0.0) - gv("away_last_5_wins", 0.0)
+        consensus = gv("consensus_prob", gv("implied_home_prob", 0.5))
+        spread_norm = gv("home_spread", 0.0)
 
-        cleaned: List[float] = []
-        for v in vec:
-            try:
-                if v is None or (isinstance(v, float) and np.isnan(v)):
-                    cleaned.append(0.0)
-                else:
-                    cleaned.append(float(v))
-            except Exception:
-                cleaned.append(0.0)
-        return cleaned
+        row = {
+            "home_win_pct": gv("home_win_pct", 0.5),
+            "away_win_pct": gv("away_win_pct", 0.5),
+            "home_avg_points": home_avg,
+            "away_avg_points": away_avg,
+            "home_form_last5": gv("home_last_5_wins", 0.0),
+            "away_form_last5": gv("away_last_5_wins", 0.0),
+            "home_pd_last5": gv("home_pd_last5", 0.0),
+            "away_pd_last5": gv("away_pd_last5", 0.0),
+            "home_sos_last5": gv("home_sos_last5", 0.0),
+            "away_sos_last5": gv("away_sos_last5", 0.0),
+            "win_pct_diff": win_pct_diff,
+            "avg_points_diff": home_avg - away_avg,
+            "form_diff": form_diff,
+            "pd_last5_diff": gv("pd_last5_diff", gv("home_pd_last5", 0.0) - gv("away_pd_last5", 0.0)),
+            "sos_diff": gv("sos_diff", gv("home_sos_last5", 0.0) - gv("away_sos_last5", 0.0)),
+            "def_rating_diff": gv("def_rating_diff", gv("home_def_rating", 0.0) - gv("away_def_rating", 0.0)),
+            "streak_diff": gv("streak_diff", gv("home_streak", 0.0) - gv("away_streak", 0.0)),
+            "spread_normalized": spread_norm,
+            "public_betting_centered": gv("public_betting_centered", gv("sentiment_diff", 0.0)),
+            "sharp_vs_public": gv("sharp_vs_public", 0.0),
+            "rest_advantage": gv("rest_advantage", 0.0),
+            "back_to_back": gv("back_to_back", 0.0),
+            "primetime_game": gv("primetime_game", 0.0),
+            "division_game": gv("division_game", 0.0),
+            "injuries_impact": gv("injuries_impact", 0.0),
+            "weather_factor": gv("weather_factor", 0.0),
+            "line_movement": gv("line_movement", 0.0),
+            "total_movement": gv("total_movement", 0.0),
+            "model_consensus": consensus,
+            "theover_probability": gv("theover_probability", 0.5),
+        }
+
+        return row
 
     # ---- candidate helpers ------------------------------------------
 
@@ -928,6 +1026,7 @@ class VertexMasterAnalyzer:
         game_league: str,
         vertex_enabled: bool,
         numeric_vec: List[float],
+        vertex_home_prob: Optional[float] = None,
     ) -> Optional[Dict[str, Any]]:
         """Build a single candidate bet with AI + market metrics."""
 
@@ -968,23 +1067,15 @@ class VertexMasterAnalyzer:
         )
 
         ai_prob = None
-        if vertex_enabled:
-            try:
-                ai_prob = get_vertex_ai_prediction(feature_payload, context)
-            except Exception as e:
-                logger.warning(
-                    "Vertex AI prediction failed for %s %s line %s: %s",
-                    market_type,
-                    selection,
-                    line,
-                    e,
-                )
+        ai_source = "heuristic"
+        if vertex_enabled and vertex_home_prob is not None:
+            if market_type in ("ML", "Spread"):
+                ai_prob = vertex_home_prob if selection == "home" else (1.0 - vertex_home_prob)
+                ai_source = "vertex_ai"
 
         if ai_prob is None:
             ai_prob = self._heuristic_probability(market_type, selection, feats)
-            ai_source = "heuristic"
-        else:
-            ai_source = "vertex_ai"
+            ai_source = "heuristic" if ai_prob is not None else ai_source
 
         if ai_prob is None:
             return None
@@ -1070,15 +1161,26 @@ class VertexMasterAnalyzer:
 
         Returns a DataFrame with one row per game.
         """
+        logging.info(
+            f"[VMA] run_full_master_analysis | use_kalshi={getattr(self, 'use_kalshi', None)} "
+            f"kalshi_is_none={getattr(self, 'kalshi', None) is None}"
+        )
         if not games:
             return pd.DataFrame()
 
-        vertex_enabled = is_vertex_ai_enabled()
+        vertex_enabled = is_vertex_prediction_configured()
 
         ml_sources_used = {
             "vertex_ai": 0,
             "heuristic": 0,
         }
+
+        kalshi_attempts = 0
+        kalshi_hits = 0
+        kalshi_errors = 0
+        kalshi_fail_reasons: Dict[str, int] = {}
+
+        vertex_feature_rows: List[Dict[str, Any]] = []
 
         rows: List[Dict[str, Any]] = []
         progress = st.progress(0)
@@ -1099,11 +1201,69 @@ class VertexMasterAnalyzer:
                 else:
                     game_league = league
 
-                feats = self.build_comprehensive_features(game, game_league)
+                home_team = game.get("home_team")
+                away_team = game.get("away_team")
+
+                kalshi_info: Optional[Dict[str, Any]] = None
+                if getattr(self, "kalshi", None) and getattr(self, "use_kalshi", True):
+                    kalshi_attempts += 1
+                    try:
+                        game_time = game.get("commence_time") or game.get("game_time")
+                        kalshi_info = match_game_to_kalshi(
+                            game_league,
+                            home_team or "",
+                            away_team or "",
+                            game_time,
+                            integrator=self.kalshi,
+                        )
+                        if isinstance(kalshi_info, dict) and kalshi_info.get("matched"):
+                            kalshi_hits += 1
+                        else:
+                            reason = None
+                            if isinstance(kalshi_info, dict):
+                                reason = kalshi_info.get("reason")
+                            reason = reason or "no_match"
+                            kalshi_fail_reasons[reason] = kalshi_fail_reasons.get(reason, 0) + 1
+                    except Exception as e:
+                        kalshi_errors += 1
+                        reason = f"api_error:{type(e).__name__}"
+                        kalshi_fail_reasons[reason] = kalshi_fail_reasons.get(reason, 0) + 1
+                        print(
+                            f"[Kalshi] Error for game {home_team} vs {away_team}: {e}"
+                        )
+
+                feats = self.build_comprehensive_features(
+                    game, game_league, kalshi_info=kalshi_info
+                )
                 vec = self.build_vertex_feature_vector(feats)
 
-                home_team = feats.get("home_team")
-                away_team = feats.get("away_team")
+                feature_row: Dict[str, Any] = {}
+                try:
+                    feature_row = self.build_vertex_feature_row(feats)
+                except Exception as e:
+                    logger.warning(
+                        "Vertex feature row build failed for %s vs %s: %s",
+                        feats.get("home_team"),
+                        feats.get("away_team"),
+                        e,
+                    )
+
+                vertex_home_prob = None
+                if vertex_enabled and feature_row:
+                    try:
+                        probs = predict_win_probabilities(
+                            pd.DataFrame([feature_row]), VERTEX_FEATURE_COLUMNS
+                        )
+                        if probs is not None and len(probs) > 0:
+                            vertex_home_prob = float(probs[0])
+                            feats["vertex_home_prob"] = vertex_home_prob
+                    except Exception as e:
+                        logger.warning(
+                            "Vertex endpoint prediction failed for %s vs %s: %s",
+                            feats.get("home_team"),
+                            feats.get("away_team"),
+                            e,
+                        )
 
                 candidates: List[Dict[str, Any]] = []
 
@@ -1119,6 +1279,7 @@ class VertexMasterAnalyzer:
                         game_league=game_league,
                         vertex_enabled=vertex_enabled,
                         numeric_vec=vec,
+                        vertex_home_prob=vertex_home_prob,
                     )
                     if cand:
                         candidates.append(cand)
@@ -1146,6 +1307,7 @@ class VertexMasterAnalyzer:
                         game_league=game_league,
                         vertex_enabled=vertex_enabled,
                         numeric_vec=vec,
+                        vertex_home_prob=vertex_home_prob,
                     )
                     if cand:
                         candidates.append(cand)
@@ -1163,6 +1325,7 @@ class VertexMasterAnalyzer:
                         game_league=game_league,
                         vertex_enabled=vertex_enabled,
                         numeric_vec=vec,
+                        vertex_home_prob=vertex_home_prob,
                     )
                     if cand:
                         candidates.append(cand)
@@ -1185,13 +1348,12 @@ class VertexMasterAnalyzer:
                     return (edge_val if edge_val is not None else -999, ev_val)
 
                 best_candidate = sorted(valid_candidates, key=_sort_key, reverse=True)[0]
-
                 # Merge explicit Kalshi features for this game so downstream tables/export always
                 # have kalshi_* columns populated even when the winning pick is a Total and the
                 # candidate-level kalshi_prob was left unset.
                 kalshi_feats: Dict[str, Any] = {}
                 try:
-                    kalshi_feats = self._get_kalshi_features(game) or {}
+                    kalshi_feats = self._get_kalshi_features(game, prefetch_info=kalshi_info) or {}
                 except Exception as e:
                     logger.warning(
                         "Kalshi feature error for game %s vs %s: %s",
@@ -1209,11 +1371,27 @@ class VertexMasterAnalyzer:
                 for k, v in kalshi_feats.items():
                     best_candidate[k] = v
 
+                # Ensure pick-level Kalshi alignment is filled when a game-level match exists
+                if kalshi_feats.get("kalshi_available") and kalshi_feats.get("kalshi_prob") is not None:
+                    pick_prob = (
+                        kalshi_feats.get("kalshi_prob")
+                        if best_candidate.get("pick_selection") == "home"
+                        else 1.0 - kalshi_feats.get("kalshi_prob")
+                    )
+                    best_candidate["kalshi_prob"] = pick_prob
+                    best_candidate["edge_vs_kalshi"] = (
+                        best_candidate.get("win_prob") - pick_prob
+                        if best_candidate.get("win_prob") is not None
+                        else None
+                    )
+                    best_candidate.setdefault("kalshi_label", kalshi_feats.get("kalshi_label"))
                 # Track source usage for the winning candidate
                 src = best_candidate.get("ml_source")
                 if src in ml_sources_used:
                     ml_sources_used[src] += 1
 
+                best_candidate["vertex_feature_row"] = feature_row or {}
+                vertex_feature_rows.append(feature_row or {})
                 rows.append(best_candidate)
             except Exception as e:
                 logger.error(f"Error analyzing game: {e}", exc_info=True)
@@ -1222,6 +1400,46 @@ class VertexMasterAnalyzer:
 
         df = pd.DataFrame(rows)
         df.attrs["ml_sources_used"] = ml_sources_used
+
+        ai_status = "fallback:not_run"
+        ai_model = VERTEX_MODEL_DISPLAY_NAME
+        if not df.empty:
+            feature_df = pd.DataFrame(vertex_feature_rows, index=df.index)
+            probs_series, ai_status, ai_model = score_with_vertex(feature_df, VERTEX_FEATURE_COLUMNS)
+            df["AI Win %"] = (probs_series * 100).round(1)
+            df["ai_status"] = ai_status
+            df["AI Model"] = ai_model
+            logging.info(
+                "[Vertex] scoring result | status=%s model=%s valid_probs=%s",
+                ai_status,
+                ai_model,
+                probs_series.notna().sum(),
+            )
+            print(
+                f"[Vertex] status={ai_status}, model={ai_model}, n_rows={len(df)}, n_valid_probs={df['AI Win %'].notna().sum()}"
+            )
+
+            if ai_status == "vertex":
+                df["win_prob"] = probs_series
+                df["edge_vs_market"] = pd.to_numeric(df["win_prob"], errors="coerce") - pd.to_numeric(
+                    df.get("market_prob"), errors="coerce"
+                )
+                if "kalshi_prob" in df.columns:
+                    df["edge_vs_kalshi"] = df.apply(
+                        lambda r: r.get("win_prob") - r.get("kalshi_prob")
+                        if r.get("kalshi_prob") is not None and not pd.isna(r.get("kalshi_prob"))
+                        else np.nan,
+                        axis=1,
+                    )
+                df["ml_source"] = "vertex_ai"
+
+        if "AI Win %" not in df.columns:
+            df["AI Win %"] = pd.Series(np.nan, index=df.index)
+        if "ai_status" not in df.columns:
+            df["ai_status"] = ai_status
+        if "AI Model" not in df.columns:
+            df["AI Model"] = ai_model
+
         logger.info("VertexMasterAnalyzer: results_df columns = %s", list(df.columns))
         try:
             logger.info(
@@ -1238,6 +1456,19 @@ class VertexMasterAnalyzer:
             )
         except Exception:
             logger.info("VertexMasterAnalyzer: Kalshi columns not available for sample logging")
+        try:
+            kalshi_matches = int(df.get("kalshi_available", pd.Series([])).fillna(False).sum())
+            logger.info(
+                "VertexMasterAnalyzer: Kalshi match summary -> %d matched / %d games",
+                kalshi_matches,
+                len(df),
+            )
+        except Exception:
+            logger.info("VertexMasterAnalyzer: unable to compute Kalshi summary")
+
+        print(
+            f"[Kalshi] attempts={kalshi_attempts}, hits={kalshi_hits}, errors={kalshi_errors}, failures={kalshi_fail_reasons}"
+        )
         return df
 
 
@@ -1298,6 +1529,27 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
         display_df["kalshi_prob"] = None
     if "kalshi_match_debug" not in display_df.columns:
         display_df["kalshi_match_debug"] = "no_kalshi_column"
+    if "kalshi_status" not in display_df.columns:
+        display_df["kalshi_status"] = "no_kalshi_column"
+    if "kalshi_label" not in display_df.columns:
+        display_df["kalshi_label"] = None
+    if "kalshi_volume" not in display_df.columns:
+        display_df["kalshi_volume"] = None
+    if "kalshi_confidence" not in display_df.columns:
+        display_df["kalshi_confidence"] = None
+    if "AI Win %" not in display_df.columns:
+        win_series = display_df.get("win_prob") if "win_prob" in display_df else pd.Series(np.nan, index=display_df.index)
+        display_df["AI Win %"] = (win_series * 100).round(1)
+    if "ai_status" not in display_df.columns:
+        display_df["ai_status"] = "unknown"
+    if "AI Model" not in display_df.columns:
+        display_df["AI Model"] = VERTEX_MODEL_DISPLAY_NAME
+
+    ai_status_val = display_df["ai_status"].iloc[0] if not display_df.empty else "unknown"
+    ai_model_val = display_df["AI Model"].iloc[0] if not display_df.empty else VERTEX_MODEL_DISPLAY_NAME
+    print(
+        f"[Vertex] status={ai_status_val}, model={ai_model_val}, valid_probs={display_df['AI Win %'].notna().sum()} / {len(display_df)}"
+    )
     display_df["sort_time"] = pd.to_datetime(display_df["game_time"], errors="coerce")
     display_df = display_df.sort_values("sort_time", ascending=True)
     display_df["is_today"] = display_df["game_time"].apply(is_today_calendar_day)
@@ -1328,7 +1580,7 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
     )
     display_df.loc[
         ~display_df["kalshi_available"].fillna(False),
-        ["kalshi_prob"],
+        ["kalshi_prob", "kalshi_label", "kalshi_confidence", "kalshi_volume"],
     ] = None
 
     def _edge_vs_kalshi(row: pd.Series) -> float:
@@ -1396,37 +1648,22 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
     
     # Kalshi: Show alignment as text + percentage
     def format_kalshi(row):
-        """Determine Kalshi agreement with a neutral band around 50%."""
-        market_type = str(row.get("pick_market_type") or "").lower()
+        """Display the matched Kalshi market label (or fallback message)."""
         kalshi_prob = row.get("kalshi_prob")
         kalshi_available = bool(row.get("kalshi_available"))
+        label = row.get("kalshi_label") or row.get("market_title")
 
-        if market_type == "total":
-            return "No Kalshi match"
         if not kalshi_available or kalshi_prob is None or pd.isna(kalshi_prob):
             return "No Kalshi match"
-
-        pick_team = row.get("pick_team", "")
-        home_team = row.get("home_team", "")
-        if not pick_team or not home_team:
-            return "No Kalshi match"
-
-        pick_is_home = str(pick_team).strip().lower() == str(home_team).strip().lower()
-
-        if 0.45 <= kalshi_prob <= 0.55:
-            return "Neutral"
-
-        if pick_is_home:
-            return "Agree" if kalshi_prob > 0.55 else "Disagree"
-        return "Agree" if kalshi_prob < 0.45 else "Disagree"
+        return label or "Kalshi match"
 
     display_df["Kalshi"] = display_df.apply(format_kalshi, axis=1)
     display_df["Kalshi %"] = display_df.apply(
-        lambda row: round(row["kalshi_prob"] * 100)
+        lambda row: round(float(row["kalshi_prob"]) * 100, 1)
         if row.get("kalshi_available")
         and row.get("kalshi_prob") is not None
         and not pd.isna(row.get("kalshi_prob"))
-        else "N/A",
+        else np.nan,
         axis=1,
     )
     
@@ -1434,16 +1671,20 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
     def calc_kalshi_edge(row):
         kalshi_prob = row.get("kalshi_prob")
         win_prob = row.get("win_prob")  # Your model's probability
-        
+
         if kalshi_prob is not None and not pd.isna(kalshi_prob) and win_prob is not None:
-            # FIXED: Edge = Your confidence - Kalshi crowd confidence
-            # Positive edge = You're MORE confident than the crowd (VALUE BET!)
-            # Negative edge = Crowd is MORE confident than you
-            edge = (win_prob - kalshi_prob) * 100
-            return f"{edge:+.1f}%"
-        return "N/A"
+            # Edge in decimal space: model win prob minus Kalshi crowd prob
+            edge = win_prob - kalshi_prob
+            return edge
+        return np.nan
 
     display_df["Kalshi Edge"] = display_df.apply(calc_kalshi_edge, axis=1)
+
+    no_kalshi_mask = ~display_df["kalshi_available"].fillna(False)
+    display_df.loc[no_kalshi_mask, "Kalshi"] = "No Kalshi match"
+    display_df.loc[no_kalshi_mask, "Kalshi %"] = np.nan
+    display_df.loc[no_kalshi_mask, "Edge vs Kalshi %"] = np.nan
+    display_df.loc[no_kalshi_mask, "Kalshi Edge"] = np.nan
 
     logger.info(
         "Kalshi probs sample: %s",
@@ -1484,6 +1725,9 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
 
     # Kalshi status indicator
     def classify_kalshi_status(row: pd.Series) -> str:
+        existing = str(row.get("kalshi_status") or "").strip()
+        if existing:
+            return existing
         prob = row.get("kalshi_prob") or row.get("Kalshi %")
         debug = str(row.get("kalshi_match_debug") or row.get("Kalshi") or "")
 
@@ -1571,7 +1815,17 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
         hide_index=True,
     )
 
+    if "AI Win %" not in display_df.columns:
+        display_df["AI Win %"] = (display_df.get("win_prob", pd.Series(np.nan, index=display_df.index)) * 100).round(1)
+    if "AI Model" not in display_df.columns:
+        display_df["AI Model"] = VERTEX_MODEL_DISPLAY_NAME
+    if "ai_status" not in display_df.columns:
+        display_df["ai_status"] = "unknown"
+
     csv_cols = cols + [
+        "AI Win %",
+        "AI Model",
+        "ai_status",
         "win_prob",
         "market_prob",
         "edge_vs_market",
@@ -1592,6 +1846,14 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
         "kalshi_status",
     ]
 
+    logging.info("[Export] Columns in CSV: %s", csv_cols)
+    logging.info(
+        "[Kalshi CSV] sample Kalshi values: %s",
+        display_df[["League", "game", "Kalshi", "Kalshi %", "kalshi_match_debug"]]
+        .head(5)
+        .to_dict("records"),
+    )
+
     csv = display_df[csv_cols].to_csv(index=False)
     st.download_button(
         "📥 Download Single Best Pick Per Game (CSV)",
@@ -1599,3 +1861,79 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
         file_name=f"vertex_single_best_pick_{datetime.now().strftime('%Y%m%d')}.csv",
         mime="text/csv",
     )
+
+
+def vertex_prediction_sanity_sample() -> None:
+    """Quick sanity check to verify Vertex endpoint connectivity."""
+
+    sample_rows = [
+        {
+            "home_win_pct": 0.6,
+            "away_win_pct": 0.4,
+            "home_avg_points": 112,
+            "away_avg_points": 107,
+            "home_last_5_wins": 3,
+            "away_last_5_wins": 2,
+            "home_spread": -3.5,
+            "implied_home_prob": 0.58,
+            "theover_probability": 0.55,
+        },
+        {
+            "home_win_pct": 0.48,
+            "away_win_pct": 0.52,
+            "home_avg_points": 105,
+            "away_avg_points": 109,
+            "home_last_5_wins": 1,
+            "away_last_5_wins": 4,
+            "home_spread": 4.5,
+            "implied_home_prob": 0.42,
+            "theover_probability": 0.47,
+        },
+    ]
+
+    df = pd.DataFrame(sample_rows)
+    for col in VERTEX_FEATURE_COLUMNS:
+        if col not in df.columns:
+            df[col] = 0.0
+
+    probs = predict_win_probabilities(df, VERTEX_FEATURE_COLUMNS)
+    print("Sanity sample Vertex probabilities:", probs)
+
+
+def debug_kalshi_analysis(df: pd.DataFrame) -> None:
+    """Run Kalshi matching on a DataFrame and print a summary."""
+
+    kalshi_attempts = 0
+    kalshi_hits = 0
+    kalshi_fail_reasons: Dict[str, int] = {}
+
+    for _, row in df.iterrows():
+        league = str(row.get("league") or row.get("League") or "").lower()
+        home_team, away_team = split_game(str(row.get("game") or ""))
+        game_time = (
+            row.get("game_time_raw")
+            or row.get("Game Time Raw")
+            or row.get("game_time")
+            or row.get("commence_time")
+        )
+
+        kalshi_attempts += 1
+        result = match_game_to_kalshi(league, home_team or "", away_team or "", game_time)
+        if result.get("matched"):
+            kalshi_hits += 1
+        else:
+            reason = result.get("reason", "unknown")
+            kalshi_fail_reasons[reason] = kalshi_fail_reasons.get(reason, 0) + 1
+
+    print(f"[Kalshi DEBUG] attempts={kalshi_attempts}, hits={kalshi_hits}, failures={kalshi_fail_reasons}")
+
+
+if __name__ == "__main__":
+    import sys
+
+    if len(sys.argv) > 1:
+        import pandas as pd
+
+        path = sys.argv[1]
+        df = pd.read_csv(path)
+        debug_kalshi_analysis(df)
