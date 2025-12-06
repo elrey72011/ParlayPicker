@@ -304,13 +304,23 @@ class KalshiIntegrator:
         }
 
         if best_market and best_score > 0.55:
-            yes_price = price_to_prob(best_market.get("yes_bid", 0))
+            # Use any available price to avoid treating a matched market as "No Match"
+            yes_bid = price_to_prob(best_market.get("yes_bid"))
+            yes_ask = price_to_prob(best_market.get("yes_ask"))
+            last_trade = price_to_prob(best_market.get("last_price") or best_market.get("last_trade_price"))
+
+            # Midpoint if both sides are present, otherwise fall back to whichever exists
+            if yes_bid is not None and yes_ask is not None:
+                yes_price = (yes_bid + yes_ask) / 2
+            else:
+                yes_price = yes_bid if yes_bid is not None else yes_ask if yes_ask is not None else last_trade
+
             subtitle = best_market.get("subtitle", "").lower()
-            
+
             # Determine Probability Direction
             is_home_sub = home_norm.lower() in subtitle
             is_away_sub = away_norm.lower() in subtitle
-            
+
             final_prob = yes_price
             # If market is "Away Team to Win", invert the YES price for Home Team prob
             if is_away_sub and not is_home_sub and yes_price:
