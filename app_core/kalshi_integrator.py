@@ -162,10 +162,18 @@ class KalshiIntegrator:
             return None
 
     def get_todays_events(self, sport_ticker=None):
-        """Fetch events closing in the window of [Now - 12h] to [Now + 48h]."""
+        """Fetch events closing in an expanded window to capture newly listed markets.
+
+        We previously limited this to ~48 hours, which missed markets Kalshi lists
+        several days ahead. Expanding the lookahead keeps the Streamlit table from
+        reporting "No Match" when markets exist but are slightly further out.
+        """
         now = int(time.time())
-        start_window = now - (12 * 60 * 60) # Look back 12 hours for active games
-        future_window = now + (48 * 60 * 60) # Look forward 48 hours
+        # Look back 24 hours for games already underway and forward 7 days for upcoming
+        # markets. This wider window still respects Kalshi's natural limits while
+        # ensuring newly posted events are available for matching.
+        start_window = now - (24 * 60 * 60)
+        future_window = now + (7 * 24 * 60 * 60)
         
         target_series = [sport_ticker] if sport_ticker else CORE_SERIES
         cache_key = f"events_{sport_ticker or 'all'}_{now // 300}" # 5 min cache
@@ -296,13 +304,23 @@ class KalshiIntegrator:
         }
 
         if best_market and best_score > 0.55:
-            yes_price = price_to_prob(best_market.get("yes_bid", 0))
+            # Use any available price to avoid treating a matched market as "No Match"
+            yes_bid = price_to_prob(best_market.get("yes_bid"))
+            yes_ask = price_to_prob(best_market.get("yes_ask"))
+            last_trade = price_to_prob(best_market.get("last_price") or best_market.get("last_trade_price"))
+
+            # Midpoint if both sides are present, otherwise fall back to whichever exists
+            if yes_bid is not None and yes_ask is not None:
+                yes_price = (yes_bid + yes_ask) / 2
+            else:
+                yes_price = yes_bid if yes_bid is not None else yes_ask if yes_ask is not None else last_trade
+
             subtitle = best_market.get("subtitle", "").lower()
-            
+
             # Determine Probability Direction
             is_home_sub = home_norm.lower() in subtitle
             is_away_sub = away_norm.lower() in subtitle
-            
+
             final_prob = yes_price
             # If market is "Away Team to Win", invert the YES price for Home Team prob
             if is_away_sub and not is_home_sub and yes_price:
