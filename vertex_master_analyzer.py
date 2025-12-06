@@ -1410,6 +1410,12 @@ class VertexMasterAnalyzer:
             df["AI Win %"] = (probs_series * 100).round(1)
             df["ai_status"] = ai_status
             df["AI Model"] = ai_model
+            logging.info(
+                "[Vertex] scoring result | status=%s model=%s valid_probs=%s",
+                ai_status,
+                ai_model,
+                probs_series.notna().sum(),
+            )
             print(
                 f"[Vertex] status={ai_status}, model={ai_model}, n_rows={len(df)}, n_valid_probs={df['AI Win %'].notna().sum()}"
             )

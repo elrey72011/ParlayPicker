@@ -235,9 +235,11 @@ def score_with_vertex(df: pd.DataFrame, feature_cols: Iterable[str]) -> tuple[pd
         series = pd.Series(np.array(probs, dtype=float), index=df.index)
         return series, "vertex", VERTEX_MODEL_DISPLAY_NAME
     except Exception as exc:  # pragma: no cover - network boundary
-        print(f"[Vertex] Error: {exc}")
-        logger.warning("Vertex prediction failed in score_with_vertex: %s", exc)
-        return pd.Series(np.nan, index=df.index), "fallback:error", VERTEX_MODEL_DISPLAY_NAME
+        import traceback
+
+        short_msg = f"{type(exc).__name__}"
+        logger.error("[Vertex] predict failed: %s\n%s", exc, traceback.format_exc())
+        return pd.Series(np.nan, index=df.index), f"error:{short_msg}", VERTEX_MODEL_DISPLAY_NAME
 
 
 def quick_vertex_sanity_check():
