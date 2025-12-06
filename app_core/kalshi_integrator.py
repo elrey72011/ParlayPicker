@@ -137,10 +137,6 @@ def match_game_to_kalshi(
             reason="api_error:no_integrator",
         )
 
-<<<<<<< HEAD
-=======
-    # Normalize game time
->>>>>>> origin/main
     game_dt: Optional[datetime] = None
     if isinstance(game_time, datetime):
         game_dt = game_time
@@ -151,13 +147,8 @@ def match_game_to_kalshi(
             game_dt = None
 
     try:
-<<<<<<< HEAD
         info = fetch_kalshi_for_game(home_team, away_team, game_dt, integrator=kalshi, status=status)
     except Exception as exc:  # pragma: no cover - defensive
-=======
-        markets = kalshi.get_markets(status=status)
-    except Exception as exc:  # pragma: no cover - defensive logging path
->>>>>>> origin/main
         short_err = str(exc)
         if len(short_err) > 80:
             short_err = short_err[:77] + "..."
@@ -170,23 +161,13 @@ def match_game_to_kalshi(
             reason=f"api_error:{short_err}",
         )
 
-<<<<<<< HEAD
     if not info:
-=======
-    logging.info(
-        f"[Kalshi f_k_g] candidate_markets={len(markets) if markets is not None else 0} "
-        f"example={(markets[0].get('title') or markets[0].get('ticker')) if markets else 'NONE'} status={status}"
-    )
-
-    if not markets:
->>>>>>> origin/main
         return KalshiMatchResult(
             matched=False,
             label="",
             probability=None,
             raw_event_id=None,
             league=league_norm,
-<<<<<<< HEAD
             reason="no_market_match",
         )
 
@@ -265,11 +246,6 @@ def fetch_kalshi_for_game(
         (markets[0].get("title") if markets else "NONE"),
     )
 
-=======
-            reason="no_events",
-        )
-
->>>>>>> origin/main
     def _meaningful_tokens(s: str) -> List[str]:
         if not s:
             return []
@@ -279,28 +255,11 @@ def fetch_kalshi_for_game(
 
     home_tokens = set(_meaningful_tokens(home_team))
     away_tokens = set(_meaningful_tokens(away_team))
-<<<<<<< HEAD
 
     best_market: Optional[Dict[str, Any]] = None
     best_score = 0.0
 
     for market in markets:
-=======
-    game_date = game_dt.date() if game_dt else None
-
-    best_market: Optional[Dict[str, Any]] = None
-    best_score = 0.0
-    team_overlap_found = False
-    date_mismatch_seen = False
-
-    for market in markets:
-        series = str(market.get("series_ticker") or "").upper()
-        if league_norm and league_norm in LEAGUE_SERIES_MAP:
-            expected = LEAGUE_SERIES_MAP[league_norm]
-            if expected and series and not series.startswith(expected):
-                continue
-
->>>>>>> origin/main
         title = market.get("title") or ""
         subtitle = market.get("subtitle") or ""
         ticker = market.get("ticker") or ""
@@ -321,19 +280,10 @@ def fetch_kalshi_for_game(
         if team_hits == 0:
             continue
 
-<<<<<<< HEAD
         # Date proximity (if game_date is provided)
         market_date = _parse_kalshi_date(market.get("close_time") or market.get("event_date"))
         if game_date and market_date and market_date.date() != game_date.date():
             # Only keep events on the same calendar day
-=======
-        team_overlap_found = True
-
-        # Date proximity (same calendar day)
-        market_date = _parse_kalshi_date(market.get("close_time") or market.get("event_date"))
-        if game_date and market_date and market_date.date() != game_date:
-            date_mismatch_seen = True
->>>>>>> origin/main
             continue
 
         # Score: overlapping tokens + small bonus if ticker looks like a game-level market
@@ -346,20 +296,10 @@ def fetch_kalshi_for_game(
             best_market = market
 
     if not best_market:
-<<<<<<< HEAD
-=======
-        reason = "team_mismatch"
-        if team_overlap_found and date_mismatch_seen:
-            reason = "date_mismatch"
-        logging.info(
-            f"[Kalshi f_k_g] NO MATCH | home={home_team} away={away_team} date={game_dt} reason={reason}"
-        )
->>>>>>> origin/main
         logger.info(
             "fetch_kalshi_for_game: no_market_match home=%s away=%s date=%s",
             home_team,
             away_team,
-<<<<<<< HEAD
             game_date,
         )
         return None
@@ -372,28 +312,6 @@ def fetch_kalshi_for_game(
         best_market.get("title"),
         best_market.get("ticker"),
     )
-=======
-            game_dt,
-        )
-        return KalshiMatchResult(
-            matched=False,
-            label="",
-            probability=None,
-            raw_event_id=None,
-            league=league_norm,
-            reason=reason,
-        )
-
-    if best_score < TEAM_FUZZY_THRESHOLD:
-        return KalshiMatchResult(
-            matched=False,
-            label="",
-            probability=None,
-            raw_event_id=str(best_market.get("ticker") or best_market.get("id")),
-            league=league_norm,
-            reason="below_threshold",
-        )
->>>>>>> origin/main
 
     prob_fields = [
         "yes_bid_dollars",
@@ -430,7 +348,6 @@ def fetch_kalshi_for_game(
             short_err = str(exc)
             if len(short_err) > 80:
                 short_err = short_err[:77] + "..."
-<<<<<<< HEAD
             logger.info(
                 "fetch_kalshi_for_game: api_error=%s for ticker=%s", short_err, best_market.get("ticker")
             )
@@ -446,124 +363,24 @@ def fetch_kalshi_for_game(
         "kalshi_probability": probability,
         "kalshi_volume": None,
         "kalshi_match_debug": str(best_market.get("ticker") or best_market.get("id")),
-=======
-            return KalshiMatchResult(
-                matched=False,
-                label="",
-                probability=None,
-                raw_event_id=str(best_market.get("ticker") or best_market.get("id")),
-                league=league_norm,
-                reason=f"api_error:{short_err}",
-            )
-
-    if probability is None:
-        return KalshiMatchResult(
-            matched=False,
-            label="",
-            probability=None,
-            raw_event_id=str(best_market.get("ticker") or best_market.get("id")),
-            league=league_norm,
-            reason="no_price",
-        )
-
-    probability = max(0.0, min(1.0, float(probability)))
-
-    logger.info(
-        "fetch_kalshi_for_game: MATCH home=%s away=%s date=%s title=%s ticker=%s",
-        home_team,
-        away_team,
-        game_dt,
-        best_market.get("title"),
-        best_market.get("ticker"),
-    )
-
-    result = KalshiMatchResult(
-        matched=True,
-        label=best_market.get("title") or best_market.get("ticker") or "",
-        probability=probability,
-        raw_event_id=str(best_market.get("ticker") or best_market.get("id")),
-        league=league_norm,
-        reason="ok",
-    )
-
-    print(
-        f"[Kalshi] league={league} game={home_team} vs {away_team} date={game_time} -> {result['reason']}"
-    )
-    return result
-
-
-def get_match_for_game(
-    league: str,
-    home_team: str,
-    away_team: str,
-    game_date: Optional[datetime],
-    integrator: "KalshiIntegrator" = None,
-    status: Optional[str] = "open",
-) -> KalshiMatchResult:
-    """Compatibility wrapper that delegates to match_game_to_kalshi."""
-
-    return match_game_to_kalshi(
-        league=league,
-        home_team=home_team,
-        away_team=away_team,
-        game_time=game_date,
-        integrator=integrator,
-        status=status,
-    )
-
-
-def fetch_kalshi_for_game(
-    home_team: str,
-    away_team: str,
-    game_date: Optional[datetime],
-    integrator: "KalshiIntegrator" = None,
-    status: Optional[str] = "open",
-) -> Optional[Dict[str, Any]]:
-    """Legacy wrapper retained for compatibility. Prefer get_match_for_game."""
-
-    logging.info(
-        f"[Kalshi f_k_g] home={home_team} away={away_team} date={game_date} "
-        f"integrator_none={integrator is None} status={status}"
-    )
-
-    result = get_match_for_game("", home_team, away_team, game_date, integrator, status)
-    logging.info(
-        f"[Kalshi f_k_g] result_type={type(result)} keys={list(result.keys()) if isinstance(result, dict) else None}"
-    )
-    if result.get("matched"):
-        return {
-            "kalshi_label": result.get("label"),
-            "kalshi_probability": result.get("probability"),
-            "kalshi_volume": None,
-            "kalshi_match_debug": result.get("reason"),
-        }
-    logging.info(
-        f"[Kalshi f_k_g] NO MATCH for home={home_team} away={away_team} date={game_date}"
-    )
-    return {
-        "kalshi_label": None,
-        "kalshi_probability": None,
-        "kalshi_volume": None,
-        "kalshi_match_debug": result.get("reason", "no_match"),
->>>>>>> origin/main
     }
 
 class KalshiIntegrator:
     """Integrates Kalshi prediction market odds and analysis
-    
+
     Kalshi uses RSA signature authentication for API requests.
     The API key is a UUID and the secret is an RSA private key.
-    
+
     Keys are loaded from Streamlit secrets:
     - st.secrets["KALSHI_API_KEY"]
     - st.secrets["KALSHI_API_SECRET"]
     """
-    
+
     def __init__(self, api_key: str = None, api_secret: str = None):
         print("="*80)
         print("🚀 KALSHI INTEGRATOR v2.0 - SECRETS VERSION - INITIALIZING")
         print("="*80)
-        
+
         # Use Streamlit secrets if keys not provided directly
         try:
             self.api_key = api_key or st.secrets.get("KALSHI_API_KEY")
@@ -578,33 +395,33 @@ class KalshiIntegrator:
             self.api_key = api_key
             self.api_secret = api_secret
             print(f"🔑 KALSHI: Fallback - API key: {bool(self.api_key)}, secret: {bool(self.api_secret)}")
-        
+
         # Kalshi API URLs - use elections subdomain (verified working)
         self.base_url = "https://api.kalshi.com/trade-api/v2"
         self.demo_url = "https://demo-api.kalshi.co/trade-api/v2"
-        
+
         # Use production API if we have credentials
         self.api_url = self.base_url if self.api_key else self.demo_url
-        
+
         self.headers = {
             "Content-Type": "application/json",
             "Accept": "application/json",
         }
-        
+
         # RSA key for signing (parsed from api_secret)
         self._private_key = None
         self._auth_ready = False
-        
+
         if self.api_key and self.api_secret:
             try:
                 from cryptography.hazmat.primitives import serialization
                 from cryptography.hazmat.backends import default_backend
-                
+
                 # Clean up the key if needed
                 key_data = self.api_secret.strip()
                 if not key_data.startswith('-----BEGIN'):
                     key_data = f"-----BEGIN RSA PRIVATE KEY-----\n{key_data}\n-----END RSA PRIVATE KEY-----"
-                
+
                 self._private_key = serialization.load_pem_private_key(
                     key_data.encode(),
                     password=None,
@@ -625,27 +442,27 @@ class KalshiIntegrator:
         self._synthetic_orderbooks: Dict[str, Dict[str, List[Dict[str, Any]]]] = {}
         self._synthetic_market_by_team: Dict[str, Dict[str, Any]] = {}
         self.last_error: Optional[str] = None
-        
+
         # Cache for API responses
         self._markets_cache: Dict[str, List[Dict[str, Any]]] = {}
         self._cache_time: Dict[str, float] = {}
         self._cache_duration = 300  # 5 minutes
         self._match_attempts = 0
         self._match_success = 0
-        
+
     def _sign_request(self, method: str, path: str, timestamp: str) -> str:
         """Create RSA signature for Kalshi API request"""
         if not self._private_key:
             return ""
-        
+
         try:
             from cryptography.hazmat.primitives import hashes
             from cryptography.hazmat.primitives.asymmetric import padding
             import base64
-            
+
             # Message format: timestamp + method + path
             message = f"{timestamp}{method}{path}"
-            
+
             # Kalshi requires PSS padding, not PKCS1v15
             signature = self._private_key.sign(
                 message.encode('utf-8'),
@@ -655,54 +472,54 @@ class KalshiIntegrator:
                 ),
                 hashes.SHA256()
             )
-            
+
             return base64.b64encode(signature).decode('utf-8')
         except Exception as e:
             logger.warning(f"Error signing Kalshi request: {e}")
             return ""
-    
+
     def _make_authenticated_request(self, method: str, endpoint: str, params: dict = None) -> Optional[dict]:
         """Make authenticated request to Kalshi API
-        
+
         Important: Per Kalshi docs, we sign ONLY the path (without query params),
         but send the full URL with query params in the actual request.
         """
         import time as time_module
-        
+
         url = f"{self.api_url}{endpoint}"
         timestamp = str(int(time_module.time() * 1000))
-        
+
         print(f"🌐 KALSHI: Request {method} {url}")
         print(f"🌐 KALSHI: Params: {params}")
         logger.info(f"Kalshi API request: {method} {url} with params: {params}")
-        
+
         headers = self.headers.copy()
-        
+
         if self._auth_ready and self._private_key:
             # CRITICAL: Strip query parameters from endpoint before signing
             # Per Kalshi docs: "Strip query parameters from path before signing"
             path_without_query = endpoint.split('?')[0]
-            
+
             signature = self._sign_request(method.upper(), path_without_query, timestamp)
             headers["KALSHI-ACCESS-KEY"] = self.api_key
             headers["KALSHI-ACCESS-SIGNATURE"] = signature
             headers["KALSHI-ACCESS-TIMESTAMP"] = timestamp
-            
+
             print(f"🔐 KALSHI: Auth configured (key: {self.api_key[:8]}...)")
             logger.debug(f"Signing: {timestamp}{method.upper()}{path_without_query}")
             logger.info(f"Using API URL: {self.api_url}")
         else:
             print("⚠️ KALSHI: No authentication configured!")
-        
+
         try:
             if method.upper() == "GET":
                 response = requests.get(url, headers=headers, params=params, timeout=15)
             else:
                 response = requests.post(url, headers=headers, json=params, timeout=15)
-            
+
             print(f"📥 KALSHI: Response Status {response.status_code}")
             logger.info(f"Kalshi API response: Status {response.status_code}, URL: {response.url}")
-            
+
             if response.status_code == 200:
                 try:
                     data = response.json()
@@ -733,7 +550,7 @@ class KalshiIntegrator:
                 print(f"❌ KALSHI: API error {response.status_code}")
                 logger.warning(f"Kalshi API error: {response.status_code} - {response.text[:200]}")
                 self.last_error = f"API error: {response.status_code}"
-                
+
         except requests.exceptions.ConnectionError as e:
             print(f"❌ KALSHI: Connection error (network blocked?): {str(e)[:100]}")
             logger.error(f"Kalshi API connection error (network may be blocked): {e}")
@@ -748,67 +565,67 @@ class KalshiIntegrator:
             import traceback
             logger.error(f"Traceback: {traceback.format_exc()}")
             self.last_error = str(e)
-        
+
         return None
-    
+
     def is_configured(self) -> bool:
         """Check if Kalshi is properly configured"""
         return bool(self.api_key and self._auth_ready)
 
     def get_sports_series(self) -> List[Dict]:
         """Get all available sports series tickers from Kalshi
-        
+
         Returns list of series with tickers like:
         - KXNFL (NFL markets)
-        - KXNBA (NBA markets)  
+        - KXNBA (NBA markets)
         - KXMLB (MLB markets)
         etc.
         """
         try:
             endpoint = "/series"
             params = {"limit": 200}
-            
+
             print("🔍 KALSHI: Fetching series list...")  # Force output to logs
             logger.info("Fetching Kalshi series list...")
             response_data = self._make_authenticated_request("GET", endpoint, params=params)
-            
+
             if response_data:
                 all_series = response_data.get("series", [])
                 print(f"🔍 KALSHI: Found {len(all_series)} total series")
                 logger.info(f"Found {len(all_series)} total series")
-                
+
                 # Filter for sports-related series
-                sports_keywords = ['NFL', 'NBA', 'MLB', 'NHL', 'UFC', 'SOCCER', 'TENNIS', 
+                sports_keywords = ['NFL', 'NBA', 'MLB', 'NHL', 'UFC', 'SOCCER', 'TENNIS',
                                   'GOLF', 'FOOTBALL', 'BASKETBALL', 'BASEBALL', 'HOCKEY',
                                   'SPORT', 'GAME']
-                
+
                 sports_series = []
                 for series in all_series:
                     ticker = series.get('ticker', '').upper()
                     title = series.get('title', '').upper()
                     category = series.get('category', '').upper()
-                    
-                    if any(keyword in ticker or keyword in title or keyword in category 
+
+                    if any(keyword in ticker or keyword in title or keyword in category
                            for keyword in sports_keywords):
                         sports_series.append(series)
                         print(f"🏈 KALSHI: Found sports series: {series.get('ticker')} - {series.get('title')}")
                         logger.info(f"Found sports series: {series.get('ticker')} - {series.get('title')}")
-                
+
                 print(f"✅ KALSHI: Total {len(sports_series)} sports series found")
                 return sports_series
             else:
                 print("❌ KALSHI: No response from /series endpoint")
                 logger.error("No response from /series endpoint")
-            
+
             return []
-            
+
         except Exception as e:
             print(f"❌ KALSHI: Error fetching sports series: {e}")
             logger.error(f"Error fetching sports series: {e}")
             import traceback
             print(f"❌ KALSHI: Traceback: {traceback.format_exc()}")
             return []
-    
+
     def get_markets(self, category: str = "sports", status: Optional[str] = "open") -> List[Dict]:
         """Fetch available Kalshi markets.
 
@@ -835,25 +652,25 @@ class KalshiIntegrator:
         try:
             # First, get sports series tickers
             sports_series = self.get_sports_series()
-            
+
             if not sports_series:
                 logger.warning("No sports series found")
                 self.last_error = "No sports series available"
                 self._using_synthetic_data = True
                 return []
-            
+
             logger.info(f"Found {len(sports_series)} sports series")
-            
+
             # Collect markets from all sports series
             all_markets = []
-            
+
             for series in sports_series[:10]:  # Limit to first 10 series to avoid rate limits
                 series_ticker = series.get('ticker')
                 if not series_ticker:
                     continue
-                
+
                 logger.info(f"Fetching markets for series: {series_ticker}")
-                
+
                 endpoint = "/markets"
                 params = {
                     "series_ticker": series_ticker,  # CRITICAL: Use series_ticker parameter
@@ -861,26 +678,26 @@ class KalshiIntegrator:
                 }
                 if status:
                     params["status"] = status
-                
+
                 response_data = self._make_authenticated_request("GET", endpoint, params=params)
-                
+
                 if response_data:
                     markets = response_data.get("markets", [])
                     logger.info(f"Got {len(markets)} markets from {series_ticker}")
                     all_markets.extend(markets)
-                    
+
                     if len(all_markets) >= 100:
                         # We have enough markets, stop querying
                         break
-            
+
             if all_markets:
                 self.last_error = None
                 logger.info(f"✅ Loaded {len(all_markets)} total Kalshi sports markets")
-                
+
                 # Log sample tickers
                 sample_tickers = [m.get('ticker', 'NO_TICKER') for m in all_markets[:5]]
                 logger.info(f"Sample tickers: {sample_tickers}")
-                
+
                 self._markets_cache[cache_key] = all_markets
                 self._cache_time[cache_key] = now
                 return all_markets
@@ -897,7 +714,7 @@ class KalshiIntegrator:
         # Return empty list if API fails (don't fallback to synthetic)
         self._using_synthetic_data = True
         return []
-    
+
     def get_sports_markets(self) -> List[Dict]:
         """Get all active sports betting markets"""
         try:
@@ -914,59 +731,59 @@ class KalshiIntegrator:
         # Filter for sports-related markets
         sports_keywords = ['NFL', 'NBA', 'MLB', 'NHL', 'UFC', 'SOCCER', 'TENNIS',
                           'GOLF', 'FOOTBALL', 'BASKETBALL', 'BASEBALL', 'HOCKEY']
-        
+
         sports_markets = []
         for market in all_markets:
             title = market.get('title', '').upper()
             ticker = market.get('ticker', '').upper()
-            
+
             if any(keyword in title or keyword in ticker for keyword in sports_keywords):
                 sports_markets.append(market)
-        
+
         return sports_markets
-    
+
     def _get_today_timestamp_range(self) -> tuple:
         """Get UTC timestamp range for today (midnight to midnight)"""
         from datetime import datetime, timezone
-        
+
         now = datetime.now(timezone.utc)
         today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
         today_end = now.replace(hour=23, minute=59, second=59, microsecond=999999)
-        
+
         # Kalshi uses milliseconds
         min_ts = int(today_start.timestamp() * 1000)
         max_ts = int(today_end.timestamp() * 1000)
-        
+
         return min_ts, max_ts
-    
+
     def get_game_markets_for_events(self, league: str = "NBA") -> List[Dict[str, Any]]:
         """Get game-related markets for a specific league (NBA, NFL, MLB, NHL, etc.)
-        
+
         Args:
             league: League code like "NBA", "NFL", "MLB", "NHL"
-            
+
         Returns:
             List of enriched market dictionaries with game data
         """
         try:
             print(f"🏀 KALSHI: Fetching {league} game markets...")
-            
+
             # Get all series
             endpoint = "/series"
             params = {"limit": 1000}
             response_data = self._make_authenticated_request("GET", endpoint, params=params)
-            
+
             if not response_data:
                 print(f"❌ KALSHI: Failed to get series list")
                 return []
-            
+
             all_series = response_data.get("series", [])
             print(f"🔍 KALSHI: Found {len(all_series)} total series")
-            
+
             # Filter to league prefix and game-ish suffixes
             league_prefix = f"KX{league.upper()}"
             game_suffixes = ["GAME", "GAMES", "SPREAD", "TOTAL", "ANYTD", "PASSYDS", "RUSHYDS"]
-            
+
             relevant_series = []
             for series in all_series:
                 ticker = series.get('ticker', '').upper()
@@ -974,29 +791,29 @@ class KalshiIntegrator:
                     if any(suffix in ticker for suffix in game_suffixes):
                         relevant_series.append(series)
                         print(f"  ✅ {ticker}")
-            
+
             print(f"🎯 KALSHI: Found {len(relevant_series)} {league} game series")
-            
+
             # Get markets for each series
             all_markets = []
             for series in relevant_series:
                 series_ticker = series.get('ticker')
                 if not series_ticker:
                     continue
-                
+
                 endpoint = "/markets"
                 params = {
                     "series_ticker": series_ticker,
                     "limit": 1000,
                     "status": "open"
                 }
-                
+
                 response_data = self._make_authenticated_request("GET", endpoint, params=params)
-                
+
                 if response_data:
                     markets = response_data.get("markets", [])
                     print(f"  📊 {series_ticker}: {len(markets)} markets")
-                    
+
                     # Enrich each market
                     for m in markets:
                         enriched = {
@@ -1018,72 +835,72 @@ class KalshiIntegrator:
                             "status": m.get("status"),
                         }
                         all_markets.append(enriched)
-            
+
             print(f"✅ KALSHI: Total {len(all_markets)} {league} game markets")
             return all_markets
-            
+
         except Exception as e:
             print(f"❌ KALSHI: Error fetching game markets: {e}")
             logger.error(f"Error fetching game markets for {league}: {e}")
             import traceback
             print(f"Traceback: {traceback.format_exc()}")
             return []
-    
+
     def filter_markets_closing_today(self, markets: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """Filter markets to only those closing today (in UTC)
-        
+
         Args:
             markets: List of market dictionaries with 'close_time' field
-            
+
         Returns:
             Filtered list of markets closing today
         """
         if not markets:
             return []
-        
+
         min_ts, max_ts = self._get_today_timestamp_range()
-        
+
         filtered = []
         for m in markets:
             close_ts = m.get("close_time")
             if isinstance(close_ts, (int, float)) and min_ts <= close_ts <= max_ts:
                 filtered.append(m)
-        
+
         return filtered
-    
+
     def group_game_markets_by_event(self, markets: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
         """Group markets by event_ticker (one event = one game)
-        
+
         Args:
             markets: List of market dictionaries
-            
+
         Returns:
             Dictionary mapping event_ticker to list of markets for that event
         """
         from collections import defaultdict
-        
+
         grouped = defaultdict(list)
         for m in markets:
             event_ticker = m.get("event_ticker")
             if event_ticker:
                 grouped[event_ticker].append(m)
-        
+
         return dict(grouped)
-    
+
     @staticmethod
     def price_to_prob(price_dollars: Optional[float]) -> Optional[float]:
         """Convert Kalshi price (0-1 dollars) to implied probability
-        
+
         Args:
             price_dollars: Kalshi contract price in dollars (0.00 to 1.00)
-            
+
         Returns:
             Implied probability (0.0 to 1.0) or None
         """
         if price_dollars is None:
             return None
         return float(price_dollars)  # Kalshi prices are already probabilities
-    
+
     def get_game_market(
         self,
         home_team: str,
@@ -1329,10 +1146,10 @@ class KalshiIntegrator:
                 result,
             )
             return result
-    
+
     def _normalize_team_name(self, team_name: str) -> str:
         """Normalize team name by removing mascots and common suffixes
-        
+
         Examples:
             "Oklahoma Sooners" → "Oklahoma"
             "Los Angeles Lakers" → "Los Angeles"
@@ -1341,7 +1158,7 @@ class KalshiIntegrator:
         """
         if not team_name:
             return ""
-        
+
         # Common mascots to remove (NCAAB + NBA + NFL + NHL)
         mascots = [
             # NCAAB Common
@@ -1378,15 +1195,15 @@ class KalshiIntegrator:
             "Predators", "Preds", "Blues", "Jets", "Ducks", "Coyotes", "Flames",
             "Oilers", "Canucks", "Nucks", "Golden Knights", "Knights", "Kraken", "Sharks", "Kings"
         ]
-        
+
         # Remove state abbreviations and clean
         team_clean = team_name.strip()
         team_clean = team_clean.replace(" St.", " State")  # Handle St. abbreviation
         team_clean = team_clean.replace(" St ", " State ")
-        
+
         # Split and remove mascot if found
         words = team_clean.split()
-        
+
         # Check if last word(s) is a mascot
         for i in range(len(words), 0, -1):
             potential_mascot = " ".join(words[i-1:])
@@ -1394,6 +1211,6 @@ class KalshiIntegrator:
                 # Remove mascot, keep everything before it
                 result = " ".join(words[:i-1])
                 return result if result else team_clean
-        
+
         # No mascot found, return as-is
         return team_clean

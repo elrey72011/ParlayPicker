@@ -18,10 +18,7 @@ import streamlit as st
 from app_core.team_name_matcher import TeamNameMatcher
 from app_core.kalshi_integrator import (
     KalshiMatchResult,
-<<<<<<< HEAD:app_core/vertex_master_analyzer.py
     fetch_kalshi_for_game,
-=======
->>>>>>> origin/main:vertex_master_analyzer.py
     match_game_to_kalshi,
 )
 from app_core.vertex_ai_endpoint import (
@@ -258,7 +255,7 @@ class VertexMasterAnalyzer:
             try:
                 for bookmaker in bookmakers:
                     book_name = bookmaker.get("title", "").lower()
-                    
+
                     for market in bookmaker.get("markets", []):
                         if market.get("key") == "h2h":
                             for outcome in market.get("outcomes", []):
@@ -274,7 +271,7 @@ class VertexMasterAnalyzer:
                                 name = outcome.get("name")
                                 point = outcome.get("point")
                                 price = outcome.get("price")
-                                
+
                                 # Extract Novig spreads specifically (Novig's API key is "lowvig")
                                 if "novig" in book_name or "lowvig" in book_name:
                                     if name == game.get("home_team"):
@@ -283,7 +280,7 @@ class VertexMasterAnalyzer:
                                     elif name == game.get("away_team"):
                                         feats["novig_away_spread"] = point
                                         feats["novig_away_spread_odds"] = price
-                                
+
                                 # General spread extraction (any bookmaker)
                                 if name == game.get("home_team") and feats["home_spread"] is None:
                                     feats["home_spread"] = point
@@ -631,7 +628,6 @@ class VertexMasterAnalyzer:
             league = game.get("league") or game.get("sport_key") or "NBA"
 
             market_info = prefetch_info
-<<<<<<< HEAD:app_core/vertex_master_analyzer.py
             game_time = game.get("commence_time") or game.get("game_time")
             game_dt = None
             if game_time:
@@ -642,20 +638,6 @@ class VertexMasterAnalyzer:
 
             if market_info is None:
                 market_info = fetch_kalshi_for_game(
-=======
-            if market_info is None:
-                game_time = game.get("commence_time") or game.get("game_time")
-                game_dt = None
-                if game_time:
-                    try:
-                        game_dt = datetime.fromisoformat(str(game_time).replace("Z", "+00:00"))
-                    except Exception:
-                        game_dt = None
-
-                # Delegate to the integrator as the single source of truth
-                market_info = match_game_to_kalshi(
-                    league,
->>>>>>> origin/main:vertex_master_analyzer.py
                     home,
                     away,
                     game_dt,
@@ -1645,7 +1627,7 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
         return f"+{int(odds_f)}" if odds_f > 0 else f"{int(odds_f)}"
 
     display_df["Odds"] = display_df["pick_odds"].apply(format_odds)
-    
+
     # Changed from emojis to text
     def favorite_label(row):
         if row.get("pick_market_type") == "Total":
@@ -1656,14 +1638,14 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
         return "Yes" if bool(val) else "No (Underdog)"
 
     display_df["Favorite"] = display_df.apply(favorite_label, axis=1)
-    
+
     # Sentiment: Show as +/- percentage impact
     display_df["Sentiment"] = display_df["sentiment_diff"].apply(
-        lambda x: f"+{x*100:.1f}%" if x is not None and x > 0 
+        lambda x: f"+{x*100:.1f}%" if x is not None and x > 0
                  else f"{x*100:.1f}%" if x is not None and x < 0
                  else "0.0%"
     )
-    
+
     # Kalshi: Show alignment as text + percentage
     def format_kalshi(row):
         """Display the matched Kalshi market label (or fallback message)."""
@@ -1684,7 +1666,7 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
         else np.nan,
         axis=1,
     )
-    
+
     # Add Kalshi Edge column (YOUR model prob - Kalshi crowd prob)
     def calc_kalshi_edge(row):
         kalshi_prob = row.get("kalshi_prob")
@@ -1731,9 +1713,9 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
             return dt_eastern.strftime("%b %d, %-I:%M %p ET")
         except Exception:
             return str(time_str)[:16] if time_str else "—"
-    
+
     display_df["Game Time"] = display_df["game_time"].apply(format_game_time)
-    
+
     # TheOver alignment/edge columns derived from keyed matches
     display_df["TheOver"] = display_df.get("theover_alignment", pd.Series([])).fillna("No Coverage")
     display_df["theover_edge_raw"] = display_df.get("theover_probability_for_pick")
@@ -1767,21 +1749,21 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
         return "No Kalshi data"
 
     display_df["kalshi_status"] = display_df.apply(classify_kalshi_status, axis=1)
-    
+
     # NEW: Novig Odds column
     def format_novig_odds(row):
         pick_team = row.get("pick_team", "")
         home_team = row.get("home_team", "")
-        
+
         novig_home = row.get("novig_home_spread")
         novig_away = row.get("novig_away_spread")
         novig_home_odds = row.get("novig_home_spread_odds")
         novig_away_odds = row.get("novig_away_spread_odds")
-        
+
         # If no Novig data available
         if pd.isna(novig_home) and pd.isna(novig_away):
             return "—"
-        
+
         # Determine which spread to show based on picked team
         if pick_team == home_team:
             # Home team picked, show home spread
@@ -1793,7 +1775,7 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
             if not pd.isna(novig_away) and not pd.isna(novig_away_odds):
                 return f"{novig_away:+.1f} ({int(novig_away_odds):+d})"
             return "—"
-    
+
     display_df["Novig"] = display_df.apply(format_novig_odds, axis=1)
 
     # Ensure debug columns are always readable strings
@@ -1861,7 +1843,7 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
         "kalshi_prob",
         "edge_vs_kalshi",
         "kalshi_match_debug",
-        "theover_edge", 
+        "theover_edge",
         "theover_match_debug",
         "kalshi_status",
         "ai_status",
