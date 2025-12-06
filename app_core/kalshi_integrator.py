@@ -104,7 +104,6 @@ def _find_best_market_match(
         ticker = market.get("ticker") or ""
         market_norm = TeamNameMatcher.normalize(f"{title} {market.get('subtitle','')}")
         
-        # Check tokens
         home_in = norm_home in market_norm
         away_in = norm_away in market_norm
         
@@ -206,21 +205,18 @@ class KalshiIntegrator:
         return [s for s in data.get("series", []) if any(k in s.get('ticker','').upper() for k in keywords)]
 
     def get_markets(self, category="sports", status="open"):
-        # IMPROVED: Fetches ALL pages for ALL series
         cache_key = f"{category}_{status}"
         if cache_key in self._markets_cache: return self._markets_cache[cache_key]
 
         series_list = self.get_sports_series()
         all_markets = []
         
-        # Priority sort
         priority = ["KXNBA", "KXNFL", "KXMLB", "KXNHL", "KXNCAAB"]
         series_list.sort(key=lambda x: next((i for i,p in enumerate(priority) if x.get('ticker','').startswith(p)), 999))
 
         for s in series_list:
             ticker = s.get('ticker')
             cursor = None
-            # Pagination loop
             while True:
                 p = {"series_ticker": ticker, "limit": 100, "status": status}
                 if cursor: p["cursor"] = cursor
@@ -233,7 +229,7 @@ class KalshiIntegrator:
                 
                 cursor = data.get("cursor")
                 if not cursor: break
-                if len(ms) < 100: break # Optimistic break
+                if len(ms) < 100: break
 
         self._markets_cache[cache_key] = all_markets
         return all_markets
@@ -260,7 +256,7 @@ class KalshiIntegrator:
             for f in ["yes_bid_dollars", "last_price", "implied_prob"]:
                 if f in best:
                     p = price_to_prob(best[f])
-                    if p: 
+                    if p is not None: 
                         prob = p
                         break
             
@@ -274,10 +270,9 @@ class KalshiIntegrator:
             
         return res
 
-# Legacy Wrapper
 def match_game_to_kalshi(league, home, away, time, integrator=None, status="open"):
     k = integrator or KalshiIntegrator()
-    sport = next((c for c in SUPPORTED_LEAGUES if c in league.lower()), None)
+    sport = next((c for c in SUPPORTED_LEAGUES if c in league.lower()), "nba")
     r = k.get_game_market(home, away, sport, time)
     return KalshiMatchResult(
         matched=r["kalshi_available"],
