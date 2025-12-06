@@ -3,13 +3,15 @@ Kalshi Integrator v6.2: Ticker Matching + Stale Object Fix
 This file goes in: app_core/kalshi_integrator.py
 """
 
-import time
 import logging
+import re
+import time
 from datetime import datetime, timedelta
+from typing import Any, Dict, List, Optional, Tuple, TypedDict
+
 import pytz
 import requests
 import streamlit as st
-from typing import Dict, List, Any, Optional, TypedDict, Tuple
 
 # Try to import the matcher, or define a dummy one if missing
 try:
@@ -71,10 +73,34 @@ KALSHI_ABBREVIATIONS = {
 }
 
 # Build Reverse Lookup Map (Team Name -> Ticker)
-TEAM_TO_TICKER = {}
+TEAM_TO_TICKER: Dict[str, str] = {}
+
+
+def _add_team_alias(name: str, code: str) -> None:
+    """Register multiple lookup keys for a team to avoid collisions.
+
+    TeamNameMatcher.normalize removes mascots (e.g., "Lakers"), which makes
+    franchises that share a city (Lakers/Clippers) collapse to the same key.
+    We index both the mascot-stripped and mascot-preserving variants so we can
+    resolve the correct Kalshi ticker even when the caller provides the full
+    team name.
+    """
+
+    if not name:
+        return
+
+    normalized = TeamNameMatcher.normalize(name).upper()
+    mascot_preserving = re.sub(r"[^A-Z\s]", "", name.upper()).strip()
+
+    for key in filter(None, {normalized, mascot_preserving}):
+        # Do not overwrite an existing alias; first write wins to keep intent
+        # stable across duplicate city names.
+        TEAM_TO_TICKER.setdefault(key, code)
+
+
 for code, names in KALSHI_ABBREVIATIONS.items():
     for n in names:
-        TEAM_TO_TICKER[TeamNameMatcher.normalize(n).upper()] = code
+        _add_team_alias(n, code)
 
 class KalshiMatchResult(TypedDict, total=False):
     matched: bool
@@ -249,9 +275,16 @@ class KalshiIntegrator:
         # 2. Normalize Names & Get Codes
         home_norm = TeamNameMatcher.normalize(home_team).upper()
         away_norm = TeamNameMatcher.normalize(away_team).upper()
-        
-        home_code = TEAM_TO_TICKER.get(home_norm)
-        away_code = TEAM_TO_TICKER.get(away_norm)
+
+        def _lookup_team_code(name: str, normalized: str) -> Optional[str]:
+            mascot_preserving = re.sub(r"[^A-Z\s]", "", (name or "").upper()).strip()
+            for key in (mascot_preserving, normalized):
+                if key and key in TEAM_TO_TICKER:
+                    return TEAM_TO_TICKER[key]
+            return None
+
+        home_code = _lookup_team_code(home_team, home_norm)
+        away_code = _lookup_team_code(away_team, away_norm)
         
         best_market = None
         best_score = 0.0
