@@ -8568,6 +8568,14 @@ with st.expander("🔍 ML Predictor Status", expanded=False):
         st.error("❌ ML Predictor Not Loaded")
         st.info("Train a model in **Tab 5: ML Training** first")
 
+def create_vertex_master_analyzer():
+    """
+    Create VertexMasterAnalyzer with ALL initialized clients
+    Call this BEFORE analyzing each game
+    """
+    # ... (Paste your provided code here) ...
+    return analyzer
+
 # ===== TAB 1: SPORTS BETTING PARLAYS =====
 with main_tab1:
     apisports_client = _session_client_or_none('apisports_nfl_client', APISportsFootballClient)
