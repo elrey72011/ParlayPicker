@@ -290,6 +290,17 @@ class KalshiIntegrator:
         best_score = 0.0
         match_type = "none"
 
+        # Build alias sets for quick containment checks against Kalshi titles
+        def _alias_set(name: str, normalized: str) -> List[str]:
+            return list({
+                (name or "").lower().strip(),
+                normalized.lower().strip(),
+                TeamNameMatcher.normalize(name or "").lower().strip(),
+            } - {""})
+
+        home_aliases = _alias_set(home_team, home_norm)
+        away_aliases = _alias_set(away_team, away_norm)
+
         for m in markets:
             event_ticker = str(m.get("event_ticker", "")).upper()
             market_text = (m.get("title", "") + " " + m.get("subtitle", "")).lower()
@@ -309,7 +320,19 @@ class KalshiIntegrator:
                     match_type = "ticker_code_rev"
                     break
 
-            # B. FUZZY MATCH (Fallback)
+            # B. TITLE CONTAINMENT (Strong Fallback)
+            title_text = (m.get("event_title", "") + " " + market_text).lower()
+            contains_home = any(alias in title_text for alias in home_aliases)
+            contains_away = any(alias in title_text for alias in away_aliases)
+
+            if contains_home and contains_away:
+                best_market = m
+                best_score = 0.9
+                match_type = "title_contains"
+                # Skip remaining scoring for this market since it's a strong match
+                continue
+
+            # C. FUZZY MATCH (Fallback)
             if best_score < 1.0:
                 event_title = m.get("event_title", "").lower()
                 full_text = event_title + " " + market_text
@@ -336,7 +359,7 @@ class KalshiIntegrator:
             "kalshi_label": None
         }
 
-        if best_market and best_score > 0.55:
+        if best_market and best_score > 0.5:
             # Use any available price to avoid treating a matched market as "No Match"
             yes_bid = price_to_prob(best_market.get("yes_bid"))
             yes_ask = price_to_prob(best_market.get("yes_ask"))
