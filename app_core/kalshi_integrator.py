@@ -111,23 +111,29 @@ def match_game_to_kalshi(
 ) -> KalshiMatchResult:
     """Attempt to match a game to a Kalshi market with explicit reasons."""
 
-    league_norm = normalize_name(league)
+    raw_league = normalize_name(league)
     logger.info(
-        "[KALSHI MATCH] league=%s home=%s away=%s game_dt=%s integrator_none=%s status=%s",
-        league if "league" in locals() else None,
+        "[KALSHI MATCH] league_raw=%s home=%s away=%s game_dt=%s integrator_none=%s status=%s",
+        raw_league,
         home_team,
         away_team,
-        game_time if "game_time" in locals() else game_time,
-        integrator is None if "integrator" in locals() else False,
-        status if "status" in locals() else None,
+        game_time,
+        integrator is None,
+        status,
     )
-    if league_norm and league_norm not in SUPPORTED_LEAGUES:
+    league_norm = None
+    for code in SUPPORTED_LEAGUES:
+        if code in raw_league:
+            league_norm = code
+            break
+
+    if not league_norm:
         return KalshiMatchResult(
             matched=False,
             label="",
             probability=None,
             raw_event_id=None,
-            league=league_norm,
+            league=raw_league,
             reason="league_not_supported",
         )
 
@@ -186,7 +192,7 @@ def match_game_to_kalshi(
     def _meaningful_tokens(name: str) -> List[str]:
         if not name:
             return []
-        tokens = _normalize_market_text(name).split()
+        tokens = normalize_name(name).split()
         stopwords = {"state", "university", "fc", "cf", "club", "the", "and", "at"}
         return [t for t in tokens if len(t) > 2 and t not in stopwords]
 
@@ -223,7 +229,7 @@ def match_game_to_kalshi(
         if team_hits == 0:
             continue
 
-        market_date = _parse_market_date(market.get("close_time") or market.get("event_date"))
+        market_date = _parse_kalshi_date(market.get("close_time") or market.get("event_date"))
         if game_dt and market_date and market_date.date() != game_dt.date():
             continue
 
@@ -239,7 +245,7 @@ def match_game_to_kalshi(
     if not best_market:
         logger.info(
             "match_game_to_kalshi: NO_MATCH league=%s home=%s away=%s date=%s num_markets=%s",
-            league,
+            league_norm,
             home_team,
             away_team,
             game_dt,
