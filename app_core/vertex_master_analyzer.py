@@ -18,7 +18,10 @@ import streamlit as st
 from app_core.team_name_matcher import TeamNameMatcher
 from app_core.kalshi_integrator import (
     KalshiMatchResult,
+<<<<<<< HEAD:app_core/vertex_master_analyzer.py
     fetch_kalshi_for_game,
+=======
+>>>>>>> origin/main:vertex_master_analyzer.py
     match_game_to_kalshi,
 )
 from app_core.vertex_ai_endpoint import (
@@ -628,6 +631,7 @@ class VertexMasterAnalyzer:
             league = game.get("league") or game.get("sport_key") or "NBA"
 
             market_info = prefetch_info
+<<<<<<< HEAD:app_core/vertex_master_analyzer.py
             game_time = game.get("commence_time") or game.get("game_time")
             game_dt = None
             if game_time:
@@ -638,6 +642,20 @@ class VertexMasterAnalyzer:
 
             if market_info is None:
                 market_info = fetch_kalshi_for_game(
+=======
+            if market_info is None:
+                game_time = game.get("commence_time") or game.get("game_time")
+                game_dt = None
+                if game_time:
+                    try:
+                        game_dt = datetime.fromisoformat(str(game_time).replace("Z", "+00:00"))
+                    except Exception:
+                        game_dt = None
+
+                # Delegate to the integrator as the single source of truth
+                market_info = match_game_to_kalshi(
+                    league,
+>>>>>>> origin/main:vertex_master_analyzer.py
                     home,
                     away,
                     game_dt,
@@ -1827,6 +1845,8 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
         "AI Model",
         "ai_status",
         "win_prob",
+        "AI Win %",
+        "AI Model",
         "market_prob",
         "edge_vs_market",
         "pick_market_type",
@@ -1841,9 +1861,10 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
         "kalshi_prob",
         "edge_vs_kalshi",
         "kalshi_match_debug",
-        "theover_edge",
+        "theover_edge", 
         "theover_match_debug",
         "kalshi_status",
+        "ai_status",
     ]
 
     logging.info("[Export] Columns in CSV: %s", csv_cols)
