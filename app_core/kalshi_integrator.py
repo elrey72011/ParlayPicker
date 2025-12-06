@@ -162,10 +162,18 @@ class KalshiIntegrator:
             return None
 
     def get_todays_events(self, sport_ticker=None):
-        """Fetch events closing in the window of [Now - 12h] to [Now + 48h]."""
+        """Fetch events closing in an expanded window to capture newly listed markets.
+
+        We previously limited this to ~48 hours, which missed markets Kalshi lists
+        several days ahead. Expanding the lookahead keeps the Streamlit table from
+        reporting "No Match" when markets exist but are slightly further out.
+        """
         now = int(time.time())
-        start_window = now - (12 * 60 * 60) # Look back 12 hours for active games
-        future_window = now + (48 * 60 * 60) # Look forward 48 hours
+        # Look back 24 hours for games already underway and forward 7 days for upcoming
+        # markets. This wider window still respects Kalshi's natural limits while
+        # ensuring newly posted events are available for matching.
+        start_window = now - (24 * 60 * 60)
+        future_window = now + (7 * 24 * 60 * 60)
         
         target_series = [sport_ticker] if sport_ticker else CORE_SERIES
         cache_key = f"events_{sport_ticker or 'all'}_{now // 300}" # 5 min cache
