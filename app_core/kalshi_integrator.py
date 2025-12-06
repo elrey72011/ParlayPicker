@@ -114,13 +114,15 @@ def _find_best_market_match(
         away_in = norm_away in market_norm
         
         quality = 0.0
-        if home_in and away_in: 
+        if home_in and away_in:
             quality = 1.0
         else:
             # Fuzzy fallback
             h_s = TeamNameMatcher.similarity_score(norm_home, market_norm)
             a_s = TeamNameMatcher.similarity_score(norm_away, market_norm)
-            if h_s > 0.45 and a_s > 0.45: quality = (h_s + a_s) / 2.0
+            avg_score = (h_s + a_s) / 2.0
+            if avg_score > 0.55:
+                quality = avg_score
             
         # Boost Game/Spread/Total lines over player props
         if "GAME" in ticker or "SPREAD" in ticker: quality += 0.1
