@@ -56,6 +56,18 @@ KALSHI_ABBREVIATIONS = {
     "PHI": ["PHILADELPHIA EAGLES"], "PIT": ["PITTSBURGH STEELERS"], "SF": ["SAN FRANCISCO 49ERS"],
     "SEA": ["SEATTLE SEAHAWKS"], "TB": ["TAMPA BAY BUCCANEERS"], "TEN": ["TENNESSEE TITANS"],
     "WSH": ["WASHINGTON COMMANDERS"],
+    # NHL (Common codes)
+    "BOS": ["BOSTON BRUINS"], "BUF": ["BUFFALO SABRES"], "DET": ["DETROIT RED WINGS"],
+    "FLA": ["FLORIDA PANTHERS"], "MTL": ["MONTREAL CANADIENS"], "OTT": ["OTTAWA SENATORS"],
+    "TBL": ["TAMPA BAY LIGHTNING"], "TOR": ["TORONTO MAPLE LEAFS"], "ARI": ["ARIZONA COYOTES"],
+    "CHI": ["CHICAGO BLACKHAWKS"], "COL": ["COLORADO AVALANCHE"], "DAL": ["DALLAS STARS"],
+    "MIN": ["MINNESOTA WILD"], "NSH": ["NASHVILLE PREDATORS"], "STL": ["ST LOUIS BLUES"],
+    "WPG": ["WINNIPEG JETS"], "ANA": ["ANAHEIM DUCKS"], "CGY": ["CALGARY FLAMES"],
+    "EDM": ["EDMONTON OILERS"], "LAK": ["LOS ANGELES KINGS"], "SJS": ["SAN JOSE SHARKS"],
+    "SEA": ["SEATTLE KRAKEN"], "VAN": ["VANCOUVER CANUCKS"], "VGK": ["VEGAS GOLDEN KNIGHTS"],
+    "CAR": ["CAROLINA HURRICANES"], "CBJ": ["COLUMBUS BLUE JACKETS"], "NJD": ["NEW JERSEY DEVILS"],
+    "NYI": ["NEW YORK ISLANDERS"], "NYR": ["NEW YORK RANGERS"], "PHI": ["PHILADELPHIA FLYERS"],
+    "PIT": ["PITTSBURGH PENGUINS"], "WSH": ["WASHINGTON CAPITALS"]
 }
 
 # Build Reverse Lookup Map
@@ -133,6 +145,7 @@ class KalshiIntegrator:
         try:
             resp = requests.get(url, headers={"Accept": "application/json"}, params=params, timeout=10)
             if resp.status_code == 200:
+                self.last_error = None
                 return resp.json()
             elif resp.status_code == 429:
                 time.sleep(1)
@@ -199,11 +212,20 @@ class KalshiIntegrator:
 
     # --- ENHANCED MATCHING LOGIC ---
     def get_game_market(self, home_team, away_team, sport="NBA", game_time=None):
-        sport_map = {'nba': 'KXNBA', 'nfl': 'KXNFL', 'nhl': 'KXNHL', 'mlb': 'KXMLB'}
+        # 1. Map sport to Kalshi Series
+        sport_map = {
+            'nba': 'KXNBA', 'basketball_nba': 'KXNBA',
+            'nfl': 'KXNFL', 'americanfootball_nfl': 'KXNFL',
+            'nhl': 'KXNHL', 'icehockey_nhl': 'KXNHL',
+            'mlb': 'KXMLB', 'baseball_mlb': 'KXMLB',
+            'ncaaf': 'KXNCAAF', 'americanfootball_ncaaf': 'KXNCAAF',
+            'ncaab': 'KXNCAAB', 'basketball_ncaab': 'KXNCAAB'
+        }
         series_ticker = sport_map.get(sport.lower(), "KXNBA")
+        
         markets = self.get_todays_events(series_ticker)
         
-        # Normalize and get Codes
+        # 2. Normalize and get Ticker Codes
         home_norm = TeamNameMatcher.normalize(home_team).upper()
         away_norm = TeamNameMatcher.normalize(away_team).upper()
         
@@ -218,29 +240,28 @@ class KalshiIntegrator:
             event_ticker = str(m.get("event_ticker", "")).upper()
             market_text = (m.get("title", "") + " " + m.get("subtitle", "")).lower()
             
-            # 1. Ticker Code Match (Highest Priority)
+            # --- STRATEGY A: Ticker Code Match (Highest Priority) ---
             if home_code and away_code:
+                # Check for "GSW-LAL" or "LAL-GSW" in the ticker
                 if f"-{home_code}-" in event_ticker and f"-{away_code}" in event_ticker:
                     best_market = m
                     best_score = 1.0
                     match_type = "ticker_code"
                     break
-                # Try reversed
-                if f"-{away_code}-" in event_ticker and f"-{home_code}" in event_ticker:
-                    best_market = m
-                    best_score = 1.0
-                    match_type = "ticker_code_rev"
-                    break
-
-            # 2. Fuzzy Text Match (Fallback)
+            
+            # --- STRATEGY B: Fuzzy Text Match (Fallback) ---
             if best_score < 1.0:
                 event_title = m.get("event_title", "").lower()
                 h_score = TeamNameMatcher.similarity_score(home_norm.lower(), event_title)
                 a_score = TeamNameMatcher.similarity_score(away_norm.lower(), event_title)
                 
+                # Check if it's a winner market
+                is_winner = "winner" in market_text or "win" in market_text
+                
                 if h_score > 0.4 and a_score > 0.4:
                     avg = (h_score + a_score) / 2
-                    if "winner" in market_text: avg += 0.1 # Boost winner markets
+                    if is_winner: avg += 0.1
+                    
                     if avg > best_score:
                         best_score = avg
                         best_market = m
@@ -257,7 +278,7 @@ class KalshiIntegrator:
             yes_price = price_to_prob(best_market.get("yes_bid", 0))
             subtitle = best_market.get("subtitle", "").lower()
             
-            # Logic for probability direction
+            # Determine Probability Direction
             is_home_sub = home_norm.lower() in subtitle
             is_away_sub = away_norm.lower() in subtitle
             
@@ -269,8 +290,9 @@ class KalshiIntegrator:
                 "kalshi_available": True,
                 "kalshi_prob": final_prob,
                 "kalshi_label": best_market.get("event_title"),
-                "kalshi_match_debug": f"Match: {match_type}",
-                "market_ticker": best_market.get("ticker")
+                "kalshi_match_debug": f"Match: {match_type} ({best_score:.2f})",
+                "market_ticker": best_market.get("ticker"),
+                "kalshi_volume": best_market.get("volume")
             })
             
         return res
