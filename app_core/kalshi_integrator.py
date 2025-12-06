@@ -168,7 +168,7 @@ def _find_best_market_match(
 class KalshiIntegrator:
     def __init__(self, api_key: str = None, api_secret: str = None):
         print("="*60)
-        print("🚀 KALSHI INTEGRATOR v4.1 (Fixed Matching)")
+        print("🚀 KALSHI INTEGRATOR v4.2 (Correct URL)")
         print("="*60)
         
         # Try to load from Streamlit secrets if not provided
@@ -183,15 +183,18 @@ class KalshiIntegrator:
         self.api_secret = api_secret
 
         # URL Configuration
-        self.prod_url = "https://api.kalshi.com/trade-api/v2"
+        # CORRECTED URL: trading-api.kalshi.com is the correct host
+        self.prod_url = "https://trading-api.kalshi.com/trade-api/v2"
+        
+        # Public URL: Contains ALL real markets
         self.public_url = "https://api.elections.kalshi.com/trade-api/v2"
         
         if self.api_key and self.api_secret:
             self.api_url = self.prod_url
-            print(f"✅ Using Authenticated Production API")
+            print(f"✅ Using Authenticated Production API ({self.api_url})")
         else:
             self.api_url = self.public_url
-            print(f"⚠️ No Keys Found: Using Public Read-Only API (Real Data)")
+            print(f"⚠️ No Keys Found: Using Public Read-Only API ({self.api_url})")
 
         self.headers = {"Content-Type": "application/json", "Accept": "application/json"}
         
