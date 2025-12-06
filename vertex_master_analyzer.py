@@ -466,10 +466,18 @@ class VertexMasterAnalyzer:
             is_matched = False
             prob = None
             label = None
+
+            def _pick_prob(info: Dict[str, Any]) -> Optional[float]:
+                if not isinstance(info, dict):
+                    return None
+                for key in ("probability", "kalshi_probability", "kalshi_prob", "prob"):
+                    if key in info and info.get(key) is not None:
+                        return info.get(key)
+                return None
             
             if isinstance(market_info, dict):
                 is_matched = market_info.get("matched", False) or market_info.get("kalshi_available", False)
-                prob = market_info.get("probability") or market_info.get("kalshi_probability") or market_info.get("kalshi_prob")
+                prob = _pick_prob(market_info)
                 label = market_info.get("label") or market_info.get("kalshi_label")
                 debug_reason = market_info.get("reason") or market_info.get("kalshi_match_debug")
                 feats["kalshi_match_debug"] = str(debug_reason)

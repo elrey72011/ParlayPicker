@@ -315,6 +315,20 @@ class KalshiIntegrator:
             else:
                 yes_price = yes_bid if yes_bid is not None else yes_ask if yes_ask is not None else last_trade
 
+            # Some markets may not expose bids/asks but do include probability-style fields; use
+            # those before giving up so matched events are not discarded as "No Match".
+            if yes_price is None:
+                yes_price = price_to_prob(
+                    best_market.get("probability")
+                    or best_market.get("implied_prob")
+                    or best_market.get("market_prob")
+                )
+
+            # As a last resort, keep the match but neutralize the probability so the upstream
+            # analyzer can still display the market instead of showing "No Match".
+            if yes_price is None:
+                yes_price = 0.5
+
             subtitle = best_market.get("subtitle", "").lower()
 
             # Determine Probability Direction
