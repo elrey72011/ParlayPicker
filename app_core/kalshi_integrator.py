@@ -1,5 +1,5 @@
 """
-Kalshi Integrator v6.0: Full Compatibility & Event-Centric Matching
+Kalshi Integrator v6.1: Abbreviation & Ticker Matching
 This file goes in: app_core/kalshi_integrator.py
 """
 
@@ -24,8 +24,71 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 # --- CONFIGURATION ---
-# Hardcoded series ensure we NEVER miss the major sports
 CORE_SERIES = ["KXNBA", "KXNFL", "KXNHL", "KXMLB", "KXNCAAF", "KXNCAAB"]
+
+# Map Full Team Names to Kalshi Ticker Codes
+KALSHI_ABBREVIATIONS = {
+    # NBA
+    "ATL": ["ATLANTA HAWKS", "ATLANTA"],
+    "BOS": ["BOSTON CELTICS", "BOSTON"],
+    "BKN": ["BROOKLYN NETS", "BROOKLYN"],
+    "CHA": ["CHARLOTTE HORNETS", "CHARLOTTE"],
+    "CHI": ["CHICAGO BULLS", "CHICAGO"],
+    "CLE": ["CLEVELAND CAVALIERS", "CLEVELAND"],
+    "DAL": ["DALLAS MAVERICKS", "DALLAS"],
+    "DEN": ["DENVER NUGGETS", "DENVER"],
+    "DET": ["DETROIT PISTONS", "DETROIT"],
+    "GSW": ["GOLDEN STATE WARRIORS", "GOLDEN STATE", "GS"],
+    "HOU": ["HOUSTON ROCKETS", "HOUSTON"],
+    "IND": ["INDIANA PACERS", "INDIANA"],
+    "LAC": ["LOS ANGELES CLIPPERS", "LA CLIPPERS"],
+    "LAL": ["LOS ANGELES LAKERS", "LA LAKERS"],
+    "MEM": ["MEMPHIS GRIZZLIES", "MEMPHIS"],
+    "MIA": ["MIAMI HEAT", "MIAMI"],
+    "MIL": ["MILWAUKEE BUCKS", "MILWAUKEE"],
+    "MIN": ["MINNESOTA TIMBERWOLVES", "MINNESOTA"],
+    "NOP": ["NEW ORLEANS PELICANS", "NEW ORLEANS", "NO"],
+    "NYK": ["NEW YORK KNICKS", "NEW YORK"],
+    "OKC": ["OKLAHOMA CITY THUNDER", "OKLAHOMA CITY"],
+    "ORL": ["ORLANDO MAGIC", "ORLANDO"],
+    "PHI": ["PHILADELPHIA 76ERS", "PHILADELPHIA", "PHILLY"],
+    "PHX": ["PHOENIX SUNS", "PHOENIX"],
+    "POR": ["PORTLAND TRAIL BLAZERS", "PORTLAND"],
+    "SAC": ["SACRAMENTO KINGS", "SACRAMENTO"],
+    "SAS": ["SAN ANTONIO SPURS", "SAN ANTONIO"],
+    "TOR": ["TORONTO RAPTORS", "TORONTO"],
+    "UTA": ["UTAH JAZZ", "UTAH"],
+    "WAS": ["WASHINGTON WIZARDS", "WASHINGTON"],
+    # NFL
+    "ARI": ["ARIZONA CARDINALS", "ARIZONA"],
+    "BAL": ["BALTIMORE RAVENS", "BALTIMORE"],
+    "BUF": ["BUFFALO BILLS", "BUFFALO"],
+    "CAR": ["CAROLINA PANTHERS", "CAROLINA"],
+    "CIN": ["CINCINNATI BENGALS", "CINCINNATI"],
+    "GB": ["GREEN BAY PACKERS", "GREEN BAY"],
+    "JAX": ["JACKSONVILLE JAGUARS", "JACKSONVILLE"],
+    "KC": ["KANSAS CITY CHIEFS", "KANSAS CITY"],
+    "LV": ["LAS VEGAS RAIDERS", "LAS VEGAS"],
+    "LAR": ["LOS ANGELES RAMS", "LA RAMS"],
+    "NE": ["NEW ENGLAND PATRIOTS", "NEW ENGLAND"],
+    "NO": ["NEW ORLEANS SAINTS", "NEW ORLEANS"],
+    "NYG": ["NEW YORK GIANTS"],
+    "NYJ": ["NEW YORK JETS"],
+    "PIT": ["PITTSBURGH STEELERS", "PITTSBURGH"],
+    "SF": ["SAN FRANCISCO 49ERS", "SAN FRANCISCO"],
+    "SEA": ["SEATTLE SEAHAWKS", "SEATTLE"],
+    "TB": ["TAMPA BAY BUCCANEERS", "TAMPA BAY"],
+    "TEN": ["TENNESSEE TITANS", "TENNESSEE"],
+    "WSH": ["WASHINGTON COMMANDERS", "WASHINGTON"],
+}
+
+# Reverse map for lookup: "Golden State Warriors" -> "GSW"
+TEAM_TO_TICKER = {}
+for code, names in KALSHI_ABBREVIATIONS.items():
+    for n in names:
+        TEAM_TO_TICKER[n.upper()] = code
+        # Also map normalized version
+        TEAM_TO_TICKER[TeamNameMatcher.normalize(n).upper()] = code
 
 class KalshiMatchResult(TypedDict, total=False):
     matched: bool
@@ -43,19 +106,8 @@ def price_to_prob(price) -> Optional[float]:
         return max(0.0, min(1.0, p))
     except: return None
 
-def _parse_market_date(raw) -> Optional[datetime]:
-    if not raw: return None
-    try:
-        if isinstance(raw, (int, float)):
-            return datetime.fromtimestamp(float(raw) / 1000.0, tz=pytz.UTC)
-        dt = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
-        if dt.tzinfo is None: dt = dt.replace(tzinfo=pytz.UTC)
-        return dt
-    except: return None
-
 class KalshiIntegrator:
     def __init__(self, api_key: str = None, api_secret: str = None):
-        # Load keys from secrets if not provided
         if not api_key:
             try:
                 api_key = st.secrets.get("KALSHI_API_KEY")
@@ -64,18 +116,12 @@ class KalshiIntegrator:
 
         self.api_key = api_key
         self.api_secret = api_secret
-
-        # --- CORRECT URLS ---
-        # Authenticated Trading
         self.prod_url = "https://trading-api.kalshi.com/trade-api/v2"
-        # Public Market Data (No Auth Required)
         self.public_url = "https://api.elections.kalshi.com/trade-api/v2"
         
-        # Decide which URL to use for authenticated calls (if any)
         self.api_url = self.prod_url if (self.api_key and self.api_secret) else self.public_url
         self.headers = {"Content-Type": "application/json", "Accept": "application/json"}
         
-        # RSA Setup (Only needed for trading, not data fetching)
         self._private_key = None
         self._auth_ready = False
         if self.api_key and self.api_secret:
@@ -93,11 +139,9 @@ class KalshiIntegrator:
                 logger.warning(f"Kalshi Auth Error: {e}")
 
         self._markets_cache = {}
-        self._cache_time = {}
         self.last_error = None
 
     def _sign_request(self, method, path, timestamp):
-        """Sign request for authenticated actions (buying/selling)."""
         if not self._private_key: return ""
         try:
             from cryptography.hazmat.primitives import hashes
@@ -112,41 +156,7 @@ class KalshiIntegrator:
             return base64.b64encode(sig).decode('utf-8')
         except: return ""
 
-    def _make_authenticated_request(self, method, endpoint, params=None):
-        """Authenticated request wrapper for trading actions."""
-        import time as tm
-        url = f"{self.prod_url}{endpoint}"
-        timestamp = str(int(tm.time() * 1000))
-        headers = self.headers.copy()
-        
-        if self._auth_ready:
-            path = endpoint.split('?')[0]
-            sig = self._sign_request(method.upper(), path, timestamp)
-            headers.update({
-                "KALSHI-ACCESS-KEY": self.api_key,
-                "KALSHI-ACCESS-SIGNATURE": sig,
-                "KALSHI-ACCESS-TIMESTAMP": timestamp
-            })
-            
-        try:
-            if method == "GET": 
-                resp = requests.get(url, headers=headers, params=params, timeout=10)
-            else: 
-                resp = requests.post(url, headers=headers, json=params, timeout=10)
-            
-            if resp.status_code == 200: 
-                self.last_error = None
-                return resp.json()
-            else:
-                self.last_error = f"{resp.status_code}: {resp.text}"
-                logger.error(f"Kalshi Auth API Error: {self.last_error}")
-        except Exception as e:
-            self.last_error = str(e)
-            logger.error(f"Kalshi Connection Error: {e}")
-        return None
-
     def _make_public_request(self, endpoint, params=None):
-        """Always uses the public URL for data fetching to avoid auth/rate-limit errors."""
         url = f"{self.public_url}{endpoint}"
         try:
             resp = requests.get(url, headers={"Accept": "application/json"}, params=params, timeout=10)
@@ -158,29 +168,21 @@ class KalshiIntegrator:
                 return self._make_public_request(endpoint, params)
             else:
                 self.last_error = f"{resp.status_code}: {resp.text}"
-                logger.error(f"Kalshi Public API Error {resp.status_code}: {resp.text}")
                 return None
         except Exception as e:
             self.last_error = str(e)
-            logger.error(f"Kalshi Connection Error: {e}")
             return None
 
     def get_todays_events(self, sport_ticker=None):
-        """
-        Fetch ONLY events closing in the next 48 hours.
-        This is the most efficient way to find 'Today's Games'.
-        """
         now = int(time.time())
         future = now + (48 * 60 * 60)
-        
         target_series = [sport_ticker] if sport_ticker else CORE_SERIES
-        all_events = []
-
-        # Cache key based on sport_ticker or 'all'
-        cache_key = f"events_{sport_ticker or 'all'}_{now // 300}" # 5 min cache bucket
+        cache_key = f"events_{sport_ticker or 'all'}_{now // 300}"
+        
         if cache_key in self._markets_cache:
             return self._markets_cache[cache_key]
 
+        all_events = []
         for series in target_series:
             params = {
                 "series_ticker": series,
@@ -190,144 +192,133 @@ class KalshiIntegrator:
                 "with_nested_markets": "true",
                 "limit": 100
             }
-            
             data = self._make_public_request("/events", params)
             if data and "events" in data:
-                events = data["events"]
-                if events:
-                    # Flatten markets inside events for easier consumption
-                    for e in events:
-                        markets = e.get('markets', [])
-                        # Augment markets with event info
-                        for m in markets:
-                            m['event_title'] = e.get('title')
-                            m['event_ticker'] = e.get('event_ticker')
-                            m['sport'] = series
-                        all_events.extend(markets)
+                # Add series context to markets
+                for e in data["events"]:
+                    for m in e.get("markets", []):
+                        m['event_title'] = e.get('title')
+                        m['event_ticker'] = e.get('event_ticker') # Critical for matching
+                        m['series'] = series
+                        all_events.append(m)
         
         self._markets_cache[cache_key] = all_events
         return all_events
 
-    # --- COMPATIBILITY METHODS FOR STREAMLIT APP ---
-    
     def get_sports_markets(self):
-        """Alias for get_todays_events (used by health check)."""
-        return self.get_todays_events()
-
-    def get_markets(self, **kwargs):
-        """Standard market fetcher."""
         return self.get_todays_events()
 
     def get_game_markets_for_events(self, league="NBA"):
-        """Wrapper to get markets filtered by league."""
-        sport_map = {
-            'NBA': 'KXNBA', 'NFL': 'KXNFL', 
-            'NHL': 'KXNHL', 'MLB': 'KXMLB',
-            'NCAAF': 'KXNCAAF', 'NCAAB': 'KXNCAAB'
-        }
+        sport_map = {'NBA': 'KXNBA', 'NFL': 'KXNFL', 'NHL': 'KXNHL', 'MLB': 'KXMLB'}
         ticker = sport_map.get(league, 'KXNBA')
         return self.get_todays_events(ticker)
 
     def filter_markets_closing_today(self, markets):
-        """Filters a list of markets to those closing today."""
         if not markets: return []
         today = datetime.now(pytz.UTC).date()
-        filtered = []
-        for m in markets:
-            dt = _parse_market_date(m.get("close_time"))
-            if dt and dt.date() == today:
-                filtered.append(m)
-        return filtered
+        # Accept markets closing today OR tomorrow (timezone safety)
+        return [m for m in markets if _parse_market_date(m.get("close_time")) and abs((_parse_market_date(m.get("close_time")).date() - today).days) <= 1]
 
-    def get_orderbook(self, ticker: str):
-        """Fetch orderbook for a specific market ticker."""
+    def get_orderbook(self, ticker):
         data = self._make_public_request(f"/markets/{ticker}/orderbook", {"depth": 5})
-        if data and 'orderbook' in data:
-            return data['orderbook']
-        return None
+        return data.get('orderbook') if data else None
 
-    # --- MATCHING LOGIC ---
-
+    # --- ENHANCED MATCHING LOGIC ---
     def get_game_market(self, home_team, away_team, sport="NBA", game_time=None):
-        """High-level matcher: Finds the best market for a specific game."""
-        sport_map = {
-            'nba': 'KXNBA', 'basketball': 'KXNBA',
-            'nfl': 'KXNFL', 'football': 'KXNFL',
-            'nhl': 'KXNHL', 'hockey': 'KXNHL',
-            'mlb': 'KXMLB', 'baseball': 'KXMLB',
-            'ncaaf': 'KXNCAAF', 'college football': 'KXNCAAF',
-            'ncaab': 'KXNCAAB', 'college basketball': 'KXNCAAB'
-        }
+        sport_map = {'nba': 'KXNBA', 'nfl': 'KXNFL', 'nhl': 'KXNHL', 'mlb': 'KXMLB'}
         series_ticker = sport_map.get(sport.lower(), "KXNBA")
-        
-        # 1. Fetch relevant events (markets)
         markets = self.get_todays_events(series_ticker)
         
-        # 2. Normalize input teams
-        norm_home = TeamNameMatcher.normalize(home_team)
-        norm_away = TeamNameMatcher.normalize(away_team)
+        # 1. Look up abbreviations (e.g. "Golden State" -> "GSW")
+        home_norm = TeamNameMatcher.normalize(home_team).upper()
+        away_norm = TeamNameMatcher.normalize(away_team).upper()
+        
+        home_code = TEAM_TO_TICKER.get(home_norm)
+        away_code = TEAM_TO_TICKER.get(away_norm)
         
         best_market = None
         best_score = 0.0
-        
-        # 3. Match Logic
+        match_type = "none"
+
         for m in markets:
-            # Check event title (usually "Home vs Away")
-            event_title = m.get("event_title", "").lower()
-            event_norm = TeamNameMatcher.normalize(event_title)
-            
-            # Check market title/subtitle
+            event_ticker = str(m.get("event_ticker", "")).upper() # e.g. KXNBA-23NOV-GSW-LAL
             market_text = (m.get("title", "") + " " + m.get("subtitle", "")).lower()
-            market_norm = TeamNameMatcher.normalize(market_text)
             
-            full_text_norm = event_norm + " " + market_norm
-
-            # Match score
-            home_score = TeamNameMatcher.similarity_score(norm_home, full_text_norm)
-            away_score = TeamNameMatcher.similarity_score(norm_away, full_text_norm)
-            
-            if home_score > 0.4 and away_score > 0.4:
-                avg_score = (home_score + away_score) / 2
-                
-                # Boost "Winner" markets
-                if "winner" in market_text or "win" in market_text:
-                    avg_score += 0.1
-                
-                if avg_score > best_score:
-                    best_score = avg_score
+            # --- STRATEGY A: Ticker Code Match (Most Accurate) ---
+            if home_code and away_code:
+                if f"-{home_code}-" in event_ticker and f"-{away_code}" in event_ticker:
                     best_market = m
+                    best_score = 1.0
+                    match_type = "ticker_code"
+                    break # Exact match found
+                
+                # Try reversed ticker just in case
+                if f"-{away_code}-" in event_ticker and f"-{home_code}" in event_ticker:
+                    best_market = m
+                    best_score = 1.0
+                    match_type = "ticker_code_rev"
+                    break
 
+            # --- STRATEGY B: Fuzzy Text Match (Fallback) ---
+            if best_score < 1.0:
+                event_title = m.get("event_title", "").lower()
+                # Use normalized names for similarity
+                h_score = TeamNameMatcher.similarity_score(home_norm.lower(), event_title + market_text)
+                a_score = TeamNameMatcher.similarity_score(away_norm.lower(), event_title + market_text)
+                
+                # Check for "Winner" or "Win" to prioritize game lines over props
+                is_winner_market = "win" in market_text
+                
+                if h_score > 0.45 and a_score > 0.45:
+                    avg = (h_score + a_score) / 2
+                    if is_winner_market: avg += 0.15 # Boost Winner markets
+                    
+                    if avg > best_score:
+                        best_score = avg
+                        best_market = m
+                        match_type = "fuzzy"
+
+        # Prepare Result
         res = {
             "kalshi_available": False, 
             "kalshi_prob": None, 
-            "kalshi_match_debug": "no_match",
+            "kalshi_match_debug": f"No match (Codes: {home_code}/{away_code})",
             "kalshi_label": None
         }
 
         if best_market and best_score > 0.55:
-            # Extract probability
+            # Determine Probability
             yes_price = price_to_prob(best_market.get("yes_bid", 0))
-            market_subtitle = best_market.get("subtitle", "").lower()
+            subtitle = best_market.get("subtitle", "").lower()
             
-            # Determine if "Yes" means Home or Away wins
-            is_home_winner = norm_home in TeamNameMatcher.normalize(market_subtitle)
+            # Logic: If subtitle contains Home Team Name, prob = Yes Price
+            # If subtitle contains Away Team Name, prob = 1 - Yes Price
+            is_home_sub = home_norm.lower() in subtitle
+            is_away_sub = away_norm.lower() in subtitle
             
             final_prob = yes_price
-            if not is_home_winner and yes_price:
+            
+            # If ticker match, we can be more precise
+            if match_type.startswith("ticker"):
+                # If market title is just the home team code? 
+                # Usually Kalshi subtitle is "Golden State to win"
+                pass
+            
+            # Fallback logic for binary markets
+            if is_away_sub and not is_home_sub and yes_price:
                 final_prob = 1.0 - yes_price
 
             res.update({
                 "kalshi_available": True,
                 "kalshi_prob": final_prob,
-                "kalshi_label": best_market.get("event_title"),
-                "kalshi_match_debug": "match_found",
+                "kalshi_label": best_market.get("event_title", best_market.get("title")),
+                "kalshi_match_debug": f"Match: {match_type} ({best_score:.2f})",
                 "market_ticker": best_market.get("ticker"),
                 "kalshi_volume": best_market.get("volume")
             })
             
         return res
 
-# Global Helper
 def match_game_to_kalshi(league, home, away, time, integrator=None, status="open"):
     k = integrator or KalshiIntegrator()
     r = k.get_game_market(home, away, league, time)
