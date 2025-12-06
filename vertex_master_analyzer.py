@@ -143,7 +143,7 @@ class VertexMasterAnalyzer:
         features.update(self._get_sentiment_features(game))
         features.update(self._get_local_ml_features(game))
         features.update(self._get_theover_features(game))
-        features.update(self._get_kalshi_features(game, kalshi_info))
+        features.update(self._get_kalshi_features(game, league, kalshi_info))
         features.update(self._calculate_derived_features(features))
 
         return features
@@ -424,7 +424,7 @@ class VertexMasterAnalyzer:
         return base
 
     def _get_kalshi_features(
-        self, game: Dict[str, Any], prefetch_info: Optional[Dict[str, Any]] = None
+        self, game: Dict[str, Any], league: str, prefetch_info: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """Fetch Kalshi probability for a game via the shared integrator."""
         feats: Dict[str, Any] = {
@@ -446,7 +446,8 @@ class VertexMasterAnalyzer:
         try:
             home = game.get("home_team", "")
             away = game.get("away_team", "")
-            league = game.get("league") or game.get("sport_key") or "NBA"
+            # Always use the normalized league from analyze_all_games to avoid sport_key mismatches
+            league = league or game.get("league") or game.get("sport_key") or "NBA"
 
             # CRITICAL FIX: Ensure game_dt is defined
             game_time = game.get("commence_time") or game.get("game_time")
@@ -652,7 +653,21 @@ class VertexMasterAnalyzer:
             try:
                 # League detection
                 skey = game.get("sport_key", "").lower()
-                game_league = "NBA" if "nba" in skey else ("NFL" if "nfl" in skey else ("NCAAB" if "ncaab" in skey else league))
+                league_map = {
+                    "nba": "NBA",
+                    "basketball_nba": "NBA",
+                    "nfl": "NFL",
+                    "americanfootball_nfl": "NFL",
+                    "ncaab": "NCAAB",
+                    "basketball_ncaab": "NCAAB",
+                    "ncaaf": "NCAAF",
+                    "americanfootball_ncaaf": "NCAAF",
+                    "nhl": "NHL",
+                    "icehockey_nhl": "NHL",
+                    "mlb": "MLB",
+                    "baseball_mlb": "MLB",
+                }
+                game_league = league_map.get(skey, league)
 
                 # Prefetch Kalshi
                 kalshi_info = None
