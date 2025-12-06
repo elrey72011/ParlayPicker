@@ -1,0 +1,15 @@
+from app_core.kalshi_integrator import KalshiIntegrator
+import json
+
+k = KalshiIntegrator()
+print("\n🔎 Searching for Today's NBA Games on Kalshi...")
+events = k.get_todays_events("KXNBA")
+
+if not events:
+    print("❌ No NBA events found closing in next 48h.")
+else:
+    print(f"✅ Found {len(events)} NBA events:")
+    for e in events:
+        print(f"   - {e['title']} (Ticker: {e['event_ticker']})")
+        for m in e.get('markets', [])[:1]: # Show first market
+            print(f"     Market: {m['ticker']} | Yes Bid: {m.get('yes_bid', 0)} cents")
