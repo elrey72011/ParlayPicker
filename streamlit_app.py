@@ -8922,29 +8922,20 @@ with main_tab1:
                             ml_predictor = st.session_state.get('ml_predictor')
                             
                             # Create analyzer with TheOver data
-                            analyzer = VertexMasterAnalyzer(
-                                odds_api_client=None,
-                                sportsdata_clients=sportsdata_clients if 'sportsdata_clients' in locals() else {},
-                                apisports_clients={
-                                    'nba': basketball_client if 'basketball_client' in locals() else None,
-                                    'nfl': apisports_client if 'apisports_client' in locals() else None,
-                                    'nhl': hockey_client if 'hockey_client' in locals() else None,
-                                },
-                                sentiment_analyzer=sentiment_analyzer,
-                                local_ml_predictor=ml_predictor,
-                                theover_data={
-                                    'spreads': theover_spreads_data,
-                                    'totals': theover_totals_data,
-                                },
-                                kalshi_integrator=kalshi_int,
-                                use_kalshi=st.session_state.get('kalshi_enabled', True),
-                            )
-                            logger.info(
-                                f"[Kalshi ANALYZER] use_kalshi={analyzer.use_kalshi}, "
-                                f"integrator_is_none={analyzer.kalshi is None}"
-                            )
-
-                            results_df = analyzer.analyze_all_games(all_games, league='multi')
+                            # NEW WAY (Uses your fix)
+                            if st.button("🚀 Run Vertex AI Master Analysis", key="vertex_master_btn"):
+                                with st.spinner("Consolidating all data sources..."):
+                                    try:
+                                        # 1. Create the analyzer using the factory function
+                                        analyzer = create_vertex_master_analyzer()
+                                        
+                                        # 2. Run analysis
+                                        results_df = analyzer.analyze_all_games(all_games, league='multi')
+                                        
+                                        # ... (Rest of your existing display logic) ...
+                                        
+                                    except Exception as e:
+                                        st.error(f"Analysis failed: {e}")
                             
                             if not results_df.empty:
                                 st.success(f"✅ Analysis complete! Found {len(results_df)} opportunities")
