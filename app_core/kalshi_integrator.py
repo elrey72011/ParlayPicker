@@ -112,9 +112,14 @@ def match_game_to_kalshi(
     """Attempt to match a game to a Kalshi market with explicit reasons."""
 
     league_norm = normalize_name(league)
-    logging.info(
-        f"[Kalshi f_k_g] match_game_to_kalshi league={league_norm} home={home_team} "
-        f"away={away_team} time={game_time} status={status} integrator_none={integrator is None}"
+    logger.info(
+        "[KALSHI MATCH] league=%s home=%s away=%s game_dt=%s integrator_none=%s status=%s",
+        league if "league" in locals() else None,
+        home_team,
+        away_team,
+        game_time if "game_time" in locals() else game_time,
+        integrator is None if "integrator" in locals() else False,
+        status if "status" in locals() else None,
     )
     if league_norm and league_norm not in SUPPORTED_LEAGUES:
         return KalshiMatchResult(
@@ -162,9 +167,10 @@ def match_game_to_kalshi(
             reason=f"api_error:{short_err}",
         )
 
-    logging.info(
-        f"[Kalshi f_k_g] candidate_markets={len(markets) if markets is not None else 0} "
-        f"example={(markets[0].get('title') or markets[0].get('ticker')) if markets else 'NONE'} status={status}"
+    logger.info(
+        "[KALSHI MATCH] candidates=%s example_title=%s",
+        len(markets) if markets else 0,
+        (markets[0].get("title") if markets else "NONE"),
     )
 
     if not markets:
@@ -222,11 +228,14 @@ def match_game_to_kalshi(
 
         team_overlap_found = True
 
-        # Date proximity (same calendar day)
+        # Date proximity (soft window to debug token matching)
         market_date = _parse_kalshi_date(market.get("close_time") or market.get("event_date"))
-        if game_date and market_date and market_date.date() != game_date:
-            date_mismatch_seen = True
-            continue
+        if game_date and market_date:
+            day_diff = abs((market_date.date() - game_date).days)
+            # TODO: re-enable strict date filter after we confirm matches
+            if day_diff > 2:
+                date_mismatch_seen = True
+                continue
 
         # Score: overlapping tokens + small bonus if ticker looks like a game-level market
         score = float(home_overlap + away_overlap)
@@ -241,14 +250,11 @@ def match_game_to_kalshi(
         reason = "team_mismatch"
         if team_overlap_found and date_mismatch_seen:
             reason = "date_mismatch"
-        logging.info(
-            f"[Kalshi f_k_g] NO MATCH | home={home_team} away={away_team} date={game_dt} reason={reason}"
-        )
         logger.info(
-            "fetch_kalshi_for_game: no_market_match home=%s away=%s date=%s",
+            "[KALSHI MATCH] NO_MATCH home=%s away=%s game_dt=%s",
             home_team,
             away_team,
-            game_dt,
+            game_dt if "game_dt" in locals() else game_time,
         )
         return KalshiMatchResult(
             matched=False,
@@ -326,10 +332,10 @@ def match_game_to_kalshi(
     probability = max(0.0, min(1.0, float(probability)))
 
     logger.info(
-        "fetch_kalshi_for_game: MATCH home=%s away=%s date=%s title=%s ticker=%s",
+        "[KALSHI MATCH] MATCH home=%s away=%s game_dt=%s title=%s ticker=%s",
         home_team,
         away_team,
-        game_dt,
+        game_dt if "game_dt" in locals() else game_time,
         best_market.get("title"),
         best_market.get("ticker"),
     )
