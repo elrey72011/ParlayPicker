@@ -652,7 +652,21 @@ class VertexMasterAnalyzer:
             try:
                 # League detection
                 skey = game.get("sport_key", "").lower()
-                game_league = "NBA" if "nba" in skey else ("NFL" if "nfl" in skey else ("NCAAB" if "ncaab" in skey else league))
+                league_map = {
+                    "nba": "NBA",
+                    "basketball_nba": "NBA",
+                    "nfl": "NFL",
+                    "americanfootball_nfl": "NFL",
+                    "ncaab": "NCAAB",
+                    "basketball_ncaab": "NCAAB",
+                    "ncaaf": "NCAAF",
+                    "americanfootball_ncaaf": "NCAAF",
+                    "nhl": "NHL",
+                    "icehockey_nhl": "NHL",
+                    "mlb": "MLB",
+                    "baseball_mlb": "MLB",
+                }
+                game_league = league_map.get(skey, league)
 
                 # Prefetch Kalshi
                 kalshi_info = None
