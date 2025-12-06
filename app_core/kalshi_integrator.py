@@ -1,15 +1,12 @@
 """
-Kalshi Integrator with Proper RSA-PSS Authentication & Improved Matching
+Kalshi Integrator: Uses Public Data API if no keys provided.
 This file goes in: app_core/kalshi_integrator.py
 """
 
-import copy
 import time
 import logging
 import re
-import string
-import uuid
-from datetime import datetime, timedelta
+from datetime import datetime
 import pytz
 import requests
 import streamlit as st
@@ -36,6 +33,7 @@ class KalshiMatchResult(TypedDict, total=False):
     reason: str
 
 SUPPORTED_LEAGUES = {"nba", "nfl", "mlb", "ncaaf", "ncaab", "nhl"}
+# Map common league codes to Kalshi Series Prefixes
 LEAGUE_SERIES_MAP = {
     "nba": "KXNBA",
     "nfl": "KXNFL",
@@ -74,6 +72,7 @@ def _find_best_market_match(
 ) -> Tuple[Optional[Dict[str, Any]], str]:
     if not markets: return None, "no_events"
 
+    # 1. Date Filter
     date_filtered = markets
     if game_dt:
         date_filtered = []
@@ -84,17 +83,22 @@ def _find_best_market_match(
         for m in markets:
             m_dt = _parse_market_date(m.get("close_time") or m.get("event_date"))
             if not m_dt: continue
-            if abs((m_dt.astimezone(pytz.UTC).date() - target_date).days) <= 1:
+            # Kalshi markets often close a few hours after the game starts, 
+            # so we check if the market date is same day or next day
+            m_local = m_dt.astimezone(pytz.UTC).date()
+            if abs((m_local - target_date).days) <= 1:
                 date_filtered.append(m)
         
         if not date_filtered: return None, "date_mismatch"
     
+    # 2. Name Matching
     best_market = None
     best_score = 0.0
     norm_home = TeamNameMatcher.normalize(home_team)
     norm_away = TeamNameMatcher.normalize(away_team)
     
     for market in date_filtered:
+        # Strict Series Filter
         series = str(market.get("series_ticker") or "").upper()
         if league_code and league_code in LEAGUE_SERIES_MAP:
             expected = LEAGUE_SERIES_MAP[league_code]
@@ -102,18 +106,23 @@ def _find_best_market_match(
 
         title = market.get("title") or ""
         ticker = market.get("ticker") or ""
+        # Create a search string: "Chicago Bulls vs Miami Heat"
         market_norm = TeamNameMatcher.normalize(f"{title} {market.get('subtitle','')}")
         
+        # Token overlap check (More robust than exact string match)
         home_in = norm_home in market_norm
         away_in = norm_away in market_norm
         
         quality = 0.0
-        if home_in and away_in: quality = 1.0
+        if home_in and away_in: 
+            quality = 1.0
         else:
+            # Fuzzy fallback
             h_s = TeamNameMatcher.similarity_score(norm_home, market_norm)
             a_s = TeamNameMatcher.similarity_score(norm_away, market_norm)
-            if h_s > 0.4 and a_s > 0.4: quality = (h_s + a_s) / 2.0
+            if h_s > 0.45 and a_s > 0.45: quality = (h_s + a_s) / 2.0
             
+        # Boost Game/Spread/Total lines over player props
         if "GAME" in ticker or "SPREAD" in ticker: quality += 0.1
         
         if quality > best_score:
@@ -125,6 +134,10 @@ def _find_best_market_match(
 
 class KalshiIntegrator:
     def __init__(self, api_key: str = None, api_secret: str = None):
+        print("="*60)
+        print("🚀 KALSHI INTEGRATOR v4.0 (Public Data Fallback)")
+        print("="*60)
+        
         try:
             self.api_key = api_key or st.secrets.get("KALSHI_API_KEY")
             self.api_secret = api_secret or st.secrets.get("KALSHI_API_SECRET")
@@ -132,11 +145,21 @@ class KalshiIntegrator:
             self.api_key = api_key
             self.api_secret = api_secret
 
-        self.base_url = "https://api.kalshi.com/trade-api/v2"
-        self.demo_url = "https://demo-api.kalshi.co/trade-api/v2"
-        self.api_url = self.base_url if self.api_key else self.demo_url
+        # URL Configuration
+        self.prod_url = "https://api.kalshi.com/trade-api/v2"
+        # Public URL: Contains ALL real markets, requires NO auth for GET requests
+        self.public_url = "https://api.elections.kalshi.com/trade-api/v2"
+        
+        if self.api_key and self.api_secret:
+            self.api_url = self.prod_url
+            print(f"✅ Using Authenticated Production API")
+        else:
+            self.api_url = self.public_url
+            print(f"⚠️ No Keys Found: Using Public Read-Only API (Real Data)")
+
         self.headers = {"Content-Type": "application/json", "Accept": "application/json"}
         
+        # RSA Setup (Only needed if keys exist)
         self._private_key = None
         self._auth_ready = False
         if self.api_key and self.api_secret:
@@ -177,7 +200,8 @@ class KalshiIntegrator:
         timestamp = str(int(tm.time() * 1000))
         headers = self.headers.copy()
         
-        if self._auth_ready:
+        # Only sign if we have keys and are using Prod URL
+        if self._auth_ready and self.api_url == self.prod_url:
             path = endpoint.split('?')[0]
             sig = self._sign_request(method.upper(), path, timestamp)
             headers.update({
@@ -187,36 +211,67 @@ class KalshiIntegrator:
             })
             
         try:
-            if method == "GET": resp = requests.get(url, headers=headers, params=params, timeout=10)
-            else: resp = requests.post(url, headers=headers, json=params, timeout=10)
+            if method == "GET": 
+                resp = requests.get(url, headers=headers, params=params, timeout=10)
+            else: 
+                resp = requests.post(url, headers=headers, json=params, timeout=10)
             
-            if resp.status_code == 200: return resp.json()
-            if resp.status_code == 429:
-                time.sleep(1)
+            if resp.status_code == 200: 
+                return resp.json()
+            elif resp.status_code == 429:
+                logger.warning("Kalshi Rate Limit. Sleeping...")
+                time.sleep(1.0)
                 return self._make_authenticated_request(method, endpoint, params)
+            else:
+                logger.error(f"Kalshi API Error {resp.status_code}: {resp.text}")
         except Exception as e:
-            logger.error(f"Kalshi Req Error: {e}")
+            logger.error(f"Kalshi Connection Error: {e}")
         return None
 
     def get_sports_series(self):
+        """Fetch all sports series"""
         data = self._make_authenticated_request("GET", "/series", {"limit": 1000})
         if not data: return []
-        keywords = ['NFL', 'NBA', 'MLB', 'NHL', 'NCAAF', 'NCAAB']
-        return [s for s in data.get("series", []) if any(k in s.get('ticker','').upper() for k in keywords)]
+        
+        all_series = data.get("series", [])
+        # Filter for sports keywords in ticker or category
+        keywords = ['NFL', 'NBA', 'MLB', 'NHL', 'NCAAF', 'NCAAB', 'FOOTBALL', 'BASKETBALL']
+        
+        sports_series = []
+        for s in all_series:
+            t = s.get('ticker', '').upper()
+            c = s.get('category', '').upper()
+            if any(k in t or k in c for k in keywords):
+                sports_series.append(s)
+        return sports_series
 
     def get_markets(self, category="sports", status="open"):
+        """Fetch ALL markets for ALL sports series with pagination"""
         cache_key = f"{category}_{status}"
-        if cache_key in self._markets_cache: return self._markets_cache[cache_key]
+        now = time.time()
+        # 5 minute cache
+        if cache_key in self._markets_cache and now - self._cache_time.get(cache_key, 0) < 300:
+            return self._markets_cache[cache_key]
 
         series_list = self.get_sports_series()
+        if not series_list:
+            logger.warning("No sports series found (Check API URL/Connection)")
+            return []
+
         all_markets = []
         
-        priority = ["KXNBA", "KXNFL", "KXMLB", "KXNHL", "KXNCAAB"]
+        # Sort priority to ensure we get major sports first
+        priority = ["KXNBA", "KXNFL", "KXMLB", "KXNHL", "KXNCAAB", "KXNCAAF"]
         series_list.sort(key=lambda x: next((i for i,p in enumerate(priority) if x.get('ticker','').startswith(p)), 999))
+
+        print(f"Fetching markets for {len(series_list)} sports series...")
 
         for s in series_list:
             ticker = s.get('ticker')
+            
+            # Pagination loop for this series
             cursor = None
+            page = 0
             while True:
                 p = {"series_ticker": ticker, "limit": 100, "status": status}
                 if cursor: p["cursor"] = cursor
@@ -225,24 +280,34 @@ class KalshiIntegrator:
                 if not data: break
                 
                 ms = data.get("markets", [])
-                all_markets.extend(ms)
+                if ms:
+                    all_markets.extend(ms)
                 
                 cursor = data.get("cursor")
+                page += 1
+                
                 if not cursor: break
-                if len(ms) < 100: break
+                if page > 10: break # Safety limit
 
         self._markets_cache[cache_key] = all_markets
+        self._cache_time[cache_key] = now
+        print(f"✅ Loaded {len(all_markets)} total Kalshi markets")
         return all_markets
 
     def get_game_market(self, home_team, away_team, sport="NBA", game_time=None):
+        # 1. Fetch
         markets = self.get_markets()
         
+        # 2. Parse Date
         game_dt = None
         if game_time:
             try: game_dt = datetime.fromisoformat(str(game_time).replace("Z", "+00:00"))
             except: pass
             
-        best, reason = _find_best_market_match(home_team, away_team, game_dt, markets, sport.lower() if sport else None)
+        # 3. Match
+        best, reason = _find_best_market_match(
+            home_team, away_team, game_dt, markets, sport.lower() if sport else None
+        )
         
         res = {
             "kalshi_available": False, 
@@ -253,6 +318,7 @@ class KalshiIntegrator:
         
         if best:
             prob = None
+            # Prioritize implied probability, then orderbook
             for f in ["yes_bid_dollars", "last_price", "implied_prob"]:
                 if f in best:
                     p = price_to_prob(best[f])
@@ -270,13 +336,17 @@ class KalshiIntegrator:
             
         return res
 
+# Legacy Wrapper
 def match_game_to_kalshi(league, home, away, time, integrator=None, status="open"):
     k = integrator or KalshiIntegrator()
+    # Map 'ncaab' -> 'ncaab', 'nfl' -> 'nfl' for league mapping
     sport = next((c for c in SUPPORTED_LEAGUES if c in league.lower()), "nba")
     r = k.get_game_market(home, away, sport, time)
+    
     return KalshiMatchResult(
         matched=r["kalshi_available"],
         label=r.get("kalshi_label"),
         probability=r.get("kalshi_prob"),
-        reason=r.get("kalshi_match_debug")
+        reason=r.get("kalshi_match_debug"),
+        raw_event_id=r.get("market_ticker")
     )
