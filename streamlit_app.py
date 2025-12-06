@@ -8728,7 +8728,7 @@ with main_tab1:
             if st.button("🎯 Analyze with Vertex AI (Spreads + Totals)", key="vertex_analyze_combined_btn"):
                 with st.spinner("Running AI analysis on all picks... This may take a minute..."):
                     try:
-                        from vertex_master_analyzer import VertexMasterAnalyzer, show_vertex_master_analysis
+                        from app_core.vertex_master_analyzer import VertexMasterAnalyzer, show_vertex_master_analysis
                         
                         # Build games list from TheOver.ai data
                         all_games = []
@@ -9245,7 +9245,7 @@ if is_vertex_ai_enabled():
     st.subheader("🌟 Vertex AI Master Analysis (Advanced)")
     st.caption("Comprehensive analysis combining TheOddsAPI, TheOver.ai, sentiment, and more.")
 
-    from vertex_master_analyzer import VertexMasterAnalyzer, show_vertex_master_analysis
+    from app_core.vertex_master_analyzer import VertexMasterAnalyzer, show_vertex_master_analysis
 
     # MASTER ANALYSIS ENTRY POINT: results_df is built here and passed to show_vertex_master_analysis
     if st.button("🌟 Run Vertex AI Master Analysis", key="vertex_master_btn", type="secondary"):

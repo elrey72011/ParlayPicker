@@ -18,7 +18,7 @@ from typing import List, Dict, Any
 import pandas as pd
 
 from app_core.kalshi_integrator import KalshiIntegrator
-from vertex_master_analyzer import VertexMasterAnalyzer
+from app_core.vertex_master_analyzer import VertexMasterAnalyzer
 
 
 def _default_games() -> List[Dict[str, Any]]:
