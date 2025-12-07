@@ -424,10 +424,17 @@ class KalshiIntegrator:
             self.last_error = str(e)
             return None
 
-    def get_todays_events(self, sport_ticker=None):
+    def get_todays_events(self, sport_ticker=None, days_ahead=3):
+        """
+        Fetch Kalshi markets for upcoming games.
+        
+        Args:
+            sport_ticker: Specific sport series (e.g., "KXNBA")
+            days_ahead: How many days ahead to look (default 3)
+        """
         now = int(time.time())
-        start_window = now - (24 * 60 * 60)
-        future_window = now + (7 * 24 * 60 * 60)
+        start_window = now - (12 * 60 * 60)  # Look 12 hours back for games already started
+        future_window = now + (days_ahead * 24 * 60 * 60)  # Look N days ahead
         target_series = [sport_ticker] if sport_ticker else CORE_SERIES
         cache_key = f"events_{sport_ticker or 'all'}_{now // 300}"
         
@@ -436,18 +443,23 @@ class KalshiIntegrator:
 
         all_events = []
         seen_market_tickers = set()
+        
         for series in target_series:
+            # Try without time filters first to get ALL active markets
             params = {
                 "series_ticker": series,
-                "min_close_ts": start_window,
-                "max_close_ts": future_window,
                 "with_nested_markets": "true",
-                "limit": 100
+                "limit": 200,
+                "status": "active"
             }
+            
             data = self._make_public_request("/events", params)
             if not data or "events" not in data:
+                logger.warning(f"No events returned for {series}")
                 continue
 
+            logger.info(f"Found {len(data.get('events', []))} events for {series}")
+            
             for e in data.get("events", []):
                 for m in e.get("markets", []):
                     ticker = m.get("ticker")
@@ -456,8 +468,19 @@ class KalshiIntegrator:
                         m['event_title'] = e.get('title')
                         m['event_ticker'] = e.get('event_ticker')
                         m['series'] = series
-                        all_events.append(m)
+                        
+                        # Filter out long-term futures (championships, etc.)
+                        close_time = _parse_market_date(m.get("close_time"))
+                        if close_time:
+                            # Only include markets closing within the next N days
+                            days_until_close = (close_time - datetime.now(pytz.UTC)).days
+                            if days_until_close <= days_ahead:
+                                all_events.append(m)
+                                logger.debug(f"Added market: {m.get('title')} (closes in {days_until_close} days)")
+                            else:
+                                logger.debug(f"Skipped long-term market: {m.get('title')} (closes in {days_until_close} days)")
         
+        logger.info(f"Total markets after filtering: {len(all_events)}")
         self._markets_cache[cache_key] = all_events
         return all_events
 
