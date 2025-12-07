@@ -1096,12 +1096,15 @@ class KalshiIntegrator:
             return []
 
     def filter_markets_closing_today(self, markets: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """Filter markets to only those closing today (based on America/New_York date)."""
+        """Filter markets to only those closing today (America/New_York),
+        but fall back to all markets if none close today.
+        """
         from datetime import datetime, timezone
     
         if not markets:
             return []
     
+        # Get today range in UTC based on Eastern "today"
         min_dt, max_dt = self._get_today_datetime_range("America/New_York")
     
         filtered: List[Dict[str, Any]] = []
@@ -1113,10 +1116,9 @@ class KalshiIntegrator:
     
             close_dt = None
     
-            # Case 1: ISO 8601 string e.g. "2025-12-08T01:00:00Z"
+            # Case 1: ISO 8601 string like "2025-12-25T01:00:00Z"
             if isinstance(close_raw, str):
                 try:
-                    # Handle trailing 'Z' as UTC
                     iso_str = close_raw.replace("Z", "+00:00")
                     close_dt = datetime.fromisoformat(iso_str)
                     if close_dt.tzinfo is None:
@@ -1124,15 +1126,13 @@ class KalshiIntegrator:
                     else:
                         close_dt = close_dt.astimezone(timezone.utc)
                 except Exception:
-                    # If parsing fails, skip this one
                     continue
     
-            # Case 2: numeric timestamp (seconds or ms)
+            # Case 2: numeric timestamp (sec or ms)
             elif isinstance(close_raw, (int, float)):
                 try:
                     ts = float(close_raw)
-                    # Heuristic: if it's huge, assume ms
-                    if ts > 10**11:
+                    if ts > 10**11:  # assume ms
                         ts /= 1000.0
                     close_dt = datetime.fromtimestamp(ts, tz=timezone.utc)
                 except Exception:
@@ -1143,6 +1143,14 @@ class KalshiIntegrator:
     
             if min_dt <= close_dt <= max_dt:
                 filtered.append(m)
+    
+        # 🔁 Fallback: if no markets close today, use all markets
+        if not filtered:
+            logger.info(
+                "No Kalshi markets close today; falling back to all markets (%d).",
+                len(markets),
+            )
+            return markets
     
         return filtered
 
