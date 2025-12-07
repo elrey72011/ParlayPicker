@@ -436,6 +436,7 @@ class VertexMasterAnalyzer:
             "kalshi_volume": None,
             "kalshi_confidence": None,
             "kalshi_status": "no_market_match",
+            "kalshi_event_ticker": None,
         }
 
         if not getattr(self, "kalshi", None) or not getattr(self, "use_kalshi", True):
@@ -482,6 +483,7 @@ class VertexMasterAnalyzer:
                 debug_reason = market_info.get("reason") or market_info.get("kalshi_match_debug")
                 feats["kalshi_match_debug"] = str(debug_reason)
                 feats["kalshi_status"] = str(debug_reason)
+                feats["kalshi_event_ticker"] = market_info.get("raw_event_id") or market_info.get("kalshi_event_ticker")
 
             if not is_matched or prob is None:
                 return feats
