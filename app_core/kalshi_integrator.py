@@ -208,22 +208,35 @@ class KalshiIntegrator:
             return self._markets_cache[cache_key]
 
         all_events = []
+        seen_market_tickers = set()
         for series in target_series:
-            params = {
+            params_base = {
                 "series_ticker": series,
-                "status": "open",
                 "min_close_ts": start_window,
                 "max_close_ts": future_window,
                 "with_nested_markets": "true",
                 "limit": 100
             }
-            
-            data = self._make_public_request("/events", params)
-            if data and "events" in data:
-                events = data["events"]
-                for e in events:
+
+            # First try open markets (typical case)
+            for status_filter in ("open", None):
+                params = dict(params_base)
+                if status_filter:
+                    params["status"] = status_filter
+
+                data = self._make_public_request("/events", params)
+                if not data or "events" not in data:
+                    continue
+
+                for e in data.get("events", []):
                     # Flatten markets and attach event metadata
                     for m in e.get("markets", []):
+                        ticker = m.get("ticker")
+                        if ticker and ticker in seen_market_tickers:
+                            continue
+                        if ticker:
+                            seen_market_tickers.add(ticker)
+
                         m['event_title'] = e.get('title')
                         m['event_ticker'] = e.get('event_ticker') # e.g. KXNBA-23NOV-LAL-GSW
                         m['series'] = series
