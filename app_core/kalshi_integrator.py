@@ -44,8 +44,8 @@ MAX_LINE_DIFF = 3.0
 
 from datetime import datetime, timezone
 
-nba_markets = self.get_game_markets_for_events("NBA")
-print(f"NBA markets returned (all): {len(nba_markets)}")
+#nba_markets = self.get_game_markets_for_events("NBA")
+#print(f"NBA markets returned (all): {len(nba_markets)}")
 
 # Inspect a few close_time values
 for m in nba_markets[:5]:
