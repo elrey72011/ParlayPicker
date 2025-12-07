@@ -681,6 +681,28 @@ class VertexMasterAnalyzer:
                 kalshi_info = None
                 if getattr(self, "kalshi", None) and getattr(self, "use_kalshi", True):
                     try:
+                        # Add this RIGHT BEFORE line 684 (before the kalshi_info = match_game_to_kalshi call)
+
+                        # Debug: Check what we're trying to match
+                        logger.info(f"\n{'='*80}")
+                        logger.info(f"KALSHI DEBUG - Attempting to match:")
+                        logger.info(f"  Home: {game.get('home_team', '')}")
+                        logger.info(f"  Away: {game.get('away_team', '')}")
+                        logger.info(f"  League: {game_league}")
+                        logger.info(f"  Integrator available: {integrator is not None}")
+                        logger.info(f"{'='*80}")
+                        
+                        # Also let's check what markets are available (do this once at the start)
+                        if integrator:
+                            test_markets = integrator.get_todays_events("KXNBA")
+                            logger.info(f"\nKALSHI: Found {len(test_markets)} NBA markets")
+                            if test_markets:
+                                sample = test_markets[0]
+                                logger.info(f"Sample market structure:")
+                                logger.info(f"  event_ticker: {sample.get('event_ticker')}")
+                                logger.info(f"  event_title: {sample.get('event_title')}")
+                                logger.info(f"  title: {sample.get('title')}")
+                                logger.info(f"  subtitle: {sample.get('subtitle')}")
                         kalshi_info = match_game_to_kalshi(
                             game_league, game.get("home_team",""), game.get("away_team",""), game.get("commence_time"), integrator=self.kalshi
                         )
