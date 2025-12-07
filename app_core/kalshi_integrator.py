@@ -20,6 +20,11 @@ from app_core.team_name_matcher import TeamNameMatcher
 logger = logging.getLogger(__name__)
 
 
+def _debug_log(message: str, *args: Any) -> None:
+    if DEBUG_KALSHI_MATCHING:
+        logger.info(message, *args)
+
+
 class KalshiMatchResult(TypedDict, total=False):
     matched: bool
     label: str
@@ -57,6 +62,7 @@ FUTURE_EXCLUDE_KEYWORDS = {
 
 TEAM_FUZZY_THRESHOLD = 2.0
 MAX_LINE_DIFF = 3.0
+DEBUG_KALSHI_MATCHING = False
 
 def price_to_prob(price) -> Optional[float]:
     """Convert a Kalshi price (dollars or fraction) to probability.
@@ -88,7 +94,10 @@ def _normalize_market_text(*parts: str) -> str:
 
 
 def _parse_market_date(raw) -> Optional[datetime]:
-    """Parse Kalshi timestamps (ms or iso) into a date for day-level matching."""
+    """Parse Kalshi timestamps (ms or iso) into a timezone-aware datetime.
+
+    Returns None when parsing fails so callers can skip date-based filtering gracefully.
+    """
 
     if raw is None or raw == "":
         return None
@@ -96,9 +105,16 @@ def _parse_market_date(raw) -> Optional[datetime]:
     try:
         # Kalshi close_time may be milliseconds since epoch
         if isinstance(raw, (int, float)):
-            return datetime.fromtimestamp(float(raw) / 1000.0)
+            # Some responses are already in seconds; treat values above year 2050 as ms
+            value = float(raw)
+            if value > 10_000_000_000:
+                value = value / 1000.0
+            return datetime.fromtimestamp(value, tz=pytz.UTC)
         # ISO timestamp string
-        return datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+        dt = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=pytz.UTC)
+        return dt.astimezone(pytz.UTC)
     except Exception:
         return None
 
@@ -136,6 +152,7 @@ def match_game_to_kalshi(
         integrator is None if "integrator" in locals() else False,
         status if "status" in locals() else None,
     )
+    _debug_log("[KALSHI MATCH DEBUG] normalized league=%s", league_norm)
     if league_norm and league_norm not in SUPPORTED_LEAGUES:
         return KalshiMatchResult(
             matched=False,
@@ -222,12 +239,14 @@ def match_game_to_kalshi(
 
     best_market: Optional[Dict[str, Any]] = None
     best_score = 0.0
+    best_day_diff: Optional[int] = None
 
     for market in markets:
         series = str(market.get("series_ticker") or "").upper()
         if league_norm and league_norm in LEAGUE_SERIES_MAP:
             expected = LEAGUE_SERIES_MAP[league_norm]
             if expected and series and not series.startswith(expected):
+                _debug_log("[KALSHI MATCH DEBUG] skip series %s for expected %s", series, expected)
                 continue
 
         title = market.get("title") or ""
@@ -238,6 +257,7 @@ def match_game_to_kalshi(
         # 🚫 Exclude obvious futures / UCL / tournament markets
         lower_text = (title + " " + subtitle + " " + ticker).lower()
         if any(key in lower_text for key in FUTURE_EXCLUDE_KEYWORDS):
+            _debug_log("[KALSHI MATCH DEBUG] excluded future %s", title)
             continue
         market_tokens = set(market_text.split())
 
@@ -255,17 +275,35 @@ def match_game_to_kalshi(
             continue
 
         market_date = _parse_market_date(market.get("close_time") or market.get("event_date"))
-        #if game_dt and market_date and market_date.date() != game_dt.date():
-        #    continue
+        day_diff = None
+        if game_dt and market_date:
+            day_diff = abs((market_date.date() - game_dt.date()).days)
+            if day_diff > 7:
+                _debug_log(
+                    "[KALSHI MATCH DEBUG] skip market %s date diff %s", ticker, day_diff
+                )
+                continue
 
         # Score: more overlapping tokens = better; prefer game-level tickers.
         score = float(home_overlap + away_overlap)
         if ticker and "GAME" in ticker.upper():
             score += 0.5
+        if team_hits == 2:
+            score += 0.25
+
+        _debug_log(
+            "[KALSHI MATCH DEBUG] candidate %s score=%.2f home_hit=%s away_hit=%s day_diff=%s",
+            ticker,
+            score,
+            home_overlap,
+            away_overlap,
+            day_diff,
+        )
 
         if score > best_score:
             best_score = score
             best_market = market
+            best_day_diff = day_diff
 
     if not best_market:
         logger.info(
@@ -275,6 +313,12 @@ def match_game_to_kalshi(
             away_team,
             game_dt,
             len(markets) if markets else 0,
+        )
+        _debug_log(
+            "[KALSHI MATCH DEBUG] no candidate cleared filters (league=%s, home_tokens=%s, away_tokens=%s)",
+            league_norm,
+            home_tokens,
+            away_tokens,
         )
         return KalshiMatchResult(
             matched=False,
@@ -286,6 +330,12 @@ def match_game_to_kalshi(
         )
 
     if best_score < TEAM_FUZZY_THRESHOLD:
+        _debug_log(
+            "[KALSHI MATCH DEBUG] best_score %.2f below threshold %.2f for ticker=%s",
+            best_score,
+            TEAM_FUZZY_THRESHOLD,
+            best_market.get("ticker") if best_market else None,
+        )
         return KalshiMatchResult(
             matched=False,
             label="",
@@ -352,12 +402,14 @@ def match_game_to_kalshi(
     probability = max(0.0, min(1.0, float(probability)))
 
     logger.info(
-        "[KALSHI MATCH] MATCH home=%s away=%s game_dt=%s title=%s ticker=%s",
+        "[KALSHI MATCH] MATCH home=%s away=%s game_dt=%s title=%s ticker=%s score=%.2f day_diff=%s",
         home_team,
         away_team,
         game_dt if "game_dt" in locals() else game_time,
         best_market.get("title"),
         best_market.get("ticker"),
+        best_score,
+        best_day_diff,
     )
 
     result = KalshiMatchResult(
@@ -403,168 +455,21 @@ def fetch_kalshi_for_game(
     status: Optional[str] = "open",
 ) -> Optional[Dict[str, Any]]:
     """Legacy wrapper retained for compatibility. Prefer get_match_for_game."""
-
-    logger.info(
-        "fetch_kalshi_for_game: home=%s away=%s date=%s integrator_none=%s status=%s",
-        home_team,
-        away_team,
-        game_date,
-        integrator is None,
-        status,
+    match_result = match_game_to_kalshi(
+        league="",
+        home_team=home_team,
+        away_team=away_team,
+        game_time=game_date,
+        integrator=integrator,
+        status=status,
     )
-
-    kalshi = integrator or KalshiIntegrator()
-
-    try:
-        markets = kalshi.get_markets(status=status)
-    except Exception:
-        markets = []
-
-    logger.info(
-        "fetch_kalshi_for_game: candidates=%s example_title=%s",
-        len(markets) if markets else 0,
-        (markets[0].get("title") if markets else "NONE"),
-    )
-
-    norm_home = _normalize_market_text(home_team)
-    norm_away = _normalize_market_text(away_team)
-
-    def _meaningful_tokens(name: str) -> List[str]:
-        if not name:
-            return []
-        tokens = _normalize_market_text(name).split()
-        stopwords = {
-            "state",
-            "university",
-            "fc",
-            "cf",
-            "club",
-            "the",
-            "and",
-            "at",
-            "city",
-            "united",
-        }
-        return [t for t in tokens if len(t) > 2 and t not in stopwords]
-
-    home_tokens = set(_meaningful_tokens(home_team))
-    away_tokens = set(_meaningful_tokens(away_team))
-
-    best_market: Optional[Dict[str, Any]] = None
-    best_score = 0.0
-
-    for market in markets:
-        title = market.get("title") or ""
-        subtitle = market.get("subtitle") or ""
-        ticker = market.get("ticker") or ""
-        market_text = _normalize_market_text(title, subtitle, ticker)
-
-        # 🚫 Exclude obvious futures / UCL / tournament markets
-        lower_text = (title + " " + subtitle + " " + ticker).lower()
-        if any(key in lower_text for key in FUTURE_EXCLUDE_KEYWORDS):
-            continue
-
-        market_tokens = set(market_text.split())
-
-        home_overlap = len(home_tokens & market_tokens)
-        away_overlap = len(away_tokens & market_tokens)
-
-        team_hits = 0
-        if home_overlap > 0:
-            team_hits += 1
-        if away_overlap > 0:
-            team_hits += 1
-
-        # Require at least SOME overlap with at least one team
-        if team_hits == 0:
-            continue
-
-        market_date = _parse_market_date(market.get("close_time") or market.get("event_date"))
-        if game_date and market_date and market_date.date() != game_date.date():
-            continue
-
-        # Score: more overlapping tokens = better; prefer game-level tickers.
-        score = float(home_overlap + away_overlap)
-        if ticker and "GAME" in ticker.upper():
-            score += 0.5
-
-        if score > best_score:
-            best_score = score
-            best_market = market
-
-    if not best_market:
-        logger.info(
-            "fetch_kalshi_for_game: NO_MATCH home=%s away=%s date=%s num_markets=%s",
-            home_team,
-            away_team,
-            game_date,
-            len(markets) if markets else 0,
-        )
-        return {
-            "kalshi_label": None,
-            "kalshi_probability": None,
-            "kalshi_volume": None,
-            "kalshi_match_debug": "no_market_match",
-        }
-
-    logger.info(
-        "fetch_kalshi_for_game: MATCH home=%s away=%s date=%s title=%s ticker=%s",
-        home_team,
-        away_team,
-        game_date,
-        best_market.get("title"),
-        best_market.get("ticker"),
-    )
-
-    prob_fields = [
-        "yes_bid_dollars",
-        "yes_ask_dollars",
-        "last_price",
-        "last_trade_price",
-        "yes_bid",
-        "yes_ask",
-    ]
-
-    probability: Optional[float] = None
-    for field in prob_fields:
-        candidate = best_market.get(field)
-        prob_candidate = price_to_prob(candidate)
-        if prob_candidate is not None:
-            probability = prob_candidate
-            break
-
-    # Fall back to live orderbook if available
-    if probability is None and best_market.get("ticker"):
-        try:
-            order = kalshi.get_orderbook(best_market.get("ticker")) or {}
-            yes_levels = None
-            for key in ("yes", "orderbook_yes", "levels"):
-                level = (order.get(key) or order.get("orderbook", {}).get(key) or {})
-                if level:
-                    yes_levels = level
-                    break
-            if isinstance(yes_levels, list) and yes_levels:
-                price_val = yes_levels[0].get("price") or yes_levels[0].get("bid")
-                if price_val is not None:
-                    probability = price_to_prob(price_val)
-        except Exception:
-            probability = None
-
-    if probability is None:
-        return {
-            "kalshi_label": best_market.get("title") or best_market.get("ticker") or "",
-            "kalshi_probability": None,
-            "kalshi_volume": None,
-            "kalshi_match_debug": "no_price",
-        }
-
-    probability = max(0.0, min(1.0, float(probability)))
 
     return {
-        "kalshi_label": best_market.get("title") or best_market.get("ticker") or "",
-        "kalshi_probability": probability,
+        "kalshi_label": match_result.get("label"),
+        "kalshi_probability": match_result.get("probability"),
         "kalshi_volume": None,
-        "kalshi_match_debug": "ok",
+        "kalshi_match_debug": match_result.get("reason"),
+        "kalshi_event_ticker": match_result.get("raw_event_id"),
     }
 
 class KalshiIntegrator:
