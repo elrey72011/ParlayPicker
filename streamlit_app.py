@@ -14002,102 +14002,102 @@ with main_tab4:
         st.subheader("💎 Arbitrage Opportunity Scanner")
         # ...
 
-            # ----------------------------
-            # AI Analysis (Gemini vs Kalshi)
-            # ----------------------------
-            if st.button("🤖 Analyze These Markets with Gemini", key="kalshi_ai_compare"):
-                project_id = (
-                    st.session_state.get("gcp_project_id")
-                    or st.secrets.get("gcp_project_id")
+        # ----------------------------
+        # AI Analysis (Gemini vs Kalshi)
+        # ----------------------------
+        if st.button("🤖 Analyze These Markets with Gemini", key="kalshi_ai_compare"):
+            project_id = (
+                st.session_state.get("gcp_project_id")
+                or st.secrets.get("gcp_project_id")
+            )
+            location = st.session_state.get("gcp_region") or "us-central1"
+
+            scored_rows = []
+
+            for m in filtered_markets[:30]:
+                title = m.get("title", "")
+                ticker = m.get("ticker", "")
+                league = m.get("league", "NBA")
+
+                # --- Robust Kalshi price extraction ---
+                yes_price = None
+                # Try all possible Kalshi fields
+                for key in ["yes_ask_dollars", "yes_bid_dollars", "yes_ask", "yes_bid"]:
+                    val = m.get(key)
+                    if val not in (None, "", "0", 0, "0.0", "0.00"):
+                        yes_price = val
+                        break
+                
+                # If we still have nothing usable → skip this market
+                if yes_price is None:
+                    continue
+                
+                # Convert
+                market_prob = kalshi.price_to_prob(yes_price) if kalshi else None
+                if market_prob is None:
+                    continue
+                
+                game_context = f"Kalshi market: {title} (league: {league})"
+                features = {
+                    "kalshi_yes_price": float(yes_price or 0),
+                    "kalshi_no_price": float(m.get("no_ask_dollars") or 0),
+                    "league": league,
+                }
+
+                ai_prob = get_vertex_ai_prediction(
+                    features=features,
+                    game_context=game_context,
+                    project_id=project_id,
+                    location=location,
                 )
-                location = st.session_state.get("gcp_region") or "us-central1"
+                if ai_prob is None:
+                    continue
 
-                scored_rows = []
+                edge = ai_prob - market_prob
 
-                for m in filtered_markets[:30]:
-                    title = m.get("title", "")
-                    ticker = m.get("ticker", "")
-                    league = m.get("league", "NBA")
-
-                    # --- Robust Kalshi price extraction ---
-                    yes_price = None
-                    # Try all possible Kalshi fields
-                    for key in ["yes_ask_dollars", "yes_bid_dollars", "yes_ask", "yes_bid"]:
-                        val = m.get(key)
-                        if val not in (None, "", "0", 0, "0.0", "0.00"):
-                            yes_price = val
-                            break
-                    
-                    # If we still have nothing usable → skip this market
-                    if yes_price is None:
-                        continue
-                    
-                    # Convert
-                    market_prob = kalshi.price_to_prob(yes_price) if kalshi else None
-                    if market_prob is None:
-                        continue
-                    
-                    game_context = f"Kalshi market: {title} (league: {league})"
-                    features = {
-                        "kalshi_yes_price": float(yes_price or 0),
-                        "kalshi_no_price": float(m.get("no_ask_dollars") or 0),
-                        "league": league,
+                scored_rows.append(
+                    {
+                        "League": league,
+                        "Ticker": ticker,
+                        "Title": title,
+                        "Kalshi_Prob": round(market_prob, 3),
+                        "AI_Prob": round(ai_prob, 3),
+                        "Edge": round(edge, 3),
                     }
+                )
 
-                    ai_prob = get_vertex_ai_prediction(
-                        features=features,
-                        game_context=game_context,
-                        project_id=project_id,
-                        location=location,
-                    )
-                    if ai_prob is None:
-                        continue
+            if not scored_rows:
+                st.warning("No markets could be scored with Gemini.")
+            else:
+                df = (
+                    pd.DataFrame(scored_rows)
+                    .sort_values("Edge", ascending=False)
+                    .reset_index(drop=True)
+                )
+                st.markdown("### 📈 AI vs Kalshi – Best Value Opportunities")
+                st.dataframe(df, use_container_width=True)
 
-                    edge = ai_prob - market_prob
+        # Show expanders
+        for i, market in enumerate(filtered_markets[:20]):
+            title = market.get("title", "Unknown Market")
+            ticker = market.get("ticker", "")
+            volume = market.get("volume", 0)
 
-                    scored_rows.append(
-                        {
-                            "League": league,
-                            "Ticker": ticker,
-                            "Title": title,
-                            "Kalshi_Prob": round(market_prob, 3),
-                            "AI_Prob": round(ai_prob, 3),
-                            "Edge": round(edge, 3),
-                        }
-                    )
-
-                if not scored_rows:
-                    st.warning("No markets could be scored with Gemini.")
-                else:
-                    df = (
-                        pd.DataFrame(scored_rows)
-                        .sort_values("Edge", ascending=False)
-                        .reset_index(drop=True)
-                    )
-                    st.markdown("### 📈 AI vs Kalshi – Best Value Opportunities")
-                    st.dataframe(df, use_container_width=True)
-
-            # Show expanders
-            for i, market in enumerate(filtered_markets[:20]):
-                title = market.get("title", "Unknown Market")
-                ticker = market.get("ticker", "")
-                volume = market.get("volume", 0)
-
-                with st.expander(f"**{i+1}. {title}**"):
-                    col_m1, col_m2 = st.columns(2)
-                    with col_m1:
-                        st.write(f"**Ticker:** {ticker}")
-                        st.write(f"**Volume:** {volume:,} contracts")
-                        st.write(f"**Status:** {market.get('status', 'unknown')}")
-                    with col_m2:
-                        button_key = f"analyze_{ticker}_{i}"
-                        if st.button(f"📊 Analyze {ticker[:15]}", key=button_key):
-                            with st.spinner("Fetching market details..."):
-                                try:
-                                    orderbook = kalshi.get_orderbook(ticker)
-                                    st.json(orderbook)
-                                except Exception as e:
-                                    st.error(f"Error fetching orderbook: {e}")
+            with st.expander(f"**{i+1}. {title}**"):
+                col_m1, col_m2 = st.columns(2)
+                with col_m1:
+                    st.write(f"**Ticker:** {ticker}")
+                    st.write(f"**Volume:** {volume:,} contracts")
+                    st.write(f"**Status:** {market.get('status', 'unknown')}")
+                with col_m2:
+                    button_key = f"analyze_{ticker}_{i}"
+                    if st.button(f"📊 Analyze {ticker[:15]}", key=button_key):
+                        with st.spinner("Fetching market details..."):
+                            try:
+                                orderbook = kalshi.get_orderbook(ticker)
+                                st.json(orderbook)
+                            except Exception as e:
+                                st.error(f"Error fetching orderbook: {e}")
 
     st.header("📊 Kalshi Prediction Markets")
     st.markdown("**Compare prediction market odds with traditional sportsbooks and AI analysis**")
