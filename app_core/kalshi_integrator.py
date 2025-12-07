@@ -39,7 +39,7 @@ LEAGUE_SERIES_MAP = {
     "ncaab": "KXNCAAB",
 }
 
-TEAM_FUZZY_THRESHOLD = 0.6
+TEAM_FUZZY_THRESHOLD = 0.5
 MAX_LINE_DIFF = 3.0
 
 def price_to_prob(price) -> Optional[float]:
@@ -223,8 +223,8 @@ def match_game_to_kalshi(
             continue
 
         market_date = _parse_market_date(market.get("close_time") or market.get("event_date"))
-        if game_dt and market_date and market_date.date() != game_dt.date():
-            continue
+        #if game_dt and market_date and market_date.date() != game_dt.date():
+        #    continue
 
         # Score: more overlapping tokens = better; prefer game-level tickers.
         score = float(home_overlap + away_overlap)
