@@ -552,7 +552,7 @@ class KalshiIntegrator:
             print(f"🔑 KALSHI: Fallback - API key: {bool(self.api_key)}, secret: {bool(self.api_secret)}")
         
         # Kalshi API URLs - use elections subdomain (verified working)
-        self.base_url = "https://api.kalshi.com/trade-api/v2"
+        self.base_url = "https://api.elections.kalshi.com/trade-api/v2"
         self.demo_url = "https://demo-api.kalshi.co/trade-api/v2"
         
         # Use production API if we have credentials
@@ -653,16 +653,18 @@ class KalshiIntegrator:
         if self._auth_ready and self._private_key:
             # CRITICAL: Strip query parameters from endpoint before signing
             # Per Kalshi docs: "Strip query parameters from path before signing"
-            path_without_query = endpoint.split('?')[0]
+            path_suffix = endpoint.split('?')[0]
+            path_to_sign = f"/trade-api/v2{path_suffix}"
             
-            signature = self._sign_request(method.upper(), path_without_query, timestamp)
+            signature = self._sign_request(method.upper(), path_to_sign, timestamp)
             headers["KALSHI-ACCESS-KEY"] = self.api_key
             headers["KALSHI-ACCESS-SIGNATURE"] = signature
             headers["KALSHI-ACCESS-TIMESTAMP"] = timestamp
             
             print(f"🔐 KALSHI: Auth configured (key: {self.api_key[:8]}...)")
-            logger.debug(f"Signing: {timestamp}{method.upper()}{path_without_query}")
-            logger.info(f"Using API URL: {self.api_url}")
+            logger.debug(f"Signing: {timestamp}{method.upper()}{path_without_query}") #remove?
+            logger.info(f"Using API URL: {self.api_url}") #remove?
+            logger.debug(f"Signed path: {path_to_sign}")
         else:
             print("⚠️ KALSHI: No authentication configured!")
         
