@@ -1,6 +1,9 @@
 """
-Kalshi Integrator v6.3: Robust Ticker Matching Fix
-This file goes in: app_core/kalshi_integrator.py
+Kalshi Integrator v6.4: Fixed League-Specific Matching
+Key fixes:
+1. League-specific team codes to prevent collisions
+2. Improved ticker matching logic
+3. Better normalization consistency
 """
 
 import logging
@@ -13,7 +16,6 @@ import pytz
 import requests
 import streamlit as st
 
-# Try to import the matcher, or define a dummy one if missing
 try:
     from app_core.team_name_matcher import TeamNameMatcher
 except ImportError:
@@ -25,66 +27,136 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-# --- CONFIGURATION ---
 CORE_SERIES = ["KXNBA", "KXNFL", "KXNHL", "KXMLB", "KXNCAAF", "KXNCAAB"]
 
-# Map Team Names to Kalshi Ticker Codes (Critical for accurate matching)
+# League-specific team mappings to prevent code collisions
 KALSHI_ABBREVIATIONS = {
-    # NBA
-    "ATL": ["ATLANTA HAWKS", "ATLANTA"], "BOS": ["BOSTON CELTICS", "BOSTON"],
-    "BKN": ["BROOKLYN NETS", "BROOKLYN"], "CHA": ["CHARLOTTE HORNETS", "CHARLOTTE"],
-    "CHI": ["CHICAGO BULLS", "CHICAGO"], "CLE": ["CLEVELAND CAVALIERS", "CLEVELAND", "CAVS"],
-    "DAL": ["DALLAS MAVERICKS", "DALLAS", "MAVS"], "DEN": ["DENVER NUGGETS", "DENVER"],
-    "DET": ["DETROIT PISTONS", "DETROIT"], "GSW": ["GOLDEN STATE WARRIORS", "GOLDEN STATE", "GS"],
-    "HOU": ["HOUSTON ROCKETS", "HOUSTON"], "IND": ["INDIANA PACERS", "INDIANA"],
-    "LAC": ["LOS ANGELES CLIPPERS", "LA CLIPPERS"], "LAL": ["LOS ANGELES LAKERS", "LA LAKERS", "LAKERS"],
-    "MEM": ["MEMPHIS GRIZZLIES", "MEMPHIS"], "MIA": ["MIAMI HEAT", "MIAMI"],
-    "MIL": ["MILWAUKEE BUCKS", "MILWAUKEE"], "MIN": ["MINNESOTA TIMBERWOLVES", "MINNESOTA"],
-    "NOP": ["NEW ORLEANS PELICANS", "NEW ORLEANS", "NO"], "NYK": ["NEW YORK KNICKS", "NEW YORK", "KNICKS"],
-    "OKC": ["OKLAHOMA CITY THUNDER", "OKLAHOMA CITY"], "ORL": ["ORLANDO MAGIC", "ORLANDO"],
-    "PHI": ["PHILADELPHIA 76ERS", "PHILADELPHIA", "PHILLY", "76ERS"], "PHX": ["PHOENIX SUNS", "PHOENIX"],
-    "POR": ["PORTLAND TRAIL BLAZERS", "PORTLAND"], "SAC": ["SACRAMENTO KINGS", "SACRAMENTO"],
-    "SAS": ["SAN ANTONIO SPURS", "SAN ANTONIO", "SPURS"], "TOR": ["TORONTO RAPTORS", "TORONTO"],
-    "UTA": ["UTAH JAZZ", "UTAH"], "WAS": ["WASHINGTON WIZARDS", "WASHINGTON"],
-    # NFL
-    "ARI": ["ARIZONA CARDINALS"], "BAL": ["BALTIMORE RAVENS"], "BUF": ["BUFFALO BILLS"],
-    "CAR": ["CAROLINA PANTHERS"], "CHI": ["CHICAGO BEARS"], "CIN": ["CINCINNATI BENGALS"],
-    "CLE": ["CLEVELAND BROWNS"], "DAL": ["DALLAS COWBOYS"], "DEN": ["DENVER BRONCOS"],
-    "DET": ["DETROIT LIONS"], "GB": ["GREEN BAY PACKERS"], "HOU": ["HOUSTON TEXANS"],
-    "IND": ["INDIANAPOLIS COLTS"], "JAX": ["JACKSONVILLE JAGUARS"], "KC": ["KANSAS CITY CHIEFS"],
-    "LV": ["LAS VEGAS RAIDERS"], "LAC": ["LOS ANGELES CHARGERS"], "LAR": ["LOS ANGELES RAMS"],
-    "MIA": ["MIAMI DOLPHINS"], "MIN": ["MINNESOTA VIKINGS"], "NE": ["NEW ENGLAND PATRIOTS"],
-    "NO": ["NEW ORLEANS SAINTS"], "NYG": ["NEW YORK GIANTS"], "NYJ": ["NEW YORK JETS"],
-    "PHI": ["PHILADELPHIA EAGLES"], "PIT": ["PITTSBURGH STEELERS"], "SF": ["SAN FRANCISCO 49ERS"],
-    "SEA": ["SEATTLE SEAHAWKS"], "TB": ["TAMPA BAY BUCCANEERS"], "TEN": ["TENNESSEE TITANS"],
-    "WSH": ["WASHINGTON COMMANDERS", "WASHINGTON"],
-    # NHL
-    "ANA": ["ANAHEIM DUCKS"], "ARI": ["ARIZONA COYOTES", "UTAH HOCKEY CLUB"], "BOS": ["BOSTON BRUINS"],
-    "BUF": ["BUFFALO SABRES"], "CGY": ["CALGARY FLAMES"], "CAR": ["CAROLINA HURRICANES"],
-    "CHI": ["CHICAGO BLACKHAWKS"], "COL": ["COLORADO AVALANCHE"], "CBJ": ["COLUMBUS BLUE JACKETS"],
-    "DAL": ["DALLAS STARS"], "DET": ["DETROIT RED WINGS"], "EDM": ["EDMONTON OILERS"],
-    "FLA": ["FLORIDA PANTHERS"], "LAK": ["LOS ANGELES KINGS"], "MIN": ["MINNESOTA WILD"],
-    "MTL": ["MONTREAL CANADIENS"], "NSH": ["NASHVILLE PREDATORS"], "NJD": ["NEW JERSEY DEVILS"],
-    "NYI": ["NEW YORK ISLANDERS"], "NYR": ["NEW YORK RANGERS"], "OTT": ["OTTAWA SENATORS"],
-    "PHI": ["PHILADELPHIA FLYERS"], "PIT": ["PITTSBURGH PENGUINS"], "SJS": ["SAN JOSE SHARKS"],
-    "SEA": ["SEATTLE KRAKEN"], "STL": ["ST LOUIS BLUES"], "TBL": ["TAMPA BAY LIGHTNING"],
-    "TOR": ["TORONTO MAPLE LEAFS"], "VAN": ["VANCOUVER CANUCKS"], "VGK": ["VEGAS GOLDEN KNIGHTS"],
-    "WSH": ["WASHINGTON CAPITALS"], "WPG": ["WINNIPEG JETS"]
+    # NBA Teams
+    "NBA": {
+        "ATL": ["ATLANTA HAWKS", "ATLANTA", "HAWKS"],
+        "BOS": ["BOSTON CELTICS", "BOSTON", "CELTICS"],
+        "BKN": ["BROOKLYN NETS", "BROOKLYN", "NETS"],
+        "CHA": ["CHARLOTTE HORNETS", "CHARLOTTE", "HORNETS"],
+        "CHI": ["CHICAGO BULLS", "BULLS"],
+        "CLE": ["CLEVELAND CAVALIERS", "CLEVELAND", "CAVS", "CAVALIERS"],
+        "DAL": ["DALLAS MAVERICKS", "DALLAS", "MAVS", "MAVERICKS"],
+        "DEN": ["DENVER NUGGETS", "DENVER", "NUGGETS"],
+        "DET": ["DETROIT PISTONS", "DETROIT", "PISTONS"],
+        "GSW": ["GOLDEN STATE WARRIORS", "GOLDEN STATE", "GS", "WARRIORS"],
+        "HOU": ["HOUSTON ROCKETS", "HOUSTON", "ROCKETS"],
+        "IND": ["INDIANA PACERS", "INDIANA", "PACERS"],
+        "LAC": ["LOS ANGELES CLIPPERS", "LA CLIPPERS", "CLIPPERS"],
+        "LAL": ["LOS ANGELES LAKERS", "LA LAKERS", "LAKERS"],
+        "MEM": ["MEMPHIS GRIZZLIES", "MEMPHIS", "GRIZZLIES"],
+        "MIA": ["MIAMI HEAT", "MIAMI", "HEAT"],
+        "MIL": ["MILWAUKEE BUCKS", "MILWAUKEE", "BUCKS"],
+        "MIN": ["MINNESOTA TIMBERWOLVES", "MINNESOTA", "TIMBERWOLVES", "WOLVES"],
+        "NOP": ["NEW ORLEANS PELICANS", "NEW ORLEANS", "NO", "PELICANS"],
+        "NYK": ["NEW YORK KNICKS", "NEW YORK", "KNICKS"],
+        "OKC": ["OKLAHOMA CITY THUNDER", "OKLAHOMA CITY", "THUNDER"],
+        "ORL": ["ORLANDO MAGIC", "ORLANDO", "MAGIC"],
+        "PHI": ["PHILADELPHIA 76ERS", "PHILADELPHIA", "PHILLY", "76ERS", "SIXERS"],
+        "PHX": ["PHOENIX SUNS", "PHOENIX", "SUNS"],
+        "POR": ["PORTLAND TRAIL BLAZERS", "PORTLAND", "BLAZERS"],
+        "SAC": ["SACRAMENTO KINGS", "SACRAMENTO", "KINGS"],
+        "SAS": ["SAN ANTONIO SPURS", "SAN ANTONIO", "SPURS"],
+        "TOR": ["TORONTO RAPTORS", "TORONTO", "RAPTORS"],
+        "UTA": ["UTAH JAZZ", "UTAH", "JAZZ"],
+        "WAS": ["WASHINGTON WIZARDS", "WASHINGTON", "WIZARDS"]
+    },
+    # NFL Teams
+    "NFL": {
+        "ARI": ["ARIZONA CARDINALS", "CARDINALS"],
+        "ATL": ["ATLANTA FALCONS", "FALCONS"],
+        "BAL": ["BALTIMORE RAVENS", "RAVENS"],
+        "BUF": ["BUFFALO BILLS", "BILLS"],
+        "CAR": ["CAROLINA PANTHERS", "PANTHERS"],
+        "CHI": ["CHICAGO BEARS", "BEARS"],
+        "CIN": ["CINCINNATI BENGALS", "BENGALS"],
+        "CLE": ["CLEVELAND BROWNS", "BROWNS"],
+        "DAL": ["DALLAS COWBOYS", "COWBOYS"],
+        "DEN": ["DENVER BRONCOS", "BRONCOS"],
+        "DET": ["DETROIT LIONS", "LIONS"],
+        "GB": ["GREEN BAY PACKERS", "PACKERS"],
+        "HOU": ["HOUSTON TEXANS", "TEXANS"],
+        "IND": ["INDIANAPOLIS COLTS", "COLTS"],
+        "JAX": ["JACKSONVILLE JAGUARS", "JAGUARS"],
+        "KC": ["KANSAS CITY CHIEFS", "CHIEFS"],
+        "LV": ["LAS VEGAS RAIDERS", "RAIDERS"],
+        "LAC": ["LOS ANGELES CHARGERS", "CHARGERS"],
+        "LAR": ["LOS ANGELES RAMS", "RAMS"],
+        "MIA": ["MIAMI DOLPHINS", "DOLPHINS"],
+        "MIN": ["MINNESOTA VIKINGS", "VIKINGS"],
+        "NE": ["NEW ENGLAND PATRIOTS", "PATRIOTS"],
+        "NO": ["NEW ORLEANS SAINTS", "SAINTS"],
+        "NYG": ["NEW YORK GIANTS", "GIANTS"],
+        "NYJ": ["NEW YORK JETS", "JETS"],
+        "PHI": ["PHILADELPHIA EAGLES", "EAGLES"],
+        "PIT": ["PITTSBURGH STEELERS", "STEELERS"],
+        "SF": ["SAN FRANCISCO 49ERS", "49ERS"],
+        "SEA": ["SEATTLE SEAHAWKS", "SEAHAWKS"],
+        "TB": ["TAMPA BAY BUCCANEERS", "BUCCANEERS"],
+        "TEN": ["TENNESSEE TITANS", "TITANS"],
+        "WSH": ["WASHINGTON COMMANDERS", "COMMANDERS", "WASHINGTON"]
+    },
+    # NHL Teams
+    "NHL": {
+        "ANA": ["ANAHEIM DUCKS", "DUCKS"],
+        "ARI": ["ARIZONA COYOTES", "UTAH HOCKEY CLUB", "COYOTES"],
+        "BOS": ["BOSTON BRUINS", "BRUINS"],
+        "BUF": ["BUFFALO SABRES", "SABRES"],
+        "CGY": ["CALGARY FLAMES", "FLAMES"],
+        "CAR": ["CAROLINA HURRICANES", "HURRICANES"],
+        "CHI": ["CHICAGO BLACKHAWKS", "BLACKHAWKS"],
+        "COL": ["COLORADO AVALANCHE", "AVALANCHE"],
+        "CBJ": ["COLUMBUS BLUE JACKETS", "BLUE JACKETS"],
+        "DAL": ["DALLAS STARS", "STARS"],
+        "DET": ["DETROIT RED WINGS", "RED WINGS"],
+        "EDM": ["EDMONTON OILERS", "OILERS"],
+        "FLA": ["FLORIDA PANTHERS", "PANTHERS"],
+        "LAK": ["LOS ANGELES KINGS", "KINGS"],
+        "MIN": ["MINNESOTA WILD", "WILD"],
+        "MTL": ["MONTREAL CANADIENS", "CANADIENS"],
+        "NSH": ["NASHVILLE PREDATORS", "PREDATORS"],
+        "NJD": ["NEW JERSEY DEVILS", "DEVILS"],
+        "NYI": ["NEW YORK ISLANDERS", "ISLANDERS"],
+        "NYR": ["NEW YORK RANGERS", "RANGERS"],
+        "OTT": ["OTTAWA SENATORS", "SENATORS"],
+        "PHI": ["PHILADELPHIA FLYERS", "FLYERS"],
+        "PIT": ["PITTSBURGH PENGUINS", "PENGUINS"],
+        "SJS": ["SAN JOSE SHARKS", "SHARKS"],
+        "SEA": ["SEATTLE KRAKEN", "KRAKEN"],
+        "STL": ["ST LOUIS BLUES", "BLUES"],
+        "TBL": ["TAMPA BAY LIGHTNING", "LIGHTNING"],
+        "TOR": ["TORONTO MAPLE LEAFS", "MAPLE LEAFS"],
+        "VAN": ["VANCOUVER CANUCKS", "CANUCKS"],
+        "VGK": ["VEGAS GOLDEN KNIGHTS", "GOLDEN KNIGHTS"],
+        "WSH": ["WASHINGTON CAPITALS", "CAPITALS"],
+        "WPG": ["WINNIPEG JETS", "JETS"]
+    }
 }
 
-# Build Reverse Lookup Map (Team Name -> Ticker)
-TEAM_TO_TICKER: Dict[str, str] = {}
+# Build league-specific reverse lookup maps
+TEAM_TO_TICKER: Dict[str, Dict[str, str]] = {}
 
-def _add_team_alias(name: str, code: str) -> None:
-    if not name: return
-    normalized = TeamNameMatcher.normalize(name).upper()
-    mascot_preserving = re.sub(r"[^A-Z\s]", "", name.upper()).strip()
-    for key in filter(None, {normalized, mascot_preserving}):
-        TEAM_TO_TICKER.setdefault(key, code)
+def _build_reverse_lookups():
+    """Build reverse lookup dictionaries for each league"""
+    for league, teams in KALSHI_ABBREVIATIONS.items():
+        TEAM_TO_TICKER[league] = {}
+        for code, names in teams.items():
+            for name in names:
+                if not name:
+                    continue
+                normalized = name.upper().strip()
+                # Remove punctuation but keep spaces for mascot matching
+                clean = re.sub(r"[^A-Z\s]", "", normalized).strip()
+                
+                # Add both versions as keys
+                for key in [normalized, clean]:
+                    if key and key not in TEAM_TO_TICKER[league]:
+                        TEAM_TO_TICKER[league][key] = code
 
-for code, names in KALSHI_ABBREVIATIONS.items():
-    for n in names:
-        _add_team_alias(n, code)
+_build_reverse_lookups()
 
 class KalshiMatchResult(TypedDict, total=False):
     matched: bool
@@ -95,22 +167,28 @@ class KalshiMatchResult(TypedDict, total=False):
     reason: str
 
 def price_to_prob(price) -> Optional[float]:
-    if price is None or price == "": return None
+    if price is None or price == "":
+        return None
     try:
         p = float(price)
-        if p > 1.01: p = p / 100.0
+        if p > 1.01:
+            p = p / 100.0
         return max(0.0, min(1.0, p))
-    except: return None
+    except:
+        return None
 
 def _parse_market_date(raw) -> Optional[datetime]:
-    if not raw: return None
+    if not raw:
+        return None
     try:
         if isinstance(raw, (int, float)):
             return datetime.fromtimestamp(float(raw) / 1000.0, tz=pytz.UTC)
         dt = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
-        if dt.tzinfo is None: dt = dt.replace(tzinfo=pytz.UTC)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=pytz.UTC)
         return dt
-    except: return None
+    except:
+        return None
 
 class KalshiIntegrator:
     def __init__(self, api_key: str = None, api_secret: str = None):
@@ -118,7 +196,8 @@ class KalshiIntegrator:
             try:
                 api_key = st.secrets.get("KALSHI_API_KEY")
                 api_secret = st.secrets.get("KALSHI_API_SECRET")
-            except: pass
+            except:
+                pass
 
         self.api_key = api_key
         self.api_secret = api_secret
@@ -150,7 +229,7 @@ class KalshiIntegrator:
         start_window = now - (24 * 60 * 60)
         future_window = now + (7 * 24 * 60 * 60)
         target_series = [sport_ticker] if sport_ticker else CORE_SERIES
-        cache_key = f"events_{sport_ticker or 'all'}_{now // 300}" 
+        cache_key = f"events_{sport_ticker or 'all'}_{now // 300}"
         
         if cache_key in self._markets_cache:
             return self._markets_cache[cache_key]
@@ -166,7 +245,8 @@ class KalshiIntegrator:
                 "limit": 100
             }
             data = self._make_public_request("/events", params)
-            if not data or "events" not in data: continue
+            if not data or "events" not in data:
+                continue
 
             for e in data.get("events", []):
                 for m in e.get("markets", []):
@@ -181,123 +261,196 @@ class KalshiIntegrator:
         self._markets_cache[cache_key] = all_events
         return all_events
 
-    def get_sports_markets(self): return self.get_todays_events()
+    def get_sports_markets(self):
+        return self.get_todays_events()
+    
     def get_game_markets_for_events(self, league="NBA"):
         sport_map = {'NBA': 'KXNBA', 'NFL': 'KXNFL', 'NHL': 'KXNHL', 'MLB': 'KXMLB'}
         return self.get_todays_events(sport_map.get(league.upper(), 'KXNBA'))
+    
     def filter_markets_closing_today(self, markets):
-        if not markets: return []
+        if not markets:
+            return []
         today = datetime.now(pytz.UTC).date()
-        return [m for m in markets if _parse_market_date(m.get("close_time")) and abs((_parse_market_date(m.get("close_time")).date() - today).days) <= 1]
+        return [m for m in markets if _parse_market_date(m.get("close_time")) and 
+                abs((_parse_market_date(m.get("close_time")).date() - today).days) <= 1]
+    
     def get_orderbook(self, ticker):
         data = self._make_public_request(f"/markets/{ticker}/orderbook", {"depth": 5})
         return data.get('orderbook') if data else None
 
-    # --- ENHANCED MATCHING LOGIC ---
+    def _lookup_team_code(self, team_name: str, league: str) -> Optional[str]:
+        """
+        Look up the Kalshi ticker code for a team name in a specific league.
+        
+        Args:
+            team_name: The team name to look up
+            league: The league (NBA, NFL, NHL, etc.)
+        
+        Returns:
+            The ticker code or None if not found
+        """
+        if not team_name or league not in TEAM_TO_TICKER:
+            return None
+        
+        # Normalize the team name
+        normalized = team_name.upper().strip()
+        clean = re.sub(r"[^A-Z\s]", "", normalized).strip()
+        
+        lookup_dict = TEAM_TO_TICKER[league]
+        
+        # Try exact matches first
+        for key in [normalized, clean]:
+            if key in lookup_dict:
+                return lookup_dict[key]
+        
+        # Try partial matches (for cases like "LA Lakers" vs "Los Angeles Lakers")
+        for key, code in lookup_dict.items():
+            if key in normalized or normalized in key:
+                return code
+        
+        return None
+
     def get_game_market(self, home_team, away_team, sport="NBA", game_time=None):
+        """
+        Match a game to a Kalshi market using improved league-specific matching.
+        
+        Args:
+            home_team: Home team name
+            away_team: Away team name
+            sport: Sport/league identifier
+            game_time: Optional game time
+        
+        Returns:
+            Dict with kalshi_available, kalshi_prob, and debug info
+        """
         sport_map = {
-            'nba': 'KXNBA', 'basketball_nba': 'KXNBA',
-            'nfl': 'KXNFL', 'americanfootball_nfl': 'KXNFL',
-            'nhl': 'KXNHL', 'icehockey_nhl': 'KXNHL',
-            'mlb': 'KXMLB', 'baseball_mlb': 'KXMLB',
-            'ncaaf': 'KXNCAAF', 'americanfootball_ncaaf': 'KXNCAAF',
-            'ncaab': 'KXNCAAB', 'basketball_ncaab': 'KXNCAAB'
+            'nba': ('KXNBA', 'NBA'),
+            'basketball_nba': ('KXNBA', 'NBA'),
+            'nfl': ('KXNFL', 'NFL'),
+            'americanfootball_nfl': ('KXNFL', 'NFL'),
+            'nhl': ('KXNHL', 'NHL'),
+            'icehockey_nhl': ('KXNHL', 'NHL'),
+            'mlb': ('KXMLB', 'MLB'),
+            'baseball_mlb': ('KXMLB', 'MLB'),
+            'ncaaf': ('KXNCAAF', 'NCAAF'),
+            'americanfootball_ncaaf': ('KXNCAAF', 'NCAAF'),
+            'ncaab': ('KXNCAAB', 'NCAAB'),
+            'basketball_ncaab': ('KXNCAAB', 'NCAAB')
         }
-        series_ticker = sport_map.get(sport.lower(), "KXNBA")
+        
+        series_ticker, league = sport_map.get(sport.lower(), ("KXNBA", "NBA"))
         markets = self.get_todays_events(series_ticker)
         
-        home_norm = TeamNameMatcher.normalize(home_team).upper()
-        away_norm = TeamNameMatcher.normalize(away_team).upper()
-
-        def _lookup_team_code(name: str, normalized: str) -> Optional[str]:
-            mascot_preserving = re.sub(r"[^A-Z\s]", "", (name or "").upper()).strip()
-            for key in (mascot_preserving, normalized):
-                if key and key in TEAM_TO_TICKER: return TEAM_TO_TICKER[key]
-            return None
-
-        home_code = _lookup_team_code(home_team, home_norm)
-        away_code = _lookup_team_code(away_team, away_norm)
+        # Look up team codes using league-specific mapping
+        home_code = self._lookup_team_code(home_team, league)
+        away_code = self._lookup_team_code(away_team, league)
+        
+        logger.info(f"Matching {home_team} vs {away_team} in {league}")
+        logger.info(f"Found codes: home={home_code}, away={away_code}")
+        
+        # Normalize team names for text matching
+        home_norm = TeamNameMatcher.normalize(home_team).lower()
+        away_norm = TeamNameMatcher.normalize(away_team).lower()
         
         best_market = None
         best_score = 0.0
         match_type = "none"
-
-        # Helper to check ticker containment
-        def _ticker_contains(event_ticker, code):
-            return f"-{code}-" in event_ticker or event_ticker.endswith(f"-{code}")
-
-        home_aliases = {home_team.lower().strip(), home_norm.lower().strip()} - {""}
-        away_aliases = {away_team.lower().strip(), away_norm.lower().strip()} - {""}
-
+        
+        # Create comprehensive alias sets
+        home_aliases = {home_team.lower().strip(), home_norm}
+        away_aliases = {away_team.lower().strip(), away_norm}
+        
+        if home_code and league in KALSHI_ABBREVIATIONS and home_code in KALSHI_ABBREVIATIONS[league]:
+            home_aliases.update(n.lower() for n in KALSHI_ABBREVIATIONS[league][home_code])
+        if away_code and league in KALSHI_ABBREVIATIONS and away_code in KALSHI_ABBREVIATIONS[league]:
+            away_aliases.update(n.lower() for n in KALSHI_ABBREVIATIONS[league][away_code])
+        
         for m in markets:
             event_ticker = str(m.get("event_ticker", "")).upper()
-            market_text = (m.get("title", "") + " " + m.get("subtitle", "")).lower()
+            title = m.get("title", "").lower()
+            subtitle = m.get("subtitle", "").lower()
+            event_title = m.get("event_title", "").lower()
             
-            # A. TICKER MATCH (Improved)
+            # A. TICKER CODE MATCH (Highest Priority)
             if home_code and away_code:
-                if _ticker_contains(event_ticker, home_code) and _ticker_contains(event_ticker, away_code):
+                # Check if both team codes appear in the event ticker
+                # Common formats: KXNBA-2024-12-06-LAL-GSW or similar
+                if home_code in event_ticker and away_code in event_ticker:
                     best_market = m
                     best_score = 1.0
                     match_type = "ticker_code"
+                    logger.info(f"✓ Ticker match: {event_ticker}")
                     break
-
-            # B. TITLE CONTAINMENT
-            title_text = (m.get("event_title", "") + " " + market_text).lower()
-            contains_home = any(alias in title_text for alias in home_aliases)
-            contains_away = any(alias in title_text for alias in away_aliases)
-
+            
+            # B. TITLE + SUBTITLE CONTAINMENT (High Priority)
+            full_text = f"{event_title} {title} {subtitle}"
+            contains_home = any(alias in full_text for alias in home_aliases if alias)
+            contains_away = any(alias in full_text for alias in away_aliases if alias)
+            
             if contains_home and contains_away:
-                best_market = m
-                best_score = 0.9
-                match_type = "title_contains"
+                if best_score < 0.95:
+                    best_market = m
+                    best_score = 0.95
+                    match_type = "text_contains"
+                    logger.info(f"✓ Text match: {event_title}")
                 continue
-
-            # C. FUZZY MATCH
-            if best_score < 1.0:
-                event_title = m.get("event_title", "").lower()
-                full_text = event_title + " " + market_text
-                h_score = TeamNameMatcher.similarity_score(home_norm.lower(), full_text)
-                a_score = TeamNameMatcher.similarity_score(away_norm.lower(), full_text)
+            
+            # C. FUZZY MATCH (Fallback)
+            if best_score < 0.9:
+                h_score = TeamNameMatcher.similarity_score(home_norm, full_text)
+                a_score = TeamNameMatcher.similarity_score(away_norm, full_text)
                 
-                if h_score > 0.45 and a_score > 0.45:
+                if h_score > 0.5 and a_score > 0.5:
                     avg = (h_score + a_score) / 2
                     if avg > best_score:
                         best_score = avg
                         best_market = m
-                        match_type = "fuzzy"
-
+                        match_type = f"fuzzy({h_score:.2f},{a_score:.2f})"
+        
+        # Build result
         res = {
-            "kalshi_available": False, 
-            "kalshi_prob": None, 
-            "kalshi_match_debug": f"No match (Codes: {home_code}/{away_code})",
+            "kalshi_available": False,
+            "kalshi_prob": None,
+            "kalshi_match_debug": f"No match (League: {league}, Codes: {home_code}/{away_code})",
             "kalshi_label": None
         }
-
+        
         if best_market and best_score > 0.5:
+            # Extract probability
             yes_price = price_to_prob(best_market.get("yes_bid"))
             if yes_price is None:
                 yes_price = price_to_prob(best_market.get("last_price") or best_market.get("yes_ask"))
             if yes_price is None:
                 yes_price = 0.5
-
+            
+            # Determine if we need to invert based on subtitle
             subtitle = best_market.get("subtitle", "").lower()
-            # Invert if the market is for the Away team
             final_prob = yes_price
-            if away_norm.lower() in subtitle and home_norm.lower() not in subtitle:
+            
+            # If the market subtitle mentions the away team but not home, invert
+            subtitle_has_away = any(alias in subtitle for alias in away_aliases if alias)
+            subtitle_has_home = any(alias in subtitle for alias in home_aliases if alias)
+            
+            if subtitle_has_away and not subtitle_has_home:
                 final_prob = 1.0 - yes_price
-
+            
             res.update({
                 "kalshi_available": True,
                 "kalshi_prob": final_prob,
                 "kalshi_label": best_market.get("event_title", best_market.get("title")),
-                "kalshi_match_debug": f"Match: {match_type} ({best_score:.2f})",
+                "kalshi_match_debug": f"✓ {match_type} (score={best_score:.2f})",
                 "market_ticker": best_market.get("ticker"),
                 "kalshi_volume": best_market.get("volume")
             })
-            
+            logger.info(f"Match successful: {res['kalshi_label']} - {final_prob:.3f}")
+        else:
+            logger.warning(f"No match found for {home_team} vs {away_team}")
+        
         return res
 
 def match_game_to_kalshi(league, home, away, time, integrator=None, status="open"):
+    """Legacy wrapper function for compatibility"""
     k = integrator or KalshiIntegrator()
     r = k.get_game_market(home, away, league, time)
     return KalshiMatchResult(
