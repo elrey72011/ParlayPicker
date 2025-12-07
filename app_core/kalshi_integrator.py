@@ -27,17 +27,16 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-# Add this right after CORE_SERIES definition
+# --- CONFIGURATION ---
 GAME_SERIES = {
-    "NBA": "KXNBAGAME",
-    "NFL": "KXNFLGAME", 
-    "NHL": "KXNHLGAME",
-    "MLB": "KXMLBGAME",
-    "NCAAF": "KXNCAAFGAME",
-    "NCAAB": "KXNCAABGAME"
+    "NBA": "KXNBA",   # Updated to use main series tickers
+    "NFL": "KXNFL",
+    "NHL": "KXNHL",
+    "MLB": "KXMLB",
+    "NCAAF": "KXNCAAF",
+    "NCAAB": "KXNCAAB"
 }
-
-CORE_SERIES = ["KXNBA", "KXNFL", "KXNHL", "KXMLB", "KXNCAAF", "KXNCAAB"]
+CORE_SERIES = list(GAME_SERIES.values())
 
 # League-specific team mappings to prevent code collisions
 KALSHI_ABBREVIATIONS = {
@@ -346,27 +345,35 @@ KALSHI_ABBREVIATIONS = {
     }
 }
 
-# Build league-specific reverse lookup maps
-TEAM_TO_TICKER: Dict[str, Dict[str, str]] = {}
+# Build Reverse Lookup Map (Team Name -> Ticker)
+TEAM_TO_TICKER: Dict[str, str] = {}
 
-def _build_reverse_lookups():
-    """Build reverse lookup dictionaries for each league"""
-    for league, teams in KALSHI_ABBREVIATIONS.items():
-        TEAM_TO_TICKER[league] = {}
-        for code, names in teams.items():
-            for name in names:
-                if not name:
-                    continue
-                normalized = name.upper().strip()
-                # Remove punctuation but keep spaces for mascot matching
-                clean = re.sub(r"[^A-Z\s]", "", normalized).strip()
-                
-                # Add both versions as keys
-                for key in [normalized, clean]:
-                    if key and key not in TEAM_TO_TICKER[league]:
-                        TEAM_TO_TICKER[league][key] = code
 
-_build_reverse_lookups()
+def _add_team_alias(name: str, code: str) -> None:
+    """Register multiple lookup keys for a team to avoid collisions.
+
+    TeamNameMatcher.normalize removes mascots (e.g., "Lakers"), which makes
+    franchises that share a city (Lakers/Clippers) collapse to the same key.
+    We index both the mascot-stripped and mascot-preserving variants so we can
+    resolve the correct Kalshi ticker even when the caller provides the full
+    team name.
+    """
+
+    if not name:
+        return
+
+    normalized = TeamNameMatcher.normalize(name).upper()
+    mascot_preserving = re.sub(r"[^A-Z\s]", "", name.upper()).strip()
+
+    for key in filter(None, {normalized, mascot_preserving}):
+        # Do not overwrite an existing alias; first write wins to keep intent
+        # stable across duplicate city names.
+        TEAM_TO_TICKER.setdefault(key, code)
+
+
+for code, names in KALSHI_ABBREVIATIONS.items():
+    for n in names:
+        _add_team_alias(n, code)
 
 class KalshiMatchResult(TypedDict, total=False):
     matched: bool
@@ -419,8 +426,15 @@ class KalshiIntegrator:
 
     def _make_public_request(self, endpoint, params=None):
         url = f"{self.public_url}{endpoint}"
+        headers = {
+            "Accept": "application/json",
+            # Use a browser-like agent to avoid silent throttling
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                          "AppleWebKit/537.36 (KHTML, like Gecko) "
+                          "Chrome/120.0.0.0 Safari/537.36",
+        }
         try:
-            resp = requests.get(url, headers={"Accept": "application/json"}, params=params, timeout=10)
+            resp = requests.get(url, headers=headers, params=params, timeout=10)
             if resp.status_code == 200:
                 self.last_error = None
                 return resp.json()
@@ -434,9 +448,21 @@ class KalshiIntegrator:
             self.last_error = str(e)
             return None
 
-    def get_todays_events(self, sport_ticker=None, days_ahead=3):
+    def get_todays_events(self, sport_ticker=None):
+        """Fetch events closing in an expanded window to capture newly listed markets.
+
+        We previously limited this to ~48 hours, which missed markets Kalshi lists
+        several days ahead. Expanding the lookahead keeps the Streamlit table from
+        reporting "No Match" when markets exist but are slightly further out.
         """
-        Fetch Kalshi markets for upcoming games.
+        now = int(time.time())
+        # Look back 24 hours for games already underway and forward 7 days for upcoming
+        # markets. This wider window still respects Kalshi's natural limits while
+        # ensuring newly posted events are available for matching.
+        start_window = now - (24 * 60 * 60)
+        future_window = now + (7 * 24 * 60 * 60)
+        now_dt = datetime.fromtimestamp(now, tz=pytz.UTC)
+        days_ahead = 7
         
         Args:
             sport_ticker: Specific sport series (e.g., "KXNBA")
@@ -451,46 +477,53 @@ class KalshiIntegrator:
 
         all_events = []
         seen_market_tickers = set()
-        
         for series in target_series:
-            # Use only the documented parameters
-            params = {
+            params_base = {
                 "series_ticker": series,
+                "min_close_ts": start_window,
+                "max_close_ts": future_window,
                 "with_nested_markets": "true",
                 "limit": 200,
                 "status": "open"  # Valid values: 'open', 'closed', 'settled'
             }
-            
-            data = self._make_public_request("/events", params)
-            if not data or "events" not in data:
-                logger.warning(f"No events returned for {series}")
-                continue
 
-            events_found = data.get("events", [])
-            logger.info(f"Found {len(events_found)} events for {series}")
-            
-            for e in events_found:
-                markets = e.get("markets", [])
-                for m in markets:
-                    ticker = m.get("ticker")
-                    if ticker and ticker not in seen_market_tickers:
-                        seen_market_tickers.add(ticker)
+            # First try open markets (typical case)
+            for status_filter in ("open", None):
+                params = dict(params_base)
+                if status_filter:
+                    params["status"] = status_filter
+
+                data = self._make_public_request("/events", params)
+                if not data or "events" not in data:
+                    continue
+
+                events_found = data.get("events", [])
+                print(f"DEBUG: Raw API returned {len(events_found)} events for {series}")
+
+                for e in events_found:
+                    # Flatten markets and attach event metadata
+                    for m in e.get("markets", []):
+                        ticker = m.get("ticker")
+                        if ticker and ticker in seen_market_tickers:
+                            continue
+
                         m['event_title'] = e.get('title')
                         m['event_ticker'] = e.get('event_ticker')
                         m['series'] = series
-                        
-                        # Filter out long-term futures (championships, etc.)
+
                         close_time = _parse_market_date(m.get("close_time"))
+                        days_until_close = None
                         if close_time:
-                            now_dt = datetime.now(pytz.UTC)
-                            days_until_close = (close_time - now_dt).total_seconds() / 86400
-                            
-                            # Only include markets closing within the next N days
-                            if days_until_close <= days_ahead and days_until_close >= -0.5:  # Allow games that started recently
-                                all_events.append(m)
-                                logger.debug(f"Added market: {m.get('title')} (closes in {days_until_close:.1f} days)")
-                            else:
-                                logger.debug(f"Skipped: {m.get('title')} (closes in {days_until_close:.1f} days)")
+                            days_until_close = (close_time - now_dt).total_seconds() / (24 * 60 * 60)
+
+                        if days_until_close is None or (-0.5 <= days_until_close <= days_ahead):
+                            if ticker:
+                                seen_market_tickers.add(ticker)
+                            all_events.append(m)
+                        else:
+                            # Uncomment to debug filtered futures markets
+                            # print(f"Skipped {ticker}: Closes in {days_until_close:.2f} days")
+                            pass
         
         logger.info(f"Total markets after filtering: {len(all_events)}")
         self._markets_cache[cache_key] = all_events
@@ -500,17 +533,11 @@ class KalshiIntegrator:
         return self.get_todays_events()
     
     def get_game_markets_for_events(self, league="NBA"):
-        # Try game-specific series first, fall back to championship series
-        game_series = GAME_SERIES.get(league.upper())
-        if game_series:
-            markets = self.get_todays_events(game_series)
-            if markets:
-                return markets
-        
-        # Fallback to championship series
-        sport_map = {'NBA': 'KXNBA', 'NFL': 'KXNFL', 'NHL': 'KXNHL', 'MLB': 'KXMLB'}
-        return self.get_todays_events(sport_map.get(league.upper(), 'KXNBA'))
-    
+        """Legacy alias used by Kalshi tab."""
+        sport_map = {k: v for k, v in GAME_SERIES.items()}
+        ticker = sport_map.get(league.upper(), GAME_SERIES["NBA"])
+        return self.get_todays_events(ticker)
+
     def filter_markets_closing_today(self, markets):
         if not markets:
             return []
@@ -555,68 +582,48 @@ class KalshiIntegrator:
         return None
 
     def get_game_market(self, home_team, away_team, sport="NBA", game_time=None):
-        """
-        Match a game to a Kalshi market using improved league-specific matching.
-        
-        Args:
-            home_team: Home team name
-            away_team: Away team name
-            sport: Sport/league identifier
-            game_time: Optional game time
-        
-        Returns:
-            Dict with kalshi_available, kalshi_prob, and debug info
-        """
-        sport_map = {
-            'nba': ('KXNBAGAME', 'NBA'),
-            'basketball_nba': ('KXNBAGAME', 'NBA'),
-            'nfl': ('KXNFLGAME', 'NFL'),
-            'americanfootball_nfl': ('KXNFLGAME', 'NFL'),
-            'nhl': ('KXNHLGAME', 'NHL'),
-            'icehockey_nhl': ('KXNHLGAME', 'NHL'),
-            'mlb': ('KXMLBGAME', 'MLB'),
-            'baseball_mlb': ('KXMLBGAME', 'MLB'),
-            'ncaaf': ('KXNCAAFGAME', 'NCAAF'),
-            'americanfootball_ncaaf': ('KXNCAAFGAME', 'NCAAF'),
-            'ncaab': ('KXNCAABGAME', 'NCAAB'),
-            'basketball_ncaab': ('KXNCAABGAME', 'NCAAB')
-        }
-        
-        series_ticker, league = sport_map.get(sport.lower(), ("KXNBAGAME", "NBA"))
-        
-        # Try game series first
+        # 1. Select Series
+        sport_map = {k.lower(): v for k, v in GAME_SERIES.items()}
+        sport_map.update({
+            'basketball_nba': GAME_SERIES['NBA'],
+            'americanfootball_nfl': GAME_SERIES['NFL'],
+            'icehockey_nhl': GAME_SERIES['NHL'],
+            'baseball_mlb': GAME_SERIES['MLB'],
+            'americanfootball_ncaaf': GAME_SERIES['NCAAF'],
+            'basketball_ncaab': GAME_SERIES['NCAAB']
+        })
+        series_ticker = sport_map.get(sport.lower(), GAME_SERIES["NBA"])
         markets = self.get_todays_events(series_ticker)
         
-        # If no game markets, try championship/futures series as fallback
-        if not markets:
-            fallback_series = series_ticker.replace("GAME", "")
-            logger.info(f"No markets in {series_ticker}, trying {fallback_series}")
-            markets = self.get_todays_events(fallback_series)
-        
-        # Look up team codes using league-specific mapping
-        home_code = self._lookup_team_code(home_team, league)
-        away_code = self._lookup_team_code(away_team, league)
-        
-        logger.info(f"Matching {home_team} vs {away_team} in {league}")
-        logger.info(f"Found codes: home={home_code}, away={away_code}")
-        
-        # Normalize team names for text matching
-        home_norm = TeamNameMatcher.normalize(home_team).lower()
-        away_norm = TeamNameMatcher.normalize(away_team).lower()
+        # 2. Normalize Names & Get Codes
+        home_norm = TeamNameMatcher.normalize(home_team).upper()
+        away_norm = TeamNameMatcher.normalize(away_team).upper()
+
+        def _lookup_team_code(name: str, normalized: str) -> Optional[str]:
+            mascot_preserving = re.sub(r"[^A-Z\s]", "", (name or "").upper()).strip()
+            for key in (mascot_preserving, normalized):
+                if key and key in TEAM_TO_TICKER:
+                    return TEAM_TO_TICKER[key]
+            return None
+
+        home_code = _lookup_team_code(home_team, home_norm)
+        away_code = _lookup_team_code(away_team, away_norm)
         
         best_market = None
         best_score = 0.0
         match_type = "none"
-        
-        # Create comprehensive alias sets
-        home_aliases = {home_team.lower().strip(), home_norm}
-        away_aliases = {away_team.lower().strip(), away_norm}
-        
-        if home_code and league in KALSHI_ABBREVIATIONS and home_code in KALSHI_ABBREVIATIONS[league]:
-            home_aliases.update(n.lower() for n in KALSHI_ABBREVIATIONS[league][home_code])
-        if away_code and league in KALSHI_ABBREVIATIONS and away_code in KALSHI_ABBREVIATIONS[league]:
-            away_aliases.update(n.lower() for n in KALSHI_ABBREVIATIONS[league][away_code])
-        
+
+        # Build alias sets for quick containment checks against Kalshi titles
+        def _alias_set(name: str, normalized: str) -> List[str]:
+            return list({
+                (name or "").lower().strip(),
+                normalized.lower().strip(),
+                TeamNameMatcher.normalize(name or "").lower().strip(),
+            } - {""})
+
+        home_aliases = _alias_set(home_team, home_norm)
+        away_aliases = _alias_set(away_team, away_norm)
+
         for m in markets:
             event_ticker = str(m.get("event_ticker", "")).upper()
             title = m.get("title", "").lower()
@@ -642,15 +649,32 @@ class KalshiIntegrator:
             if contains_home and contains_away:
                 if best_score < 0.95:
                     best_market = m
-                    best_score = 0.95
-                    match_type = "text_contains"
-                    logger.info(f"✓ Text match: {event_title}")
+                    best_score = 1.0
+                    match_type = "ticker_code_rev"
+                    break
+
+            # B. TITLE CONTAINMENT (Strong Fallback)
+            title_text = (m.get("event_title", "") + " " + market_text).lower()
+            contains_home = any(alias in title_text for alias in home_aliases)
+            contains_away = any(alias in title_text for alias in away_aliases)
+
+            if contains_home and contains_away:
+                best_market = m
+                best_score = 0.9
+                match_type = "title_contains"
+                # Skip remaining scoring for this market since it's a strong match
                 continue
-            
+
             # C. FUZZY MATCH (Fallback)
-            if best_score < 0.9:
-                h_score = TeamNameMatcher.similarity_score(home_norm, full_text)
-                a_score = TeamNameMatcher.similarity_score(away_norm, full_text)
+            if best_score < 1.0:
+                event_title = m.get("event_title", "").lower()
+                full_text = event_title + " " + market_text
+                
+                h_score = TeamNameMatcher.similarity_score(home_norm.lower(), full_text)
+                a_score = TeamNameMatcher.similarity_score(away_norm.lower(), full_text)
+                
+                # Boost "Winner" markets slightly
+                is_winner = "winner" in market_text or "win" in market_text
                 
                 if h_score > 0.5 and a_score > 0.5:
                     avg = (h_score + a_score) / 2
@@ -666,24 +690,42 @@ class KalshiIntegrator:
             "kalshi_match_debug": f"No match (League: {league}, Codes: {home_code}/{away_code})",
             "kalshi_label": None
         }
-        
+
         if best_market and best_score > 0.5:
-            # Extract probability
-            yes_price = price_to_prob(best_market.get("yes_bid"))
+            # Use any available price to avoid treating a matched market as "No Match"
+            yes_bid = price_to_prob(best_market.get("yes_bid"))
+            yes_ask = price_to_prob(best_market.get("yes_ask"))
+            last_trade = price_to_prob(best_market.get("last_price") or best_market.get("last_trade_price"))
+
+            # Midpoint if both sides are present, otherwise fall back to whichever exists
+            if yes_bid is not None and yes_ask is not None:
+                yes_price = (yes_bid + yes_ask) / 2
+            else:
+                yes_price = yes_bid if yes_bid is not None else yes_ask if yes_ask is not None else last_trade
+
+            # Some markets may not expose bids/asks but do include probability-style fields; use
+            # those before giving up so matched events are not discarded as "No Match".
             if yes_price is None:
-                yes_price = price_to_prob(best_market.get("last_price") or best_market.get("yes_ask"))
+                yes_price = price_to_prob(
+                    best_market.get("probability")
+                    or best_market.get("implied_prob")
+                    or best_market.get("market_prob")
+                )
+
+            # As a last resort, keep the match but neutralize the probability so the upstream
+            # analyzer can still display the market instead of showing "No Match".
             if yes_price is None:
                 yes_price = 0.5
-            
-            # Determine if we need to invert based on subtitle
+
             subtitle = best_market.get("subtitle", "").lower()
+
+            # Determine Probability Direction
+            is_home_sub = home_norm.lower() in subtitle
+            is_away_sub = away_norm.lower() in subtitle
+
             final_prob = yes_price
-            
-            # If the market subtitle mentions the away team but not home, invert
-            subtitle_has_away = any(alias in subtitle for alias in away_aliases if alias)
-            subtitle_has_home = any(alias in subtitle for alias in home_aliases if alias)
-            
-            if subtitle_has_away and not subtitle_has_home:
+            # If market is "Away Team to Win", invert the YES price for Home Team prob
+            if is_away_sub and not is_home_sub and yes_price:
                 final_prob = 1.0 - yes_price
             
             res.update({

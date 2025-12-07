@@ -676,7 +676,7 @@ class VertexMasterAnalyzer:
                     "baseball_mlb": "MLB",
                 }
                 game_league = league_map.get(skey, league)
-                
+
                 # Prefetch Kalshi
                 kalshi_info = None
                 if getattr(self, "kalshi", None) and getattr(self, "use_kalshi", True):
