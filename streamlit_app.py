@@ -13958,66 +13958,49 @@ with main_tab3:
 
 # ===== TAB 4: KALSHI PREDICTION MARKETS =====
 with main_tab4:
+    # 1. SETUP & CONFIGURATION (Must come first!)
+    st.header("📊 Kalshi Prediction Markets")
+    st.caption("Compare prediction market odds with traditional sportsbooks")
+
+    # Initialize Integrator
+    if 'kalshi_integrator' not in st.session_state:
+        kalshi_key = st.secrets.get("KALSHI_API_KEY", "")
+        kalshi_secret = st.secrets.get("KALSHI_API_SECRET", "")
+        st.session_state['kalshi_integrator'] = KalshiIntegrator(kalshi_key, kalshi_secret)
+    
+    kalshi = st.session_state['kalshi_integrator']
+
+    # 2. ANALYSIS MODE SELECTION (Define variable before using it)
+    analysis_mode = st.radio(
+        "Select Analysis Mode:",
+        ["🔍 Browse Kalshi Sports Markets", "⚖️ Compare with Sportsbooks", "💎 Find Arbitrage Opportunities"],
+        horizontal=True,
+    )
+    
+    st.markdown("---")
+
+    # 3. LOGIC BRANCHES
     if analysis_mode == "🔍 Browse Kalshi Sports Markets":
         st.subheader("🏈 Available Sports Betting Markets")
-
-        # Load markets from Kalshi
+        
+        # ... [Keep your existing "Browse" logic here] ...
+        
         if st.button("🔄 Load Kalshi Markets", type="primary", key="kalshi_load_markets"):
             with st.spinner("Fetching Kalshi markets..."):
-                try:
-                    markets = kalshi.get_sports_markets()
-                    st.session_state["kalshi_markets"] = markets
-                    if markets:
-                        st.success(f"✅ Loaded {len(markets)} sports markets")
-                    else:
-                        st.warning("⚠️ No Kalshi markets found for the current filters.")
-                        if kalshi.last_error:
-                            st.caption(f"Last Kalshi message: {kalshi.last_error}")
-                except Exception as e:
-                    st.error(f"Error loading markets: {e}")
-                    st.info("💡 Try demo mode without API keys to explore sample markets")
+                markets = kalshi.get_sports_markets()
+                st.session_state["kalshi_markets"] = markets
+        
+        # ... [Rest of browse logic] ...
 
-        # If markets exist, show filters + AI analysis
-        if "kalshi_markets" in st.session_state and st.session_state["kalshi_markets"]:
-            markets = st.session_state["kalshi_markets"]
+    elif analysis_mode == "⚖️ Compare with Sportsbooks":
+        # ... [Keep your existing comparison logic here] ...
+        st.subheader("⚖️ Kalshi vs Sportsbook Odds Comparison")
+        # ...
 
-            st.markdown(f"### 📋 {len(markets)} Markets Available")
-
-            # Filter + sorting controls
-            col_filter1, col_filter2 = st.columns(2)
-            with col_filter1:
-                sport_filter = st.selectbox(
-                    "Filter by Sport",
-                    options=["All"] + ["NFL", "NBA", "MLB", "NHL", "UFC", "Soccer"],
-                    key="kalshi_sport_filter",
-                )
-
-            with col_filter2:
-                sort_by = st.selectbox(
-                    "Sort by",
-                    options=[
-                        "Volume (High to Low)",
-                        "Close Date (Soonest)",
-                        "Title (A-Z)",
-                    ],
-                    key="kalshi_sort",
-                )
-
-            # Apply filter
-            filtered_markets = markets
-            if sport_filter != "All":
-                filtered_markets = [
-                    m for m in markets
-                    if sport_filter.upper() in m.get("title", "").upper()
-                ]
-
-            # Apply sorting
-            if sort_by == "Volume (High to Low)":
-                filtered_markets.sort(key=lambda x: x.get("volume", 0), reverse=True)
-            elif sort_by == "Close Date (Soonest)":
-                filtered_markets.sort(key=lambda x: x.get("close_time", ""))
-            else:
-                filtered_markets.sort(key=lambda x: x.get("title", ""))
+    elif analysis_mode == "💎 Find Arbitrage Opportunities":
+        # ... [Keep your existing arbitrage logic here] ...
+        st.subheader("💎 Arbitrage Opportunity Scanner")
+        # ...
 
             # ----------------------------
             # AI Analysis (Gemini vs Kalshi)
