@@ -42,6 +42,30 @@ LEAGUE_SERIES_MAP = {
 TEAM_FUZZY_THRESHOLD = 0.6
 MAX_LINE_DIFF = 3.0
 
+from datetime import datetime, timezone
+
+nba_markets = self.get_game_markets_for_events("NBA")
+print(f"NBA markets returned (all): {len(nba_markets)}")
+
+# Inspect a few close_time values
+for m in nba_markets[:5]:
+    ct = m.get("close_time")
+    print("NBA sample close_time raw:", ct)
+    try:
+        if isinstance(ct, str):
+            iso_str = ct.replace("Z", "+00:00")
+            dt_utc = datetime.fromisoformat(iso_str)
+        elif isinstance(ct, (int, float)):
+            ts = float(ct)
+            if ts > 10**11:  # ms → sec
+                ts /= 1000.0
+            dt_utc = datetime.fromtimestamp(ts, tz=timezone.utc)
+        else:
+            dt_utc = None
+        print(" -> parsed UTC:", dt_utc)
+    except Exception as e:
+        print(" -> parse error:", e)
+
 
 def price_to_prob(price) -> Optional[float]:
     """Convert a Kalshi price (dollars or fraction) to probability.
