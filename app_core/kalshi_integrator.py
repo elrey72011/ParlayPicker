@@ -657,6 +657,7 @@ class KalshiIntegrator:
             path_to_sign = f"/trade-api/v2{path_suffix}"
             
             signature = self._sign_request(method.upper(), path_to_sign, timestamp)
+            
             headers["KALSHI-ACCESS-KEY"] = self.api_key
             headers["KALSHI-ACCESS-SIGNATURE"] = signature
             headers["KALSHI-ACCESS-TIMESTAMP"] = timestamp
