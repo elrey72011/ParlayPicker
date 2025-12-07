@@ -183,10 +183,10 @@ def match_game_to_kalshi(
             reason="no_events",
         )
 
-    def _meaningful_tokens(s: str) -> List[str]:
-        if not s:
+    def _meaningful_tokens(name: str) -> List[str]:
+        if not name:
             return []
-        tokens = _normalize_market_text(s).split()
+        tokens = _normalize_market_text(name).split()
         stopwords = {"state", "university", "fc", "cf", "club", "the", "and", "at"}
         return [t for t in tokens if len(t) > 2 and t not in stopwords]
 
@@ -196,8 +196,6 @@ def match_game_to_kalshi(
 
     best_market: Optional[Dict[str, Any]] = None
     best_score = 0.0
-    team_overlap_found = False
-    date_mismatch_seen = False
 
     for market in markets:
         series = str(market.get("series_ticker") or "").upper()
@@ -212,7 +210,6 @@ def match_game_to_kalshi(
         market_text = _normalize_market_text(title, subtitle, ticker)
         market_tokens = set(market_text.split())
 
-        # Count overlapping tokens with the home/away team names
         home_overlap = len(home_tokens & market_tokens)
         away_overlap = len(away_tokens & market_tokens)
 
@@ -222,22 +219,15 @@ def match_game_to_kalshi(
         if away_overlap > 0:
             team_hits += 1
 
-        # Require at least one side to match
+        # Require at least some overlap with at least one team
         if team_hits == 0:
             continue
 
-        team_overlap_found = True
+        market_date = _parse_market_date(market.get("close_time") or market.get("event_date"))
+        if game_dt and market_date and market_date.date() != game_dt.date():
+            continue
 
-        # Date proximity (soft window to debug token matching)
-        market_date = _parse_kalshi_date(market.get("close_time") or market.get("event_date"))
-        if game_date and market_date:
-            day_diff = abs((market_date.date() - game_date).days)
-            # TODO: re-enable strict date filter after we confirm matches
-            if day_diff > 2:
-                date_mismatch_seen = True
-                continue
-
-        # Score: overlapping tokens + small bonus if ticker looks like a game-level market
+        # Score: more overlapping tokens = better; prefer game-level tickers.
         score = float(home_overlap + away_overlap)
         if ticker and "GAME" in ticker.upper():
             score += 0.5
@@ -247,14 +237,13 @@ def match_game_to_kalshi(
             best_market = market
 
     if not best_market:
-        reason = "team_mismatch"
-        if team_overlap_found and date_mismatch_seen:
-            reason = "date_mismatch"
         logger.info(
-            "[KALSHI MATCH] NO_MATCH home=%s away=%s game_dt=%s",
+            "match_game_to_kalshi: NO_MATCH league=%s home=%s away=%s date=%s num_markets=%s",
+            league,
             home_team,
             away_team,
-            game_dt if "game_dt" in locals() else game_time,
+            game_dt,
+            len(markets) if markets else 0,
         )
         return KalshiMatchResult(
             matched=False,
@@ -262,7 +251,7 @@ def match_game_to_kalshi(
             probability=None,
             raw_event_id=None,
             league=league_norm,
-            reason=reason,
+            reason="no_market_match",
         )
 
     if best_score < TEAM_FUZZY_THRESHOLD:
