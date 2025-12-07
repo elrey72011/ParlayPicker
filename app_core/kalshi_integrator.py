@@ -433,8 +433,6 @@ class KalshiIntegrator:
             days_ahead: How many days ahead to look (default 3)
         """
         now = int(time.time())
-        start_window = now - (12 * 60 * 60)  # Look 12 hours back for games already started
-        future_window = now + (days_ahead * 24 * 60 * 60)  # Look N days ahead
         target_series = [sport_ticker] if sport_ticker else CORE_SERIES
         cache_key = f"events_{sport_ticker or 'all'}_{now // 300}"
         
@@ -445,12 +443,12 @@ class KalshiIntegrator:
         seen_market_tickers = set()
         
         for series in target_series:
-            # Try without time filters first to get ALL active markets
+            # Use only the documented parameters
             params = {
                 "series_ticker": series,
                 "with_nested_markets": "true",
                 "limit": 200,
-                "status": "active"
+                "status": "open"  # Valid values: 'open', 'closed', 'settled'
             }
             
             data = self._make_public_request("/events", params)
@@ -458,10 +456,12 @@ class KalshiIntegrator:
                 logger.warning(f"No events returned for {series}")
                 continue
 
-            logger.info(f"Found {len(data.get('events', []))} events for {series}")
+            events_found = data.get("events", [])
+            logger.info(f"Found {len(events_found)} events for {series}")
             
-            for e in data.get("events", []):
-                for m in e.get("markets", []):
+            for e in events_found:
+                markets = e.get("markets", [])
+                for m in markets:
                     ticker = m.get("ticker")
                     if ticker and ticker not in seen_market_tickers:
                         seen_market_tickers.add(ticker)
@@ -472,13 +472,15 @@ class KalshiIntegrator:
                         # Filter out long-term futures (championships, etc.)
                         close_time = _parse_market_date(m.get("close_time"))
                         if close_time:
+                            now_dt = datetime.now(pytz.UTC)
+                            days_until_close = (close_time - now_dt).total_seconds() / 86400
+                            
                             # Only include markets closing within the next N days
-                            days_until_close = (close_time - datetime.now(pytz.UTC)).days
-                            if days_until_close <= days_ahead:
+                            if days_until_close <= days_ahead and days_until_close >= -0.5:  # Allow games that started recently
                                 all_events.append(m)
-                                logger.debug(f"Added market: {m.get('title')} (closes in {days_until_close} days)")
+                                logger.debug(f"Added market: {m.get('title')} (closes in {days_until_close:.1f} days)")
                             else:
-                                logger.debug(f"Skipped long-term market: {m.get('title')} (closes in {days_until_close} days)")
+                                logger.debug(f"Skipped: {m.get('title')} (closes in {days_until_close:.1f} days)")
         
         logger.info(f"Total markets after filtering: {len(all_events)}")
         self._markets_cache[cache_key] = all_events
@@ -488,6 +490,14 @@ class KalshiIntegrator:
         return self.get_todays_events()
     
     def get_game_markets_for_events(self, league="NBA"):
+        # Try game-specific series first, fall back to championship series
+        game_series = GAME_SERIES.get(league.upper())
+        if game_series:
+            markets = self.get_todays_events(game_series)
+            if markets:
+                return markets
+        
+        # Fallback to championship series
         sport_map = {'NBA': 'KXNBA', 'NFL': 'KXNFL', 'NHL': 'KXNHL', 'MLB': 'KXMLB'}
         return self.get_todays_events(sport_map.get(league.upper(), 'KXNBA'))
     
@@ -548,22 +558,30 @@ class KalshiIntegrator:
             Dict with kalshi_available, kalshi_prob, and debug info
         """
         sport_map = {
-            'nba': ('KXNBA', 'NBA'),
-            'basketball_nba': ('KXNBA', 'NBA'),
-            'nfl': ('KXNFL', 'NFL'),
-            'americanfootball_nfl': ('KXNFL', 'NFL'),
-            'nhl': ('KXNHL', 'NHL'),
-            'icehockey_nhl': ('KXNHL', 'NHL'),
-            'mlb': ('KXMLB', 'MLB'),
-            'baseball_mlb': ('KXMLB', 'MLB'),
-            'ncaaf': ('KXNCAAF', 'NCAAF'),
-            'americanfootball_ncaaf': ('KXNCAAF', 'NCAAF'),
-            'ncaab': ('KXNCAAB', 'NCAAB'),
-            'basketball_ncaab': ('KXNCAAB', 'NCAAB')
+            'nba': ('KXNBAGAME', 'NBA'),
+            'basketball_nba': ('KXNBAGAME', 'NBA'),
+            'nfl': ('KXNFLGAME', 'NFL'),
+            'americanfootball_nfl': ('KXNFLGAME', 'NFL'),
+            'nhl': ('KXNHLGAME', 'NHL'),
+            'icehockey_nhl': ('KXNHLGAME', 'NHL'),
+            'mlb': ('KXMLBGAME', 'MLB'),
+            'baseball_mlb': ('KXMLBGAME', 'MLB'),
+            'ncaaf': ('KXNCAAFGAME', 'NCAAF'),
+            'americanfootball_ncaaf': ('KXNCAAFGAME', 'NCAAF'),
+            'ncaab': ('KXNCAABGAME', 'NCAAB'),
+            'basketball_ncaab': ('KXNCAABGAME', 'NCAAB')
         }
         
-        series_ticker, league = sport_map.get(sport.lower(), ("KXNBA", "NBA"))
+        series_ticker, league = sport_map.get(sport.lower(), ("KXNBAGAME", "NBA"))
+        
+        # Try game series first
         markets = self.get_todays_events(series_ticker)
+        
+        # If no game markets, try championship/futures series as fallback
+        if not markets:
+            fallback_series = series_ticker.replace("GAME", "")
+            logger.info(f"No markets in {series_ticker}, trying {fallback_series}")
+            markets = self.get_todays_events(fallback_series)
         
         # Look up team codes using league-specific mapping
         home_code = self._lookup_team_code(home_team, league)
