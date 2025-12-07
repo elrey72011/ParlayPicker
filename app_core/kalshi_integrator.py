@@ -986,17 +986,24 @@ class KalshiIntegrator:
 
         return sports_markets
 
-    def _get_today_timestamp_range(self) -> tuple:
-        """Get UTC timestamp range for today (midnight to midnight)."""
-        from datetime import datetime as dt, timezone as tz
-
-        now = dt.now(tz.utc)
-        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        today_end = now.replace(hour=23, minute=59, second=59, microsecond=999999)
-
-        min_ts = int(today_start.timestamp() * 1000)
-        max_ts = int(today_end.timestamp() * 1000)
-        return min_ts, max_ts
+    def _get_today_datetime_range(self, tz_name: str = "America/New_York"):
+        """Get datetime range for *today* in the given timezone, returned in UTC."""
+        from datetime import datetime, time as dtime, timezone
+        import pytz
+    
+        # Localize to the given timezone (your app is Eastern)
+        tz = pytz.timezone(tz_name)
+        now_local = datetime.now(tz)
+    
+        start_local = tz.localize(
+            datetime.combine(now_local.date(), dtime.min)
+        )
+        end_local = tz.localize(
+            datetime.combine(now_local.date(), dtime.max)
+        )
+    
+        # Return as UTC datetimes
+        return start_local.astimezone(timezone.utc), end_local.astimezone(timezone.utc)
 
     def get_game_markets_for_events(self, league: str = "NBA") -> List[Dict[str, Any]]:
         """Get game-related markets for a specific league (NBA, NFL, MLB, NHL, etc.)."""
@@ -1089,21 +1096,55 @@ class KalshiIntegrator:
             print(f"Traceback: {traceback.format_exc()}")
             return []
 
-    def filter_markets_closing_today(
-        self, markets: List[Dict[str, Any]]
-    ) -> List[Dict[str, Any]]:
-        """Filter markets to only those closing today (UTC)."""
+    def filter_markets_closing_today(self, markets: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Filter markets to only those closing today (based on America/New_York date)."""
+        from datetime import datetime, timezone
+    
         if not markets:
             return []
-
-        min_ts, max_ts = self._get_today_timestamp_range()
-
-        filtered = []
+    
+        min_dt, max_dt = self._get_today_datetime_range("America/New_York")
+    
+        filtered: List[Dict[str, Any]] = []
+    
         for m in markets:
-            close_ts = m.get("close_time")
-            if isinstance(close_ts, (int, float)) and min_ts <= close_ts <= max_ts:
+            close_raw = m.get("close_time")
+            if close_raw is None:
+                continue
+    
+            close_dt = None
+    
+            # Case 1: ISO 8601 string e.g. "2025-12-08T01:00:00Z"
+            if isinstance(close_raw, str):
+                try:
+                    # Handle trailing 'Z' as UTC
+                    iso_str = close_raw.replace("Z", "+00:00")
+                    close_dt = datetime.fromisoformat(iso_str)
+                    if close_dt.tzinfo is None:
+                        close_dt = close_dt.replace(tzinfo=timezone.utc)
+                    else:
+                        close_dt = close_dt.astimezone(timezone.utc)
+                except Exception:
+                    # If parsing fails, skip this one
+                    continue
+    
+            # Case 2: numeric timestamp (seconds or ms)
+            elif isinstance(close_raw, (int, float)):
+                try:
+                    ts = float(close_raw)
+                    # Heuristic: if it's huge, assume ms
+                    if ts > 10**11:
+                        ts /= 1000.0
+                    close_dt = datetime.fromtimestamp(ts, tz=timezone.utc)
+                except Exception:
+                    continue
+    
+            if close_dt is None:
+                continue
+    
+            if min_dt <= close_dt <= max_dt:
                 filtered.append(m)
-
+    
         return filtered
 
     def group_game_markets_by_event(
