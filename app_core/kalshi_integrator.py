@@ -39,7 +39,23 @@ LEAGUE_SERIES_MAP = {
     "ncaab": "KXNCAAB",
 }
 
-TEAM_FUZZY_THRESHOLD = 0.5
+FUTURE_EXCLUDE_KEYWORDS = {
+    "champions league",
+    "ucl",
+    "winner",
+    "wins",
+    "win league",
+    "win the league",
+    "title",
+    "championship",
+    "playoffs",
+    "division",
+    "relegation",
+    "bottom of table",
+    "top of table",
+}
+
+TEAM_FUZZY_THRESHOLD = 2.0
 MAX_LINE_DIFF = 3.0
 
 def price_to_prob(price) -> Optional[float]:
@@ -186,7 +202,18 @@ def match_game_to_kalshi(
         if not name:
             return []
         tokens = _normalize_market_text(name).split()
-        stopwords = {"state", "university", "fc", "cf", "club", "the", "and", "at"}
+        stopwords = {
+            "state",
+            "university",
+            "fc",
+            "cf",
+            "club",
+            "the",
+            "and",
+            "at",
+            "city",
+            "united",
+        }
         return [t for t in tokens if len(t) > 2 and t not in stopwords]
 
     home_tokens = set(_meaningful_tokens(home_team))
@@ -207,6 +234,11 @@ def match_game_to_kalshi(
         subtitle = market.get("subtitle") or ""
         ticker = market.get("ticker") or ""
         market_text = _normalize_market_text(title, subtitle, ticker)
+
+        # 🚫 Exclude obvious futures / UCL / tournament markets
+        lower_text = (title + " " + subtitle + " " + ticker).lower()
+        if any(key in lower_text for key in FUTURE_EXCLUDE_KEYWORDS):
+            continue
         market_tokens = set(market_text.split())
 
         home_overlap = len(home_tokens & market_tokens)
@@ -401,7 +433,18 @@ def fetch_kalshi_for_game(
         if not name:
             return []
         tokens = _normalize_market_text(name).split()
-        stopwords = {"state", "university", "fc", "cf", "club", "the", "and", "at"}
+        stopwords = {
+            "state",
+            "university",
+            "fc",
+            "cf",
+            "club",
+            "the",
+            "and",
+            "at",
+            "city",
+            "united",
+        }
         return [t for t in tokens if len(t) > 2 and t not in stopwords]
 
     home_tokens = set(_meaningful_tokens(home_team))
@@ -415,6 +458,11 @@ def fetch_kalshi_for_game(
         subtitle = market.get("subtitle") or ""
         ticker = market.get("ticker") or ""
         market_text = _normalize_market_text(title, subtitle, ticker)
+
+        # 🚫 Exclude obvious futures / UCL / tournament markets
+        lower_text = (title + " " + subtitle + " " + ticker).lower()
+        if any(key in lower_text for key in FUTURE_EXCLUDE_KEYWORDS):
+            continue
 
         market_tokens = set(market_text.split())
 
