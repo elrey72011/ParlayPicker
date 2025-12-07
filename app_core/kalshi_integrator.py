@@ -633,51 +633,49 @@ class KalshiIntegrator:
             logger.warning(f"Error signing Kalshi request: {e}")
             return ""
     
-    def _make_authenticated_request(self, method: str, endpoint: str, params: dict = None) -> Optional[dict]:
+        def _make_authenticated_request(self, method: str, endpoint: str, params: dict = None) -> Optional[dict]:
         """Make authenticated request to Kalshi API
-        
+
         Important: Per Kalshi docs, we sign ONLY the path (without query params),
         but send the full URL with query params in the actual request.
         """
         import time as time_module
-        
+
         url = f"{self.api_url}{endpoint}"
         timestamp = str(int(time_module.time() * 1000))
-        
+
         print(f"🌐 KALSHI: Request {method} {url}")
         print(f"🌐 KALSHI: Params: {params}")
         logger.info(f"Kalshi API request: {method} {url} with params: {params}")
-        
+
         headers = self.headers.copy()
-        
+
         if self._auth_ready and self._private_key:
-            # CRITICAL: Strip query parameters from endpoint before signing
-            # Per Kalshi docs: "Strip query parameters from path before signing"
-            path_suffix = endpoint.split('?')[0]
+            # Strip query parameters from endpoint before signing
+            path_suffix = endpoint.split("?", 1)[0]
             path_to_sign = f"/trade-api/v2{path_suffix}"
-            
+
             signature = self._sign_request(method.upper(), path_to_sign, timestamp)
-            
             headers["KALSHI-ACCESS-KEY"] = self.api_key
             headers["KALSHI-ACCESS-SIGNATURE"] = signature
             headers["KALSHI-ACCESS-TIMESTAMP"] = timestamp
-            
+
             print(f"🔐 KALSHI: Auth configured (key: {self.api_key[:8]}...)")
-            logger.debug(f"Signing: {timestamp}{method.upper()}{path_without_query}") #remove?
-            logger.info(f"Using API URL: {self.api_url}") #remove?
+            logger.debug(f"Signing: {timestamp}{method.upper()}{path_to_sign}")
+            logger.info(f"Using API URL: {self.api_url}")
             logger.debug(f"Signed path: {path_to_sign}")
         else:
             print("⚠️ KALSHI: No authentication configured!")
-        
+
         try:
             if method.upper() == "GET":
                 response = requests.get(url, headers=headers, params=params, timeout=15)
             else:
                 response = requests.post(url, headers=headers, json=params, timeout=15)
-            
+
             print(f"📥 KALSHI: Response Status {response.status_code}")
             logger.info(f"Kalshi API response: Status {response.status_code}, URL: {response.url}")
-            
+
             if response.status_code == 200:
                 try:
                     data = response.json()
@@ -708,7 +706,7 @@ class KalshiIntegrator:
                 print(f"❌ KALSHI: API error {response.status_code}")
                 logger.warning(f"Kalshi API error: {response.status_code} - {response.text[:200]}")
                 self.last_error = f"API error: {response.status_code}"
-                
+
         except requests.exceptions.ConnectionError as e:
             print(f"❌ KALSHI: Connection error (network blocked?): {str(e)[:100]}")
             logger.error(f"Kalshi API connection error (network may be blocked): {e}")
@@ -723,7 +721,7 @@ class KalshiIntegrator:
             import traceback
             logger.error(f"Traceback: {traceback.format_exc()}")
             self.last_error = str(e)
-        
+
         return None
     
     def is_configured(self) -> bool:
