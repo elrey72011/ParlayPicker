@@ -27,6 +27,16 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+# Add this right after CORE_SERIES definition
+GAME_SERIES = {
+    "NBA": "KXNBAGAME",
+    "NFL": "KXNFLGAME", 
+    "NHL": "KXNHLGAME",
+    "MLB": "KXMLBGAME",
+    "NCAAF": "KXNCAAFGAME",
+    "NCAAB": "KXNCAABGAME"
+}
+
 CORE_SERIES = ["KXNBA", "KXNFL", "KXNHL", "KXMLB", "KXNCAAF", "KXNCAAB"]
 
 # League-specific team mappings to prevent code collisions
