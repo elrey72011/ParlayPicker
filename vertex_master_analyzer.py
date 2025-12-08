@@ -451,27 +451,32 @@ class VertexMasterAnalyzer:
         try:
             home = game.get("home_team", "")
             away = game.get("away_team", "")
-            # Normalize league/sport_key to match SUPPORTED_LEAGUES used by Kalshi integrator
             raw_league = league or game.get("league") or game.get("sport_key") or "NBA"
             league = normalize_league(raw_league)
 
-            # CRITICAL FIX: Ensure game_dt is defined
+            # --- FIX: DEFINE game_dt HERE ---
             game_time = game.get("commence_time") or game.get("game_time")
             game_dt = None
             if game_time:
                 try:
-                    game_dt = datetime.fromisoformat(str(game_time).replace("Z", "+00:00"))
-                except:
+                    # Handle string ISO format
+                    if isinstance(game_time, str):
+                        game_dt = datetime.fromisoformat(str(game_time).replace("Z", "+00:00"))
+                    # Handle existing datetime object
+                    elif isinstance(game_time, datetime):
+                        game_dt = game_time
+                except Exception:
                     game_dt = None
+            # --------------------------------
 
             market_info = prefetch_info
             if market_info is None:
-                # Pass status=None to fetch 'closed' and 'settling' markets too
+                # FIX: Pass status=None to find markets even if they are active/locked
                 market_info = match_game_to_kalshi(league, home, away, game_dt, integrator=self.kalshi, status=None)
 
             logging.info(f"[Kalshi FETCH] home={home} away={away} dt={game_dt}")
 
-            # Check if market_info is a match object or dict
+            # [Rest of logic remains the same]
             is_matched = False
             prob = None
             label = None
@@ -518,7 +523,6 @@ class VertexMasterAnalyzer:
             feats["kalshi_label"] = label
             feats["kalshi_volume"] = market_info.get("kalshi_volume")
             
-            # Simple Alignment Check
             model_p = game.get("implied_home_prob") or game.get("win_prob")
             if model_p is not None:
                 try:

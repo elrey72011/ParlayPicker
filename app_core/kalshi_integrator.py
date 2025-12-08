@@ -158,31 +158,23 @@ def _parse_market_date(raw) -> Optional[datetime]:
 
 
 def _build_team_codes(team_name: str) -> List[str]:
-    """Generate plausible team codes from a full team name, using explicit maps."""
+    """Generate plausible team codes using explicit maps."""
     if not team_name:
         return []
-    
     codes = []
-    
-    # 1. Check explicit map (Case Insensitive)
     upper_name = team_name.upper().strip()
     if upper_name in KALSHI_TEAM_ABBREVIATIONS:
         codes.extend(KALSHI_TEAM_ABBREVIATIONS[upper_name])
-    
-    # 2. Also check if the team name *contains* a known key (e.g. "Arizona Cardinals" inside "Arizona Cardinals (Home)")
     for key, abbreviations in KALSHI_TEAM_ABBREVIATIONS.items():
         if key in upper_name:
             codes.extend(abbreviations)
-
-    # 3. Fallback: Generate standard 3-letter codes
     words = [w for w in re.split(r"\s+", team_name) if w]
     if words:
         codes.append(words[0][:3].upper())
         codes.append("".join(w[0] for w in words[:3]).upper())
     if len(words) > 1:
         codes.append(words[-1][:3].upper())
-        
-    return list(set(codes)) # Return unique codes
+    return list(set(codes))
 
 
 def _extract_date_from_ticker(ticker: str) -> Optional[datetime]:
@@ -393,10 +385,9 @@ def match_game_to_kalshi(
                 continue
 
         if game_dt and meta.get("market_date"):
+            # Strict check: Must be within 24 hours to handle TZ differences, but target same day
             day_diff = abs((meta["market_date"].date() - game_dt.date()).days)
-            # INCREASE TOLERANCE or log it
-            if day_diff > 3:
-                # _debug_log(f"Skipping market {meta['ticker']} due to date diff: {day_diff} days")
+            if day_diff > 1:
                 continue
 
         teams = meta.get("teams", [])
@@ -926,118 +917,38 @@ class KalshiIntegrator:
             print(f"❌ KALSHI: Traceback: {traceback.format_exc()}")
             return []
 
-    def get_markets(
-        self, category: str = "sports", status: Optional[str] = "open"
-    ) -> List[Dict]:
-        """Fetch available Kalshi markets."""
-        # We *don't* hard-return synthetic here; we still try live API.
+    def get_markets(self, category: str = "sports", status: Optional[str] = "open") -> List[Dict]:
         cache_key = status or "all"
         now = time.time()
-        if (
-            cache_key in self._markets_cache
-            and cache_key in self._cache_time
-            and now - self._cache_time[cache_key] < self._cache_duration
-        ):
-            logger.info("Kalshi get_markets cache hit for status=%s", cache_key)
-            return copy.deepcopy(self._markets_cache.get(cache_key, []))
+        if cache_key in self._markets_cache and now - self._cache_time.get(cache_key, 0) < self._cache_duration:
+            return copy.deepcopy(self._markets_cache[cache_key])
 
-        all_markets: List[Dict[str, Any]] = []
-
+        all_markets = []
         try:
-            sports_series = self.get_sports_series()
-
-            if sports_series:
-                logger.info(
-                    "Found %d sports series from /series", len(sports_series)
-                )
-
-                # Pull markets from first few sports series to avoid rate limits
-                for series in sports_series[:10]:
-                    series_ticker = series.get("ticker")
-                    if not series_ticker:
-                        continue
-
-                    logger.info("Fetching markets for series: %s", series_ticker)
-                    endpoint = "/markets"
-                    params = {
-                        "series_ticker": series_ticker,
-                        "limit": 200,
-                    }
-                    if status:
-                        params["status"] = status
-
-                    response_data = self._make_authenticated_request(
-                        "GET", endpoint, params=params
-                    )
-                    if response_data:
-                        markets = response_data.get("markets", [])
-                        logger.info(
-                            "Got %d markets from %s",
-                            len(markets),
-                            series_ticker,
-                        )
-                        all_markets.extend(markets)
-                        if len(all_markets) >= 200:
-                            break
-            else:
-                # Fallback: call /markets directly
-                logger.warning(
-                    "No sports series found from /series; falling back to /markets"
-                )
-                endpoint = "/markets"
-                params = {"limit": 200}
-                if status:
-                    params["status"] = status
-                response_data = self._make_authenticated_request(
-                    "GET", endpoint, params=params
-                )
-                if response_data:
-                    fallback_markets = response_data.get("markets", [])
-                    logger.info(
-                        "Fallback /markets returned %d markets",
-                        len(fallback_markets),
-                    )
-                    all_markets.extend(fallback_markets)
+            series_list = self.get_sports_series()
+            if series_list:
+                series_list.sort(key=lambda x: x.get("start_date", ""), reverse=True)
+                for series in series_list[:50]:
+                    ticker = series.get("ticker")
+                    if not ticker: continue
+                    params = {"series_ticker": ticker, "limit": 1000}
+                    if status: params["status"] = status
+                    data = self._make_authenticated_request("GET", "/markets", params=params)
+                    if data: all_markets.extend(data.get("markets", []))
+            
+            # Fallback
+            if not all_markets:
+                params = {"limit": 1000}
+                if status: params["status"] = status
+                data = self._make_authenticated_request("GET", "/markets", params=params)
+                if data: all_markets.extend(data.get("markets", []))
 
             if all_markets:
-                self.last_error = None
-                logger.info(
-                    "✅ Loaded %d total Kalshi markets", len(all_markets)
-                )
-                sample_tickers = [
-                    m.get("ticker", "NO_TICKER") for m in all_markets[:5]
-                ]
-                logger.info("Sample tickers: %s", sample_tickers)
                 self._markets_cache[cache_key] = all_markets
                 self._cache_time[cache_key] = now
-                return all_markets
-
-            if (
-                self.last_error
-                and isinstance(self.last_error, str)
-                and self.last_error.startswith("Connection blocked")
-                and self.demo_markets_enabled
-            ):
-                print(
-                    "🧪 KALSHI: Connection blocked, using synthetic demo markets for debugging."
-                )
-                return self._get_synthetic_markets()
-
-            if not self.last_error:
-                self.last_error = "Kalshi API returned no markets"
-            logger.warning(
-                "No markets found (sports_series=%d)",
-                len(sports_series or []),
-            )
-
         except Exception as e:
-            self.last_error = str(e)
-            logger.error("Error fetching Kalshi markets: %s", e)
-            import traceback
-
-            logger.error("Traceback: %s", traceback.format_exc())
-
-        return []
+            logger.error(f"Error fetching markets: {e}")
+        return all_markets
 
     def get_sports_markets(self) -> List[Dict]:
         """Get all active sports betting markets."""
