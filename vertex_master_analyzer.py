@@ -451,7 +451,7 @@ class VertexMasterAnalyzer:
         try:
             home = game.get("home_team", "")
             away = game.get("away_team", "")
-            # Always use the normalized league to avoid sport_key mismatches
+            # Normalize league/sport_key to match SUPPORTED_LEAGUES used by Kalshi integrator
             raw_league = league or game.get("league") or game.get("sport_key") or "NBA"
             league = normalize_league(raw_league)
 
