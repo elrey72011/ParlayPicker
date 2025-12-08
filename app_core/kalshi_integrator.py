@@ -394,7 +394,9 @@ def match_game_to_kalshi(
 
         if game_dt and meta.get("market_date"):
             day_diff = abs((meta["market_date"].date() - game_dt.date()).days)
+            # INCREASE TOLERANCE or log it
             if day_diff > 3:
+                # _debug_log(f"Skipping market {meta['ticker']} due to date diff: {day_diff} days")
                 continue
 
         teams = meta.get("teams", [])
