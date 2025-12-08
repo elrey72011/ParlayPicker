@@ -61,6 +61,8 @@ def normalize_league(value: str) -> str:
     if "ncaaf" in v: return "ncaaf"
     if "nba" in v: return "nba"
     if "nhl" in v: return "nhl"
+    if "mlb" in v: return "mlb"
+    if "nfl" in v: return "nfl"
     return v
 
 def split_game(game: str) -> Tuple[Optional[str], Optional[str]]:
@@ -449,15 +451,18 @@ class VertexMasterAnalyzer:
         try:
             home = game.get("home_team", "")
             away = game.get("away_team", "")
-            # Always use the normalized league from analyze_all_games to avoid sport_key mismatches
-            league = league or game.get("league") or game.get("sport_key") or "NBA"
+            # Always use the normalized league to avoid sport_key mismatches
+            raw_league = league or game.get("league") or game.get("sport_key") or "NBA"
+            league = normalize_league(raw_league)
 
             # CRITICAL FIX: Ensure game_dt is defined
             game_time = game.get("commence_time") or game.get("game_time")
             game_dt = None
             if game_time:
-                try: game_dt = datetime.fromisoformat(str(game_time).replace("Z", "+00:00"))
-                except: game_dt = None
+                try:
+                    game_dt = datetime.fromisoformat(str(game_time).replace("Z", "+00:00"))
+                except:
+                    game_dt = None
 
             market_info = prefetch_info
             if market_info is None:
