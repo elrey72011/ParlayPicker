@@ -466,7 +466,8 @@ class VertexMasterAnalyzer:
 
             market_info = prefetch_info
             if market_info is None:
-                market_info = match_game_to_kalshi(league, home, away, game_dt, integrator=self.kalshi)
+                # Pass status=None to fetch 'closed' and 'settling' markets too
+                market_info = match_game_to_kalshi(league, home, away, game_dt, integrator=self.kalshi, status=None)
 
             logging.info(f"[Kalshi FETCH] home={home} away={away} dt={game_dt}")
 
