@@ -27,6 +27,7 @@ def _debug_log(message: str, *args: Any) -> None:
 
 class KalshiMatchResult(TypedDict, total=False):
     matched: bool
+    kalshi_available: bool
     label: str
     probability: Optional[float]
     raw_event_id: Optional[str]
@@ -238,11 +239,6 @@ def match_game_to_kalshi(
         if any(key in text for key in FUTURE_EXCLUDE_KEYWORDS):
             return None
 
-        if market.get("floor_strike") or market.get("cap_strike") or market.get("strike"):
-            strike_fields = [market.get("floor_strike"), market.get("cap_strike"), market.get("strike")]
-            if any(v not in (None, "") for v in strike_fields):
-                return None
-
         ticker_teams = _extract_teams_from_ticker(ticker)
         if len(ticker_teams) < 2:
             return None
@@ -280,6 +276,7 @@ def match_game_to_kalshi(
     if league_norm and league_norm not in SUPPORTED_LEAGUES:
         return KalshiMatchResult(
             matched=False,
+            kalshi_available=False,
             label="",
             probability=None,
             raw_event_id=None,
@@ -291,6 +288,7 @@ def match_game_to_kalshi(
     if kalshi is None:
         return KalshiMatchResult(
             matched=False,
+            kalshi_available=False,
             label="",
             probability=None,
             raw_event_id=None,
@@ -315,6 +313,7 @@ def match_game_to_kalshi(
             short_err = short_err[:77] + "..."
         return KalshiMatchResult(
             matched=False,
+            kalshi_available=False,
             label="",
             probability=None,
             raw_event_id=None,
@@ -331,6 +330,7 @@ def match_game_to_kalshi(
     if not parsed_markets:
         return KalshiMatchResult(
             matched=False,
+            kalshi_available=False,
             label="",
             probability=None,
             raw_event_id=None,
@@ -397,6 +397,7 @@ def match_game_to_kalshi(
     if not best_market or best_score < TEAM_FUZZY_THRESHOLD:
         return KalshiMatchResult(
             matched=False,
+            kalshi_available=False,
             label="",
             probability=None,
             raw_event_id=None,
@@ -424,6 +425,7 @@ def match_game_to_kalshi(
     if probability is None:
         return KalshiMatchResult(
             matched=False,
+            kalshi_available=False,
             label=meta.get("title") or meta.get("ticker"),
             probability=None,
             raw_event_id=str(best_market.get("ticker") or best_market.get("id")),
@@ -435,6 +437,7 @@ def match_game_to_kalshi(
 
     result = KalshiMatchResult(
         matched=True,
+        kalshi_available=True,
         label=meta.get("title") or meta.get("ticker"),
         probability=probability,
         raw_event_id=str(best_market.get("ticker") or best_market.get("id")),

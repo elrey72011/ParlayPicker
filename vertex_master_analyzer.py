@@ -626,7 +626,7 @@ class VertexMasterAnalyzer:
         edge_vs_kalshi = None
         if kalshi_prob is not None and market_type in ("ML", "Spread"):
             k_pick_prob = kalshi_prob if selection == "home" else (1.0 - kalshi_prob)
-            edge_vs_kalshi = ai_prob - k_pick_prob
+            edge_vs_kalshi = abs(ai_prob - k_pick_prob)
 
         # Format Pick
         pick_text = selection
