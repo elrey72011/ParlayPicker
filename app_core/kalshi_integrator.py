@@ -239,7 +239,7 @@ def match_game_to_kalshi(
         if any(key in text for key in FUTURE_EXCLUDE_KEYWORDS):
             return None
 
-        # NOTE: Do not filter out markets just because they have strikes.
+        # Do not filter out markets just because they have strikes.
         # Spreads and totals always have strikes and are valid game markets.
 
         ticker_teams = _extract_teams_from_ticker(ticker)
