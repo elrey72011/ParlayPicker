@@ -479,9 +479,17 @@ class VertexMasterAnalyzer:
                 return None
             
             if isinstance(market_info, dict):
-                is_matched = market_info.get("matched", False) or market_info.get("kalshi_available", False)
+                is_matched = (
+                    market_info.get("matched", False)
+                    or market_info.get("kalshi_available", False)
+                    or market_info.get("available", False)
+                )
                 prob = _pick_prob(market_info)
-                label = market_info.get("label") or market_info.get("kalshi_label")
+                label = (
+                    market_info.get("label")
+                    or market_info.get("kalshi_label")
+                    or market_info.get("market_type")
+                )
                 debug_reason = market_info.get("reason") or market_info.get("kalshi_match_debug")
                 feats["kalshi_match_debug"] = str(debug_reason)
                 feats["kalshi_status"] = str(debug_reason)
@@ -626,7 +634,7 @@ class VertexMasterAnalyzer:
         edge_vs_kalshi = None
         if kalshi_prob is not None and market_type in ("ML", "Spread"):
             k_pick_prob = kalshi_prob if selection == "home" else (1.0 - kalshi_prob)
-            edge_vs_kalshi = ai_prob - k_pick_prob
+            edge_vs_kalshi = abs(ai_prob - k_pick_prob)
 
         # Format Pick
         pick_text = selection
