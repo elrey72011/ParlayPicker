@@ -63,6 +63,10 @@ FUTURE_EXCLUDE_KEYWORDS = {
     "top of table",
     "season wins",
     "regular season wins",
+    "season",
+    "wins",
+    "champion",
+    "exactly",
 }
 
 TEAM_FUZZY_THRESHOLD = 2.0
