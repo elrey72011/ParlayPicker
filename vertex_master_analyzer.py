@@ -437,6 +437,8 @@ class VertexMasterAnalyzer:
             "kalshi_confidence": None,
             "kalshi_status": "no_market_match",
             "kalshi_event_ticker": None,
+            "kalshi_market_type": None,
+            "kalshi_direction": None,
         }
 
         if not getattr(self, "kalshi", None) or not getattr(self, "use_kalshi", True):
@@ -477,13 +479,23 @@ class VertexMasterAnalyzer:
                 return None
             
             if isinstance(market_info, dict):
-                is_matched = market_info.get("matched", False) or market_info.get("kalshi_available", False)
+                is_matched = (
+                    market_info.get("matched", False)
+                    or market_info.get("kalshi_available", False)
+                    or market_info.get("available", False)
+                )
                 prob = _pick_prob(market_info)
-                label = market_info.get("label") or market_info.get("kalshi_label")
+                label = (
+                    market_info.get("label")
+                    or market_info.get("kalshi_label")
+                    or market_info.get("market_type")
+                )
                 debug_reason = market_info.get("reason") or market_info.get("kalshi_match_debug")
                 feats["kalshi_match_debug"] = str(debug_reason)
                 feats["kalshi_status"] = str(debug_reason)
                 feats["kalshi_event_ticker"] = market_info.get("raw_event_id") or market_info.get("kalshi_event_ticker")
+                feats["kalshi_market_type"] = market_info.get("market_type")
+                feats["kalshi_direction"] = market_info.get("direction")
 
             if not is_matched or prob is None:
                 return feats
@@ -622,7 +634,7 @@ class VertexMasterAnalyzer:
         edge_vs_kalshi = None
         if kalshi_prob is not None and market_type in ("ML", "Spread"):
             k_pick_prob = kalshi_prob if selection == "home" else (1.0 - kalshi_prob)
-            edge_vs_kalshi = ai_prob - k_pick_prob
+            edge_vs_kalshi = abs(ai_prob - k_pick_prob)
 
         # Format Pick
         pick_text = selection
@@ -650,6 +662,8 @@ class VertexMasterAnalyzer:
             "kalshi_match_debug": feats.get("kalshi_match_debug", ""),
             "kalshi_available": feats.get("kalshi_available", False),
             "kalshi_label": feats.get("kalshi_label"),
+            "kalshi_market_type": feats.get("kalshi_market_type"),
+            "kalshi_direction": feats.get("kalshi_direction"),
             "game_time": feats.get("game_time"),
         }
 
