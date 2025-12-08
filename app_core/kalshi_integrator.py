@@ -160,25 +160,28 @@ def _parse_market_date(raw) -> Optional[datetime]:
 
 def _build_team_codes(team_name: str) -> List[str]:
     """Generate plausible team codes using explicit maps."""
-    if not team_name:
-        return []
+    if not team_name: return []
     codes = []
     upper_name = team_name.upper().strip()
     
-    # 1. Check explicit map
+    # Check explicit map
     if upper_name in KALSHI_TEAM_ABBREVIATIONS:
         codes.extend(KALSHI_TEAM_ABBREVIATIONS[upper_name])
+    
+    # Check if name contains key (e.g. "Arizona Cardinals (Home)")
     for key, abbreviations in KALSHI_TEAM_ABBREVIATIONS.items():
-        if key in upper_name:
+        if key in upper_name: 
             codes.extend(abbreviations)
+
+    # Fallback: Standard 3-letter logic
     words = [w for w in re.split(r"\s+", team_name) if w]
     if words:
         codes.append(words[0][:3].upper())
         codes.append("".join(w[0] for w in words[:3]).upper())
     if len(words) > 1:
         codes.append(words[-1][:3].upper())
+        
     return list(set(codes))
-
 
 def _extract_date_from_ticker(ticker: str) -> Optional[datetime]:
     """Attempt to pull a date from the Kalshi ticker text."""
