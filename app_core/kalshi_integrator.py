@@ -163,6 +163,8 @@ def _build_team_codes(team_name: str) -> List[str]:
         return []
     codes = []
     upper_name = team_name.upper().strip()
+    
+    # 1. Check explicit map
     if upper_name in KALSHI_TEAM_ABBREVIATIONS:
         codes.extend(KALSHI_TEAM_ABBREVIATIONS[upper_name])
     for key, abbreviations in KALSHI_TEAM_ABBREVIATIONS.items():
