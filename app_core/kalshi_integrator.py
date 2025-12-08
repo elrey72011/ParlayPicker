@@ -248,7 +248,8 @@ def match_game_to_kalshi(
 
         market_type = _extract_market_type(title, ticker)
         if market_type is None:
-            return None
+            # Allow markets even if we cannot classify them strictly as ML/Spread/Total.
+            market_type = "Unknown"
 
         date_from_ticker = _extract_date_from_ticker(ticker)
         parsed_date = _parse_market_date(market.get("event_date") or market.get("close_time"))
@@ -542,9 +543,8 @@ class KalshiIntegrator:
             )
 
         # Kalshi API URLs
-        # If your account is on the main trading host, you can change base_url to:
-        # "https://api.kalshi.com/trade-api/v2"
-        self.base_url = "https://api.elections.kalshi.com/trade-api/v2"
+        # Use the main trading host for sports markets
+        self.base_url = "https://api.kalshi.com/trade-api/v2"
         self.demo_url = "https://demo-api.kalshi.co/trade-api/v2"
 
         # Use production API if we have credentials
