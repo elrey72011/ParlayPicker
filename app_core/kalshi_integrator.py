@@ -596,6 +596,7 @@ class KalshiIntegrator:
         self._synthetic_markets: List[Dict[str, Any]] = []
         self._synthetic_orderbooks: Dict[str, Dict[str, Any]] = {}
         self._synthetic_market_by_team: Dict[str, Dict[str, Any]] = {}
+        self.demo_markets_enabled = True
 
         self.last_error: Optional[str] = None
 
@@ -635,7 +636,11 @@ class KalshiIntegrator:
             return ""
 
     def _make_authenticated_request(
-        self, method: str, endpoint: str, params: dict = None
+        self,
+        method: str,
+        endpoint: str,
+        params: Optional[Dict[str, Any]] = None,
+        json_data: Optional[Dict[str, Any]] = None,
     ) -> Optional[dict]:
         """Make authenticated request to Kalshi API.
 
@@ -645,6 +650,7 @@ class KalshiIntegrator:
         import time as time_module
 
         url = f"{self.api_url}{endpoint}"
+        print(f"🌐 KALSHI REQUEST: {method} {url} params={params} json={json_data}")
         timestamp = str(int(time_module.time() * 1000))
 
         print(f"🌐 KALSHI: Request {method} {url}")
@@ -675,8 +681,9 @@ class KalshiIntegrator:
                     url, headers=headers, params=params, timeout=15
                 )
             else:
+                payload = json_data if json_data is not None else params
                 response = requests.post(
-                    url, headers=headers, json=params, timeout=15
+                    url, headers=headers, json=payload, timeout=15
                 )
 
             print(f"📥 KALSHI: Response Status {response.status_code}")
@@ -738,14 +745,13 @@ class KalshiIntegrator:
                 self.last_error = f"API error: {response.status_code}"
 
         except requests.exceptions.ConnectionError as e:
-            print(
-                f"❌ KALSHI: Connection error (network blocked?): {str(e)[:100]}"
-            )
+            msg = f"Connection blocked: {str(e)[:200]}"
+            print(f"❌ KALSHI: {msg}")
             logger.error(
                 "Kalshi API connection error (network may be blocked): %s", e
             )
-            self.last_error = "Connection blocked - check network settings"
-
+            self.last_error = msg
+            
         except requests.exceptions.Timeout:
             print("❌ KALSHI: Request timeout")
             logger.warning("Kalshi API timeout")
@@ -764,6 +770,57 @@ class KalshiIntegrator:
     def is_configured(self) -> bool:
         """Check if Kalshi is properly configured."""
         return bool(self.api_key and self._auth_ready)
+
+    def _get_synthetic_markets(self) -> List[Dict[str, Any]]:
+        """Return locally generated markets for debugging when live API is blocked."""
+
+        if self._synthetic_markets:
+            return copy.deepcopy(self._synthetic_markets)
+
+        now = datetime.now(pytz.UTC)
+        base_date = now.replace(hour=0, minute=0, second=0, microsecond=0)
+
+        def ts(dt: datetime) -> int:
+            return int(dt.timestamp() * 1000)
+
+        self._synthetic_markets = [
+            {
+                "ticker": "KXNBALALNYK20241201SPREAD",
+                "title": "LAL vs NYK Spread",
+                "subtitle": "Lakers at Knicks",
+                "series_ticker": "KXNBA",
+                "event_date": ts(base_date),
+                "close_time": ts(base_date),
+                "last_price_dollars": 0.63,
+            },
+            {
+                "ticker": "KXNFLPHIDAL20241201TOTAL",
+                "title": "PHI vs DAL Total",
+                "subtitle": "Eagles at Cowboys",
+                "series_ticker": "KXNFL",
+                "event_date": ts(base_date),
+                "close_time": ts(base_date),
+                "last_price_dollars": 0.44,
+            },
+            {
+                "ticker": "KXMLBYANBOS20241201ML",
+                "title": "YAN vs BOS Moneyline",
+                "subtitle": "Yankees at Red Sox",
+                "series_ticker": "KXMLB",
+                "event_date": ts(base_date),
+                "close_time": ts(base_date),
+                "last_price_dollars": 0.55,
+            },
+        ]
+
+        self._using_synthetic_data = True
+        print(
+            "🧪 KALSHI: Displaying locally generated Kalshi fallback data for exploration."
+        )
+        logger.warning(
+            "Using synthetic Kalshi markets because live API is unavailable"
+        )
+        return copy.deepcopy(self._synthetic_markets)
 
     def get_sports_series(self) -> List[Dict]:
         """Get all available sports series tickers from Kalshi."""
@@ -920,7 +977,19 @@ class KalshiIntegrator:
                 self._cache_time[cache_key] = now
                 return all_markets
 
-            self.last_error = "Kalshi API returned no markets"
+            if (
+                self.last_error
+                and isinstance(self.last_error, str)
+                and self.last_error.startswith("Connection blocked")
+                and self.demo_markets_enabled
+            ):
+                print(
+                    "🧪 KALSHI: Connection blocked, using synthetic demo markets for debugging."
+                )
+                return self._get_synthetic_markets()
+
+            if not self.last_error:
+                self.last_error = "Kalshi API returned no markets"
             logger.warning(
                 "No markets found (sports_series=%d)",
                 len(sports_series or []),
