@@ -19,6 +19,32 @@ from app_core.team_name_matcher import TeamNameMatcher
 
 logger = logging.getLogger(__name__)
 
+KALSHI_TEAM_ABBREVIATIONS = {
+    # NBA
+    "ATLANTA HAWKS": ["ATL"], "BOSTON CELTICS": ["BOS"], "BROOKLYN NETS": ["BKN", "BRK"],
+    "CHARLOTTE HORNETS": ["CHA", "CLT"], "CHICAGO BULLS": ["CHI"], "CLEVELAND CAVALIERS": ["CLE", "CAVS"],
+    "DALLAS MAVERICKS": ["DAL"], "DENVER NUGGETS": ["DEN"], "DETROIT PISTONS": ["DET"],
+    "GOLDEN STATE WARRIORS": ["GSW", "GS"], "HOUSTON ROCKETS": ["HOU"], "INDIANA PACERS": ["IND"],
+    "LOS ANGELES CLIPPERS": ["LAC", "LA CLIPPERS"], "LOS ANGELES LAKERS": ["LAL", "LA LAKERS"],
+    "MEMPHIS GRIZZLIES": ["MEM"], "MIAMI HEAT": ["MIA"], "MILWAUKEE BUCKS": ["MIL"],
+    "MINNESOTA TIMBERWOLVES": ["MIN"], "NEW ORLEANS PELICANS": ["NOP", "NO PELICANS"],
+    "NEW YORK KNICKS": ["NYK", "NY KNICKS"], "OKLAHOMA CITY THUNDER": ["OKC"], "ORLANDO MAGIC": ["ORL"],
+    "PHILADELPHIA 76ERS": ["PHI", "PHL", "SIXERS"], "PHOENIX SUNS": ["PHX"], "PORTLAND TRAIL BLAZERS": ["POR"],
+    "SACRAMENTO KINGS": ["SAC"], "SAN ANTONIO SPURS": ["SAS", "SA SPURS"], "TORONTO RAPTORS": ["TOR"],
+    "UTAH JAZZ": ["UTA"], "WASHINGTON WIZARDS": ["WAS", "WSH"],
+    # NFL
+    "ARIZONA CARDINALS": ["ARI", "ARZ"], "ATLANTA FALCONS": ["ATL"], "BALTIMORE RAVENS": ["BAL"],
+    "BUFFALO BILLS": ["BUF"], "CAROLINA PANTHERS": ["CAR"], "CHICAGO BEARS": ["CHI"],
+    "CINCINNATI BENGALS": ["CIN"], "CLEVELAND BROWNS": ["CLE"], "DALLAS COWBOYS": ["DAL"],
+    "DENVER BRONCOS": ["DEN"], "DETROIT LIONS": ["DET"], "GREEN BAY PACKERS": ["GB", "GBP"],
+    "HOUSTON TEXANS": ["HOU"], "INDIANAPOLIS COLTS": ["IND"], "JACKSONVILLE JAGUARS": ["JAX", "JAC"],
+    "KANSAS CITY CHIEFS": ["KC", "KCC"], "LAS VEGAS RAIDERS": ["LV", "LVR"], "LOS ANGELES CHARGERS": ["LAC"],
+    "LOS ANGELES RAMS": ["LAR"], "MIAMI DOLPHINS": ["MIA"], "MINNESOTA VIKINGS": ["MIN"],
+    "NEW ENGLAND PATRIOTS": ["NE", "NEP"], "NEW ORLEANS SAINTS": ["NO", "NOS"], "NEW YORK GIANTS": ["NYG"],
+    "NEW YORK JETS": ["NYJ"], "PHILADELPHIA EAGLES": ["PHI"], "PITTSBURGH STEELERS": ["PIT"],
+    "SAN FRANCISCO 49ERS": ["SF", "SFO"], "SEATTLE SEAHAWKS": ["SEA"], "TAMPA BAY BUCCANEERS": ["TB", "TBB"],
+    "TENNESSEE TITANS": ["TEN"], "WASHINGTON COMMANDERS": ["WAS", "WSH"],
+}
 
 def _debug_log(message: str, *args: Any) -> None:
     if DEBUG_KALSHI_MATCHING:
@@ -132,23 +158,31 @@ def _parse_market_date(raw) -> Optional[datetime]:
 
 
 def _build_team_codes(team_name: str) -> List[str]:
-    """Generate plausible team codes from a full team name.
-
-    This makes it possible to align Kalshi's compact tickers (e.g., "PHI")
-    with ESPN/OddsAPI names such as "Philadelphia 76ers".
-    """
-
+    """Generate plausible team codes from a full team name, using explicit maps."""
     if not team_name:
         return []
+    
+    codes = []
+    
+    # 1. Check explicit map (Case Insensitive)
+    upper_name = team_name.upper().strip()
+    if upper_name in KALSHI_TEAM_ABBREVIATIONS:
+        codes.extend(KALSHI_TEAM_ABBREVIATIONS[upper_name])
+    
+    # 2. Also check if the team name *contains* a known key (e.g. "Arizona Cardinals" inside "Arizona Cardinals (Home)")
+    for key, abbreviations in KALSHI_TEAM_ABBREVIATIONS.items():
+        if key in upper_name:
+            codes.extend(abbreviations)
 
+    # 3. Fallback: Generate standard 3-letter codes
     words = [w for w in re.split(r"\s+", team_name) if w]
-    codes: List[str] = []
     if words:
         codes.append(words[0][:3].upper())
         codes.append("".join(w[0] for w in words[:3]).upper())
     if len(words) > 1:
         codes.append(words[-1][:3].upper())
-    return list({c for c in codes if len(c) >= 2})
+        
+    return list(set(codes)) # Return unique codes
 
 
 def _extract_date_from_ticker(ticker: str) -> Optional[datetime]:
@@ -180,7 +214,6 @@ def _extract_date_from_ticker(ticker: str) -> Optional[datetime]:
             pass
 
     return None
-
 
 def _extract_market_type(title: str, ticker: str) -> Optional[str]:
     """Determine market type (ML, Spread, Total) from ticker/title."""
