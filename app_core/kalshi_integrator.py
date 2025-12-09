@@ -393,7 +393,7 @@ def match_game_to_kalshi(
         if game_dt and meta.get("market_date"):
             # Strict check: 1 day tolerance to handle timezone shifts
             day_diff = abs((meta["market_date"].date() - game_dt.date()).days)
-            if day_diff > 1:
+            if day_diff > 2:
                 continue
 
         teams = meta.get("teams", [])
@@ -924,7 +924,7 @@ class KalshiIntegrator:
             return []
 
     def get_markets(self, category: str = "sports", status: Optional[str] = "open") -> List[Dict]:
-        """Fetch available Kalshi markets, searching deeper into series."""
+        """Fetch markets, prioritizing major sports series to ensure coverage."""
         cache_key = status or "all"
         now = time.time()
         if cache_key in self._markets_cache and now - self._cache_time.get(cache_key, 0) < self._cache_duration:
@@ -932,37 +932,53 @@ class KalshiIntegrator:
 
         all_markets = []
         try:
-            series_list = self.get_sports_series()
-            if series_list:
-                # FIX: Sort by start_date to prioritize recent/upcoming series
-                series_list.sort(key=lambda x: x.get("start_date", ""), reverse=True)
-                
-                # FIX: Increased limit from 10 to 50 to catch games late in the season
-                for series in series_list[:50]:
-                    ticker = series.get("ticker")
-                    if not ticker: continue
-                    
-                    endpoint = "/markets"
-                    params = {"series_ticker": ticker, "limit": 1000}
-                    if status: 
-                        params["status"] = status
-
-                    data = self._make_authenticated_request("GET", endpoint, params=params)
-                    if data: 
-                        all_markets.extend(data.get("markets", []))
+            # 1. Fetch all series
+            series_list = self.get_sports_series() or []
             
-            # Fallback if no series found
-            if not all_markets:
-                params = {"limit": 1000}
+            # 2. Identify high-priority series (NBA, NFL, NHL, MLB) based on current date
+            # This ensures we don't miss them if they are buried deep in the list
+            priority_tickers = []
+            target_prefixes = ["KXNBA", "KXNFL", "KXNHL", "KXMLB", "KXNCAAF", "KXNCAAB"]
+            
+            for s in series_list:
+                ticker = s.get("ticker", "")
+                # If ticker starts with a target prefix, add to priority
+                if any(ticker.startswith(p) for p in target_prefixes):
+                    priority_tickers.append(s)
+            
+            # Sort priority list by start date (newest first)
+            priority_tickers.sort(key=lambda x: x.get("start_date", ""), reverse=True)
+            
+            # 3. Fetch markets for top 30 PRIORITY series (most relevant sports)
+            # This is much better than just taking the top 50 random series
+            series_to_fetch = priority_tickers[:30]
+            
+            if not series_to_fetch:
+                # Fallback: if no priority found, just take top 30 of anything
+                series_to_fetch = series_list[:30]
+
+            logger.info(f"Fetching markets for {len(series_to_fetch)} series...")
+
+            for series in series_to_fetch:
+                ticker = series.get("ticker")
+                if not ticker: continue
+                
+                params = {"series_ticker": ticker, "limit": 1000}
                 if status: 
                     params["status"] = status
+
+                # Rate limit protection (simple sleep)
+                time.sleep(0.05) 
+                
                 data = self._make_authenticated_request("GET", "/markets", params=params)
                 if data: 
-                    all_markets.extend(data.get("markets", []))
+                    new_markets = data.get("markets", [])
+                    all_markets.extend(new_markets)
 
             if all_markets:
                 self._markets_cache[cache_key] = all_markets
                 self._cache_time[cache_key] = now
+                logger.info(f"✅ Cached {len(all_markets)} Kalshi markets")
                 
         except Exception as e:
             logger.error(f"Error fetching markets: {e}")
