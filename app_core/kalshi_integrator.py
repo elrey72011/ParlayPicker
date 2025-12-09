@@ -251,19 +251,51 @@ def match_game_to_kalshi(
     status: Optional[str] = "open",
 ) -> KalshiMatchResult:
     # ... [Keep initial setup logic: league_norm, kalshi check, game_dt parsing] ...
-    
-    # ... [Keep try/except block for get_markets] ...
+    # (Same as before)
+    league_norm = normalize_name(league)
+    if league_norm and league_norm not in SUPPORTED_LEAGUES:
+        return KalshiMatchResult(matched=False, kalshi_available=False, label="", probability=None, raw_event_id=None, league=league_norm, reason="league_not_supported")
 
-    # ... [Keep parsed_markets loop] ...
+    kalshi = integrator or KalshiIntegrator()
+    if kalshi is None:
+        return KalshiMatchResult(matched=False, kalshi_available=False, label="", probability=None, raw_event_id=None, league=league_norm, reason="api_error:no_integrator")
 
-    # --- UPDATED MATCHING LOOP ---
+    game_dt: Optional[datetime] = None
+    if isinstance(game_time, datetime):
+        game_dt = game_time
+    elif game_time:
+        try:
+            game_dt = datetime.fromisoformat(str(game_time).replace("Z", "+00:00"))
+        except Exception:
+            game_dt = None
+
+    try:
+        markets = kalshi.get_markets(status=status)
+    except Exception as exc:
+        return KalshiMatchResult(matched=False, reason=f"api_error:{str(exc)[:50]}")
+
+    parsed_markets: List[Dict[str, Any]] = []
+    for mkt in markets or []:
+        parsed = _parse_market_metadata(mkt)
+        if parsed:
+            parsed_markets.append({"__meta": parsed, **mkt})
+
+    home_norm = TeamNameMatcher.normalize(home_team) if TeamNameMatcher else normalize_name(home_team)
+    away_norm = TeamNameMatcher.normalize(away_team) if TeamNameMatcher else normalize_name(away_team)
+    home_codes = _build_team_codes(home_team)
+    away_codes = _build_team_codes(away_team)
+
+    best_market = None
+    best_score = 0.0
+
+    # --- UPDATED MATCHING LOGIC ---
     for market in parsed_markets:
         meta = market["__meta"]
         title = meta.get("title", "").upper()
 
         # 1. NEW: Penalize/Skip Futures keywords if looking for a game
-        # If the market is "Will NBA approve new franchise?", it has "NBA" but it's not a game.
-        futures_noise = ["APPROVE", "FRANCHISE", "DRAFT", "MVP", "ROOKIE", "CHAMPION", "WINNER", "SEASON"]
+        # If title contains "CHAMPION", "MVP", "SEASON", "WINNER", "DRAFT" -> Skip
+        futures_noise = ["APPROVE", "FRANCHISE", "DRAFT", "MVP", "ROOKIE", "CHAMPION", "WINNER", "SEASON", "CONFERENCE", "DIVISION"]
         if any(bad in title for bad in futures_noise):
             continue
 
@@ -276,29 +308,45 @@ def match_game_to_kalshi(
         teams = meta.get("teams", [])
         if len(teams) < 2: continue
 
-        # 3. Scoring (Same as before)
-        def _team_score(team_code: str, target_norm: str, target_codes: List[str]) -> float:
-            if team_code in target_codes: return 2.0
-            if TeamNameMatcher and TeamNameMatcher.normalize(team_code) == target_norm: return 1.5
-            if TeamNameMatcher and TeamNameMatcher.similarity_score(TeamNameMatcher.normalize(team_code), target_norm) >= TEAM_NAME_SIMILARITY: return 1.0
-            return 0.0
+        # 3. Scoring (Standard)
+        score_home = 0.0
+        score_away = 0.0
+        
+        # Check codes (LAL, NYK)
+        if any(c in teams for c in home_codes): score_home += 2.0
+        if any(c in teams for c in away_codes): score_away += 2.0
+        
+        # Check normalized names
+        norm_title = normalize_name(title)
+        if home_norm in norm_title: score_home += 1.5
+        if away_norm in norm_title: score_away += 1.5
 
-        score_home_first = _team_score(teams[0], home_norm, home_codes) + _team_score(teams[1], away_norm, away_codes)
-        score_away_first = _team_score(teams[0], away_norm, away_codes) + _team_score(teams[1], home_norm, home_codes)
-
-        score = max(score_home_first, score_away_first)
-
-        if score_home_first < 1.0 and score_away_first < 1.0:
-            continue
-
-        if meta.get("probability") is not None:
-            score += 0.25
-
-        if score > best_score:
-            best_score = score
+        total_score = score_home + score_away
+        if total_score > best_score:
+            best_score = total_score
             best_market = market
 
-    # ... [Keep result return logic] ...
+    if not best_market or best_score < TEAM_FUZZY_THRESHOLD:
+        return KalshiMatchResult(matched=False, reason="no_market_match")
+
+    # Extract probability
+    prob = None
+    for key in ["last_price_dollars", "yes_bid_dollars", "yes_ask_dollars", "yes_bid", "last_price"]:
+        prob = price_to_prob(best_market.get(key))
+        if prob is not None: break
+
+    return KalshiMatchResult(
+        matched=True,
+        kalshi_available=True,
+        label=best_market.get("title"),
+        probability=prob,
+        raw_event_id=best_market.get("ticker"),
+        league=league_norm,
+        reason="ok",
+        market_type=meta.get("market_type"),
+        game_date=meta.get("market_date"),
+        kalshi_volume=best_market.get("volume"),
+    )
 
     def _parse_market_metadata(market: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         title = market.get("title") or ""
