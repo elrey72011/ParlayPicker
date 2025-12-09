@@ -525,7 +525,7 @@ class VertexMasterAnalyzer:
         else:
             pick_text = f"{selection} {line}"
 
-        # Base result row
+        # Base result row 
         result: Dict[str, Any] = {
             "league": game_league,
             "game": f"{feats.get('away_team')} @ {feats.get('home_team')}",
@@ -535,16 +535,13 @@ class VertexMasterAnalyzer:
             "market_prob": market_prob,
             "edge_vs_market": edge,
             "ev": ev,
+
+            # Kalshi fields (for display + CSV export)
             "kalshi_available": bool(feats.get("kalshi_available", False)),
             "kalshi_prob": feats.get("kalshi_prob"),          # 0–1 float if matched
             "kalshi_status": feats.get("kalshi_status", ""),  # human-readable reason
-        }) 
-            # Kalshi Metadata for Export
-            "kalshi_available": feats.get("kalshi_available"),
-            "kalshi_prob": feats.get("kalshi_prob"),
             "kalshi_ticker": feats.get("kalshi_ticker"),
             "kalshi_date": feats.get("kalshi_date"),
-            "kalshi_status": feats.get("kalshi_status"),
         }
 
         # Attach LLM assistant metadata (game-level)
