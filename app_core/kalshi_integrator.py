@@ -9,7 +9,7 @@ import logging
 import re
 import string
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 import pytz
 import requests
 import streamlit as st
@@ -60,6 +60,20 @@ FUTURE_EXCLUDE_KEYWORDS = {
 }
 
 SUPPORTED_LEAGUES = {"nba", "nfl", "mlb", "ncaaf", "ncaab", "nhl"}
+
+LEAGUE_SERIES_MAP = {
+    "nba": "KXNBA",
+    "nfl": "KXNFL",
+    "mlb": "KXMLB",
+    "nhl": "KXNHL",
+    "ncaaf": "KXNCAAF",
+    "ncaab": "KXNCAAB",
+}
+
+TEAM_FUZZY_THRESHOLD = 1.1  
+MAX_LINE_DIFF = 3.0
+DEBUG_KALSHI_MATCHING = False
+TEAM_NAME_SIMILARITY = 0.80
 
 # --- 3. DATA STRUCTURES ---
 
@@ -199,7 +213,7 @@ def normalize_name(s: str) -> str:
     s = re.sub(r"\s+", " ", s).strip()
     return s
 
-# --- 5. MAIN MATCHING FUNCTION (Series Check Removed!) ---
+# --- 5. MAIN MATCHING FUNCTION ---
 
 def match_game_to_kalshi(
     league: str,
@@ -272,7 +286,6 @@ def match_game_to_kalshi(
             game_dt = None
 
     try:
-        # Use the new "Nuclear" get_markets which finds everything
         markets = kalshi.get_markets(status=status)
     except Exception as exc:
         short_err = str(exc)[:77] + "..." if len(str(exc)) > 80 else str(exc)
@@ -295,17 +308,11 @@ def match_game_to_kalshi(
     best_market: Optional[Dict[str, Any]] = None
     best_score: float = 0.0
 
-    # Low threshold allowing 1 exact match + 1 fuzzy match
-    TEAM_FUZZY_THRESHOLD = 1.1 
-    TEAM_NAME_SIMILARITY = 0.80
-
     for market in parsed_markets:
         meta = market["__meta"]
 
-        # REMOVED: Strict LEAGUE_SERIES_MAP check (source of bug)
-        
         if game_dt and meta.get("market_date"):
-            # Strict tolerance: 2 days
+            # Increased tolerance to 2 days
             day_diff = abs((meta["market_date"].date() - game_dt.date()).days)
             if day_diff > 2:
                 continue
@@ -377,7 +384,6 @@ class KalshiIntegrator:
     """Integrates Kalshi prediction market odds and analysis"""
 
     def __init__(self, api_key: str = None, api_secret: str = None):
-        # Priority: Argument -> Streamlit Secrets (Upper/Lower) -> Session State -> Env Var
         self.api_key = (
             api_key 
             or st.secrets.get("KALSHI_API_KEY") 
@@ -385,7 +391,6 @@ class KalshiIntegrator:
             or st.session_state.get("kalshi_api_key")
             or os.environ.get("KALSHI_API_KEY")
         )
-        
         self.api_secret = (
             api_secret 
             or st.secrets.get("KALSHI_API_SECRET") 
@@ -393,8 +398,6 @@ class KalshiIntegrator:
             or st.session_state.get("kalshi_secret_key")
             or os.environ.get("KALSHI_API_SECRET")
         )
-
-        # Correct V2 Production Endpoint
         self.base_url = "https://api.elections.kalshi.com/trade-api/v2"
         self.demo_url = "https://demo-api.kalshi.co/trade-api/v2"
         self.api_url = self.base_url if self.api_key else self.demo_url
@@ -467,11 +470,8 @@ class KalshiIntegrator:
             logger.error(f"Kalshi request failed: {e}")
         return None
 
-    def get_sports_series(self) -> List[Dict]:
-        return []
-
     def get_markets(self, category: str = "sports", status: Optional[str] = "open") -> List[Dict]:
-        """Nuclear Fetch: Download ALL markets and filter locally."""
+        """Fetch available Kalshi markets, searching deeper into series and using time filters."""
         cache_key = status or "all"
         now = time.time()
         if cache_key in self._markets_cache and now - self._cache_time.get(cache_key, 0) < self._cache_duration:
@@ -479,44 +479,51 @@ class KalshiIntegrator:
 
         all_markets = []
         try:
-            cursor = None
-            page_count = 0
-            # Safety cap at 20 pages (approx 4000 markets)
-            while page_count < 20:
-                params = {"limit": 200}
+            # 1. Fetch by known sports series (fastest)
+            series_tickers = [
+                "KXNBA", "KXNBASPREAD", "KXNBATOTAL", "KXNBAMONEYLINE",
+                "KXNFL", "KXNFLSPREAD", "KXNFLTOTAL", "KXNFLMONEYLINE",
+                "KXNHL", "KXMLB", "KXNCAAF", "KXNCAAB", "KXUFC"
+            ]
+            
+            for ticker in series_tickers:
+                # Use min_close_ts to avoid fetching old history
+                params = {
+                    "series_ticker": ticker, 
+                    "limit": 1000,
+                    "min_close_ts": int(now) # Only markets closing in future
+                }
                 if status: params["status"] = status
-                if cursor: params["cursor"] = cursor
                 
                 data = self._make_authenticated_request("GET", "/markets", params=params)
-                if not data: break
-                
-                markets = data.get("markets", [])
-                if not markets: break
-                
-                all_markets.extend(markets)
-                cursor = data.get("cursor")
-                page_count += 1
-                if not cursor: break
+                if data: all_markets.extend(data.get("markets", []))
 
-            # Local filter for sports
-            sports_keywords = ["NFL", "NBA", "MLB", "NHL", "UFC", "SOCCER", "TENNIS", "FOOTBALL", "BASKETBALL"]
-            filtered = []
-            for m in all_markets:
-                title = (m.get("title") or "").upper()
-                ticker = (m.get("ticker") or "").upper()
-                if any(kw in title or kw in ticker for kw in sports_keywords):
-                    filtered.append(m)
+            # 2. Fallback: Scan recent markets if specific series returned nothing
+            if not all_markets:
+                params = {
+                    "limit": 1000,
+                    "min_close_ts": int(now), # Important: Filter out old markets
+                }
+                if status: params["status"] = status
+                
+                # Fetch 5 pages max to avoid hitting limits
+                cursor = None
+                for _ in range(5):
+                    if cursor: params["cursor"] = cursor
+                    data = self._make_authenticated_request("GET", "/markets", params=params)
+                    if not data: break
+                    
+                    page_markets = data.get("markets", [])
+                    all_markets.extend(page_markets)
+                    cursor = data.get("cursor")
+                    if not cursor: break
 
-            if filtered:
-                self._markets_cache[cache_key] = filtered
+            if all_markets:
+                self._markets_cache[cache_key] = all_markets
                 self._cache_time[cache_key] = now
-                logger.info(f"✅ Cached {len(filtered)} Kalshi markets (Nuclear Fetch)")
-                return filtered
-                
         except Exception as e:
             logger.error(f"Error fetching markets: {e}")
-        
-        return []
+        return all_markets
 
     def get_sports_markets(self) -> List[Dict]:
         return self.get_markets()
