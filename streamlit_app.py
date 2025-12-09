@@ -9294,42 +9294,65 @@ if is_vertex_ai_enabled():
                                 upcoming_games.append(game)
                         
                         # Add sport_key and league to each upcoming game
+                        from math import isfinite  # put at top of file if not already imported
                         for game in upcoming_games:
-                            game['sport_key'] = sport
-                            
-                            # Map sport_key to league abbreviation
-                            if sport == 'basketball_nba':
-                                game['league'] = 'NBA'
-                            elif sport == 'basketball_ncaab':
-                                game['league'] = 'NCAAB'
-                            elif sport == 'americanfootball_nfl':
-                                game['league'] = 'NFL'
-                            elif sport == 'americanfootball_ncaaf':
-                                game['league'] = 'NCAAF'
-                            elif sport == 'icehockey_nhl':
-                                game['league'] = 'NHL'
+                            game["sport_key"] = sport
+                        
+                            if sport == "basketball_nba":
+                                game["league"] = "NBA"
+                            elif sport == "basketball_ncaab":
+                                game["league"] = "NCAAB"
+                            elif sport == "americanfootball_nfl":
+                                game["league"] = "NFL"
+                            elif sport == "americanfootball_ncaaf":
+                                game["league"] = "NCAAF"
+                            elif sport == "icehockey_nhl":
+                                game["league"] = "NHL"
                             else:
-                                game['league'] = 'NBA'
+                                game["league"] = "NBA"
                         
-                        filtered_count = len(games) - len(upcoming_games)
-                        all_games.extend(upcoming_games)
+                            # 🔽 NEW: flatten core odds for VertexMasterAnalyzer
+                            home_team = game.get("home_team") or ""
+                            away_team = game.get("away_team") or ""
                         
-                        if filtered_count > 0:
-                            st.success(f"✅ Fetched {len(upcoming_games)} upcoming {sport} games (filtered out {filtered_count} past games)")
-                        else:
-                            st.success(f"✅ Fetched {len(upcoming_games)} {sport} games from TheOddsAPI")
-                        logger.info(f"Loaded {len(upcoming_games)} upcoming {sport} games (filtered {filtered_count} past games)")
+                            markets = game.get("markets") or {}
+                            h2h = markets.get("h2h") or {}
                         
-                    except Exception as e:
-                        st.warning(f"⚠️ Could not fetch {sport} from TheOddsAPI: {e}")
-                        logger.error(f"Error fetching {sport} from TheOddsAPI: {e}")
-                
-                if not all_games:
-                    st.error("❌ No games found from TheOddsAPI")
-                    st.info("Check your API key and selected sports")
-                    st.stop()
-                
-                st.success(f"✅ Loaded {len(all_games)} total games from TheOddsAPI with real sportsbook lines")
+                            home_ml = (h2h.get("home") or {}).get("price")
+                            away_ml = (h2h.get("away") or {}).get("price")
+                        
+                            # Spreads
+                            spreads = markets.get("spreads") or []
+                            home_spread = away_spread = None
+                            home_spread_odds = away_spread_odds = None
+                        
+                            for o in spreads:
+                                name = (o.get("name") or "").strip()
+                                if name == home_team:
+                                    home_spread = o.get("point")
+                                    home_spread_odds = o.get("price")
+                                elif name == away_team:
+                                    away_spread = o.get("point")
+                                    away_spread_odds = o.get("price")
+                        
+                            # Implied home win probability from American odds
+                            implied_home_prob = 0.5
+                            try:
+                                if isinstance(home_ml, (int, float)) and isfinite(home_ml) and home_ml != 0:
+                                    if home_ml > 0:
+                                        implied_home_prob = 100.0 / (home_ml + 100.0)
+                                    else:
+                                        implied_home_prob = abs(home_ml) / (abs(home_ml) + 100.0)
+                            except Exception:
+                                implied_home_prob = 0.5
+                        
+                            game["home_ml_odds"] = home_ml
+                            game["away_ml_odds"] = away_ml
+                            game["home_spread"] = home_spread
+                            game["away_spread"] = away_spread
+                            game["home_spread_odds"] = home_spread_odds
+                            game["away_spread_odds"] = away_spread_odds
+                            game["implied_home_prob"] = implied_home_prob
 
                 # =========================================================================
                 # SUPPLEMENTAL DATA: TheOver.ai Picks & Probabilities (NOT Lines!)
