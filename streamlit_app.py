@@ -9354,6 +9354,10 @@ if is_vertex_ai_enabled():
                             game["away_spread_odds"] = away_spread_odds
                             game["implied_home_prob"] = implied_home_prob
 
+                except Exception as e:
+                    print("Master analysis block failed before debug df:", e)
+
+
                 # =========================================================================
                 # SUPPLEMENTAL DATA: TheOver.ai Picks & Probabilities (NOT Lines!)
                 # Merge TheOver.ai picks/probabilities for consensus validation
