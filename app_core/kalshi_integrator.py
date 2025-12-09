@@ -391,7 +391,7 @@ def match_game_to_kalshi(
                 continue
 
         if game_dt and meta.get("market_date"):
-            # Strict check: Must be within 24 hours to handle TZ differences, but target same day
+            # Strict check: 1 day tolerance to handle timezone shifts
             day_diff = abs((meta["market_date"].date() - game_dt.date()).days)
             if day_diff > 1:
                 continue
