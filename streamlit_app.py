@@ -1356,21 +1356,25 @@ def render_sidebar_controls() -> Dict[str, Any]:
     sidebar = st.sidebar
     sidebar.header("⚙️ ParlayDesk")
 
-    # --- 1. CRITICAL: FORCE GCP PROJECT ID ---
-    # This fixes the "projects/None" 403 Error
-    PROJECT_ID = "elite-hangar-479017-m8"  # Your specific ID
+    # --- 1. CRITICAL FIX: FORCE GCP PROJECT ID ---
+    # This prevents the "resource project None" 403 error
+    PROJECT_ID = "elite-hangar-479017-m8"
     
     # Set in Session State
-    st.session_state['gcp_project_id'] = PROJECT_ID
-    st.session_state['gcp_location'] = "us-central1"
-    st.session_state['vertex_endpoint_id'] = "6435317312558989312"
+    if 'gcp_project_id' not in st.session_state or not st.session_state['gcp_project_id']:
+        st.session_state['gcp_project_id'] = PROJECT_ID
     
-    # Set in Environment (Required for Vertex SDK to pick it up)
+    st.session_state['gcp_location'] = "us-central1"
+    
+    if 'vertex_endpoint_id' not in st.session_state:
+        st.session_state['vertex_endpoint_id'] = "6435317312558989312"
+    
+    # Set in Environment (REQUIRED for Vertex SDK to pick it up)
     import os
     os.environ["GOOGLE_CLOUD_PROJECT"] = PROJECT_ID
     os.environ["GCP_PROJECT_ID"] = PROJECT_ID
-    
-    # --- 2. Auto-load Keys ---
+    # ---------------------------------------------
+
     # Odds API
     default_odds_key, odds_key_source = resolve_odds_api_key_with_source()
     st.session_state.setdefault('api_key', default_odds_key)
@@ -1378,68 +1382,10 @@ def render_sidebar_controls() -> Dict[str, Any]:
     # News API
     st.session_state.setdefault('news_api_key', 
         st.secrets.get("NEWS_API_KEY", "") or os.environ.get("NEWS_API_KEY", ""))
-    
-    # Initialize Analyzers if keys exist
     if st.session_state.get('news_api_key') and 'sentiment_analyzer' not in st.session_state:
         st.session_state['sentiment_analyzer'] = RealSentimentAnalyzer(st.session_state['news_api_key'])
-        
-    # ... (Rest of your sidebar code remains the same) ...
     
-    # --- UPDATE GCP CONFIGURATION IN SIDEBAR ---
-    # Ensure this runs near the top of render_sidebar_controls or main setup
-    
-    # 1. Force Hardcoded ID if missing (Fixes 'Project None' error)
-    DEFAULT_GCP_PROJECT = "elite-hangar-479017-m8"
-    
-    if 'gcp_project_id' not in st.session_state or not st.session_state.get('gcp_project_id'):
-        loaded_id = (
-            st.secrets.get("GCP_PROJECT_ID") 
-            or st.secrets.get("gcp_project_id") 
-            or os.environ.get("GCP_PROJECT_ID") 
-            or DEFAULT_GCP_PROJECT  # Fallback to hardcoded ID
-        )
-        st.session_state['gcp_project_id'] = loaded_id
-        # Also set env var for libraries that look there
-        os.environ['GCP_PROJECT_ID'] = loaded_id
-        os.environ['GOOGLE_CLOUD_PROJECT'] = loaded_id
-
-    # 2. Endpoint ID
-    if 'vertex_endpoint_id' not in st.session_state:
-        st.session_state['vertex_endpoint_id'] = (
-            st.secrets.get("VERTEX_ENDPOINT_ID") 
-            or "6435317312558989312"
-        )
-    
-    # Initialize GCP credentials
-    try:
-        if 'gcp_service_account' in st.secrets and not os.environ.get('GOOGLE_APPLICATION_CREDENTIALS'):
-            import tempfile
-            gcp_creds = dict(st.secrets.gcp_service_account)
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
-                json.dump(gcp_creds, f)
-                os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = f.name
-    except Exception as e:
-        logger.warning(f"Could not load GCP credentials: {e}")
-    
-    # --------------------- Clean Status Display - NO WARNINGS! ---------------------
-    sidebar.markdown("### 📊 System Status")
-    
-    if st.session_state.get('api_key'):
-        sidebar.success("✅ TheOddsAPI: Configured")
-    
-    if st.session_state.get('gcp_project_id'):
-        sidebar.success(f"☁️ Vertex AI: {st.session_state['gcp_project_id']}")
-    
-    kalshi_key = st.secrets.get("KALSHI_API_KEY", "")
-    if kalshi_key:
-        sidebar.success("🔮 Kalshi: Connected")
-    
-    if st.session_state.get('news_api_key'):
-        sidebar.success("📰 Sentiment: Live")
-    
-    sidebar.markdown("---")
-    
-    # --------------------- Gemini Config (if needed) ---------------------
+    # Gemini Config
     if GEMINI_AVAILABLE:
         gemini_configured = show_gemini_config_ui()
         if gemini_configured:
@@ -1447,7 +1393,7 @@ def render_sidebar_controls() -> Dict[str, Any]:
     
     sidebar.markdown("---")
     
-    # --------------------- Time & sport filters ---------------------
+    # Time & sport filters
     sidebar.subheader("📅 Filters")
     default_tz_name = st.session_state.get('user_timezone', 'America/New_York')
     tz_input = sidebar.text_input(
@@ -1493,66 +1439,38 @@ def render_sidebar_controls() -> Dict[str, Any]:
             key="selected_sports",
         )
     except TypeError as exc:
-        logger.exception("Sidebar sports selector failed; falling back to default sports", exc_info=exc)
-        sidebar.warning(
-            "⚠️ Sports selector failed to format options. Using default sports list instead."
-        )
+        logger.exception("Sidebar sports selector failed", exc_info=exc)
         sports = default_sports
 
-    # --------------------- AI settings ---------------------
+    # AI settings
     ai_expander = sidebar.expander("🤖 AI Settings", expanded=False)
     with ai_expander:
         use_sentiment = ai_expander.checkbox(
             "Enable Sentiment Analysis",
             value=st.session_state.get('use_sentiment', True),
-            help="Analyze news sentiment for each team when computing edges.",
         )
 
         current_ml_state = bool(st.session_state.get('use_ml_predictions', True))
         use_ml_predictions = ai_expander.checkbox(
             "Enable ML Predictions",
             value=current_ml_state,
-            help="Blend trained historical models into probability estimates.",
         )
 
-        toggle_label = "🔌 Disable ML for this session" if use_ml_predictions else "⚡ Re-enable ML predictions"
-        toggle_help = (
-            "Temporarily turn the historical machine-learning models off. "
-            "When disabled, the app falls back to odds + sentiment without training datasets."
-            if use_ml_predictions
-            else "Turn the historical machine-learning models back on for eligible sports."
-        )
-        if ai_expander.button(
-            toggle_label,
-            key="toggle_ml_predictions_button",
-            help=toggle_help,
-            use_container_width=True,
-        ):
-            use_ml_predictions = not use_ml_predictions
-            st.session_state['use_ml_predictions'] = use_ml_predictions
-
-        if not use_ml_predictions:
-            ai_expander.info(
-                "ML predictions are disabled. Odds, sentiment, Kalshi, and live data signals still run as usual."
-            )
         min_ai_confidence = ai_expander.slider(
             "Minimum AI Confidence",
-            0.0,
-            1.0,
+            0.0, 1.0,
             float(st.session_state.get('min_ai_confidence', 0.60) or 0.60),
             0.05,
         )
         min_parlay_probability = ai_expander.slider(
             "Minimum Parlay Probability",
-            0.20,
-            0.60,
+            0.20, 0.60,
             float(st.session_state.get('min_parlay_probability', 0.30) or 0.30),
             0.05,
         )
         max_parlay_probability = ai_expander.slider(
             "Maximum Parlay Probability",
-            0.45,
-            0.85,
+            0.45, 0.85,
             float(st.session_state.get('max_parlay_probability', 0.65) or 0.65),
             0.05,
         )
@@ -1575,7 +1493,6 @@ def render_sidebar_controls() -> Dict[str, Any]:
         "min_parlay_probability": min_parlay_probability,
         "max_parlay_probability": max_parlay_probability,
     }
-
 
 def resolve_nfl_apisports_key() -> Tuple[str, Optional[str]]:
     """Locate the NFL API-Sports key from Streamlit secrets or the environment."""
