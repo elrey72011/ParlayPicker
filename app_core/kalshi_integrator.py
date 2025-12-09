@@ -225,17 +225,7 @@ def _extract_market_type(title: str, ticker: str) -> Optional[str]:
         return "Total"
     return None
 
-
-def _extract_teams_from_ticker(ticker: str) -> List[str]:
-    """Extract potential team codes from a ticker string."""
-
-    if not ticker:
-        return []
-
-    tokens = re.findall(r"[A-Z]{2,4}", ticker)
-    ignore = {"ML", "OU", "OVER", "UNDER", "SP", "SPD", "TOT", "GAME", "VS", "AT"}
-    return [t for t in tokens if t not in ignore]
-
+_extract_teams_from
 
 # Alias used in matching snippets
 def _parse_kalshi_date(raw) -> Optional[datetime]:
