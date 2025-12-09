@@ -8,6 +8,7 @@ import time
 import logging
 import re
 import string
+import os
 from datetime import datetime
 import pytz
 import requests
@@ -69,7 +70,6 @@ LEAGUE_SERIES_MAP = {
     "ncaab": "KXNCAAB",
 }
 
-# Low threshold allows fuzzy matching (e.g. "St. Louis" vs "Saint Louis")
 TEAM_FUZZY_THRESHOLD = 1.1  
 MAX_LINE_DIFF = 3.0
 DEBUG_KALSHI_MATCHING = False
@@ -390,8 +390,23 @@ class KalshiIntegrator:
     """Integrates Kalshi prediction market odds and analysis"""
 
     def __init__(self, api_key: str = None, api_secret: str = None):
-        self.api_key = api_key or st.secrets.get("KALSHI_API_KEY")
-        self.api_secret = api_secret or st.secrets.get("KALSHI_API_SECRET")
+        # Priority: Argument -> Streamlit Secrets (Upper/Lower) -> Session State -> Env Var
+        self.api_key = (
+            api_key 
+            or st.secrets.get("KALSHI_API_KEY") 
+            or st.secrets.get("kalshi_api_key") 
+            or st.session_state.get("kalshi_api_key")
+            or os.environ.get("KALSHI_API_KEY")
+        )
+        
+        self.api_secret = (
+            api_secret 
+            or st.secrets.get("KALSHI_API_SECRET") 
+            or st.secrets.get("kalshi_secret_key") 
+            or st.session_state.get("kalshi_secret_key")
+            or os.environ.get("KALSHI_API_SECRET")
+        )
+
         # Correct V2 Production Endpoint
         self.base_url = "https://api.elections.kalshi.com/trade-api/v2"
         self.demo_url = "https://demo-api.kalshi.co/trade-api/v2"
@@ -468,7 +483,19 @@ class KalshiIntegrator:
     def get_sports_series(self) -> List[Dict]:
         """Fetch sports series using pagination and hardcoded fallbacks."""
         all_series = []
-        known_tickers = ["KXNBA", "KXNFL", "KXNHL", "KXMLB", "KXNCAAF", "KXNCAAB", "KXUFC"]
+        
+        # UPDATED: Includes specific market sub-tickers (SPREAD, TOTAL, etc.)
+        known_tickers = [
+            # NBA
+            "KXNBA", "KXNBASPREAD", "KXNBATOTAL", "KXNBAMONEYLINE", "KXNBACHAMP", "KXNBAPLAYOFFS",
+            # NFL
+            "KXNFL", "KXNFLSPREAD", "KXNFLTOTAL", "KXNFLMONEYLINE", "KXNFLCHAMP",
+            # College
+            "KXNCAAF", "KXNCAAB", "KXNCAAFSPREAD", "KXNCAABSPREAD",
+            # Other
+            "KXNHL", "KXMLB", "KXUFC"
+        ]
+        
         for ticker in known_tickers:
             all_series.append({
                 "ticker": ticker,
@@ -489,7 +516,7 @@ class KalshiIntegrator:
                 all_series.extend(series_page)
                 cursor = data.get("cursor")
                 page_count += 1
-                if not cursor or page_count > 5: break
+                if not cursor or page_count > 10: break
             
             sports_keywords = ["NFL", "NBA", "MLB", "NHL", "UFC", "SOCCER", "TENNIS", "GOLF", "FOOTBALL", "BASKETBALL", "BASEBALL", "HOCKEY"]
             filtered_series = []
