@@ -1367,19 +1367,30 @@ def render_sidebar_controls() -> Dict[str, Any]:
     if st.session_state.get('news_api_key') and 'sentiment_analyzer' not in st.session_state:
         st.session_state['sentiment_analyzer'] = RealSentimentAnalyzer(st.session_state['news_api_key'])
     
-    # GCP/Vertex AI
+    # --- UPDATE GCP CONFIGURATION IN SIDEBAR ---
+    # Ensure this runs near the top of render_sidebar_controls or main setup
+    
+    # 1. Force Hardcoded ID if missing (Fixes 'Project None' error)
+    DEFAULT_GCP_PROJECT = "elite-hangar-479017-m8"
+    
     if 'gcp_project_id' not in st.session_state or not st.session_state.get('gcp_project_id'):
-        gcp_project = st.secrets.get("GCP_PROJECT_ID", "") or st.secrets.get("gcp_project_id", "")
-        if gcp_project:
-            st.session_state['gcp_project_id'] = gcp_project
-    
-    if 'vertex_endpoint_id' not in st.session_state or not st.session_state.get('vertex_endpoint_id'):
-        endpoint_id = st.secrets.get("VERTEX_ENDPOINT_ID", "") or st.secrets.get("vertex_endpoint_id", "")
-        if endpoint_id:
-            st.session_state['vertex_endpoint_id'] = endpoint_id
-    
-    if 'gcp_location' not in st.session_state or not st.session_state.get('gcp_location'):
-        st.session_state['gcp_location'] = st.secrets.get("GCP_REGION", "us-central1")
+        loaded_id = (
+            st.secrets.get("GCP_PROJECT_ID") 
+            or st.secrets.get("gcp_project_id") 
+            or os.environ.get("GCP_PROJECT_ID") 
+            or DEFAULT_GCP_PROJECT  # Fallback to hardcoded ID
+        )
+        st.session_state['gcp_project_id'] = loaded_id
+        # Also set env var for libraries that look there
+        os.environ['GCP_PROJECT_ID'] = loaded_id
+        os.environ['GOOGLE_CLOUD_PROJECT'] = loaded_id
+
+    # 2. Endpoint ID
+    if 'vertex_endpoint_id' not in st.session_state:
+        st.session_state['vertex_endpoint_id'] = (
+            st.secrets.get("VERTEX_ENDPOINT_ID") 
+            or "6435317312558989312"
+        )
     
     # Initialize GCP credentials
     try:
