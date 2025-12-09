@@ -924,6 +924,7 @@ class KalshiIntegrator:
             return []
 
     def get_markets(self, category: str = "sports", status: Optional[str] = "open") -> List[Dict]:
+        """Fetch available Kalshi markets, searching deeper into series."""
         cache_key = status or "all"
         now = time.time()
         if cache_key in self._markets_cache and now - self._cache_time.get(cache_key, 0) < self._cache_duration:
@@ -933,27 +934,39 @@ class KalshiIntegrator:
         try:
             series_list = self.get_sports_series()
             if series_list:
+                # FIX: Sort by start_date to prioritize recent/upcoming series
                 series_list.sort(key=lambda x: x.get("start_date", ""), reverse=True)
+                
+                # FIX: Increased limit from 10 to 50 to catch games late in the season
                 for series in series_list[:50]:
                     ticker = series.get("ticker")
                     if not ticker: continue
+                    
+                    endpoint = "/markets"
                     params = {"series_ticker": ticker, "limit": 1000}
-                    if status: params["status"] = status
-                    data = self._make_authenticated_request("GET", "/markets", params=params)
-                    if data: all_markets.extend(data.get("markets", []))
+                    if status: 
+                        params["status"] = status
+
+                    data = self._make_authenticated_request("GET", endpoint, params=params)
+                    if data: 
+                        all_markets.extend(data.get("markets", []))
             
-            # Fallback
+            # Fallback if no series found
             if not all_markets:
                 params = {"limit": 1000}
-                if status: params["status"] = status
+                if status: 
+                    params["status"] = status
                 data = self._make_authenticated_request("GET", "/markets", params=params)
-                if data: all_markets.extend(data.get("markets", []))
+                if data: 
+                    all_markets.extend(data.get("markets", []))
 
             if all_markets:
                 self._markets_cache[cache_key] = all_markets
                 self._cache_time[cache_key] = now
+                
         except Exception as e:
             logger.error(f"Error fetching markets: {e}")
+            
         return all_markets
 
     def get_sports_markets(self) -> List[Dict]:
