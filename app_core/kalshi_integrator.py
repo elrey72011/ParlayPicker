@@ -476,9 +476,11 @@ class KalshiIntegrator:
         return []
 
     def get_markets(self, category: str = "sports", status: Optional[str] = "open") -> List[Dict]:
-        """Nuclear Fetch: Download ALL markets and filter locally."""
+        """Nuclear Fetch: Download markets (including recent past) and filter locally."""
         cache_key = status or "all"
         now = time.time()
+        
+        # Check cache (5 min duration)
         if cache_key in self._markets_cache and now - self._cache_time.get(cache_key, 0) < self._cache_duration:
             return copy.deepcopy(self._markets_cache[cache_key])
 
@@ -486,13 +488,23 @@ class KalshiIntegrator:
         try:
             cursor = None
             page_count = 0
-            # Fetch 20 pages max
+            
+            # FIX: Look back 48 hours to catch live/recently finished games
+            # (86400 seconds = 24 hours)
+            lookback_ts = int(now - (86400 * 2))
+            
+            # Fetch up to 20 pages
             while page_count < 20:
                 params = {"limit": 200}
-                if status: params["status"] = status
                 if cursor: params["cursor"] = cursor
-                # Only active markets (close time > now)
-                params["min_close_ts"] = int(now) 
+                
+                # Retrieve markets that haven't expired OR expired recently
+                # If we don't send this, we get years of history.
+                # If we send 'now', we miss today's active games.
+                params["min_close_ts"] = lookback_ts 
+                
+                # Note: We purposely DON'T send status="open" to the API here 
+                # because we want to see "settling" or "closed" games too.
                 
                 data = self._make_authenticated_request("GET", "/markets", params=params)
                 if not data: break
@@ -506,11 +518,18 @@ class KalshiIntegrator:
                 if not cursor: break
 
             # Local filter for sports keywords
-            sports_keywords = ["NFL", "NBA", "MLB", "NHL", "UFC", "SOCCER", "TENNIS", "FOOTBALL", "BASKETBALL"]
+            # Added "SPREAD", "TOTAL", "MONEYLINE" to ensure we catch specific game lines
+            sports_keywords = [
+                "NFL", "NBA", "MLB", "NHL", "UFC", "SOCCER", "TENNIS", "FOOTBALL", "BASKETBALL",
+                "SPREAD", "TOTAL", "MONEYLINE" 
+            ]
+            
             filtered = []
             for m in all_markets:
                 title = (m.get("title") or "").upper()
                 ticker = (m.get("ticker") or "").upper()
+                
+                # Check keywords
                 if any(kw in title or kw in ticker for kw in sports_keywords):
                     filtered.append(m)
 
