@@ -9253,6 +9253,14 @@ if is_vertex_ai_enabled():
                 # PRIMARY DATA SOURCE: TheOddsAPI (Real Sportsbook Lines)
                 # Use TheOddsAPI for all spreads/totals/moneylines from real books (Novig, DraftKings, FanDuel, etc.)
                 # =========================================================================
+                
+                from datetime import datetime, timezone
+                from math import isfinite
+                
+                # =========================================================================
+                # PRIMARY DATA SOURCE: TheOddsAPI (Real Sportsbook Lines)
+                # Use TheOddsAPI for all spreads/totals/moneylines from real books
+                # =========================================================================
                 odds_api_key = resolve_odds_api_key()
                 
                 if not odds_api_key:
@@ -9263,105 +9271,105 @@ if is_vertex_ai_enabled():
                 st.info("📊 Fetching games from TheOddsAPI (all sportsbooks including Novig)...")
                 
                 # Get current time for filtering past games
-                from datetime import datetime, timezone
                 now_utc = datetime.now(timezone.utc)
                 
                 for sport in selected_sports:
-                    try:
-                        snapshot = fetch_oddsapi_snapshot(odds_api_key, sport)
-                        games = snapshot.get('events', [])
-                        
-                        # Filter out games that have already started/finished
-                        upcoming_games = []
-                        for game in games:
-                            commence_time_str = game.get('commence_time')
-                            if commence_time_str:
-                                try:
-                                    # Parse commence_time (ISO format from TheOddsAPI)
-                                    commence_time = datetime.fromisoformat(commence_time_str.replace('Z', '+00:00'))
-                                    
-                                    # Only include games that haven't started yet (with 5 min buffer)
-                                    if commence_time > now_utc:
-                                        upcoming_games.append(game)
-                                    else:
-                                        logger.info(f"Filtered out past game: {game.get('home_team')} vs {game.get('away_team')} (commenced {commence_time})")
-                                except Exception as e:
-                                    # If we can't parse time, include the game to be safe
-                                    logger.warning(f"Could not parse commence_time for game, including anyway: {e}")
+                    snapshot = fetch_oddsapi_snapshot(odds_api_key, sport)
+                    games = snapshot.get("events", [])
+                
+                    # Filter out games that have already started/finished
+                    upcoming_games = []
+                    for game in games:
+                        commence_time_str = game.get("commence_time")
+                        if commence_time_str:
+                            try:
+                                # Parse commence_time (ISO format from TheOddsAPI)
+                                commence_time = datetime.fromisoformat(
+                                    commence_time_str.replace("Z", "+00:00")
+                                )
+                
+                                # Only include games that haven't started yet (with 5 min buffer)
+                                if commence_time > now_utc:
                                     upcoming_games.append(game)
-                            else:
-                                # No commence_time, include it
+                                else:
+                                    logger.info(
+                                        f"Filtered out past game: {game.get('home_team')} vs "
+                                        f"{game.get('away_team')} (commenced {commence_time})"
+                                    )
+                            except Exception as e:
+                                # If we can't parse time, include the game to be safe
+                                logger.warning(
+                                    f"Could not parse commence_time for game, including anyway: {e}"
+                                )
                                 upcoming_games.append(game)
-                        
-                        # Add sport_key and league to each upcoming game
-                        from math import isfinite  # put at top of file if not already imported
-                        for game in upcoming_games:
-                            game["sport_key"] = sport
-                        
-                            if sport == "basketball_nba":
-                                game["league"] = "NBA"
-                            elif sport == "basketball_ncaab":
-                                game["league"] = "NCAAB"
-                            elif sport == "americanfootball_nfl":
-                                game["league"] = "NFL"
-                            elif sport == "americanfootball_ncaaf":
-                                game["league"] = "NCAAF"
-                            elif sport == "icehockey_nhl":
-                                game["league"] = "NHL"
-                            else:
-                                game["league"] = "NBA"
-                        
-                            # 🔽 NEW: flatten core odds for VertexMasterAnalyzer
-                            home_team = game.get("home_team") or ""
-                            away_team = game.get("away_team") or ""
-                        
-                            markets = game.get("markets") or {}
-                            h2h = markets.get("h2h") or {}
-                        
-                            home_ml = (h2h.get("home") or {}).get("price")
-                            away_ml = (h2h.get("away") or {}).get("price")
-                        
-                            # Spreads
-                            spreads = markets.get("spreads") or []
-                            home_spread = away_spread = None
-                            home_spread_odds = away_spread_odds = None
-                        
-                            for o in spreads:
-                                name = (o.get("name") or "").strip()
-                                if name == home_team:
-                                    home_spread = o.get("point")
-                                    home_spread_odds = o.get("price")
-                                elif name == away_team:
-                                    away_spread = o.get("point")
-                                    away_spread_odds = o.get("price")
-                        
-                            # Implied home win probability from American odds
-                            # Implied home win probability from American odds
+                        else:
+                            # No commence_time, include it
+                            upcoming_games.append(game)
+                
+                    # Add sport_key, league, and flatten odds for each upcoming game
+                    for game in upcoming_games:
+                        game["sport_key"] = sport
+                
+                        if sport == "basketball_nba":
+                            game["league"] = "NBA"
+                        elif sport == "basketball_ncaab":
+                            game["league"] = "NCAAB"
+                        elif sport == "americanfootball_nfl":
+                            game["league"] = "NFL"
+                        elif sport == "americanfootball_ncaaf":
+                            game["league"] = "NCAAF"
+                        elif sport == "icehockey_nhl":
+                            game["league"] = "NHL"
+                        else:
+                            game["league"] = "NBA"
+                
+                        # 🔽 Flatten core odds for VertexMasterAnalyzer
+                        home_team = game.get("home_team") or ""
+                        away_team = game.get("away_team") or ""
+                
+                        markets = game.get("markets") or {}
+                        h2h = markets.get("h2h") or {}
+                
+                        home_ml = (h2h.get("home") or {}).get("price")
+                        away_ml = (h2h.get("away") or {}).get("price")
+                
+                        # Spreads
+                        spreads = markets.get("spreads") or []
+                        home_spread = away_spread = None
+                        home_spread_odds = away_spread_odds = None
+                
+                        for o in spreads:
+                            name = (o.get("name") or "").strip()
+                            if name == home_team:
+                                home_spread = o.get("point")
+                                home_spread_odds = o.get("price")
+                            elif name == away_team:
+                                away_spread = o.get("point")
+                                away_spread_odds = o.get("price")
+                
+                        # Implied home win probability from American odds
+                        implied_home_prob = 0.5
+                        try:
+                            if (
+                                isinstance(home_ml, (int, float))
+                                and isfinite(home_ml)
+                                and home_ml != 0
+                            ):
+                                if home_ml > 0:
+                                    implied_home_prob = 100.0 / (home_ml + 100.0)
+                                else:
+                                    implied_home_prob = abs(home_ml) / (abs(home_ml) + 100.0)
+                        except Exception:
                             implied_home_prob = 0.5
-                            
-                            try:  # TRY #1
-                                try:  # TRY #2
-                                    if isinstance(home_ml, (int, float)) and isfinite(home_ml) and home_ml != 0:
-                                        if home_ml > 0:
-                                            implied_home_prob = 100.0 / (home_ml + 100.0)
-                                        else:
-                                            implied_home_prob = abs(home_ml) / (abs(home_ml) + 100.0)
-                                except Exception:
-                                    implied_home_prob = 0.5
-                            
-                                game["home_ml_odds"] = home_ml
-                                game["away_ml_odds"] = away_ml
-                                game["home_spread"] = home_spread
-                                game["away_spread"] = away_spread
-                                game["home_spread_odds"] = home_spread_odds
-                                game["away_spread_odds"] = away_spread_odds
-                                game["implied_home_prob"] = implied_home_prob
-                            
-                            except Exception as e:  # ← TRY #1 proper except
-                                print("Master analysis block failed before debug df:", e)
-
-
-
+                
+                        game["home_ml_odds"] = home_ml
+                        game["away_ml_odds"] = away_ml
+                        game["home_spread"] = home_spread
+                        game["away_spread"] = away_spread
+                        game["home_spread_odds"] = home_spread_odds
+                        game["away_spread_odds"] = away_spread_odds
+                        game["implied_home_prob"] = implied_home_prob                   
+                    
                 # =========================================================================
                 # SUPPLEMENTAL DATA: TheOver.ai Picks & Probabilities (NOT Lines!)
                 # Merge TheOver.ai picks/probabilities for consensus validation
