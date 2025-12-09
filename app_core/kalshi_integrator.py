@@ -224,6 +224,40 @@ def normalize_name(s: str) -> str:
 
 # --- 5. MAIN MATCHING FUNCTION ---
 
+def _parse_market_metadata(market: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """
+    Normalize a Kalshi market into a simple metadata dict used for matching.
+    """
+    if not market:
+        return None
+
+    title = market.get("title") or market.get("ticker") or ""
+    ticker = market.get("ticker") or ""
+    # Try to get a date from close/expiration time
+    market_date = None
+    for key in ("expected_expiration_time", "expiration_time", "close_time"):
+        val = market.get(key)
+        if isinstance(val, str):
+            try:
+                market_date = datetime.fromisoformat(val.replace("Z", "+00:00"))
+                break
+            except Exception:
+                pass
+
+    teams = _extract_teams_from_ticker(ticker)
+
+    probability = market.get("probability")
+    # Some APIs embed prices; leave as-is and let price_to_prob handle later if needed
+
+    return {
+        "title": title,
+        "ticker": ticker,
+        "market_date": market_date,
+        "teams": teams,
+        "probability": probability,
+        "market_type": market.get("category") or market.get("series_ticker"),
+    }
+
 def match_game_to_kalshi(
     league: str,
     home_team: str,
