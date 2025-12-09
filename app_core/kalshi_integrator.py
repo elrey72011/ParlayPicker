@@ -332,10 +332,59 @@ def match_game_to_kalshi(
             continue
 
         def _team_score(team_code: str, target_norm: str, target_codes: List[str]) -> float:
-            if team_code in target_codes: return 2.0
-            if TeamNameMatcher and TeamNameMatcher.normalize(team_code) == target_norm: return 1.5
-            if TeamNameMatcher and TeamNameMatcher.similarity_score(TeamNameMatcher.normalize(team_code), target_norm) >= TEAM_NAME_SIMILARITY: return 1.0
+            """
+            Score how well a Kalshi team token matches a sportsbook team name.
+
+            2.0  - exact code / abbreviation match (e.g. NYK, MIA)
+            1.5  - exact normalized name match (e.g. "miami heat" == "miami heat")
+            1.2  - one normalized name is contained in the other
+            1.0  - >= 50% word overlap
+            0.5  - some word overlap but weaker
+            0.0  - no meaningful match
+            """
+            if not team_code:
+                return 0.0
+
+            # Normalize the raw token a bit
+            clean_code = team_code.strip().upper()
+
+            # 1) Code / abbreviation match first (fast path)
+            if clean_code in target_codes:
+                return 2.0
+
+            # 2) If TeamNameMatcher is available, use it
+            if TeamNameMatcher:
+                norm_code = TeamNameMatcher.normalize(team_code)
+                if norm_code == target_norm:
+                    return 1.5
+
+                sim = TeamNameMatcher.similarity_score(norm_code, target_norm)
+                if sim >= TEAM_NAME_SIMILARITY:
+                    return 1.0
+
+            # 3) Fallback: simple normalization + word overlap
+            norm_code = normalize_name(team_code)
+
+            # exact normalized name
+            if norm_code == target_norm and norm_code:
+                return 1.5
+
+            # one name contained inside the other
+            if norm_code and target_norm and (norm_code in target_norm or target_norm in norm_code):
+                return 1.2
+
+            # word overlap
+            words_code = set(norm_code.split())
+            words_target = set(target_norm.split())
+            overlap = words_code & words_target
+            if overlap:
+                ratio = len(overlap) / max(len(words_target), 1)
+                if ratio >= 0.5:
+                    return 1.0
+                return 0.5
+
             return 0.0
+
 
         score_home_first = _team_score(teams[0], home_norm, home_codes) + _team_score(teams[1], away_norm, away_codes)
         score_away_first = _team_score(teams[0], away_norm, away_codes) + _team_score(teams[1], home_norm, home_codes)
@@ -352,8 +401,41 @@ def match_game_to_kalshi(
             best_score = score
             best_market = market
 
-    if not best_market or best_score < TEAM_FUZZY_THRESHOLD:
-        return KalshiMatchResult(matched=False, kalshi_available=False, label="", probability=None, raw_event_id=None, league=league_norm, reason="no_market_match")
+    # No viable market at all
+    if not parsed_markets:
+        return KalshiMatchResult(
+            matched=False,
+            kalshi_available=False,
+            label="",
+            probability=None,
+            raw_event_id=None,
+            league=league_norm,
+            reason="no_kalshi_markets_for_league",
+        )
+
+    # We had markets, but none cleared the threshold
+    if not best_market:
+        return KalshiMatchResult(
+            matched=False,
+            kalshi_available=True,
+            label="",
+            probability=None,
+            raw_event_id=None,
+            league=league_norm,
+            reason="no_candidate_above_min_score",
+        )
+
+    if best_score < TEAM_FUZZY_THRESHOLD:
+        return KalshiMatchResult(
+            matched=False,
+            kalshi_available=True,
+            label="",
+            probability=None,
+            raw_event_id=None,
+            league=league_norm,
+            reason=f"low_score:{best_score:.2f}",
+        )
+
 
     meta = best_market["__meta"]
     probability = meta.get("probability")
