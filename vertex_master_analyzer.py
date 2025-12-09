@@ -1,5 +1,6 @@
 """
 Vertex AI Master Analyzer
+Location: vertex_master_analyzer.py (ROOT DIRECTORY)
 Consolidates ALL data sources for ultimate best bet recommendations.
 """
 import logging
@@ -7,12 +8,10 @@ import re
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
-import pytz
-import numpy as np
 import pandas as pd
 import streamlit as st
 
-# Import shared modules
+# --- IMPORTS FROM APP_CORE ---
 try:
     from app_core.team_name_matcher import TeamNameMatcher
     from app_core.kalshi_integrator import (
@@ -20,46 +19,25 @@ try:
         match_game_to_kalshi,
     )
     from app_core.vertex_ai_endpoint import (
-        VERTEX_MODEL_DISPLAY_NAME,
         VERTEX_FEATURE_COLUMNS,
         is_vertex_prediction_configured,
-        score_with_vertex,
         predict_win_probabilities,
     )
 except ImportError as e:
     logging.warning(f"VertexMasterAnalyzer import warning: {e}")
+    # Fallbacks to prevent crash if app_core is missing
     TeamNameMatcher = None
     KalshiMatchResult = dict
     match_game_to_kalshi = lambda *args, **kwargs: {}
     VERTEX_FEATURE_COLUMNS = []
-    VERTEX_MODEL_DISPLAY_NAME = "Unknown"
     is_vertex_prediction_configured = lambda: False
-    score_with_vertex = lambda *args: (pd.Series([]), "error", "none")
     predict_win_probabilities = lambda *args: []
 
 logger = logging.getLogger(__name__)
 
 # -------------------------------
-# Normalization helpers
+# Normalization Helpers
 # -------------------------------
-
-def normalize_team(name: str) -> str:
-    if not isinstance(name, str): return ""
-    s = name.lower().strip()
-    s = re.sub(r"[^\w\s]", "", s)
-    s = s.replace("st ", "state ").replace("st.", "state ")
-    return re.sub(r"\s+", " ", s)
-
-def normalize_league(value: str) -> str:
-    if not isinstance(value, str): return ""
-    v = value.lower().strip()
-    if "ncaab" in v: return "ncaab"
-    if "ncaaf" in v: return "ncaaf"
-    if "nba" in v: return "nba"
-    if "nhl" in v: return "nhl"
-    if "mlb" in v: return "mlb"
-    if "nfl" in v: return "nfl"
-    return v
 
 def implied_prob_from_american(odds: Optional[float]) -> Optional[float]:
     if odds is None or odds == 0 or pd.isna(odds): return None
@@ -259,7 +237,6 @@ class VertexMasterAnalyzer:
             "implied_home_prob": gv("implied_home_prob", 0.5),
             "sentiment_diff": gv("sentiment_diff"),
             "kalshi_prob": gv("kalshi_prob", 0.5) if feats.get("kalshi_available") else 0.5,
-            # Add other required model features here
         }
 
     def _evaluate_candidate(
