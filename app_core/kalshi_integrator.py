@@ -323,8 +323,9 @@ def match_game_to_kalshi(
 
         if game_dt and meta.get("market_date"):
             day_diff = abs((meta["market_date"].date() - game_dt.date()).days)
-            if day_diff > 2:
+            if day_diff > 4:   # was 2
                 continue
+
 
         teams = meta.get("teams", [])
         if len(teams) < 2:
