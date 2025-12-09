@@ -454,29 +454,27 @@ class VertexMasterAnalyzer:
             raw_league = league or game.get("league") or game.get("sport_key") or "NBA"
             league = normalize_league(raw_league)
 
-            # --- FIX: DEFINE game_dt HERE ---
+            # --- FIX: Define game_dt correctly to handle ISO strings ---
             game_time = game.get("commence_time") or game.get("game_time")
             game_dt = None
             if game_time:
                 try:
-                    # Handle string ISO format
                     if isinstance(game_time, str):
                         game_dt = datetime.fromisoformat(str(game_time).replace("Z", "+00:00"))
-                    # Handle existing datetime object
                     elif isinstance(game_time, datetime):
                         game_dt = game_time
                 except Exception:
                     game_dt = None
-            # --------------------------------
+            # -----------------------------------------------------------
 
             market_info = prefetch_info
             if market_info is None:
-                # FIX: Pass status=None to find markets even if they are active/locked
+                # FIX: Pass status=None to find markets even if they are active/locked/closed
                 market_info = match_game_to_kalshi(league, home, away, game_dt, integrator=self.kalshi, status=None)
 
             logging.info(f"[Kalshi FETCH] home={home} away={away} dt={game_dt}")
 
-            # [Rest of logic remains the same]
+            # [Keep the rest of your original logic below this line...]
             is_matched = False
             prob = None
             label = None
@@ -488,6 +486,56 @@ class VertexMasterAnalyzer:
                     if key in info and info.get(key) is not None:
                         return info.get(key)
                 return None
+            
+                if isinstance(market_info, dict):
+                    is_matched = (
+                        market_info.get("matched", False)
+                        or market_info.get("kalshi_available", False)
+                        or market_info.get("available", False)
+                    )
+                    prob = _pick_prob(market_info)
+                    label = (
+                        market_info.get("label")
+                        or market_info.get("kalshi_label")
+                        or market_info.get("market_type")
+                    )
+                    debug_reason = market_info.get("reason") or market_info.get("kalshi_match_debug")
+                    feats["kalshi_match_debug"] = str(debug_reason)
+                    feats["kalshi_status"] = str(debug_reason)
+                    feats["kalshi_event_ticker"] = market_info.get("raw_event_id") or market_info.get("kalshi_event_ticker")
+                    feats["kalshi_market_type"] = market_info.get("market_type")
+                    feats["kalshi_direction"] = market_info.get("direction")
+    
+                if not is_matched or prob is None:
+                    return feats
+    
+                try:
+                    prob = float(prob)
+                    prob = max(0.0, min(1.0, prob))
+                except:
+                    return feats
+    
+                feats["kalshi_available"] = True
+                feats["kalshi_prob"] = prob
+                feats["kalshi_home_prob"] = prob
+                feats["kalshi_label"] = label
+                feats["kalshi_volume"] = market_info.get("kalshi_volume")
+                
+                model_p = game.get("implied_home_prob") or game.get("win_prob")
+                if model_p is not None:
+                    try:
+                        model_p = float(model_p)
+                        if abs(model_p - prob) < 0.05: feats["kalshi_alignment"] = "Neutral"
+                        elif model_p > prob: feats["kalshi_alignment"] = "Model > Kalshi"
+                        else: feats["kalshi_alignment"] = "Kalshi > Model"
+                    except: pass
+    
+                return feats
+
+        except Exception as e:
+            logger.error(f"Kalshi feature error: {e}", exc_info=True)
+            feats["kalshi_match_debug"] = f"error={str(e)}"
+            return feats
             
             if isinstance(market_info, dict):
                 is_matched = (
