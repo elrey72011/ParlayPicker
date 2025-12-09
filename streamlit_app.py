@@ -11926,6 +11926,7 @@ if is_vertex_ai_enabled():
                     # CSV Download with structured alignment/status fields
                     export_cols = display_cols + [
                         'Kalshi Prob %',
+                        'Kalshi Match Debug',
                         'pick_market_type',
                         'pick_line',
                         'pick_selection',
