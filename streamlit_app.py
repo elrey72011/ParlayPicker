@@ -6223,18 +6223,18 @@ def prepare_theover_dataset(
         except Exception:
             df.at[idx, 'theover_match_key'] = ''
             
-    market_type = _infer_theover_market(row, explicit_market)
-    # Spread rows (keep these enabled)
-    if market_type == 'spread':
-        _ingest_theover_spread_row(entry, row, swapped, idx, home_raw, away_raw)
-    
-    # Total rows (temporarily disabled)
-    elif market_type == 'total':
-            if ENABLE_THEOVER_TOTALS:
-                _ingest_theover_total_row(entry, row, idx)
-            else:
-                # Skip totals entirely while debugging
-                continue
+        market_type = _infer_theover_market(row, explicit_market)
+        # Spread rows (keep these enabled)
+        if market_type == 'spread':
+            _ingest_theover_spread_row(entry, row, swapped, idx, home_raw, away_raw)
+        
+        # Total rows (temporarily disabled)
+        elif market_type == 'total':
+                if ENABLE_THEOVER_TOTALS:
+                    _ingest_theover_total_row(entry, row, idx)
+                else:
+                    # Skip totals entirely while debugging
+                    continue
     
     # Moneyline (or fallback)
     else:
