@@ -455,6 +455,7 @@ class VertexMasterAnalyzer:
             league = normalize_league(raw_league)
 
             # --- FIX: Define game_dt correctly to handle ISO strings ---
+            # ... inside _get_kalshi_features ...
             game_time = game.get("commence_time") or game.get("game_time")
             game_dt = None
             if game_time:
@@ -465,6 +466,8 @@ class VertexMasterAnalyzer:
                         game_dt = game_time
                 except Exception:
                     game_dt = None
+            
+            # ... then call match_game_to_kalshi ...
             # -----------------------------------------------------------
 
             market_info = prefetch_info
