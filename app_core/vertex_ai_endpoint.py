@@ -1,292 +1,346 @@
-"""Vertex AI prediction helper for ParlayPicker.
-
-This module centralizes configuration for the deployed Vertex endpoint and
-exposes a small helper to score DataFrames of model features.
 """
+app_core.vertex_ai_endpoint
+
+Thin wrapper around a deployed Google Vertex AI Endpoint used for
+numeric win-probability predictions in ParlayPicker.
+
+Exports:
+    - VERTEX_FEATURE_COLUMNS: list[str]
+    - is_vertex_prediction_configured() -> bool
+    - predict_win_probabilities(df, feature_columns=None) -> list[float]
+"""
+
 from __future__ import annotations
 
-import json
-import logging
 import os
-from functools import lru_cache
-from typing import Iterable, List, Optional, Tuple
+import logging
+from typing import List, Optional
 
-import numpy as np
 import pandas as pd
 
 try:
     import streamlit as st  # type: ignore
-except Exception:  # pragma: no cover - Streamlit not available in tests
-    st = None
+except Exception:  # Streamlit not always available (e.g., offline tests)
+    st = None  # type: ignore
 
-try:  # Lazy import to avoid hard dependency during cold starts
+try:
     from google.cloud import aiplatform
-except Exception:  # pragma: no cover - allow module import without SDK
-    aiplatform = None
+    _GCP_AVAILABLE = True
+except Exception:
+    aiplatform = None  # type: ignore
+    _GCP_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
-# Human-readable model label for surfaced metadata/exports
-VERTEX_MODEL_DISPLAY_NAME = "parlaypicker-v3-stripped (Vertex XGBoost)"
+# -------------------------------------------------------------------
+# MODEL INPUT SCHEMA
+# -------------------------------------------------------------------
 
-# ---------------------------------------------------------------------------
-# Configuration helpers
-# ---------------------------------------------------------------------------
+#: Columns your Vertex tabular model expects.
+#: Make sure this matches the model's training schema.
+VERTEX_FEATURE_COLUMNS: List[str] = [
+    # TODO: Adjust to exactly match your deployed model
+    # These are placeholders – update if needed.
+    "implied_home_prob",
+    "sentiment_diff",
+    "kalshi_prob",
+]
+
+# -------------------------------------------------------------------
+# DEFAULT CONFIG (you can override in secrets or env)
+# -------------------------------------------------------------------
+
+DEFAULT_PROJECT_ID = "elite-hangar-479017-m8"
+DEFAULT_LOCATION = "us-central1"
+DEFAULT_ENDPOINT_ID = "6435317312558989312"  # numeric endpoint id from your logs
+
+# Cached endpoint client & name so we don't recreate it constantly
+_vertex_endpoint_client = None
+_vertex_endpoint_name: Optional[str] = None
 
 
-@lru_cache(maxsize=1)
-def _load_vertex_settings() -> dict:
-    """Load Vertex settings from env vars or Streamlit secrets.
+# -------------------------------------------------------------------
+# INTERNAL CONFIG HELPERS
+# -------------------------------------------------------------------
 
-    Environment variables take precedence, followed by ``st.secrets["vertex"]``.
+def _get_vertex_config() -> tuple[str, str, str]:
     """
-    vertex_secret = {}
-    try:
-        if st is not None:
-            vertex_secret = st.secrets.get("vertex", {})  # type: ignore[arg-type]
-    except Exception:
-        vertex_secret = {}
+    Resolve (project_id, location, endpoint_id) from:
+      1. Streamlit session_state
+      2. Streamlit secrets
+      3. Environment variables
+      4. Internal defaults
 
-    project_id = os.environ.get("VERTEX_PROJECT_ID") or vertex_secret.get("project_id")
-    location = os.environ.get("VERTEX_LOCATION") or vertex_secret.get("location") or "us-central1"
-    endpoint_id = os.environ.get("VERTEX_ENDPOINT_ID") or vertex_secret.get("endpoint_id")
+    Order of precedence (highest → lowest):
 
-    # Optional SA credentials for local/dev usage
-    credentials_info = None
-    try:
-        if st is not None and "gcp_service_account" in st.secrets:
-            credentials_info = st.secrets.get("gcp_service_account")
-        elif st is not None and "gcp_service_account" in st.session_state:
-            credentials_info = st.session_state.get("gcp_service_account")
-    except Exception:
-        credentials_info = None
+        project_id:
+          - st.session_state['gcp_project_id']
+          - st.secrets['gcp_project_id']
+          - $GCP_PROJECT_ID
+          - $GOOGLE_CLOUD_PROJECT
+          - DEFAULT_PROJECT_ID
 
-    return {
-        "project_id": project_id,
-        "location": location,
-        "endpoint_id": endpoint_id,
-        "credentials_info": credentials_info,
-    }
+        location:
+          - st.session_state['gcp_region']
+          - st.secrets['gcp_region']
+          - $GCP_REGION
+          - DEFAULT_LOCATION
 
+        endpoint_id (can be raw id or full resource name):
+          - st.secrets['vertex_endpoint_id']
+          - $VERTEX_ENDPOINT_ID
+          - DEFAULT_ENDPOINT_ID
+    """
+    # Project
+    project_id = (
+        (st and st.session_state.get("gcp_project_id"))
+        or (st and getattr(st, "secrets", {}).get("gcp_project_id", None))
+        or os.environ.get("GCP_PROJECT_ID")
+        or os.environ.get("GOOGLE_CLOUD_PROJECT")
+        or DEFAULT_PROJECT_ID
+    )
+
+    # Location
+    location = (
+        (st and st.session_state.get("gcp_region"))
+        or (st and getattr(st, "secrets", {}).get("gcp_region", None))
+        or os.environ.get("GCP_REGION")
+        or DEFAULT_LOCATION
+    )
+
+    # Endpoint (either raw id or full resource name)
+    endpoint_id = (
+        (st and getattr(st, "secrets", {}).get("vertex_endpoint_id", None))
+        or os.environ.get("VERTEX_ENDPOINT_ID")
+        or DEFAULT_ENDPOINT_ID
+    )
+
+    # Normalize just in case
+    project_id = str(project_id).strip()
+    location = str(location).strip()
+    endpoint_id = str(endpoint_id).strip()
+
+    return project_id, location, endpoint_id
+
+
+def _build_endpoint_name(project_id: str, location: str, endpoint_id: str) -> str:
+    """
+    Build full endpoint resource name.
+
+    If endpoint_id is already a full resource path (contains 'projects/'),
+    we return it as-is. Otherwise we build:
+        projects/{project_id}/locations/{location}/endpoints/{endpoint_id}
+    """
+    if "projects/" in endpoint_id and "/endpoints/" in endpoint_id:
+        # Already full resource name
+        return endpoint_id
+
+    return f"projects/{project_id}/locations/{location}/endpoints/{endpoint_id}"
+
+
+def _get_or_create_endpoint():
+    """
+    Get a configured Vertex Endpoint client.
+
+    Ensures:
+      - aiplatform.init(project=..., location=...) is called with a
+        non-None project_id (prevents 'projects/None' bugs).
+      - Endpoint is created only once & cached.
+    """
+    global _vertex_endpoint_client, _vertex_endpoint_name
+
+    if not _GCP_AVAILABLE:
+        raise RuntimeError(
+            "google-cloud-aiplatform is not installed. "
+            "Install with: pip install google-cloud-aiplatform"
+        )
+
+    project_id, location, endpoint_id = _get_vertex_config()
+    endpoint_name = _build_endpoint_name(project_id, location, endpoint_id)
+
+    # Return cached client if same endpoint
+    if _vertex_endpoint_client is not None and _vertex_endpoint_name == endpoint_name:
+        return _vertex_endpoint_client
+
+    # Explicitly init AI Platform with proper project & region
+    aiplatform.init(project=project_id, location=location)
+
+    logger.info(f"[VertexEndpoint] Using endpoint: {endpoint_name}")
+    endpoint = aiplatform.Endpoint(endpoint_name)
+
+    _vertex_endpoint_client = endpoint
+    _vertex_endpoint_name = endpoint_name
+    return endpoint
+
+
+# -------------------------------------------------------------------
+# PUBLIC HELPERS
+# -------------------------------------------------------------------
 
 def is_vertex_prediction_configured() -> bool:
-    settings = _load_vertex_settings()
-    if not settings.get("endpoint_id"):
-        logger.warning("Vertex prediction disabled: missing endpoint id")
+    """
+    Return True if Vertex appears to be configured well enough
+    to attempt predictions.
+
+    This checks:
+      - aiplatform import availability
+      - presence of a non-empty project_id
+      - presence of an endpoint id/name
+
+    It does *not* call the endpoint yet – only verifies config.
+    """
+    if not _GCP_AVAILABLE:
+        logger.warning("Vertex prediction not configured: google-cloud-aiplatform missing")
         return False
-    if aiplatform is None:
-        logger.warning("Vertex prediction disabled: google-cloud-aiplatform not installed")
+
+    try:
+        project_id, location, endpoint_id = _get_vertex_config()
+    except Exception as e:
+        logger.warning(f"Vertex config resolution failed: {e}")
         return False
+
+    if not project_id or project_id.lower() == "none":
+        logger.warning("Vertex prediction not configured: project_id is missing/None")
+        return False
+
+    if not endpoint_id:
+        logger.warning("Vertex prediction not configured: endpoint_id is missing")
+        return False
+
+    if not location:
+        logger.warning("Vertex prediction not configured: location is missing")
+        return False
+
     return True
 
 
-# ---------------------------------------------------------------------------
-# Endpoint caching + prediction
-# ---------------------------------------------------------------------------
+def predict_win_probabilities(
+    features_df: pd.DataFrame,
+    feature_columns: Optional[List[str]] = None
+) -> List[float]:
+    """
+    Call the Vertex endpoint and return predicted *home win probabilities*
+    for each row in `features_df`.
 
-_vertex_endpoint = None
+    Args:
+        features_df:
+            DataFrame containing all features. At minimum it must
+            contain the columns listed in `feature_columns` (or
+            `VERTEX_FEATURE_COLUMNS` if None).
+        feature_columns:
+            Columns to send to the model. If None, uses VERTEX_FEATURE_COLUMNS.
 
+    Returns:
+        List[float]: A list of probabilities (0.0–1.0) aligned with
+        each row of `features_df`. If something fails, returns [].
+    """
+    if features_df is None or features_df.empty:
+        logger.info("predict_win_probabilities called with empty features_df")
+        return []
 
-def _get_vertex_endpoint():
-    global _vertex_endpoint
-    if _vertex_endpoint is not None:
-        return _vertex_endpoint
+    if feature_columns is None:
+        feature_columns = VERTEX_FEATURE_COLUMNS
 
-    settings = _load_vertex_settings()
-    endpoint_id = settings.get("endpoint_id")
-    project_id = settings.get("project_id")
-    location = settings.get("location")
+    # Ensure DataFrame has all required columns; fill missing with 0.0
+    payload_df = pd.DataFrame(features_df.copy())
+    for col in feature_columns:
+        if col not in payload_df.columns:
+            logger.warning(f"Missing feature column '{col}' – filling with 0.0")
+            payload_df[col] = 0.0
 
-    if not endpoint_id:
-        logger.error("VERTEX_ENDPOINT_ID is not configured; skipping Vertex predictions")
-        return None
+    # Only send what the model expects
+    instances = payload_df[feature_columns].to_dict(orient="records")
 
     try:
-        credentials = None
-        if settings.get("credentials_info"):
-            cred_info = settings["credentials_info"]
-            if isinstance(cred_info, str):
-                cred_info = json.loads(cred_info)
-            from google.oauth2 import service_account  # type: ignore
+        endpoint = _get_or_create_endpoint()
+    except Exception as e:
+        logger.error(f"Unable to create Vertex endpoint client: {e}")
+        return []
 
-            credentials = service_account.Credentials.from_service_account_info(
-                cred_info, scopes=["https://www.googleapis.com/auth/cloud-platform"]
-            )
+    try:
+        prediction = endpoint.predict(instances=instances)
+    except Exception as e:
+        logger.error(f"Vertex endpoint prediction failed: {e}")
+        return []
 
-        aiplatform.init(project=project_id, location=location, credentials=credentials)
-        endpoint_path = endpoint_id
-        if not endpoint_id.startswith("projects/"):
-            endpoint_path = f"projects/{project_id}/locations/{location}/endpoints/{endpoint_id}"
-        _vertex_endpoint = aiplatform.Endpoint(endpoint_path)
-        logger.info("Vertex endpoint initialized: %s", endpoint_path)
-        return _vertex_endpoint
-    except Exception as exc:  # pragma: no cover - requires cloud access
-        logger.error("Failed to initialize Vertex endpoint: %s", exc)
-        return None
+    # ------------------------------------------------------------------
+    # Output parsing
+    # ------------------------------------------------------------------
+    probs: List[float] = []
 
+    try:
+        preds = prediction.predictions  # type: ignore[attr-defined]
 
-VERTEX_FEATURE_COLUMNS: List[str] = [
-    "home_win_pct",
-    "away_win_pct",
-    "home_avg_points",
-    "away_avg_points",
-    "home_form_last5",
-    "away_form_last5",
-    "home_pd_last5",
-    "away_pd_last5",
-    "home_sos_last5",
-    "away_sos_last5",
-    "win_pct_diff",
-    "avg_points_diff",
-    "form_diff",
-    "pd_last5_diff",
-    "sos_diff",
-    "def_rating_diff",
-    "streak_diff",
-    "spread_normalized",
-    "public_betting_centered",
-    "sharp_vs_public",
-    "rest_advantage",
-    "back_to_back",
-    "primetime_game",
-    "division_game",
-    "injuries_impact",
-    "weather_factor",
-    "line_movement",
-    "total_movement",
-    "model_consensus",
-    "theover_probability",
-]
+        for p in preds:
+            # Common pattern 1: {"probabilities": [p_home, p_away]}
+            if isinstance(p, dict) and "probabilities" in p:
+                arr = p["probabilities"]
+                if isinstance(arr, (list, tuple)) and len(arr) > 0:
+                    probs.append(float(arr[0]))
+                    continue
+
+            # Common pattern 2: {"probability": p_home}
+            if isinstance(p, dict) and "probability" in p:
+                probs.append(float(p["probability"]))
+                continue
+
+            # Common pattern 3: [p_home, p_away] or [p_home]
+            if isinstance(p, (list, tuple)) and len(p) > 0:
+                probs.append(float(p[0]))
+                continue
+
+            # Fallback if structure unknown
+            logger.warning(f"Unrecognized prediction format: {p!r} – defaulting to 0.5")
+            probs.append(0.5)
+
+    except Exception as e:
+        logger.error(f"Error parsing Vertex predictions: {e}")
+        return []
+
+    return probs
 
 
-def predict_win_probabilities(df: pd.DataFrame, feature_columns: Iterable[str]) -> Optional[np.ndarray]:
-    """Call the deployed Vertex endpoint and return win probabilities.
+# -------------------------------------------------------------------
+# CLI TEST ENTRYPOINT (optional)
+# -------------------------------------------------------------------
 
-    Returns ``None`` on configuration/API errors so callers can gracefully
-    fall back without crashing the Streamlit app.
+if __name__ == "__main__":
     """
+    Allow quick testing via:
+
+        python -m app_core.vertex_ai_endpoint
+
+    or
+
+        python app_core/vertex_ai_endpoint.py
+    """
+    import sys
+
+    logging.basicConfig(level=logging.INFO)
+
+    try:
+        project_id, location, endpoint_id = _get_vertex_config()
+        print("Resolved config:")
+        print(f"  project_id  = {project_id}")
+        print(f"  location    = {location}")
+        print(f"  endpoint_id = {endpoint_id}")
+    except Exception as e:
+        print(f"Failed to resolve Vertex config: {e}")
+        sys.exit(1)
+
     if not is_vertex_prediction_configured():
-        return None
+        print("Vertex prediction is NOT configured correctly.")
+        sys.exit(1)
 
-    endpoint = _get_vertex_endpoint()
-    if endpoint is None:
-        return None
-
-    try:
-        # Ensure column order and numeric dtype
-        df_payload = df.copy()
-        for col in feature_columns:
-            if col not in df_payload.columns:
-                df_payload[col] = 0.0
-        df_payload = df_payload[list(feature_columns)].apply(pd.to_numeric, errors="coerce").fillna(0.0)
-
-        instances = df_payload.values.tolist()
-        prediction = endpoint.predict(instances=instances, timeout=5)
-        raw_preds = prediction.predictions or []
-        probs: List[float] = []
-        for entry in raw_preds:
-            if isinstance(entry, (list, tuple)):
-                # Most AutoML/XGB endpoints return [class0, class1]
-                if len(entry) == 1:
-                    probs.append(float(entry[0]))
-                else:
-                    probs.append(float(entry[-1]))
-            else:
-                probs.append(float(entry))
-        return np.array(probs, dtype=float)
-    except Exception as exc:  # pragma: no cover - network boundary
-        logger.warning("Vertex prediction failed: %s", exc)
-        return None
-
-
-def score_with_vertex(df: pd.DataFrame, feature_cols: Iterable[str]) -> tuple[pd.Series, str, str]:
-    """Score a DataFrame with Vertex and return probabilities + status + model.
-
-    The status string is "vertex" on success or "fallback:<reason>" on
-    failure. Returned Series always aligns with ``df.index`` and includes
-    the human-readable model name for export visibility.
-    """
-
-    try:
-        if not is_vertex_prediction_configured():
-            return pd.Series(np.nan, index=df.index), "fallback:not_configured", VERTEX_MODEL_DISPLAY_NAME
-
-        endpoint = _get_vertex_endpoint()
-        if endpoint is None:
-            return pd.Series(np.nan, index=df.index), "fallback:endpoint", VERTEX_MODEL_DISPLAY_NAME
-
-        df_payload = df.copy()
-        for col in feature_cols:
-            if col not in df_payload.columns:
-                df_payload[col] = 0.0
-        df_payload = df_payload[list(feature_cols)].apply(pd.to_numeric, errors="coerce").fillna(0.0)
-        instances = df_payload.values.tolist()
-        prediction = endpoint.predict(instances=instances, timeout=5)
-        raw_preds = prediction.predictions or []
-        probs: List[float] = []
-        for entry in raw_preds:
-            if isinstance(entry, (list, tuple)):
-                if len(entry) == 1:
-                    probs.append(float(entry[0]))
-                else:
-                    probs.append(float(entry[-1]))
-            else:
-                probs.append(float(entry))
-        series = pd.Series(np.array(probs, dtype=float), index=df.index)
-        return series, "vertex", VERTEX_MODEL_DISPLAY_NAME
-    except Exception as exc:  # pragma: no cover - network boundary
-        import traceback
-
-        short_msg = f"{type(exc).__name__}"
-        logger.error("[Vertex] predict failed: %s\n%s", exc, traceback.format_exc())
-        return pd.Series(np.nan, index=df.index), f"error:{short_msg}", VERTEX_MODEL_DISPLAY_NAME
-
-
-def quick_vertex_sanity_check():
-    """Tiny sanity check to run in a REPL without Streamlit."""
-    sample = pd.DataFrame(
+    # Build a tiny dummy frame for sanity check
+    dummy = pd.DataFrame(
         [
-            {
-                "home_win_pct": 0.55,
-                "away_win_pct": 0.45,
-                "home_avg_points": 112,
-                "away_avg_points": 108,
-                "home_form_last5": 3,
-                "away_form_last5": 2,
-                "home_pd_last5": 4,
-                "away_pd_last5": -1,
-                "home_sos_last5": 1.2,
-                "away_sos_last5": 0.8,
-                "win_pct_diff": 0.1,
-                "avg_points_diff": 4,
-                "form_diff": 1,
-                "pd_last5_diff": 5,
-                "sos_diff": 0.4,
-                "def_rating_diff": 1.0,
-                "streak_diff": 1,
-                "spread_normalized": -1.5,
-                "public_betting_centered": 0.0,
-                "sharp_vs_public": 0.1,
-                "rest_advantage": 1,
-                "back_to_back": 0,
-                "primetime_game": 0,
-                "division_game": 1,
-                "injuries_impact": 0,
-                "weather_factor": 0,
-                "line_movement": 0.5,
-                "total_movement": -0.25,
-                "model_consensus": 0.52,
-                "theover_probability": 0.51,
-            }
+            {col: 0.5 for col in VERTEX_FEATURE_COLUMNS},
+            {col: 0.1 for col in VERTEX_FEATURE_COLUMNS},
         ]
     )
-    probs = predict_win_probabilities(sample, VERTEX_FEATURE_COLUMNS)
-    print("Sample Vertex probabilities:", probs)
 
-
-__all__ = [
-    "VERTEX_FEATURE_COLUMNS",
-    "predict_win_probabilities",
-    "is_vertex_prediction_configured",
-    "quick_vertex_sanity_check",
-]
+    print("\nRequesting predictions for dummy data...")
+    probs = predict_win_probabilities(dummy)
+    print("Predictions:", probs)
+    sys.exit(0)
