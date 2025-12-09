@@ -14145,6 +14145,33 @@ with main_tab4:
                 kalshi_key, 
                 st.session_state.get('kalshi_api_secret', '')
             )
+
+# --- ADD THIS TO TAB 4 IN STREAMLIT_APP.PY ---
+st.subheader("🕵️ Series Ticker Discovery")
+if st.button("🔎 Find Active NBA/NFL Tickers"):
+    with st.spinner("Scanning all Kalshi series..."):
+        try:
+            # 1. Fetch ALL series (pagination handling included in your integrator)
+            all_series = kalshi.get_sports_series()
+            
+            # 2. Filter for relevant sports
+            nba_series = [s for s in all_series if "NBA" in s.get("ticker", "").upper()]
+            nfl_series = [s for s in all_series if "NFL" in s.get("ticker", "").upper()]
+            
+            # 3. Display Results
+            col1, col2 = st.columns(2)
+            with col1:
+                st.write(f"**Found {len(nba_series)} NBA Series:**")
+                for s in nba_series:
+                    st.code(f"{s['ticker']} : {s['title']}")
+            
+            with col2:
+                st.write(f"**Found {len(nfl_series)} NFL Series:**")
+                for s in nfl_series:
+                    st.code(f"{s['ticker']} : {s['title']}")
+                    
+        except Exception as e:
+            st.error(f"Discovery failed: {e}")
     # ------------------------------------------------------------
 # KALSHI PREDICTION MARKET — AI COMPARISON PANEL
 # ------------------------------------------------------------
