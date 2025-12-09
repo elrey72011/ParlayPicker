@@ -272,23 +272,28 @@ def predict_win_probabilities(
         preds = prediction.predictions  # type: ignore[attr-defined]
 
         for p in preds:
-            # Common pattern 1: {"probabilities": [p_home, p_away]}
+            # 1) {"probabilities": [p_home, p_away]}
             if isinstance(p, dict) and "probabilities" in p:
                 arr = p["probabilities"]
                 if isinstance(arr, (list, tuple)) and len(arr) > 0:
                     probs.append(float(arr[0]))
                     continue
-
-            # Common pattern 2: {"probability": p_home}
+        
+            # 2) {"probability": p_home}
             if isinstance(p, dict) and "probability" in p:
                 probs.append(float(p["probability"]))
                 continue
-
-            # Common pattern 3: [p_home, p_away] or [p_home]
+        
+            # 3) [p_home, p_away] or [p_home]
             if isinstance(p, (list, tuple)) and len(p) > 0:
                 probs.append(float(p[0]))
                 continue
-
+        
+            # 4) Bare float / int (your current model behavior)
+            if isinstance(p, (int, float)):
+                probs.append(float(p))
+                continue
+        
             # Fallback if structure unknown
             logger.warning(f"Unrecognized prediction format: {p!r} – defaulting to 0.5")
             probs.append(0.5)
