@@ -161,45 +161,69 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-st.subheader("Kalshi Debug")
-kalshi = st.session_state.get("kalshi_integrator") or KalshiIntegrator(
-    st.session_state.get("kalshi_key"),
-    st.session_state.get("kalshi_secret"),
-)
-st.session_state["kalshi_integrator"] = kalshi
+# --- REPLACE THE 'Kalshi Debug' SECTION IN streamlit_app.py WITH THIS ---
 
-st.write("Has API key:", bool(getattr(kalshi, "api_key", None)))
-st.write("Auth ready:", getattr(kalshi, "_auth_ready", None))
-st.write("API URL:", getattr(kalshi, "api_url", None))
+st.markdown("---")
+st.header("🔧 Kalshi Diagnostics & Health Check")
 
-with st.expander("Kalshi API Health Check", expanded=False):
-    try:
-        markets = kalshi.get_sports_markets() or []
-        st.write("Total markets from Kalshi:", len(markets))
-        st.write("Sample markets:", markets[:5])
-        st.write("Last Kalshi error:", getattr(kalshi, "last_error", None))
-    except Exception as e:
-        st.error(f"Kalshi health check error: {e}")
-
-debug_league = st.selectbox(
-    "Debug league",
-    ["NFL", "NBA", "NHL", "NCAAF", "NCAAB"],
-    index=1,  # default NBA
-    key="kalshi_debug_league",
-)
-
+# 1. Force a fresh integrator to bypass session cache issues
 try:
-    all_markets = kalshi.get_game_markets_for_events(debug_league)
-    today_markets = kalshi.filter_markets_closing_today(all_markets)
+    from app_core.kalshi_integrator import KalshiIntegrator
+    
+    # Check for cryptography library
+    try:
+        import cryptography
+        crypto_status = "✅ Installed"
+    except ImportError:
+        crypto_status = "❌ MISSING (Required for Prod)"
 
-    st.write(f"{debug_league} markets returned (all):", len(all_markets))
-    st.write(f"{debug_league} markets returned (today only):", len(today_markets))
-    st.write("Sample markets:", today_markets[:5] if today_markets else all_markets[:5])
+    # Load keys directly to verify they exist
+    k_key = st.secrets.get("KALSHI_API_KEY") or os.environ.get("KALSHI_API_KEY")
+    k_sec = st.secrets.get("KALSHI_API_SECRET") or os.environ.get("KALSHI_API_SECRET")
+    
+    key_status = "✅ Present" if k_key else "❌ Missing"
+    sec_status = "✅ Present" if k_sec else "❌ Missing"
+    
+    # Initialize Fresh
+    debug_kalshi = KalshiIntegrator(k_key, k_sec)
+    
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("Cryptography Lib", crypto_status)
+    col2.metric("API Key", key_status)
+    col3.metric("API Secret", sec_status)
+    col4.metric("Environment", "Production" if k_key else "Demo")
+
+    if st.button("🚀 Run Connection Test"):
+        with st.spinner("Testing Kalshi connection..."):
+            st.write(f"**Target URL:** `{debug_kalshi.api_url}`")
+            
+            # Test 1: Fetch Series
+            series = debug_kalshi.get_sports_series()
+            if series:
+                st.success(f"✅ Connection Successful! Found {len(series)} sports series.")
+                
+                # Test 2: Fetch Markets for a specific league
+                st.write("Fetching NBA markets as test...")
+                nba_markets = debug_kalshi.get_game_markets_for_events("NBA")
+                
+                if nba_markets:
+                    st.success(f"✅ Found {len(nba_markets)} NBA markets.")
+                    with st.expander("🔎 Inspect First 5 Markets"):
+                        st.json(nba_markets[:5])
+                else:
+                    st.warning("⚠️ Connection worked, but 0 NBA markets found. (Is it off-season?)")
+                    
+            else:
+                st.error("❌ Connection Failed. /series returned empty.")
+                if debug_kalshi.last_error:
+                    st.error(f"**API Error:** {debug_kalshi.last_error}")
+                    if "401" in debug_kalshi.last_error or "403" in debug_kalshi.last_error:
+                        st.info("💡 **Fix:** Check your API Key/Secret in secrets.toml. They might be invalid or expired.")
+                    if "cryptography" in crypto_status and "Prod" in col4.metric_value:
+                        st.info("💡 **Fix:** You must add `cryptography` to your `requirements.txt` file.")
 
 except Exception as e:
-    st.write("Exception when fetching markets:", str(e))
-
-st.write("Last Kalshi error:", getattr(kalshi, "last_error", None))
+    st.error(f"Critical Error in Debug Block: {e}")
 
 # ============================================================
 # ML PREDICTION OPTIMIZATION FUNCTIONS
