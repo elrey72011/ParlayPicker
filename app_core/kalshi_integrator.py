@@ -23,6 +23,7 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 # --- 1. EXPANDED TEAM ABBREVIATIONS (NBA + NFL + NHL + MLB) ---
+# --- MASTER TEAM LIST (NBA, NFL, NHL, MLB) ---
 KALSHI_TEAM_ABBREVIATIONS = {
     # NBA
     "ATLANTA HAWKS": ["ATL"], "BOSTON CELTICS": ["BOS"], "BROOKLYN NETS": ["BKN", "BRK"],
@@ -319,49 +320,98 @@ class KalshiIntegrator:
         except Exception as e: self.last_error = str(e)
         return None
 
-    def get_markets(self, status="open") -> List[Dict]:
-        """Nuclear Fetch: Download everything and filter for all sports."""
-        cache_key = "all"
+    def get_markets(self, category: str = "sports", status: Optional[str] = "open") -> List[Dict]:
+        """Nuclear Fetch: Download markets (including recent past) and filter locally."""
+        cache_key = status or "all"
         now = time.time()
-        if cache_key in self._markets_cache and now - self._cache_time.get(cache_key, 0) < 300:
-            return self._markets_cache[cache_key]
+        
+        if cache_key in self._markets_cache and now - self._cache_time.get(cache_key, 0) < self._cache_duration:
+            return copy.deepcopy(self._markets_cache[cache_key])
 
         all_markets = []
         try:
-            cursor = None
-            for _ in range(25): # Increased pages to catch everything
-                p = {"limit": 200, "min_close_ts": int(now - 86400*2)} # Look back 48h
-                if cursor: p["cursor"] = cursor
-                
-                data = self._make_authenticated_request("GET", "/markets", params=p)
-                if not data: break
-                
-                markets = data.get("markets", [])
-                if not markets: break
-                
-                all_markets.extend(markets)
-                cursor = data.get("cursor")
-                if not cursor: break
-
-            # Expanded Keyword Filter for All Sports
-            keywords = [
-                "NBA", "NFL", "NHL", "MLB", "UFC", "NCAA", "COLLEGE", 
-                "FOOTBALL", "BASKETBALL", "HOCKEY", "BASEBALL", "SOCCER", "TENNIS",
-                "SPREAD", "TOTAL", "MONEYLINE"
+            # 1. PRIORITY TICKERS FOR ALL SPORTS
+            # These are fetched first to ensure we get them even if pagination stops early
+            series_tickers = [
+                # NBA
+                "KXNBA", "KXNBASPREAD", "KXNBATOTAL", "KXNBAMONEYLINE",
+                # NFL
+                "KXNFL", "KXNFLSPREAD", "KXNFLTOTAL", "KXNFLMONEYLINE",
+                # NHL
+                "KXNHL", "KXNHLSPREAD", "KXNHLTOTAL", "KXNHLMONEYLINE",
+                # MLB
+                "KXMLB", "KXMLBSPREAD", "KXMLBTOTAL", "KXMLBMONEYLINE",
+                # College
+                "KXNCAAF", "KXNCAAB", "KXNCAAFSPREAD", "KXNCAABSPREAD",
+                # Other
+                "KXUFC"
             ]
             
-            filtered = [
-                m for m in all_markets 
-                if any(k in (m.get("title") or "").upper() or k in (m.get("ticker") or "").upper() for k in keywords)
+            for ticker in series_tickers:
+                # Look back 48 hours to catch live/recently finished games
+                params = {
+                    "series_ticker": ticker, 
+                    "limit": 1000,
+                    "min_close_ts": int(now - (86400 * 2)) 
+                }
+                if status: params["status"] = status
+                
+                # Small sleep to be nice to the API
+                time.sleep(0.02)
+                data = self._make_authenticated_request("GET", "/markets", params=params)
+                if data: all_markets.extend(data.get("markets", []))
+
+            # 2. Fallback Nuclear Scan (if specific tickers missed something)
+            # Only run if we found very few markets
+            if len(all_markets) < 50:
+                cursor = None
+                page_count = 0
+                while page_count < 20:
+                    params = {"limit": 200, "min_close_ts": int(now - (86400 * 2))}
+                    if cursor: params["cursor"] = cursor
+                    
+                    data = self._make_authenticated_request("GET", "/markets", params=params)
+                    if not data: break
+                    
+                    markets = data.get("markets", [])
+                    if not markets: break
+                    
+                    all_markets.extend(markets)
+                    cursor = data.get("cursor")
+                    page_count += 1
+                    if not cursor: break
+
+            # 3. Local Filter
+            sports_keywords = [
+                "NFL", "NBA", "MLB", "NHL", "UFC", "SOCCER", "TENNIS", "FOOTBALL", "BASKETBALL",
+                "HOCKEY", "BASEBALL", "COLLEGE", "NCAA",
+                "SPREAD", "TOTAL", "MONEYLINE" 
             ]
+            
+            filtered = []
+            seen_ids = set()
+            
+            for m in all_markets:
+                mid = m.get("ticker")
+                if mid in seen_ids: continue
+                seen_ids.add(mid)
 
-            self._markets_cache[cache_key] = filtered
-            self._cache_time[cache_key] = now
-            return filtered
+                title = (m.get("title") or "").upper()
+                ticker = (m.get("ticker") or "").upper()
+                
+                if any(kw in title or kw in ticker for kw in sports_keywords):
+                    filtered.append(m)
+
+            if filtered:
+                self._markets_cache[cache_key] = filtered
+                self._cache_time[cache_key] = now
+                logger.info(f"✅ Cached {len(filtered)} Kalshi markets (All Sports)")
+                return filtered
+                
         except Exception as e:
-            logger.error(f"Fetch failed: {e}")
-            return []
-
+            logger.error(f"Error fetching markets: {e}")
+        
+        return []
     # Compatibility aliases
     get_sports_markets = get_markets
     get_game_markets_for_events = lambda self, league: self.get_markets()
