@@ -9368,7 +9368,9 @@ if is_vertex_ai_enabled():
                         game["away_spread"] = away_spread
                         game["home_spread_odds"] = home_spread_odds
                         game["away_spread_odds"] = away_spread_odds
-                        game["implied_home_prob"] = implied_home_prob                   
+                        game["implied_home_prob"] = implied_home_prob
+                        
+                        all_games.append(game)
                     
                 # =========================================================================
                 # SUPPLEMENTAL DATA: TheOver.ai Picks & Probabilities (NOT Lines!)
