@@ -11776,6 +11776,7 @@ if is_vertex_ai_enabled():
                         'Kalshi %': f"{kalshi_pick_prob:.0f}" if kalshi_pick_prob else '—',
                         'Kalshi Prob %': round(kalshi_prob, 1) if kalshi_prob is not None else None,
                         'kalshi_prob': kalshi_prob if kalshi_available else None,
+                        'Kalshi Match Debug': feats.get('kalshi_status', ''),
                         'TheOver %': f"{theover_prob:.0f}" if theover_prob else '—',
                         'Odds': odds_str,
                         'Confidence': round(confidence, 1),
