@@ -393,7 +393,7 @@ class KalshiIntegrator:
     def __init__(self, api_key: str = None, api_secret: str = None):
         self.api_key = api_key or st.secrets.get("KALSHI_API_KEY")
         self.api_secret = api_secret or st.secrets.get("KALSHI_API_SECRET")
-        self.base_url = "https://api.kalshi.com/trade-api/v2"
+        self.base_url = "https://api.elections.kalshi.com/trade-api/v2"
         self.demo_url = "https://demo-api.kalshi.co/trade-api/v2"
         self.api_url = self.base_url if self.api_key else self.demo_url
         self.headers = {"Content-Type": "application/json", "Accept": "application/json"}
