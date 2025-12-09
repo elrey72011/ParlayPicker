@@ -1,35 +1,37 @@
 # ParlayDesk_AI_Enhanced.py - v9.2 VERTEX-FIRST
 # AI-Enhanced parlay finder with sentiment analysis, ML predictions, and live market data
-# v9.2 Update: Integrated Vertex-first architecture - Vertex AI now calculates probabilities
-# BEFORE Best Bets and Parlays are generated for consistent, high-quality predictions
 from __future__ import annotations
-import os, io, json, itertools, re, copy, logging, hashlib, math, difflib
+
+# --- 1. STANDARD IMPORTS (Must come first) ---
+import os
+import io
+import json
+import itertools
+import re
+import copy
+import logging
+import hashlib
+import math
+import difflib
 import concurrent.futures
-from functools import lru_cache
 import time
+from functools import lru_cache
 from html import escape
 from dataclasses import asdict
 from typing import Dict, Any, List, Tuple, Optional, Iterable, Sequence, Type, Set
 from datetime import datetime, timedelta, date, timezone
-from app_core import KalshiIntegrator
-from app_core.team_name_matcher import TeamNameMatcher
-try:
-    from ml_predictions import show_vertex_ai_prediction_section, is_vertex_ai_enabled
-except ImportError:
-    def get_vertex_ai_prediction(*args, **kwargs):
-        return None
-# Optional core prediction function for Vertex/Gemini
-try:
-    from ml_predictions import get_vertex_ai_prediction
-except ImportError:
-    # Safe fallback: if ml_predictions or Vertex AI isn't available, do nothing
-    def get_vertex_ai_prediction(*args, **kwargs):
-        return None
+from pathlib import Path
+from collections import defaultdict
 
-# ... (your existing imports) ...
-import os
+# --- 2. THIRD PARTY IMPORTS (Streamlit must be imported here) ---
+import pandas as pd
+import numpy as np
+import requests
+import pytz
+import streamlit as st  # <--- THIS IMPORT MUST BE HERE
+import streamlit.components.v1 as components
 
-# --- CRITICAL GLOBAL CONFIGURATION (Must run before anything else) ---
+# --- 3. CRITICAL GLOBAL CONFIGURATION (Now safe to run) ---
 # This fixes the "Permission denied on resource project None" error
 # by ensuring the ID is loaded before any AI libraries initialize.
 PROJECT_ID = "elite-hangar-479017-m8"
@@ -41,27 +43,17 @@ if 'gcp_project_id' not in st.session_state:
     st.session_state['gcp_project_id'] = PROJECT_ID
 if 'vertex_endpoint_id' not in st.session_state:
     st.session_state['vertex_endpoint_id'] = "6435317312558989312"
-# ---------------------------------------------------------------------
 
-# ... (rest of your file) ...
-
-# Optional core prediction function
+# --- 4. APP SETUP ---
 try:
-    from ml_predictions import get_vertex_ai_prediction
-except ImportError:
-    # Safe fallback: if ml_predictions or Vertex AI isn't available, just return None
-    def get_vertex_ai_prediction(*args, **kwargs):
-        return None
+    st.set_page_config(page_title="ParlayDesk", page_icon="🎯", layout="wide")
+except: pass
 
-import pandas as pd
-import numpy as np
-import requests
-import streamlit as st
-import streamlit.components.v1 as components
-import pytz
-from pathlib import Path
-from collections import defaultdict
+# --- 5. LOCAL MODULE IMPORTS (Safe to load now) ---
+from app_core import KalshiIntegrator
+from app_core.team_name_matcher import TeamNameMatcher
 
+# ... (Rest of your imports like APISportsBasketballClient, etc.) ...
 
 from app_core import (
     APISportsBasketballClient,
