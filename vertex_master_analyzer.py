@@ -628,7 +628,6 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
     ]
 
     export_df = results_df.copy()
-    # Ensure all export columns exist
     for c in export_cols:
         if c not in export_df.columns:
             export_df[c] = None
