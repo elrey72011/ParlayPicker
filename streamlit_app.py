@@ -162,7 +162,8 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 # --- REPLACE THE DEBUG SECTION IN streamlit_app.py WITH THIS ---
-if st.button("🚀 Run Connection Test"):
+# ADDED key="kalshi_health_check_btn" to fix the crash
+    if st.button("🚀 Run Connection Test", key="kalshi_health_check_btn"):
         with st.spinner("Fetching all markets..."):
             markets = debug_kalshi.get_markets()
             
