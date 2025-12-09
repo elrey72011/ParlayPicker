@@ -31,18 +31,15 @@ import pytz
 import streamlit as st  # <--- THIS IMPORT MUST BE HERE
 import streamlit.components.v1 as components
 
-# --- 3. CRITICAL GLOBAL CONFIGURATION (Now safe to run) ---
-# This fixes the "Permission denied on resource project None" error
-# by ensuring the ID is loaded before any AI libraries initialize.
 PROJECT_ID = "elite-hangar-479017-m8"
 os.environ["GOOGLE_CLOUD_PROJECT"] = PROJECT_ID
 os.environ["GCP_PROJECT_ID"] = PROJECT_ID
 
 # Initialize Session State early to prevent race conditions
-if 'gcp_project_id' not in st.session_state:
-    st.session_state['gcp_project_id'] = PROJECT_ID
-if 'vertex_endpoint_id' not in st.session_state:
-    st.session_state['vertex_endpoint_id'] = "6435317312558989312"
+if "gcp_project_id" not in st.session_state:
+    st.session_state["gcp_project_id"] = PROJECT_ID
+if "vertex_endpoint_id" not in st.session_state:
+    st.session_state["vertex_endpoint_id"] = "6435317312558989312"
 
 # --- 4. APP SETUP ---
 try:
