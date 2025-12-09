@@ -249,7 +249,7 @@ def predict_win_probabilities(
             payload_df[col] = 0.0
 
     # Only send what the model expects
-    instances = payload_df[feature_columns].to_dict(orient="records")
+    instances = payload_df[feature_columns].values.tolist()
 
     try:
         endpoint = _get_or_create_endpoint()
