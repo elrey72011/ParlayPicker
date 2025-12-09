@@ -15,6 +15,7 @@ import requests
 import streamlit as st
 from typing import Dict, List, Any, Optional, TypedDict
 
+# --- 1. SHARED IMPORTS ---
 try:
     from app_core.team_name_matcher import TeamNameMatcher
 except ImportError:
@@ -22,8 +23,9 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-# --- 1. EXPANDED TEAM ABBREVIATIONS (NBA + NFL + NHL + MLB) ---
-# --- MASTER TEAM LIST (NBA, NFL, NHL, MLB) ---
+# --- 2. CONFIGURATION & CONSTANTS ---
+
+# MASTER TEAM LIST (NBA, NFL, NHL, MLB)
 KALSHI_TEAM_ABBREVIATIONS = {
     # NBA
     "ATLANTA HAWKS": ["ATL"], "BOSTON CELTICS": ["BOS"], "BROOKLYN NETS": ["BKN", "BRK"],
@@ -49,7 +51,7 @@ KALSHI_TEAM_ABBREVIATIONS = {
     "NEW YORK JETS": ["NYJ"], "PHILADELPHIA EAGLES": ["PHI"], "PITTSBURGH STEELERS": ["PIT"],
     "SAN FRANCISCO 49ERS": ["SF", "SFO"], "SEATTLE SEAHAWKS": ["SEA"], "TAMPA BAY BUCCANEERS": ["TB", "TBB"],
     "TENNESSEE TITANS": ["TEN"], "WASHINGTON COMMANDERS": ["WAS", "WSH"],
-    # NHL (Added)
+    # NHL
     "ANAHEIM DUCKS": ["ANA"], "BOSTON BRUINS": ["BOS"], "BUFFALO SABRES": ["BUF"], "CALGARY FLAMES": ["CGY"],
     "CAROLINA HURRICANES": ["CAR"], "CHICAGO BLACKHAWKS": ["CHI"], "COLORADO AVALANCHE": ["COL"], "COLUMBUS BLUE JACKETS": ["CBJ"],
     "DALLAS STARS": ["DAL"], "DETROIT RED WINGS": ["DET"], "EDMONTON OILERS": ["EDM"], "FLORIDA PANTHERS": ["FLA"],
@@ -58,7 +60,7 @@ KALSHI_TEAM_ABBREVIATIONS = {
     "PHILADELPHIA FLYERS": ["PHI"], "PITTSBURGH PENGUINS": ["PIT"], "SAN JOSE SHARKS": ["SJS"], "SEATTLE KRAKEN": ["SEA"],
     "ST LOUIS BLUES": ["STL"], "TAMPA BAY LIGHTNING": ["TBL"], "TORONTO MAPLE LEAFS": ["TOR"], "UTAH HOCKEY CLUB": ["UTA"],
     "VANCOUVER CANUCKS": ["VAN"], "VEGAS GOLDEN KNIGHTS": ["VGK"], "WASHINGTON CAPITALS": ["WSH"], "WINNIPEG JETS": ["WPG"],
-    # MLB (Added)
+    # MLB
     "ARIZONA DIAMONDBACKS": ["ARI"], "ATLANTA BRAVES": ["ATL"], "BALTIMORE ORIOLES": ["BAL"], "BOSTON RED SOX": ["BOS"],
     "CHICAGO CUBS": ["CHC"], "CHICAGO WHITE SOX": ["CWS"], "CINCINNATI REDS": ["CIN"], "CLEVELAND GUARDIANS": ["CLE"],
     "COLORADO ROCKIES": ["COL"], "DETROIT TIGERS": ["DET"], "HOUSTON ASTROS": ["HOU"], "KANSAS CITY ROYALS": ["KC"],
@@ -79,14 +81,20 @@ FUTURE_EXCLUDE_KEYWORDS = {
 SUPPORTED_LEAGUES = {"nba", "nfl", "mlb", "ncaaf", "ncaab", "nhl"}
 
 LEAGUE_SERIES_MAP = {
-    "nba": "KXNBA", "nfl": "KXNFL", "mlb": "KXMLB",
-    "nhl": "KXNHL", "ncaaf": "KXNCAAF", "ncaab": "KXNCAAB",
+    "nba": "KXNBA",
+    "nfl": "KXNFL",
+    "mlb": "KXMLB",
+    "nhl": "KXNHL",
+    "ncaaf": "KXNCAAF",
+    "ncaab": "KXNCAAB",
 }
 
-# Thresholds
 TEAM_FUZZY_THRESHOLD = 1.1  
+MAX_LINE_DIFF = 3.0
 DEBUG_KALSHI_MATCHING = False
 TEAM_NAME_SIMILARITY = 0.80
+
+# --- 3. DATA STRUCTURES ---
 
 class KalshiMatchResult(TypedDict, total=False):
     matched: bool
@@ -101,81 +109,130 @@ class KalshiMatchResult(TypedDict, total=False):
     game_date: Optional[datetime]
     kalshi_volume: Optional[int]
 
-# --- HELPER FUNCTIONS ---
+# --- 4. HELPER FUNCTIONS ---
+
+def _debug_log(message: str, *args: Any) -> None:
+    if DEBUG_KALSHI_MATCHING:
+        logger.info(message, *args)
 
 def price_to_prob(price) -> Optional[float]:
-    if price is None or price == "": return None
+    if price is None or price == "":
+        return None
     try:
         p = float(price)
-    except (TypeError, ValueError): return None
-    if p > 1.01: p = p / 100.0
-    if 0 <= p <= 1: return p
+    except (TypeError, ValueError):
+        return None
+    if p > 1.01:
+        p = p / 100.0
+    if 0 <= p <= 1:
+        return p
     return None
 
+def _normalize_market_text(*parts: str) -> str:
+    joined = " ".join([p or "" for p in parts])
+    cleaned = joined.lower()
+    cleaned = re.sub(r"[\.,\-_/]", " ", cleaned)
+    cleaned = cleaned.translate(str.maketrans("", "", string.punctuation))
+    cleaned = re.sub(r"\s+", " ", cleaned)
+    return cleaned.strip()
+
 def _parse_market_date(raw) -> Optional[datetime]:
-    if raw is None or raw == "": return None
+    if raw is None or raw == "":
+        return None
     try:
         if isinstance(raw, (int, float)):
             value = float(raw)
-            if value > 10_000_000_000: value = value / 1000.0
+            if value > 10_000_000_000:
+                value = value / 1000.0
             return datetime.fromtimestamp(value, tz=pytz.UTC)
         dt = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
-        if dt.tzinfo is None: dt = dt.replace(tzinfo=pytz.UTC)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=pytz.UTC)
         return dt.astimezone(pytz.UTC)
-    except Exception: return None
+    except Exception:
+        return None
 
 def _extract_date_from_ticker(ticker: str) -> Optional[datetime]:
-    if not ticker: return None
+    if not ticker:
+        return None
     match = re.search(r"(20\d{2}[01]\d[0-3]\d)", ticker)
     if match:
-        try: return datetime.strptime(match.group(1), "%Y%m%d").replace(tzinfo=pytz.UTC)
+        try:
+            return datetime.strptime(match.group(1), "%Y%m%d").replace(tzinfo=pytz.UTC)
+        except Exception: pass
+    match = re.search(r"(\d{4}-\d{2}-\d{2})", ticker)
+    if match:
+        try:
+            return datetime.fromisoformat(match.group(1)).replace(tzinfo=pytz.UTC)
         except Exception: pass
     match = re.search(r"(\d{2}[01]\d[0-3]\d)", ticker)
     if match:
-        try: return datetime.strptime(match.group(1), "%y%m%d").replace(tzinfo=pytz.UTC)
+        try:
+            return datetime.strptime(match.group(1), "%y%m%d").replace(tzinfo=pytz.UTC)
         except Exception: pass
     return None
 
 def _extract_market_type(title: str, ticker: str) -> Optional[str]:
     text = ((title or "") + " " + (ticker or "")).upper()
-    if "MONEYLINE" in text or "ML" in text: return "ML"
-    if "SPREAD" in text or "SPD" in text: return "Spread"
-    if "TOTAL" in text or "OVER" in text or "UNDER" in text: return "Total"
+    if "MONEYLINE" in text or re.search(r"\bML\b", text):
+        return "ML"
+    if "SPREAD" in text or re.search(r"\bSPR?\b", text):
+        return "Spread"
+    if "TOTAL" in text or "OVER" in text or "UNDER" in text or re.search(r"\bOU\b", text):
+        return "Total"
     return None
 
 def _build_team_codes(team_name: str) -> List[str]:
-    if not team_name: return []
+    """Generate plausible team codes from a full team name using explicit maps."""
+    if not team_name:
+        return []
+    
     codes = []
     upper_name = team_name.upper().strip()
+    
     if upper_name in KALSHI_TEAM_ABBREVIATIONS:
         codes.extend(KALSHI_TEAM_ABBREVIATIONS[upper_name])
+    
     for key, abbreviations in KALSHI_TEAM_ABBREVIATIONS.items():
-        if key in upper_name: codes.extend(abbreviations)
+        if key in upper_name:
+            codes.extend(abbreviations)
+
     words = [w for w in re.split(r"\s+", team_name) if w]
     if words:
         codes.append(words[0][:3].upper())
         codes.append("".join(w[0] for w in words[:3]).upper())
+    if len(words) > 1:
+        codes.append(words[-1][:3].upper())
+        
     return list(set(codes))
 
 def _extract_teams_from_ticker(ticker: str) -> List[str]:
-    if not ticker: return []
+    """Extract team codes, stripping league prefixes to fix parsing errors."""
+    if not ticker:
+        return []
+
     clean_ticker = ticker.upper()
     prefixes = ["KXNBA", "KXNFL", "KXMLB", "KXNHL", "KXNCAAF", "KXNCAAB", "KX"]
     for p in prefixes:
         if clean_ticker.startswith(p):
             clean_ticker = clean_ticker[len(p):]
             break
+
     tokens = re.findall(r"[A-Z]{2,3}", clean_ticker)
-    ignore = {"ML", "OU", "OVE", "UND", "SPR", "TOT", "GAM", "VS", "AT", "NBA", "NFL", "MLB", "NHL"}
+    ignore = {
+        "ML", "OU", "OVE", "UND", "SPR", "TOT", "GAM", "VS", "AT", 
+        "NBA", "NFL", "MLB", "NHL", "NCA", "AF", "AB"
+    }
     return [t for t in tokens if t not in ignore]
 
 def normalize_name(s: str) -> str:
     s = s or ""
     s = s.lower()
     s = re.sub(r"[^a-z0-9 ]+", " ", s)
-    return s.strip()
+    s = re.sub(r"\s+", " ", s).strip()
+    return s
 
-# --- MAIN MATCHING FUNCTION ---
+# --- 5. MAIN MATCHING FUNCTION ---
 
 def match_game_to_kalshi(
     league: str,
@@ -185,10 +242,58 @@ def match_game_to_kalshi(
     integrator: "KalshiIntegrator" = None,
     status: Optional[str] = "open",
 ) -> KalshiMatchResult:
+    """Attempt to match a game to a Kalshi market with explicit reasons."""
+
+    def _parse_market_metadata(market: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        title = market.get("title") or ""
+        subtitle = market.get("subtitle") or ""
+        ticker = market.get("ticker") or ""
+
+        text = f"{title} {subtitle} {ticker}".lower()
+        if any(key in text for key in FUTURE_EXCLUDE_KEYWORDS):
+            return None
+
+        ticker_teams = _extract_teams_from_ticker(ticker)
+        if len(ticker_teams) < 2:
+            return None
+
+        market_type = _extract_market_type(title, ticker)
+        if market_type is None:
+            market_type = "Unknown"
+
+        date_from_ticker = _extract_date_from_ticker(ticker)
+        parsed_date = _parse_market_date(market.get("event_date") or market.get("close_time"))
+        market_date = parsed_date or date_from_ticker
+        if market_date is None:
+            return None
+
+        probability = None
+        for key in ["last_price_dollars", "last_price", "yes_bid_dollars", "yes_ask_dollars", "last_trade_price", "yes_bid", "yes_ask"]:
+            probability = price_to_prob(market.get(key))
+            if probability is not None:
+                break
+
+        teams_norm = []
+        if TeamNameMatcher:
+            teams_norm = [TeamNameMatcher.normalize(t) for t in ticker_teams]
+
+        return {
+            "ticker": ticker,
+            "title": title,
+            "teams": ticker_teams,
+            "teams_norm": teams_norm,
+            "market_type": market_type,
+            "market_date": market_date,
+            "probability": probability,
+        }
+
     league_norm = normalize_name(league)
+    if league_norm and league_norm not in SUPPORTED_LEAGUES:
+        return KalshiMatchResult(matched=False, kalshi_available=False, label="", probability=None, raw_event_id=None, league=league_norm, reason="league_not_supported")
+
     kalshi = integrator or KalshiIntegrator()
     if kalshi is None:
-        return KalshiMatchResult(matched=False, reason="api_error:no_integrator")
+        return KalshiMatchResult(matched=False, kalshi_available=False, label="", probability=None, raw_event_id=None, league=league_norm, reason="api_error:no_integrator")
 
     game_dt: Optional[datetime] = None
     if isinstance(game_time, datetime):
@@ -196,90 +301,133 @@ def match_game_to_kalshi(
     elif game_time:
         try:
             game_dt = datetime.fromisoformat(str(game_time).replace("Z", "+00:00"))
-        except Exception: game_dt = None
+        except Exception:
+            game_dt = None
 
     try:
+        # Use Nuclear Fetch (ignoring status if needed)
         markets = kalshi.get_markets(status=status)
     except Exception as exc:
-        return KalshiMatchResult(matched=False, reason=f"api_error:{str(exc)[:50]}")
+        short_err = str(exc)[:77] + "..." if len(str(exc)) > 80 else str(exc)
+        return KalshiMatchResult(matched=False, kalshi_available=False, label="", probability=None, raw_event_id=None, league=league_norm, reason=f"api_error:{short_err}")
 
-    home_norm = normalize_name(home_team)
-    away_norm = normalize_name(away_team)
+    parsed_markets: List[Dict[str, Any]] = []
+    for mkt in markets or []:
+        parsed = _parse_market_metadata(mkt)
+        if parsed:
+            parsed_markets.append({"__meta": parsed, **mkt})
+
+    if not parsed_markets:
+        return KalshiMatchResult(matched=False, kalshi_available=False, label="", probability=None, raw_event_id=None, league=league_norm, reason="no_valid_game_markets")
+
+    home_norm = TeamNameMatcher.normalize(home_team) if TeamNameMatcher else normalize_name(home_team)
+    away_norm = TeamNameMatcher.normalize(away_team) if TeamNameMatcher else normalize_name(away_team)
     home_codes = _build_team_codes(home_team)
     away_codes = _build_team_codes(away_team)
 
-    best_market = None
-    best_score = 0.0
+    best_market: Optional[Dict[str, Any]] = None
+    best_score: float = 0.0
 
-    for mkt in markets:
-        # Pre-filter by date (Tolerance: 2 days)
-        mkt_date = _parse_market_date(mkt.get("event_date") or mkt.get("close_time"))
-        if game_dt and mkt_date:
-            if abs((mkt_date.date() - game_dt.date()).days) > 2:
+    for market in parsed_markets:
+        meta = market["__meta"]
+
+        if game_dt and meta.get("market_date"):
+            # Increased tolerance for timezones
+            day_diff = abs((meta["market_date"].date() - game_dt.date()).days)
+            if day_diff > 2:
                 continue
 
-        # Extract info
-        title = mkt.get("title", "")
-        ticker = mkt.get("ticker", "")
-        if any(k in title.lower() for k in FUTURE_EXCLUDE_KEYWORDS): continue
+        teams = meta.get("teams", [])
+        if len(teams) < 2:
+            continue
 
-        ticker_teams = _extract_teams_from_ticker(ticker)
-        if len(ticker_teams) < 2: continue
+        def _team_score(team_code: str, target_norm: str, target_codes: List[str]) -> float:
+            if team_code in target_codes: return 2.0
+            if TeamNameMatcher and TeamNameMatcher.normalize(team_code) == target_norm: return 1.5
+            if TeamNameMatcher and TeamNameMatcher.similarity_score(TeamNameMatcher.normalize(team_code), target_norm) >= TEAM_NAME_SIMILARITY: return 1.0
+            return 0.0
 
-        # Scoring
-        score_home = 0.0
-        score_away = 0.0
-        
-        # Check codes
-        if any(c in ticker_teams for c in home_codes): score_home += 2.0
-        if any(c in ticker_teams for c in away_codes): score_away += 2.0
-        
-        # Check title names
-        norm_title = normalize_name(title)
-        if home_norm in norm_title: score_home += 1.5
-        if away_norm in norm_title: score_away += 1.5
+        score_home_first = _team_score(teams[0], home_norm, home_codes) + _team_score(teams[1], away_norm, away_codes)
+        score_away_first = _team_score(teams[0], away_norm, away_codes) + _team_score(teams[1], home_norm, home_codes)
 
-        total_score = score_home + score_away
-        if total_score > best_score:
-            best_score = total_score
-            best_market = mkt
+        score = max(score_home_first, score_away_first)
+
+        if score_home_first < 1.0 and score_away_first < 1.0:
+            continue
+
+        if meta.get("probability") is not None:
+            score += 0.25
+
+        if score > best_score:
+            best_score = score
+            best_market = market
 
     if not best_market or best_score < TEAM_FUZZY_THRESHOLD:
-        return KalshiMatchResult(matched=False, reason="no_market_match")
+        return KalshiMatchResult(matched=False, kalshi_available=False, label="", probability=None, raw_event_id=None, league=league_norm, reason="no_market_match")
 
-    # Extract probability
-    prob = None
-    for key in ["last_price_dollars", "yes_bid_dollars", "yes_ask_dollars", "yes_bid", "last_price"]:
-        prob = price_to_prob(best_market.get(key))
-        if prob is not None: break
+    meta = best_market["__meta"]
+    probability = meta.get("probability")
+    if probability is None and best_market.get("ticker"):
+        try:
+            order = kalshi.get_orderbook(best_market.get("ticker")) or {}
+            yes_levels = None
+            for key in ("yes", "orderbook_yes", "levels"):
+                level = (order.get(key) or order.get("orderbook", {}).get(key) or {})
+                if level:
+                    yes_levels = level
+                    break
+            if isinstance(yes_levels, list) and yes_levels:
+                price_val = yes_levels[0].get("price") or yes_levels[0].get("bid")
+                probability = price_to_prob(price_val)
+        except Exception:
+            probability = None
+
+    direction = "YES" if probability and probability >= 0.5 else "NO"
 
     return KalshiMatchResult(
         matched=True,
         kalshi_available=True,
-        label=best_market.get("title"),
-        probability=prob,
-        raw_event_id=best_market.get("ticker"),
+        label=meta.get("title") or meta.get("ticker"),
+        probability=probability,
+        raw_event_id=str(best_market.get("ticker") or best_market.get("id")),
         league=league_norm,
         reason="ok",
-        market_type=_extract_market_type(best_market.get("title", ""), best_market.get("ticker", "")),
-        game_date=_parse_market_date(best_market.get("close_time")),
+        market_type=meta.get("market_type"),
+        direction=direction,
+        game_date=meta.get("market_date"),
         kalshi_volume=best_market.get("volume"),
     )
 
-# --- INTEGRATOR CLASS ---
+# --- 6. INTEGRATOR CLASS ---
 
 class KalshiIntegrator:
+    """Integrates Kalshi prediction market odds and analysis"""
+
     def __init__(self, api_key: str = None, api_secret: str = None):
-        self.api_key = api_key or st.secrets.get("KALSHI_API_KEY") or os.environ.get("KALSHI_API_KEY")
-        self.api_secret = api_secret or st.secrets.get("KALSHI_API_SECRET") or os.environ.get("KALSHI_API_SECRET")
+        self.api_key = (
+            api_key 
+            or st.secrets.get("KALSHI_API_KEY") 
+            or st.secrets.get("kalshi_api_key") 
+            or st.session_state.get("kalshi_api_key")
+            or os.environ.get("KALSHI_API_KEY")
+        )
+        self.api_secret = (
+            api_secret 
+            or st.secrets.get("KALSHI_API_SECRET") 
+            or st.secrets.get("kalshi_secret_key") 
+            or st.session_state.get("kalshi_secret_key")
+            or os.environ.get("KALSHI_API_SECRET")
+        )
         self.base_url = "https://api.elections.kalshi.com/trade-api/v2"
-        self.api_url = self.base_url
+        self.demo_url = "https://demo-api.kalshi.co/trade-api/v2"
+        self.api_url = self.base_url if self.api_key else self.demo_url
         self.headers = {"Content-Type": "application/json", "Accept": "application/json"}
         self._private_key = None
         self._auth_ready = False
-        self._markets_cache = {}
-        self._cache_time = {}
-        self.last_error = None
+        self.last_error: Optional[str] = None
+        self._markets_cache: Dict[str, List[Dict[str, Any]]] = {}
+        self._cache_time: Dict[str, float] = {}
+        self._cache_duration = 300 
 
         if self.api_key and self.api_secret:
             try:
@@ -288,135 +436,114 @@ class KalshiIntegrator:
                 key_data = self.api_secret.strip()
                 if not key_data.startswith("-----BEGIN"):
                     key_data = "-----BEGIN RSA PRIVATE KEY-----\n" + key_data + "\n-----END RSA PRIVATE KEY-----"
-                self._private_key = serialization.load_pem_private_key(key_data.encode(), password=None, backend=default_backend())
+                self._private_key = serialization.load_pem_private_key(
+                    key_data.encode(), password=None, backend=default_backend(),
+                )
                 self._auth_ready = True
+            except ImportError:
+                logger.warning("cryptography library not installed - Kalshi auth disabled")
             except Exception as e:
-                logger.warning(f"Kalshi auth setup failed: {e}")
+                logger.warning(f"Could not load Kalshi RSA key: {e}")
 
-    def _sign_request(self, method, path, timestamp):
+    def _sign_request(self, method: str, path: str, timestamp: str) -> str:
         if not self._private_key: return ""
         try:
             from cryptography.hazmat.primitives import hashes
             from cryptography.hazmat.primitives.asymmetric import padding
             import base64
-            msg = f"{timestamp}{method}{path}".encode('utf-8')
-            sig = self._private_key.sign(msg, padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.DIGEST_LENGTH), hashes.SHA256())
-            return base64.b64encode(sig).decode('utf-8')
-        except: return ""
+            message = f"{timestamp}{method}{path}"
+            signature = self._private_key.sign(
+                message.encode("utf-8"),
+                padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.DIGEST_LENGTH),
+                hashes.SHA256(),
+            )
+            return base64.b64encode(signature).decode("utf-8")
+        except Exception: return ""
 
-    def _make_authenticated_request(self, method, endpoint, params=None):
-        import time as tm
-        ts = str(int(tm.time() * 1000))
+    def _make_authenticated_request(self, method: str, endpoint: str, params: Optional[Dict] = None, json_data: Optional[Dict] = None) -> Optional[dict]:
+        import time as time_module
+        url = f"{self.api_url}{endpoint}"
+        timestamp = str(int(time_module.time() * 1000))
         headers = self.headers.copy()
-        if self._auth_ready:
-            sig = self._sign_request(method.upper(), f"/trade-api/v2{endpoint.split('?')[0]}", ts)
-            headers.update({"KALSHI-ACCESS-KEY": self.api_key, "KALSHI-ACCESS-SIGNATURE": sig, "KALSHI-ACCESS-TIMESTAMP": ts})
-        
+
+        if self._auth_ready and self._private_key:
+            path_suffix = endpoint.split("?", 1)[0]
+            path_to_sign = f"/trade-api/v2{path_suffix}"
+            signature = self._sign_request(method.upper(), path_to_sign, timestamp)
+            headers["KALSHI-ACCESS-KEY"] = self.api_key
+            headers["KALSHI-ACCESS-SIGNATURE"] = signature
+            headers["KALSHI-ACCESS-TIMESTAMP"] = timestamp
+
         try:
-            url = f"{self.api_url}{endpoint}"
-            resp = requests.request(method, url, headers=headers, params=params, timeout=10)
-            if resp.status_code == 200: return resp.json()
-            self.last_error = f"HTTP {resp.status_code}"
-        except Exception as e: self.last_error = str(e)
+            if method.upper() == "GET":
+                response = requests.get(url, headers=headers, params=params, timeout=15)
+            else:
+                response = requests.post(url, headers=headers, json=json_data or params, timeout=15)
+            
+            if response.status_code == 200:
+                return response.json()
+            else:
+                self.last_error = f"API error: {response.status_code}"
+                logger.warning(f"Kalshi error {response.status_code}: {response.text[:200]}")
+        except Exception as e:
+            self.last_error = str(e)
+            logger.error(f"Kalshi request failed: {e}")
         return None
 
     def get_markets(self, category: str = "sports", status: Optional[str] = "open") -> List[Dict]:
         """Nuclear Fetch: Download markets (including recent past) and filter locally."""
         cache_key = status or "all"
         now = time.time()
-        
         if cache_key in self._markets_cache and now - self._cache_time.get(cache_key, 0) < self._cache_duration:
             return copy.deepcopy(self._markets_cache[cache_key])
 
         all_markets = []
         try:
-            # 1. PRIORITY TICKERS FOR ALL SPORTS
-            # These are fetched first to ensure we get them even if pagination stops early
-            series_tickers = [
-                # NBA
-                "KXNBA", "KXNBASPREAD", "KXNBATOTAL", "KXNBAMONEYLINE",
-                # NFL
-                "KXNFL", "KXNFLSPREAD", "KXNFLTOTAL", "KXNFLMONEYLINE",
-                # NHL
-                "KXNHL", "KXNHLSPREAD", "KXNHLTOTAL", "KXNHLMONEYLINE",
-                # MLB
-                "KXMLB", "KXMLBSPREAD", "KXMLBTOTAL", "KXMLBMONEYLINE",
-                # College
-                "KXNCAAF", "KXNCAAB", "KXNCAAFSPREAD", "KXNCAABSPREAD",
-                # Other
-                "KXUFC"
-            ]
+            cursor = None
+            page_count = 0
+            # Look back 48 hours to catch live/recently finished games
+            lookback_ts = int(now - (86400 * 2))
             
-            for ticker in series_tickers:
-                # Look back 48 hours to catch live/recently finished games
-                params = {
-                    "series_ticker": ticker, 
-                    "limit": 1000,
-                    "min_close_ts": int(now - (86400 * 2)) 
-                }
-                if status: params["status"] = status
+            while page_count < 20:
+                params = {"limit": 200}
+                if cursor: params["cursor"] = cursor
+                params["min_close_ts"] = lookback_ts 
                 
-                # Small sleep to be nice to the API
-                time.sleep(0.02)
                 data = self._make_authenticated_request("GET", "/markets", params=params)
-                if data: all_markets.extend(data.get("markets", []))
+                if not data: break
+                
+                markets = data.get("markets", [])
+                if not markets: break
+                
+                all_markets.extend(markets)
+                cursor = data.get("cursor")
+                page_count += 1
+                if not cursor: break
 
-            # 2. Fallback Nuclear Scan (if specific tickers missed something)
-            # Only run if we found very few markets
-            if len(all_markets) < 50:
-                cursor = None
-                page_count = 0
-                while page_count < 20:
-                    params = {"limit": 200, "min_close_ts": int(now - (86400 * 2))}
-                    if cursor: params["cursor"] = cursor
-                    
-                    data = self._make_authenticated_request("GET", "/markets", params=params)
-                    if not data: break
-                    
-                    markets = data.get("markets", [])
-                    if not markets: break
-                    
-                    all_markets.extend(markets)
-                    cursor = data.get("cursor")
-                    page_count += 1
-                    if not cursor: break
-
-            # 3. Local Filter
+            # Expanded Keyword Filter for All Sports
             sports_keywords = [
                 "NFL", "NBA", "MLB", "NHL", "UFC", "SOCCER", "TENNIS", "FOOTBALL", "BASKETBALL",
-                "HOCKEY", "BASEBALL", "COLLEGE", "NCAA",
+                "HOCKEY", "BASEBALL", "COLLEGE", "NCAA", "MMA", "FIGHT",
                 "SPREAD", "TOTAL", "MONEYLINE" 
             ]
             
             filtered = []
-            seen_ids = set()
-            
             for m in all_markets:
-                mid = m.get("ticker")
-                if mid in seen_ids: continue
-                seen_ids.add(mid)
-
                 title = (m.get("title") or "").upper()
                 ticker = (m.get("ticker") or "").upper()
-                
                 if any(kw in title or kw in ticker for kw in sports_keywords):
                     filtered.append(m)
 
             if filtered:
                 self._markets_cache[cache_key] = filtered
                 self._cache_time[cache_key] = now
-                logger.info(f"✅ Cached {len(filtered)} Kalshi markets (All Sports)")
+                logger.info(f"✅ Cached {len(filtered)} Kalshi markets (Nuclear Fetch)")
                 return filtered
                 
         except Exception as e:
             logger.error(f"Error fetching markets: {e}")
         
         return []
-    # Compatibility aliases
-    get_sports_markets = get_markets
-    get_game_markets_for_events = lambda self, league: self.get_markets()
-    filter_markets_closing_today = lambda self, markets: markets # Passthrough
-    get_orderbook = lambda self, ticker: (self._make_authenticated_request("GET", f"/markets/{ticker}/orderbook") or {}).get("orderbook", {})
 
     def get_sports_markets(self) -> List[Dict]:
         return self.get_markets()
