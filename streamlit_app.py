@@ -161,70 +161,60 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-# --- REPLACE THE 'Kalshi Debug' SECTION IN streamlit_app.py WITH THIS ---
+# --- REPLACE THE DEBUG SECTION IN streamlit_app.py WITH THIS ---
 
 st.markdown("---")
 st.header("🔧 Kalshi Diagnostics & Health Check")
 
-# 1. Force a fresh integrator to bypass session cache issues
 try:
     from app_core.kalshi_integrator import KalshiIntegrator
     
-    # Check for cryptography library
+    # Check for cryptography
     try:
         import cryptography
         crypto_status = "✅ Installed"
     except ImportError:
-        crypto_status = "❌ MISSING (Required for Prod)"
+        crypto_status = "❌ MISSING"
 
-    # Load keys directly to verify they exist
-    k_key = st.secrets.get("KALSHI_API_KEY") or os.environ.get("KALSHI_API_KEY")
-    k_sec = st.secrets.get("KALSHI_API_SECRET") or os.environ.get("KALSHI_API_SECRET")
+    # Initialize
+    k_key = st.secrets.get("KALSHI_API_KEY") or st.session_state.get("kalshi_api_key") or os.environ.get("KALSHI_API_KEY")
+    k_sec = st.secrets.get("KALSHI_API_SECRET") or st.session_state.get("kalshi_secret_key") or os.environ.get("KALSHI_API_SECRET")
     
-    key_status = "✅ Present" if k_key else "❌ Missing"
-    sec_status = "✅ Present" if k_sec else "❌ Missing"
-    
-    # Initialize Fresh
     debug_kalshi = KalshiIntegrator(k_key, k_sec)
     
     col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Cryptography Lib", crypto_status)
-    col2.metric("API Key", key_status)
-    col3.metric("API Secret", sec_status)
-    col4.metric("Environment", "Production" if k_key else "Demo")
+    col1.metric("Crypto Lib", crypto_status)
+    col2.metric("API Key", "✅ Present" if k_key else "❌ Missing")
+    col3.metric("Endpoint", "Production" if k_key else "Demo")
+    col4.metric("Base URL", "api.elections..." if "elections" in debug_kalshi.api_url else "api.kalshi...")
 
     if st.button("🚀 Run Connection Test"):
-        with st.spinner("Testing Kalshi connection..."):
-            st.write(f"**Target URL:** `{debug_kalshi.api_url}`")
+        with st.spinner("Testing connection to /markets..."):
             
-            # Test 1: Fetch Series
-            series = debug_kalshi.get_sports_series()
-            if series:
-                st.success(f"✅ Connection Successful! Found {len(series)} sports series.")
+            # DIRECT MARKET FETCH (Bypasses Series Check)
+            markets = debug_kalshi.get_markets()
+            
+            if markets:
+                st.success(f"✅ SUCCESS! Found {len(markets)} active markets.")
                 
-                # Test 2: Fetch Markets for a specific league
-                st.write("Fetching NBA markets as test...")
-                nba_markets = debug_kalshi.get_game_markets_for_events("NBA")
-                
-                if nba_markets:
-                    st.success(f"✅ Found {len(nba_markets)} NBA markets.")
-                    with st.expander("🔎 Inspect First 5 Markets"):
-                        st.json(nba_markets[:5])
+                # Filter for NBA to verify
+                nba = [m for m in markets if "NBA" in m.get("ticker", "") or "NBA" in m.get("title", "")]
+                if nba:
+                    st.info(f"🏀 Found {len(nba)} NBA markets in the dump.")
+                    st.write("Sample NBA Market:", nba[0])
                 else:
-                    st.warning("⚠️ Connection worked, but 0 NBA markets found. (Is it off-season?)")
-                    
+                    st.warning("⚠️ Connection good, but 0 NBA markets found in the first batch.")
             else:
-                st.error("❌ Connection Failed. /series returned empty.")
+                st.error("❌ Connection Failed. /markets returned 0 results.")
                 if debug_kalshi.last_error:
-                    st.error(f"**API Error:** {debug_kalshi.last_error}")
-                    if "401" in debug_kalshi.last_error or "403" in debug_kalshi.last_error:
-                        st.info("💡 **Fix:** Check your API Key/Secret in secrets.toml. They might be invalid or expired.")
-                    if "cryptography" in crypto_status and "Prod" in col4.metric_value:
-                        st.info("💡 **Fix:** You must add `cryptography` to your `requirements.txt` file.")
+                    st.error(f"API Error Details: {debug_kalshi.last_error}")
+                    if "403" in debug_kalshi.last_error:
+                        st.warning("🔑 **Auth Error:** Your API Key/Secret might be invalid.")
+                    if "NameResolution" in debug_kalshi.last_error:
+                        st.warning("🌐 **DNS Error:** Still trying to hit the old URL. Restart the app.")
 
 except Exception as e:
-    st.error(f"Critical Error in Debug Block: {e}")
-
+    st.error(f"Debug Crash: {e}")
 # ============================================================
 # ML PREDICTION OPTIMIZATION FUNCTIONS
 # These functions speed up ML predictions by 5-10x using batching and caching
