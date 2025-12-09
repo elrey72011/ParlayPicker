@@ -726,59 +726,50 @@ class VertexMasterAnalyzer:
         }
 
     def analyze_all_games(self, games: List[Dict[str, Any]], league: str = "NBA") -> pd.DataFrame:
+        """Run analysis on a list of games."""
         if not games: return pd.DataFrame()
         vertex_enabled = is_vertex_prediction_configured()
         rows = []
         progress = st.progress(0)
+
+        # Pre-check if Kalshi is usable to avoid repeated checks
+        kalshi_active = False
+        if getattr(self, "kalshi", None) and getattr(self, "use_kalshi", True):
+            kalshi_active = True
 
         for idx, game in enumerate(games):
             try:
                 # League detection
                 skey = game.get("sport_key", "").lower()
                 league_map = {
-                    "nba": "NBA",
-                    "basketball_nba": "NBA",
-                    "nfl": "NFL",
-                    "americanfootball_nfl": "NFL",
-                    "ncaab": "NCAAB",
-                    "basketball_ncaab": "NCAAB",
-                    "ncaaf": "NCAAF",
-                    "americanfootball_ncaaf": "NCAAF",
-                    "nhl": "NHL",
-                    "icehockey_nhl": "NHL",
-                    "mlb": "MLB",
-                    "baseball_mlb": "MLB",
+                    "nba": "NBA", "basketball_nba": "NBA",
+                    "nfl": "NFL", "americanfootball_nfl": "NFL",
+                    "ncaab": "NCAAB", "basketball_ncaab": "NCAAB",
+                    "ncaaf": "NCAAF", "americanfootball_ncaaf": "NCAAF",
+                    "nhl": "NHL", "icehockey_nhl": "NHL",
+                    "mlb": "MLB", "baseball_mlb": "MLB",
                 }
                 game_league = league_map.get(skey, league)
                 
-                # Prefetch Kalshi
+                # --- CLEANED UP KALSHI PREFETCH (Removed broken debug code) ---
                 kalshi_info = None
-                if getattr(self, "kalshi", None) and getattr(self, "use_kalshi", True):
+                if kalshi_active:
                     try:
-                        # Add this RIGHT BEFORE line 684 (before the kalshi_info = match_game_to_kalshi call)
-
-                        # Debug: Check what we're trying to match
-                        logger.info(f"\n{'='*80}")
-                        logger.info(f"KALSHI DEBUG - Attempting to match:")
-                        logger.info(f"  Home: {game.get('home_team', '')}")
-                        logger.info(f"  Away: {game.get('away_team', '')}")
-                        logger.info(f"  League: {game_league}")
-                        logger.info(f"  Integrator available: {integrator is not None}")
-                        logger.info(f"{'='*80}")
+                        # Parse date safely for prefetch
+                        g_time = game.get("commence_time")
+                        g_dt = None
+                        if g_time:
+                            try:
+                                g_dt = datetime.fromisoformat(str(g_time).replace("Z", "+00:00"))
+                            except: pass
                         
-                        # Also let's check what markets are available (do this once at the start)
-                        if integrator:
-                            test_markets = integrator.get_todays_events("KXNBA")
-                            logger.info(f"\nKALSHI: Found {len(test_markets)} NBA markets")
-                            if test_markets:
-                                sample = test_markets[0]
-                                logger.info(f"Sample market structure:")
-                                logger.info(f"  event_ticker: {sample.get('event_ticker')}")
-                                logger.info(f"  event_title: {sample.get('event_title')}")
-                                logger.info(f"  title: {sample.get('title')}")
-                                logger.info(f"  subtitle: {sample.get('subtitle')}")
                         kalshi_info = match_game_to_kalshi(
-                            game_league, game.get("home_team",""), game.get("away_team",""), game.get("commence_time"), integrator=self.kalshi
+                            game_league, 
+                            game.get("home_team", ""), 
+                            game.get("away_team", ""), 
+                            g_dt, 
+                            integrator=self.kalshi,
+                            status=None # Fetch closed/active games too
                         )
                     except Exception as e:
                         logger.warning(f"Kalshi prefetch fail: {e}")
@@ -813,10 +804,119 @@ class VertexMasterAnalyzer:
 
             except Exception as e:
                 logger.error(f"Error analyzing game {idx}: {e}")
-            progress.progress((idx + 1) / len(games))
+            
+            if len(games) > 0:
+                progress.progress((idx + 1) / len(games))
 
         return pd.DataFrame(rows)
 
+    def _get_kalshi_features(
+        self, game: Dict[str, Any], league: str, prefetch_info: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """Fetch Kalshi probability for a game via the shared integrator."""
+        feats: Dict[str, Any] = {
+            "kalshi_available": False,
+            "kalshi_prob": None,
+            "kalshi_alignment": None,
+            "kalshi_match_debug": "no_match_found",
+            "kalshi_label": None,
+            "kalshi_volume": None,
+            "kalshi_confidence": None,
+            "kalshi_status": "no_market_match",
+            "kalshi_event_ticker": None,
+            "kalshi_market_type": None,
+            "kalshi_direction": None,
+        }
+
+        if not getattr(self, "kalshi", None) or not getattr(self, "use_kalshi", True):
+            feats["kalshi_match_debug"] = "kalshi_not_configured"
+            feats["kalshi_status"] = "kalshi_disabled"
+            return feats
+
+        try:
+            home = game.get("home_team", "")
+            away = game.get("away_team", "")
+            raw_league = league or game.get("league") or game.get("sport_key") or "NBA"
+            league = normalize_league(raw_league)
+
+            # --- DEFINED game_dt SAFELY ---
+            game_time = game.get("commence_time") or game.get("game_time")
+            game_dt = None
+            if game_time:
+                try:
+                    if isinstance(game_time, str):
+                        game_dt = datetime.fromisoformat(str(game_time).replace("Z", "+00:00"))
+                    elif isinstance(game_time, datetime):
+                        game_dt = game_time
+                except Exception:
+                    game_dt = None
+            
+            # Use prefetch if available, otherwise fetch
+            market_info = prefetch_info
+            if market_info is None:
+                market_info = match_game_to_kalshi(league, home, away, game_dt, integrator=self.kalshi, status=None)
+
+            is_matched = False
+            prob = None
+            label = None
+
+            if isinstance(market_info, dict):
+                is_matched = (
+                    market_info.get("matched", False)
+                    or market_info.get("kalshi_available", False)
+                    or market_info.get("available", False)
+                )
+                
+                # Pick probability
+                for key in ("probability", "kalshi_probability", "kalshi_prob", "prob"):
+                    if key in market_info and market_info.get(key) is not None:
+                        prob = market_info.get(key)
+                        break
+                        
+                label = (
+                    market_info.get("label")
+                    or market_info.get("kalshi_label")
+                    or market_info.get("market_type")
+                )
+                
+                debug_reason = market_info.get("reason") or market_info.get("kalshi_match_debug")
+                feats["kalshi_match_debug"] = str(debug_reason)
+                feats["kalshi_status"] = str(debug_reason)
+                feats["kalshi_event_ticker"] = market_info.get("raw_event_id") or market_info.get("kalshi_event_ticker")
+                feats["kalshi_market_type"] = market_info.get("market_type")
+                feats["kalshi_direction"] = market_info.get("direction")
+
+            if not is_matched or prob is None:
+                return feats
+
+            try:
+                prob = float(prob)
+                prob = max(0.0, min(1.0, prob))
+            except:
+                return feats
+
+            feats["kalshi_available"] = True
+            feats["kalshi_prob"] = prob
+            feats["kalshi_home_prob"] = prob
+            feats["kalshi_label"] = label
+            feats["kalshi_volume"] = market_info.get("kalshi_volume")
+            
+            # Simple Alignment Check
+            model_p = game.get("implied_home_prob") or game.get("win_prob")
+            if model_p is not None:
+                try:
+                    model_p = float(model_p)
+                    if abs(model_p - prob) < 0.05: feats["kalshi_alignment"] = "Neutral"
+                    elif model_p > prob: feats["kalshi_alignment"] = "Model > Kalshi"
+                    else: feats["kalshi_alignment"] = "Kalshi > Model"
+                except: pass
+
+            return feats
+
+        except Exception as e:
+            logger.error(f"Kalshi feature error: {e}", exc_info=True)
+            feats["kalshi_match_debug"] = f"error={str(e)}"
+            return feats
 def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
     """Render the Vertex AI Master Analysis in Streamlit."""
     if results_df is None or results_df.empty:
