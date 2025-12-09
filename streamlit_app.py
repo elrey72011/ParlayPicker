@@ -26,6 +26,24 @@ except ImportError:
     def get_vertex_ai_prediction(*args, **kwargs):
         return None
 
+# ... (your existing imports) ...
+import os
+
+# --- CRITICAL GLOBAL CONFIGURATION (Must run before anything else) ---
+# This fixes the "Permission denied on resource project None" error
+# by ensuring the ID is loaded before any AI libraries initialize.
+PROJECT_ID = "elite-hangar-479017-m8"
+os.environ["GOOGLE_CLOUD_PROJECT"] = PROJECT_ID
+os.environ["GCP_PROJECT_ID"] = PROJECT_ID
+
+# Initialize Session State early to prevent race conditions
+if 'gcp_project_id' not in st.session_state:
+    st.session_state['gcp_project_id'] = PROJECT_ID
+if 'vertex_endpoint_id' not in st.session_state:
+    st.session_state['vertex_endpoint_id'] = "6435317312558989312"
+# ---------------------------------------------------------------------
+
+# ... (rest of your file) ...
 
 # Optional core prediction function
 try:
