@@ -15,7 +15,7 @@ import requests
 import streamlit as st
 from typing import Dict, List, Any, Optional, TypedDict
 
-# Import shared matcher if available, otherwise define locally or skip
+# --- 1. SHARED IMPORTS ---
 try:
     from app_core.team_name_matcher import TeamNameMatcher
 except ImportError:
@@ -23,9 +23,8 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-# --- CONFIGURATION & CONSTANTS ---
+# --- 2. CONFIGURATION & CONSTANTS ---
 
-# 1. Team Abbreviations Dictionary (Your New Addition)
 KALSHI_TEAM_ABBREVIATIONS = {
     # NBA
     "ATLANTA HAWKS": ["ATL"], "BOSTON CELTICS": ["BOS"], "BROOKLYN NETS": ["BKN", "BRK"],
@@ -53,7 +52,6 @@ KALSHI_TEAM_ABBREVIATIONS = {
     "TENNESSEE TITANS": ["TEN"], "WASHINGTON COMMANDERS": ["WAS", "WSH"],
 }
 
-# 2. Market Filter Constants (Restored)
 FUTURE_EXCLUDE_KEYWORDS = {
     "champions league", "ucl", "win the league", "to win league",
     "to win the league", "to win championship", "championship", "playoffs",
@@ -72,13 +70,13 @@ LEAGUE_SERIES_MAP = {
     "ncaab": "KXNCAAB",
 }
 
-# 3. Tuning Parameters
-TEAM_FUZZY_THRESHOLD = 1.1  # Relaxed from 2.0 to allow partial matches
+# Low threshold allows fuzzy matching (e.g. "St. Louis" vs "Saint Louis")
+TEAM_FUZZY_THRESHOLD = 1.1  
 MAX_LINE_DIFF = 3.0
 DEBUG_KALSHI_MATCHING = False
 TEAM_NAME_SIMILARITY = 0.80
 
-# --- DATA STRUCTURES ---
+# --- 3. DATA STRUCTURES ---
 
 class KalshiMatchResult(TypedDict, total=False):
     matched: bool
@@ -93,7 +91,7 @@ class KalshiMatchResult(TypedDict, total=False):
     game_date: Optional[datetime]
     kalshi_volume: Optional[int]
 
-# --- HELPER FUNCTIONS ---
+# --- 4. HELPER FUNCTIONS ---
 
 def _debug_log(message: str, *args: Any) -> None:
     if DEBUG_KALSHI_MATCHING:
@@ -166,8 +164,6 @@ def _extract_market_type(title: str, ticker: str) -> Optional[str]:
         return "Total"
     return None
 
-# --- CORE MATCHING LOGIC (UPDATED) ---
-
 def _build_team_codes(team_name: str) -> List[str]:
     """Generate plausible team codes from a full team name using explicit maps."""
     if not team_name:
@@ -176,16 +172,13 @@ def _build_team_codes(team_name: str) -> List[str]:
     codes = []
     upper_name = team_name.upper().strip()
     
-    # 1. Check explicit map
     if upper_name in KALSHI_TEAM_ABBREVIATIONS:
         codes.extend(KALSHI_TEAM_ABBREVIATIONS[upper_name])
     
-    # 2. Check if name contains key (e.g. "Arizona Cardinals (Home)")
     for key, abbreviations in KALSHI_TEAM_ABBREVIATIONS.items():
         if key in upper_name:
             codes.extend(abbreviations)
 
-    # 3. Fallback: Standard 3-letter logic
     words = [w for w in re.split(r"\s+", team_name) if w]
     if words:
         codes.append(words[0][:3].upper())
@@ -200,7 +193,6 @@ def _extract_teams_from_ticker(ticker: str) -> List[str]:
     if not ticker:
         return []
 
-    # 1. Strip common Kalshi series prefixes so we don't parse "KXNB" as a team
     clean_ticker = ticker.upper()
     prefixes = ["KXNBA", "KXNFL", "KXMLB", "KXNHL", "KXNCAAF", "KXNCAAB", "KX"]
     for p in prefixes:
@@ -208,10 +200,7 @@ def _extract_teams_from_ticker(ticker: str) -> List[str]:
             clean_ticker = clean_ticker[len(p):]
             break
 
-    # 2. Extract 2-3 letter codes (teams are rarely 4 letters in Kalshi)
     tokens = re.findall(r"[A-Z]{2,3}", clean_ticker)
-    
-    # 3. Filter out noise
     ignore = {
         "ML", "OU", "OVE", "UND", "SPR", "TOT", "GAM", "VS", "AT", 
         "NBA", "NFL", "MLB", "NHL", "NCA", "AF", "AB"
@@ -224,6 +213,8 @@ def normalize_name(s: str) -> str:
     s = re.sub(r"[^a-z0-9 ]+", " ", s)
     s = re.sub(r"\s+", " ", s).strip()
     return s
+
+# --- 5. MAIN MATCHING FUNCTION (Must be global) ---
 
 def match_game_to_kalshi(
     league: str,
@@ -328,7 +319,7 @@ def match_game_to_kalshi(
                 continue
 
         if game_dt and meta.get("market_date"):
-            # Increased tolerance to 2 days to handle UTC vs Local time edge cases
+            # Tolerance: 2 days
             day_diff = abs((meta["market_date"].date() - game_dt.date()).days)
             if day_diff > 2:
                 continue
@@ -394,7 +385,7 @@ def match_game_to_kalshi(
         kalshi_volume=best_market.get("volume"),
     )
 
-# --- CLASS DEFINITION ---
+# --- 6. INTEGRATOR CLASS ---
 
 class KalshiIntegrator:
     """Integrates Kalshi prediction market odds and analysis"""
@@ -498,7 +489,6 @@ class KalshiIntegrator:
         all_markets = []
         try:
             series_list = self.get_sports_series() or []
-            
             priority_tickers = []
             target_prefixes = ["KXNBA", "KXNFL", "KXNHL", "KXMLB", "KXNCAAF", "KXNCAAB"]
             
@@ -509,7 +499,6 @@ class KalshiIntegrator:
             
             priority_tickers.sort(key=lambda x: x.get("start_date", ""), reverse=True)
             series_to_fetch = priority_tickers[:30]
-            
             if not series_to_fetch:
                 series_to_fetch = series_list[:30]
 
