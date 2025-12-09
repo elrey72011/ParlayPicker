@@ -28,18 +28,19 @@ import pandas as pd
 import numpy as np
 import requests
 import pytz
-import streamlit as st  # <--- THIS IMPORT MUST BE HERE
+
+import os
+import streamlit as st
 import streamlit.components.v1 as components
 
-PROJECT_ID = "elite-hangar-479017-m8"
-os.environ["GOOGLE_CLOUD_PROJECT"] = PROJECT_ID
-os.environ["GCP_PROJECT_ID"] = PROJECT_ID
+PROJECT_ID = os.getenv("GCP_PROJECT_ID") or "elite-hangar-479017-m8"
 
-# Initialize Session State early to prevent race conditions
 if "gcp_project_id" not in st.session_state:
     st.session_state["gcp_project_id"] = PROJECT_ID
+
 if "vertex_endpoint_id" not in st.session_state:
     st.session_state["vertex_endpoint_id"] = "6435317312558989312"
+
 
 # --- 4. APP SETUP ---
 try:
