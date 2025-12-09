@@ -162,6 +162,27 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 # --- REPLACE THE DEBUG SECTION IN streamlit_app.py WITH THIS ---
+if st.button("🚀 Run Connection Test"):
+        with st.spinner("Fetching all markets..."):
+            markets = debug_kalshi.get_markets()
+            
+            if markets:
+                st.success(f"✅ SUCCESS! Found {len(markets)} active sports markets.")
+                
+                # Tally by League
+                nba = len([m for m in markets if "NBA" in m.get("ticker", "")])
+                nfl = len([m for m in markets if "NFL" in m.get("ticker", "")])
+                nhl = len([m for m in markets if "NHL" in m.get("ticker", "")])
+                mlb = len([m for m in markets if "MLB" in m.get("ticker", "")])
+                ncaa = len([m for m in markets if "NCAA" in m.get("ticker", "") or "COLLEGE" in m.get("title", "").upper()])
+                
+                st.write(f"**Breakdown:** 🏀 NBA: {nba} | 🏈 NFL: {nfl} | 🏒 NHL: {nhl} | ⚾ MLB: {mlb} | 🎓 College: {ncaa}")
+                
+                if nba > 0:
+                    with st.expander("🔎 View Sample NBA Market"):
+                        st.json([m for m in markets if "NBA" in m.get("ticker", "")][0])
+            else:
+                st.error("❌ No markets found. Check keys or API status.")
 
 st.markdown("---")
 st.header("🔧 Kalshi Diagnostics & Health Check")
