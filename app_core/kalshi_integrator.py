@@ -300,6 +300,7 @@ def match_game_to_kalshi(
         if parsed:
             parsed_markets.append({"__meta": parsed, **mkt})
 
+
     home_norm = TeamNameMatcher.normalize(home_team) if TeamNameMatcher else normalize_name(home_team)
     away_norm = TeamNameMatcher.normalize(away_team) if TeamNameMatcher else normalize_name(away_team)
     home_codes = _build_team_codes(home_team)
