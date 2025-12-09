@@ -15659,10 +15659,11 @@ Return ONLY a JSON object with this exact structure:
     
     results_df = pd.DataFrame([{
         'Game': f"{r['away_team']} @ {r['home_team']}",
-        'Vertex Prob %': f"{r['vertex_probability']:.1f}%",
-        'Confidence %': f"{r['confidence']:.0f}%",
-        'Has Edge': '✅' if r['has_edge'] else '❌',
-        'Sources': r['sources_used']
+        # fall back to win_prob or ai_prob if vertex_probability is missing
+        'Vertex Prob %': f"{(r.get('vertex_probability') or r.get('win_prob') or r.get('ai_prob') or 0) * 100:.1f}%",
+        'Confidence %': f"{r.get('confidence', 0):.0f}%",
+        'Has Edge': '✅' if r.get('has_edge') else '❌',
+        'Sources': r.get('sources_used', '')
     } for r in vertex_results])
     
     st.dataframe(results_df, use_container_width=True)
