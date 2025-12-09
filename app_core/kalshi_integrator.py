@@ -88,10 +88,10 @@ LEAGUE_SERIES_MAP = {
     "ncaab": "KXNCAAB",
 }
 
-TEAM_FUZZY_THRESHOLD = 1.1  
+TEAM_FUZZY_THRESHOLD = 0.80  
 MAX_LINE_DIFF = 3.0
 DEBUG_KALSHI_MATCHING = False
-TEAM_NAME_SIMILARITY = 0.80
+TEAM_NAME_SIMILARITY = 0.70
 
 # --- 3. DATA STRUCTURES ---
 
@@ -249,10 +249,13 @@ def _parse_market_metadata(mkt: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     # e.g. "NBA: LAKERS @ CELTICS" → ["LAKERS", "CELTICS"]
     upper_title = title.upper()
     teams: List[str] = []
-    for sep in [" VS ", " @ ", " AT "]:
+
+    # Support more formats: "VS", "VS.", "V", "@", "AT", "-", "/", "|"
+    separators = [" VS ", " VS. ", " V ", " @ ", " AT ", " - ", " / ", " | "]
+    for sep in separators:
         if sep in upper_title:
             parts = upper_title.split(sep)
-            if len(parts) == 2:
+            if len(parts) >= 2:
                 teams = [parts[0].strip(), parts[1].strip()]
             break
 
