@@ -449,11 +449,12 @@ class KalshiIntegrator:
         try:
             cursor = None
             page_count = 0
+            # Look back 48 hours to catch live/recently finished games
             lookback_ts = int(now - (86400 * 2))
             
             while page_count < 20:
-                # FIX: Increased sleep to 0.5s to prevent 429 Errors
-                time.sleep(0.5) 
+                # FIX: Sleep 0.5s to prevent 429 Errors (Increased from 0.2)
+                time.sleep(0.5)
                 
                 params = {"limit": 200}
                 if cursor: params["cursor"] = cursor
@@ -469,8 +470,6 @@ class KalshiIntegrator:
                 cursor = data.get("cursor")
                 page_count += 1
                 if not cursor: break
-
-            # ... (Rest of filter logic remains the same) ...
 
             # Expanded Keyword Filter for All Sports
             sports_keywords = [
