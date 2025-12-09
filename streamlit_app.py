@@ -9336,26 +9336,30 @@ if is_vertex_ai_enabled():
                                     away_spread_odds = o.get("price")
                         
                             # Implied home win probability from American odds
+                            # Implied home win probability from American odds
                             implied_home_prob = 0.5
-                            try:
-                                if isinstance(home_ml, (int, float)) and isfinite(home_ml) and home_ml != 0:
-                                    if home_ml > 0:
-                                        implied_home_prob = 100.0 / (home_ml + 100.0)
-                                    else:
-                                        implied_home_prob = abs(home_ml) / (abs(home_ml) + 100.0)
-                            except Exception:
-                                implied_home_prob = 0.5
-                        
-                            game["home_ml_odds"] = home_ml
-                            game["away_ml_odds"] = away_ml
-                            game["home_spread"] = home_spread
-                            game["away_spread"] = away_spread
-                            game["home_spread_odds"] = home_spread_odds
-                            game["away_spread_odds"] = away_spread_odds
-                            game["implied_home_prob"] = implied_home_prob
+                            
+                            try:  # TRY #1
+                                try:  # TRY #2
+                                    if isinstance(home_ml, (int, float)) and isfinite(home_ml) and home_ml != 0:
+                                        if home_ml > 0:
+                                            implied_home_prob = 100.0 / (home_ml + 100.0)
+                                        else:
+                                            implied_home_prob = abs(home_ml) / (abs(home_ml) + 100.0)
+                                except Exception:
+                                    implied_home_prob = 0.5
+                            
+                                game["home_ml_odds"] = home_ml
+                                game["away_ml_odds"] = away_ml
+                                game["home_spread"] = home_spread
+                                game["away_spread"] = away_spread
+                                game["home_spread_odds"] = home_spread_odds
+                                game["away_spread_odds"] = away_spread_odds
+                                game["implied_home_prob"] = implied_home_prob
+                            
+                            except Exception as e:  # ← TRY #1 proper except
+                                print("Master analysis block failed before debug df:", e)
 
-                except Exception as e:
-                    print("Master analysis block failed before debug df:", e)
 
 
                 # =========================================================================
