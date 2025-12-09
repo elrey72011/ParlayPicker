@@ -598,6 +598,7 @@ class KalshiIntegrator:
         """Nuclear Fetch: Download markets (including recent past) and filter locally."""
         cache_key = status or "all"
         now = time.time()
+        
         if cache_key in self._markets_cache and now - self._cache_time.get(cache_key, 0) < self._cache_duration:
             return copy.deepcopy(self._markets_cache[cache_key])
 
@@ -608,15 +609,13 @@ class KalshiIntegrator:
             # Look back 48 hours to catch live/recently finished games
             lookback_ts = int(now - (86400 * 2))
             
-            # Fetch up to 20 pages
             while page_count < 20:
-                # FIX: Slow down to avoid 429 Errors
-                time.sleep(0.2) 
+                # FIX: Sleep 200ms to respect rate limits (avoid 429)
+                time.sleep(0.2)
                 
                 params = {"limit": 200}
                 if cursor: params["cursor"] = cursor
-                
-                # ... (rest of the loop is the same)
+                params["min_close_ts"] = lookback_ts 
                 
                 data = self._make_authenticated_request("GET", "/markets", params=params)
                 if not data: break
