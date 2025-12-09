@@ -1356,7 +1356,21 @@ def render_sidebar_controls() -> Dict[str, Any]:
     sidebar = st.sidebar
     sidebar.header("⚙️ ParlayDesk")
 
-    # --------------------- Auto-load All Keys from Secrets ---------------------
+    # --- 1. CRITICAL: FORCE GCP PROJECT ID ---
+    # This fixes the "projects/None" 403 Error
+    PROJECT_ID = "elite-hangar-479017-m8"  # Your specific ID
+    
+    # Set in Session State
+    st.session_state['gcp_project_id'] = PROJECT_ID
+    st.session_state['gcp_location'] = "us-central1"
+    st.session_state['vertex_endpoint_id'] = "6435317312558989312"
+    
+    # Set in Environment (Required for Vertex SDK to pick it up)
+    import os
+    os.environ["GOOGLE_CLOUD_PROJECT"] = PROJECT_ID
+    os.environ["GCP_PROJECT_ID"] = PROJECT_ID
+    
+    # --- 2. Auto-load Keys ---
     # Odds API
     default_odds_key, odds_key_source = resolve_odds_api_key_with_source()
     st.session_state.setdefault('api_key', default_odds_key)
@@ -1364,8 +1378,12 @@ def render_sidebar_controls() -> Dict[str, Any]:
     # News API
     st.session_state.setdefault('news_api_key', 
         st.secrets.get("NEWS_API_KEY", "") or os.environ.get("NEWS_API_KEY", ""))
+    
+    # Initialize Analyzers if keys exist
     if st.session_state.get('news_api_key') and 'sentiment_analyzer' not in st.session_state:
         st.session_state['sentiment_analyzer'] = RealSentimentAnalyzer(st.session_state['news_api_key'])
+        
+    # ... (Rest of your sidebar code remains the same) ...
     
     # --- UPDATE GCP CONFIGURATION IN SIDEBAR ---
     # Ensure this runs near the top of render_sidebar_controls or main setup
