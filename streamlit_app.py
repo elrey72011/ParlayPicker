@@ -5026,7 +5026,7 @@ MAX_TOTAL_DIFF = 1.0  # pts tolerance when matching TheOver total lines
 DATE_TOLERANCE_DAYS = 1  # days tolerance when comparing commence dates to TheOver rows
 DATE_TOLERANCE_HOURS = 3  # hours tolerance when comparing commence times to TheOver rows
 DEBUG_THEOVER_MERGE = True  # Toggle verbose TheOver merge diagnostics
-
+ENABLE_THEOVER_TOTALS = False
 
 def normalize_team_name(name: str) -> str:
     """Normalize a team string for cross-source matching.
@@ -6222,14 +6222,24 @@ def prepare_theover_dataset(
             )
         except Exception:
             df.at[idx, 'theover_match_key'] = ''
-        market_type = _infer_theover_market(row, explicit_market)
+                market_type = _infer_theover_market(row, explicit_market)
 
-        if market_type == 'spread':
-            _ingest_theover_spread_row(entry, row, swapped, idx, home_raw, away_raw)
-        elif market_type == 'total':
-            _ingest_theover_total_row(entry, row, idx)
-        else:
-            _ingest_theover_ml_row(entry, row, swapped, idx, home_raw, away_raw)
+                if market_type == 'spread':
+                    # ✅ keep using TheOver spreads as normal
+                    _ingest_theover_spread_row(entry, row, swapped, idx, home_raw, away_raw)
+        
+                elif market_type == 'total':
+                    # 🚫 totals temporarily disabled while we work on matching
+                    if ENABLE_THEOVER_TOTALS:
+                        _ingest_theover_total_row(entry, row, idx)
+                    else:
+                        # Skip this row entirely (don’t treat it as ML)
+                        continue
+        
+                else:
+                    # Moneyline (or anything not classified as spread/total)
+                    _ingest_theover_ml_row(entry, row, swapped, idx, home_raw, away_raw)
+
 
     match_key_map: Dict[Tuple[str, str, str, Optional[date]], Dict[str, Any]] = {}
     for entry in records:
