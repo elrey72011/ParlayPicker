@@ -6222,24 +6222,24 @@ def prepare_theover_dataset(
             )
         except Exception:
             df.at[idx, 'theover_match_key'] = ''
-                market_type = _infer_theover_market(row, explicit_market)
+            
+        market_type = _infer_theover_market(row, explicit_market)
 
-                if market_type == 'spread':
-                    # ✅ keep using TheOver spreads as normal
-                    _ingest_theover_spread_row(entry, row, swapped, idx, home_raw, away_raw)
-        
-                elif market_type == 'total':
-                    # 🚫 totals temporarily disabled while we work on matching
-                    if ENABLE_THEOVER_TOTALS:
-                        _ingest_theover_total_row(entry, row, idx)
-                    else:
-                        # Skip this row entirely (don’t treat it as ML)
-                        continue
-        
-                else:
-                    # Moneyline (or anything not classified as spread/total)
-                    _ingest_theover_ml_row(entry, row, swapped, idx, home_raw, away_raw)
+        if market_type == 'spread':
+            # ✅ keep using TheOver spreads as normal
+            _ingest_theover_spread_row(entry, row, swapped, idx, home_raw, away_raw)
 
+        elif market_type == 'total':
+            # 🚫 totals temporarily disabled while we work on matching
+            if ENABLE_THEOVER_TOTALS:
+                _ingest_theover_total_row(entry, row, idx)
+            else:
+                # Skip this row entirely (don’t treat it as ML)
+                continue
+        
+            else:
+                # Moneyline (or anything not classified as spread/total)
+                _ingest_theover_ml_row(entry, row, swapped, idx, home_raw, away_raw)
 
     match_key_map: Dict[Tuple[str, str, str, Optional[date]], Dict[str, Any]] = {}
     for entry in records:
