@@ -234,6 +234,14 @@ def normalize_name(s: str) -> str:
 
 # --- 5. MAIN MATCHING FUNCTION ---
 
+"""
+Kalshi Integrator (Updated filtering logic)
+"""
+# ... [Imports and Constants same as before] ...
+# (Keep your existing file imports and constants, just update match_game_to_kalshi)
+
+# --- PASTE THIS UPDATED MATCH FUNCTION OVER THE OLD ONE ---
+
 def match_game_to_kalshi(
     league: str,
     home_team: str,
@@ -242,7 +250,55 @@ def match_game_to_kalshi(
     integrator: "KalshiIntegrator" = None,
     status: Optional[str] = "open",
 ) -> KalshiMatchResult:
-    """Attempt to match a game to a Kalshi market with explicit reasons."""
+    # ... [Keep initial setup logic: league_norm, kalshi check, game_dt parsing] ...
+    
+    # ... [Keep try/except block for get_markets] ...
+
+    # ... [Keep parsed_markets loop] ...
+
+    # --- UPDATED MATCHING LOOP ---
+    for market in parsed_markets:
+        meta = market["__meta"]
+        title = meta.get("title", "").upper()
+
+        # 1. NEW: Penalize/Skip Futures keywords if looking for a game
+        # If the market is "Will NBA approve new franchise?", it has "NBA" but it's not a game.
+        futures_noise = ["APPROVE", "FRANCHISE", "DRAFT", "MVP", "ROOKIE", "CHAMPION", "WINNER", "SEASON"]
+        if any(bad in title for bad in futures_noise):
+            continue
+
+        # 2. Date Check (Tolerance: 2 days)
+        if game_dt and meta.get("market_date"):
+            day_diff = abs((meta["market_date"].date() - game_dt.date()).days)
+            if day_diff > 2:
+                continue
+
+        teams = meta.get("teams", [])
+        if len(teams) < 2: continue
+
+        # 3. Scoring (Same as before)
+        def _team_score(team_code: str, target_norm: str, target_codes: List[str]) -> float:
+            if team_code in target_codes: return 2.0
+            if TeamNameMatcher and TeamNameMatcher.normalize(team_code) == target_norm: return 1.5
+            if TeamNameMatcher and TeamNameMatcher.similarity_score(TeamNameMatcher.normalize(team_code), target_norm) >= TEAM_NAME_SIMILARITY: return 1.0
+            return 0.0
+
+        score_home_first = _team_score(teams[0], home_norm, home_codes) + _team_score(teams[1], away_norm, away_codes)
+        score_away_first = _team_score(teams[0], away_norm, away_codes) + _team_score(teams[1], home_norm, home_codes)
+
+        score = max(score_home_first, score_away_first)
+
+        if score_home_first < 1.0 and score_away_first < 1.0:
+            continue
+
+        if meta.get("probability") is not None:
+            score += 0.25
+
+        if score > best_score:
+            best_score = score
+            best_market = market
+
+    # ... [Keep result return logic] ...
 
     def _parse_market_metadata(market: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         title = market.get("title") or ""
