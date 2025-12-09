@@ -161,32 +161,12 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-# --- REPLACE THE DEBUG SECTION IN streamlit_app.py WITH THIS ---
-# ADDED key="kalshi_health_check_btn" to fix the crash
-if st.button("🚀 Run Connection Test", key="kalshi_health_check_btn"):
-    with st.spinner("Fetching all markets..."):
-        markets = debug_kalshi.get_markets()
-            
-        if markets:
-            st.success(f"✅ SUCCESS! Found {len(markets)} active sports markets.")
-            
-            # Tally by League
-            nba = len([m for m in markets if "NBA" in m.get("ticker", "")])
-            nfl = len([m for m in markets if "NFL" in m.get("ticker", "")])
-            nhl = len([m for m in markets if "NHL" in m.get("ticker", "")])
-            mlb = len([m for m in markets if "MLB" in m.get("ticker", "")])
-            ncaa = len([m for m in markets if "NCAA" in m.get("ticker", "") or "COLLEGE" in m.get("title", "").upper()])
-            
-            st.write(f"**Breakdown:** 🏀 NBA: {nba} | 🏈 NFL: {nfl} | 🏒 NHL: {nhl} | ⚾ MLB: {mlb} | 🎓 College: {ncaa}")
-            
-            if nba > 0:
-                with st.expander("🔎 View Sample NBA Market"):
-                    st.json([m for m in markets if "NBA" in m.get("ticker", "")][0])
-        else:
-            st.error("❌ No markets found. Check keys or API status.")
+# --- ROBUST DIAGNOSTICS SECTION (Replace existing block in Tab 4) ---
 
 st.markdown("---")
 st.header("🔧 Kalshi Diagnostics & Health Check")
+
+debug_kalshi = None  # Initialize to None to prevent NameError crashes
 
 try:
     from app_core.kalshi_integrator import KalshiIntegrator
@@ -198,45 +178,58 @@ try:
     except ImportError:
         crypto_status = "❌ MISSING"
 
-    # Initialize
+    # Initialize Keys
     k_key = st.secrets.get("KALSHI_API_KEY") or st.session_state.get("kalshi_api_key") or os.environ.get("KALSHI_API_KEY")
     k_sec = st.secrets.get("KALSHI_API_SECRET") or st.session_state.get("kalshi_secret_key") or os.environ.get("KALSHI_API_SECRET")
     
+    # Attempt to create the integrator
     debug_kalshi = KalshiIntegrator(k_key, k_sec)
     
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("Crypto Lib", crypto_status)
     col2.metric("API Key", "✅ Present" if k_key else "❌ Missing")
     col3.metric("Endpoint", "Production" if k_key else "Demo")
-    col4.metric("Base URL", "api.elections..." if "elections" in debug_kalshi.api_url else "api.kalshi...")
-
-    if st.button("🚀 Run Connection Test"):
-        with st.spinner("Testing connection to /markets..."):
-            
-            # DIRECT MARKET FETCH (Bypasses Series Check)
-            markets = debug_kalshi.get_markets()
-            
-            if markets:
-                st.success(f"✅ SUCCESS! Found {len(markets)} active markets.")
-                
-                # Filter for NBA to verify
-                nba = [m for m in markets if "NBA" in m.get("ticker", "") or "NBA" in m.get("title", "")]
-                if nba:
-                    st.info(f"🏀 Found {len(nba)} NBA markets in the dump.")
-                    st.write("Sample NBA Market:", nba[0])
-                else:
-                    st.warning("⚠️ Connection good, but 0 NBA markets found in the first batch.")
-            else:
-                st.error("❌ Connection Failed. /markets returned 0 results.")
-                if debug_kalshi.last_error:
-                    st.error(f"API Error Details: {debug_kalshi.last_error}")
-                    if "403" in debug_kalshi.last_error:
-                        st.warning("🔑 **Auth Error:** Your API Key/Secret might be invalid.")
-                    if "NameResolution" in debug_kalshi.last_error:
-                        st.warning("🌐 **DNS Error:** Still trying to hit the old URL. Restart the app.")
+    
+    # Safe access to URL
+    base_url = getattr(debug_kalshi, "api_url", "Unknown")
+    col4.metric("Base URL", "api.elections..." if "elections" in base_url else "api.kalshi...")
 
 except Exception as e:
-    st.error(f"Debug Crash: {e}")
+    st.error(f"⚠️ Debug Setup Failed: {e}")
+
+# Only show the button if the integrator loaded successfully
+if debug_kalshi:
+    # UPDATED KEY: "kalshi_health_check_v2" prevents duplicate ID errors
+    if st.button("🚀 Run Connection Test", key="kalshi_health_check_v2"):
+        with st.spinner("Fetching all markets..."):
+            try:
+                markets = debug_kalshi.get_markets()
+                
+                if markets:
+                    st.success(f"✅ SUCCESS! Found {len(markets)} active sports markets.")
+                    
+                    # Tally by League
+                    nba = len([m for m in markets if "NBA" in m.get("ticker", "")])
+                    nfl = len([m for m in markets if "NFL" in m.get("ticker", "")])
+                    nhl = len([m for m in markets if "NHL" in m.get("ticker", "")])
+                    mlb = len([m for m in markets if "MLB" in m.get("ticker", "")])
+                    ncaa = len([m for m in markets if "NCAA" in m.get("ticker", "") or "COLLEGE" in m.get("title", "").upper()])
+                    
+                    st.write(f"**Breakdown:** 🏀 NBA: {nba} | 🏈 NFL: {nfl} | 🏒 NHL: {nhl} | ⚾ MLB: {mlb} | 🎓 College: {ncaa}")
+                    
+                    if nba > 0:
+                        with st.expander("🔎 View Sample NBA Market"):
+                            st.json([m for m in markets if "NBA" in m.get("ticker", "")][0])
+                else:
+                    st.error("❌ Connection successful, but 0 markets returned. (Check Filters)")
+                    if debug_kalshi.last_error:
+                        st.caption(f"Last API Message: {debug_kalshi.last_error}")
+                        
+            except Exception as e:
+                st.error(f"❌ Test Failed: {e}")
+else:
+    st.warning("Integrator could not be initialized. Check API keys.")
+    
 # ============================================================
 # ML PREDICTION OPTIMIZATION FUNCTIONS
 # These functions speed up ML predictions by 5-10x using batching and caching
