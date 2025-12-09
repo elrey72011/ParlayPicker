@@ -466,18 +466,70 @@ class KalshiIntegrator:
         return None
 
     def get_sports_series(self) -> List[Dict]:
+        """
+        Fetch all sports series using pagination and hardcoded fallbacks.
+        Ensures major leagues (NBA, NFL) are found even if buried in the API list.
+        """
+        all_series = []
+        
+        # 1. Known major sports tickers to force-check
+        # (This guarantees we look for NBA/NFL even if the API list is cluttered)
+        known_tickers = ["KXNBA", "KXNFL", "KXNHL", "KXMLB", "KXNCAAF", "KXNCAAB", "KXUFC"]
+        for ticker in known_tickers:
+            # Add dummy entries for known leagues so get_markets will definitely scan them
+            # We give them a future start_date so the sorter prioritizes them
+            all_series.append({
+                "ticker": ticker,
+                "title": ticker,
+                "start_date": "2099-01-01T00:00:00Z" 
+            })
+
+        # 2. Fetch actual series list from API with Pagination
         try:
-            data = self._make_authenticated_request("GET", "/series", params={"limit": 200})
-            if not data: return []
+            cursor = None
+            page_count = 0
             
-            all_series = data.get("series", [])
+            while True:
+                params = {"limit": 200}
+                if cursor:
+                    params["cursor"] = cursor
+                
+                data = self._make_authenticated_request("GET", "/series", params=params)
+                if not data: 
+                    break
+                
+                series_page = data.get("series", [])
+                all_series.extend(series_page)
+                
+                cursor = data.get("cursor")
+                page_count += 1
+                
+                # Safety break to prevent infinite loops (scan max 1000 series)
+                if not cursor or page_count > 5:
+                    break
+            
+            # 3. Filter for sports-relevant series
             sports_keywords = ["NFL", "NBA", "MLB", "NHL", "UFC", "SOCCER", "TENNIS", "GOLF", "FOOTBALL", "BASKETBALL", "BASEBALL", "HOCKEY"]
             
-            return [
-                s for s in all_series 
-                if any(kw in s.get("ticker", "").upper() or kw in s.get("title", "").upper() for kw in sports_keywords)
-            ]
-        except Exception: return []
+            filtered_series = []
+            seen_tickers = set()
+            
+            for s in all_series:
+                t = s.get("ticker", "").upper()
+                if t in seen_tickers:
+                    continue
+                
+                # Keep it if it's a known hardcoded ticker OR matches keywords
+                if t in known_tickers or any(kw in t or kw in s.get("title", "").upper() for kw in sports_keywords):
+                    filtered_series.append(s)
+                    seen_tickers.add(t)
+            
+            return filtered_series
+
+        except Exception as e:
+            logger.error(f"Error fetching sports series: {e}")
+            # Even if API fails, return the hardcoded list so we can try fetching markets
+            return [s for s in all_series if s["ticker"] in known_tickers]
 
     def get_markets(self, category: str = "sports", status: Optional[str] = "open") -> List[Dict]:
         """Fetch available Kalshi markets, prioritizing major sports series to ensure coverage."""
