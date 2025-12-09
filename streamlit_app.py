@@ -6230,11 +6230,11 @@ def prepare_theover_dataset(
     
     # Total rows (temporarily disabled)
     elif market_type == 'total':
-        if ENABLE_THEOVER_TOTALS:
-            _ingest_theover_total_row(entry, row, idx)
-        else:
-            # Skip totals entirely while debugging
-            continue
+            if ENABLE_THEOVER_TOTALS:
+                _ingest_theover_total_row(entry, row, idx)
+            else:
+                # Skip totals entirely while debugging
+                continue
     
     # Moneyline (or fallback)
     else:
@@ -6252,7 +6252,6 @@ def prepare_theover_dataset(
         'market_type': explicit_market,
         'match_key_map': match_key_map,
     }
-
 
 def _format_theover_source(source: Optional[str]) -> str:
     if not source:
