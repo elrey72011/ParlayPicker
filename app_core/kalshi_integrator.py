@@ -61,6 +61,13 @@ FUTURE_EXCLUDE_KEYWORDS = {
 
 SUPPORTED_LEAGUES = {"nba", "nfl", "mlb", "ncaaf", "ncaab", "nhl"}
 
+# Update this list with the ACTUAL tickers found by the discovery script
+        known_tickers = [
+            "KXNBA", "KXNBA25", "KXNBAGAMES",  # Add variations here
+            "KXNFL", "KXNFL25", 
+            "KXNHL", "KXMLB", "KXNCAAF", "KXNCAAB", "KXUFC"
+        ]
+
 LEAGUE_SERIES_MAP = {
     "nba": "KXNBA",
     "nfl": "KXNFL",
