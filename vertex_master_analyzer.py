@@ -561,7 +561,10 @@ class VertexMasterAnalyzer:
 # -------------------------------
 
 def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
-    """Render the Vertex AI Master Analysis results."""
+    """
+    Render the Vertex AI Master Analysis results, including Kalshi metadata
+    and a CSV export with debug columns.
+    """
     if results_df is None or results_df.empty:
         st.info("No games to analyze.")
         return
@@ -569,19 +572,72 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
     st.subheader("🏆 Vertex AI Master Analysis")
 
     display_df = results_df.copy()
+
+    # Friendly display columns
     display_df["Win %"] = (display_df["win_prob"] * 100).round(1)
     display_df["Edge %"] = (display_df["edge_vs_market"] * 100).round(1)
 
-    # Format Kalshi column for display
+    # --- Kalshi display column ------------------------------------------
     def fmt_kalshi(row: pd.Series) -> str:
         if not row.get("kalshi_available"):
             return "No Match"
         prob = row.get("kalshi_prob")
-        if prob:
-            return f"Matched ({float(prob) * 100:.0f}%)"
-        return "Matched"
+        if prob is None or pd.isna(prob):
+            return "Matched"
+        try:
+            return f"Matched ({float(prob) * 100:.1f}%)"
+        except Exception:
+            return "Matched"
 
     display_df["Kalshi"] = display_df.apply(fmt_kalshi, axis=1)
 
-    cols = ["game", "the_pick", "pick_odds", "Win %", "Edge %", "ev", "Kalshi"]
+    # --- Debug column exposes the matcher reason/status -----------------
+    if "kalshi_status" in display_df.columns:
+        display_df["Kalshi Match Debug"] = display_df["kalshi_status"]
+    else:
+        display_df["Kalshi Match Debug"] = ""
+
+    # Columns for the on-screen grid
+    cols = [
+        "game",
+        "the_pick",
+        "pick_odds",
+        "Win %",
+        "Edge %",
+        "ev",
+        "Kalshi",
+        "Kalshi Match Debug",
+    ]
     st.dataframe(display_df[cols], use_container_width=True)
+
+    # --- CSV export with raw Kalshi fields ------------------------------
+    export_cols = [
+        "league",
+        "game",
+        "the_pick",
+        "pick_odds",
+        "win_prob",
+        "market_prob",
+        "edge_vs_market",
+        "ev",
+        "kalshi_available",
+        "kalshi_prob",
+        "kalshi_status",
+        "kalshi_ticker",
+        "kalshi_date",
+    ]
+
+    export_df = results_df.copy()
+    # Ensure all export columns exist
+    for c in export_cols:
+        if c not in export_df.columns:
+            export_df[c] = None
+
+    csv_bytes = export_df[export_cols].to_csv(index=False).encode("utf-8")
+    st.download_button(
+        label="📥 Download Vertex Master Analysis CSV",
+        data=csv_bytes,
+        file_name="vertex_master_analysis.csv",
+        mime="text/csv",
+        key="vertex_master_analysis_csv_btn",
+    )
