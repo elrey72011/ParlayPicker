@@ -35,17 +35,18 @@ class VertexAIAnalyzer:
     This uses the proper Anthropic on Vertex integration, not direct API calls.
     """
     
-    def __init__(self, project_id: str, region: str = "us-east5"):
+    def __init__(self, project_id: Optional[str] = None, region: str = "us-east5"):
         """
         Initialize Vertex AI Analyzer.
         
         Args:
-            project_id: Your Google Cloud project ID
-            region: GCP region (us-east5 has Claude 3.5 Sonnet)
+            project_id: Your Google Cloud project ID. If None, will try to use
+                        GCP_PROJECT_ID or GOOGLE_CLOUD_PROJECT from environment.
+            region: GCP region (us-east5 has Claude 3.5/4.5 Sonnet)
         
         Raises:
             ValueError: If Vertex AI dependencies not available
-            ValueError: If project_id not provided
+            ValueError: If project_id not provided and not found in env
         """
         if not VERTEX_AI_AVAILABLE:
             raise ValueError(
@@ -53,12 +54,23 @@ class VertexAIAnalyzer:
                 "Install with: pip install anthropic[vertex] google-cloud-aiplatform"
             )
         
+        # Fallback to environment variables if project_id not explicitly provided
         if not project_id:
-            raise ValueError("GCP project_id is required for Vertex AI")
+            env_project = (
+                os.environ.get("GCP_PROJECT_ID")
+                or os.environ.get("GOOGLE_CLOUD_PROJECT")
+            )
+            project_id = env_project
+        
+        if not project_id:
+            raise ValueError(
+                "GCP project_id is required for Vertex AI. "
+                "Set it explicitly or via GCP_PROJECT_ID / GOOGLE_CLOUD_PROJECT env vars."
+            )
         
         self.project_id = project_id
         self.region = region
-        self.client = None
+        self.client: Optional[AnthropicVertex] = None
         
         logger.info(f"Initializing Vertex AI with project={project_id}, region={region}")
         
@@ -430,9 +442,16 @@ def get_vertex_ai_config():
     
     # Fall back to environment variables
     if not project_id:
-        project_id = os.environ.get('GCP_PROJECT_ID')
+        project_id = (
+            os.environ.get('GCP_PROJECT_ID')
+            or os.environ.get('GOOGLE_CLOUD_PROJECT')
+        )
     
     if not project_id:
+        logger.error(
+            "Vertex AI config missing: no project id in session_state['gcp_project_id'], "
+            "GCP_PROJECT_ID, or GOOGLE_CLOUD_PROJECT."
+        )
         return None
     
     return {
