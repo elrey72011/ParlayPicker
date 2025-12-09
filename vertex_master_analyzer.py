@@ -535,6 +535,10 @@ class VertexMasterAnalyzer:
             "market_prob": market_prob,
             "edge_vs_market": edge,
             "ev": ev,
+            "kalshi_available": bool(feats.get("kalshi_available", False)),
+            "kalshi_prob": feats.get("kalshi_prob"),          # 0–1 float if matched
+            "kalshi_status": feats.get("kalshi_status", ""),  # human-readable reason
+        }) 
             # Kalshi Metadata for Export
             "kalshi_available": feats.get("kalshi_available"),
             "kalshi_prob": feats.get("kalshi_prob"),
