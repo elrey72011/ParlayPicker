@@ -617,13 +617,23 @@ class KalshiIntegrator:
             return base64.b64encode(signature).decode("utf-8")
         except Exception: return ""
 
-    def _make_authenticated_request(self, method: str, endpoint: str, params: Optional[Dict] = None, json_data: Optional[Dict] = None) -> Optional[dict]:
+    def _make_authenticated_request(
+        self,
+        method: str,
+        endpoint: str,
+        params: Optional[Dict] = None,
+        json_data: Optional[Dict] = None,
+    ) -> Optional[dict]:
+        """Make an authenticated Kalshi API request using RSA-PSS signing if available."""
         import time as time_module
+
         url = f"{self.api_url}{endpoint}"
         timestamp = str(int(time_module.time() * 1000))
         headers = self.headers.copy()
 
+        # Attach Kalshi auth headers if we have a key
         if self._auth_ready and self._private_key:
+            # Only sign the path portion, not query string
             path_suffix = endpoint.split("?", 1)[0]
             path_to_sign = f"/trade-api/v2{path_suffix}"
             signature = self._sign_request(method.upper(), path_to_sign, timestamp)
@@ -632,20 +642,27 @@ class KalshiIntegrator:
             headers["KALSHI-ACCESS-TIMESTAMP"] = timestamp
 
         try:
-            if method.upper() == "GET":
-                response = requests.get(url, headers=headers, params=params, timeout=15)
-            else:
-                response = requests.post(url, headers=headers, json=json_data or params, timeout=15)
-            
+            response = requests.request(
+                method.upper(),
+                url,
+                headers=headers,
+                params=params,
+                json=json_data,
+                timeout=10,
+            )
             if response.status_code == 200:
                 return response.json()
             else:
                 self.last_error = f"API error: {response.status_code}"
-                logger.warning(f"Kalshi error {response.status_code}: {response.text[:200]}")
+                logger.warning(
+                    f"Kalshi error {response.status_code}: {response.text[:200]}"
+                )
         except Exception as e:
             self.last_error = str(e)
             logger.error(f"Kalshi request failed: {e}")
+
         return None
+
 
     def get_markets(self, category: str = "sports", status: Optional[str] = "open") -> List[Dict]:
         """Nuclear Fetch: Download markets (including recent past) and filter locally."""
