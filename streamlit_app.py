@@ -2290,12 +2290,12 @@ def evaluate_tracked_parlays(
 
     default_sports = st.session_state.setdefault('selected_sports', APP_CFG["sports_common"][:6])
     sports = sidebar.multiselect(
-        "Sports",
-        options=APP_CFG["sports_common"],
-        default=default_sports,
-        format_func=format_sport_label,
-        key="selected_sports",
-    )
+    "Sports",
+    options=APP_CFG["sports_common"],
+    # default=default_sports,  <-- Commented out or removed
+    format_func=format_sport_label,
+    key="selected_sports",
+)
 
     # --------------------- AI settings ---------------------
     ai_expander = sidebar.expander("🤖 AI Settings", expanded=False)
