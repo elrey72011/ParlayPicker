@@ -15736,13 +15736,32 @@ if st.session_state.get('vertex_analysis_complete') and st.session_state.get('ve
     # Results table
     st.write("### 📋 All Results")
     
-    prev_df = pd.DataFrame([{
-        'Game': f"{r['away_team']} @ {r['home_team']}",
-        'Vertex Prob %': f"{r['vertex_probability']:.1f}%",
-        'Confidence %': f"{r['confidence']:.0f}%",
-        'Has Edge': '✅' if r['has_edge'] else '❌',
-        'Sources': r['sources_used']
-    } for r in prev_results])
+    # ... inside the "Previous AI Analysis Results" block ...
+    
+    # 1. Force fix Kalshi URL if it's stale in session state
+    if 'kalshi_integrator' in st.session_state:
+        k_int = st.session_state['kalshi_integrator']
+        # If URL is missing or wrong, kill it so it rebuilds
+        if not hasattr(k_int, 'api_url') or "trading-api" not in k_int.api_url:
+            del st.session_state['kalshi_integrator']
+            st.rerun()
+
+    # 2. Safe DataFrame Creation (Fixes KeyError)
+    safe_rows = []
+    for r in prev_results:
+        # Use .get() with defaults for EVERYTHING
+        safe_rows.append({
+            'Game': f"{r.get('away_team', '?')} @ {r.get('home_team', '?')}",
+            'Vertex Prob %': f"{r.get('vertex_probability', 0):.1f}%",
+            'Confidence %': f"{r.get('confidence', 0):.0f}%",
+            'Has Edge': '✅' if r.get('has_edge') else '❌',
+            'Sources': r.get('sources_used', 'Unknown')
+        })
+    
+    prev_df = pd.DataFrame(safe_rows)
+    
+    if not prev_df.empty:
+        st.dataframe(prev_df, use_container_width=True)
     
     st.dataframe(prev_df, use_container_width=True)
     
