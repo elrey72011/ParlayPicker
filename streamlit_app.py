@@ -9300,9 +9300,8 @@ if is_vertex_ai_enabled():
     # Filter out games that have already started/finished
     upcoming_games = []
         for game in games:
-            commence_time_str = game.get("commence_time")
-                        
-            # --- BEGIN TODAY FILTER ---
+            commence_time_str = game.get("commence_time")            
+            # --- TODAY FILTER BEGIN ---
             def is_today(dt_utc):
                 if not dt_utc:
                     return False
@@ -9324,9 +9323,10 @@ if is_vertex_ai_enabled():
             except:
                 continue
         
+            # Only include today's games
             if not is_today(commence_dt):
                 continue
-            # --- END TODAY FILTER ---
+            # --- TODAY FILTER END ---
                             
                             if commence_time_str:
                                 try:
