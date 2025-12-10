@@ -241,7 +241,11 @@ def _parse_market_metadata(mkt: Dict[str, Any]) -> Optional[Dict[str, Any]]:
 
     # Market date: from close_time / expected_expiration_time if available
     market_dt: Optional[datetime] = None
-    close_raw = mkt.get("close_time") or mkt.get("expected_expiration_time")
+    close_raw = (
+        mkt.get("close_time")
+        or mkt.get("expiration_time")
+        or mkt.get("expected_expiration_time")
+    )
     if close_raw:
         try:
             market_dt = datetime.fromisoformat(str(close_raw).replace("Z", "+00:00"))
