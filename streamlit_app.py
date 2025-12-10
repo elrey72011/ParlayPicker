@@ -19,7 +19,7 @@ from functools import lru_cache
 from html import escape
 from dataclasses import asdict
 from typing import Dict, Any, List, Tuple, Optional, Iterable, Sequence, Type, Set
-from datetime import datetime, timedelta, date, timezone, date
+from datetime import datetime, timedelta, date, timezone,
 from pathlib import Path
 from collections import defaultdict
 
@@ -9319,7 +9319,7 @@ if is_vertex_ai_enabled():
                             continue
 
                         # Keep only games that are scheduled for today (UTC date)
-                        if not (today_utc <= commence_dt.date() <= today_utc + timedelta(days=1)):
+                        if not (today_utc - timedelta(days=1) <= commence_dt.date() <= today_utc + timedelta(days=1)):
                             continue
 
                         # Attach parsed datetime for downstream Kalshi matching
