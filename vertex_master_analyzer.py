@@ -525,6 +525,8 @@ class VertexMasterAnalyzer:
         else:
             pick_text = f"{selection} {line}"
         
+        commence_raw = feats.get("commence_time")
+        commence_time_str = str(commence_raw) if commence_raw is not None else "Unknown"
         # Base result row 
         result: Dict[str, Any] = {
             "league": game_league,
