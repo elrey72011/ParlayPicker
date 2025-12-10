@@ -314,14 +314,16 @@ from typing import Dict, Any, Optional, List
 
 def _parse_market_metadata(mkt: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """
-    Lightweight parser to extract title, approximate date, and teams
-    from a Kalshi market.
+    Lightweight parser to extract title, approximate date, teams, market type
+    and probability from a Kalshi market.
     """
     title = (mkt.get("title") or "").strip()
     if not title:
         return None
 
-    # Use close_time as the "market_date"
+    ticker = mkt.get("ticker") or mkt.get("event_ticker") or mkt.get("series_ticker") or ""
+
+    # --- market date (from close_time / expected_expiration_time / ticker) ---
     market_dt = None
     close_raw = mkt.get("close_time") or mkt.get("expected_expiration_time")
     if close_raw:
@@ -329,13 +331,15 @@ def _parse_market_metadata(mkt: Dict[str, Any]) -> Optional[Dict[str, Any]]:
             market_dt = datetime.fromisoformat(str(close_raw).replace("Z", "+00:00"))
         except Exception:
             market_dt = None
+    if market_dt is None:
+        # fallback: try to parse from ticker like ...-20251210-...
+        market_dt = _extract_date_from_ticker(ticker)
 
-    # Very simple team extraction from title
-    # e.g. "NBA: LAKERS @ CELTICS" → ["LAKERS", "CELTICS"]
+    # --- teams: first try title, then ticker codes ---
     upper_title = title.upper()
     teams: List[str] = []
 
-    # Support more formats: "VS", "VS.", "V", "@", "AT", "-", "/", "|"
+    # Try formats like "LAKERS @ CELTICS", "MIAMI VS ORLANDO", etc.
     separators = [" VS ", " VS. ", " V ", " @ ", " AT ", " - ", " / ", " | "]
     for sep in separators:
         if sep in upper_title:
@@ -344,11 +348,33 @@ def _parse_market_metadata(mkt: Dict[str, Any]) -> Optional[Dict[str, Any]]:
                 teams = [parts[0].strip(), parts[1].strip()]
             break
 
+    # If we still don't have 2 teams, fall back to ticker abbreviations
+    if len(teams) < 2 and ticker:
+        ticker_teams = _extract_teams_from_ticker(ticker)
+        if len(ticker_teams) >= 2:
+            # e.g. ["MIA", "ORL"]
+            teams = ticker_teams[:2]
+
+    # --- probability & market type ---
+    market_type = _extract_market_type(title, ticker)
+
+    prob_source = (
+        mkt.get("yes_price")
+        or mkt.get("last_price")
+        or mkt.get("last_yes_price")
+        or mkt.get("implied_prob")
+        or mkt.get("probability")
+    )
+    prob = price_to_prob(prob_source)
+
     return {
         "title": title,
         "market_date": market_dt,
         "teams": teams,
+        "probability": prob,
+        "market_type": market_type,
     }
+
 
 def match_game_to_kalshi(
     league: str,
@@ -361,7 +387,10 @@ def match_game_to_kalshi(
     league_norm = normalize_name(league)
     if league_norm and league_norm not in SUPPORTED_LEAGUES:
         return KalshiMatchResult(matched=False, kalshi_available=False, label="", probability=None, raw_event_id=None, league=league_norm, reason="league_not_supported")
+    # Map league to Kalshi series prefix (e.g. "nba" -> "KXNBA")
+    series_prefix = LEAGUE_SERIES_MAP.get(league_norm)
 
+    
     kalshi = integrator or KalshiIntegrator()
     if kalshi is None:
         return KalshiMatchResult(matched=False, kalshi_available=False, label="", probability=None, raw_event_id=None, league=league_norm, reason="api_error:no_integrator")
@@ -400,6 +429,11 @@ def match_game_to_kalshi(
     for market in parsed_markets:
         meta = market["__meta"]
         title = meta.get("title", "").upper()
+        ticker = (market.get("ticker") or "").upper()
+
+        # 0. Filter by series prefix if we know the league
+        if series_prefix and ticker and not ticker.startswith(series_prefix):
+            continue
 
         # 1. Skip Futures keywords if looking for a game
         futures_noise = ["APPROVE", "FRANCHISE", "DRAFT", "MVP", "ROOKIE", "CHAMPION", "WINNER", "SEASON", "CONFERENCE", "DIVISION"]
