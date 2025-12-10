@@ -758,20 +758,6 @@ def match_game_to_kalshi(
 
     direction = "YES" if probability and probability >= 0.5 else "NO"
 
-    return KalshiMatchResult(
-        matched=True,
-        kalshi_available=True,
-        label=meta.get("title") or meta.get("ticker"),
-        probability=probability,
-        raw_event_id=str(best_market.get("ticker") or best_market.get("id")),
-        league=league_norm,
-        reason="ok",
-        market_type=meta.get("market_type"),
-        direction=direction,
-        game_date=meta.get("market_date"),
-        kalshi_volume=best_market.get("volume"),
-    )
-
 # --- 6. INTEGRATOR CLASS ---
 
 class KalshiIntegrator:
