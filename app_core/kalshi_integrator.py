@@ -178,6 +178,10 @@ MAX_LINE_DIFF = 3.0
 DEBUG_KALSHI_MATCHING = False
 TEAM_NAME_SIMILARITY = 0.70
 
+# 🔽 NEW: date tolerances
+DATE_TOLERANCE_DAYS = 5          # hard cutoff: ignore markets more than this many days away
+DATE_SOFT_PENALTY = 0.10         # subtract this * day_diff from score (soft penalty)
+
 # --- 3. DATA STRUCTURES ---
 
 class KalshiMatchResult(TypedDict, total=False):
@@ -314,26 +318,31 @@ from typing import Dict, Any, Optional, List
 
 def _parse_market_metadata(mkt: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """
-    Lightweight parser to extract title, approximate date, teams, market type
+    Lightweight parser to extract title, approximate date, teams, market type,
     and probability from a Kalshi market.
     """
     title = (mkt.get("title") or "").strip()
     if not title:
         return None
 
-    ticker = mkt.get("ticker") or mkt.get("event_ticker") or mkt.get("series_ticker") or ""
+    # --- basic fields ---
+    ticker = (
+        mkt.get("ticker")
+        or mkt.get("event_ticker")
+        or mkt.get("series_ticker")
+        or ""
+    )
 
     # --- market date (from close_time / expected_expiration_time / ticker) ---
-    market_dt = None
+    market_dt: Optional[datetime] = None
     close_raw = mkt.get("close_time") or mkt.get("expected_expiration_time")
     if close_raw:
         try:
             market_dt = datetime.fromisoformat(str(close_raw).replace("Z", "+00:00"))
         except Exception:
             market_dt = None
-    if market_dt is None:
-        # fallback: try to parse from ticker like ...-20251210-...
-        market_dt = _extract_date_from_ticker(ticker)
+    # you may have a helper like _parse_market_date or _extract_date_from_ticker;
+    # if so, you can call it here as a fallback.
 
     # --- teams: first try title, then ticker codes ---
     upper_title = title.upper()
@@ -352,10 +361,9 @@ def _parse_market_metadata(mkt: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     if len(teams) < 2 and ticker:
         ticker_teams = _extract_teams_from_ticker(ticker)
         if len(ticker_teams) >= 2:
-            # e.g. ["MIA", "ORL"]
             teams = ticker_teams[:2]
 
-    # --- probability & market type ---
+    # --- market type & probability ---
     market_type = _extract_market_type(title, ticker)
 
     prob_source = (
@@ -375,7 +383,6 @@ def _parse_market_metadata(mkt: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         "market_type": market_type,
     }
 
-
 def match_game_to_kalshi(
     league: str,
     home_team: str,
@@ -384,71 +391,247 @@ def match_game_to_kalshi(
     integrator: "KalshiIntegrator" = None,
     status: Optional[str] = "open",
 ) -> KalshiMatchResult:
+    """
+    Match an OddsAPI game to the best Kalshi market using TEAM-FIRST scoring,
+    with date as a soft constraint (penalty + hard cutoff).
+
+    - Team codes / names drive most of the score.
+    - Date difference subtracts from score and can hard-cut if too far.
+    """
     league_norm = normalize_name(league)
     if league_norm and league_norm not in SUPPORTED_LEAGUES:
-        return KalshiMatchResult(matched=False, kalshi_available=False, label="", probability=None, raw_event_id=None, league=league_norm, reason="league_not_supported")
-    # Map league to Kalshi series prefix (e.g. "nba" -> "KXNBA")
-    series_prefix = LEAGUE_SERIES_MAP.get(league_norm)
+        return KalshiMatchResult(
+            matched=False,
+            kalshi_available=False,
+            label="",
+            probability=None,
+            raw_event_id=None,
+            league=league_norm,
+            reason="league_not_supported",
+        )
 
-    
     kalshi = integrator or KalshiIntegrator()
     if kalshi is None:
-        return KalshiMatchResult(matched=False, kalshi_available=False, label="", probability=None, raw_event_id=None, league=league_norm, reason="api_error:no_integrator")
+        return KalshiMatchResult(
+            matched=False,
+            kalshi_available=False,
+            label="",
+            probability=None,
+            raw_event_id=None,
+            league=league_norm,
+            reason="api_error:no_integrator",
+        )
 
-    game_dt: Optional[datetime] = None
-    if isinstance(game_time, datetime):
-        game_dt = game_time
-    elif game_time:
-        try:
-            game_dt = datetime.fromisoformat(str(game_time).replace("Z", "+00:00"))
-        except Exception:
-            game_dt = None
-
-    try:
-        # Use Nuclear Fetch
-        markets = kalshi.get_markets(status=status)
-    except Exception as exc:
-        short_err = str(exc)[:77] + "..." if len(str(exc)) > 80 else str(exc)
-        return KalshiMatchResult(matched=False, kalshi_available=False, label="", probability=None, raw_event_id=None, league=league_norm, reason=f"api_error:{short_err}")
-
-    parsed_markets: List[Dict[str, Any]] = []
-    for mkt in markets or []:
-        parsed = _parse_market_metadata(mkt)
-        if parsed:
-            parsed_markets.append({"__meta": parsed, **mkt})
-
-
-    home_norm = TeamNameMatcher.normalize(home_team) if TeamNameMatcher else normalize_name(home_team)
-    away_norm = TeamNameMatcher.normalize(away_team) if TeamNameMatcher else normalize_name(away_team)
+    # Normalize game info
+    home_norm = normalize_name(home_team)
+    away_norm = normalize_name(away_team)
     home_codes = _build_team_codes(home_team)
     away_codes = _build_team_codes(away_team)
 
+    # Pull markets from Kalshi
+    markets = kalshi.get_markets(status=status)
+    if not markets:
+        return KalshiMatchResult(
+            matched=False,
+            kalshi_available=False,
+            label="",
+            probability=None,
+            raw_event_id=None,
+            league=league_norm,
+            reason="no_kalshi_markets_for_league",
+        )
+
+    # Parse metadata once
+    parsed_markets: List[Dict[str, Any]] = []
+    for mkt in markets:
+        meta = _parse_market_metadata(mkt)
+        if not meta:
+            continue
+        mkt2 = mkt.copy()
+        mkt2["__meta"] = meta
+        parsed_markets.append(mkt2)
+
+    if not parsed_markets:
+        return KalshiMatchResult(
+            matched=False,
+            kalshi_available=True,
+            label="",
+            probability=None,
+            raw_event_id=None,
+            league=league_norm,
+            reason="no_parsable_markets",
+        )
+
+    series_prefix = LEAGUE_SERIES_MAP.get(league_norm)
+
+    # Convert game time to aware datetime if possible
+    game_dt: Optional[datetime] = None
+    if isinstance(game_time, datetime):
+        if game_time.tzinfo is None:
+            game_dt = pytz.UTC.localize(game_time)
+        else:
+            game_dt = game_time.astimezone(pytz.UTC)
+
+    # --- nested scorer ---
+    def _team_score(team_code: str, target_norm: str, target_codes: List[str]) -> float:
+        """
+        Score how well a Kalshi team token matches a sportsbook team name.
+
+        2.0  - exact code / abbreviation match (e.g. NYK, MIA)
+        1.5  - exact normalized name match (e.g. "miami heat" == "miami heat")
+        1.2  - one normalized name contains the other
+        1.0  - ≥ 50% word overlap
+        0.5  - some word overlap but weaker
+        0.0  - no meaningful match
+        """
+        if not team_code:
+            return 0.0
+
+        clean_code = team_code.strip().upper()
+
+        # 1) Code / abbreviation match (fast path)
+        if clean_code in target_codes:
+            return 2.0
+
+        # 2) If TeamNameMatcher is available, use it
+        if TeamNameMatcher:
+            norm_code = TeamNameMatcher.normalize(team_code)
+            if norm_code == target_norm:
+                return 1.5
+            sim = TeamNameMatcher.similarity_score(norm_code, target_norm)
+            if sim >= TEAM_NAME_SIMILARITY:
+                return 1.0
+
+        # 3) Fallback: simple normalization + word overlap
+        norm_code = normalize_name(team_code)
+
+        # exact normalized name
+        if norm_code == target_norm and norm_code:
+            return 1.5
+
+        # one name contained inside the other
+        if norm_code and target_norm and (norm_code in target_norm or target_norm in norm_code):
+            return 1.2
+
+        # word overlap
+        words_code = set(norm_code.split())
+        words_target = set(target_norm.split())
+        overlap = words_code & words_target
+        if overlap:
+            ratio = len(overlap) / max(len(words_target), 1)
+            if ratio >= 0.5:
+                return 1.0
+            return 0.5
+
+        return 0.0
+
     best_market: Optional[Dict[str, Any]] = None
     best_score: float = 0.0
+    best_day_diff: Optional[int] = None
 
+    # --- loop through all parsed markets ---
     for market in parsed_markets:
         meta = market["__meta"]
         title = meta.get("title", "").upper()
-        ticker = (market.get("ticker") or "").upper()
+        ticker = (market.get("ticker") or market.get("event_ticker") or "").upper()
 
-        # 0. Filter by series prefix if we know the league
+        # 0. Filter by series prefix (NBA vs NFL vs NCAAB etc.)
         if series_prefix and ticker and not ticker.startswith(series_prefix):
             continue
 
-        # 1. Skip Futures keywords if looking for a game
-        futures_noise = ["APPROVE", "FRANCHISE", "DRAFT", "MVP", "ROOKIE", "CHAMPION", "WINNER", "SEASON", "CONFERENCE", "DIVISION"]
+        # 1. Skip obvious futures / season props
+        futures_noise = [
+            "APPROVE", "FRANCHISE", "DRAFT", "MVP", "ROOKIE",
+            "CHAMPION", "WINNER", "SEASON", "CONFERENCE", "DIVISION",
+            "REGULAR SEASON WINS", "SEASON WINS"
+        ]
         if any(bad in title for bad in futures_noise):
             continue
 
-        if game_dt and meta.get("market_date"):
-            day_diff = abs((meta["market_date"].date() - game_dt.date()).days)
-            if day_diff > 4:   # was 2
-                continue
-
-
-        teams = meta.get("teams", [])
+        # 2. Teams from meta
+        teams = meta.get("teams") or []
         if len(teams) < 2:
             continue
+
+        # Score both orientations
+        score_home_first = (
+            _team_score(teams[0], home_norm, home_codes)
+            + _team_score(teams[1], away_norm, away_codes)
+        )
+        score_away_first = (
+            _team_score(teams[0], away_norm, away_codes)
+            + _team_score(teams[1], home_norm, home_codes)
+        )
+
+        team_score = max(score_home_first, score_away_first)
+        if team_score <= 0.0:
+            continue
+
+        # Base score is team score
+        score = team_score
+
+        # 3. Soft date penalty + hard cutoff
+        day_diff: Optional[int] = None
+        market_dt: Optional[datetime] = meta.get("market_date")
+        if game_dt and market_dt:
+            day_diff = abs((market_dt.date() - game_dt.date()).days)
+            if day_diff > DATE_TOLERANCE_DAYS:
+                # too far away in time
+                continue
+            # penalize the score slightly the further away we get
+            score -= DATE_SOFT_PENALTY * day_diff
+
+        # 4. Small bump if we have a usable probability
+        if meta.get("probability") is not None:
+            score += 0.25
+
+        if score > best_score:
+            best_score = score
+            best_market = market
+            best_day_diff = day_diff
+
+    # --- no viable candidate at all ---
+    if not best_market:
+        return KalshiMatchResult(
+            matched=False,
+            kalshi_available=True,
+            label="",
+            probability=None,
+            raw_event_id=None,
+            league=league_norm,
+            reason="no_candidate_for_game",
+        )
+
+    # --- candidate exists but below acceptance threshold ---
+    if best_score < TEAM_FUZZY_THRESHOLD:
+        reason = f"low_score:{best_score:.2f}"
+        if best_day_diff is not None:
+            reason += f":day_diff={best_day_diff}"
+        return KalshiMatchResult(
+            matched=False,
+            kalshi_available=True,
+            label="",
+            probability=None,
+            raw_event_id=None,
+            league=league_norm,
+            reason=reason,
+        )
+
+    # --- accept best market ---
+    best_meta = best_market["__meta"]
+    return KalshiMatchResult(
+        matched=True,
+        kalshi_available=True,
+        label=best_meta.get("title", ""),
+        probability=best_meta.get("probability"),
+        raw_event_id=best_market.get("event_ticker") or best_market.get("ticker"),
+        league=league_norm,
+        reason="ok",
+        market_type=best_meta.get("market_type"),
+        direction=None,
+        game_date=best_meta.get("market_date"),
+        kalshi_volume=best_market.get("volume"),
+    )
 
         def _team_score(team_code: str, target_norm: str, target_codes: List[str]) -> float:
             """
