@@ -1,8 +1,7 @@
 # ParlayDesk_AI_Enhanced.py - v9.2 VERTEX-FIRST
 # AI-Enhanced parlay finder with sentiment analysis, ML predictions, and live market data
+from dataclasses import asdict
 from __future__ import annotations
-
-# --- 1. STANDARD IMPORTS (Must come first) ---
 import os
 import io
 import json
