@@ -9322,12 +9322,17 @@ if is_vertex_ai_enabled():
                         st.warning(f"[Kalshi Filter] Failed to filter today's games: {e}")
 
             # --- TODAY FILTER END ---
+            commence_time_str = game.get("commence_time") if isinstance(game, dict) else None
+
             if commence_time_str:
                 try:
-                    # Parse commence_time (ISO format from TheOddsAPI)
-                    commence_time = datetime.fromisoformat(
+                    commence_dt = datetime.fromisoformat(
                         commence_time_str.replace("Z", "+00:00")
-                    )
+                    ).astimezone(timezone.utc)
+                except Exception:
+                    commence_dt = None
+            else:
+                commence_dt = None
 
                     # 1) Only keep games on today's calendar day (UTC)
                     if commence_time.date() != today_utc:
