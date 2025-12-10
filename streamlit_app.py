@@ -9293,10 +9293,37 @@ if is_vertex_ai_enabled():
                     snapshot = fetch_oddsapi_snapshot(odds_api_key, sport)
                     games = snapshot.get("events", [])
             
-                    # ---------------------------------------------
-                    # --- FILTER TO TODAY'S GAMES ONLY ---
-                    today_local = datetime.now(tz).date()
                     upcoming_games = []
+                    # ============================================================
+                    # FILTER TO TODAY'S GAMES BEFORE MATCHING WITH KALSHI
+                    # ============================================================
+                    
+                    from datetime import datetime
+                    
+                    today_utc = datetime.utcnow().date()
+                    
+                    filtered_games = []
+                    for game in games:
+                        commence_str = None
+                    
+                        if isinstance(game, dict):
+                            commence_str = game.get("commence_time")
+                        else:
+                            commence_str = getattr(game, "commence_time", None)
+                    
+                        if commence_str:
+                            try:
+                                commence_dt = datetime.fromisoformat(
+                                    commence_str.replace("Z", "+00:00")
+                                )
+                                if commence_dt.date() == today_utc:
+                                    filtered_games.append(game)
+                            except:
+                                pass
+                    
+                    # Override games list (only today’s games now)
+                    games = filtered_games
+
                     
                     for game in games:
                         commence_time_str = None
