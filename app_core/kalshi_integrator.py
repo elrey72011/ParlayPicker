@@ -62,7 +62,8 @@ KALSHI_TEAM_ABBREVIATIONS: Dict[str, List[str]] = {
     "TENNESSEE TITANS": ["TEN"], "WASHINGTON COMMANDERS": ["WAS"],
 }
 
-TEAM_FUZZY_THRESHOLD = 1.5
+# LOWERED THRESHOLD TO CATCH MORE MATCHES
+TEAM_FUZZY_THRESHOLD = 1.0  
 DATE_TOLERANCE_DAYS = 5
 DATE_SOFT_PENALTY = 0.10
 
@@ -125,7 +126,6 @@ def _parse_market_metadata(mkt: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     ticker = (mkt.get("ticker") or mkt.get("event_ticker") or "")
     
     market_dt: Optional[datetime] = None
-    # Prioritize close_time (Trading Close)
     close_raw = (mkt.get("close_time") or mkt.get("expiration_time") or mkt.get("expected_expiration_time"))
     if close_raw:
         try:
@@ -172,11 +172,16 @@ def _build_team_codes(team_name: str) -> List[str]:
 def _team_score(team_code: str, target_norm: str, target_codes: List[str]) -> float:
     if not team_code: return 0.0
     clean_code = team_code.strip().upper()
+    # Check abbreviations
     if clean_code in target_codes: return 2.0
-    norm_code = normalize_name(team_code)
-    if norm_code == target_norm and norm_code: return 1.5
-    if norm_code and target_norm and (norm_code in target_norm or target_norm in norm_code): return 1.2
     
+    norm_code = normalize_name(team_code)
+    # Exact Match
+    if norm_code == target_norm: return 2.0
+    # Substring Match
+    if norm_code in target_norm or target_norm in norm_code: return 1.5
+    
+    # Token Overlap
     words_code = set(norm_code.split())
     words_target = set(target_norm.split())
     if words_code & words_target: return 1.0
@@ -207,7 +212,10 @@ def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time:
     # Normalize game time to UTC for comparison
     game_dt_utc: Optional[datetime] = None
     if isinstance(game_time, datetime):
-        game_dt_utc = game_time.astimezone(pytz.UTC)
+        if game_time.tzinfo is None:
+            game_dt_utc = pytz.utc.localize(game_time)
+        else:
+            game_dt_utc = game_time.astimezone(pytz.UTC)
 
     series_prefix = LEAGUE_SERIES_MAP.get(league_key)
     best_market = None
@@ -225,27 +233,33 @@ def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time:
         if len(teams) < 2: continue
 
         # Score both orientations (Home vs Away OR Away vs Home)
+        # Use target codes for abbreviation matching
         s1 = _team_score(teams[0], home_norm, home_codes) + _team_score(teams[1], away_norm, away_codes)
         s2 = _team_score(teams[0], away_norm, away_codes) + _team_score(teams[1], home_norm, home_codes)
         score = max(s1, s2)
 
         # Date penalty (±24 hours tolerance for timezone shifts)
         m_date = meta.get("market_date")
-        if game_dt_utc and m_date:
+        
+        # CRITICAL FIX: Robust date checking to prevent NoneType crash
+        if game_dt_utc is not None and m_date is not None and isinstance(m_date, datetime):
             try:
-                # Compare dates
+                # Ensure m_date is aware
+                if m_date.tzinfo is None:
+                    m_date = pytz.utc.localize(m_date)
+                
                 diff = abs((m_date.date() - game_dt_utc.date()).days)
-                if diff > 1: # Strict 1 day tolerance
-                     continue 
+                if diff > DATE_TOLERANCE_DAYS: continue
+                score -= (diff * DATE_SOFT_PENALTY)
             except Exception:
-                pass 
+                pass # Ignore date comparison errors
 
         if score > best_score:
             best_score = score
             best_market = m
             best_market["__meta"] = meta
 
-    if not best_market or best_score < 1.5: # Threshold of 1.5 ensures at least one strong name match
+    if not best_market or best_score < TEAM_FUZZY_THRESHOLD:
         return KalshiMatchResult(matched=False, kalshi_available=True, label="", probability=None, raw_event_id=None, reason=f"low_score_{best_score:.1f}")
 
     meta = best_market["__meta"]
