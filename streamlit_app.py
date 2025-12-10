@@ -9354,70 +9354,70 @@ if is_vertex_ai_enabled():
                 # No commence_time, include it
                 upcoming_games.append(game)
 
-                        # Add sport_key, league, etc. for each upcoming game (leave the rest
-                        # of your existing code here unchanged)
-                        for game in upcoming_games:
-                            game["sport_key"] = sport
-                    
-                            if sport == "basketball_nba":
-                                game["league"] = "NBA"
-                            elif sport == "basketball_ncaab":
-                                game["league"] = "NCAAB"
-                            elif sport == "americanfootball_nfl":
-                                game["league"] = "NFL"
-                            elif sport == "americanfootball_ncaaf":
-                                game["league"] = "NCAAF"
-                            elif sport == "icehockey_nhl":
-                                game["league"] = "NHL"
+                # Add sport_key, league, etc. for each upcoming game (leave the rest
+                # of your existing code here unchanged)
+                for game in upcoming_games:
+                    game["sport_key"] = sport
+            
+                    if sport == "basketball_nba":
+                        game["league"] = "NBA"
+                    elif sport == "basketball_ncaab":
+                        game["league"] = "NCAAB"
+                    elif sport == "americanfootball_nfl":
+                        game["league"] = "NFL"
+                    elif sport == "americanfootball_ncaaf":
+                        game["league"] = "NCAAF"
+                    elif sport == "icehockey_nhl":
+                        game["league"] = "NHL"
+        
+                # 🔽 Flatten core odds for VertexMasterAnalyzer
+                home_team = game.get("home_team") or ""
+                away_team = game.get("away_team") or ""
+        
+                markets = game.get("markets") or {}
+                h2h = markets.get("h2h") or {}
+        
+                home_ml = (h2h.get("home") or {}).get("price")
+                away_ml = (h2h.get("away") or {}).get("price")
+        
+                # Spreads
+                spreads = markets.get("spreads") or []
+                home_spread = away_spread = None
+                home_spread_odds = away_spread_odds = None
+        
+                for o in spreads:
+                    name = (o.get("name") or "").strip()
+                    if name == home_team:
+                        home_spread = o.get("point")
+                        home_spread_odds = o.get("price")
+                    elif name == away_team:
+                        away_spread = o.get("point")
+                        away_spread_odds = o.get("price")
+        
+                # Implied home win probability from American odds
+                implied_home_prob = 0.5
+                try:
+                    if (
+                        isinstance(home_ml, (int, float))
+                        and isfinite(home_ml)
+                        and home_ml != 0
+                    ):
+                        if home_ml > 0:
+                            implied_home_prob = 100.0 / (home_ml + 100.0)
+                        else:
+                            implied_home_prob = abs(home_ml) / (abs(home_ml) + 100.0)
+                except Exception:
+                    implied_home_prob = 0.5
+        
+                game["home_ml_odds"] = home_ml
+                game["away_ml_odds"] = away_ml
+                game["home_spread"] = home_spread
+                game["away_spread"] = away_spread
+                game["home_spread_odds"] = home_spread_odds
+                game["away_spread_odds"] = away_spread_odds
+                game["implied_home_prob"] = implied_home_prob
                 
-                        # 🔽 Flatten core odds for VertexMasterAnalyzer
-                        home_team = game.get("home_team") or ""
-                        away_team = game.get("away_team") or ""
-                
-                        markets = game.get("markets") or {}
-                        h2h = markets.get("h2h") or {}
-                
-                        home_ml = (h2h.get("home") or {}).get("price")
-                        away_ml = (h2h.get("away") or {}).get("price")
-                
-                        # Spreads
-                        spreads = markets.get("spreads") or []
-                        home_spread = away_spread = None
-                        home_spread_odds = away_spread_odds = None
-                
-                        for o in spreads:
-                            name = (o.get("name") or "").strip()
-                            if name == home_team:
-                                home_spread = o.get("point")
-                                home_spread_odds = o.get("price")
-                            elif name == away_team:
-                                away_spread = o.get("point")
-                                away_spread_odds = o.get("price")
-                
-                        # Implied home win probability from American odds
-                        implied_home_prob = 0.5
-                        try:
-                            if (
-                                isinstance(home_ml, (int, float))
-                                and isfinite(home_ml)
-                                and home_ml != 0
-                            ):
-                                if home_ml > 0:
-                                    implied_home_prob = 100.0 / (home_ml + 100.0)
-                                else:
-                                    implied_home_prob = abs(home_ml) / (abs(home_ml) + 100.0)
-                        except Exception:
-                            implied_home_prob = 0.5
-                
-                        game["home_ml_odds"] = home_ml
-                        game["away_ml_odds"] = away_ml
-                        game["home_spread"] = home_spread
-                        game["away_spread"] = away_spread
-                        game["home_spread_odds"] = home_spread_odds
-                        game["away_spread_odds"] = away_spread_odds
-                        game["implied_home_prob"] = implied_home_prob
-                        
-                        all_games.append(game)
+                all_games.append(game)
                     
                 # =========================================================================
                 # SUPPLEMENTAL DATA: TheOver.ai Picks & Probabilities (NOT Lines!)
