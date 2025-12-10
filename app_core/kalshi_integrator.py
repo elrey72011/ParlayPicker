@@ -279,11 +279,23 @@ class KalshiIntegrator:
         self.api_key = api_key or os.getenv("KALSHI_API_KEY") or st.secrets.get("KALSHI_API_KEY", "")
         self.api_secret = api_secret or st.secrets.get("KALSHI_API_SECRET", "") or os.getenv("KALSHI_API_SECRET", "")
         
-        # Clean private key
+        # Clean private key format
         if self.api_secret:
-            self.api_secret = self.api_secret.replace("\\n", "\n").strip()
-            if "-----BEGIN RSA PRIVATE KEY-----" not in self.api_secret:
-                self.api_secret = f"-----BEGIN RSA PRIVATE KEY-----\n{self.api_secret}\n-----END RSA PRIVATE KEY-----"
+            # Convert \n from env/secrets into real newlines
+            cleaned = self.api_secret.replace("\\n", "\n").strip()
+
+    # If it already looks like a PEM, use as-is
+    if "-----BEGIN" in cleaned:
+        self.api_secret = cleaned
+    else:
+        # If you *really* are storing just the base64 body (not recommended),
+        # you can wrap it in a generic PRIVATE KEY header:
+        self.api_secret = (
+            "-----BEGIN PRIVATE KEY-----\n"
+            + cleaned +
+            "\n-----END PRIVATE KEY-----"
+        )
+
 
         self.api_url = "https://trading-api.kalshi.com/trade-api/v2"
         self._markets_cache = []
