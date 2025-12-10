@@ -531,15 +531,13 @@ class VertexMasterAnalyzer:
         result: Dict[str, Any] = {
             "league": game_league,
             "game": f"{feats.get('away_team')} @ {feats.get('home_team')}",
-            # Raw commence time from TheOddsAPI / merged features
-            "game_time": feats.get("game_time"),
+            "commence_time": feats.get("commence_time"),  # <-- NEW
             "the_pick": pick_text,
             "pick_odds": odds,
             "win_prob": ai_prob,
             "market_prob": market_prob,
             "edge_vs_market": edge,
             "ev": ev,
-
             # Kalshi fields (for display + CSV export)
             "kalshi_available": bool(feats.get("kalshi_available", False)),
             "kalshi_prob": feats.get("kalshi_prob"),          # 0–1 float if matched
@@ -632,7 +630,7 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
         "Kalshi",
         "Kalshi Match Debug",
     ]
-    st.dataframe(display_df[cols], use_container_width=True)
+    display_df = display_df[cols]
 
     # --- CSV export with raw Kalshi fields ------------------------------
     export_cols = [
