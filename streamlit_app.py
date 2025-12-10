@@ -9292,6 +9292,7 @@ if is_vertex_ai_enabled():
                 
                 # Get current time for filtering past games
                 now_utc = datetime.now(timezone.utc)
+                today_utc = now_utc.date()
                 
                 for sport in selected_sports:
                     snapshot = fetch_oddsapi_snapshot(odds_api_key, sport)
@@ -9299,63 +9300,60 @@ if is_vertex_ai_enabled():
                 
                     # Filter out games that have already started/finished
                     upcoming_games = []
-                    if commence_time_str:
-                        try:
-                            # Parse commence_time (ISO format from TheOddsAPI)
-                            commence_time = datetime.fromisoformat(
-                                commence_time_str.replace("Z", "+00:00")
-                            )
+                        for game in games:
+                            commence_time_str = game.get("commence_time")
+                    
+                            if commence_time_str:
+                                try:
+                                    # Parse commence_time (ISO format from TheOddsAPI)
+                                    commence_time = datetime.fromisoformat(
+                                        commence_time_str.replace("Z", "+00:00")
+                                    )
+        
+                                    # 1) Only keep games on today's calendar day (UTC)
+                                    if commence_time.date() != today_utc:
+                                        logger.info(
+                                            f"Skipping non-today game: {game.get('home_team')} vs "
+                                            f"{game.get('away_team')} ({commence_time.date()} != {today_utc})"
+                                        )
+                                        continue
 
-                            # If a Focus date is set, skip games not on that calendar day
-                            if focus_date is not None and commence_time.date() != focus_date:
-                                logger.info(
-                                    f"Skipping non-focus-date game: "
-                                    f"{game.get('home_team')} vs {game.get('away_team')} "
-                                    f"({commence_time.date()} != {focus_date})"
-                                )
-                                continue
+                                    # 2) Only include games that haven't started yet (5-min grace if you want)
+                                    if commence_time > now_utc:
+                                        # keep the ISO string for later display / export
+                                        game["commence_time"] = commence_time_str
+                                        upcoming_games.append(game)
+                                    else:
+                                        logger.info(
+                                            f"Filtered out past game: {game.get('home_team')} vs "
+                                            f"{game.get('away_team')} (commenced {commence_time})"
+                                        )
+                                except Exception as e:
+                                    # If we can't parse time, include the game to be safe
+                                    logger.warning(
+                                        f"Could not parse commence_time for game, including anyway: {e}"
+                                    )
+                                    upcoming_games.append(game)
 
-                            # Only include games that haven't started yet (with 5 min buffer)
-                            if commence_time > now_utc:
-                                upcoming_games.append(game)
                             else:
-                                logger.info(
-                                    f"Filtered out past game: {game.get('home_team')} vs "
-                                    f"{game.get('away_team')} (commenced {commence_time})"
-                                )
-                        except Exception as e:
-                            # If we can't parse time, include the game to be safe
-                            logger.warning(
-                                f"Could not parse commence_time for game, including anyway: {e}"
-                            )
-                            upcoming_games.append(game)
+                                # No commence_time, include it
+                                upcoming_games.append(game)
 
-                        except Exception as e:
-                            # If we can't parse time, include the game to be safe
-                            logger.warning(
-                                f"Could not parse commence_time for game, including anyway: {e}"
-                            )
-                            upcoming_games.append(game)
-                    else:
-                        # No commence_time, include it
-                        upcoming_games.append(game)
-                
-                    # Add sport_key, league, and flatten odds for each upcoming game
-                    for game in upcoming_games:
-                        game["sport_key"] = sport
-                
-                        if sport == "basketball_nba":
-                            game["league"] = "NBA"
-                        elif sport == "basketball_ncaab":
-                            game["league"] = "NCAAB"
-                        elif sport == "americanfootball_nfl":
-                            game["league"] = "NFL"
-                        elif sport == "americanfootball_ncaaf":
-                            game["league"] = "NCAAF"
-                        elif sport == "icehockey_nhl":
-                            game["league"] = "NHL"
-                        else:
-                            game["league"] = "NBA"
+                        # Add sport_key, league, etc. for each upcoming game (leave the rest
+                        # of your existing code here unchanged)
+                        for game in upcoming_games:
+                            game["sport_key"] = sport
+                    
+                            if sport == "basketball_nba":
+                                game["league"] = "NBA"
+                            elif sport == "basketball_ncaab":
+                                game["league"] = "NCAAB"
+                            elif sport == "americanfootball_nfl":
+                                game["league"] = "NFL"
+                            elif sport == "americanfootball_ncaaf":
+                                game["league"] = "NCAAF"
+                            elif sport == "icehockey_nhl":
+                                game["league"] = "NHL"
                 
                         # 🔽 Flatten core odds for VertexMasterAnalyzer
                         home_team = game.get("home_team") or ""
