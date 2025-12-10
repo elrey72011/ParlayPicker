@@ -9294,31 +9294,40 @@ if is_vertex_ai_enabled():
                     games = snapshot.get("events", [])
             
                     # ---------------------------------------------
-                    # FILTER TODAY'S GAMES BEFORE KALSHI MATCHING
-                    # ---------------------------------------------
+                    # --- FILTER TO TODAY'S GAMES ONLY ---
+                    today_local = datetime.now(tz).date()
+                    upcoming_games = []
                     
-                    try:
-                        upcoming_games = []
-                        now_utc = datetime.now(timezone.utc).date()   # today in UTC
+                    for game in games:
+                        commence_time_str = None
                     
-                        for game in games:
-                            commence_raw = game.get("commence_time")
-                            commence_dt = None
+                        # Game may be dict or object → normalize safely
+                        if isinstance(game, dict):
+                            commence_time_str = game.get("commence_time")
+                        else:
+                            commence_time_str = getattr(game, "commence_time", None)
                     
-                            if commence_raw:
-                                try:
-                                    commence_dt = datetime.fromisoformat(
-                                        commence_raw.replace("Z", "+00:00")
-                                    )
-                                except Exception:
-                                    commence_dt = None
+                        # Skip if no time
+                        if not commence_time_str:
+                            continue
                     
-                            # Keep only today's games
-                            if commence_dt and commence_dt.date() == now_utc:
-                                upcoming_games.append(game)
+                        # Convert timestamp or ISO time → datetime
+                        try:
+                            if isinstance(commence_time_str, (int, float)):
+                                commence_dt = datetime.fromtimestamp(commence_time_str, tz)
+                            else:
+                                commence_dt = datetime.fromisoformat(
+                                    str(commence_time_str).replace("Z", "+00:00")
+                                ).astimezone(tz)
+                        except Exception:
+                            continue
                     
-                        # Replace original game list with filtered list
-                        games = upcoming_games
+                        # Keep **only today's games**
+                        if commence_dt.date() == today_local:
+                            upcoming_games.append(game)
+                    
+                    # Use filtered list
+                    games = upcoming_games
                     
                     except Exception as e:
                         st.warning(f"[Kalshi Filter] Failed filtering today's games: {e}")
