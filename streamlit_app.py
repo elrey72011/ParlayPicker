@@ -19,7 +19,7 @@ from functools import lru_cache
 from html import escape
 from dataclasses import asdict
 from typing import Dict, Any, List, Tuple, Optional, Iterable, Sequence, Type, Set
-from datetime import datetime, timedelta, date, timezone,
+from datetime import datetime, timedelta, date, timezone
 from pathlib import Path
 from collections import defaultdict
 
