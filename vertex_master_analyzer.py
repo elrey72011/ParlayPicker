@@ -524,11 +524,13 @@ class VertexMasterAnalyzer:
             pick_text = f"{team} {line:+.1f}"
         else:
             pick_text = f"{selection} {line}"
-
+        
         # Base result row 
         result: Dict[str, Any] = {
             "league": game_league,
             "game": f"{feats.get('away_team')} @ {feats.get('home_team')}",
+            # Raw commence time from TheOddsAPI / merged features
+            "game_time": feats.get("game_time"),
             "the_pick": pick_text,
             "pick_odds": odds,
             "win_prob": ai_prob,
@@ -543,6 +545,7 @@ class VertexMasterAnalyzer:
             "kalshi_ticker": feats.get("kalshi_ticker"),
             "kalshi_date": feats.get("kalshi_date"),
         }
+
 
         # Attach LLM assistant metadata (game-level)
         result["assistant_contracts"] = feats.get("assistant_contracts")
@@ -574,6 +577,27 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
     display_df["Win %"] = (display_df["win_prob"] * 100).round(1)
     display_df["Edge %"] = (display_df["edge_vs_market"] * 100).round(1)
 
+    # Commence time column for display
+    from datetime import datetime
+
+    if "game_time" in display_df.columns:
+        def _fmt_commence(x):
+            if isinstance(x, datetime):
+                return x.strftime("%Y-%m-%d %H:%M")
+            if not x:
+                return ""
+            try:
+                return datetime.fromisoformat(str(x).replace("Z", "+00:00")).strftime(
+                    "%Y-%m-%d %H:%M"
+                )
+            except Exception:
+                return str(x)
+
+        display_df["Commence (UTC)"] = display_df["game_time"].apply(_fmt_commence)
+    else:
+        # Always have the column so the grid definition below doesn’t explode
+        display_df["Commence (UTC)"] = ""
+
     # --- Kalshi display column ------------------------------------------
     def fmt_kalshi(row: pd.Series) -> str:
         if not row.get("kalshi_available"):
@@ -597,6 +621,7 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
     # Columns for the on-screen grid
     cols = [
         "game",
+        "Commence (UTC)",
         "the_pick",
         "pick_odds",
         "Win %",
@@ -611,6 +636,7 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
     export_cols = [
         "league",
         "game",
+        "game_time",
         "the_pick",
         "pick_odds",
         "win_prob",
