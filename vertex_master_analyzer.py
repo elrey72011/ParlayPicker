@@ -8,7 +8,7 @@ import logging
 import re
 from datetime import datetime
 from typing import Any, Dict, List, Optional
-from dataclasses import asdict # <--- Added missing import
+from dataclasses import asdict
 
 import pandas as pd
 import streamlit as st
@@ -135,14 +135,13 @@ class VertexMasterAnalyzer:
                 }
                 game_league = league_map.get(skey, league)
 
-                # 2. Kalshi Prefetch (single, best match)
+                # 2. Kalshi Prefetch
                 kalshi_info: Optional[Dict[str, Any]] = None
                 if kalshi_active:
                     try:
                         g_time = game.get("commence_time")
                         g_dt: Optional[datetime] = None
                         if g_time:
-                            # Handle string or datetime
                             if isinstance(g_time, str):
                                 g_dt = datetime.fromisoformat(
                                     str(g_time).replace("Z", "+00:00")
@@ -159,19 +158,17 @@ class VertexMasterAnalyzer:
                             integrator=self.kalshi,
                             status=None,
                         )
-                        # Convert object to dict so .get works
                         kalshi_info = asdict(raw_kalshi_result) if raw_kalshi_result else None
                     
                     except Exception as e:
-                         # FIXED: Added except block to handle prefetch errors without crashing
                         logger.warning(f"Kalshi prefetch error for {game.get('home_team')}: {e}")
 
-                # 3. Build Features (including Kalshi flags/metadata)
+                # 3. Build Features
                 feats = self.build_comprehensive_features(
                     game, game_league, kalshi_info
                 )
 
-                # 4. Optional LLM Assistant (placeholder AI reasoning)
+                # 4. Optional LLM Assistant
                 (
                     assistant_contracts,
                     assistant_best_side,
@@ -237,7 +234,6 @@ class VertexMasterAnalyzer:
                         candidates.append(c)
 
                 if candidates:
-                    # Pick best candidate by edge
                     best = sorted(
                         candidates,
                         key=lambda x: x.get("edge_vs_market", -99),
@@ -325,7 +321,6 @@ class VertexMasterAnalyzer:
             "kalshi_date": None,
         }
 
-        # If we passed prefetch_info, use it directly
         if prefetch_info and isinstance(prefetch_info, dict):
             matched = prefetch_info.get("matched", False)
             if matched:
@@ -334,7 +329,7 @@ class VertexMasterAnalyzer:
                 feats["kalshi_label"] = prefetch_info.get("label")
                 feats["kalshi_status"] = "matched"
                 feats["kalshi_ticker"] = prefetch_info.get("raw_event_id")
-
+                
                 # Format date if available
                 k_date = prefetch_info.get("game_date")
                 if k_date:
@@ -355,11 +350,15 @@ class VertexMasterAnalyzer:
         kalshi_info: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """Assemble all features from game odds, sentiment, Kalshi, etc."""
+        
+        # FIX: Explicitly grab commence_time so it survives into the features dict
+        game_time = game.get("commence_time") or game.get("commence_dt")
+        
         features: Dict[str, Any] = {
             "league": league,
             "home_team": game.get("home_team"),
             "away_team": game.get("away_team"),
-            "game_time": game.get("commence_time"),
+            "game_time": game_time,  # Ensure this is populated
         }
 
         # Odds
@@ -421,12 +420,6 @@ class VertexMasterAnalyzer:
     ) -> Optional[Dict[str, Any]]:
         """
         Evaluate a single betting candidate (Home ML, Away Spread, etc).
-        Computes:
-          - Market probability
-          - AI probability (Vertex or heuristic)
-          - Edge vs market
-          - EV
-        And attaches Kalshi + LLM assistant metadata.
         """
         if odds is None or pd.isna(odds):
             return None
@@ -440,9 +433,8 @@ class VertexMasterAnalyzer:
         if vertex_enabled and vertex_home_prob is not None:
             ai_prob = vertex_home_prob if selection == "home" else (1.0 - vertex_home_prob)
         else:
-            # Fallback heuristic if Vertex isn't configured/available
+            # Fallback heuristic
             base = feats.get("implied_home_prob", 0.5)
-            # Adjust by sentiment
             sent_adj = (feats.get("sentiment_diff", 0) or 0) * 0.1
             adj_base = base + sent_adj
             ai_prob = adj_base if selection == "home" else (1.0 - adj_base)
@@ -467,33 +459,26 @@ class VertexMasterAnalyzer:
         else:
             pick_text = f"{selection} {line}"
         
-        commence_raw = feats.get("commence_time")
-        commence_time_str = str(commence_raw) if commence_raw is not None else "Unknown"
-        # Base result row 
+        # Ensure game_time is extracted correctly
+        g_time = feats.get("game_time")
+        
         result: Dict[str, Any] = {
             "league": game_league,
             "game": f"{feats.get('away_team')} @ {feats.get('home_team')}",
-            "commence_time": feats.get("commence_time"),  # <-- NEW
+            "game_time": g_time,  # Explicitly passing it here
             "the_pick": pick_text,
             "pick_odds": odds,
             "win_prob": ai_prob,
             "market_prob": market_prob,
             "edge_vs_market": edge,
             "ev": ev,
-            # Kalshi fields (for display + CSV export)
+            # Kalshi fields
             "kalshi_available": bool(feats.get("kalshi_available", False)),
-            "kalshi_prob": feats.get("kalshi_prob"),          # 0–1 float if matched
-            "kalshi_status": feats.get("kalshi_status", ""),  # human-readable reason
+            "kalshi_prob": feats.get("kalshi_prob"),
+            "kalshi_status": feats.get("kalshi_status", ""),
             "kalshi_ticker": feats.get("kalshi_ticker"),
             "kalshi_date": feats.get("kalshi_date"),
         }
-
-
-        # Attach LLM assistant metadata (game-level)
-        result["assistant_contracts"] = feats.get("assistant_contracts")
-        result["assistant_best_side"] = feats.get("assistant_best_side")
-        result["assistant_confidence"] = feats.get("assistant_confidence")
-        result["assistant_reason"] = feats.get("assistant_reason")
 
         return result
 
@@ -504,8 +489,7 @@ class VertexMasterAnalyzer:
 
 def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
     """
-    Render the Vertex AI Master Analysis results, including Kalshi metadata
-    and a CSV export with debug columns.
+    Render the Vertex AI Master Analysis results.
     """
     if results_df is None or results_df.empty:
         st.info("No games to analyze.")
@@ -515,32 +499,28 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
 
     display_df = results_df.copy()
 
-    # Friendly display columns
     display_df["Win %"] = (display_df["win_prob"] * 100).round(1)
     display_df["Edge %"] = (display_df["edge_vs_market"] * 100).round(1)
 
-    # Commence time column for display
-    from datetime import datetime
-
-    if "game_time" in display_df.columns:
-        def _fmt_commence(x):
+    # Handle Commence Time display gracefully
+    def _fmt_commence(x):
+        if not x: return ""
+        try:
+            if isinstance(x, str):
+                # Try standard iso format
+                return datetime.fromisoformat(x.replace("Z", "+00:00")).strftime("%Y-%m-%d %H:%M")
             if isinstance(x, datetime):
                 return x.strftime("%Y-%m-%d %H:%M")
-            if not x:
-                return ""
-            try:
-                return datetime.fromisoformat(str(x).replace("Z", "+00:00")).strftime(
-                    "%Y-%m-%d %H:%M"
-                )
-            except Exception:
-                return str(x)
+            return str(x)
+        except:
+            return str(x)
 
+    if "game_time" in display_df.columns:
         display_df["Commence (UTC)"] = display_df["game_time"].apply(_fmt_commence)
     else:
-        # Always have the column so the grid definition below doesn’t explode
         display_df["Commence (UTC)"] = ""
 
-    # --- Kalshi display column ------------------------------------------
+    # Kalshi display column
     def fmt_kalshi(row: pd.Series) -> str:
         if not row.get("kalshi_available"):
             return "No Match"
@@ -554,13 +534,11 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
 
     display_df["Kalshi"] = display_df.apply(fmt_kalshi, axis=1)
 
-    # --- Debug column exposes the matcher reason/status -----------------
     if "kalshi_status" in display_df.columns:
         display_df["Kalshi Match Debug"] = display_df["kalshi_status"]
     else:
         display_df["Kalshi Match Debug"] = ""
 
-    # Columns for the on-screen grid
     cols = [
         "game",
         "Commence (UTC)",
@@ -573,28 +551,19 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
         "Kalshi Match Debug",
     ]
     
-    # Filter only columns that actually exist to avoid KeyError
-    existing_cols = [c for c in cols if c in display_df.columns]
-    st.dataframe(display_df[existing_cols], use_container_width=True)
+    # Safety: ensure cols exist
+    final_cols = [c for c in cols if c in display_df.columns]
+    
+    st.dataframe(display_df[final_cols], use_container_width=True)
 
-    # --- CSV export with raw Kalshi fields ------------------------------
+    # CSV export
     export_cols = [
-        "league",
-        "game",
-        "game_time",
-        "the_pick",
-        "pick_odds",
-        "win_prob",
-        "market_prob",
-        "edge_vs_market",
-        "ev",
-        "kalshi_available",
-        "kalshi_prob",
-        "kalshi_status",
-        "kalshi_ticker",
-        "kalshi_date",
+        "league", "game", "game_time", "the_pick", "pick_odds", 
+        "win_prob", "market_prob", "edge_vs_market", "ev", 
+        "kalshi_available", "kalshi_prob", "kalshi_status", 
+        "kalshi_ticker", "kalshi_date"
     ]
-
+    
     export_df = results_df.copy()
     for c in export_cols:
         if c not in export_df.columns:
