@@ -547,7 +547,6 @@ def match_game_to_kalshi(
 class KalshiIntegrator:
     """
     Thin wrapper around the Kalshi API with caching and simple key auth.
-    Only the /markets endpoint is used for matching.
     """
 
     def __init__(self, api_key: Optional[str] = None, api_secret: Optional[str] = None) -> None:
@@ -556,10 +555,9 @@ class KalshiIntegrator:
         Accepts optional arguments to satisfy dependency injection in main app.
         """
         self.api_key: Optional[str] = api_key
-        # Note: api_secret is accepted for compatibility but primarily unused
-        # in this simplified wrapper which relies on KEY header auth.
-        self.api_secret: Optional[str] = api_secret
+        self.api_secret: Optional[str] = api_secret  # Stored but mostly unused for v2 simple auth
         
+        # Ensure we use the correct trading endpoint, NOT elections
         self.api_url: str = os.getenv(
             "KALSHI_API_URL", "https://trading-api.kalshi.com/trade-api/v2"
         )
