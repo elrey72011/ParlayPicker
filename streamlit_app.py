@@ -9289,181 +9289,105 @@ if is_vertex_ai_enabled():
             
                 st.info("📡 Fetching games from TheOddsAPI...")
             
-                for sport in selected_sports:
+                                for sport in selected_sports:
                     snapshot = fetch_oddsapi_snapshot(odds_api_key, sport)
                     games = snapshot.get("events", [])
-            
-                    upcoming_games = []
-                    # ============================================================
-                    # FILTER TO TODAY'S GAMES BEFORE MATCHING WITH KALSHI
-                    # ============================================================
-                    
-                    from datetime import datetime
-                    
-                    today_utc = datetime.utcnow().date()
-                    
-                    filtered_games = []
-                    for game in games:
-                        commence_str = None
-                    
-                        if isinstance(game, dict):
-                            commence_str = game.get("commence_time")
-                        else:
-                            commence_str = getattr(game, "commence_time", None)
-                    
-                        if commence_str:
-                            try:
-                                commence_dt = datetime.fromisoformat(
-                                    commence_str.replace("Z", "+00:00")
-                                )
-                                if commence_dt.date() == today_utc:
-                                    filtered_games.append(game)
-                            except:
-                                pass
-                    
-                    # Override games list (only today’s games now)
-                    games = filtered_games
 
-                    
+                    if not games:
+                        continue
+
                     for game in games:
+                        # Read commence_time from dict or object
                         commence_time_str = None
-                    
-                        # Game may be dict or object → normalize safely
                         if isinstance(game, dict):
                             commence_time_str = game.get("commence_time")
                         else:
                             commence_time_str = getattr(game, "commence_time", None)
-                    
-                        # Skip if no time
+
                         if not commence_time_str:
+                            # If we don't know when the game starts, skip it for today's filter
                             continue
-                    
-                        # Convert timestamp or ISO time → datetime
+
+                        # Parse commence_time into a timezone-aware datetime
                         try:
-                            if isinstance(commence_time_str, (int, float)):
-                                commence_dt = datetime.fromtimestamp(commence_time_str, tz)
-                            else:
-                                commence_dt = datetime.fromisoformat(
-                                    str(commence_time_str).replace("Z", "+00:00")
-                                ).astimezone(tz)
-                        except Exception:
-                            continue
-                    
-                        # Keep **only today's games**
-                        if commence_dt.date() == today_local:
-                            upcoming_games.append(game)
-                    
-                    # Use filtered list
-                    games = upcoming_games
-                    
-                    except Exception as e:
-                        st.warning(f"[Kalshi Filter] Failed filtering today's games: {e}")
-                    
-                    # -------- END DATE FILTER --------
-                    # --- TODAY FILTER END ---
-                    # We now safely re-parse commence_time for each game BEFORE Kalshi matching
-                    for game in games:
-                        commence_time_str = None
-                        commence_dt = None
-                    
-                        try:
-                            # Works whether game is dict or object-like
-                            commence_time_str = (
-                                game.get("commence_time")
-                                if isinstance(game, dict)
-                                else getattr(game, "commence_time", None)
+                            commence_dt = datetime.fromisoformat(
+                                str(commence_time_str).replace("Z", "+00:00")
                             )
-                    
-                            if commence_time_str:
-                                try:
-                                    commence_dt = (
-                                        datetime.fromisoformat(
-                                            str(commence_time_str).replace("Z", "+00:00")
-                                        )
-                                        .astimezone(timezone.utc)
-                                    )
-                                except Exception:
-                                    commence_dt = None
-                    
-                            # Attach parsed field to game for KalshiIntegrator
-                            if isinstance(game, dict):
-                                game["commence_dt"] = commence_dt
-                            else:
-                                setattr(game, "commence_dt", commence_dt)
-                    
-                        except Exception as e:
-                            st.warning(f"[Commence Parse] Failed to attach commence_dt: {e}")
+                        except Exception:
+                            # If parsing fails, skip this game
+                            continue
 
-                    upcoming_games.append(game)
+                        # Keep only games that are scheduled for today (UTC date)
+                        if commence_dt.date() != today_utc:
+                            continue
 
-            else:
-                # No commence_time, include it
-                upcoming_games.append(game)
-
-                # Add sport_key, league, etc. for each upcoming game (leave the rest
-                # of your existing code here unchanged)
-                for game in upcoming_games:
-                    game["sport_key"] = sport
-            
-                    if sport == "basketball_nba":
-                        game["league"] = "NBA"
-                    elif sport == "basketball_ncaab":
-                        game["league"] = "NCAAB"
-                    elif sport == "americanfootball_nfl":
-                        game["league"] = "NFL"
-                    elif sport == "americanfootball_ncaaf":
-                        game["league"] = "NCAAF"
-                    elif sport == "icehockey_nhl":
-                        game["league"] = "NHL"
-        
-                # 🔽 Flatten core odds for VertexMasterAnalyzer
-                home_team = game.get("home_team") or ""
-                away_team = game.get("away_team") or ""
-        
-                markets = game.get("markets") or {}
-                h2h = markets.get("h2h") or {}
-        
-                home_ml = (h2h.get("home") or {}).get("price")
-                away_ml = (h2h.get("away") or {}).get("price")
-        
-                # Spreads
-                spreads = markets.get("spreads") or []
-                home_spread = away_spread = None
-                home_spread_odds = away_spread_odds = None
-        
-                for o in spreads:
-                    name = (o.get("name") or "").strip()
-                    if name == home_team:
-                        home_spread = o.get("point")
-                        home_spread_odds = o.get("price")
-                    elif name == away_team:
-                        away_spread = o.get("point")
-                        away_spread_odds = o.get("price")
-        
-                # Implied home win probability from American odds
-                implied_home_prob = 0.5
-                try:
-                    if (
-                        isinstance(home_ml, (int, float))
-                        and isfinite(home_ml)
-                        and home_ml != 0
-                    ):
-                        if home_ml > 0:
-                            implied_home_prob = 100.0 / (home_ml + 100.0)
+                        # Attach parsed datetime for downstream Kalshi matching
+                        if isinstance(game, dict):
+                            game["commence_dt"] = commence_dt
                         else:
-                            implied_home_prob = abs(home_ml) / (abs(home_ml) + 100.0)
-                except Exception:
-                    implied_home_prob = 0.5
-        
-                game["home_ml_odds"] = home_ml
-                game["away_ml_odds"] = away_ml
-                game["home_spread"] = home_spread
-                game["away_spread"] = away_spread
-                game["home_spread_odds"] = home_spread_odds
-                game["away_spread_odds"] = away_spread_odds
-                game["implied_home_prob"] = implied_home_prob
-                
-                all_games.append(game)
+                            setattr(game, "commence_dt", commence_dt)
+
+                        # Tag sport and league
+                        game["sport_key"] = sport
+
+                        if sport == "basketball_nba":
+                            game["league"] = "NBA"
+                        elif sport == "basketball_ncaab":
+                            game["league"] = "NCAAB"
+                        elif sport == "americanfootball_nfl":
+                            game["league"] = "NFL"
+                        elif sport == "americanfootball_ncaaf":
+                            game["league"] = "NCAAF"
+                        elif sport == "icehockey_nhl":
+                            game["league"] = "NHL"
+                        else:
+                            # Fallback: use the raw sport key
+                            game["league"] = sport
+
+                        # Flatten core odds for VertexMasterAnalyzer
+                        home_team = game.get("home_team") or ""
+                        away_team = game.get("away_team") or ""
+
+                        markets = game.get("markets") or {}
+                        h2h = markets.get("h2h") or {}
+
+                        home_ml = (h2h.get("home") or {}).get("price")
+                        away_ml = (h2h.get("away") or {}).get("price")
+
+                        spreads = markets.get("spreads") or []
+                        home_spread = away_spread = None
+                        home_spread_odds = away_spread_odds = None
+
+                        for o in spreads:
+                            name = (o.get("name") or "").strip()
+                            if name == home_team:
+                                home_spread = o.get("point")
+                                home_spread_odds = o.get("price")
+                            elif name == away_team:
+                                away_spread = o.get("point")
+                                away_spread_odds = o.get("price")
+
+                        # Implied home win probability from American odds
+                        implied_home_prob = 0.5
+                        try:
+                            if isinstance(home_ml, (int, float)) and isfinite(home_ml) and home_ml != 0:
+                                if home_ml > 0:
+                                    implied_home_prob = 100.0 / (home_ml + 100.0)
+                                else:
+                                    implied_home_prob = abs(home_ml) / (abs(home_ml) + 100.0)
+                        except Exception:
+                            implied_home_prob = 0.5
+
+                        game["home_ml_odds"] = home_ml
+                        game["away_ml_odds"] = away_ml
+                        game["home_spread"] = home_spread
+                        game["away_spread"] = away_spread
+                        game["home_spread_odds"] = home_spread_odds
+                        game["away_spread_odds"] = away_spread_odds
+                        game["implied_home_prob"] = implied_home_prob
+
+                        # Collect for Vertex AI Master Analysis and Kalshi matching
+                        all_games.append(game)
                     
                 # =========================================================================
                 # SUPPLEMENTAL DATA: TheOver.ai Picks & Probabilities (NOT Lines!)
