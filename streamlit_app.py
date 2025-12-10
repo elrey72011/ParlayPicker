@@ -9324,43 +9324,40 @@ if is_vertex_ai_enabled():
                         st.warning(f"[Kalshi Filter] Failed filtering today's games: {e}")
                     
                     # -------- END DATE FILTER --------
+                    # --- TODAY FILTER END ---
+                    # We now safely re-parse commence_time for each game BEFORE Kalshi matching
+                    for game in games:
+                        commence_time_str = None
+                        commence_dt = None
                     
-                    
-                    # Now process commence time safely
-                    commence_time_str = game.get("commence_time") if isinstance(game, dict) else None
-                    commence_dt = None
-                    
-                    if commence_time_str:
                         try:
-                            commence_dt = datetime.fromisoformat(
-                                commence_time_str.replace("Z", "+00:00")
+                            # Works whether game is dict or object-like
+                            commence_time_str = (
+                                game.get("commence_time")
+                                if isinstance(game, dict)
+                                else getattr(game, "commence_time", None)
                             )
-                        except Exception:
-                            commence_dt = None
+                    
+                            if commence_time_str:
+                                try:
+                                    commence_dt = (
+                                        datetime.fromisoformat(
+                                            str(commence_time_str).replace("Z", "+00:00")
+                                        )
+                                        .astimezone(timezone.utc)
+                                    )
+                                except Exception:
+                                    commence_dt = None
+                    
+                            # Attach parsed field to game for KalshiIntegrator
+                            if isinstance(game, dict):
+                                game["commence_dt"] = commence_dt
+                            else:
+                                setattr(game, "commence_dt", commence_dt)
+                    
+                        except Exception as e:
+                            st.warning(f"[Commence Parse] Failed to attach commence_dt: {e}")
 
-                    # 1) Only keep games on today's calendar day (UTC)
-                    if commence_time.date() != today_utc:
-                        logger.info(
-                            f"Skipping non-today game: {game.get('home_team')} vs "
-                            f"{game.get('away_team')} ({commence_time.date()} != {today_utc})"
-                        )
-                        continue
-
-                    # 2) Only include games that haven't started yet (5-min grace if you want)
-                    if commence_time > now_utc:
-                        # keep the ISO string for later display / export
-                        game["commence_time"] = commence_time_str
-                        upcoming_games.append(game)
-                    else:
-                        logger.info(
-                            f"Filtered out past game: {game.get('home_team')} vs "
-                            f"{game.get('away_team')} (commenced {commence_time})"
-                        )
-                except Exception as e:
-                    # If we can't parse time, include the game to be safe
-                    logger.warning(
-                        f"Could not parse commence_time for game, including anyway: {e}"
-                    )
                     upcoming_games.append(game)
 
             else:
