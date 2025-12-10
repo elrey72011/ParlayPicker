@@ -9252,80 +9252,71 @@ if is_vertex_ai_enabled():
         with st.spinner("Running comprehensive AI analysis... Consolidating all data sources..."):
             try:
                 selected_sports = []
+                if 'NBA' in st.session_state.get('selected_sports', []):
+                    selected_sports.append('basketball_nba')
                 if 'NCAAF' in st.session_state.get('selected_sports', []):
                     selected_sports.append('americanfootball_ncaaf')
                 if 'NFL' in st.session_state.get('selected_sports', []):
                     selected_sports.append('americanfootball_nfl')
-                if 'NBA' in st.session_state.get('selected_sports', []):
-                    selected_sports.append('basketball_nba')
                 if 'NCAAB' in st.session_state.get('selected_sports', []):
                     selected_sports.append('basketball_ncaab')
                 if 'NHL' in st.session_state.get('selected_sports', []):
                     selected_sports.append('icehockey_nhl')
-                
+            
                 if not selected_sports:
-                    selected_sports = ['basketball_nba', 'americanfootball_nfl', 'americanfootball_ncaaf', 'basketball_ncaab', 'icehockey_nhl']
-                
+                    selected_sports = [
+                        'basketball_nba',
+                        'americanfootball_nfl',
+                        'americanfootball_ncaaf',
+                        'basketball_ncaab',
+                        'icehockey_nhl'
+                    ]
+            
                 all_games = []
-
-                # =========================================================================
-                # PRIMARY DATA SOURCE: TheOddsAPI (Real Sportsbook Lines)
-                # Use TheOddsAPI for all spreads/totals/moneylines from real books (Novig, DraftKings, FanDuel, etc.)
-                # =========================================================================
-                
+            
+                # PRIMARY DATA SOURCE: TheOddsAPI
                 from datetime import datetime, timezone
                 from math import isfinite
-                
-                # =========================================================================
-                # PRIMARY DATA SOURCE: TheOddsAPI (Real Sportsbook Lines)
-                # Use TheOddsAPI for all spreads/totals/moneylines from real books
-                # =========================================================================
+            
                 odds_api_key = resolve_odds_api_key()
-                
+            
                 if not odds_api_key:
                     st.error("❌ TheOddsAPI key required for Vertex AI Master Analysis")
-                    st.info("💡 Add ODDS_API_KEY to secrets.toml or enter in sidebar")
                     st.stop()
-                
-                st.info("📊 Fetching games from TheOddsAPI (all sportsbooks including Novig)...")
-                
-                # Get current time for filtering past games
+            
                 now_utc = datetime.now(timezone.utc)
                 today_utc = now_utc.date()
-                
+            
+                st.info("📡 Fetching games from TheOddsAPI...")
+            
                 for sport in selected_sports:
                     snapshot = fetch_oddsapi_snapshot(odds_api_key, sport)
                     games = snapshot.get("events", [])
+            
+                    upcoming_games = []   # ← now inside the loop correctly
+            
+                    for game in games:
+                        commence_time_str = game.get("commence_time") or ""
+                        if not commence_time_str:
+                            continue
+            
+                        commence_dt = datetime.fromisoformat(
+                            commence_time_str.replace("Z", "+00:00")
+                        )
+            
+                        # Skip past or future games (only today's games)
+                        if commence_dt.date() != today_utc:
+                            continue
+            
+                        upcoming_games.append(game)
+            
+                    # End of inner game loop
+            
+                # End of sport loop
+            
+            except Exception as e:
+                st.error(f"Master Analysis Error: {e}")
 
-    # Filter out games that have already started/finished
-    upcoming_games = []
-        for game in games:
-            commence_time_str = game.get("commence_time")            
-            # --- TODAY FILTER BEGIN ---
-            def is_today(dt_utc):
-                if not dt_utc:
-                    return False
-                try:
-                    import pytz
-                    tz = pytz.timezone(st.session_state.get("user_timezone", "America/New_York"))
-                    dt_local = dt_utc.astimezone(tz)
-                    today_local = datetime.now(tz).date()
-                    return dt_local.date() == today_local
-                except Exception:
-                    return False
-        
-            commence_raw = game.get("commence_time") or game.get("commence")
-            if not commence_raw:
-                continue
-        
-            try:
-                commence_dt = datetime.fromisoformat(str(commence_raw).replace("Z", "+00:00"))
-            except:
-                continue
-        
-            # Only include today's games
-            if not is_today(commence_dt):
-                continue
             # --- TODAY FILTER END ---
                             
                             if commence_time_str:
