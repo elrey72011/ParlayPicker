@@ -150,7 +150,8 @@ class VertexMasterAnalyzer:
                                 g_dt = g_time
 
                         # Use status=None to find markets even if closed/locked
-                        kalshi_info = match_game_to_kalshi(
+                        # NEW CODE (Fixes Crash)
+                        raw_kalshi_result = match_game_to_kalshi(
                             game_league,
                             game.get("home_team", ""),
                             game.get("away_team", ""),
@@ -158,8 +159,8 @@ class VertexMasterAnalyzer:
                             integrator=self.kalshi,
                             status=None,
                         )
-                    except Exception as e:
-                        logger.warning(f"Kalshi prefetch error: {e}")
+                        # Convert dataclass to dict so .get() works
+                        kalshi_info = asdict(raw_kalshi_result) if raw_kalshi_result else None
 
                 # 3. Build Features (including Kalshi flags/metadata)
                 feats = self.build_comprehensive_features(
