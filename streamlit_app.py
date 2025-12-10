@@ -9302,7 +9302,38 @@ if is_vertex_ai_enabled():
                     upcoming_games = []
                         for game in games:
                             commence_time_str = game.get("commence_time")
-                    
+
+                            # --- BEGIN TODAY FILTER ---
+                            def is_today(dt_utc):
+                                """Returns True if dt_utc occurs today (local timezone)."""
+                                if not dt_utc:
+                                    return False
+                            
+                                try:
+                                    import pytz
+                                    tz = pytz.timezone(st.session_state.get("user_timezone", "America/New_York"))
+                                    dt_local = dt_utc.astimezone(tz)
+                                    today_local = datetime.now(tz).date()
+                                    return dt_local.date() == today_local
+                                except Exception:
+                                    return False
+                            
+                            
+                            # Parse commence_time safely
+                            commence_raw = game.get("commence_time") or game.get("commence")
+                            if not commence_raw:
+                                continue
+                            
+                            try:
+                                commence_dt = datetime.fromisoformat(str(commence_raw).replace("Z", "+00:00"))
+                            except:
+                                continue  # skip broken dates
+                            
+                            # Only include today's games
+                            if not is_today(commence_dt):
+                                continue
+                            # --- END TODAY FILTER ---
+                            
                             if commence_time_str:
                                 try:
                                     # Parse commence_time (ISO format from TheOddsAPI)
