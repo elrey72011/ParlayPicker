@@ -1452,7 +1452,8 @@ def render_sidebar_controls() -> Dict[str, Any]:
         sports = sidebar.multiselect(
             "Sports",
             options=APP_CFG["sports_common"],
-            default=default_sports,
+            # REMOVE the 'default' argument because 'key' handles the value via session_state
+            # default=default_sports, 
             format_func=format_sport_label,
             key="selected_sports",
         )
