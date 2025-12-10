@@ -8,6 +8,7 @@ import logging
 import re
 from datetime import datetime
 from typing import Any, Dict, List, Optional
+from dataclasses import asdict  # <--- ADDED THIS IMPORT
 
 import pandas as pd
 import streamlit as st
@@ -150,7 +151,6 @@ class VertexMasterAnalyzer:
                                 g_dt = g_time
 
                         # Use status=None to find markets even if closed/locked
-                        # NEW CODE (Fixes Crash)
                         raw_kalshi_result = match_game_to_kalshi(
                             game_league,
                             game.get("home_team", ""),
@@ -161,6 +161,10 @@ class VertexMasterAnalyzer:
                         )
                         # Convert dataclass to dict so .get() works
                         kalshi_info = asdict(raw_kalshi_result) if raw_kalshi_result else None
+                    
+                    except Exception as e:
+                        # Added missing except block to prevent SyntaxError
+                        logger.warning(f"Kalshi prefetch error: {e}")
 
                 # 3. Build Features (including Kalshi flags/metadata)
                 feats = self.build_comprehensive_features(
