@@ -9319,7 +9319,7 @@ if is_vertex_ai_enabled():
                             continue
 
                         # Keep only games that are scheduled for today (UTC date)
-                        if commence_dt.date() != today_utc:
+                        if not (today_utc <= commence_dt.date() <= today_utc + timedelta(days=1)):
                             continue
 
                         # Attach parsed datetime for downstream Kalshi matching
