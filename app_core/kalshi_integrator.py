@@ -38,6 +38,48 @@ LEAGUE_SERIES_MAP: Dict[str, str] = {
     "NCAAB": "KXNCAAB",
 }
 
+KALSHI_TEAM_ABBREVIATIONS: Dict[str, List[str]] = {
+    "ATLANTA HAWKS": ["ATL"], "BOSTON CELTICS": ["BOS"], "BROOKLYN NETS": ["BKN", "BRK"],
+    "CHARLOTTE HORNETS": ["CHA", "CLT"], "CHICAGO BULLS": ["CHI"], "CLEVELAND CAVALIERS": ["CLE"],
+    "DALLAS MAVERICKS": ["DAL"], "DENVER NUGGETS": ["DEN"], "DETROIT PISTONS": ["DET"],
+    "GOLDEN STATE WARRIORS": ["GSW"], "HOUSTON ROCKETS": ["HOU"], "INDIANA PACERS": ["IND"],
+    "LOS ANGELES CLIPPERS": ["LAC"], "LOS ANGELES LAKERS": ["LAL"], "MEMPHIS GRIZZLIES": ["MEM"],
+    "MIAMI HEAT": ["MIA"], "MILWAUKEE BUCKS": ["MIL"], "MINNESOTA TIMBERWOLVES": ["MIN"],
+    "NEW ORLEANS PELICANS": ["NOP"], "NEW YORK KNICKS": ["NYK"], "OKLAHOMA CITY THUNDER": ["OKC"],
+    "ORLANDO MAGIC": ["ORL"], "PHILADELPHIA 76ERS": ["PHI"], "PHOENIX SUNS": ["PHX"],
+    "PORTLAND TRAIL BLAZERS": ["POR"], "SACRAMENTO KINGS": ["SAC"], "SAN ANTONIO SPURS": ["SAS"],
+    "TORONTO RAPTORS": ["TOR"], "UTAH JAZZ": ["UTA"], "WASHINGTON WIZARDS": ["WAS", "WSH"],
+    "ARIZONA CARDINALS": ["ARI"], "ATLANTA FALCONS": ["ATL"], "BALTIMORE RAVENS": ["BAL"],
+    "BUFFALO BILLS": ["BUF"], "CAROLINA PANTHERS": ["CAR"], "CHICAGO BEARS": ["CHI"],
+    "CINCINNATI BENGALS": ["CIN"], "CLEVELAND BROWNS": ["CLE"], "DALLAS COWBOYS": ["DAL"],
+    "DENVER BRONCOS": ["DEN"], "DETROIT LIONS": ["DET"], "GREEN BAY PACKERS": ["GB"],
+    "HOUSTON TEXANS": ["HOU"], "INDIANAPOLIS COLTS": ["IND"], "JACKSONVILLE JAGUARS": ["JAX"],
+    "KANSAS CITY CHIEFS": ["KC"], "LAS VEGAS RAIDERS": ["LV"], "LOS ANGELES CHARGERS": ["LAC"],
+    "LOS ANGELES RAMS": ["LAR"], "MIAMI DOLPHINS": ["MIA"], "MINNESOTA VIKINGS": ["MIN"],
+    "NEW ENGLAND PATRIOTS": ["NE"], "NEW ORLEANS SAINTS": ["NO"], "NEW YORK GIANTS": ["NYG"],
+    "NEW YORK JETS": ["NYJ"], "PHILADELPHIA EAGLES": ["PHI"], "PITTSBURGH STEELERS": ["PIT"],
+    "SAN FRANCISCO 49ERS": ["SF"], "SEATTLE SEAHAWKS": ["SEA"], "TAMPA BAY BUCCANEERS": ["TB"],
+    "TENNESSEE TITANS": ["TEN"], "WASHINGTON COMMANDERS": ["WAS"],
+}
+
+TEAM_FUZZY_THRESHOLD = 1.5
+DATE_TOLERANCE_DAYS = 5
+DATE_SOFT_PENALTY = 0.10
+
+@dataclass
+class KalshiMatchResult:
+    matched: bool
+    kalshi_available: bool
+    label: str
+    probability: Optional[float]
+    raw_event_id: Optional[str]
+    league: Optional[str] = None
+    reason: str = ""
+    market_type: Optional[str] = None
+    direction: Optional[str] = None
+    game_date: Optional[datetime] = None
+    kalshi_volume: Optional[float] = None
+
 # ---------------------------------------------------------------------------
 # Helper Functions
 # ---------------------------------------------------------------------------
@@ -77,24 +119,6 @@ def _extract_market_type(title: str, ticker: str) -> str:
     if "MONEYLINE" in t or "ML" in t: return "moneyline"
     return "generic"
 
-@dataclass
-class KalshiMatchResult:
-    matched: bool
-    kalshi_available: bool
-    label: str
-    probability: Optional[float]
-    raw_event_id: Optional[str]
-    league: Optional[str] = None
-    reason: str = ""
-    market_type: Optional[str] = None
-    direction: Optional[str] = None
-    game_date: Optional[datetime] = None
-    kalshi_volume: Optional[float] = None
-
-# ---------------------------------------------------------------------------
-# Parsing Logic
-# ---------------------------------------------------------------------------
-
 def _parse_market_metadata(mkt: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     title = (mkt.get("title") or "").strip()
     if not title: return None
@@ -111,6 +135,8 @@ def _parse_market_metadata(mkt: Dict[str, Any]) -> Optional[Dict[str, Any]]:
 
     upper_title = title.upper()
     teams: List[str] = []
+    
+    # Try splitting by common separators
     separators = [" VS ", " VS. ", " V ", " @ ", " AT ", " - ", " / ", " | "]
     for sep in separators:
         if sep in upper_title:
@@ -131,17 +157,26 @@ def _parse_market_metadata(mkt: Dict[str, Any]) -> Optional[Dict[str, Any]]:
 
     return {"title": title, "market_date": market_dt, "teams": teams, "probability": prob, "market_type": market_type}
 
-def _team_score(team_code: str, target_norm: str) -> float:
-    """Simple fuzzy matching score."""
+def _build_team_codes(team_name: str) -> List[str]:
+    norm = normalize_name(team_name)
+    codes: List[str] = []
+    for full_name, abbrs in KALSHI_TEAM_ABBREVIATIONS.items():
+        if normalize_name(full_name) == norm:
+            codes.extend(abbrs)
+    tokens = norm.split()
+    for t in tokens:
+        if len(t) >= 2 and t not in codes:
+            codes.append(t)
+    return list(dict.fromkeys(codes))
+
+def _team_score(team_code: str, target_norm: str, target_codes: List[str]) -> float:
     if not team_code: return 0.0
+    clean_code = team_code.strip().upper()
+    if clean_code in target_codes: return 2.0
     norm_code = normalize_name(team_code)
+    if norm_code == target_norm and norm_code: return 1.5
+    if norm_code and target_norm and (norm_code in target_norm or target_norm in norm_code): return 1.2
     
-    # Exact Match
-    if norm_code == target_norm: return 2.0
-    # Substring Match
-    if norm_code in target_norm or target_norm in norm_code: return 1.5
-    
-    # Word Overlap
     words_code = set(norm_code.split())
     words_target = set(target_norm.split())
     if words_code & words_target: return 1.0
@@ -162,6 +197,8 @@ def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time:
 
     home_norm = normalize_name(home_team)
     away_norm = normalize_name(away_team)
+    home_codes = _build_team_codes(home_team)
+    away_codes = _build_team_codes(away_team)
 
     markets = kalshi.get_markets(status=status)
     if not markets:
@@ -188,8 +225,8 @@ def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time:
         if len(teams) < 2: continue
 
         # Score both orientations (Home vs Away OR Away vs Home)
-        s1 = _team_score(teams[0], home_norm) + _team_score(teams[1], away_norm)
-        s2 = _team_score(teams[0], away_norm) + _team_score(teams[1], home_norm)
+        s1 = _team_score(teams[0], home_norm, home_codes) + _team_score(teams[1], away_norm, away_codes)
+        s2 = _team_score(teams[0], away_norm, away_codes) + _team_score(teams[1], home_norm, home_codes)
         score = max(s1, s2)
 
         # Date penalty (±24 hours tolerance for timezone shifts)
