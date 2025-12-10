@@ -9293,12 +9293,13 @@ if is_vertex_ai_enabled():
                     snapshot = fetch_oddsapi_snapshot(odds_api_key, sport)
                     games = snapshot.get("events", [])
             
-                    # --------------------------------------------------
+                    # ---------------------------------------------
                     # FILTER TODAY'S GAMES BEFORE KALSHI MATCHING
-                    # --------------------------------------------------
+                    # ---------------------------------------------
+                    
                     try:
                         upcoming_games = []
-                        now_utc = datetime.now(timezone.utc)
+                        now_utc = datetime.now(timezone.utc).date()   # today in UTC
                     
                         for game in games:
                             commence_raw = game.get("commence_time")
@@ -9308,36 +9309,34 @@ if is_vertex_ai_enabled():
                                 try:
                                     commence_dt = datetime.fromisoformat(
                                         commence_raw.replace("Z", "+00:00")
-                                    ).astimezone(timezone.utc)
+                                    )
                                 except Exception:
                                     commence_dt = None
                     
                             # Keep only today's games
-                            if commence_dt and commence_dt.date() == now_utc.date():
+                            if commence_dt and commence_dt.date() == now_utc:
                                 upcoming_games.append(game)
                     
+                        # Replace original game list with filtered list
                         games = upcoming_games
                     
                     except Exception as e:
-                        st.warning(f"[Kalshi Filter] Failed to filter today's games: {e}")
+                        st.warning(f"[Kalshi Filter] Failed filtering today's games: {e}")
                     
-                    # --------------------------------------------------
-                    # END TODAY FILTER
-                    # --------------------------------------------------
+                    # -------- END DATE FILTER --------
                     
-                    # Continue safely — this will NOT be part of try/except above
+                    
+                    # Now process commence time safely
                     commence_time_str = game.get("commence_time") if isinstance(game, dict) else None
-
-
-            if commence_time_str:
-                try:
-                    commence_dt = datetime.fromisoformat(
-                        commence_time_str.replace("Z", "+00:00")
-                    ).astimezone(timezone.utc)
-                except Exception:
                     commence_dt = None
-            else:
-                commence_dt = None
+                    
+                    if commence_time_str:
+                        try:
+                            commence_dt = datetime.fromisoformat(
+                                commence_time_str.replace("Z", "+00:00")
+                            )
+                        except Exception:
+                            commence_dt = None
 
                     # 1) Only keep games on today's calendar day (UTC)
                     if commence_time.date() != today_utc:
