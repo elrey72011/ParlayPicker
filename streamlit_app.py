@@ -9318,42 +9318,41 @@ if is_vertex_ai_enabled():
                 st.error(f"Master Analysis Error: {e}")
 
             # --- TODAY FILTER END ---
-                            
-                            if commence_time_str:
-                                try:
-                                    # Parse commence_time (ISO format from TheOddsAPI)
-                                    commence_time = datetime.fromisoformat(
-                                        commence_time_str.replace("Z", "+00:00")
-                                    )
-        
-                                    # 1) Only keep games on today's calendar day (UTC)
-                                    if commence_time.date() != today_utc:
-                                        logger.info(
-                                            f"Skipping non-today game: {game.get('home_team')} vs "
-                                            f"{game.get('away_team')} ({commence_time.date()} != {today_utc})"
-                                        )
-                                        continue
+            if commence_time_str:
+                try:
+                    # Parse commence_time (ISO format from TheOddsAPI)
+                    commence_time = datetime.fromisoformat(
+                        commence_time_str.replace("Z", "+00:00")
+                    )
 
-                                    # 2) Only include games that haven't started yet (5-min grace if you want)
-                                    if commence_time > now_utc:
-                                        # keep the ISO string for later display / export
-                                        game["commence_time"] = commence_time_str
-                                        upcoming_games.append(game)
-                                    else:
-                                        logger.info(
-                                            f"Filtered out past game: {game.get('home_team')} vs "
-                                            f"{game.get('away_team')} (commenced {commence_time})"
-                                        )
-                                except Exception as e:
-                                    # If we can't parse time, include the game to be safe
-                                    logger.warning(
-                                        f"Could not parse commence_time for game, including anyway: {e}"
-                                    )
-                                    upcoming_games.append(game)
+                    # 1) Only keep games on today's calendar day (UTC)
+                    if commence_time.date() != today_utc:
+                        logger.info(
+                            f"Skipping non-today game: {game.get('home_team')} vs "
+                            f"{game.get('away_team')} ({commence_time.date()} != {today_utc})"
+                        )
+                        continue
 
-                            else:
-                                # No commence_time, include it
-                                upcoming_games.append(game)
+                    # 2) Only include games that haven't started yet (5-min grace if you want)
+                    if commence_time > now_utc:
+                        # keep the ISO string for later display / export
+                        game["commence_time"] = commence_time_str
+                        upcoming_games.append(game)
+                    else:
+                        logger.info(
+                            f"Filtered out past game: {game.get('home_team')} vs "
+                            f"{game.get('away_team')} (commenced {commence_time})"
+                        )
+                except Exception as e:
+                    # If we can't parse time, include the game to be safe
+                    logger.warning(
+                        f"Could not parse commence_time for game, including anyway: {e}"
+                    )
+                    upcoming_games.append(game)
+
+            else:
+                # No commence_time, include it
+                upcoming_games.append(game)
 
                         # Add sport_key, league, etc. for each upcoming game (leave the rest
                         # of your existing code here unchanged)
