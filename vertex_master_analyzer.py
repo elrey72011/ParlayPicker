@@ -8,7 +8,7 @@ import logging
 import re
 from datetime import datetime
 from typing import Any, Dict, List, Optional
-from dataclasses import asdict  # <--- ADDED THIS IMPORT
+from dataclasses import asdict # <--- Added missing import
 
 import pandas as pd
 import streamlit as st
@@ -159,12 +159,12 @@ class VertexMasterAnalyzer:
                             integrator=self.kalshi,
                             status=None,
                         )
-                        # Convert dataclass to dict so .get() works
+                        # Convert object to dict so .get works
                         kalshi_info = asdict(raw_kalshi_result) if raw_kalshi_result else None
                     
                     except Exception as e:
-                        # Added missing except block to prevent SyntaxError
-                        logger.warning(f"Kalshi prefetch error: {e}")
+                         # FIXED: Added except block to handle prefetch errors without crashing
+                        logger.warning(f"Kalshi prefetch error for {game.get('home_team')}: {e}")
 
                 # 3. Build Features (including Kalshi flags/metadata)
                 feats = self.build_comprehensive_features(
@@ -172,7 +172,6 @@ class VertexMasterAnalyzer:
                 )
 
                 # 4. Optional LLM Assistant (placeholder AI reasoning)
-                #    This does NOT replace Vertex; it adds commentary/extra columns.
                 (
                     assistant_contracts,
                     assistant_best_side,
@@ -263,17 +262,8 @@ class VertexMasterAnalyzer:
         kalshi_info: Optional[Dict[str, Any]],
         league: str,
     ):
-        """
-        Call the optional LLM assistant (e.g., Gemini wrapper) to get a
-        second-opinion recommendation based on Kalshi info + basic odds.
-
-        Returns:
-            (contracts_list, best_side, best_confidence, best_reason)
-        """
         if not LLM_ASSISTANT_AVAILABLE:
             return [], None, None, None
-
-        # Only bother if we have a Kalshi match
         if not kalshi_info or not kalshi_info.get("kalshi_available"):
             return [], None, None, None
 
@@ -286,16 +276,11 @@ class VertexMasterAnalyzer:
             if not contracts:
                 return [], None, None, None
 
-            # Choose the highest-confidence suggestion
             best = max(contracts, key=lambda c: c.get("confidence", 0))
-            best_side = best.get("side")
-            best_conf = best.get("confidence")
-            best_reason = best.get("reason")
-
-            return contracts, best_side, best_conf, best_reason
+            return contracts, best.get("side"), best.get("confidence"), best.get("reason")
 
         except Exception as e:
-            logger.warning(f"LLM assistant failed for game {feats.get('game_time')}: {e}")
+            logger.warning(f"LLM assistant failed: {e}")
             return [], None, None, None
 
     def _build_kalshi_context_for_llm(
@@ -304,68 +289,20 @@ class VertexMasterAnalyzer:
         kalshi_info: Optional[Dict[str, Any]],
         league: str,
     ) -> str:
-        """
-        Build a markdown context string for the LLM assistant, summarizing:
-          - League, teams, game time
-          - Sportsbook odds (ML + spreads)
-          - Kalshi probability and label if available
-        """
         if not kalshi_info:
             return ""
 
         home = feats.get("home_team") or ""
         away = feats.get("away_team") or ""
-        game_time = feats.get("game_time") or ""
         kalshi_label = kalshi_info.get("label") or ""
         kalshi_prob = kalshi_info.get("probability")
-        kalshi_status = kalshi_info.get("reason") or ""
-        kalshi_ticker = kalshi_info.get("raw_event_id") or ""
-
-        lines: List[str] = []
-        lines.append(f"# {league} Game Kalshi Context")
-        lines.append("")
-        lines.append(f"Game: {away} @ {home}")
-        lines.append(f"Game Time (UTC/ISO): {game_time}")
-        lines.append("")
-
-        # Sportsbook odds snapshot
-        lines.append("## Sportsbook Odds")
-        lines.append(f"- Home ML Odds: {feats.get('home_ml_odds')}")
-        lines.append(f"- Away ML Odds: {feats.get('away_ml_odds')}")
-        lines.append(
-            f"- Home Spread: {feats.get('home_spread')} "
-            f"(odds {feats.get('home_spread_odds')})"
-        )
-        lines.append(
-            f"- Away Spread: {feats.get('away_spread')} "
-            f"(odds {feats.get('away_spread_odds')})"
-        )
-        lines.append("")
-
-        # Kalshi info
-        lines.append("## Kalshi Market")
-        lines.append(f"- Ticker: {kalshi_ticker}")
-        lines.append(f"- Label: {kalshi_label}")
-        if kalshi_prob is not None:
-            try:
-                pct = float(kalshi_prob) * 100
-                lines.append(f"- Kalshi Implied Probability: {pct:.1f}%")
-            except Exception:
-                lines.append(f"- Kalshi Implied Probability: {kalshi_prob}")
-        else:
-            lines.append("- Kalshi Implied Probability: None")
-        lines.append(f"- Kalshi Status: {kalshi_status}")
-        lines.append("")
-
-        # Simple instructions for the assistant (high-level)
-        lines.append(
-            "Given the sportsbook odds and the Kalshi market info above, "
-            "identify whether the home side or away side appears underpriced "
-            "and explain why. Return your answer as JSON with contracts, "
-            "each containing: ticker, side ('home'/'away' or 'yes'/'no'), "
-            "bid_price (0-100), reason, and confidence (0-100)."
-        )
-
+        
+        lines = [
+            f"# {league} Game Kalshi Context",
+            f"Game: {away} @ {home}",
+            f"Kalshi Label: {kalshi_label}",
+            f"Kalshi Prob: {kalshi_prob}",
+        ]
         return "\n".join(lines)
 
     # -------------------------------
@@ -635,7 +572,10 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
         "Kalshi",
         "Kalshi Match Debug",
     ]
-    display_df = display_df[cols]
+    
+    # Filter only columns that actually exist to avoid KeyError
+    existing_cols = [c for c in cols if c in display_df.columns]
+    st.dataframe(display_df[existing_cols], use_container_width=True)
 
     # --- CSV export with raw Kalshi fields ------------------------------
     export_cols = [
