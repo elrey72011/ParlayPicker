@@ -9293,9 +9293,9 @@ if is_vertex_ai_enabled():
                     snapshot = fetch_oddsapi_snapshot(odds_api_key, sport)
                     games = snapshot.get("events", [])
             
-                    # -----------------------------------------
+                    # --------------------------------------------------
                     # FILTER TODAY'S GAMES BEFORE KALSHI MATCHING
-                    # -----------------------------------------
+                    # --------------------------------------------------
                     try:
                         upcoming_games = []
                         now_utc = datetime.now(timezone.utc)
@@ -9303,6 +9303,7 @@ if is_vertex_ai_enabled():
                         for game in games:
                             commence_raw = game.get("commence_time")
                             commence_dt = None
+                    
                             if commence_raw:
                                 try:
                                     commence_dt = datetime.fromisoformat(
@@ -9311,18 +9312,22 @@ if is_vertex_ai_enabled():
                                 except Exception:
                                     commence_dt = None
                     
-                            # keep only today's games
+                            # Keep only today's games
                             if commence_dt and commence_dt.date() == now_utc.date():
                                 upcoming_games.append(game)
                     
-                        # Replace original games list
                         games = upcoming_games
                     
                     except Exception as e:
                         st.warning(f"[Kalshi Filter] Failed to filter today's games: {e}")
+                    
+                    # --------------------------------------------------
+                    # END TODAY FILTER
+                    # --------------------------------------------------
+                    
+                    # Continue safely — this will NOT be part of try/except above
+                    commence_time_str = game.get("commence_time") if isinstance(game, dict) else None
 
-            # --- TODAY FILTER END ---
-            commence_time_str = game.get("commence_time") if isinstance(game, dict) else None
 
             if commence_time_str:
                 try:
