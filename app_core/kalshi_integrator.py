@@ -1,6 +1,7 @@
 """
 Kalshi Integrator with team-aware, league-aware fuzzy matching.
 Updated to accept API keys directly in constructor and force Trading API URL.
+Fixed NoneType crash on date comparison.
 """
 
 from __future__ import annotations
@@ -229,11 +230,15 @@ def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time:
         score_away_first = _team_score(teams[0], away_norm, away_codes) + _team_score(teams[1], home_norm, home_codes)
         score = max(score_home_first, score_away_first)
 
-        # Date penalty
-        if game_dt and meta.get("market_date"):
-            diff = abs((meta["market_date"].date() - game_dt.date()).days)
-            if diff > DATE_TOLERANCE_DAYS: continue
-            score -= (diff * DATE_SOFT_PENALTY)
+        # Date penalty - SAFE check for None
+        m_date = meta.get("market_date")
+        if game_dt and m_date:
+            try:
+                diff = abs((m_date.date() - game_dt.date()).days)
+                if diff > DATE_TOLERANCE_DAYS: continue
+                score -= (diff * DATE_SOFT_PENALTY)
+            except Exception:
+                pass # Ignore date comparison errors
 
         if score > best_score:
             best_score = score
@@ -272,15 +277,10 @@ class KalshiIntegrator:
 
     def _make_authenticated_request(self, method: str, endpoint: str, params: Optional[Dict] = None) -> Optional[dict]:
         url = f"{self.api_url}{endpoint}"
-        # Kalshi v2 Trading API uses basic Authorization header (unusual but specific to some endpoints) 
-        # OR simply KALSHI-ACCESS-KEY. Using provided key directly.
         headers = {
             "Content-Type": "application/json",
             "KALSHI-ACCESS-KEY": self.api_key
         }
-        
-        # If the key provided is a full RSA key (long block), it might be for a different auth flow.
-        # But for simple access, we just pass what we have.
         
         try:
             resp = requests.request(method, url, headers=headers, params=params, timeout=10)
@@ -301,16 +301,7 @@ class KalshiIntegrator:
 
         # For sports, we fetch all markets to ensure we don't miss anything
         data = self._make_authenticated_request("GET", "/markets", params={"limit": 1000, "status": status})
-        if not data:
-            # Fallback to public/demo markets if auth fails
-            logger.warning("Auth failed, trying public markets endpoint...")
-            try:
-                resp = requests.get("https://demo-api.kalshi.co/trade-api/v2/markets", params={"limit": 100})
-                if resp.status_code == 200:
-                    data = resp.json()
-            except:
-                pass
-
+        
         markets = data.get("markets", []) if data else []
         if markets:
             self._markets_cache = markets
