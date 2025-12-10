@@ -1,5 +1,6 @@
 """
 Kalshi Integrator with team-aware, league-aware fuzzy matching.
+Updated to accept API keys directly in constructor.
 
 Drop this file in: app_core/kalshi_integrator.py
 """
@@ -75,7 +76,6 @@ LEAGUE_SERIES_MAP: Dict[str, str] = {
 }
 
 # Abbreviation mapping – not exhaustive, but covers major pro teams.
-# For NCAA, fuzzy matching on full names will still work.
 KALSHI_TEAM_ABBREVIATIONS: Dict[str, List[str]] = {
     # NBA
     "ATLANTA HAWKS": ["ATL"],
@@ -170,7 +170,6 @@ KALSHI_TEAM_ABBREVIATIONS: Dict[str, List[str]] = {
 
 # Matching thresholds
 TEAM_FUZZY_THRESHOLD = 1.5   # overall score threshold to accept a market
-TEAM_NAME_SIMILARITY = 0.7   # reserved for future, if you add RapidFuzz
 DATE_TOLERANCE_DAYS = 5
 DATE_SOFT_PENALTY = 0.10
 
@@ -307,13 +306,6 @@ def _build_team_codes(team_name: str) -> List[str]:
 def _team_score(team_code: str, target_norm: str, target_codes: List[str]) -> float:
     """
     Score how well a Kalshi team token matches a sportsbook team name.
-
-    2.0  - exact code / abbreviation match (e.g. NYK, MIA)
-    1.5  - exact normalized name match
-    1.2  - one normalized name contains the other
-    1.0  - ≥50% word overlap
-    0.5  - some word overlap but weaker
-    0.0  - no meaningful match
     """
     if not team_code:
         return 0.0
@@ -554,8 +546,16 @@ class KalshiIntegrator:
     Only the /markets endpoint is used for matching.
     """
 
-    def __init__(self) -> None:
-        self.api_key: Optional[str] = None
+    def __init__(self, api_key: Optional[str] = None, api_secret: Optional[str] = None) -> None:
+        """
+        Initialize the integrator.
+        Accepts optional arguments to satisfy dependency injection in main app.
+        """
+        self.api_key: Optional[str] = api_key
+        # Note: api_secret is accepted for compatibility but primarily unused
+        # in this simplified wrapper which relies on KEY header auth.
+        self.api_secret: Optional[str] = api_secret
+        
         self.api_url: str = os.getenv(
             "KALSHI_API_URL", "https://trading-api.kalshi.com/trade-api/v2"
         )
@@ -565,7 +565,10 @@ class KalshiIntegrator:
         self.last_error: Optional[str] = None
         self._auth_ready: bool = False
 
-        self._load_config()
+        if not self.api_key:
+            self._load_config()
+        else:
+            self._auth_ready = True
 
     # ------------------------------------------------------------------
     # Config / auth
