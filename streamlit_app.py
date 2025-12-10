@@ -9293,29 +9293,33 @@ if is_vertex_ai_enabled():
                     snapshot = fetch_oddsapi_snapshot(odds_api_key, sport)
                     games = snapshot.get("events", [])
             
-                    upcoming_games = []   # ← now inside the loop correctly
-            
-                    for game in games:
-                        commence_time_str = game.get("commence_time") or ""
-                        if not commence_time_str:
-                            continue
-            
-                        commence_dt = datetime.fromisoformat(
-                            commence_time_str.replace("Z", "+00:00")
-                        )
-            
-                        # Skip past or future games (only today's games)
-                        if commence_dt.date() != today_utc:
-                            continue
-            
-                        upcoming_games.append(game)
-            
-                    # End of inner game loop
-            
-                # End of sport loop
-            
-            except Exception as e:
-                st.error(f"Master Analysis Error: {e}")
+                    # -----------------------------------------
+                    # FILTER TODAY'S GAMES BEFORE KALSHI MATCHING
+                    # -----------------------------------------
+                    try:
+                        upcoming_games = []
+                        now_utc = datetime.now(timezone.utc)
+                    
+                        for game in games:
+                            commence_raw = game.get("commence_time")
+                            commence_dt = None
+                            if commence_raw:
+                                try:
+                                    commence_dt = datetime.fromisoformat(
+                                        commence_raw.replace("Z", "+00:00")
+                                    ).astimezone(timezone.utc)
+                                except Exception:
+                                    commence_dt = None
+                    
+                            # keep only today's games
+                            if commence_dt and commence_dt.date() == now_utc.date():
+                                upcoming_games.append(game)
+                    
+                        # Replace original games list
+                        games = upcoming_games
+                    
+                    except Exception as e:
+                        st.warning(f"[Kalshi Filter] Failed to filter today's games: {e}")
 
             # --- TODAY FILTER END ---
             if commence_time_str:
