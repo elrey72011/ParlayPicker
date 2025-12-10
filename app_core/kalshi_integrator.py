@@ -469,12 +469,12 @@ def match_game_to_kalshi(
 
         # Score both orientations
         score_home_first = (
-            _team_score(teams[0], home_norm, home_codes) +
-            _team_score(teams[1], away_norm, away_codes)
+            _team_score(teams[0], home_norm, home_codes)
+            + _team_score(teams[1], away_norm, away_codes)
         )
         score_away_first = (
-            _team_score(teams[0], away_norm, away_codes) +
-            _team_score(teams[1], home_norm, home_codes)
+            _team_score(teams[0], away_norm, away_codes)
+            + _team_score(teams[1], home_norm, home_codes)
         )
         team_score = max(score_home_first, score_away_first)
         if team_score <= 0.0:
