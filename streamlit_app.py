@@ -9289,7 +9289,7 @@ if is_vertex_ai_enabled():
             
                 st.info("📡 Fetching games from TheOddsAPI...")
             
-                                for sport in selected_sports:
+                for sport in selected_sports:
                     snapshot = fetch_oddsapi_snapshot(odds_api_key, sport)
                     games = snapshot.get("events", [])
 
