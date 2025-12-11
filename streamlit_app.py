@@ -8932,7 +8932,7 @@ if is_vertex_ai_enabled():
                         )
 
                         # 5) Run master analysis
-                        results_df = analyzer.run_master_analysis(all_games, league="multi")
+                        results_df = analyzer.analyze_all_games(all_games, league="multi")
 
                         # Persist results so the grid doesn’t disappear
                         st.session_state["vertex_master_results"] = results_df
