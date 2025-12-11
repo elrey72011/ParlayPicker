@@ -373,37 +373,47 @@ class KalshiIntegrator:
         return None
 
     def get_markets(self, status: str = "open") -> List[Dict[str, Any]]:
+        """
+        Fetches ALL markets by handling pagination (cursors).
+        """
         now = time.time()
-
-        # 1) Use cache if still fresh
+        # 1) Use cache if still fresh (e.g., 5 minutes)
         if self._markets_cache and (now - self._markets_cache_ts) < self.cache_ttl_seconds:
+            logger.info(f"Using cached markets ({len(self._markets_cache)} items)")
             return self._markets_cache
 
-        # NOTE: limit must NOT exceed 1000 (per Kalshi 400 error)
-        params = {"limit": 1000, "status": status}
-        data = self._make_authenticated_request("GET", "/markets", params=params)
+        all_markets = []
+        cursor = None
+        
+        # Loop until no cursor is returned
+        while True:
+            params = {"limit": 1000, "status": status}
+            if cursor:
+                params["cursor"] = cursor
 
-        # 2) If API call failed, fall back to cache instead of empty
-        if not data:
-            if self._markets_cache:
-                logger.warning("Kalshi API error, falling back to cached markets.")
-                return self._markets_cache
-            return []
+            data = self._make_authenticated_request("GET", "/markets", params=params)
+            
+            if not data:
+                break
+            
+            markets = data.get("markets", [])
+            if not markets:
+                break
+                
+            all_markets.extend(markets)
+            cursor = data.get("cursor")
+            
+            if not cursor:
+                break
+                
+            # Rate limit safety
+            time.sleep(0.1)
 
-        markets = data.get("markets", [])
-
-        # 3) If API returned no markets, also fall back to cache
-        if not markets:
-            if self._markets_cache:
-                logger.warning("Kalshi returned 0 markets, using cached markets instead.")
-                return self._markets_cache
-            return []
-
-        # 4) Happy path: update cache and return
-        self._markets_cache = markets
+        # Update cache
+        self._markets_cache = all_markets
         self._markets_cache_ts = now
-        logger.info(f"✅ Successfully loaded {len(markets)} Kalshi markets")
-        return markets
+        logger.info(f"✅ Successfully loaded {len(all_markets)} Kalshi markets (paginated)")
+        return all_markets
 
     # Helpers required by app
     def get_sports_markets(self):
