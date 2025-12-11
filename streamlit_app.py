@@ -8811,7 +8811,7 @@ with main_tab1:
                             sentiment_analyzer = st.session_state.get('sentiment_analyzer')
                             ml_predictor = st.session_state.get('ml_predictor')
                             
-                           st.write(f"[DEBUG] Master Analysis – games fetched: {len(all_games)}")
+                            st.write(f"[DEBUG] Master Analysis – games fetched: {len(all_games)}")
                             if all_games:
                                 first = all_games[0]
                                 st.write("[DEBUG] Sample game keys:", list(first.keys())[:15])
