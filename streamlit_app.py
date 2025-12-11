@@ -8937,24 +8937,67 @@ with main_tab1:
                             
                             # Create analyzer with TheOver data
                             # NEW WAY (Uses your fix)
+                            from vertex_master_analyzer import VertexMasterAnalyzer, show_vertex_master_analysis
+
+                            # ------------------------------------------------------------------
+                            # Vertex AI Master Analysis – SAFE VERSION
+                            # ------------------------------------------------------------------
+                            
+                            # Recover any previous results from session_state
+                            results_df = st.session_state.get("vertex_master_results")
+                            
                             if st.button("🚀 Run Vertex AI Master Analysis", key="vertex_master_btn"):
-                                with st.spinner("Consolidating all data sources..."):
+                                with st.spinner("Consolidating all data sources."):
                                     try:
                                         # 1. Create the analyzer using the factory function
                                         analyzer = create_vertex_master_analyzer()
-                                        
-                                        # 2. Run analysis
-                                        results_df = analyzer.analyze_all_games(all_games, league='multi')
-                                        
-                                        # ... (Rest of your existing display logic) ...
-                                        
-                                    except Exception as e:
-                                        st.error(f"Analysis failed: {e}")
                             
-                            if not results_df.empty:
+                                        # 2. Run analysis on all_games (already built above)
+                                        results_df = analyzer.analyze_all_games(all_games, league="multi")
+                            
+                                        # 3. Persist results for future reruns
+                                        st.session_state["vertex_master_results"] = results_df
+                            
+                                    except Exception as e:
+                                        st.error(f"Error during Vertex AI analysis: {e}")
+                                        logger.error(f"Vertex AI analysis error: {e}", exc_info=True)
+                                        results_df = None
+                                        st.session_state["vertex_master_results"] = None
+                            
+                            # Safely display results if we have them
+                            if results_df is not None and not results_df.empty:
                                 st.success(f"✅ Analysis complete! Found {len(results_df)} opportunities")
                                 show_vertex_master_analysis(results_df)
-                                
+                            
+                                # Store simplified results for the Best Bets section
+                                vertex_results = []
+                                for _, row in results_df.iterrows():
+                                    vertex_results.append({
+                                        "home_team": row.get("home_team", ""),
+                                        "away_team": row.get("away_team", ""),
+                                        "league": row.get("league", ""),
+                                        "vertex_prob": row.get("vertex_ai_prob", 0.5),
+                                        "theover_probability": row.get("theover_probability", 0.5),
+                                        "theover_pick": row.get("theover_pick", ""),
+                                        "theover_total": row.get("theover_total", 0),
+                                        "theover_total_pick": row.get("theover_total_pick", ""),
+                                        "spread": row.get("home_spread", 0),
+                                        "home_ml_odds": row.get("home_ml_odds", 0),
+                                        "away_ml_odds": row.get("away_ml_odds", 0),
+                                        "implied_home_prob": row.get("implied_home_prob", 0.5),
+                                        "sentiment_diff": row.get("sentiment_diff", 0),
+                                        "kalshi_available": row.get("kalshi_available", False),
+                                        "kalshi_prob": row.get("kalshi_prob", 0.5),
+                                        "confidence": min(95, 50 + abs(row.get("vertex_ai_edge", 0)) * 500),
+                                    })
+                            
+                                st.session_state["vertex_results"] = vertex_results
+                                st.session_state["vertex_analysis_complete"] = True
+                            
+                            elif st.session_state.get("vertex_master_results") is None:
+                                # First time / no run yet – optional helper message
+                                st.info("Click **Run Vertex AI Master Analysis** to analyze today's games.")
+
                                 # Store results for Best Bets
                                 vertex_results = []
                                 for _, row in results_df.iterrows():
