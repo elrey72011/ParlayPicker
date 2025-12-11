@@ -9444,7 +9444,7 @@ if is_vertex_ai_enabled():
                 # Merge TheOver.ai picks/probabilities for consensus validation
                 # DO NOT use their Line column (unreliable signs)
                 # =========================================================================
-                def _debug_df(label: str, df: Optional[pd.DataFrame]):
+            def _debug_df(label: str, df: Optional[pd.DataFrame]):
                     if not DEBUG_THEOVER_MERGE:
                         return
                     if df is None:
