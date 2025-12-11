@@ -417,6 +417,11 @@ class KalshiIntegrator:
         # Stub: your app may override or extend this later
         return markets
 
+    @staticmethod
+    def price_to_prob(price: Any) -> Optional[float]:
+        """Static wrapper so you can call kalshi.price_to_prob(...) from the app."""
+        return price_to_prob(price)
+    
     def get_orderbook(self, ticker: str) -> Dict[str, Any]:
         return self._make_authenticated_request("GET", f"/markets/{ticker}/orderbook") or {}
 
