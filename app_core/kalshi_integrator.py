@@ -274,6 +274,10 @@ def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time:
 # KalshiIntegrator Class
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# KalshiIntegrator Class
+# ---------------------------------------------------------------------------
+
 class KalshiIntegrator:
     def __init__(self, api_key: Optional[str] = None, api_secret: Optional[str] = None) -> None:
         # Resolve key + secret from args, env, or Streamlit secrets
@@ -305,8 +309,7 @@ class KalshiIntegrator:
                 )
 
         # --- Correct Kalshi base URL (per SDK quickstart) ---
-        # You can toggle demo vs prod with an env var if you want:
-        # use_demo = os.getenv("KALSHI_DEMO", "false").lower() == "true"
+        # For now we’ll hard-code elections API v2; you can swap to demo if desired.
         # base_host = "https://demo-api.kalshi.co" if use_demo else "https://api.elections.kalshi.com"
         # self.api_url = f"{base_host}/trade-api/v2"
         self.api_url = "https://api.elections.kalshi.com/trade-api/v2"
@@ -318,21 +321,33 @@ class KalshiIntegrator:
         self.last_error: Optional[str] = None
 
     def _sign_request(self, method: str, path: str, timestamp: str) -> str:
-        if not self.api_secret: return ""
+        if not self.api_secret:
+            return ""
         msg_string = f"{timestamp}{method}{path}"
         try:
-            private_key = serialization.load_pem_private_key(self.api_secret.encode('utf-8'), password=None)
-            signature = private_key.sign(
-                msg_string.encode('utf-8'),
-                padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.MAX_LENGTH),
-                hashes.SHA256()
+            private_key = serialization.load_pem_private_key(
+                self.api_secret.encode("utf-8"),
+                password=None,
             )
-            return base64.b64encode(signature).decode('utf-8')
+            signature = private_key.sign(
+                msg_string.encode("utf-8"),
+                padding.PSS(
+                    mgf=padding.MGF1(hashes.SHA256()),
+                    salt_length=padding.PSS.MAX_LENGTH,
+                ),
+                hashes.SHA256(),
+            )
+            return base64.b64encode(signature).decode("utf-8")
         except Exception as e:
             logger.error(f"Signing failed: {e}")
             return ""
 
-    def _make_authenticated_request(self, method: str, endpoint: str, params: Optional[Dict] = None) -> Optional[dict]:
+    def _make_authenticated_request(
+        self,
+        method: str,
+        endpoint: str,
+        params: Optional[Dict] = None,
+    ) -> Optional[dict]:
         url = f"{self.api_url}{endpoint}"
         path_for_signing = f"/trade-api/v2{endpoint}"
         timestamp = str(int(time.time() * 1000))
@@ -342,9 +357,9 @@ class KalshiIntegrator:
             "Content-Type": "application/json",
             "KALSHI-ACCESS-KEY": self.api_key,
             "KALSHI-ACCESS-SIGNATURE": signature,
-            "KALSHI-ACCESS-TIMESTAMP": timestamp
+            "KALSHI-ACCESS-TIMESTAMP": timestamp,
         }
-        
+
         try:
             resp = requests.request(method, url, headers=headers, params=params, timeout=10)
             if resp.status_code == 200:
@@ -359,23 +374,24 @@ class KalshiIntegrator:
 
     def get_markets(self, status: str = "open") -> List[Dict[str, Any]]:
         now = time.time()
-    
+
         # 1) Use cache if still fresh
         if self._markets_cache and (now - self._markets_cache_ts) < self.cache_ttl_seconds:
             return self._markets_cache
-    
+
+        # NOTE: limit must NOT exceed 1000 (per Kalshi 400 error)
         params = {"limit": 1000, "status": status}
         data = self._make_authenticated_request("GET", "/markets", params=params)
-    
+
         # 2) If API call failed, fall back to cache instead of empty
         if not data:
             if self._markets_cache:
                 logger.warning("Kalshi API error, falling back to cached markets.")
                 return self._markets_cache
             return []
-    
+
         markets = data.get("markets", [])
-    
+
         # 3) If API returned no markets, also fall back to cache
         if not markets:
             if self._markets_cache:
@@ -383,13 +399,24 @@ class KalshiIntegrator:
                 return self._markets_cache
             return []
 
-    # 4) Happy path: update cache and return
-    self._markets_cache = markets
-    self._markets_cache_ts = now
-    logger.info(f"✅ Successfully loaded {len(markets)} Kalshi markets")
-    return markets
+        # 4) Happy path: update cache and return
+        self._markets_cache = markets
+        self._markets_cache_ts = now
+        logger.info(f"✅ Successfully loaded {len(markets)} Kalshi markets")
+        return markets
 
-    def get_sports_markets(self): return self.get_markets()
-    def get_game_markets_for_events(self, league): return self.get_markets()
-    def filter_markets_closing_today(self, markets): return markets
-    def get_orderbook(self, ticker): return self._make_authenticated_request("GET", f"/markets/{ticker}/orderbook") or {}
+    # Helpers required by app
+    def get_sports_markets(self):
+        return self.get_markets()
+
+    def get_game_markets_for_events(self, league):
+        # You can add league-specific filtering later; for now just reuse get_markets
+        return self.get_markets()
+
+    def filter_markets_closing_today(self, markets):
+        # Stub: your app may override or extend this later
+        return markets
+
+    def get_orderbook(self, ticker: str) -> Dict[str, Any]:
+        return self._make_authenticated_request("GET", f"/markets/{ticker}/orderbook") or {}
+
