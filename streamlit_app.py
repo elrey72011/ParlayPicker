@@ -15467,6 +15467,33 @@ Return ONLY a JSON object with this exact structure:
         'Has Edge': '✅' if r.get('has_edge') else '❌',
         'Sources': r.get('sources_used', '')
     } for r in vertex_results])
+
+    # Filter for TODAY'S games only
+    from datetime import datetime
+    import pytz
+    
+    # Ensure we have a date column to filter
+    # Add 'Commence' to the DataFrame creation above if it's missing, or filter the raw 'vertex_results' list first
+    
+    # Better approach: Filter the list BEFORE creating the DataFrame
+    today_date = datetime.now(pytz.timezone('US/Eastern')).date()
+    
+    vertex_results = [
+        r for r in vertex_results 
+        if pd.to_datetime(r.get('commence_time')).date() == today_date
+    ]
+    
+    # Re-create DataFrame with filtered results
+    results_df = pd.DataFrame([{
+        'Game': f"{r['away_team']} @ {r['home_team']}",
+        'Vertex Prob %': f"{(r.get('vertex_probability') or r.get('win_prob') or r.get('ai_prob') or 0) * 100:.1f}%",
+        'Confidence %': f"{r.get('confidence', 0):.0f}%",
+        'Has Edge': '✅' if r.get('has_edge') else '❌',
+        'Sources': r.get('sources_used', '')
+    } for r in vertex_results])
+    # -------------------------
+
+    st.dataframe(results_df, use_container_width=True)
     
     st.dataframe(results_df, use_container_width=True)
     
