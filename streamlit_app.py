@@ -68,27 +68,29 @@ from app_core import (
 )
 
 # Optional ml_predictions module
+# Optional ml_predictions module
 try:
     from ml_predictions import (
         show_vertex_ai_prediction_section,
         is_vertex_ai_enabled,
-        get_vertex_ai_prediction,  # 👈 add this
+        get_vertex_ai_prediction,  # 👈 import the predictor too
     )
 except ImportError:
+    import streamlit as st
+
     def show_vertex_ai_prediction_section(*args, **kwargs):
-        import streamlit as st
-        st.warning(
-            "⚠️ ml_predictions module not available. ML prediction features disabled."
-        )
+        """Fallback function when ml_predictions module is not available"""
+        st.warning("⚠️ ml_predictions module not available. ML prediction features disabled.")
         return None
 
     def is_vertex_ai_enabled(*args, **kwargs):
+        """Fallback function when ml_predictions module is not available"""
         return False
 
     def get_vertex_ai_prediction(*args, **kwargs):
-        # Fallback: no ML available → signal caller to skip
+        """Fallback predictor when ml_predictions is missing"""
+        st.warning("⚠️ get_vertex_ai_prediction called, but ml_predictions module is not available.")
         return None
-
 
 try:
     from theover_vertex_analyzer import (
