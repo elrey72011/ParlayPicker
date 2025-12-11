@@ -9254,8 +9254,17 @@ _debug_df("TheOver ML raw", theover_ml_data if 'theover_ml_data' in locals() els
 _debug_df("TheOver Spreads raw", theover_spreads_data if 'theover_spreads_data' in locals() else None)
 _debug_df("TheOver Totals raw", theover_totals_data if 'theover_totals_data' in locals() else None)
 
-odds_df = pd.DataFrame(all_games)
-_debug_df("OddsAPI games raw", odds_df)
+# If we haven't built all_games yet (user hasn't run the master loader),
+# don't try to merge or analyze – just skip this block quietly.
+if not all_games:
+    # Nothing to do yet; the earlier "Run Vertex AI Master Analysis" section
+    # will populate all_games and results when you click the button.
+    pass
+else:
+    odds_df = pd.DataFrame(all_games)
+    _debug_df("OddsAPI games raw", odds_df)
+    # 👇 leave the rest of this block as-is, just indent it one level
+    # (everything that currently follows odds_df = ... stays under this `else:`)
 
 sport_candidates_odds = ["league", "sport_key", "sport"]
 home_candidates_odds = ["home_team", "home"]
