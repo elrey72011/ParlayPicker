@@ -9091,11 +9091,6 @@ with main_tab1:
                             
                                     st.session_state["vertex_results"] = vertex_results
                                     st.session_state["vertex_analysis_complete"] = True
-                                except Exception as e:
-                                    st.error(f"Error during Vertex AI analysis: {e}")
-                                    logger.error(e)
-                                    st.session_state["vertex_master_results"] = None
-
 
 # =====================================================
 # SIMPLE THEODDSAPI-ONLY ANALYSIS
