@@ -1,5 +1,5 @@
 """
-Kalshi Integrator with RSA Signing.
+Kalshi Integrator with RSA Signing & Pagination.
 Location: app_core/kalshi_integrator.py
 """
 from __future__ import annotations
@@ -23,7 +23,7 @@ from cryptography.hazmat.primitives.asymmetric import padding
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Data Structures (Moved up to prevent SyntaxErrors)
+# Data Structures
 # ---------------------------------------------------------------------------
 
 @dataclass
@@ -274,10 +274,6 @@ def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time:
 # KalshiIntegrator Class
 # ---------------------------------------------------------------------------
 
-# ---------------------------------------------------------------------------
-# KalshiIntegrator Class
-# ---------------------------------------------------------------------------
-
 class KalshiIntegrator:
     def __init__(self, api_key: Optional[str] = None, api_secret: Optional[str] = None) -> None:
         # Resolve key + secret from args, env, or Streamlit secrets
@@ -308,10 +304,6 @@ class KalshiIntegrator:
                     "\n-----END PRIVATE KEY-----"
                 )
 
-        # --- Correct Kalshi base URL (per SDK quickstart) ---
-        # For now we’ll hard-code elections API v2; you can swap to demo if desired.
-        # base_host = "https://demo-api.kalshi.co" if use_demo else "https://api.elections.kalshi.com"
-        # self.api_url = f"{base_host}/trade-api/v2"
         self.api_url = "https://api.elections.kalshi.com/trade-api/v2"
 
         # Caching + error state
@@ -420,18 +412,61 @@ class KalshiIntegrator:
         return self.get_markets()
 
     def get_game_markets_for_events(self, league):
-        # You can add league-specific filtering later; for now just reuse get_markets
         return self.get_markets()
 
     def filter_markets_closing_today(self, markets):
-        # Stub: your app may override or extend this later
         return markets
 
     @staticmethod
     def price_to_prob(price: Any) -> Optional[float]:
-        """Static wrapper so you can call kalshi.price_to_prob(...) from the app."""
         return price_to_prob(price)
     
     def get_orderbook(self, ticker: str) -> Dict[str, Any]:
         return self._make_authenticated_request("GET", f"/markets/{ticker}/orderbook") or {}
 
+# ---------------------------------------------------------------------------
+# CROSSWALK UTILITY (Included at bottom)
+# ---------------------------------------------------------------------------
+def get_event_crosswalk(league: str, home_team: str, away_team: str) -> Dict[str, Any]:
+    """
+    Returns a dictionary linking identifiers across data sources (Kalshi, OddsAPI, etc.)
+    """
+    league = league.upper()
+    
+    # Mapping for TheOddsAPI
+    odds_api_keys = {
+        'NFL': 'americanfootball_nfl',
+        'NBA': 'basketball_nba',
+        'NHL': 'icehockey_nhl',
+        'MLB': 'baseball_mlb',
+        'NCAAF': 'americanfootball_ncaaf',
+        'NCAAB': 'basketball_ncaab'
+    }
+    
+    # Mapping for Kalshi Series Tickers
+    kalshi_series = {
+        'NFL': 'KXNFL', 'NBA': 'KXNBA', 'NHL': 'KXNHL', 'MLB': 'KXMLB'
+    }
+    
+    return {
+        "Matchup": f"{away_team} @ {home_team}",
+        "Sources": {
+            "TheOddsAPI": {
+                "sport_key": odds_api_keys.get(league),
+                "home": home_team,
+                "away": away_team
+            },
+            "Kalshi": {
+                # Kalshi tickers often look like KXNBA-23DEC25-LAL-BOS
+                "series_ticker": kalshi_series.get(league), 
+                "fuzzy_match_query": f"{away_team} {home_team}" 
+            },
+            "NewsAPI": {
+                # Strict query to avoid noise
+                "query": f'"{away_team}" AND "{home_team}" AND {league}'
+            },
+            "APISports": {
+                "endpoint": f"https://v1.{league.lower()}.api-sports.io/games",
+            }
+        }
+    }
