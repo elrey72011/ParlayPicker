@@ -9020,6 +9020,7 @@ with main_tab1:
                                 show_vertex_master_analysis(results_df)
 
 # =====================================================
+# # =====================================================
 # SIMPLE THEODDSAPI-ONLY ANALYSIS
 # Uses ONLY TheOddsAPI for games + odds - no TheOver.ai complexity
 # =====================================================
@@ -9029,9 +9030,9 @@ if is_vertex_ai_enabled():
     st.caption("Simple analysis using only TheOddsAPI for odds. No CSV uploads needed!")
     
     if st.button("🚀 Run Quick Analysis", key="quick_analysis_btn", type="primary"):
-        with st.spinner("Fetching games and running AI analysis..."):
+        with st.spinner("Fetching games and running AI analysis."):
             try:
-                # Get selected sports
+                # Get selected sports from session_state, fall back to all
                 selected_sports = []
                 sport_map = {
                     'NFL': 'americanfootball_nfl',
@@ -9071,7 +9072,6 @@ if is_vertex_ai_enabled():
                             away_ml = None
                             home_spread = None
                             away_spread = None
-                            spread_line = None
                             
                             for bookmaker in game.get('bookmakers', []):
                                 for market in bookmaker.get('markets', []):
@@ -9087,7 +9087,6 @@ if is_vertex_ai_enabled():
                                         for outcome in market.get('outcomes', []):
                                             if outcome['name'] == home_team:
                                                 home_spread = outcome.get('point', 0)
-                                                spread_line = outcome.get('point', 0)
                                             elif outcome['name'] == away_team:
                                                 away_spread = outcome.get('point', 0)
                             
@@ -9097,122 +9096,35 @@ if is_vertex_ai_enabled():
                             if away_ml is None:
                                 away_ml = -110
                             
-                            # Calculate implied probabilities from moneylines
-                            if home_ml < 0:
-                                home_implied = abs(home_ml) / (abs(home_ml) + 100)
-                            else:
-                                home_implied = 100 / (home_ml + 100)
+                            # Convert moneyline to decimal and probability
+                            home_dec = american_to_decimal_safe(home_ml)
+                            away_dec = american_to_decimal_safe(away_ml)
                             
-                            if away_ml < 0:
-                                away_implied = abs(away_ml) / (abs(away_ml) + 100)
-                            else:
-                                away_implied = 100 / (away_ml + 100)
+                            if home_dec is None or away_dec is None:
+                                continue
                             
-                            # Normalize to sum to 1 (remove vig)
-                            total_implied = home_implied + away_implied
-                            home_prob_market = home_implied / total_implied
-                            away_prob_market = away_implied / total_implied
+                            # Use Kalshi-style price_to_prob helper if you want consistent conversion
+                            market_prob_home = price_to_prob(home_dec)
                             
-                            # Get league name
-                            league_map = {
-                                'americanfootball_nfl': 'NFL',
-                                'americanfootball_ncaaf': 'NCAAF',
-                                'basketball_nba': 'NBA',
-                                'basketball_ncaab': 'NCAAB',
-                                'icehockey_nhl': 'NHL',
-                            }
-                            league = league_map.get(sport_key, sport_key.upper())
+                            # Simple AI probability from your ML / Vertex predictor
+                            ai_pred = get_vertex_ai_prediction(
+                                home_team=home_team,
+                                away_team=away_team,
+                                sport_key=sport_key,
+                            ) or {}
                             
-                            # Get Vertex AI prediction
-                            from ml_predictions import get_vertex_ai_prediction
+                            ai_prob = ai_pred.get('home_win_prob', 0.5)
                             
-                            features = {
-                                'home_team': home_team,
-                                'away_team': away_team,
-                                'league': league,
-                                'home_ml_odds': home_ml,
-                                'away_ml_odds': away_ml,
-                                'implied_home_prob': home_prob_market,
-                                'home_spread': home_spread or 0,
-                            }
-                            
-                            context = f"{away_team} @ {home_team} ({league})"
-                            
-                            # Get AI prediction (returns HOME team win probability)
-                            ai_home_prob = get_vertex_ai_prediction(features, context)
-                            
-                            # Handle None or invalid predictions
-                            if ai_home_prob is None or pd.isna(ai_home_prob):
-                                # Fall back to the market's implied home probability instead of a fake 50/50
-                                ai_home_prob = home_prob_market
-                                ai_prob_source = "market_only"
-                            else:
-                                ai_prob_source = "vertex_ai"
-                            
-                            # Ensure it's a decimal (defensive, in case a percentage sneaks through)
-                            if ai_home_prob > 1:
-                                ai_home_prob = ai_home_prob / 100.0
-                            
-                            ai_away_prob = 1 - ai_home_prob
-                           
-                            # Determine best pick (higher AI probability)
-                            if ai_home_prob >= ai_away_prob:
-                                pick_team = home_team
-                                pick_prob = ai_home_prob
-                                pick_ml = home_ml
-                                market_prob = home_prob_market
-                                pick_spread = home_spread
-                            else:
-                                pick_team = away_team
-                                pick_prob = ai_away_prob
-                                pick_ml = away_ml
-                                market_prob = away_prob_market
-                                pick_spread = away_spread
-                            
-                            # Calculate edge
-                            edge = pick_prob - market_prob
-                            
-                            # Calculate EV
-                            if pick_ml > 0:
-                                potential_profit = pick_ml / 100
-                            else:
-                                potential_profit = 100 / abs(pick_ml)
-                            ev = (pick_prob * potential_profit) - ((1 - pick_prob) * 1)
-                            
-                            # Format pick text
-                            if pick_spread and pick_spread != 0:
-                                if pick_spread > 0:
-                                    pick_text = f"{pick_team} +{abs(pick_spread):.1f}"
-                                else:
-                                    pick_text = f"{pick_team} {pick_spread:.1f}"
-                            else:
-                                pick_text = f"{pick_team} ML"
-                            
-                            # Format ML odds
-                            if pick_ml > 0:
-                                odds_str = f"+{int(pick_ml)}"
-                            else:
-                                odds_str = str(int(pick_ml))
-                            
-                            # Determine if pick is the market favorite (negative ML = favorite)
-                            # Compare actual market moneylines
-                            is_market_favorite = pick_ml < 0 and (
-                                (pick_team == home_team and home_ml < away_ml) or
-                                (pick_team == away_team and away_ml < home_ml)
-                            )
+                            edge = (ai_prob - market_prob_home) * 100.0
                             
                             all_results.append({
-                                'League': league,
+                                'League': sport_key,
                                 'Game': f"{away_team} @ {home_team}",
-                                'THE PICK': pick_text,
-                                'AI Win %': round(pick_prob * 100, 1),
-                                'Market %': round(market_prob * 100, 1),
-                                'Edge': round(edge * 100, 1),
-                                'Favorite': '✅' if is_market_favorite else '❌',
-                                'EV': f"${ev * 100:.2f}",
-                                'Odds': odds_str,
-                                'Home ML': home_ml,
-                                'Away ML': away_ml,
+                                'THE PICK': home_team if ai_prob >= 0.5 else away_team,
+                                'AI Win %': ai_prob * 100.0,
+                                'Market %': market_prob_home * 100.0,
+                                'Edge': edge,
+                                'Odds': home_ml if ai_prob >= 0.5 else away_ml,
                             })
                     
                     except Exception as e:
@@ -9226,9 +9138,10 @@ if is_vertex_ai_enabled():
                     results_df['Rank'] = range(1, len(results_df) + 1)
                     
                     # Reorder columns
-                    display_cols = ['Rank', 'League', 'Game', 'THE PICK', 'AI Win %', 'Market %', 
-                                   'Edge', 'EV', 'Consensus', 'ML Model', 'Sentiment', 'Kalshi', 
-                                   'Kalshi %', 'TheOver %', 'Odds', 'Confidence']
+                    display_cols = [
+                        'Rank', 'League', 'Game', 'THE PICK',
+                        'AI Win %', 'Market %', 'Edge', 'Odds'
+                    ]
                     results_df = results_df[display_cols]
                     
                     st.success(f"✅ Analyzed {len(results_df)} games!")
@@ -9262,7 +9175,7 @@ if is_vertex_ai_enabled():
                         key="quick_analysis_export"
                     )
                     
-                    # Store for Best Bets
+                    # Store for downstream use if needed
                     st.session_state['quick_analysis_results'] = all_results
                     st.session_state['quick_analysis_timestamp'] = datetime.now()
                 else:
@@ -9274,21 +9187,24 @@ if is_vertex_ai_enabled():
                 import traceback
                 with st.expander("🔍 Debug"):
                     st.code(traceback.format_exc())
-
+    
     st.markdown("---")
 
+# =====================================================
 # VERTEX AI MASTER ANALYSIS (Complex - with TheOver.ai integration)
+# =====================================================
 if is_vertex_ai_enabled():
     st.markdown("---")
     st.subheader("🌟 Vertex AI Master Analysis (Advanced)")
-    st.caption("Comprehensive analysis combining TheOddsAPI, TheOver.ai, sentiment, and more.")
-
+    st.caption("Comprehensive analysis combining TheOddsAPI, TheOver.ai, sentiment, and Kalshi where available.")
+    
     from vertex_master_analyzer import VertexMasterAnalyzer, show_vertex_master_analysis
-
+    
     # MASTER ANALYSIS ENTRY POINT: results_df is built here and passed to show_vertex_master_analysis
     if st.button("🌟 Run Vertex AI Master Analysis", key="vertex_master_btn", type="secondary"):
-        with st.spinner("Running comprehensive AI analysis... Consolidating all data sources..."):
+        with st.spinner("Running comprehensive AI analysis. Consolidating all data sources."):
             try:
+                # Step 1: Build selected sports list for Odds API
                 selected_sports = []
                 if 'NBA' in st.session_state.get('selected_sports', []):
                     selected_sports.append('basketball_nba')
@@ -9300,132 +9216,100 @@ if is_vertex_ai_enabled():
                     selected_sports.append('basketball_ncaab')
                 if 'NHL' in st.session_state.get('selected_sports', []):
                     selected_sports.append('icehockey_nhl')
-            
+                
                 if not selected_sports:
+                    # Fall back to core sports if user hasn't picked anything
                     selected_sports = [
                         'basketball_nba',
                         'americanfootball_nfl',
-                        'americanfootball_ncaaf',
                         'basketball_ncaab',
+                        'americanfootball_ncaaf',
                         'icehockey_nhl'
                     ]
-            
-                all_games = []
-            
-                # PRIMARY DATA SOURCE: TheOddsAPI
-                from datetime import datetime, timezone
-                from math import isfinite
-            
+                
+                # Step 2: Fetch games from TheOddsAPI
                 odds_api_key = resolve_odds_api_key()
-            
                 if not odds_api_key:
-                    st.error("❌ TheOddsAPI key required for Vertex AI Master Analysis")
+                    st.error("❌ Please configure your The Odds API key in the sidebar settings.")
                     st.stop()
-            
-                now_utc = datetime.now(timezone.utc)
-                today_utc = now_utc.date()
-            
-                st.info("📡 Fetching games from TheOddsAPI...")
-            
+                
+                all_games = []
                 for sport in selected_sports:
                     snapshot = fetch_oddsapi_snapshot(odds_api_key, sport)
-                    games = snapshot.get("events", [])
-
-                    if not games:
-                        continue
-
-                    for game in games:
-                        # Read commence_time from dict or object
-                        commence_time_str = None
-                        if isinstance(game, dict):
-                            commence_time_str = game.get("commence_time")
-                        else:
-                            commence_time_str = getattr(game, "commence_time", None)
-
-                        if not commence_time_str:
-                            # If we don't know when the game starts, skip it for today's filter
-                            continue
-
-                        # Parse commence_time into a timezone-aware datetime
+                    events = snapshot.get("events", [])
+                    for event in events:
+                        event["sport_key"] = sport
+                        raw = event.get("commence_time")
                         try:
-                            commence_dt = datetime.fromisoformat(
-                                str(commence_time_str).replace("Z", "+00:00")
-                            )
+                            dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
                         except Exception:
-                            # If parsing fails, skip this game
-                            continue
-
-                        # Keep only games that are scheduled for today (UTC date)
-                        if not (today_utc - timedelta(days=1) <= commence_dt.date() <= today_utc + timedelta(days=1)):
-                            continue
-
-                        # Attach parsed datetime for downstream Kalshi matching
-                        if isinstance(game, dict):
-                            game["commence_dt"] = commence_dt
-                        else:
-                            setattr(game, "commence_dt", commence_dt)
-
-                        # Tag sport and league
-                        game["sport_key"] = sport
-
-                        if sport == "basketball_nba":
-                            game["league"] = "NBA"
-                        elif sport == "basketball_ncaab":
-                            game["league"] = "NCAAB"
-                        elif sport == "americanfootball_nfl":
-                            game["league"] = "NFL"
-                        elif sport == "americanfootball_ncaaf":
-                            game["league"] = "NCAAF"
-                        elif sport == "icehockey_nhl":
-                            game["league"] = "NHL"
-                        else:
-                            # Fallback: use the raw sport key
-                            game["league"] = sport
-
-                        # Flatten core odds for VertexMasterAnalyzer
-                        home_team = game.get("home_team") or ""
-                        away_team = game.get("away_team") or ""
-
-                        markets = game.get("markets") or {}
-                        h2h = markets.get("h2h") or {}
-
-                        home_ml = (h2h.get("home") or {}).get("price")
-                        away_ml = (h2h.get("away") or {}).get("price")
-
-                        spreads = markets.get("spreads") or []
-                        home_spread = away_spread = None
-                        home_spread_odds = away_spread_odds = None
-
-                        for o in spreads:
-                            name = (o.get("name") or "").strip()
-                            if name == home_team:
-                                home_spread = o.get("point")
-                                home_spread_odds = o.get("price")
-                            elif name == away_team:
-                                away_spread = o.get("point")
-                                away_spread_odds = o.get("price")
-
-                        # Implied home win probability from American odds
-                        implied_home_prob = 0.5
-                        try:
-                            if isinstance(home_ml, (int, float)) and isfinite(home_ml) and home_ml != 0:
-                                if home_ml > 0:
-                                    implied_home_prob = 100.0 / (home_ml + 100.0)
-                                else:
-                                    implied_home_prob = abs(home_ml) / (abs(home_ml) + 100.0)
-                        except Exception:
-                            implied_home_prob = 0.5
-
-                        game["home_ml_odds"] = home_ml
-                        game["away_ml_odds"] = away_ml
-                        game["home_spread"] = home_spread
-                        game["away_spread"] = away_spread
-                        game["home_spread_odds"] = home_spread_odds
-                        game["away_spread_odds"] = away_spread_odds
-                        game["implied_home_prob"] = implied_home_prob
-
-                        # Collect for Vertex AI Master Analysis and Kalshi matching
-                        all_games.append(game)
+                            dt = None
+                        event["commence_dt"] = dt
+                        all_games.append(event)
+                
+                if not all_games:
+                    st.warning("No games available today for master analysis.")
+                    st.session_state["vertex_master_results"] = None
+                else:
+                    # Step 3: Build analyzer
+                    ml_predictor = st.session_state.get("ml_predictor")
+                    kalshi_int = st.session_state.get("kalshi_integrator")
+                    sentiment = st.session_state.get("sentiment_analyzer")
+                    
+                    analyzer = VertexMasterAnalyzer(
+                        kalshi_client=kalshi_int,
+                        ml_predictor=ml_predictor,
+                        sentiment_analyzer=sentiment,
+                    )
+                    
+                    # Step 4: Run full analysis
+                    results_df = analyzer.run_master_analysis(all_games, league="multi")
+                    
+                    # Persist for re-rendering
+                    st.session_state["vertex_master_results"] = results_df
+            
+            except Exception as e:
+                st.error(f"Error during Vertex AI analysis: {e}")
+                logger.error(e, exc_info=True)
+                st.session_state["vertex_master_results"] = None
+    
+    # 🔁 Always render the latest results stored in session_state
+    results_df = st.session_state.get("vertex_master_results")
+    
+    if results_df is None:
+        st.info("Click **Run Vertex AI Master Analysis** to analyze today's games.")
+    elif results_df.empty:
+        st.warning("Vertex AI master analysis returned no opportunities for the current filters.")
+    else:
+        st.success(f"✅ Analysis complete! Found {len(results_df)} opportunities")
+        show_vertex_master_analysis(results_df)
+        
+        # Build simplified list for Best Bets and store in session_state
+        vertex_results = []
+        for _, row in results_df.iterrows():
+            vertex_results.append(
+                {
+                    "home_team": row.get("home_team", ""),
+                    "away_team": row.get("away_team", ""),
+                    "league": row.get("league", ""),
+                    "vertex_prob": row.get("vertex_ai_prob", 0.5),
+                    "theover_probability": row.get("theover_probability", 0.5),
+                    "theover_pick": row.get("theover_pick", ""),
+                    "theover_total": row.get("theover_total", 0),
+                    "theover_total_pick": row.get("theover_total_pick", ""),
+                    "spread": row.get("home_spread", 0),
+                    "home_ml_odds": row.get("home_ml_odds", 0),
+                    "away_ml_odds": row.get("away_ml_odds", 0),
+                    "implied_home_prob": row.get("implied_home_prob", 0.5),
+                    "sentiment_diff": row.get("sentiment_diff", 0),
+                    "kalshi_available": row.get("kalshi_available", False),
+                    "kalshi_prob": row.get("kalshi_prob", 0.5),
+                    "confidence": min(95, 50 + abs(row.get("vertex_ai_edge", 0)) * 500),
+                }
+            )
+        
+        st.session_state["vertex_results"] = vertex_results
+        st.session_state["vertex_analysis_complete"] = True
                     
                 # =========================================================================
                 # SUPPLEMENTAL DATA: TheOver.ai Picks & Probabilities (NOT Lines!)
