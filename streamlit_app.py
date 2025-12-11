@@ -67,6 +67,8 @@ from app_core import (
     SportsDataNHLClient,
 )
 
+from vertex_master_analyzer import VertexMasterAnalyzer, show_vertex_master_analysis
+
 # Optional ml_predictions module
 # Optional ml_predictions module
 try:
