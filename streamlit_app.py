@@ -8933,10 +8933,55 @@ with main_tab1:
                             st.info(f"🤖 Analyzing {len(all_games)} games with Vertex AI...")
                             
                             # Get clients from session state
+                            # Get clients from session state
                             kalshi_int = st.session_state.get('kalshi_integrator')
                             sentiment_analyzer = st.session_state.get('sentiment_analyzer')
                             ml_predictor = st.session_state.get('ml_predictor')
                             
+                            # Create Analyzer
+                            analyzer = VertexMasterAnalyzer(
+                                kalshi_client=kalshi_int,
+                                ml_predictor=ml_predictor,
+                                sentiment_analyzer=sentiment_analyzer
+                            )
+                            
+                            # Run Analysis
+                            results_df = analyzer.analyze_all_games(all_games, league='multi')
+                            
+                            if not results_df.empty:
+                                st.success(f"✅ Analysis complete! Found {len(results_df)} opportunities")
+                                show_vertex_master_analysis(results_df)
+                                
+                                # Store results in session_state
+                                vertex_results = []
+                                for _, row in results_df.iterrows():
+                                    vertex_results.append({
+                                        'home_team': row.get('home_team', ''),
+                                        'away_team': row.get('away_team', ''),
+                                        'league': row.get('league', ''),
+                                        'vertex_prob': row.get('vertex_ai_prob', 0.5),
+                                        'confidence': row.get('confidence', 0),
+                                        'edge': row.get('vertex_ai_edge', 0),
+                                        'home_ml_odds': row.get('home_ml_odds', 0),
+                                        'away_ml_odds': row.get('away_ml_odds', 0),
+                                        'spread': row.get('home_spread', 0),
+                                        'theover_pick': row.get('theover_pick', ''),
+                                        'theover_probability': row.get('theover_probability', 0.5),
+                                        'kalshi_prob': row.get('kalshi_prob'),
+                                        'kalshi_available': row.get('kalshi_available', False),
+                                    })
+                                
+                                st.session_state['vertex_results'] = vertex_results
+                                st.session_state['vertex_analysis_complete'] = True
+                                st.session_state['vertex_results_df'] = results_df
+                            else:
+                                st.warning("⚠️ Analysis returned no results.")
+
+                    except Exception as e:
+                        st.error(f"❌ Error during combined analysis: {str(e)}")
+                        import traceback
+                        st.code(traceback.format_exc())
+
 # =====================================================
 # SIMPLE THEODDSAPI-ONLY ANALYSIS
 # Uses ONLY TheOddsAPI for games + odds - no TheOver.ai complexity
