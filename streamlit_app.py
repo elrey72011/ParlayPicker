@@ -9109,87 +9109,252 @@ if is_vertex_ai_enabled():
     st.markdown("---")
 
 # =====================================================
-# VERTEX AI MASTER ANALYSIS (Complex - with TheOver.ai integration)
+# VERTEX AI MASTER ANALYSIS (FULL PIPELINE)
+# Uses TheOddsAPI + Kalshi + ML + sentiment
 # =====================================================
 if is_vertex_ai_enabled():
     st.markdown("---")
-    st.subheader("🌟 Vertex AI Master Analysis (Advanced)")
-    st.caption("Comprehensive analysis combining TheOddsAPI, TheOver.ai, sentiment, and Kalshi where available.")
-    
-    from vertex_master_analyzer import VertexMasterAnalyzer, show_vertex_master_analysis
-    
-    # MASTER ANALYSIS ENTRY POINT: results_df is built here and passed to show_vertex_master_analysis
-    if st.button("🌟 Run Vertex AI Master Analysis", key="vertex_master_btn", type="secondary"):
-        with st.spinner("Running comprehensive AI analysis. Consolidating all data sources."):
+    st.subheader("🧠 Vertex AI Master Analysis")
+    st.caption("Combines TheOddsAPI, your ML model, Kalshi markets, and sentiment into one master grid.")
+
+    run_master = st.button("🚀 Run Vertex AI Master Analysis", key="vertex_master_btn")
+
+    if run_master:
+        with st.spinner("Running Vertex AI master analysis across today's games..."):
             try:
-                # Step 1: Build selected sports list for Odds API
-                selected_sports = []
-                if 'NBA' in st.session_state.get('selected_sports', []):
-                    selected_sports.append('basketball_nba')
-                if 'NCAAF' in st.session_state.get('selected_sports', []):
-                    selected_sports.append('americanfootball_ncaaf')
-                if 'NFL' in st.session_state.get('selected_sports', []):
-                    selected_sports.append('americanfootball_nfl')
-                if 'NCAAB' in st.session_state.get('selected_sports', []):
-                    selected_sports.append('basketball_ncaab')
-                if 'NHL' in st.session_state.get('selected_sports', []):
-                    selected_sports.append('icehockey_nhl')
-                
-                if not selected_sports:
-                    # Fall back to core sports if user hasn't picked anything
-                    selected_sports = [
-                        'basketball_nba',
-                        'americanfootball_nfl',
-                        'basketball_ncaab',
-                        'americanfootball_ncaaf',
-                        'icehockey_nhl'
-                    ]
-                
-                # Step 2: Fetch games from TheOddsAPI
+                # 1) Resolve Odds API key
                 odds_api_key = resolve_odds_api_key()
                 if not odds_api_key:
                     st.error("❌ Please configure your The Odds API key in the sidebar settings.")
-                    st.stop()
-                
-                all_games = []
-                for sport in selected_sports:
-                    snapshot = fetch_oddsapi_snapshot(odds_api_key, sport)
-                    events = snapshot.get("events", [])
-                    for event in events:
-                        event["sport_key"] = sport
-                        raw = event.get("commence_time")
-                        try:
-                            dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
-                        except Exception:
-                            dt = None
-                        event["commence_dt"] = dt
-                        all_games.append(event)
-                
-                if not all_games:
-                    st.warning("No games available today for master analysis.")
                     st.session_state["vertex_master_results"] = None
                 else:
-                    # Step 3: Build analyzer
-                    ml_predictor = st.session_state.get("ml_predictor")
-                    kalshi_int = st.session_state.get("kalshi_integrator")
-                    sentiment = st.session_state.get("sentiment_analyzer")
-                    
-                    analyzer = VertexMasterAnalyzer(
-                        kalshi_client=kalshi_int,
-                        ml_predictor=ml_predictor,
-                        sentiment_analyzer=sentiment,
-                    )
-                    
-                    # Step 4: Run full analysis
-                    results_df = analyzer.run_master_analysis(all_games, league="multi")
-                    
-                    # Persist for re-rendering
-                    st.session_state["vertex_master_results"] = results_df
-            
+                    # 2) Determine which sports to include
+                    sport_map = {
+                        "NFL": "americanfootball_nfl",
+                        "NCAAF": "americanfootball_ncaaf",
+                        "NBA": "basketball_nba",
+                        "NCAAB": "basketball_ncaab",
+                        "NHL": "icehockey_nhl",
+                    }
+
+                    selected_sports = []
+                    selected_labels = st.session_state.get("selected_sports", [])
+                    for label, sport_key in sport_map.items():
+                        if label in selected_labels:
+                            selected_sports.append(sport_key)
+
+                    # If user hasn’t selected any in the sidebar, default to all
+                    if not selected_sports:
+                        selected_sports = list(sport_map.values())
+
+                    # 3) Fetch games for all selected sports
+                    all_games = []
+                    for sport in selected_sports:
+                        snapshot = fetch_oddsapi_snapshot(odds_api_key, sport)
+                        events = snapshot.get("events", []) or []
+
+                        for event in events:
+                            event["sport_key"] = sport
+
+                            # Attach parsed datetime for downstream analysis
+                            raw = event.get("commence_time")
+                            dt = None
+                            if raw:
+                                try:
+                                    dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+                                except Exception:
+                                    dt = None
+                            event["commence_dt"] = dt
+                            all_games.append(event)
+
+                    if not all_games:
+                        st.warning("No games available today for master analysis.")
+                        st.session_state["vertex_master_results"] = None
+                    else:
+                        # 4) Build analyzer
+                        ml_predictor = st.session_state.get("ml_predictor")
+                        kalshi_int = st.session_state.get("kalshi_integrator")
+                        sentiment = st.session_state.get("sentiment_analyzer")
+
+                        analyzer = VertexMasterAnalyzer(
+                            kalshi_client=kalshi_int,
+                            ml_predictor=ml_predictor,
+                            sentiment_analyzer=sentiment,
+                        )
+
+                        # 5) Run master analysis
+                        results_df = analyzer.run_master_analysis(all_games, league="multi")
+
+                        # Persist results so the grid doesn’t disappear
+                        st.session_state["vertex_master_results"] = results_df
+
             except Exception as e:
                 st.error(f"Error during Vertex AI analysis: {e}")
                 logger.error(e, exc_info=True)
                 st.session_state["vertex_master_results"] = None
+
+    # 🔁 Always render the latest results from session_state
+    results_df = st.session_state.get("vertex_master_results")
+
+    if results_df is None:
+        st.info("Click **Run Vertex AI Master Analysis** to analyze today's games.")
+    elif results_df.empty:
+        st.warning("Vertex AI master analysis returned no opportunities for the current filters.")
+    else:
+        st.success(f"✅ Analysis complete! Found {len(results_df)} opportunities")
+        show_vertex_master_analysis(results_df)
+
+        # Build simplified list for Best Bets and store in session_state
+        vertex_results = []
+        for _, row in results_df.iterrows():
+            vertex_results.append(
+                {
+                    "home_team": row.get("home_team", ""),
+                    "away_team": row.get("away_team", ""),
+                    "league": row.get("league", ""),
+                    "vertex_prob": row.get("vertex_ai_prob", 0.5),
+                    "theover_probability": row.get("theover_probability", 0.5),
+                    "theover_pick": row.get("theover_pick", ""),
+                    "theover_total": row.get("theover_total", 0),
+                    "theover_total_pick": row.get("theover_total_pick", ""),
+                    "spread": row.get("home_spread", 0),
+                    "home_ml_odds": row.get("home_ml_odds", 0),
+                    "away_ml_odds": row.get("away_ml_odds", 0),
+                    "implied_home_prob": row.get("implied_home_prob", 0.5),
+                    "sentiment_diff": row.get("sentiment_diff", 0),
+                    "kalshi_available": row.get("kalshi_available", False),
+                    "kalshi_prob": row.get("kalshi_prob", 0.5),
+                    "confidence": min(95, 50 + abs(row.get("vertex_ai_edge", 0)) * 500),
+                }
+            )
+
+        st.session_state["vertex_results"] = vertex_results
+        st.session_state["vertex_analysis_complete"] = True
+
+
+# =====================================================
+# SIMPLE THEODDSAPI-ONLY ANALYSIS
+# Uses ONLY TheOddsAPI for games + odds - no TheOver.ai complexity
+# =====================================================
+if is_vertex_ai_enabled():
+    st.markdown("---")
+    st.subheader("🎯 Quick Analysis (TheOddsAPI Only)")
+    st.caption("Simple analysis using only TheOddsAPI for odds. No CSV uploads needed!")
+
+    if st.button("🚀 Run Quick Analysis", key="quick_analysis_btn", type="primary"):
+        with st.spinner("Fetching games and running AI analysis..."):
+            try:
+                # Get selected sports from session_state, fall back to all
+                sport_map = {
+                    "NFL": "americanfootball_nfl",
+                    "NCAAF": "americanfootball_ncaaf",
+                    "NBA": "basketball_nba",
+                    "NCAAB": "basketball_ncaab",
+                    "NHL": "icehockey_nhl",
+                }
+                selected_sports = []
+                selected_labels = st.session_state.get("selected_sports", [])
+                for label, sport_key in sport_map.items():
+                    if label in selected_labels:
+                        selected_sports.append(sport_key)
+                if not selected_sports:
+                    selected_sports = list(sport_map.values())
+
+                odds_api_key = resolve_odds_api_key()
+                if not odds_api_key:
+                    st.error("❌ Please configure your The Odds API key in the sidebar settings.")
+                    st.stop()
+
+                all_results = []
+
+                for sport_key in selected_sports:
+                    try:
+                        snapshot = fetch_oddsapi_snapshot(odds_api_key, sport_key)
+                        games = snapshot.get("events", []) or []
+                        st.success(f"✅ Fetched {len(games)} {sport_key} games")
+
+                        for game in games:
+                            home_team = game.get("home_team", "")
+                            away_team = game.get("away_team", "")
+
+                            home_ml = None
+                            away_ml = None
+                            home_spread = None
+                            away_spread = None
+
+                            for bookmaker in game.get("bookmakers", []):
+                                for market in bookmaker.get("markets", []):
+                                    if market["key"] == "h2h":  # Moneyline
+                                        for outcome in market.get("outcomes", []):
+                                            if outcome["name"] == home_team:
+                                                if home_ml is None or outcome["price"] > home_ml:
+                                                    home_ml = outcome["price"]
+                                            elif outcome["name"] == away_team:
+                                                if away_ml is None or outcome["price"] > away_ml:
+                                                    away_ml = outcome["price"]
+                                    elif market["key"] == "spreads":
+                                        for outcome in market.get("outcomes", []):
+                                            if outcome["name"] == home_team:
+                                                home_spread = outcome.get("point", 0)
+                                            elif outcome["name"] == away_team:
+                                                away_spread = outcome.get("point", 0)
+
+                            if home_ml is None:
+                                home_ml = -110
+                            if away_ml is None:
+                                away_ml = -110
+
+                            implied_home_prob = american_to_decimal_safe(home_ml)
+                            implied_away_prob = american_to_decimal_safe(away_ml)
+
+                            if implied_home_prob and implied_away_prob:
+                                p_home = 1.0 / implied_home_prob
+                                p_away = 1.0 / implied_away_prob
+                                norm = p_home + p_away
+                                if norm > 0:
+                                    p_home /= norm
+                                    p_away /= norm
+                                else:
+                                    p_home = p_away = 0.5
+                            else:
+                                p_home = p_away = 0.5
+
+                            ai_prob = (p_home + 0.5) / 2.0
+                            ai_edge = ai_prob - p_home
+
+                            all_results.append(
+                                {
+                                    "sport": sport_key,
+                                    "home_team": home_team,
+                                    "away_team": away_team,
+                                    "home_ml": home_ml,
+                                    "away_ml": away_ml,
+                                    "home_spread": home_spread,
+                                    "away_spread": away_spread,
+                                    "implied_home_prob": p_home,
+                                    "implied_away_prob": p_away,
+                                    "ai_prob": ai_prob,
+                                    "ai_edge": ai_edge,
+                                }
+                            )
+
+                    except Exception as e:
+                        st.warning(f"⚠️ Error fetching odds for {sport_key}: {e}")
+
+                if not all_results:
+                    st.warning("No games found for quick analysis.")
+                else:
+                    qa_df = pd.DataFrame(all_results)
+                    qa_df.sort_values("ai_edge", ascending=False, inplace=True)
+                    st.subheader("📊 Quick AI Edge Table")
+                    st.dataframe(qa_df, use_container_width=True)
+
+            except Exception as e:
+                st.error(f"Error during quick analysis: {e}")
+                import traceback
+
+                st.code(traceback.format_exc())
+
     
     # 🔁 Always render the latest results stored in session_state
     results_df = st.session_state.get("vertex_master_results")
