@@ -9646,108 +9646,108 @@ else:
     ml_predictor = st.session_state.get('ml_predictor')
     
     with st.spinner("..."):
-    try:
-        analyzer = VertexMasterAnalyzer(
-            odds_api_client=odds_client if 'odds_client' in locals() else None,
-            sportsdata_clients=sportsdata_clients if 'sportsdata_clients' in locals() else {},
-            apisports_clients={
-                'nba': basketball_client if 'basketball_client' in locals() else None,
-                'nfl': apisports_client if 'apisports_client' in locals() else None,
-                'nhl': hockey_client if 'hockey_client' in locals() else None,
-            },
-            sentiment_analyzer=sentiment_analyzer,  # From session_state
-            local_ml_predictor=ml_predictor,        # From session_state
-            theover_data={
-                'spreads': theover_spreads_data if 'theover_spreads_data' in locals() else None,
-                'totals': theover_totals_data if 'theover_totals_data' in locals() else None,
-                'ml': theover_ml_data if 'theover_ml_data' in locals() else None,
-            },
-            kalshi_integrator=kalshi_int,
-            use_kalshi=st.session_state.get('kalshi_enabled', True),
-        )
-
-        kalshi_obj = getattr(analyzer, "kalshi", None)
-        use_kalshi = getattr(analyzer, "use_kalshi", None)
-        logger.info(
-            f"[VMA BUTTON] Run Vertex AI Master Analysis clicked | "
-            f"use_kalshi={use_kalshi} kalshi_is_none={kalshi_obj is None}"
-        )
-        logger.info(
-            f"[Kalshi ANALYZER] use_kalshi={analyzer.use_kalshi}, "
-            f"integrator_is_none={analyzer.kalshi is None}"
-        )
-
-        results_df = analyzer.analyze_all_games(all_games, league='multi')
-        
-        if not results_df.empty:
-            st.success(f"✅ Analysis complete! Found {len(results_df)} opportunities")
-            show_vertex_master_analysis(results_df)
-            
-            # Store results in session_state for Best Bets and Parlays
-            vertex_results = []
-            for _, row in results_df.iterrows():
-                vertex_results.append({
-                    'home_team': row.get('home_team', ''),
-                    'away_team': row.get('away_team', ''),
-                    'league': row.get('league', ''),
-                    'vertex_prob': row.get('vertex_ai_prob', 0.5),
-                    # Calculate meaningful confidence...
-                    'confidence': min(95, 50 + abs(row.get('vertex_ai_edge', 0)) * 500),
-                    'edge': row.get('vertex_ai_edge', 0),
-                    'has_edge': abs(row.get('vertex_ai_edge', 0)) > 0.03,
-                    'home_sentiment': row.get('home_sentiment', 0),
-                    'away_sentiment': row.get('away_sentiment', 0),
-                    'sentiment_diff': row.get('sentiment_diff', 0),
-                    'local_ml_prob': row.get('local_ml_prob', 0.5),
-                    'theover_probability': row.get('theover_probability', 0.5),
-                    'theover_spread': row.get('theover_spread', 0),
-                    'theover_pick': row.get('theover_pick', ''),
-                    'theover_total': row.get('theover_total', 0),
-                    'theover_total_pick': row.get('theover_total_pick', ''),
-                    'theover_total_probability': row.get('theover_total_probability', 0.5),
-                    'sharp_money_indicator': row.get('sharp_money_indicator', 0),
-                    'home_ml_odds': row.get('home_ml_odds') or row.get('home_ml', 0),
-                    'away_ml_odds': row.get('away_ml_odds') or row.get('away_ml', 0),
-                    'spread': row.get('home_spread') or row.get('spread', 0) or 0,
-                    'total': row.get('total_line') or row.get('total', 0),
-                    'implied_home_prob': row.get('implied_home_prob', 0.5),
-                    # Kalshi prediction market data
-                    'kalshi_available': row.get('kalshi_available', False),
-                    'kalshi_prob': row.get('kalshi_prob'),
-                    'kalshi_alignment': row.get('kalshi_alignment'),
-                    'kalshi_validation_score': row.get('kalshi_validation_score'),
-                    'kalshi_agrees': row.get('kalshi_agrees', None),
-                    'kalshi_arbitrage_opportunity': row.get('kalshi_arbitrage_opportunity', False),
-                    'kalshi_synthetic': row.get('kalshi_synthetic', True),
-                })
-            
-            st.session_state['vertex_results'] = vertex_results
-            st.session_state['vertex_analysis_complete'] = True
-            st.session_state['vertex_timestamp'] = datetime.now()
-            st.session_state['vertex_results_df'] = results_df
-            
-            st.info(f"💾 Stored {len(vertex_results)} games for Best Bets & Parlays. Scroll down to generate!")
-        else:
-            st.warning("⚠️ No results from analysis. Try adjusting your filters.")
-
-    except Exception as e:
-        st.error(f"❌ Error in master analysis: {str(e)}")
-        logger.error(f"Vertex master analysis error: {e}", exc_info=True)
-        
-        with st.expander("🔍 Debug Information"):
-            import traceback
-            st.code(traceback.format_exc())
-
-        st.caption(
-            "AI filters applied: sentiment {sentiment_state}, ML {ml_state}, confidence ≥ {conf:.0%}, "
-            "parlay probability {min_prob:.0%}-{max_prob:.0%}".format(
-                sentiment_state="on" if use_sentiment else "off",
-                ml_state="on" if use_ml_predictions else "off",
-                conf=min_ai_confidence,
-                min_prob=min_parlay_probability,
-                max_prob=max_parlay_probability,
+        try:
+            analyzer = VertexMasterAnalyzer(
+                odds_api_client=odds_client if 'odds_client' in locals() else None,
+                sportsdata_clients=sportsdata_clients if 'sportsdata_clients' in locals() else {},
+                apisports_clients={
+                    'nba': basketball_client if 'basketball_client' in locals() else None,
+                    'nfl': apisports_client if 'apisports_client' in locals() else None,
+                    'nhl': hockey_client if 'hockey_client' in locals() else None,
+                },
+                sentiment_analyzer=sentiment_analyzer,  # From session_state
+                local_ml_predictor=ml_predictor,        # From session_state
+                theover_data={
+                    'spreads': theover_spreads_data if 'theover_spreads_data' in locals() else None,
+                    'totals': theover_totals_data if 'theover_totals_data' in locals() else None,
+                    'ml': theover_ml_data if 'theover_ml_data' in locals() else None,
+                },
+                kalshi_integrator=kalshi_int,
+                use_kalshi=st.session_state.get('kalshi_enabled', True),
             )
-        )
+    
+            kalshi_obj = getattr(analyzer, "kalshi", None)
+            use_kalshi = getattr(analyzer, "use_kalshi", None)
+            logger.info(
+                f"[VMA BUTTON] Run Vertex AI Master Analysis clicked | "
+                f"use_kalshi={use_kalshi} kalshi_is_none={kalshi_obj is None}"
+            )
+            logger.info(
+                f"[Kalshi ANALYZER] use_kalshi={analyzer.use_kalshi}, "
+                f"integrator_is_none={analyzer.kalshi is None}"
+            )
+    
+            results_df = analyzer.analyze_all_games(all_games, league='multi')
+            
+            if not results_df.empty:
+                st.success(f"✅ Analysis complete! Found {len(results_df)} opportunities")
+                show_vertex_master_analysis(results_df)
+                
+                # Store results in session_state for Best Bets and Parlays
+                vertex_results = []
+                for _, row in results_df.iterrows():
+                    vertex_results.append({
+                        'home_team': row.get('home_team', ''),
+                        'away_team': row.get('away_team', ''),
+                        'league': row.get('league', ''),
+                        'vertex_prob': row.get('vertex_ai_prob', 0.5),
+                        # Calculate meaningful confidence...
+                        'confidence': min(95, 50 + abs(row.get('vertex_ai_edge', 0)) * 500),
+                        'edge': row.get('vertex_ai_edge', 0),
+                        'has_edge': abs(row.get('vertex_ai_edge', 0)) > 0.03,
+                        'home_sentiment': row.get('home_sentiment', 0),
+                        'away_sentiment': row.get('away_sentiment', 0),
+                        'sentiment_diff': row.get('sentiment_diff', 0),
+                        'local_ml_prob': row.get('local_ml_prob', 0.5),
+                        'theover_probability': row.get('theover_probability', 0.5),
+                        'theover_spread': row.get('theover_spread', 0),
+                        'theover_pick': row.get('theover_pick', ''),
+                        'theover_total': row.get('theover_total', 0),
+                        'theover_total_pick': row.get('theover_total_pick', ''),
+                        'theover_total_probability': row.get('theover_total_probability', 0.5),
+                        'sharp_money_indicator': row.get('sharp_money_indicator', 0),
+                        'home_ml_odds': row.get('home_ml_odds') or row.get('home_ml', 0),
+                        'away_ml_odds': row.get('away_ml_odds') or row.get('away_ml', 0),
+                        'spread': row.get('home_spread') or row.get('spread', 0) or 0,
+                        'total': row.get('total_line') or row.get('total', 0),
+                        'implied_home_prob': row.get('implied_home_prob', 0.5),
+                        # Kalshi prediction market data
+                        'kalshi_available': row.get('kalshi_available', False),
+                        'kalshi_prob': row.get('kalshi_prob'),
+                        'kalshi_alignment': row.get('kalshi_alignment'),
+                        'kalshi_validation_score': row.get('kalshi_validation_score'),
+                        'kalshi_agrees': row.get('kalshi_agrees', None),
+                        'kalshi_arbitrage_opportunity': row.get('kalshi_arbitrage_opportunity', False),
+                        'kalshi_synthetic': row.get('kalshi_synthetic', True),
+                    })
+                
+                st.session_state['vertex_results'] = vertex_results
+                st.session_state['vertex_analysis_complete'] = True
+                st.session_state['vertex_timestamp'] = datetime.now()
+                st.session_state['vertex_results_df'] = results_df
+                
+                st.info(f"💾 Stored {len(vertex_results)} games for Best Bets & Parlays. Scroll down to generate!")
+            else:
+                st.warning("⚠️ No results from analysis. Try adjusting your filters.")
+    
+        except Exception as e:
+            st.error(f"❌ Error in master analysis: {str(e)}")
+            logger.error(f"Vertex master analysis error: {e}", exc_info=True)
+            
+            with st.expander("🔍 Debug Information"):
+                import traceback
+                st.code(traceback.format_exc())
+    
+            st.caption(
+                "AI filters applied: sentiment {sentiment_state}, ML {ml_state}, confidence ≥ {conf:.0%}, "
+                "parlay probability {min_prob:.0%}-{max_prob:.0%}".format(
+                    sentiment_state="on" if use_sentiment else "off",
+                    ml_state="on" if use_ml_predictions else "off",
+                    conf=min_ai_confidence,
+                    min_prob=min_parlay_probability,
+                    max_prob=max_parlay_probability,
+                )
+            )
 
     builder = st.session_state.get('historical_data_builder')
     builder_error = st.session_state.get('historical_builder_error')
