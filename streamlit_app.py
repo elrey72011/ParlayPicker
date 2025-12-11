@@ -8939,37 +8939,40 @@ with main_tab1:
                             # NEW WAY (Uses your fix)
                             from vertex_master_analyzer import VertexMasterAnalyzer, show_vertex_master_analysis
 
-                            # ------------------------------------------------------------------
-                            # Vertex AI Master Analysis – SAFE VERSION
-                            # ------------------------------------------------------------------
+                            # -----------------------------------------------
+                            # Vertex AI Master Analysis (stable version)
+                            # -----------------------------------------------
                             
-                            # Recover any previous results from session_state
-                            results_df = st.session_state.get("vertex_master_results")
+                            # Initialize storage for results
+                            if "vertex_master_results" not in st.session_state:
+                                st.session_state["vertex_master_results"] = None
                             
+                            # Run the analysis when button is clicked
                             if st.button("🚀 Run Vertex AI Master Analysis", key="vertex_master_btn"):
-                                with st.spinner("Consolidating all data sources."):
+                                with st.spinner("Consolidating all data sources..."):
                                     try:
-                                        # 1. Create the analyzer using the factory function
                                         analyzer = create_vertex_master_analyzer()
                             
-                                        # 2. Run analysis on all_games (already built above)
+                                        # all_games should already be built earlier in your code
                                         results_df = analyzer.analyze_all_games(all_games, league="multi")
                             
-                                        # 3. Persist results for future reruns
+                                        # Save to session_state so it persists after rerun
                                         st.session_state["vertex_master_results"] = results_df
                             
                                     except Exception as e:
                                         st.error(f"Error during Vertex AI analysis: {e}")
                                         logger.error(f"Vertex AI analysis error: {e}", exc_info=True)
-                                        results_df = None
                                         st.session_state["vertex_master_results"] = None
                             
-                            # Safely display results if we have them
+                            # Read the latest results
+                            results_df = st.session_state.get("vertex_master_results")
+                            
+                            # Safely render if we actually have results
                             if results_df is not None and not results_df.empty:
                                 st.success(f"✅ Analysis complete! Found {len(results_df)} opportunities")
                                 show_vertex_master_analysis(results_df)
                             
-                                # Store simplified results for the Best Bets section
+                                # Build simplified list for Best Bets and store in session_state
                                 vertex_results = []
                                 for _, row in results_df.iterrows():
                                     vertex_results.append({
@@ -8994,46 +8997,13 @@ with main_tab1:
                                 st.session_state["vertex_results"] = vertex_results
                                 st.session_state["vertex_analysis_complete"] = True
                             
-                            elif st.session_state.get("vertex_master_results") is None:
-                                # First time / no run yet – optional helper message
+                            elif results_df is None:
+                                # First load / never run yet
                                 st.info("Click **Run Vertex AI Master Analysis** to analyze today's games.")
-
-                                # Store results for Best Bets
-                                vertex_results = []
-                                for _, row in results_df.iterrows():
-                                    vertex_results.append({
-                                        'home_team': row.get('home_team', ''),
-                                        'away_team': row.get('away_team', ''),
-                                        'league': row.get('league', ''),
-                                        'vertex_prob': row.get('vertex_ai_prob', 0.5),
-                                        'theover_probability': row.get('theover_probability', 0.5),
-                                        'theover_pick': row.get('theover_pick', ''),
-                                        'theover_total': row.get('theover_total', 0),
-                                        'theover_total_pick': row.get('theover_total_pick', ''),
-                                        'spread': row.get('home_spread', 0),
-                                        'home_ml_odds': row.get('home_ml_odds', 0),
-                                        'away_ml_odds': row.get('away_ml_odds', 0),
-                                        'implied_home_prob': row.get('implied_home_prob', 0.5),
-                                        'sentiment_diff': row.get('sentiment_diff', 0),
-                                        'kalshi_available': row.get('kalshi_available', False),
-                                        'kalshi_prob': row.get('kalshi_prob', 0.5),
-                                        'confidence': min(95, 50 + abs(row.get('vertex_ai_edge', 0)) * 500),
-                                    })
-                                st.session_state['vertex_results'] = vertex_results
-                                st.session_state['vertex_analysis_complete'] = True
+                            
                             else:
-                                st.warning("No results from Vertex AI analysis")
-                                
-                    except Exception as e:
-                        st.error(f"Error during Vertex AI analysis: {e}")
-                        logger.error(f"Vertex AI analysis error: {e}", exc_info=True)
-                        import traceback
-                        with st.expander("🔍 Debug"):
-                            st.code(traceback.format_exc())
-        else:
-            st.info("💡 Upload spread or totals picks above to enable Vertex AI analysis")
-    
-    st.markdown("---")
+                                # We ran but got no rows back
+                                st.warning("Vertex AI master analysis returned no opportunities for the current filters.")
 
 # VERTEX AI MASTER ANALYSIS
 
