@@ -8811,6 +8811,11 @@ with main_tab1:
                             sentiment_analyzer = st.session_state.get('sentiment_analyzer')
                             ml_predictor = st.session_state.get('ml_predictor')
                             
+                           st.write(f"[DEBUG] Master Analysis – games fetched: {len(all_games)}")
+                            if all_games:
+                                first = all_games[0]
+                                st.write("[DEBUG] Sample game keys:", list(first.keys())[:15])
+
                             # Initialize Analyzer
                             analyzer = VertexMasterAnalyzer(
                                 sentiment_analyzer=sentiment_analyzer,
@@ -8895,7 +8900,7 @@ if is_vertex_ai_enabled():
                     if not selected_sports:
                         selected_sports = list(sport_map.values())
 
-                    # 3) Fetch games for all selected sports
+                    # 3) Fetch games AND flatten odds for the Analyzer
                     all_games = []
                     for sport in selected_sports:
                         snapshot = fetch_oddsapi_snapshot(odds_api_key, sport)
@@ -8904,6 +8909,60 @@ if is_vertex_ai_enabled():
                         for event in events:
                             event["sport_key"] = sport
 
+                            # --- FIX: FLATTEN ODDS FOR ANALYZER ---
+                            # The Analyzer expects top-level keys like 'home_ml_odds', not nested bookmakers
+                            home_team = event.get('home_team')
+                            away_team = event.get('away_team')
+                            
+                            best_home_ml = None
+                            best_away_ml = None
+                            best_home_spread = None
+                            best_away_spread = None
+                            best_home_spread_odds = None
+                            best_away_spread_odds = None
+
+                            # Iterate bookmakers to find lines
+                            bookmakers = event.get('bookmakers', [])
+                            for bm in bookmakers:
+                                for mkt in bm.get('markets', []):
+                                    if mkt['key'] == 'h2h':
+                                        for out in mkt['outcomes']:
+                                            if out['name'] == home_team:
+                                                # Take the first one we find, or logic to find best
+                                                if best_home_ml is None: best_home_ml = out['price']
+                                            elif out['name'] == away_team:
+                                                if best_away_ml is None: best_away_ml = out['price']
+                                    elif mkt['key'] == 'spreads':
+                                        for out in mkt['outcomes']:
+                                            if out['name'] == home_team:
+                                                if best_home_spread is None: 
+                                                    best_home_spread = out.get('point')
+                                                    best_home_spread_odds = out.get('price')
+                                            elif out['name'] == away_team:
+                                                if best_away_spread is None:
+                                                    best_away_spread = out.get('point')
+                                                    best_away_spread_odds = out.get('price')
+
+                            # Inject flattened keys into the event dict
+                            event["home_ml_odds"] = best_home_ml
+                            event["away_ml_odds"] = best_away_ml
+                            event["home_spread"] = best_home_spread
+                            event["away_spread"] = best_away_spread
+                            event["home_spread_odds"] = best_home_spread_odds
+                            event["away_spread_odds"] = best_away_spread_odds
+                            
+                            # Calculate implied prob for reference
+                            try:
+                                if best_home_ml:
+                                    # Simple conversion for american odds
+                                    if best_home_ml < 0:
+                                        ip = (-best_home_ml) / (-best_home_ml + 100)
+                                    else:
+                                        ip = 100 / (best_home_ml + 100)
+                                    event["implied_home_prob"] = ip
+                            except:
+                                pass
+                            
                             # Attach parsed datetime for downstream analysis
                             raw = event.get("commence_time")
                             dt = None
@@ -8913,10 +8972,13 @@ if is_vertex_ai_enabled():
                                 except Exception:
                                     dt = None
                             event["commence_dt"] = dt
-                            all_games.append(event)
+                            
+                            # Only add if we actually found odds
+                            if best_home_ml or best_home_spread:
+                                all_games.append(event)
 
                     if not all_games:
-                        st.warning("No games available today for master analysis.")
+                        st.warning("No games with active odds found for master analysis.")
                         st.session_state["vertex_master_results"] = None
                     else:
                         # 4) Build analyzer
@@ -8941,44 +9003,6 @@ if is_vertex_ai_enabled():
                 st.error(f"Error during Vertex AI analysis: {e}")
                 logger.error(e, exc_info=True)
                 st.session_state["vertex_master_results"] = None
-
-    # 🔁 Always render the latest results from session_state
-    results_df = st.session_state.get("vertex_master_results")
-
-    if results_df is None:
-        st.info("Click **Run Vertex AI Master Analysis** to analyze today's games.")
-    elif results_df.empty:
-        st.warning("Vertex AI master analysis returned no opportunities for the current filters.")
-    else:
-        st.success(f"✅ Analysis complete! Found {len(results_df)} opportunities")
-        show_vertex_master_analysis(results_df)
-
-        # Build simplified list for Best Bets and store in session_state
-        vertex_results = []
-        for _, row in results_df.iterrows():
-            vertex_results.append(
-                {
-                    "home_team": row.get("home_team", ""),
-                    "away_team": row.get("away_team", ""),
-                    "league": row.get("league", ""),
-                    "vertex_prob": row.get("vertex_ai_prob", 0.5),
-                    "theover_probability": row.get("theover_probability", 0.5),
-                    "theover_pick": row.get("theover_pick", ""),
-                    "theover_total": row.get("theover_total", 0),
-                    "theover_total_pick": row.get("theover_total_pick", ""),
-                    "spread": row.get("home_spread", 0),
-                    "home_ml_odds": row.get("home_ml_odds", 0),
-                    "away_ml_odds": row.get("away_ml_odds", 0),
-                    "implied_home_prob": row.get("implied_home_prob", 0.5),
-                    "sentiment_diff": row.get("sentiment_diff", 0),
-                    "kalshi_available": row.get("kalshi_available", False),
-                    "kalshi_prob": row.get("kalshi_prob", 0.5),
-                    "confidence": min(95, 50 + abs(row.get("vertex_ai_edge", 0)) * 500),
-                }
-            )
-
-        st.session_state["vertex_results"] = vertex_results
-        st.session_state["vertex_analysis_complete"] = True
 
 # =====================================================
 # SIMPLE THEODDSAPI-ONLY ANALYSIS
