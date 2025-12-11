@@ -3094,7 +3094,7 @@ def validate_with_kalshi(kalshi_integrator, home_team: str, away_team: str,
             'data_source': 'synthetic' if synthetic else 'kalshi'
         }
 
-    # --- MAIN TRY BLOCK (This was missing causing SyntaxError) ---
+    # --- MAIN TRY BLOCK ---
     try:
         markets = kalshi_integrator.get_sports_markets()
         if not markets: return None
@@ -3117,6 +3117,8 @@ def validate_with_kalshi(kalshi_integrator, home_team: str, away_team: str,
             'edge': 0,
             'confidence_boost': 0
         }
+    
+    # (The second 'except' block is removed completely)
 
     except Exception as e:
         # Fail gracefully
