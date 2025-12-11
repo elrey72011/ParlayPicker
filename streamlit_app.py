@@ -8813,9 +8813,10 @@ with main_tab1:
                             
                             # Initialize Analyzer
                             analyzer = VertexMasterAnalyzer(
-                                kalshi_client=kalshi_int,
-                                ml_predictor=ml_predictor,
-                                sentiment_analyzer=sentiment_analyzer
+                                sentiment_analyzer=sentiment_analyzer,
+                                local_ml_predictor=ml_predictor,
+                                kalshi_integrator=kalshi_int,
+                                use_kalshi=st.session_state.get("kalshi_enabled", True),
                             )
                             
                             # Run Analysis
@@ -8924,9 +8925,10 @@ if is_vertex_ai_enabled():
                         sentiment = st.session_state.get("sentiment_analyzer")
 
                         analyzer = VertexMasterAnalyzer(
-                            kalshi_client=kalshi_int,
-                            ml_predictor=ml_predictor,
                             sentiment_analyzer=sentiment,
+                            local_ml_predictor=ml_predictor,
+                            kalshi_integrator=kalshi_int,
+                            use_kalshi=st.session_state.get("kalshi_enabled", True),
                         )
 
                         # 5) Run master analysis
