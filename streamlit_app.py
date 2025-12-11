@@ -9645,52 +9645,53 @@ else:
     # Get ML predictor from session state
     ml_predictor = st.session_state.get('ml_predictor')
     
-    analyzer = VertexMasterAnalyzer(
-        odds_api_client=odds_client if 'odds_client' in locals() else None,
-        sportsdata_clients=sportsdata_clients if 'sportsdata_clients' in locals() else {},
-        apisports_clients={
-            'nba': basketball_client if 'basketball_client' in locals() else None,
-            'nfl': apisports_client if 'apisports_client' in locals() else None,
-            'nhl': hockey_client if 'hockey_client' in locals() else None,
-        },
-        sentiment_analyzer=sentiment_analyzer,  # From session_state
-        local_ml_predictor=ml_predictor,  # From session_state
-        theover_data={
-            'spreads': theover_spreads_data if 'theover_spreads_data' in locals() else None,
-            'totals': theover_totals_data if 'theover_totals_data' in locals() else None,
-            'ml': theover_ml_data if 'theover_ml_data' in locals() else None,
-        },
-        kalshi_integrator=kalshi_int,
-        use_kalshi=st.session_state.get('kalshi_enabled', True),
-    )
-    kalshi_obj = getattr(analyzer, "kalshi", None)
-    use_kalshi = getattr(analyzer, "use_kalshi", None)
-    logger.info(
-        f"[VMA BUTTON] Run Vertex AI Master Analysis clicked | "
-        f"use_kalshi={use_kalshi} kalshi_is_none={kalshi_obj is None}"
-    )
-    logger.info(
-        f"[Kalshi ANALYZER] use_kalshi={analyzer.use_kalshi}, "
-        f"integrator_is_none={analyzer.kalshi is None}"
-    )
+    with st.spinner("..."):
+    try:
+        analyzer = VertexMasterAnalyzer(
+            odds_api_client=odds_client if 'odds_client' in locals() else None,
+            sportsdata_clients=sportsdata_clients if 'sportsdata_clients' in locals() else {},
+            apisports_clients={
+                'nba': basketball_client if 'basketball_client' in locals() else None,
+                'nfl': apisports_client if 'apisports_client' in locals() else None,
+                'nhl': hockey_client if 'hockey_client' in locals() else None,
+            },
+            sentiment_analyzer=sentiment_analyzer,  # From session_state
+            local_ml_predictor=ml_predictor,        # From session_state
+            theover_data={
+                'spreads': theover_spreads_data if 'theover_spreads_data' in locals() else None,
+                'totals': theover_totals_data if 'theover_totals_data' in locals() else None,
+                'ml': theover_ml_data if 'theover_ml_data' in locals() else None,
+            },
+            kalshi_integrator=kalshi_int,
+            use_kalshi=st.session_state.get('kalshi_enabled', True),
+        )
 
-    results_df = analyzer.analyze_all_games(all_games, league='multi')
-    
-    if not results_df.empty:
-        st.success(f"✅ Analysis complete! Found {len(results_df)} opportunities")
-        show_vertex_master_analysis(results_df)
+        kalshi_obj = getattr(analyzer, "kalshi", None)
+        use_kalshi = getattr(analyzer, "use_kalshi", None)
+        logger.info(
+            f"[VMA BUTTON] Run Vertex AI Master Analysis clicked | "
+            f"use_kalshi={use_kalshi} kalshi_is_none={kalshi_obj is None}"
+        )
+        logger.info(
+            f"[Kalshi ANALYZER] use_kalshi={analyzer.use_kalshi}, "
+            f"integrator_is_none={analyzer.kalshi is None}"
+        )
+
+        results_df = analyzer.analyze_all_games(all_games, league='multi')
         
-        # Store results in session_state for Best Bets and Parlays
-        vertex_results = []
-        for _, row in results_df.iterrows():
-            vertex_results.append({
-                'home_team': row.get('home_team', ''),
-                'away_team': row.get('away_team', ''),
-                'league': row.get('league', ''),
+        if not results_df.empty:
+            st.success(f"✅ Analysis complete! Found {len(results_df)} opportunities")
+            show_vertex_master_analysis(results_df)
+            
+            # Store results in session_state for Best Bets and Parlays
+            vertex_results = []
+            for _, row in results_df.iterrows():
+                vertex_results.append({
+                    'home_team': row.get('home_team', ''),
+                    'away_team': row.get('away_team', ''),
+                    'league': row.get('league', ''),
                     'vertex_prob': row.get('vertex_ai_prob', 0.5),
-                    # Calculate meaningful confidence: base 50% + (edge * 500) capped at 95%
-                    # Edge of 0.10 (10%) = 50 + 50 = 100% confidence
-                    # Edge of 0.05 (5%) = 50 + 25 = 75% confidence
+                    # Calculate meaningful confidence...
                     'confidence': min(95, 50 + abs(row.get('vertex_ai_edge', 0)) * 500),
                     'edge': row.get('vertex_ai_edge', 0),
                     'has_edge': abs(row.get('vertex_ai_edge', 0)) > 0.03,
@@ -9717,7 +9718,7 @@ else:
                     'kalshi_validation_score': row.get('kalshi_validation_score'),
                     'kalshi_agrees': row.get('kalshi_agrees', None),
                     'kalshi_arbitrage_opportunity': row.get('kalshi_arbitrage_opportunity', False),
-                    'kalshi_synthetic': row.get('kalshi_synthetic', True),  # Indicates if synthetic data
+                    'kalshi_synthetic': row.get('kalshi_synthetic', True),
                 })
             
             st.session_state['vertex_results'] = vertex_results
@@ -9728,24 +9729,25 @@ else:
             st.info(f"💾 Stored {len(vertex_results)} games for Best Bets & Parlays. Scroll down to generate!")
         else:
             st.warning("⚠️ No results from analysis. Try adjusting your filters.")
-    
-except Exception as e:
-    st.error(f"❌ Error in master analysis: {str(e)}")
-    logger.error(f"Vertex master analysis error: {e}", exc_info=True)
-    
-    with st.expander("🔍 Debug Information"):
-        import traceback
-        st.code(traceback.format_exc())
 
-    st.caption(
-        "AI filters applied: sentiment {sentiment_state}, ML {ml_state}, confidence ≥ {conf:.0%}, parlay probability {min_prob:.0%}-{max_prob:.0%}".format(
-            sentiment_state="on" if use_sentiment else "off",
-            ml_state="on" if use_ml_predictions else "off",
-            conf=min_ai_confidence,
-            min_prob=min_parlay_probability,
-            max_prob=max_parlay_probability,
+    except Exception as e:
+        st.error(f"❌ Error in master analysis: {str(e)}")
+        logger.error(f"Vertex master analysis error: {e}", exc_info=True)
+        
+        with st.expander("🔍 Debug Information"):
+            import traceback
+            st.code(traceback.format_exc())
+
+        st.caption(
+            "AI filters applied: sentiment {sentiment_state}, ML {ml_state}, confidence ≥ {conf:.0%}, "
+            "parlay probability {min_prob:.0%}-{max_prob:.0%}".format(
+                sentiment_state="on" if use_sentiment else "off",
+                ml_state="on" if use_ml_predictions else "off",
+                conf=min_ai_confidence,
+                min_prob=min_parlay_probability,
+                max_prob=max_parlay_probability,
+            )
         )
-    )
 
     builder = st.session_state.get('historical_data_builder')
     builder_error = st.session_state.get('historical_builder_error')
