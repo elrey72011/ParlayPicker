@@ -21,6 +21,8 @@ from typing import Dict, Any, List, Tuple, Optional, Iterable, Sequence, Type, S
 from datetime import datetime, timedelta, date, timezone
 from pathlib import Path
 from collections import defaultdict
+from app_core import KalshiIntegrator
+from app_core.kalshi_integrator import price_to_prob  # <-- add this line
 
 # --- 2. THIRD PARTY IMPORTS (Streamlit must be imported here) ---
 import pandas as pd
