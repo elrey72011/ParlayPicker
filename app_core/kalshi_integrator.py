@@ -359,17 +359,35 @@ class KalshiIntegrator:
 
     def get_markets(self, status: str = "open") -> List[Dict[str, Any]]:
         now = time.time()
+    
+        # 1) Use cache if still fresh
         if self._markets_cache and (now - self._markets_cache_ts) < self.cache_ttl_seconds:
             return self._markets_cache
+    
+        params = {"limit": 1000, "status": status}
+        data = self._make_authenticated_request("GET", "/markets", params=params)
+    
+        # 2) If API call failed, fall back to cache instead of empty
+        if not data:
+            if self._markets_cache:
+                logger.warning("Kalshi API error, falling back to cached markets.")
+                return self._markets_cache
+            return []
+    
+        markets = data.get("markets", [])
+    
+        # 3) If API returned no markets, also fall back to cache
+        if not markets:
+            if self._markets_cache:
+                logger.warning("Kalshi returned 0 markets, using cached markets instead.")
+                return self._markets_cache
+            return []
 
-        data = self._make_authenticated_request("GET", "/markets", params={"limit": 2000, "status": status})
-        markets = data.get("markets", []) if data else []
-        
-        if markets:
-            self._markets_cache = markets
-            self._markets_cache_ts = now
-            logger.info(f"✅ Successfully loaded {len(markets)} Kalshi markets")
-        return markets
+    # 4) Happy path: update cache and return
+    self._markets_cache = markets
+    self._markets_cache_ts = now
+    logger.info(f"✅ Successfully loaded {len(markets)} Kalshi markets")
+    return markets
 
     def get_sports_markets(self): return self.get_markets()
     def get_game_markets_for_events(self, league): return self.get_markets()
