@@ -276,32 +276,46 @@ def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time:
 
 class KalshiIntegrator:
     def __init__(self, api_key: Optional[str] = None, api_secret: Optional[str] = None) -> None:
-        self.api_key = api_key or os.getenv("KALSHI_API_KEY") or st.secrets.get("KALSHI_API_KEY", "")
-        self.api_secret = api_secret or st.secrets.get("KALSHI_API_SECRET", "") or os.getenv("KALSHI_API_SECRET", "")
-        
-        # Clean private key format
-        if self.api_secret:
-            # Convert \n from env/secrets into real newlines
-            cleaned = self.api_secret.replace("\\n", "\n").strip()
-
-    # If it already looks like a PEM, use as-is
-    if "-----BEGIN" in cleaned:
-        self.api_secret = cleaned
-    else:
-        # If you *really* are storing just the base64 body (not recommended),
-        # you can wrap it in a generic PRIVATE KEY header:
+        # Resolve key + secret from args, env, or Streamlit secrets
+        self.api_key = (
+            api_key
+            or os.getenv("KALSHI_API_KEY")
+            or st.secrets.get("KALSHI_API_KEY", "")
+        )
         self.api_secret = (
-            "-----BEGIN PRIVATE KEY-----\n"
-            + cleaned +
-            "\n-----END PRIVATE KEY-----"
+            api_secret
+            or st.secrets.get("KALSHI_API_SECRET", "")
+            or os.getenv("KALSHI_API_SECRET", "")
         )
 
+        # --- Clean private key format ---
+        if self.api_secret:
+            # Turn literal "\n" into real newlines
+            cleaned = self.api_secret.replace("\\n", "\n").strip()
 
-        self.api_url = "https://trading-api.kalshi.com/trade-api/v2"
-        self._markets_cache = []
-        self._markets_cache_ts = 0
-        self.cache_ttl_seconds = 300 
-        self.last_error = None
+            # If it already looks like PEM, trust it
+            if "-----BEGIN" in cleaned:
+                self.api_secret = cleaned
+            else:
+                # Only if you're really storing just the body (not recommended)
+                self.api_secret = (
+                    "-----BEGIN PRIVATE KEY-----\n"
+                    + cleaned +
+                    "\n-----END PRIVATE KEY-----"
+                )
+
+        # --- Correct Kalshi base URL (per SDK quickstart) ---
+        # You can toggle demo vs prod with an env var if you want:
+        # use_demo = os.getenv("KALSHI_DEMO", "false").lower() == "true"
+        # base_host = "https://demo-api.kalshi.co" if use_demo else "https://api.elections.kalshi.com"
+        # self.api_url = f"{base_host}/trade-api/v2"
+        self.api_url = "https://api.elections.kalshi.com/trade-api/v2"
+
+        # Caching + error state
+        self._markets_cache: List[Dict[str, Any]] = []
+        self._markets_cache_ts: float = 0.0
+        self.cache_ttl_seconds: int = 300
+        self.last_error: Optional[str] = None
 
     def _sign_request(self, method: str, path: str, timestamp: str) -> str:
         if not self.api_secret: return ""
