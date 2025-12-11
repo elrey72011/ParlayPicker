@@ -8811,6 +8811,7 @@ with main_tab1:
                             sentiment_analyzer = st.session_state.get('sentiment_analyzer')
                             ml_predictor = st.session_state.get('ml_predictor')
                             
+                            # DEBUG: Verify games are being passed correctly
                             st.write(f"[DEBUG] Master Analysis – games fetched: {len(all_games)}")
                             if all_games:
                                 first = all_games[0]
@@ -8828,6 +8829,25 @@ with main_tab1:
                             results_df = analyzer.analyze_all_games(all_games, league='multi')
                             
                             if not results_df.empty:
+                                # --- NEW: Filter for TODAY'S games only ---
+                                from datetime import datetime
+                                import pytz
+                                
+                                try:
+                                    # Create filtering date in US/Eastern
+                                    today_date = datetime.now(pytz.timezone('US/Eastern')).date()
+                                    
+                                    # Ensure 'game_time' is datetime (VertexMasterAnalyzer output usually has this)
+                                    if 'game_time' in results_df.columns:
+                                        # Filter the DataFrame directly
+                                        results_df = results_df[
+                                            pd.to_datetime(results_df['game_time']).dt.date == today_date
+                                        ].reset_index(drop=True)
+                                        st.success(f"✅ Filtered to {len(results_df)} games for TODAY ({today_date})")
+                                except Exception as e:
+                                    st.warning(f"⚠️ Date filtering failed: {e}")
+                                # -------------------------------------------
+
                                 st.success(f"✅ Analysis complete! Found {len(results_df)} opportunities")
                                 show_vertex_master_analysis(results_df)
                                 
