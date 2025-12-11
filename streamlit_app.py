@@ -8935,77 +8935,161 @@ with main_tab1:
                             sentiment_analyzer = st.session_state.get('sentiment_analyzer')
                             ml_predictor = st.session_state.get('ml_predictor')
                             
-                            # Create analyzer with TheOver data
-                            # NEW WAY (Uses your fix)
-                            from vertex_master_analyzer import VertexMasterAnalyzer, show_vertex_master_analysis
+                            # VERTEX AI MASTER ANALYSIS (Complex - with TheOver.ai integration)
+                            if is_vertex_ai_enabled():
+                                st.markdown("---")
+                                st.subheader("🌟 Vertex AI Master Analysis (Advanced)")
+                                st.caption("Comprehensive analysis combining TheOddsAPI, TheOver.ai, sentiment, and Kalshi.")
+                            
+                                from vertex_master_analyzer import VertexMasterAnalyzer, show_vertex_master_analysis
+                            
+                                # MAIN ENTRY POINT – actually run the analysis
+                                if st.button("🌟 Run Vertex AI Master Analysis", key="vertex_master_btn", type="secondary"):
+                                    with st.spinner("Running comprehensive AI analysis. Consolidating all data sources."):
+                                        try:
+                                            # 1️⃣ Figure out which sports to include
+                                            selected_sports = []
+                                            if "NBA" in st.session_state.get("selected_sports", []):
+                                                selected_sports.append("basketball_nba")
+                                            if "NCAAF" in st.session_state.get("selected_sports", []):
+                                                selected_sports.append("americanfootball_ncaaf")
+                                            if "NFL" in st.session_state.get("selected_sports", []):
+                                                selected_sports.append("americanfootball_nfl")
+                                            if "NCAAB" in st.session_state.get("selected_sports", []):
+                                                selected_sports.append("basketball_ncaab")
+                                            if "NHL" in st.session_state.get("selected_sports", []):
+                                                selected_sports.append("icehockey_nhl")
+                            
+                                            if not selected_sports:
+                                                selected_sports = [
+                                                    "basketball_nba",
+                                                    "americanfootball_nfl",
+                                                    "americanfootball_ncaaf",
+                                                    "basketball_ncaab",
+                                                    "icehockey_nhl",
+                                                ]
+                            
+                                            # 2️⃣ Fetch today’s games from TheOddsAPI
+                                            from datetime import datetime, timezone, timedelta
+                            
+                                            odds_api_key = resolve_odds_api_key()
+                                            if not odds_api_key:
+                                                st.error("❌ TheOddsAPI key required for Vertex AI Master Analysis")
+                                                st.stop()
+                            
+                                            now_utc = datetime.now(timezone.utc)
+                                            today_utc = now_utc.date()
+                            
+                                            st.info("📡 Fetching games from TheOddsAPI for Vertex AI Master Analysis.")
+                                            all_games = []
+                            
+                                            for sport in selected_sports:
+                                                snapshot = fetch_oddsapi_snapshot(odds_api_key, sport)
+                                                games = snapshot.get("events", [])
+                                                if not games:
+                                                    continue
+                            
+                                                for game in games:
+                                                    # Read commence_time (dict or object)
+                                                    if isinstance(game, dict):
+                                                        commence_time_str = game.get("commence_time")
+                                                    else:
+                                                        commence_time_str = getattr(game, "commence_time", None)
+                            
+                                                    if not commence_time_str:
+                                                        continue
+                            
+                                                    try:
+                                                        commence_dt = datetime.fromisoformat(
+                                                            str(commence_time_str).replace("Z", "+00:00")
+                                                        )
+                                                    except Exception:
+                                                        continue
+                            
+                                                    # Filter to +/- 1 day around today (UTC)
+                                                    if not (today_utc - timedelta(days=1) <= commence_dt.date() <= today_utc + timedelta(days=1)):
+                                                        continue
+                            
+                                                    # Attach parsed datetime and sport info for downstream Kalshi matching
+                                                    if isinstance(game, dict):
+                                                        game["commence_dt"] = commence_dt
+                                                    else:
+                                                        setattr(game, "commence_dt", commence_dt)
+                                                    game["sport_key"] = sport
+                            
+                                                    all_games.append(game)
+                            
+                                            if not all_games:
+                                                st.warning("⚠️ No games found for Vertex AI Master Analysis.")
+                                                st.session_state["vertex_master_results"] = None
+                                            else:
+                                                st.info(f"🤖 Analyzing {len(all_games)} games with Vertex AI.")
+                            
+                                                # 3️⃣ Build the VertexMasterAnalyzer (uses your Kalshi + ML + sentiment, etc.)
+                                                ml_predictor = get_ml_predictor_smart("multi") if "get_ml_predictor_smart" in globals() else None
+                                                kalshi_int = st.session_state.get("kalshi_integrator")
+                                                sentiment_analyzer = st.session_state.get("sentiment_analyzer")
+                            
+                                                analyzer = VertexMasterAnalyzer(
+                                                    kalshi_client=kalshi_int,
+                                                    ml_predictor=ml_predictor,
+                                                    sentiment_analyzer=sentiment_analyzer,
+                                                )
+                            
+                                                # 4️⃣ Run the full master analysis
+                                                results_df = analyzer.run_master_analysis(all_games, league="multi")
+                            
+                                                # ✅ Save results for later display so the grid doesn’t vanish on rerun
+                                                st.session_state["vertex_master_results"] = results_df
+                            
+                                        except Exception as e:
+                                            st.error(f"Error during Vertex AI analysis: {e}")
+                                            logger.error(f"Vertex AI analysis error: {e}", exc_info=True)
+                                            import traceback
+                            
+                                            with st.expander("🔍 Debug details"):
+                                                st.code(traceback.format_exc())
+                                            # On error, make sure we don't keep stale results around
+                                            st.session_state["vertex_master_results"] = None
+                            
+                                # 🔁 Always render the latest results stored in session_state
+                                results_df = st.session_state.get("vertex_master_results")
+                            
+                                if results_df is None:
+                                    st.info("Click **Run Vertex AI Master Analysis** to analyze today's games.")
+                                elif results_df.empty:
+                                    st.warning("Vertex AI master analysis returned no opportunities for the current filters.")
+                                else:
+                                    st.success(f"✅ Analysis complete! Found {len(results_df)} opportunities")
+                                    show_vertex_master_analysis(results_df)
+                            
+                                    # Build simplified list for Best Bets and store in session_state
+                                    vertex_results = []
+                                    for _, row in results_df.iterrows():
+                                        vertex_results.append(
+                                            {
+                                                "home_team": row.get("home_team", ""),
+                                                "away_team": row.get("away_team", ""),
+                                                "league": row.get("league", ""),
+                                                "vertex_prob": row.get("vertex_ai_prob", 0.5),
+                                                "theover_probability": row.get("theover_probability", 0.5),
+                                                "theover_pick": row.get("theover_pick", ""),
+                                                "theover_total": row.get("theover_total", 0),
+                                                "theover_total_pick": row.get("theover_total_pick", ""),
+                                                "spread": row.get("home_spread", 0),
+                                                "home_ml_odds": row.get("home_ml_odds", 0),
+                                                "away_ml_odds": row.get("away_ml_odds", 0),
+                                                "implied_home_prob": row.get("implied_home_prob", 0.5),
+                                                "sentiment_diff": row.get("sentiment_diff", 0),
+                                                "kalshi_available": row.get("kalshi_available", False),
+                                                "kalshi_prob": row.get("kalshi_prob", 0.5),
+                                                "confidence": min(95, 50 + abs(row.get("vertex_ai_edge", 0)) * 500),
+                                            }
+                                        )
+                            
+                                    st.session_state["vertex_results"] = vertex_results
+                                    st.session_state["vertex_analysis_complete"] = True
 
-                            # -----------------------------------------------
-                            # Vertex AI Master Analysis (stable version)
-                            # -----------------------------------------------
-                            
-                            # Initialize storage for results
-                            if "vertex_master_results" not in st.session_state:
-                                st.session_state["vertex_master_results"] = None
-                            
-                            # Run the analysis when button is clicked
-                            if st.button("🚀 Run Vertex AI Master Analysis", key="vertex_master_btn"):
-                                with st.spinner("Consolidating all data sources..."):
-                                    try:
-                                        analyzer = create_vertex_master_analyzer()
-                            
-                                        # all_games should already be built earlier in your code
-                                        results_df = analyzer.analyze_all_games(all_games, league="multi")
-                            
-                                        # Save to session_state so it persists after rerun
-                                        st.session_state["vertex_master_results"] = results_df
-                            
-                                    except Exception as e:
-                                        st.error(f"Error during Vertex AI analysis: {e}")
-                                        logger.error(f"Vertex AI analysis error: {e}", exc_info=True)
-                                        st.session_state["vertex_master_results"] = None
-                            
-                            # Read the latest results
-                            results_df = st.session_state.get("vertex_master_results")
-                            
-                            # Safely render if we actually have results
-                            if results_df is not None and not results_df.empty:
-                                st.success(f"✅ Analysis complete! Found {len(results_df)} opportunities")
-                                show_vertex_master_analysis(results_df)
-                            
-                                # Build simplified list for Best Bets and store in session_state
-                                vertex_results = []
-                                for _, row in results_df.iterrows():
-                                    vertex_results.append({
-                                        "home_team": row.get("home_team", ""),
-                                        "away_team": row.get("away_team", ""),
-                                        "league": row.get("league", ""),
-                                        "vertex_prob": row.get("vertex_ai_prob", 0.5),
-                                        "theover_probability": row.get("theover_probability", 0.5),
-                                        "theover_pick": row.get("theover_pick", ""),
-                                        "theover_total": row.get("theover_total", 0),
-                                        "theover_total_pick": row.get("theover_total_pick", ""),
-                                        "spread": row.get("home_spread", 0),
-                                        "home_ml_odds": row.get("home_ml_odds", 0),
-                                        "away_ml_odds": row.get("away_ml_odds", 0),
-                                        "implied_home_prob": row.get("implied_home_prob", 0.5),
-                                        "sentiment_diff": row.get("sentiment_diff", 0),
-                                        "kalshi_available": row.get("kalshi_available", False),
-                                        "kalshi_prob": row.get("kalshi_prob", 0.5),
-                                        "confidence": min(95, 50 + abs(row.get("vertex_ai_edge", 0)) * 500),
-                                    })
-                            
-                                st.session_state["vertex_results"] = vertex_results
-                                st.session_state["vertex_analysis_complete"] = True
-                            
-                            elif results_df is None:
-                                # First load / never run yet
-                                st.info("Click **Run Vertex AI Master Analysis** to analyze today's games.")
-                            
-                            else:
-                                # We ran but got no rows back
-                                st.warning("Vertex AI master analysis returned no opportunities for the current filters.")
-
-# VERTEX AI MASTER ANALYSIS
 
 # =====================================================
 # SIMPLE THEODDSAPI-ONLY ANALYSIS
