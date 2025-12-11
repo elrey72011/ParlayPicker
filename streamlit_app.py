@@ -9020,10 +9020,11 @@ with main_tab1:
                                 show_vertex_master_analysis(results_df)
 
 # =====================================================
-# # =====================================================
+# =====================================================
 # SIMPLE THEODDSAPI-ONLY ANALYSIS
 # Uses ONLY TheOddsAPI for games + odds - no TheOver.ai complexity
 # =====================================================
+
 if is_vertex_ai_enabled():
     st.markdown("---")
     st.subheader("🎯 Quick Analysis (TheOddsAPI Only)")
