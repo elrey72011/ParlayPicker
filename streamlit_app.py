@@ -89,10 +89,15 @@ try:
         SportsDataNFLClient,
         SportsDataNHLClient,
     )
-    from vertex_master_analyzer import VertexMasterAnalyzer, show_vertex_master_analysis
-except ImportError as e:
-    print(f"⚠️ Import Warning: {e}")
-
+# --- END OF HEADER FIX ---
+    try:
+        from theover_vertex_analyzer import (
+            analyze_theover_spreads_with_vertex,
+            show_best_bets_table
+        )
+    except ImportError:
+        analyze_theover_spreads_with_vertex = None
+        show_best_bets_table = None
 # --- 5. OPTIONAL ML PREDICTIONS ---
 try:
     from ml_predictions import (
