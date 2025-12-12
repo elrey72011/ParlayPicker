@@ -93,8 +93,8 @@ try:
 
     try:
         from vertex_master_analyzer import VertexMasterAnalyzer, show_vertex_master_analysis
-    except ImportError as e:
-        print(f"⚠️ Import Warning: {e}")
+    except Exception as e:
+        print(f"⚠️ Vertex Master import failed: {e}")
         VertexMasterAnalyzer = None
         show_vertex_master_analysis = None
 
