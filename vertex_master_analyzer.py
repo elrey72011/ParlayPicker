@@ -29,13 +29,18 @@ try:
         is_vertex_prediction_configured,
         predict_win_probabilities,
     )
-    # Optional LLM assistant (e.g., Gemini wrapper)
+
+    # Optional LLM assistant (Gemini via Vertex AI)
     try:
         from app_core.llm_assistant import analyze_kalshi_context_with_llm
         LLM_ASSISTANT_AVAILABLE = True
-    except ImportError as _llm_import_err:
-        logger.warning(f"LLM assistant not available: {_llm_import_err}")
-        analyze_kalshi_context_with_llm = lambda *args, **kwargs: []  # type: ignore
+    except ImportError as e:
+        logger.warning(f"LLM assistant not available (import): {e}")
+        analyze_kalshi_context_with_llm = None
+        LLM_ASSISTANT_AVAILABLE = False
+    except Exception as e:
+        logger.warning(f"LLM assistant error during import: {e}")
+        analyze_kalshi_context_with_llm = None
         LLM_ASSISTANT_AVAILABLE = False
 
 except ImportError as e:
@@ -259,18 +264,22 @@ class VertexMasterAnalyzer:
     # -------------------------------
 
     def _run_llm_assistant(
-        self,
-        feats: Dict[str, Any],
-        kalshi_info: Optional[Dict[str, Any]],
-        league: str,
+            self,
+            feats: Dict[str, Any],
+            kalshi_info: Optional[Dict[str, Any]],
+            league: str,
     ):
-        if not LLM_ASSISTANT_AVAILABLE:
+        # ---- HARD GUARD: assistant is optional and must never crash ----
+        if (not LLM_ASSISTANT_AVAILABLE) or (analyze_kalshi_context_with_llm is None):
             return [], None, None, None
+
         if not kalshi_info or not kalshi_info.get("kalshi_available"):
             return [], None, None, None
 
         try:
-            context_md = self._build_kalshi_context_for_llm(feats, kalshi_info, league)
+            context_md = self._build_kalshi_context_for_llm(
+                feats, kalshi_info, league
+            )
             if not context_md.strip():
                 return [], None, None, None
 
@@ -279,10 +288,15 @@ class VertexMasterAnalyzer:
                 return [], None, None, None
 
             best = max(contracts, key=lambda c: c.get("confidence", 0))
-            return contracts, best.get("side"), best.get("confidence"), best.get("reason")
+            return (
+                contracts,
+                best.get("side"),
+                best.get("confidence"),
+                best.get("reason"),
+            )
 
         except Exception as e:
-            logger.warning(f"LLM assistant failed: {e}")
+            logger.warning(f"LLM assistant failed safely: {e}")
             return [], None, None, None
 
     def _build_kalshi_context_for_llm(
