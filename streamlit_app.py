@@ -8827,8 +8827,8 @@ with main_tab1:
                             results_df = analyzer.analyze_all_games(all_games, league='multi')
                             
                             if not results_df.empty:
-                                                # --- NEW: Filter for TODAY'S games only ---
-                from datetime import datetime
+                            # --- NEW: Filter for TODAY'S games only ---
+                    from datetime import datetime
                     import pytz
                                     
                     try:
