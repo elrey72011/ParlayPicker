@@ -1,3 +1,4 @@
+# redeploy: bump
 """
 app_core.llm_assistant
 
