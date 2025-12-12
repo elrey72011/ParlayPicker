@@ -77,7 +77,6 @@ def _clamp(p: float, lo: float = 0.01, hi: float = 0.99) -> float:
         return 0.5
     return max(lo, min(hi, p))
 
-
 def blended_win_prob(
     *,
     market_prob: Optional[float],
@@ -503,7 +502,7 @@ class VertexMasterAnalyzer:
             return None
 
         market_prob = implied_prob_from_american(odds)
-        if not market_prob:
+        if market_prob is None:
             return None
 
         # --- Blended probability (uses Vertex + TheOver + Kalshi + Sentiment) ---
@@ -671,13 +670,15 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
     
     # Filter only columns that actually exist to avoid KeyError
     existing_cols = [c for c in cols if c in display_df.columns]
-    st.dataframe(display_df[existing_cols], use_container_width=True)
+    st.dataframe(display_df[existing_cols], width="stretch")
 
     # CSV export
     export_cols = [
-        "league", "game", "game_time", "the_pick", "pick_odds", 
-        "win_prob", "market_prob", "edge_vs_market", "ev", 
-        "kalshi_available", "kalshi_prob", "kalshi_status", 
+        "league", "game", "game_time", "the_pick", "pick_odds",
+        "win_prob", "final_win_prob", "market_prob", "market_home_prob",
+        "vertex_home_prob", "theover_home_prob", "kalshi_home_prob",
+        "edge_vs_market", "ev",
+        "kalshi_available", "kalshi_prob", "kalshi_status",
         "kalshi_ticker", "kalshi_date"
     ]
     
