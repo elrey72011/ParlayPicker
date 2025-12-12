@@ -1,8 +1,14 @@
 """
 app_core.llm_assistant
 
-Safe, optional Gemini (Vertex AI) second-opinion engine.
-This module MUST NEVER crash the app.
+Lightweight LLM assistant wrapper for ParlayPicker.
+
+Provides:
+    - analyze_kalshi_context_with_llm(context_markdown: str) -> List[dict]
+
+This is used as a SECOND-OPINION reasoning engine (Gemini via Vertex AI),
+NOT as a replacement for Vertex Master Analysis. If Gemini/Vertex isn't
+available, the function returns an empty list.
 """
 
 from __future__ import annotations
@@ -16,100 +22,112 @@ from pydantic import BaseModel, ValidationError
 
 logger = logging.getLogger(__name__)
 
-# -------------------------------------------------
-# Vertex Gemini setup (safe)
-# -------------------------------------------------
-
-_GEMINI_AVAILABLE = False
-GenerativeModel = None  # type: ignore
-
+# -------------------------------------------------------------------
+# GEMINI (VERTEX AI) SETUP
+# -------------------------------------------------------------------
 try:
-    from vertexai.generative_models import GenerativeModel as _GenerativeModel  # type: ignore
-    GenerativeModel = _GenerativeModel  # type: ignore
+    # Vertex AI (NOT google-generativeai)
+    from vertexai.generative_models import GenerativeModel  # type: ignore
+
     _GEMINI_AVAILABLE = True
 except Exception as e:
-    logger.warning(f"Vertex Gemini unavailable: {e}")
+    GenerativeModel = None  # type: ignore
+    _GEMINI_AVAILABLE = False
+    logger.warning(f"Vertex Gemini not available: {e}")
 
 GEMINI_MODEL_NAME = os.getenv("GEMINI_MODEL_NAME", "gemini-1.5-flash")
 
 
-# -------------------------------------------------
-# Schema
-# -------------------------------------------------
-
 class ContractRecommendation(BaseModel):
     ticker: str
-    side: str
-    bid_price: int
+    side: str          # "yes"/"no" or "home"/"away"
+    bid_price: int     # 0–100 (cents)
     reason: str
-    confidence: int
+    confidence: int    # 0–100
 
 
-# -------------------------------------------------
-# Public API
-# -------------------------------------------------
+def _safe_json_extract(text: str) -> Dict[str, Any]:
+    """Best-effort extraction of a JSON object from model output."""
+    text = (text or "").strip()
+    if not text:
+        return {}
+    if text.startswith("{") and text.endswith("}"):
+        try:
+            return json.loads(text)
+        except Exception:
+            pass
+    start = text.find("{")
+    end = text.rfind("}")
+    if start >= 0 and end > start:
+        chunk = text[start : end + 1]
+        try:
+            return json.loads(chunk)
+        except Exception:
+            return {}
+    return {}
+
 
 def analyze_kalshi_context_with_llm(context_markdown: str) -> List[Dict[str, Any]]:
-    """
-    Analyze Kalshi context using Gemini via Vertex AI.
-
-    Returns [] on ANY failure.
-    """
+    """Return contract recommendations from Gemini (via Vertex AI)."""
     if not _GEMINI_AVAILABLE or GenerativeModel is None:
+        logger.debug("LLM assistant disabled (Vertex Gemini not available).")
         return []
 
     if not context_markdown or not context_markdown.strip():
         return []
 
-    system_prompt = """You are a prediction market assistant.
+    system_instructions = """You are a prediction market assistant that evaluates current prices for event contracts on Kalshi.
 
-Return JSON ONLY in this format:
+You will receive a description of a single game, including:
+- League and teams (e.g., NBA, NFL)
+- Game time
+- Sportsbook moneyline and spread odds
+- Kalshi market ticker, label, and implied probability
+
+Your job is to identify one or more underpriced contracts and explain why.
+
+CRITICAL OUTPUT REQUIREMENTS:
+1) Output JSON ONLY (no commentary, no markdown).
+2) Use this exact structure:
 {
   "contracts": [
     {
-      "ticker": "...",
-      "side": "yes|no|home|away",
+      "ticker": "<Kalshi ticker or descriptive id>",
+      "side": "yes" | "no" | "home" | "away",
       "bid_price": 0,
-      "reason": "...",
+      "reason": "short explanation",
       "confidence": 0
     }
   ]
 }
-
-If no edge exists, return {"contracts": []}.
+3) confidence must be an integer 0-100.
+4) bid_price must be an integer 0-100 (cents).
 """
 
-    prompt = f"""{system_prompt}
-
-CONTEXT:
-{context_markdown}
-"""
+    prompt = system_instructions + "\n\nCONTEXT:\n" + context_markdown.strip() + "\n"
 
     try:
         model = GenerativeModel(GEMINI_MODEL_NAME)
-        response = model.generate_content(prompt)
-        text = getattr(response, "text", "") or ""
+        resp = model.generate_content(prompt)
+        text = (getattr(resp, "text", "") or "").strip()
 
-        if not text.strip():
+        payload = _safe_json_extract(text)
+        contracts_raw = payload.get("contracts", [])
+        if not isinstance(contracts_raw, list):
             return []
 
-        # Strip markdown fences if present
-        if "```" in text:
-            text = text.split("```")[1]
-
-        data = json.loads(text)
-        contracts = data.get("contracts", [])
-
-        results: List[Dict[str, Any]] = []
-        for c in contracts:
+        cleaned: List[Dict[str, Any]] = []
+        for item in contracts_raw:
+            if not isinstance(item, dict):
+                continue
             try:
-                rec = ContractRecommendation(**c)
-                results.append(rec.model_dump())
+                cr = ContractRecommendation(**item)
+                cleaned.append(cr.model_dump())
             except ValidationError:
                 continue
 
-        return results
+        return cleaned
 
     except Exception as e:
-        logger.warning(f"LLM assistant failed safely: {e}")
+        logger.warning(f"LLM assistant call failed: {e}")
         return []
