@@ -80,17 +80,18 @@ def _clamp(p: float, lo: float = 0.01, hi: float = 0.99) -> float:
 
 def blended_win_prob(
     *,
-    market_prob: float | None,
-    vertex_prob: float | None,
-    theover_prob: float | None,
-    kalshi_prob: float | None,
-    sentiment_diff: float | None,
+    market_prob: Optional[float],
+    vertex_prob: Optional[float],
+    theover_prob: Optional[float],
+    kalshi_prob: Optional[float],
+    sentiment_diff: Optional[float],
     selection: str,  # "home" or "away"
     w_vertex: float = 0.40,
     w_theover: float = 0.25,
     w_kalshi: float = 0.20,
     w_sentiment: float = 0.15,
 ) -> float:
+
     """
     Produces a final win probability for the selected side ("home"/"away").
 
