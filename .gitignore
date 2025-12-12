@@ -24,7 +24,7 @@ wheels/
 *.egg
 
 # Streamlit
-.streamlit/
+old_streamlit/
 
 # Historical data cache
 historical_cache/
@@ -51,4 +51,4 @@ Thumbs.db
 
 # Logs
 *.log
-.streamlit/secrets.toml
+old_streamlit/secrets.toml

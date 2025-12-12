@@ -1,38 +1,52 @@
-# ParlayDesk_AI_Enhanced.py - v9.2 VERTEX-FIRST
+# ParlayDesk_AI_Enhanced.py - v9.3 FORCE-AUTH
 # AI-Enhanced parlay finder with sentiment analysis, ML predictions, and live market data
 from __future__ import annotations
-from dataclasses import asdict
 import os
+import streamlit as st
+from google.oauth2 import service_account
+import vertexai
+
+# --- 🛑 CRITICAL FORCE-LOGIN ---
+# We don't wait for libraries to find the key. We FORCE it right now.
+try:
+    if "GOOGLE_APPLICATION_CREDENTIALS" in st.secrets:
+        # 1. Get the path from your secrets file
+        key_path = st.secrets["GOOGLE_APPLICATION_CREDENTIALS"]
+        os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = key_path
+
+        # 2. Your Project ID (Hardcoded to be safe)
+        PROJECT_ID = "elite-hangar-479017-m8"
+
+        # 3. Manually Load Credentials & Init Vertex IMMEDIATELY
+        print(f"🔐 Attempting Force-Login with: {key_path}")
+        creds = service_account.Credentials.from_service_account_file(key_path)
+        vertexai.init(project=PROJECT_ID, location="us-central1", credentials=creds)
+
+        print("✅ SUCCESS: Vertex AI is forcefully connected!")
+        st.session_state["vertex_active"] = True
+    else:
+        print("⚠️ Warning: 'GOOGLE_APPLICATION_CREDENTIALS' not found in secrets.")
+except Exception as e:
+    print(f"❌ FORCE-LOGIN FAILED: {e}")
+# --------------------------------
+
+# Standard Imports
+from dataclasses import asdict
+# Standard Imports
+from dataclasses import asdict
 import io
 import json
 import itertools
 import re
 import copy
 import logging
-import hashlib
-import math
-import difflib
 import concurrent.futures
 import time
-from functools import lru_cache
-from html import escape
-from dataclasses import asdict
-from typing import Dict, Any, List, Tuple, Optional, Iterable, Sequence, Type, Set
-from datetime import datetime, timedelta, date, timezone
-from pathlib import Path
-from collections import defaultdict
-from app_core import KalshiIntegrator
-from app_core.kalshi_integrator import price_to_prob  # <-- add this line
+from typing import Dict, Any, List, Optional
+from datetime import datetime, timedelta
+from pathlib import Path  # <--- THIS IS THE MISSING LINE YOU NEED
 
-# --- 2. THIRD PARTY IMPORTS (Streamlit must be imported here) ---
-import pandas as pd
-import numpy as np
-import requests
-import pytz
-
-import os
-import streamlit as st
-import streamlit.components.v1 as components
+# ... (The rest of your imports below here are fine) ...
 
 PROJECT_ID = os.getenv("GCP_PROJECT_ID") or "elite-hangar-479017-m8"
 
@@ -51,9 +65,18 @@ except: pass
 # --- 5. LOCAL MODULE IMPORTS (Safe to load now) ---
 from app_core import KalshiIntegrator
 from app_core.team_name_matcher import TeamNameMatcher
+# --- 2. THIRD PARTY IMPORTS (CRITICAL: RESTORE THESE!) ---
+import pandas as pd
+import numpy as np
+import requests
+import pytz       # <--- THIS IS THE ONE CAUSING THE CRASH
+import math
+import streamlit.components.v1 as components
 
-# ... (Rest of your imports like APISportsBasketballClient, etc.) ...
-
+# --- 5. LOCAL MODULE IMPORTS ---
+from app_core import KalshiIntegrator
+from app_core.kalshi_integrator import price_to_prob
+from app_core.team_name_matcher import TeamNameMatcher
 from app_core import (
     APISportsBasketballClient,
     APISportsFootballClient,
