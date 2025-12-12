@@ -1,4 +1,4 @@
-<<<<<<< Updated upstream
+#<<<<<<< Updated upstream
 # ParlayDesk_AI_Enhanced.py - v9.3 FORCE-AUTH
 # AI-Enhanced parlay finder with sentiment analysis, ML predictions, and live market data
 from __future__ import annotations
