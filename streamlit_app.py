@@ -105,6 +105,35 @@ except ImportError as e:
     TeamNameMatcher = None
 
 # --- END OF HEADER FIX ---
+def get_vertex_master_analyzer(
+    *,
+    odds_api_client=None,
+    sportsdata_clients=None,
+    apisports_clients=None,
+    theover_data=None,
+    kalshi_integrator=None,
+):
+    if VertexMasterAnalyzer is None:
+        st.error(
+            "❌ Vertex Master Analyzer failed to load.\n\n"
+            "Check Streamlit logs for the root import error."
+        )
+        st.stop()
+    try:
+        return VertexMasterAnalyzer(
+            odds_api_client=odds_api_client,
+            sportsdata_clients=sportsdata_clients or {},
+            apisports_clients=apisports_clients or {},
+            sentiment_analyzer=st.session_state.get("sentiment_analyzer"),
+            local_ml_predictor=st.session_state.get("ml_predictor"),
+            theover_data=theover_data or {},
+            kalshi_integrator=kalshi_integrator,
+            use_kalshi=st.session_state.get("kalshi_enabled", True),
+        )
+    except Exception as e:
+        st.error(f"❌ Failed to initialize VertexMasterAnalyzer: {e}")
+        st.stop()
+
 try:
     from theover_vertex_analyzer import (
         analyze_theover_spreads_with_vertex,
@@ -8766,17 +8795,34 @@ with main_tab1:
                                 first = all_games[0]
                                 st.write("[DEBUG] Sample game keys:", list(first.keys())[:15])
 
-                            # Initialize Analyzer
-                            analyzer = VertexMasterAnalyzer(
-                                sentiment_analyzer=sentiment_analyzer,
-                                local_ml_predictor=ml_predictor,
-                                kalshi_integrator=kalshi_int,
-                                use_kalshi=st.session_state.get("kalshi_enabled", True),
+                            # Initialize Analyzer (single shared helper)
+                            analyzer = get_vertex_master_analyzer(
+                                odds_api_client=odds_client,
+                                sportsdata_clients=sportsdata_clients,
+                                apisports_clients={
+                                    "nba": basketball_client,
+                                    "nfl": apisports_client,
+                                    "nhl": hockey_client,
+                                },
+                                theover_data={
+                                    "spreads": theover_spreads_data,
+                                    "totals": theover_totals_data,
+                                    "ml": theover_ml_data,
+                                },
+                                kalshi_integrator=st.session_state.get("kalshi_integrator"),
                             )
-                            
+
+                            st.write("[DEBUG] kalshi_integrator type:", type(st.session_state.get("kalshi_integrator")))
+                            st.write("[DEBUG] sentiment_analyzer type:",
+                                     type(st.session_state.get("sentiment_analyzer")))
+                            st.write("[DEBUG] ml_predictor type:", type(st.session_state.get("ml_predictor")))
+
                             # Run Analysis
                             results_df = analyzer.analyze_all_games(all_games, league='multi')
-                            
+
+                            # Debug output (optional but recommended while stabilizing)
+                            st.write(f"[DEBUG] Master Analysis – rows returned: {len(results_df)}")
+
                             if not results_df.empty:
                                 # --- NEW: Filter for TODAY'S games only ---
                                 from datetime import datetime
@@ -9058,15 +9104,40 @@ if is_vertex_ai_enabled():
                         kalshi_int = st.session_state.get("kalshi_integrator")
                         sentiment = st.session_state.get("sentiment_analyzer")
 
-                        analyzer = VertexMasterAnalyzer(
-                            sentiment_analyzer=sentiment,
-                            local_ml_predictor=ml_predictor,
+                        if VertexMasterAnalyzer is None:
+                            st.error(
+                                "❌ Vertex Master Analyzer failed to load.\n\n"
+                                "This usually means a syntax or import error in:\n"
+                                "- app_core/llm_assistant.py\n"
+                                "- vertex_master_analyzer.py\n\n"
+                                "Check the Streamlit logs ABOVE this message for the root cause."
+                            )
+                            st.stop()
+                        analyzer = get_vertex_master_analyzer(
+                            odds_api_client=odds_client,
+                            sportsdata_clients=sportsdata_clients,
+                            apisports_clients={
+                                "nba": basketball_client,
+                                "nfl": apisports_client,
+                                "nhl": hockey_client,
+                            },
+                            theover_data={
+                                "spreads": theover_spreads_data,
+                                "totals": theover_totals_data,
+                                "ml": theover_ml_data,
+                            },
                             kalshi_integrator=kalshi_int,
-                            use_kalshi=st.session_state.get("kalshi_enabled", True),
                         )
+
+                        st.write("[DEBUG] kalshi_integrator type:", type(st.session_state.get("kalshi_integrator")))
+                        st.write("[DEBUG] sentiment_analyzer type:", type(st.session_state.get("sentiment_analyzer")))
+                        st.write("[DEBUG] ml_predictor type:", type(st.session_state.get("ml_predictor")))
 
                         # 5) Run master analysis
                         results_df = analyzer.analyze_all_games(all_games, league="multi")
+
+                        # Debug output (optional but recommended while stabilizing)
+                        st.write(f"[DEBUG] Master Analysis – rows returned: {len(results_df)}")
 
                         # Persist results so the grid doesn’t disappear
                         st.session_state["vertex_master_results"] = results_df
@@ -9579,31 +9650,54 @@ else:
     
     # Get sentiment analyzer from session state
     sentiment_analyzer = st.session_state.get('sentiment_analyzer')
-    
+
     # Get ML predictor from session state
     ml_predictor = st.session_state.get('ml_predictor')
-    
-    with st.spinner("..."):
+
+    # --- SAFETY GUARD: prevent NoneType crash ---
+    if VertexMasterAnalyzer is None:
+        st.error(
+            "❌ Vertex Master Analyzer failed to load.\n\n"
+            "This is usually caused by a syntax or import error in:\n"
+            "- app_core/llm_assistant.py\n"
+            "- vertex_master_analyzer.py\n\n"
+            "Check the Streamlit logs ABOVE this message for the root cause."
+        )
+        st.stop()
+
+    with st.spinner("Running Vertex AI Master Analysis..."):
         try:
-            analyzer = VertexMasterAnalyzer(
-                odds_api_client=odds_client if 'odds_client' in locals() else None,
-                sportsdata_clients=sportsdata_clients if 'sportsdata_clients' in locals() else {},
+            # Initialize Analyzer (single shared helper)
+            analyzer = get_vertex_master_analyzer(
+                odds_api_client=odds_client,
+                sportsdata_clients=sportsdata_clients,
                 apisports_clients={
-                    'nba': basketball_client if 'basketball_client' in locals() else None,
-                    'nfl': apisports_client if 'apisports_client' in locals() else None,
-                    'nhl': hockey_client if 'hockey_client' in locals() else None,
+                    "nba": basketball_client,
+                    "nfl": apisports_client,
+                    "nhl": hockey_client,
                 },
-                sentiment_analyzer=sentiment_analyzer,  # From session_state
-                local_ml_predictor=ml_predictor,        # From session_state
                 theover_data={
-                    'spreads': theover_spreads_data if 'theover_spreads_data' in locals() else None,
-                    'totals': theover_totals_data if 'theover_totals_data' in locals() else None,
-                    'ml': theover_ml_data if 'theover_ml_data' in locals() else None,
+                    "spreads": theover_spreads_data,
+                    "totals": theover_totals_data,
+                    "ml": theover_ml_data,
                 },
-                kalshi_integrator=kalshi_int,
-                use_kalshi=st.session_state.get('kalshi_enabled', True),
+                kalshi_integrator=st.session_state.get("kalshi_integrator"),
             )
-    
+
+            st.write("[DEBUG] kalshi_integrator type:", type(st.session_state.get("kalshi_integrator")))
+            st.write("[DEBUG] sentiment_analyzer type:", type(st.session_state.get("sentiment_analyzer")))
+            st.write("[DEBUG] ml_predictor type:", type(st.session_state.get("ml_predictor")))
+
+            # Run Analysis
+            results_df = analyzer.analyze_all_games(all_games, league="multi")
+
+            # Debug output (optional but recommended while stabilizing)
+            st.write(f"[DEBUG] Master Analysis – rows returned: {len(results_df)}")
+
+        except Exception as e:
+            st.error(f"❌ Vertex Master Analysis failed during execution: {e}")
+            st.stop()
+
             kalshi_obj = getattr(analyzer, "kalshi", None)
             use_kalshi = getattr(analyzer, "use_kalshi", None)
             logger.info(
@@ -9614,7 +9708,11 @@ else:
                 f"[Kalshi ANALYZER] use_kalshi={analyzer.use_kalshi}, "
                 f"integrator_is_none={analyzer.kalshi is None}"
             )
-    
+
+            st.write("[DEBUG] kalshi_integrator type:", type(st.session_state.get("kalshi_integrator")))
+            st.write("[DEBUG] sentiment_analyzer type:", type(st.session_state.get("sentiment_analyzer")))
+            st.write("[DEBUG] ml_predictor type:", type(st.session_state.get("ml_predictor")))
+
             results_df = analyzer.analyze_all_games(all_games, league='multi')
             
             if not results_df.empty:

@@ -33,7 +33,6 @@ try:
     # Optional LLM assistant (Gemini via Vertex AI) — MUST NOT crash app if broken
     try:
         from app_core.llm_assistant import analyze_kalshi_context_with_llm
-
         LLM_ASSISTANT_AVAILABLE = True
     except Exception as e:  # catches ImportError + SyntaxError + anything else during import
         logger.warning(f"LLM assistant not available: {e}")
