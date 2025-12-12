@@ -7405,7 +7405,7 @@ def render_parlay_section_ai(
         st.markdown("---")
         kalshi_legs_with_data = row.get('kalshi_legs', 0)
         total_legs = len(row.get('legs', []))
-        
+
         if kalshi_legs_with_data > 0:
             # HAS KALSHI DATA - Show influence
             st.markdown("### 📊 Kalshi Prediction Market Influence:")
@@ -7421,16 +7421,19 @@ def render_parlay_section_ai(
                     "because live market data was unavailable."
                 )
 
-
+            # Define columns for Kalshi metrics
             col_k1, col_k2, col_k3, col_k4 = st.columns(4)
-            
+
             with col_k1:
+                # Calculate kalshi_available locally since the main variable isn't defined yet
+                k_avail_local = sum(
+                    1 for leg in row.get("legs", []) if leg.get('kalshi_validation', {}).get('kalshi_available', False))
                 st.metric(
                     "Legs Validated",
-                    f"{kalshi_available}/{len(row.get('legs', []))}",
+                    f"{k_avail_local}/{total_legs}",
                     help="How many legs have Kalshi market data"
                 )
-            
+
             with col_k2:
                 kalshi_boost_val = row.get('kalshi_boost', 0)
                 delta_boost = float(kalshi_boost_val) if kalshi_boost_val else None
@@ -7440,191 +7443,128 @@ def render_parlay_section_ai(
                     f"{kalshi_boost_val:+.0f}",
                     delta=delta_boost,
                     delta_color=delta_color,
-                    help="Raw boost points from Kalshi validation (+15 = strong confirmation, -10 = contradiction)"
+                    help="Raw boost points from Kalshi validation"
                 )
 
-                synthetic_legs = sum(
-                    1 for leg in row.get('legs', [])
-                    if 'synthetic' in leg.get('kalshi_validation', {}).get('data_source', '')
+            with col_k3:
+                align_score = row.get('kalshi_alignment_avg', 0)
+                st.metric(
+                    "Alignment Score",
+                    f"{align_score * 100:+.1f}pp",
+                    help="Average probability difference between Kalshi and Model"
                 )
 
-                if synthetic_legs:
-                    st.info(
-                        f"🧪 Using simulated Kalshi fallback for {synthetic_legs} leg(s) "
-                        "because live market data was unavailable."
-                    )
-
-
-                col_k1, col_k2, col_k3, col_k4 = st.columns(4)
-                
-                with col_k1:
-                    st.metric(
-                        "Live Data Legs",
-                        f"{live_data_legs_with_data}/{len(row.get('legs', []))}",
-                        help="How many legs include live team context",
-                    )
-                
-                with col_k2:
-                    kalshi_boost_val = row.get('kalshi_boost', 0)
-                    delta_boost = float(kalshi_boost_val) if kalshi_boost_val else None
-                    delta_color = "normal" if kalshi_boost_val >= 0 else "inverse"
-                    st.metric(
-                        "Kalshi Boost Points",
-                        f"{kalshi_boost_val:+.0f}",
-                        delta=delta_boost,
-                        delta_color=delta_color,
-                        help="Raw boost points from Kalshi validation (+15 = strong confirmation, -10 = contradiction)"
-                    )
-
-                with col_a3:
-                    delta_color_sd = "normal" if sportsdata_boost >= 0 else "inverse"
-                    display_sd = f"{sportsdata_boost:+.0f}" if sportsdata_legs else "—"
-                    st.metric(
-                        "SportsData.io Points",
-                        display_sd,
-                        delta=float(sportsdata_boost) if sportsdata_boost else None,
-                        delta_color=delta_color_sd,
-                        help="Power index and turnover margin boost from SportsData.io",
-                    )
-
-                with col_a4:
-                    st.metric(
-                        "Score Multiplier",
-                        f"{live_data_factor:.2f}x",
-                        delta=f"{(live_data_factor-1)*100:+.0f}%" if live_data_factor != 1.0 else None,
-                        help="Overall adjustment to the AI score from live data feeds",
-                    )
-
-                with col_a5:
-                    baseline = row['ai_score'] / live_data_factor if live_data_factor else row['ai_score']
-                    live_delta = row['ai_score'] - baseline
-                    st.metric(
-                        "Score Impact",
-                        f"{live_delta:+.1f} pts",
-                        help="How many points live data added or removed",
-                    )
-
-                if live_data_factor >= 1.02:
-                    st.success(
-                        f"🟢 **Live data boosted this parlay by {(live_data_factor-1)*100:.0f}%** thanks to favorable team trends."
-                    )
-                elif live_data_factor <= 0.98:
-                    st.warning(
-                        f"🟠 **Live data reduced this parlay by {(1-live_data_factor)*100:.0f}%** due to cold or negative trends."
-                    )
-                else:
-                    st.info("🟡 **Live data neutral** – trends across API-Sports and SportsData.io are balanced.")
-
-                if apisports_legs:
-                    st.caption(
-                        f"API-Sports coverage: {apisports_legs} leg(s), points {apisports_boost:+.0f}"
-                    )
-                if sportsdata_legs:
-                    st.caption(
-                        f"SportsData.io coverage: {sportsdata_legs} leg(s), points {sportsdata_boost:+.0f}"
-                    )
-            if live_data_legs_with_data:
-                st.markdown("### 🛰️ Live Data Influence (API-Sports + SportsData.io):")
-
-                if live_data_sports:
-                    icons = " ".join(
-                        sport_icon_lookup.get(sport, '🛰️') for sport in sorted(set(live_data_sports))
-                    )
-                    st.caption(
-                        f"Live data applied from: {icons} {', '.join(sorted(set(live_data_sports)))}"
-                    )
-
-                col_a1, col_a2, col_a3, col_a4, col_a5 = st.columns(5)
-
-                with col_a1:
-                    st.metric(
-                        "Live Data Legs",
-                        f"{live_data_legs_with_data}/{len(row.get('legs', []))}",
-                        help="How many legs include live team context",
-                    )
-
-                with col_a2:
-                    delta_color = "normal" if apisports_boost >= 0 else "inverse"
-                    display_val = f"{apisports_boost:+.0f}" if apisports_legs else "—"
-                    st.metric(
-                        "API-Sports Points",
-                        display_val,
-                        delta=float(apisports_boost) if apisports_boost else None,
-                        delta_color=delta_color,
-                        help="Boost or penalty applied from API-Sports hot/cold team trends",
-                    )
-
-                with col_a3:
-                    delta_color_sd = "normal" if sportsdata_boost >= 0 else "inverse"
-                    display_sd = f"{sportsdata_boost:+.0f}" if sportsdata_legs else "—"
-                    st.metric(
-                        "SportsData.io Points",
-                        display_sd,
-                        delta=float(sportsdata_boost) if sportsdata_boost else None,
-                        delta_color=delta_color_sd,
-                        help="Power index and turnover margin boost from SportsData.io",
-                    )
-
-                with col_a4:
-                    st.metric(
-                        "Score Multiplier",
-                        f"{live_data_factor:.2f}x",
-                        delta=f"{(live_data_factor-1)*100:+.0f}%" if live_data_factor != 1.0 else None,
-                        help="Overall adjustment to the AI score from live data feeds",
-                    )
-
-                with col_a5:
-                    baseline = row['ai_score'] / live_data_factor if live_data_factor else row['ai_score']
-                    live_delta = row['ai_score'] - baseline
-                    st.metric(
-                        "Score Impact",
-                        f"{live_delta:+.1f} pts",
-                        help="How many points live data added or removed",
-                    )
-
-                if live_data_factor >= 1.02:
-                    st.success(
-                        f"🟢 **Live data boosted this parlay by {(live_data_factor-1)*100:.0f}%** thanks to favorable team trends."
-                    )
-                elif live_data_factor <= 0.98:
-                    st.warning(
-                        f"🟠 **Live data reduced this parlay by {(1-live_data_factor)*100:.0f}%** due to cold or negative trends."
-                    )
-                else:
-                    st.info("🟡 **Live data neutral** – trends across API-Sports and SportsData.io are balanced.")
-
-                if apisports_legs:
-                    st.caption(
-                        f"API-Sports coverage: {apisports_legs} leg(s), points {apisports_boost:+.0f}"
-                    )
-                if sportsdata_legs:
-                    st.caption(
-                        f"SportsData.io coverage: {sportsdata_legs} leg(s), points {sportsdata_boost:+.0f}"
-                    )
-            else:
-                st.markdown("### 🛰️ Live Data Status:")
-                apisports_client = _session_client_or_none('apisports_nfl_client', APISportsFootballClient)
-                hockey_client = _session_client_or_none('apisports_hockey_client', APISportsHockeyClient)
-                configured_apisports = any(
-                    client and client.is_configured()
-                    for client in (
-                        apisports_client,
-                        basketball_client,
-                        hockey_client,
-                    )
+            with col_k4:
+                kalshi_factor_val = row.get('kalshi_factor', 1.0)
+                st.metric(
+                    "Multiplier",
+                    f"{kalshi_factor_val:.2f}x",
+                    help="Final multiplier applied to the AI Score"
                 )
-                configured_sportsdata = any(
-                    client and getattr(client, "is_configured", lambda: False)()
-                    for client in sportsdata_clients.values()
-                )
-                if not (configured_apisports or configured_sportsdata):
-                    st.info(
-                        "Add your API-Sports and SportsData.io keys across the leagues you follow to blend live team trends into scoring."
-                    )
-                else:
-                    st.info("Live data feeds are configured but no matching games were found for this parlay.")
 
-        save_key_suffix = hashlib.sha1(title.encode('utf-8')).hexdigest()[:6] if isinstance(title, str) else 'parlay'
+            # --- LIVE DATA SECTION (Separated correctly) ---
+        if live_data_legs_with_data:
+            st.markdown("### 🛰️ Live Data Influence (API-Sports + SportsData.io):")
+
+            if live_data_sports:
+                # Safe lookup for icons
+                sport_icon_lookup = {
+                    "americanfootball_nfl": "🏈", "basketball_nba": "🏀", "icehockey_nhl": "🏒"
+                }
+                icons = " ".join(
+                    sport_icon_lookup.get(sport, '🛰️') for sport in sorted(set(live_data_sports))
+                )
+                st.caption(
+                    f"Live data applied from: {icons} {', '.join(sorted(set(live_data_sports)))}"
+                )
+
+            # Define columns for Live Data metrics
+            col_a1, col_a2, col_a3, col_a4, col_a5 = st.columns(5)
+
+            with col_a1:
+                st.metric(
+                    "Live Data Legs",
+                    f"{live_data_legs_with_data}/{len(row.get('legs', []))}",
+                    help="How many legs include live team context",
+                )
+
+            with col_a2:
+                delta_color = "normal" if apisports_boost >= 0 else "inverse"
+                display_val = f"{apisports_boost:+.0f}" if apisports_legs else "—"
+                st.metric(
+                    "API-Sports Points",
+                    display_val,
+                    delta=float(apisports_boost) if apisports_boost else None,
+                    delta_color=delta_color,
+                    help="Boost from API-Sports trends",
+                )
+
+            with col_a3:
+                delta_color_sd = "normal" if sportsdata_boost >= 0 else "inverse"
+                display_sd = f"{sportsdata_boost:+.0f}" if sportsdata_legs else "—"
+                st.metric(
+                    "SportsData.io Points",
+                    display_sd,
+                    delta=float(sportsdata_boost) if sportsdata_boost else None,
+                    delta_color=delta_color_sd,
+                    help="Power index boost from SportsData.io",
+                )
+
+            with col_a4:
+                st.metric(
+                    "Score Multiplier",
+                    f"{live_data_factor:.2f}x",
+                    delta=f"{(live_data_factor - 1) * 100:+.0f}%" if live_data_factor != 1.0 else None,
+                )
+
+            with col_a5:
+                baseline = row['ai_score'] / live_data_factor if live_data_factor else row['ai_score']
+                live_delta = row['ai_score'] - baseline
+                st.metric("Score Impact", f"{live_delta:+.1f} pts")
+
+            # Define columns for Live Data metrics
+            col_a1, col_a2, col_a3, col_a4, col_a5 = st.columns(5)
+
+            with col_a1:
+                st.metric(
+                    "Live Data Legs",
+                    f"{live_data_legs_with_data}/{len(row.get('legs', []))}",
+                    help="How many legs include live team context",
+                )
+
+            with col_a2:
+                delta_color = "normal" if apisports_boost >= 0 else "inverse"
+                display_val = f"{apisports_boost:+.0f}" if apisports_legs else "—"
+                st.metric(
+                    "API-Sports Points",
+                    display_val,
+                    delta=float(apisports_boost) if apisports_boost else None,
+                    delta_color=delta_color,
+                    help="Boost from API-Sports trends",
+                )
+
+            with col_a3:
+                delta_color_sd = "normal" if sportsdata_boost >= 0 else "inverse"
+                display_sd = f"{sportsdata_boost:+.0f}" if sportsdata_legs else "—"
+                st.metric(
+                    "SportsData.io Points",
+                    display_sd,
+                    delta=float(sportsdata_boost) if sportsdata_boost else None,
+                    delta_color=delta_color_sd,
+                    help="Power index boost from SportsData.io",
+                )
+
+            with col_a4:
+                st.metric(
+                    "Score Multiplier",
+                    f"{live_data_factor:.2f}x",
+                    delta=f"{(live_data_factor - 1) * 100:+.0f}%" if live_data_factor != 1.0 else None,
+                )
+
+            with col_a5:
+                baseline = row['ai_score'] / live_data_factor if live_data_factor else row['ai_score']
+                live_delta = row['ai_score'] - baseline
+                st.metric("Score Impact", f"{live_delta:+.1f} pts")
 
         if st.button(
             "📌 Save this parlay for tracking",
