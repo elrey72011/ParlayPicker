@@ -111,10 +111,10 @@ try:
 except: pass
 
 # --- END OF HEADER FIX ---try:
-    from theover_vertex_analyzer import (
-        analyze_theover_spreads_with_vertex,
-        show_best_bets_table
-    )
+from theover_vertex_analyzer import (
+    analyze_theover_spreads_with_vertex,
+    show_best_bets_table
+)
 except ImportError:
     analyze_theover_spreads_with_vertex = None
     show_best_bets_table = None
