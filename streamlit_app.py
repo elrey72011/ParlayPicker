@@ -1,3 +1,4 @@
+<<<<<<< Updated upstream
 # ParlayDesk_AI_Enhanced.py - v9.3 FORCE-AUTH
 # AI-Enhanced parlay finder with sentiment analysis, ML predictions, and live market data
 from __future__ import annotations
@@ -3305,28 +3306,129 @@ def american_to_decimal(odds) -> float:
     if odds >= 100: return 1.0 + odds/100.0
     if odds <= -100: return 1.0 + 100.0/abs(odds)
     raise ValueError("Bad American odds")
+=======
+#!/usr/bin/env python3
+"""
+Standalone Parlay Analyzer - No Streamlit Required
+Runs locally and exports results to CSV/JSON/HTML
 
-def implied_p_from_american(odds) -> float:
-    odds = float(odds)
-    return 100.0/(odds+100.0) if odds>0 else abs(odds)/(abs(odds)+100.0)
+Usage:
+    python parlay_analyzer.py --sports nfl nba --size 2 --output results.csv
+    python parlay_analyzer.py --config config.json
+"""
 
-def ev_rate(p: float, d: float) -> float: 
-    return p*d - 1.0
+import argparse
+import json
+import logging
+import sys
+from datetime import datetime, timedelta
+from pathlib import Path
+from typing import Dict, List, Optional, Any
+import pandas as pd
 
-def _dig(obj, path, default=None):
-    try:
-        cur = obj
-        for token in path.split('.'):
-            if '[' in token and token.endswith(']'):
-                name, idx = token[:-1].split('[')
-                if name: cur = cur.get(name, {})
-                cur = cur[int(idx)]
-            else:
-                cur = cur.get(token) if isinstance(cur, dict) else None
-        return default if cur is None else cur
-    except Exception:
-        return default
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
+
+class LocalParlayAnalyzer:
+    """Standalone parlay analyzer that doesn't require Streamlit"""
+
+    def __init__(self, config_path: Optional[str] = None):
+        """
+        Initialize the analyzer with optional config file
+
+        Args:
+            config_path: Path to JSON config file with API keys and settings
+        """
+        self.config = self._load_config(config_path)
+        self.odds_api_key = self.config.get('odds_api_key')
+        self.sportsdata_keys = self.config.get('sportsdata_keys', {})
+        self.apisports_keys = self.config.get('apisports_keys', {})
+
+    def _load_config(self, config_path: Optional[str]) -> Dict:
+        """Load configuration from JSON file"""
+        if config_path and Path(config_path).exists():
+            with open(config_path, 'r') as f:
+                return json.load(f)
+        return {}
+
+    def fetch_odds(self, sports: List[str], regions: str = 'us',
+                   markets: str = 'h2h,spreads,totals') -> pd.DataFrame:
+        """
+        Fetch odds from The Odds API
+
+        Args:
+            sports: List of sport keys (e.g., ['basketball_nba', 'americanfootball_nfl'])
+            regions: Comma-separated regions (default: 'us')
+            markets: Comma-separated markets (default: 'h2h,spreads,totals')
+
+        Returns:
+            DataFrame with all odds data
+        """
+        if not self.odds_api_key:
+            logger.error("❌ No Odds API key configured!")
+            logger.info("Add your key to config.json or set ODDS_API_KEY environment variable")
+            return pd.DataFrame()
+
+        import requests
+
+        all_odds = []
+        base_url = "https://api.the-odds-api.com/v4/sports"
+
+        for sport in sports:
+            logger.info(f"📊 Fetching odds for {sport}...")
+
+            url = f"{base_url}/{sport}/odds/"
+            params = {
+                'apiKey': self.odds_api_key,
+                'regions': regions,
+                'markets': markets,
+                'oddsFormat': 'decimal'
+            }
+
+            try:
+                response = requests.get(url, params=params)
+                response.raise_for_status()
+                data = response.json()
+
+                logger.info(f"✅ Found {len(data)} games for {sport}")
+
+                for game in data:
+                    all_odds.append({
+                        'sport': sport,
+                        'game_id': game.get('id'),
+                        'commence_time': game.get('commence_time'),
+                        'home_team': game.get('home_team'),
+                        'away_team': game.get('away_team'),
+                        'bookmakers': game.get('bookmakers', [])
+                    })
+
+            except requests.exceptions.RequestException as e:
+                logger.error(f"❌ Error fetching {sport}: {e}")
+                continue
+
+        return pd.DataFrame(all_odds)
+>>>>>>> Stashed changes
+
+    def extract_best_legs(self, odds_df: pd.DataFrame,
+                          min_edge: float = 0.02) -> pd.DataFrame:
+        """
+        Extract individual legs with positive expected value
+
+        Args:
+            odds_df: DataFrame with odds data
+            min_edge: Minimum edge threshold (default: 2%)
+
+        Returns:
+            DataFrame with best legs
+        """
+        legs = []
+
+<<<<<<< Updated upstream
 def _odds_api_base():
     return "https://api.the-odds-api.com"
 
@@ -3921,10 +4023,21 @@ def build_best_odds_report(
 
     return compute_best_overall_odds(aggregated_events, tz_name)
 
+=======
+        for _, game in odds_df.iterrows():
+            home = game['home_team']
+            away = game['away_team']
+            sport = game['sport']
+            commence = game['commence_time']
 
-def calculate_profit(decimal_odds: float, stake: float = 100) -> float:
-    return (decimal_odds - 1.0) * stake
+            for bookmaker in game.get('bookmakers', []):
+                bookie_name = bookmaker.get('title', 'Unknown')
+>>>>>>> Stashed changes
 
+                for market in bookmaker.get('markets', []):
+                    market_key = market.get('key')
+
+<<<<<<< Updated upstream
 
 def decimal_to_american(decimal_odds: Optional[float]) -> Optional[int]:
     """Convert decimal odds back to American format for display."""
@@ -13778,54 +13891,23 @@ with main_tab3:
                             "Market EV": [f"${market_expected_return:+.2f}"],
                             "AI EV": [f"${ai_expected_return:+.2f}"],
                             "AI Score": [f"{ai_metrics['score']:.1f}"]
+=======
+                    for outcome in market.get('outcomes', []):
+                        leg = {
+                            'sport': sport,
+                            'home_team': home,
+                            'away_team': away,
+                            'commence_time': commence,
+                            'bookmaker': bookie_name,
+                            'market': market_key,
+                            'selection': outcome.get('name'),
+                            'point': outcome.get('point'),
+                            'odds_decimal': outcome.get('price'),
+                            'implied_prob': 1 / outcome.get('price', 1) if outcome.get('price') else None
+>>>>>>> Stashed changes
                         }
-                        
-                        csv_buf = io.StringIO()
-                        pd.DataFrame(analysis_data).to_csv(csv_buf, index=False)
-                        st.download_button(
-                            "💾 Download Analysis",
-                            data=csv_buf.getvalue(),
-                            file_name="custom_parlay_analysis.csv",
-                            mime="text/csv"
-                        )
-                        
-                    except Exception as e:
-                        st.error(f"Error analyzing parlay: {str(e)}")
-                        with st.expander("Error Details"):
-                            import traceback
-                            st.code(traceback.format_exc())
-        else:
-            st.info("ℹ️ Add at least 2 legs to analyze your parlay")
-        
-        # Clear parlay button
-        if st.button("🗑️ Clear All Legs", type="secondary"):
-            st.session_state['custom_legs'] = []
-            st.rerun()
-    else:
-        st.info("👆 Load games and start building your parlay above")
-    
-    # Tips section
-    st.markdown("---")
-    st.markdown("""
-    ### 💡 Custom Parlay Tips:
-    
-    **Building Your Parlay:**
-    - Start with 2-3 legs for better win probability
-    - Mix different bet types (ML, Spread, Total) for variety
-    - Avoid same-game parlays unless you have strong correlation thesis
-    
-    **Using AI Analysis:**
-    - **Positive AI EV** = AI thinks you have an edge
-    - **High Confidence (70%+)** = AI very sure about probabilities
-    - **Positive Sentiment** = Recent news favors this pick
-    - **Green AI Score** = Strong overall recommendation
-    
-    **Making Decisions:**
-    - ✅ Target: Positive AI EV + High Confidence + Good Sentiment
-    - ⚠️ Caution: Negative AI EV or Low Confidence
-    - 🔴 Avoid: Multiple red flags (negative EV, low confidence, bad sentiment)
-    """)
 
+<<<<<<< Updated upstream
 # ===== TAB 4: KALSHI PREDICTION MARKETS =====
 with main_tab4:
     # 1. SETUP & CONFIGURATION (Must come first!)
@@ -15638,3 +15720,341 @@ if st.session_state.get('vertex_analysis_complete') and st.session_state.get('ve
 
 
 # End of main application
+=======
+                        # Calculate simple edge (this would use ML models in full version)
+                        if leg['implied_prob']:
+                            # Placeholder: assume 5% edge on everything for demo
+                            leg['ai_prob'] = min(0.95, leg['implied_prob'] * 1.05)
+                            leg['edge'] = leg['ai_prob'] - leg['implied_prob']
+
+                            if leg['edge'] >= min_edge:
+                                legs.append(leg)
+
+        return pd.DataFrame(legs)
+
+    def generate_parlays(self, legs_df: pd.DataFrame,
+                         parlay_size: int = 2,
+                         max_parlays: int = 100) -> pd.DataFrame:
+        """
+        Generate optimal parlays from best legs
+
+        Args:
+            legs_df: DataFrame with individual legs
+            parlay_size: Number of legs per parlay (default: 2)
+            max_parlays: Maximum number of parlays to generate (default: 100)
+
+        Returns:
+            DataFrame with parlay recommendations
+        """
+        from itertools import combinations
+
+        if len(legs_df) < parlay_size:
+            logger.warning(f"⚠️ Only {len(legs_df)} legs found, need at least {parlay_size}")
+            return pd.DataFrame()
+
+        logger.info(f"🎲 Generating {parlay_size}-leg parlays from {len(legs_df)} legs...")
+
+        parlays = []
+
+        # Generate all combinations
+        for combo in combinations(legs_df.to_dict('records'), parlay_size):
+            # Check for conflicts (same game, same team, etc.)
+            games = set()
+            teams = set()
+            valid = True
+
+            for leg in combo:
+                game_id = f"{leg['away_team']}@{leg['home_team']}"
+                if game_id in games:
+                    valid = False
+                    break
+                games.add(game_id)
+
+                # Check for team conflicts in different games
+                if leg['selection'] in teams:
+                    valid = False
+                    break
+                teams.add(leg['selection'])
+
+            if not valid:
+                continue
+
+            # Calculate parlay metrics
+            combined_odds = 1.0
+            combined_prob = 1.0
+            total_edge = 0.0
+
+            for leg in combo:
+                combined_odds *= leg['odds_decimal']
+                combined_prob *= leg['ai_prob']
+                total_edge += leg['edge']
+
+            parlay = {
+                'parlay_size': parlay_size,
+                'legs': ' | '.join([f"{leg['selection']} {leg['market']}" for leg in combo]),
+                'combined_odds': combined_odds,
+                'ai_probability': combined_prob,
+                'expected_value': (combined_odds * combined_prob) - 1,
+                'total_edge': total_edge,
+                'leg_details': combo
+            }
+
+            parlays.append(parlay)
+
+            if len(parlays) >= max_parlays:
+                break
+
+        parlays_df = pd.DataFrame(parlays)
+
+        if not parlays_df.empty:
+            # Sort by expected value
+            parlays_df = parlays_df.sort_values('expected_value', ascending=False)
+            logger.info(f"✅ Generated {len(parlays_df)} parlays")
+        else:
+            logger.warning("⚠️ No valid parlays generated")
+
+        return parlays_df
+
+    def enrich_with_sportsdata(self, legs_df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Enrich legs with SportsData.io metrics
+
+        Args:
+            legs_df: DataFrame with legs
+
+        Returns:
+            Enriched DataFrame
+        """
+        if not self.sportsdata_keys:
+            logger.warning("⚠️ No SportsData.io keys configured, skipping enrichment")
+            return legs_df
+
+        logger.info("📊 Enriching with SportsData.io metrics...")
+
+        # This would make actual API calls in production
+        # For now, add placeholder columns
+        legs_df['sportsdata_prob'] = None
+        legs_df['sportsdata_trend'] = None
+        legs_df['sportsdata_record'] = None
+
+        return legs_df
+
+    def export_results(self, parlays_df: pd.DataFrame, legs_df: pd.DataFrame,
+                       output_path: str, format: str = 'csv'):
+        """
+        Export results to file
+
+        Args:
+            parlays_df: DataFrame with parlays
+            legs_df: DataFrame with legs
+            output_path: Output file path
+            format: Output format ('csv', 'json', 'html', 'excel')
+        """
+        output_file = Path(output_path)
+
+        if format == 'csv':
+            parlays_df.to_csv(output_file, index=False)
+            legs_file = output_file.with_name(f"{output_file.stem}_legs.csv")
+            legs_df.to_csv(legs_file, index=False)
+            logger.info(f"✅ Exported to {output_file} and {legs_file}")
+
+        elif format == 'json':
+            results = {
+                'generated_at': datetime.now().isoformat(),
+                'parlays': parlays_df.to_dict('records'),
+                'legs': legs_df.to_dict('records')
+            }
+            with open(output_file, 'w') as f:
+                json.dump(results, f, indent=2)
+            logger.info(f"✅ Exported to {output_file}")
+
+        elif format == 'html':
+            html_content = f"""
+            <html>
+            <head>
+                <title>Parlay Analysis Results</title>
+                <style>
+                    body {{ font-family: Arial, sans-serif; margin: 20px; }}
+                    h1 {{ color: #333; }}
+                    table {{ border-collapse: collapse; width: 100%; margin: 20px 0; }}
+                    th {{ background-color: #4CAF50; color: white; padding: 12px; text-align: left; }}
+                    td {{ border: 1px solid #ddd; padding: 8px; }}
+                    tr:nth-child(even) {{ background-color: #f2f2f2; }}
+                    .positive {{ color: green; font-weight: bold; }}
+                    .negative {{ color: red; }}
+                </style>
+            </head>
+            <body>
+                <h1>🎲 Parlay Analysis Results</h1>
+                <p>Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
+
+                <h2>Top Parlays</h2>
+                {parlays_df.head(20).to_html(index=False, classes='table')}
+
+                <h2>All Legs</h2>
+                {legs_df.to_html(index=False, classes='table')}
+            </body>
+            </html>
+            """
+            with open(output_file, 'w') as f:
+                f.write(html_content)
+            logger.info(f"✅ Exported to {output_file}")
+
+        elif format == 'excel':
+            with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
+                parlays_df.to_excel(writer, sheet_name='Parlays', index=False)
+                legs_df.to_excel(writer, sheet_name='Legs', index=False)
+            logger.info(f"✅ Exported to {output_file}")
+
+        else:
+            logger.error(f"❌ Unknown format: {format}")
+
+    def run(self, sports: List[str], parlay_size: int = 2,
+            min_edge: float = 0.02, max_parlays: int = 100,
+            output_path: str = 'parlays.csv', output_format: str = 'csv'):
+        """
+        Main execution method
+
+        Args:
+            sports: List of sports to analyze
+            parlay_size: Number of legs per parlay
+            min_edge: Minimum edge threshold
+            max_parlays: Maximum parlays to generate
+            output_path: Output file path
+            output_format: Output format
+        """
+        logger.info("=" * 60)
+        logger.info("🎲 PARLAY ANALYZER - STANDALONE VERSION")
+        logger.info("=" * 60)
+
+        # Step 1: Fetch odds
+        logger.info("\n📊 Step 1: Fetching odds data...")
+        odds_df = self.fetch_odds(sports)
+
+        if odds_df.empty:
+            logger.error("❌ No odds data found. Exiting.")
+            return
+
+        # Step 2: Extract best legs
+        logger.info(f"\n🎯 Step 2: Extracting legs with edge >= {min_edge * 100}%...")
+        legs_df = self.extract_best_legs(odds_df, min_edge=min_edge)
+
+        if legs_df.empty:
+            logger.error("❌ No qualifying legs found. Try lowering min_edge.")
+            return
+
+        logger.info(f"✅ Found {len(legs_df)} qualifying legs")
+
+        # Step 3: Enrich with SportsData
+        logger.info("\n📈 Step 3: Enriching with SportsData.io...")
+        legs_df = self.enrich_with_sportsdata(legs_df)
+
+        # Step 4: Generate parlays
+        logger.info(f"\n🎲 Step 4: Generating {parlay_size}-leg parlays...")
+        parlays_df = self.generate_parlays(legs_df, parlay_size=parlay_size,
+                                           max_parlays=max_parlays)
+
+        if parlays_df.empty:
+            logger.error("❌ No valid parlays generated. Exiting.")
+            return
+
+        # Step 5: Export results
+        logger.info(f"\n💾 Step 5: Exporting results to {output_path}...")
+        self.export_results(parlays_df, legs_df, output_path, output_format)
+
+        # Print summary
+        logger.info("\n" + "=" * 60)
+        logger.info("📊 SUMMARY")
+        logger.info("=" * 60)
+        logger.info(f"Total games analyzed: {len(odds_df)}")
+        logger.info(f"Qualifying legs: {len(legs_df)}")
+        logger.info(f"Parlays generated: {len(parlays_df)}")
+        logger.info(f"Best EV: {parlays_df['expected_value'].max():.2%}")
+        logger.info(f"Avg EV: {parlays_df['expected_value'].mean():.2%}")
+        logger.info("=" * 60)
+
+        # Show top 5 parlays
+        logger.info("\n🏆 TOP 5 PARLAYS:")
+        for idx, row in parlays_df.head(5).iterrows():
+            logger.info(f"\n#{idx + 1}:")
+            logger.info(f"  Legs: {row['legs']}")
+            logger.info(f"  Odds: {row['combined_odds']:.2f}")
+            logger.info(f"  AI Prob: {row['ai_probability']:.1%}")
+            logger.info(f"  Expected Value: {row['expected_value']:.2%}")
+
+
+def create_config_template(output_path: str = 'config.json'):
+    """Create a config template file"""
+    config = {
+        "odds_api_key": "b722c798f7bca605da45a09dba155152",
+        "sportsdata_keys": {
+            "nfl": "b722c798f7bca605da45a09dba155152",
+            "nba": "b722c798f7bca605da45a09dba155152",
+            "nhl": "b722c798f7bca605da45a09dba155152"
+        },
+        "apisports_keys": {
+            "nfl": "07972c891e3d56fbc6298b5c2a07b152",
+            "nba": "07972c891e3d56fbc6298b5c2a07b152",
+            "nhl": "07972c891e3d56fbc6298b5c2a07b152"
+        },
+        "settings": {
+            "min_edge": 0.02,
+            "parlay_size": 2,
+            "max_parlays": 100,
+            "regions": "us",
+            "markets": "h2h,spreads,totals"
+        }
+    }
+
+    with open(output_path, 'w') as f:
+        json.dump(config, f, indent=2)
+
+    print(f"✅ Created config template: {output_path}")
+    print("Edit this file with your API keys and settings")
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description='Standalone Parlay Analyzer - No Streamlit required'
+    )
+
+    parser.add_argument('--config', type=str, help='Path to config.json file')
+    parser.add_argument('--create-config', action='store_true',
+                        help='Create a config.json template')
+    parser.add_argument('--sports', nargs='+', default=['basketball_nba', 'americanfootball_nfl'],
+                        help='Sports to analyze (e.g., basketball_nba americanfootball_nfl)')
+    parser.add_argument('--size', type=int, default=2,
+                        help='Parlay size (number of legs)')
+    parser.add_argument('--min-edge', type=float, default=0.02,
+                        help='Minimum edge threshold (default: 0.02 = 2%%)')
+    parser.add_argument('--max-parlays', type=int, default=100,
+                        help='Maximum number of parlays to generate')
+    parser.add_argument('--output', type=str, default='parlays.csv',
+                        help='Output file path')
+    parser.add_argument('--format', type=str, default='csv',
+                        choices=['csv', 'json', 'html', 'excel'],
+                        help='Output format')
+
+    args = parser.parse_args()
+
+    if args.create_config:
+        create_config_template()
+        return
+
+    # Initialize analyzer
+    analyzer = LocalParlayAnalyzer(config_path=args.config)
+
+    # Run analysis
+    analyzer.run(
+        sports=args.sports,
+        parlay_size=args.size,
+        min_edge=args.min_edge,
+        max_parlays=args.max_parlays,
+        output_path=args.output,
+        output_format=args.format
+    )
+
+
+if __name__ == '__main__':
+    main()
+>>>>>>> Stashed changes
