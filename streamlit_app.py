@@ -3412,7 +3412,7 @@ class LocalParlayAnalyzer:
                 continue
 
         return pd.DataFrame(all_odds)
->>>>>>> Stashed changes
+#>>>>>>> Stashed changes
 
     def extract_best_legs(self, odds_df: pd.DataFrame,
                           min_edge: float = 0.02) -> pd.DataFrame:
@@ -3428,7 +3428,7 @@ class LocalParlayAnalyzer:
         """
         legs = []
 
-<<<<<<< Updated upstream
+#<<<<<<< Updated upstream
 def _odds_api_base():
     return "https://api.the-odds-api.com"
 
