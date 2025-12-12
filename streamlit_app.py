@@ -8828,128 +8828,128 @@ with main_tab1:
                             
                             if not results_df.empty:
                             # --- NEW: Filter for TODAY'S games only ---
-                    from datetime import datetime
-                    import pytz
-                                    
-                    try:
-                        # Create filtering date in US/Eastern
-                        today_date = datetime.now(pytz.timezone('US/Eastern')).date()
-    
-                        if 'game_time' in results_df.columns:
-                            results_df = results_df[
-                                pd.to_datetime(results_df['game_time']).dt.date == today_date
-                            ].reset_index(drop=True)
-                            st.success(f"✅ Filtered to {len(results_df)} games for TODAY ({today_date})")
-                    except Exception as e:
-                        st.warning(f"⚠️ Date filtering failed: {e}")
-                    # -------------------------------------------
-    
-                    # --- OPTIONAL: Gemini overlay (uses Vertex + odds + TheOver as context) ---
-                    if GEMINI_AVAILABLE and st.session_state.get("ai_provider") == "gemini":
-                        try:
-                            project_id = st.session_state.get("gcp_project_id")
-                            region = st.session_state.get("gcp_region", "us-central1")
-                            if project_id:
-                                gem_analyzer = GeminiAnalyzer(
-                                    project_id=project_id,
-                                    region=region,
-                                )
-    
-                                gem_input = []
-                                for _, g in results_df.iterrows():
-                                    # Base ML context from your Vertex model
-                                    ml_prob = g.get("vertex_ai_prob", g.get("win_prob", 0.5))
-                                    ml_prob = float(ml_prob or 0.5)
-    
-                                    ml_context = {
-                                        "home_win_prob": ml_prob,
-                                        "away_win_prob": 1.0 - ml_prob,
-                                        "confidence": float(g.get("confidence", 0) or 0),
-                                        "model_used": "Vertex AI sports model",
-                                        "edge": float(g.get("edge_vs_market", 0) or 0),
-                                    }
-    
-                                    context_data = {"ml": ml_context}
-    
-                                    # Optional TheOver.ai context if present
-                                    if "theover_pick" in results_df.columns:
-                                        context_data["theover"] = {
-                                            "Pick": g.get("theover_pick"),
-                                            "Line": g.get("theover_line"),
-                                            "Market": g.get("theover_market"),
-                                            "Probability": g.get("theover_prob"),
-                                        }
-    
-                                    gem_input.append({
-                                        "home_team": g.get("home_team"),
-                                        "away_team": g.get("away_team"),
-                                        # league is fine as an identifier for the prompt
-                                        "sport_key": g.get("sport_key") or g.get("league"),
-                                        "commence_time": g.get("commence_time") or g.get("game_time"),
-                                        # Use home side as the reference bet for now
-                                        "best_moneyline": g.get("home_ml_odds"),
-                                        "best_spread": g.get("home_spread"),
-                                        "context_data": context_data,
-                                    })
-    
-                                gem_results = gem_analyzer.analyze_games_batch(gem_input)
-    
-                                import pandas as _pd
-                                gem_df = _pd.DataFrame(gem_results)
-    
-                                if not gem_df.empty:
-                                    # Build a join key using teams + league/sport
-                                    results_df["__join_key"] = (
-                                        results_df.get("home_team", "").astype(str)
-                                        + "||"
-                                        + results_df.get("away_team", "").astype(str)
-                                        + "||"
-                                        + results_df.get("league", "").astype(str)
-                                    )
-                                    gem_df["__join_key"] = (
-                                        gem_df.get("home_team", "").astype(str)
-                                        + "||"
-                                        + gem_df.get("away_team", "").astype(str)
-                                        + "||"
-                                        + gem_df.get("sport", "").astype(str)
-                                    )
-    
-                                    # Rename Gemini columns to avoid collisions
-                                    gem_df = gem_df.rename(columns={
-                                        "gemini_probability": "gemini_home_prob",
-                                        "away_probability": "gemini_away_prob",
-                                        "confidence": "gemini_confidence",
-                                        "has_edge": "gemini_has_edge",
-                                        "recommended_bet": "gemini_recommended_bet",
-                                        "bet_type": "gemini_bet_type",
-                                        "risk_level": "gemini_risk_level",
-                                    })
-    
-                                    merge_cols = [
-                                        "__join_key",
-                                        "gemini_home_prob",
-                                        "gemini_away_prob",
-                                        "gemini_confidence",
-                                        "gemini_has_edge",
-                                        "gemini_recommended_bet",
-                                        "gemini_bet_type",
-                                        "gemini_risk_level",
-                                    ]
-    
-                                    results_df = results_df.merge(
-                                        gem_df[merge_cols],
-                                        on="__join_key",
-                                        how="left",
-                                    )
-                                    results_df.drop(columns=["__join_key"], inplace=True, errors="ignore")
-                            else:
-                                st.info("ℹ️ Gemini is available, but no GCP project ID was set. Skipping Gemini overlay.")
-                        except Exception as gem_e:
-                            st.warning(f"⚠️ Gemini analysis failed; continuing without it: {gem_e}")
-                    # --- END GEMINI OVERLAY ---
-    
-                    st.success(f"✅ Analysis complete! Found {len(results_df)} opportunities")
-                    show_vertex_master_analysis(results_df)
+                            from datetime import datetime
+                            import pytz
+                                            
+                            try:
+                                # Create filtering date in US/Eastern
+                                today_date = datetime.now(pytz.timezone('US/Eastern')).date()
+            
+                                if 'game_time' in results_df.columns:
+                                    results_df = results_df[
+                                        pd.to_datetime(results_df['game_time']).dt.date == today_date
+                                    ].reset_index(drop=True)
+                                    st.success(f"✅ Filtered to {len(results_df)} games for TODAY ({today_date})")
+                            except Exception as e:
+                                st.warning(f"⚠️ Date filtering failed: {e}")
+                            # -------------------------------------------
+            
+                            # --- OPTIONAL: Gemini overlay (uses Vertex + odds + TheOver as context) ---
+                            if GEMINI_AVAILABLE and st.session_state.get("ai_provider") == "gemini":
+                                try:
+                                    project_id = st.session_state.get("gcp_project_id")
+                                    region = st.session_state.get("gcp_region", "us-central1")
+                                    if project_id:
+                                        gem_analyzer = GeminiAnalyzer(
+                                            project_id=project_id,
+                                            region=region,
+                                        )
+            
+                                        gem_input = []
+                                        for _, g in results_df.iterrows():
+                                            # Base ML context from your Vertex model
+                                            ml_prob = g.get("vertex_ai_prob", g.get("win_prob", 0.5))
+                                            ml_prob = float(ml_prob or 0.5)
+            
+                                            ml_context = {
+                                                "home_win_prob": ml_prob,
+                                                "away_win_prob": 1.0 - ml_prob,
+                                                "confidence": float(g.get("confidence", 0) or 0),
+                                                "model_used": "Vertex AI sports model",
+                                                "edge": float(g.get("edge_vs_market", 0) or 0),
+                                            }
+            
+                                            context_data = {"ml": ml_context}
+            
+                                            # Optional TheOver.ai context if present
+                                            if "theover_pick" in results_df.columns:
+                                                context_data["theover"] = {
+                                                    "Pick": g.get("theover_pick"),
+                                                    "Line": g.get("theover_line"),
+                                                    "Market": g.get("theover_market"),
+                                                    "Probability": g.get("theover_prob"),
+                                                }
+            
+                                            gem_input.append({
+                                                "home_team": g.get("home_team"),
+                                                "away_team": g.get("away_team"),
+                                                # league is fine as an identifier for the prompt
+                                                "sport_key": g.get("sport_key") or g.get("league"),
+                                                "commence_time": g.get("commence_time") or g.get("game_time"),
+                                                # Use home side as the reference bet for now
+                                                "best_moneyline": g.get("home_ml_odds"),
+                                                "best_spread": g.get("home_spread"),
+                                                "context_data": context_data,
+                                            })
+            
+                                        gem_results = gem_analyzer.analyze_games_batch(gem_input)
+            
+                                        import pandas as _pd
+                                        gem_df = _pd.DataFrame(gem_results)
+            
+                                        if not gem_df.empty:
+                                            # Build a join key using teams + league/sport
+                                            results_df["__join_key"] = (
+                                                results_df.get("home_team", "").astype(str)
+                                                + "||"
+                                                + results_df.get("away_team", "").astype(str)
+                                                + "||"
+                                                + results_df.get("league", "").astype(str)
+                                            )
+                                            gem_df["__join_key"] = (
+                                                gem_df.get("home_team", "").astype(str)
+                                                + "||"
+                                                + gem_df.get("away_team", "").astype(str)
+                                                + "||"
+                                                + gem_df.get("sport", "").astype(str)
+                                            )
+            
+                                            # Rename Gemini columns to avoid collisions
+                                            gem_df = gem_df.rename(columns={
+                                                "gemini_probability": "gemini_home_prob",
+                                                "away_probability": "gemini_away_prob",
+                                                "confidence": "gemini_confidence",
+                                                "has_edge": "gemini_has_edge",
+                                                "recommended_bet": "gemini_recommended_bet",
+                                                "bet_type": "gemini_bet_type",
+                                                "risk_level": "gemini_risk_level",
+                                            })
+            
+                                            merge_cols = [
+                                                "__join_key",
+                                                "gemini_home_prob",
+                                                "gemini_away_prob",
+                                                "gemini_confidence",
+                                                "gemini_has_edge",
+                                                "gemini_recommended_bet",
+                                                "gemini_bet_type",
+                                                "gemini_risk_level",
+                                            ]
+            
+                                            results_df = results_df.merge(
+                                                gem_df[merge_cols],
+                                                on="__join_key",
+                                                how="left",
+                                            )
+                                            results_df.drop(columns=["__join_key"], inplace=True, errors="ignore")
+                                    else:
+                                        st.info("ℹ️ Gemini is available, but no GCP project ID was set. Skipping Gemini overlay.")
+                                except Exception as gem_e:
+                                    st.warning(f"⚠️ Gemini analysis failed; continuing without it: {gem_e}")
+                            # --- END GEMINI OVERLAY ---
+            
+                            st.success(f"✅ Analysis complete! Found {len(results_df)} opportunities")
+                            show_vertex_master_analysis(results_df)
 
                                 
                                 # Store results in session_state
