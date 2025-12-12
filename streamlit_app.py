@@ -4016,18 +4016,21 @@ def build_best_odds_report(
 
     return compute_best_overall_odds(aggregated_events, tz_name)
 
-        for game in odds_df.iterrows():
-            home = game['home_team']
-            away = game['away_team']
-            sport = game['sport']
-            commence = game['commence_time']
+        # ... inside build_best_odds_report ...
+        # Iterate over each snapshot and aggregate events
+        for snapshot in odds_data.values():
+            events = snapshot.get("events") or []
+            if not events:
+                continue
+    
+            filtered = filter_events_by_date_range(events, start_date, end_date, tz_name)
+            aggregated_events.extend(filtered)
+    
+        return compute_best_overall_odds(aggregated_events, tz_name)
 
-            for bookmaker in game.get('bookmakers', []):
-                bookie_name = bookmaker.get('title', 'Unknown')
-
-                for market in bookmaker.get('markets', []):
-                    market_key = market.get('key')
-
+def decimal_to_american(decimal_odds: Optional[float]) -> Optional[int]:
+    """Convert decimal odds back to American format for display."""
+    # ... rest of function ...
 
 def decimal_to_american(decimal_odds: Optional[float]) -> Optional[int]:
     """Convert decimal odds back to American format for display."""
