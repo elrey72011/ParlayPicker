@@ -23,37 +23,31 @@ from pydantic import BaseModel, ValidationError
 logger = logging.getLogger(__name__)
 
 # -------------------------------------------------------------------
-# GEMINI SETUP
+# GEMINI (VERTEX AI) SETUP
 # -------------------------------------------------------------------
 
 try:
-    import google.generativeai as genai  # type: ignore
+    import vertexai
+    from vertexai.generative_models import GenerativeModel
 
-    _GEMINI_IMPORTED = True
+    _GEMINI_AVAILABLE = True
 except Exception as e:
-    genai = None  # type: ignore
-    _GEMINI_IMPORTED = False
-    logger.warning(f"google-generativeai not available: {e}")
+    GenerativeModel = None  # type: ignore
+    _GEMINI_AVAILABLE = False
+    logger.warning(f"Vertex Gemini not available: {e}")
 
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 GEMINI_MODEL_NAME = os.getenv("GEMINI_MODEL_NAME", "gemini-1.5-flash")
 
 _GEMINI_CONFIGURED = False
 
-if _GEMINI_IMPORTED and GEMINI_API_KEY:
+if _GEMINI_AVAILABLE:
     try:
-        genai.configure(api_key=GEMINI_API_KEY)
+        # Vertex is already initialized globally in your app
         _GEMINI_CONFIGURED = True
-        logger.info(f"LLM assistant using Gemini model: {GEMINI_MODEL_NAME}")
+        logger.info(f"LLM assistant using Vertex Gemini model: {GEMINI_MODEL_NAME}")
     except Exception as e:
-        logger.warning(f"Failed to configure Gemini: {e}")
+        logger.warning(f"Failed to configure Vertex Gemini: {e}")
         _GEMINI_CONFIGURED = False
-elif _GEMINI_IMPORTED and not GEMINI_API_KEY:
-    logger.warning(
-        "GEMINI_API_KEY is not set. LLM assistant will be disabled "
-        "until a valid key is provided."
-    )
-
 
 # -------------------------------------------------------------------
 # Pydantic schema for contract recommendations
