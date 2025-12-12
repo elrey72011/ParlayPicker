@@ -617,7 +617,8 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
 
     # Format Commence Time to show EST/EDT
     def _fmt_commence(x):
-        if not x: return ""
+        if not x:
+            return ""
         try:
             target_tz = pytz.timezone('US/Eastern')
             if isinstance(x, str):
@@ -629,13 +630,13 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
                     x = pytz.utc.localize(x)
                 return x.astimezone(target_tz).strftime("%Y-%m-%d %I:%M %p")
             return str(x)
-        except:
+        except Exception:
             return str(x)
 
-    if "game_time" in display_df.columns:
+if "game_time" in display_df.columns:
         display_df["Commence (ET)"] = display_df["game_time"].apply(_fmt_commence)
-    else:
-        display_df["Commence (ET)"] = ""
+else:
+    display_df["Commence (ET)"] = ""
 
     # Kalshi display column
     def fmt_kalshi(row: pd.Series) -> str:
