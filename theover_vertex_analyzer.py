@@ -11,6 +11,88 @@ from ml_predictions import get_vertex_ai_prediction, is_vertex_ai_enabled
 
 logger = logging.getLogger(__name__)
 
+import re
+
+RE_MULTI_SPACE = re.compile(r"\s+")
+RE_NONALNUM = re.compile(r"[^a-z0-9 ]+")
+
+def _norm_team(s: str) -> str:
+    s = (s or "").strip().lower()
+    s = RE_NONALNUM.sub("", s)
+    s = RE_MULTI_SPACE.sub(" ", s)
+    return s
+
+def _league_norm(s: str) -> str:
+    s = (s or "").strip().upper()
+    # keep your mapping rules here
+    return s
+
+def normalize_theover_spreads(df: pd.DataFrame) -> pd.DataFrame:
+    required = {"League","HomeTeam","AwayTeam","Line","WinProbability","Market"}
+    missing = required - set(df.columns)
+    if missing:
+        raise ValueError(f"Spreads CSV missing columns: {sorted(missing)}")
+
+    out = pd.DataFrame()
+    out["league"] = df["League"].map(_league_norm)
+    out["home_team"] = df["HomeTeam"].astype(str).str.strip()
+    out["away_team"] = df["AwayTeam"].astype(str).str.strip()
+    out["market"] = "Spread"
+
+    # Prefer PickTeam if present, else derive from Pick
+    if "PickTeam" in df.columns:
+        out["pick_team"] = df["PickTeam"].astype(str).str.strip()
+    elif "Pick" in df.columns:
+        out["pick_team"] = df["Pick"].astype(str).str.strip()
+    else:
+        out["pick_team"] = None
+
+    out["pick_code"] = None
+    out["line"] = pd.to_numeric(df["Line"], errors="coerce")
+    out["win_probability"] = pd.to_numeric(df["WinProbability"], errors="coerce")
+
+    # normalize win prob: allow 0-100 or 0-1
+    out.loc[out["win_probability"] > 1.0, "win_probability"] = out["win_probability"] / 100.0
+
+    out["matchup_key"] = (
+        out["league"] + "|" +
+        out["away_team"].map(_norm_team) + "@" +
+        out["home_team"].map(_norm_team)
+    )
+    return out
+
+
+def normalize_theover_totals(df: pd.DataFrame) -> pd.DataFrame:
+    required = {"League","HomeTeam","AwayTeam","Line","WinProbability","Market"}
+    missing = required - set(df.columns)
+    if missing:
+        raise ValueError(f"Totals CSV missing columns: {sorted(missing)}")
+
+    out = pd.DataFrame()
+    out["league"] = df["League"].map(_league_norm)
+    out["home_team"] = df["HomeTeam"].astype(str).str.strip()
+    out["away_team"] = df["AwayTeam"].astype(str).str.strip()
+    out["market"] = "Total"
+
+    # Totals should use PickCode if present; else try Pick
+    if "PickCode" in df.columns:
+        out["pick_code"] = df["PickCode"].astype(str).str.strip().str.upper()
+    elif "Pick" in df.columns:
+        out["pick_code"] = df["Pick"].astype(str).str.strip().str.upper()
+    else:
+        out["pick_code"] = None
+
+    out["pick_team"] = None
+    out["line"] = pd.to_numeric(df["Line"], errors="coerce")
+    out["win_probability"] = pd.to_numeric(df["WinProbability"], errors="coerce")
+    out.loc[out["win_probability"] > 1.0, "win_probability"] = out["win_probability"] / 100.0
+
+    out["matchup_key"] = (
+        out["league"] + "|" +
+        out["away_team"].map(_norm_team) + "@" +
+        out["home_team"].map(_norm_team)
+    )
+    return out
 
 def enrich_spread_pick_with_stats(row: pd.Series, sportsdata_client=None, apisports_client=None) -> Dict:
     """
@@ -18,12 +100,12 @@ def enrich_spread_pick_with_stats(row: pd.Series, sportsdata_client=None, apispo
     Handles both column naming conventions (home_team and HomeTeam)
     """
     # Handle both column naming conventions
-    home_team = row.get('home_team') or row.get('HomeTeam', '')
-    away_team = row.get('away_team') or row.get('AwayTeam', '')
-    league = row.get('league') or row.get('League', 'NBA')
-    pick = row.get('pick') or row.get('Pick', '')
-    line = float(row.get('line') or row.get('Line', 0))
-    
+    home_team = row.get("home_team", "")
+    away_team = row.get("away_team", "")
+    league = row.get("league", "NBA")
+    pick = row.get("pick_team") or row.get("pick_code") or ""
+    line = float(row.get("line") or 0)
+
     features = {
         'league': league,
         'home_team': home_team,
@@ -162,15 +244,21 @@ def analyze_theover_spreads_with_vertex(
     
     results = []
     errors = []
-    
+
+    try:
+        spreads_df = normalize_theover_spreads(spreads_df)
+    except Exception as e:
+        st.error(f"Invalid TheOver Spreads CSV: {e}")
+        return pd.DataFrame()
+
     progress_bar = st.progress(0)
     status_text = st.empty()
     
     for idx, row in spreads_df.iterrows():
         # Get team names (handle both column formats)
-        home_team = row.get('home_team') or row.get('HomeTeam', 'Unknown')
-        away_team = row.get('away_team') or row.get('AwayTeam', 'Unknown')
-        
+        home_team = row.get("home_team", "Unknown")
+        away_team = row.get("away_team", "Unknown")
+
         status_text.text(f"Analyzing {away_team} @ {home_team}... ({idx+1}/{len(spreads_df)})")
         
         try:
@@ -220,7 +308,6 @@ def analyze_theover_spreads_with_vertex(
         results_df = results_df.sort_values('confidence', ascending=False)
     
     return results_df
-
 
 def show_best_bets_table(results_df: pd.DataFrame):
     """Display ALL analysis results with ML predictions - NOT filtered by EV"""
@@ -385,7 +472,7 @@ def show_best_bets_table(results_df: pd.DataFrame):
         'AI Win %', 'EV %', 'Edge %', 'Confidence', 'Rec'
     ]
     
-    st.dataframe(table_df, use_container_width=True, height=400)
+    st.dataframe(table_df, width="stretch", height=400)
     
     # Download
     csv = results_df.to_csv(index=False)

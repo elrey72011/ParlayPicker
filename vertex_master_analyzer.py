@@ -70,6 +70,71 @@ def american_to_decimal(odds: Optional[float]) -> Optional[float]:
         return 1.0 + odds / 100.0
     return 1.0 + 100.0 / abs(odds)
 
+def _clamp(p: float, lo: float = 0.01, hi: float = 0.99) -> float:
+    try:
+        p = float(p)
+    except Exception:
+        return 0.5
+    return max(lo, min(hi, p))
+
+
+def blended_win_prob(
+    *,
+    market_prob: float | None,
+    vertex_prob: float | None,
+    theover_prob: float | None,
+    kalshi_prob: float | None,
+    sentiment_diff: float | None,
+    selection: str,  # "home" or "away"
+    w_vertex: float = 0.40,
+    w_theover: float = 0.25,
+    w_kalshi: float = 0.20,
+    w_sentiment: float = 0.15,
+) -> float:
+    """
+    Produces a final win probability for the selected side ("home"/"away").
+
+    - Uses Vertex/TheOver/Kalshi when available
+    - Falls back to market_prob if sources are missing
+    - Applies a small sentiment adjustment (bounded)
+    """
+
+    # Base fallback
+    base_home = market_prob if market_prob is not None else 0.5
+    base_home = _clamp(base_home)
+
+    # Normalize inputs (home-side)
+    v = _clamp(vertex_prob) if vertex_prob is not None else None
+    t = _clamp(theover_prob) if theover_prob is not None else None
+    k = _clamp(kalshi_prob) if kalshi_prob is not None else None
+
+    # Sentiment -> convert to a small probability tweak on HOME side
+    sd = float(sentiment_diff or 0.0)
+    sent_adj = max(-0.08, min(0.08, sd * 0.08))  # cap impact to ±8%
+    s = _clamp(base_home + sent_adj)
+
+    # Dynamic reweight (only weight sources that exist)
+    weights = []
+    parts = []
+
+    if v is not None:
+        weights.append(w_vertex); parts.append(v)
+    if t is not None:
+        weights.append(w_theover); parts.append(t)
+    if k is not None:
+        weights.append(w_kalshi); parts.append(k)
+
+    # Always include sentiment term (based on base/market)
+    weights.append(w_sentiment); parts.append(s)
+
+    denom = sum(weights) if sum(weights) > 0 else 1.0
+    blended_home = sum(w * p for w, p in zip(weights, parts)) / denom
+    blended_home = _clamp(blended_home)
+
+    if selection == "home":
+        return blended_home
+    return _clamp(1.0 - blended_home)
+
 # -------------------------------
 # MASTER ANALYZER CLASS
 # -------------------------------
@@ -440,16 +505,52 @@ class VertexMasterAnalyzer:
         if not market_prob:
             return None
 
-        ai_prob: Optional[float] = None
-        if vertex_enabled and vertex_home_prob is not None:
-            ai_prob = vertex_home_prob if selection == "home" else (1.0 - vertex_home_prob)
-        else:
-            base = feats.get("implied_home_prob", 0.5)
-            sent_adj = (feats.get("sentiment_diff", 0) or 0) * 0.1
-            adj_base = base + sent_adj
-            ai_prob = adj_base if selection == "home" else (1.0 - adj_base)
+        # --- Blended probability (uses Vertex + TheOver + Kalshi + Sentiment) ---
+        # Market probability (from sportsbook odds) is our baseline fallback.
+        # For ML sources, we treat them as HOME-side probabilities.
+        market_home_prob = feats.get("implied_home_prob", None)
+        try:
+            market_home_prob = float(market_home_prob) if market_home_prob is not None else None
+        except Exception:
+            market_home_prob = None
 
-        ai_prob = max(0.01, min(0.99, ai_prob))
+        # Vertex model returns home win probability (if enabled)
+        vertex_home = None
+        if vertex_enabled and vertex_home_prob is not None:
+            try:
+                vertex_home = float(vertex_home_prob)
+            except Exception:
+                vertex_home = None
+
+        # TheOver: if you store one, it should also be HOME-side.
+        # If you don’t have this yet, it will just be None and get ignored.
+        theover_home = feats.get("theover_home_prob", None)
+        try:
+            theover_home = float(theover_home) if theover_home is not None else None
+        except Exception:
+            theover_home = None
+
+        # Kalshi prob: your feats["kalshi_prob"] should be HOME-side probability
+        # (or at least "home favored" probability for wins markets). If it’s not,
+        # keep it None until you align the meaning.
+        kalshi_home = feats.get("kalshi_prob", None)
+        try:
+            kalshi_home = float(kalshi_home) if kalshi_home is not None else None
+        except Exception:
+            kalshi_home = None
+
+        sentiment_diff = feats.get("sentiment_diff", 0.0)
+
+        ai_prob = blended_win_prob(
+            market_prob=market_home_prob,
+            vertex_prob=vertex_home,
+            theover_prob=theover_home,
+            kalshi_prob=kalshi_home if feats.get("kalshi_available") else None,
+            sentiment_diff=sentiment_diff,
+            selection=selection,  # "home" or "away"
+        )
+
+        # Edge vs THIS market (ML or Spread) is computed vs the market implied prob for THIS candidate
         edge = ai_prob - market_prob
 
         dec_odds = american_to_decimal(odds)
@@ -487,8 +588,13 @@ class VertexMasterAnalyzer:
             "kalshi_date": feats.get("kalshi_date"),
         }
 
-        return result
+        result["final_win_prob"] = ai_prob
+        result["vertex_home_prob"] = vertex_home
+        result["theover_home_prob"] = theover_home
+        result["kalshi_home_prob"] = kalshi_home if feats.get("kalshi_available") else None
+        result["market_home_prob"] = market_home_prob
 
+        return result
 
 # -------------------------------
 # STREAMLIT DISPLAY
