@@ -1,8 +1,8 @@
 """
 app_core.llm_assistant
 
-Second-opinion LLM assistant wrapper for ParlayPicker (Gemini via Vertex AI).
-Never blocks the app: returns [] if unavailable or any failure.
+Safe, optional Gemini (Vertex AI) second-opinion engine.
+This module MUST NEVER crash the app.
 """
 
 from __future__ import annotations
@@ -16,20 +16,26 @@ from pydantic import BaseModel, ValidationError
 
 logger = logging.getLogger(__name__)
 
-# ---- Vertex Gemini availability ----
+# -------------------------------------------------
+# Vertex Gemini setup (safe)
+# -------------------------------------------------
+
 _GEMINI_AVAILABLE = False
 GenerativeModel = None  # type: ignore
 
 try:
     from vertexai.generative_models import GenerativeModel as _GenerativeModel  # type: ignore
-
     GenerativeModel = _GenerativeModel  # type: ignore
     _GEMINI_AVAILABLE = True
 except Exception as e:
-    logger.warning(f"Vertex Gemini not available: {e}")
+    logger.warning(f"Vertex Gemini unavailable: {e}")
 
 GEMINI_MODEL_NAME = os.getenv("GEMINI_MODEL_NAME", "gemini-1.5-flash")
 
+
+# -------------------------------------------------
+# Schema
+# -------------------------------------------------
 
 class ContractRecommendation(BaseModel):
     ticker: str
@@ -39,63 +45,71 @@ class ContractRecommendation(BaseModel):
     confidence: int
 
 
+# -------------------------------------------------
+# Public API
+# -------------------------------------------------
+
 def analyze_kalshi_context_with_llm(context_markdown: str) -> List[Dict[str, Any]]:
+    """
+    Analyze Kalshi context using Gemini via Vertex AI.
+
+    Returns [] on ANY failure.
+    """
     if not _GEMINI_AVAILABLE or GenerativeModel is None:
         return []
+
     if not context_markdown or not context_markdown.strip():
         return []
 
-    system_instructions = (
-        "Output JSON ONLY. Schema:\n"
-        '{ "contracts": [ { "ticker": "...", "side": "yes|no|home|away", '
-        '"bid_price": 0, "reason": "...", "confidence": 0 } ] }\n'
-        'If no edge: {"contracts": []}'
-    )
+    system_prompt = """You are a prediction market assistant.
+
+Return JSON ONLY in this format:
+{
+  "contracts": [
+    {
+      "ticker": "...",
+      "side": "yes|no|home|away",
+      "bid_price": 0,
+      "reason": "...",
+      "confidence": 0
+    }
+  ]
+}
+
+If no edge exists, return {"contracts": []}.
+"""
+
+    prompt = f"""{system_prompt}
+
+CONTEXT:
+{context_markdown}
+"""
 
     try:
         model = GenerativeModel(GEMINI_MODEL_NAME)
-        resp = model.generate_content([system_instructions, context_markdown])
-        raw_text = (getattr(resp, "text", "") or "").strip()
-        if not raw_text:
+        response = model.generate_content(prompt)
+        text = getattr(response, "text", "") or ""
+
+        if not text.strip():
             return []
+
+        # Strip markdown fences if present
+        if "```" in text:
+            text = text.split("```")[1]
+
+        data = json.loads(text)
+        contracts = data.get("contracts", [])
+
+        results: List[Dict[str, Any]] = []
+        for c in contracts:
+            try:
+                rec = ContractRecommendation(**c)
+                results.append(rec.model_dump())
+            except ValidationError:
+                continue
+
+        return results
+
     except Exception as e:
-        logger.warning(f"Gemini request failed: {e}")
+        logger.warning(f"LLM assistant failed safely: {e}")
         return []
-
-    # Strip fenced blocks if present
-    json_str = raw_text
-    if "```" in json_str:
-        try:
-            if "```json" in json_str:
-                json_str = json_str.split("```json", 1)[1].split("```", 1)[0].strip()
-            else:
-                json_str = json_str.split("```", 1)[1].split("```", 1)[0].strip()
-        except Exception:
-            json_str = raw_text.strip()
-
-    try:
-        parsed = json.loads(json_str)
-    except Exception as e:
-        logger.warning(f"Non-JSON assistant output: {e}. Raw: {raw_text[:300]}")
-        return []
-
-    raw_contracts = []
-    if isinstance(parsed, dict):
-        raw_contracts = parsed.get("contracts", [])
-    elif isinstance(parsed, list):
-        raw_contracts = parsed
-
-    if not isinstance(raw_contracts, list):
-        return []
-
-    out: List[Dict[str, Any]] = []
-    for c in raw_contracts:
-        if not isinstance(c, dict):
-            continue
-        try:
-            rec = ContractRecommendation(**c)
-            out.append(rec.model_dump() if hasattr(rec, "model_dump") else rec.dict())
-        except ValidationError:
-            continue
-
-    return out
