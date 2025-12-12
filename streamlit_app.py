@@ -13882,7 +13882,7 @@ with main_tab3:
                             "Market EV": [f"${market_expected_return:+.2f}"],
                             "AI EV": [f"${ai_expected_return:+.2f}"],
                             "AI Score": [f"{ai_metrics['score']:.1f}"]
-
+                        }
                     for outcome in market.get('outcomes', []):
                         leg = {
                             'sport': sport,
