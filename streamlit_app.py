@@ -1,4 +1,3 @@
-#Update
 # (optional) encoding comment is allowed
 # -*- coding: utf-8 -*-
 from __future__ import annotations
