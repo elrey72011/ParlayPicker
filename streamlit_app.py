@@ -4023,7 +4023,7 @@ def build_best_odds_report(
 
     return compute_best_overall_odds(aggregated_events, tz_name)
 
-        for _, game in odds_df.iterrows():
+        for game in odds_df.iterrows():
             home = game['home_team']
             away = game['away_team']
             sport = game['sport']
