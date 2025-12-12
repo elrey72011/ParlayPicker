@@ -4016,17 +4016,17 @@ def build_best_odds_report(
 
     return compute_best_overall_odds(aggregated_events, tz_name)
 
-        # ... inside build_best_odds_report ...
-        # Iterate over each snapshot and aggregate events
-        for snapshot in odds_data.values():
-            events = snapshot.get("events") or []
-            if not events:
-                continue
-    
-            filtered = filter_events_by_date_range(events, start_date, end_date, tz_name)
-            aggregated_events.extend(filtered)
-    
-        return compute_best_overall_odds(aggregated_events, tz_name)
+    # ... inside build_best_odds_report ...
+    # Iterate over each snapshot and aggregate events
+    for snapshot in odds_data.values():
+        events = snapshot.get("events") or []
+        if not events:
+            continue
+
+        filtered = filter_events_by_date_range(events, start_date, end_date, tz_name)
+        aggregated_events.extend(filtered)
+
+    return compute_best_overall_odds(aggregated_events, tz_name)
 
 def decimal_to_american(decimal_odds: Optional[float]) -> Optional[int]:
     """Convert decimal odds back to American format for display."""
