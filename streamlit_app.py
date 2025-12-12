@@ -4023,7 +4023,6 @@ def build_best_odds_report(
 
     return compute_best_overall_odds(aggregated_events, tz_name)
 
-=======
         for _, game in odds_df.iterrows():
             home = game['home_team']
             away = game['away_team']
@@ -4032,12 +4031,10 @@ def build_best_odds_report(
 
             for bookmaker in game.get('bookmakers', []):
                 bookie_name = bookmaker.get('title', 'Unknown')
->>>>>>> Stashed changes
 
                 for market in bookmaker.get('markets', []):
                     market_key = market.get('key')
 
-<<<<<<< Updated upstream
 
 def decimal_to_american(decimal_odds: Optional[float]) -> Optional[int]:
     """Convert decimal odds back to American format for display."""
@@ -4079,13 +4076,11 @@ def _record_pct_from_text(record: Any) -> Optional[float]:
         return None
     return wins / total
 
-
 def _logistic_probability(score: float, *, scale: float = 1.0) -> float:
     if scale <= 0:
         scale = 1.0
     scaled = max(-8.0, min(8.0, score / scale))
     return 1.0 / (1.0 + math.exp(-scaled))
-
 
 def _sportsdata_probability_for_leg(leg: Dict[str, Any]) -> Optional[float]:
     """Derive a probability estimate for a leg using SportsData.io metrics."""
