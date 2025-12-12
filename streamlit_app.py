@@ -1,11 +1,10 @@
-# ParlayDesk_AI_Enhanced.py - v9.4 FINAL-FIX
-# AI-Enhanced parlay finder with sentiment analysis, ML predictions, and live market data
+# (optional) encoding comment is allowed
+# -*- coding: utf-8 -*-
 from __future__ import annotations
-import sys
-assert "google.generativeai" not in sys.modules
 
 # --- 1. CORE IMPORTS & CONFIGURATION ---
 import os
+imimport streamlit as st
 import io
 import json
 import itertools
