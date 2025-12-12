@@ -89,6 +89,10 @@ try:
         SportsDataNFLClient,
         SportsDataNHLClient,
     )
+    from vertex_master_analyzer import VertexMasterAnalyzer, show_vertex_master_analysis
+except ImportError as e:
+    print(f"⚠️ Import Warning: {e}")
+
 # --- END OF HEADER FIX ---
 try:
     from theover_vertex_analyzer import (
@@ -115,15 +119,6 @@ except ImportError:
 try:
     st.set_page_config(page_title="ParlayDesk", page_icon="🎯", layout="wide")
 except: pass
-
-# --- END OF HEADER FIX ---try:
-from theover_vertex_analyzer import (
-    analyze_theover_spreads_with_vertex,
-    show_best_bets_table
-)
-except ImportError:
-    analyze_theover_spreads_with_vertex = None
-    show_best_bets_table = None
 
 # Google Gemini AI Integration (recommended - 24x cheaper than Claude!)
 try:
