@@ -90,9 +90,19 @@ try:
         SportsDataNFLClient,
         SportsDataNHLClient,
     )
-    from vertex_master_analyzer import VertexMasterAnalyzer, show_vertex_master_analysis
+
+    try:
+        from vertex_master_analyzer import VertexMasterAnalyzer, show_vertex_master_analysis
+    except ImportError as e:
+        print(f"⚠️ Import Warning: {e}")
+        VertexMasterAnalyzer = None
+        show_vertex_master_analysis = None
+
 except ImportError as e:
-    print(f"⚠️ Import Warning: {e}")
+    print(f"⚠️ Import Warning (app_core): {e}")
+    KalshiIntegrator = None
+    price_to_prob = None
+    TeamNameMatcher = None
 
 # --- END OF HEADER FIX ---
 try:
