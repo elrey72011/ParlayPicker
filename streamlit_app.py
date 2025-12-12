@@ -3306,7 +3306,7 @@ def american_to_decimal(odds) -> float:
     if odds >= 100: return 1.0 + odds/100.0
     if odds <= -100: return 1.0 + 100.0/abs(odds)
     raise ValueError("Bad American odds")
-=======
+# ============ UTILITY FUNCTIONS ============
 #!/usr/bin/env python3
 """
 Standalone Parlay Analyzer - No Streamlit Required
