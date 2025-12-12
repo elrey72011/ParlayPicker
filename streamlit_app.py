@@ -13882,7 +13882,7 @@ with main_tab3:
                             "Market EV": [f"${market_expected_return:+.2f}"],
                             "AI EV": [f"${ai_expected_return:+.2f}"],
                             "AI Score": [f"{ai_metrics['score']:.1f}"]
-=======
+
                     for outcome in market.get('outcomes', []):
                         leg = {
                             'sport': sport,
@@ -13895,10 +13895,9 @@ with main_tab3:
                             'point': outcome.get('point'),
                             'odds_decimal': outcome.get('price'),
                             'implied_prob': 1 / outcome.get('price', 1) if outcome.get('price') else None
->>>>>>> Stashed changes
+
                         }
 
-<<<<<<< Updated upstream
 # ===== TAB 4: KALSHI PREDICTION MARKETS =====
 with main_tab4:
     # 1. SETUP & CONFIGURATION (Must come first!)
