@@ -13895,7 +13895,6 @@ with main_tab3:
                             'point': outcome.get('point'),
                             'odds_decimal': outcome.get('price'),
                             'implied_prob': 1 / outcome.get('price', 1) if outcome.get('price') else None
-
                         }
 
 # ===== TAB 4: KALSHI PREDICTION MARKETS =====
@@ -14090,7 +14089,7 @@ if st.button("🔎 Find Active NBA/NFL Tickers"):
                     
         except Exception as e:
             st.error(f"Discovery failed: {e}")
-    # ------------------------------------------------------------
+# ------------------------------------------------------------
 # KALSHI PREDICTION MARKET — AI COMPARISON PANEL
 # ------------------------------------------------------------
 st.markdown("---")
