@@ -1,124 +1,116 @@
-#<<<<<<< Updated upstream
-# ParlayDesk_AI_Enhanced.py - v9.3 FORCE-AUTH
+# ParlayDesk_AI_Enhanced.py - v9.4 FINAL-FIX
 # AI-Enhanced parlay finder with sentiment analysis, ML predictions, and live market data
 from __future__ import annotations
+
+# --- 1. CORE IMPORTS & CONFIGURATION ---
 import os
-import streamlit as st
-from google.oauth2 import service_account
-import vertexai
-
-# --- 🛑 CRITICAL FORCE-LOGIN ---
-# We don't wait for libraries to find the key. We FORCE it right now.
-try:
-    if "GOOGLE_APPLICATION_CREDENTIALS" in st.secrets:
-        # 1. Get the path from your secrets file
-        key_path = st.secrets["GOOGLE_APPLICATION_CREDENTIALS"]
-        os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = key_path
-
-        # 2. Your Project ID (Hardcoded to be safe)
-        PROJECT_ID = "elite-hangar-479017-m8"
-
-        # 3. Manually Load Credentials & Init Vertex IMMEDIATELY
-        print(f"🔐 Attempting Force-Login with: {key_path}")
-        creds = service_account.Credentials.from_service_account_file(key_path)
-        vertexai.init(project=PROJECT_ID, location="us-central1", credentials=creds)
-
-        print("✅ SUCCESS: Vertex AI is forcefully connected!")
-        st.session_state["vertex_active"] = True
-    else:
-        print("⚠️ Warning: 'GOOGLE_APPLICATION_CREDENTIALS' not found in secrets.")
-except Exception as e:
-    print(f"❌ FORCE-LOGIN FAILED: {e}")
-# --------------------------------
-
-# Standard Imports
-from dataclasses import asdict
-# Standard Imports
-from dataclasses import asdict
 import io
 import json
 import itertools
 import re
 import copy
 import logging
+import hashlib
+import math
+import difflib
 import concurrent.futures
 import time
-from typing import Dict, Any, List, Optional
-from datetime import datetime, timedelta
-from pathlib import Path  # <--- THIS IS THE MISSING LINE YOU NEED
+from pathlib import Path  # <--- FIXED: Was missing
+from datetime import datetime, timedelta, date, timezone
+from typing import Dict, Any, List, Tuple, Optional, Iterable, Sequence, Type, Set
+from collections import defaultdict
+from functools import lru_cache
+from html import escape
+from dataclasses import asdict
 
-# ... (The rest of your imports below here are fine) ...
-
-PROJECT_ID = os.getenv("GCP_PROJECT_ID") or "elite-hangar-479017-m8"
-
-if "gcp_project_id" not in st.session_state:
-    st.session_state["gcp_project_id"] = PROJECT_ID
-
-if "vertex_endpoint_id" not in st.session_state:
-    st.session_state["vertex_endpoint_id"] = "6435317312558989312"
-
-
-# --- 4. APP SETUP ---
-try:
-    st.set_page_config(page_title="ParlayDesk", page_icon="🎯", layout="wide")
-except: pass
-
-# --- 5. LOCAL MODULE IMPORTS (Safe to load now) ---
-from app_core import KalshiIntegrator
-from app_core.team_name_matcher import TeamNameMatcher
-# --- 2. THIRD PARTY IMPORTS (CRITICAL: RESTORE THESE!) ---
+# --- 2. THIRD PARTY IMPORTS ---
+import streamlit as st
 import pandas as pd
 import numpy as np
 import requests
-import pytz       # <--- THIS IS THE ONE CAUSING THE CRASH
-import math
+import pytz  # <--- FIXED: Was missing
 import streamlit.components.v1 as components
+from google.oauth2 import service_account
+import vertexai
 
-# --- 5. LOCAL MODULE IMPORTS ---
-from app_core import KalshiIntegrator
-from app_core.kalshi_integrator import price_to_prob
-from app_core.team_name_matcher import TeamNameMatcher
-from app_core import (
-    APISportsBasketballClient,
-    APISportsFootballClient,
-    APISportsHockeyClient,
-    RealSentimentAnalyzer,
-    SentimentAnalyzer,
-    SportsDataNCAABClient,
-    SportsDataNCAAFClient,
-    SportsDataNBAClient,
-    SportsDataNFLClient,
-    SportsDataNHLClient,
-)
+# --- 3. CRITICAL FORCE-LOGIN (Must happen before other logic) ---
+try:
+    # 1. Define Project ID (Hardcoded for safety)
+    PROJECT_ID = "elite-hangar-479017-m8"
+    
+    # 2. Set Session State
+    if "gcp_project_id" not in st.session_state:
+        st.session_state["gcp_project_id"] = PROJECT_ID
+        st.session_state["vertex_endpoint_id"] = "6435317312558989312"
+        st.session_state["vertex_active"] = False
 
-from vertex_master_analyzer import VertexMasterAnalyzer, show_vertex_master_analysis
+    # 3. Authenticate
+    if "gcp_service_account" in st.secrets:
+        # Preferred: Load from secrets dictionary
+        creds = service_account.Credentials.from_service_account_info(
+            st.secrets["gcp_service_account"]
+        )
+        vertexai.init(project=PROJECT_ID, location="us-central1", credentials=creds)
+        st.session_state["vertex_active"] = True
+        print("✅ SUCCESS: Vertex AI connected via Secrets Dictionary!")
+        
+    elif "GOOGLE_APPLICATION_CREDENTIALS" in st.secrets:
+        # Fallback: Load from file path
+        key_path = st.secrets["GOOGLE_APPLICATION_CREDENTIALS"]
+        os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = key_path
+        print(f"🔐 Attempting Force-Login with: {key_path}")
+        
+        creds = service_account.Credentials.from_service_account_file(key_path)
+        vertexai.init(project=PROJECT_ID, location="us-central1", credentials=creds)
+        st.session_state["vertex_active"] = True
+        print("✅ SUCCESS: Vertex AI connected via File!")
+        
+    else:
+        print("⚠️ Warning: No Google Credentials found in secrets.")
 
-# Optional ml_predictions module
-# Optional ml_predictions module
+except Exception as e:
+    print(f"❌ FORCE-LOGIN FAILED: {e}")
+
+# --- 4. LOCAL MODULE IMPORTS (Safe to load now) ---
+# (These must match your file structure)
+try:
+    from app_core import KalshiIntegrator
+    from app_core.kalshi_integrator import price_to_prob
+    from app_core.team_name_matcher import TeamNameMatcher
+    from app_core import (
+        APISportsBasketballClient,
+        APISportsFootballClient,
+        APISportsHockeyClient,
+        RealSentimentAnalyzer,
+        SentimentAnalyzer,
+        SportsDataNCAABClient,
+        SportsDataNCAAFClient,
+        SportsDataNBAClient,
+        SportsDataNFLClient,
+        SportsDataNHLClient,
+    )
+    from vertex_master_analyzer import VertexMasterAnalyzer, show_vertex_master_analysis
+except ImportError as e:
+    print(f"⚠️ Import Warning: {e}")
+
+# --- 5. OPTIONAL ML PREDICTIONS ---
 try:
     from ml_predictions import (
         show_vertex_ai_prediction_section,
         is_vertex_ai_enabled,
-        get_vertex_ai_prediction,  # 👈 import the predictor too
+        get_vertex_ai_prediction,
     )
 except ImportError:
-    import streamlit as st
+    def show_vertex_ai_prediction_section(*args, **kwargs): return None
+    def is_vertex_ai_enabled(*args, **kwargs): return False
+    def get_vertex_ai_prediction(*args, **kwargs): return None
 
-    def show_vertex_ai_prediction_section(*args, **kwargs):
-        """Fallback function when ml_predictions module is not available"""
-        st.warning("⚠️ ml_predictions module not available. ML prediction features disabled.")
-        return None
-
-    def is_vertex_ai_enabled(*args, **kwargs):
-        """Fallback function when ml_predictions module is not available"""
-        return False
-
-    def get_vertex_ai_prediction(*args, **kwargs):
-        """Fallback predictor when ml_predictions is missing"""
-        st.warning("⚠️ get_vertex_ai_prediction called, but ml_predictions module is not available.")
-        return None
-
+# --- 6. PAGE CONFIG ---
 try:
+    st.set_page_config(page_title="ParlayDesk", page_icon="🎯", layout="wide")
+except: pass
+
+# --- END OF HEADER FIX ---try:
     from theover_vertex_analyzer import (
         analyze_theover_spreads_with_vertex,
         show_best_bets_table
