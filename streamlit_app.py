@@ -106,7 +106,7 @@ except ImportError as e:
 
 st.subheader("🧪 Test ML Prediction")
 
-if st.button("🧪 Test ML Prediction"):
+if st.button("🧪 Test ML Prediction", key="btn_test_ml_prediction_tab"):
     try:
         ml_predictor = st.session_state.get("ml_predictor")
 
@@ -8523,7 +8523,7 @@ st.write(f"[DEBUG] sentiment_analyzer type: {type(sent_obj).__name__ if sent_obj
 st.write(f"[DEBUG] ml_predictor type: {type(ml_obj).__name__ if ml_obj is not None else 'None'}")
 
 #Test prediction button
-if st.button("🧪 Test ML Prediction"):
+if st.button("🧪 Test ML Prediction", key="btn_test_ml_prediction_debug"):
     try:
         # Get sentiment analyzer
         sentiment_analyzer = st.session_state.get('sentiment_analyzer')
