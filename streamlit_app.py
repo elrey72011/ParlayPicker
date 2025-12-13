@@ -8796,8 +8796,6 @@ with main_tab1:
                                 first = all_games[0]
                                 st.write("[DEBUG] Sample game keys:", list(first.keys())[:15])
 
-                            # [DEBUG] lines are here...
-                        
                             # --- SAFE INITIALIZATION BLOCK ---
                             # 1. Get the API Key safely
                             odds_key_safe = st.session_state.get('api_key')
