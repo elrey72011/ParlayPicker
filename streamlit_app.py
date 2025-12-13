@@ -104,6 +104,21 @@ except ImportError as e:
     price_to_prob = None
     TeamNameMatcher = None
 
+st.subheader("🧪 Test ML Prediction")
+
+if st.button("🧪 Test ML Prediction"):
+    try:
+        ml_predictor = st.session_state.get("ml_predictor")
+
+        if ml_predictor is None:
+            st.error("⛔ ML Predictor Not Loaded")
+        else:
+            st.success("✅ ML Predictor is loaded")
+            st.write("Predictor type:", type(ml_predictor).__name__)
+
+    except Exception as e:
+        st.error(f"Test prediction failed: {e}")
+
 # --- END OF HEADER FIX ---
 def get_vertex_master_analyzer(
     *,
@@ -559,7 +574,6 @@ def fetch_all_sports_parallel(api_key: str, sports: List[str]) -> Dict[str, Any]
     
     return results
 
-
 @st.cache_resource
 def get_cached_ml_predictor(sport_key: str, cache_key: str):
     """
@@ -582,7 +596,6 @@ def get_cached_ml_predictor(sport_key: str, cache_key: str):
             f"Error accessing cached ML predictor for {sport_key}: {e}"
         )
         return None
-
 
 def get_ml_predictor_smart(sport_key: str):
     """
@@ -8571,11 +8584,6 @@ else:
     st.info("Train a model in **Tab 5: ML Training** first")
 
 def create_vertex_master_analyzer():
-    """
-    Create VertexMasterAnalyzer with ALL initialized clients
-    Call this BEFORE analyzing each game
-    """
-    # ... (Paste your provided code here) ...
     return analyzer
 
 # ===== TAB 1: SPORTS BETTING PARLAYS =====
