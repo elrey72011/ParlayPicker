@@ -8818,10 +8818,28 @@ with main_tab1:
                                 kalshi_integrator=st.session_state.get("kalshi_integrator"),
                             )
 
-                            st.write("[DEBUG] kalshi_integrator type:", type(st.session_state.get("kalshi_integrator")))
-                            st.write("[DEBUG] sentiment_analyzer type:",
-                                     type(st.session_state.get("sentiment_analyzer")))
-                            st.write("[DEBUG] ml_predictor type:", type(st.session_state.get("ml_predictor")))
+                            # -------------------------------
+                            # DEBUG: Analyzer Dependency Types (SAFE)
+                            # -------------------------------
+
+                            kalshi_obj = st.session_state.get("kalshi_integrator")
+                            sentiment_obj = st.session_state.get("sentiment_analyzer")
+                            ml_obj = st.session_state.get("ml_predictor")
+
+                            st.write(
+                                f"[DEBUG] kalshi_integrator type: "
+                                f"{kalshi_obj.__class__.__name__ if kalshi_obj is not None else None}"
+                            )
+
+                            st.write(
+                                f"[DEBUG] sentiment_analyzer type: "
+                                f"{sentiment_obj.__class__.__name__ if sentiment_obj is not None else None}"
+                            )
+
+                            st.write(
+                                f"[DEBUG] ml_predictor type: "
+                                f"{ml_obj.__class__.__name__ if ml_obj is not None else None}"
+                            )
 
                             # Run Analysis
                             results_df = analyzer.analyze_all_games(all_games, league='multi')
@@ -9135,9 +9153,28 @@ if is_vertex_ai_enabled():
                             kalshi_integrator=kalshi_int,
                         )
 
-                        st.write("[DEBUG] kalshi_integrator type:", type(st.session_state.get("kalshi_integrator")))
-                        st.write("[DEBUG] sentiment_analyzer type:", type(st.session_state.get("sentiment_analyzer")))
-                        st.write("[DEBUG] ml_predictor type:", type(st.session_state.get("ml_predictor")))
+                        # -------------------------------
+                        # DEBUG: Analyzer Dependency Types (SAFE)
+                        # -------------------------------
+
+                        kalshi_obj = st.session_state.get("kalshi_integrator")
+                        sentiment_obj = st.session_state.get("sentiment_analyzer")
+                        ml_obj = st.session_state.get("ml_predictor")
+
+                        st.write(
+                            f"[DEBUG] kalshi_integrator type: "
+                            f"{kalshi_obj.__class__.__name__ if kalshi_obj is not None else None}"
+                        )
+
+                        st.write(
+                            f"[DEBUG] sentiment_analyzer type: "
+                            f"{sentiment_obj.__class__.__name__ if sentiment_obj is not None else None}"
+                        )
+
+                        st.write(
+                            f"[DEBUG] ml_predictor type: "
+                            f"{ml_obj.__class__.__name__ if ml_obj is not None else None}"
+                        )
 
                         # 5) Run master analysis
                         results_df = analyzer.analyze_all_games(all_games, league="multi")
@@ -9690,9 +9727,28 @@ else:
                 kalshi_integrator=st.session_state.get("kalshi_integrator"),
             )
 
-            st.write("[DEBUG] kalshi_integrator type:", type(st.session_state.get("kalshi_integrator")))
-            st.write("[DEBUG] sentiment_analyzer type:", type(st.session_state.get("sentiment_analyzer")))
-            st.write("[DEBUG] ml_predictor type:", type(st.session_state.get("ml_predictor")))
+            # -------------------------------
+            # DEBUG: Analyzer Dependency Types (SAFE)
+            # -------------------------------
+
+            kalshi_obj = st.session_state.get("kalshi_integrator")
+            sentiment_obj = st.session_state.get("sentiment_analyzer")
+            ml_obj = st.session_state.get("ml_predictor")
+
+            st.write(
+                f"[DEBUG] kalshi_integrator type: "
+                f"{kalshi_obj.__class__.__name__ if kalshi_obj is not None else None}"
+            )
+
+            st.write(
+                f"[DEBUG] sentiment_analyzer type: "
+                f"{sentiment_obj.__class__.__name__ if sentiment_obj is not None else None}"
+            )
+
+            st.write(
+                f"[DEBUG] ml_predictor type: "
+                f"{ml_obj.__class__.__name__ if ml_obj is not None else None}"
+            )
 
             # Run Analysis
             results_df = analyzer.analyze_all_games(all_games, league="multi")
@@ -9727,9 +9783,28 @@ else:
                 f"integrator_is_none={analyzer.kalshi is None}"
             )
 
-            st.write("[DEBUG] kalshi_integrator type:", type(st.session_state.get("kalshi_integrator")))
-            st.write("[DEBUG] sentiment_analyzer type:", type(st.session_state.get("sentiment_analyzer")))
-            st.write("[DEBUG] ml_predictor type:", type(st.session_state.get("ml_predictor")))
+            # -------------------------------
+            # DEBUG: Analyzer Dependency Types (SAFE)
+            # -------------------------------
+
+            kalshi_obj = st.session_state.get("kalshi_integrator")
+            sentiment_obj = st.session_state.get("sentiment_analyzer")
+            ml_obj = st.session_state.get("ml_predictor")
+
+            st.write(
+                f"[DEBUG] kalshi_integrator type: "
+                f"{kalshi_obj.__class__.__name__ if kalshi_obj is not None else None}"
+            )
+
+            st.write(
+                f"[DEBUG] sentiment_analyzer type: "
+                f"{sentiment_obj.__class__.__name__ if sentiment_obj is not None else None}"
+            )
+
+            st.write(
+                f"[DEBUG] ml_predictor type: "
+                f"{ml_obj.__class__.__name__ if ml_obj is not None else None}"
+            )
 
             results_df = analyzer.analyze_all_games(all_games, league='multi')
             
