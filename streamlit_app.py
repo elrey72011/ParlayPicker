@@ -11337,6 +11337,9 @@ else:
 
                 # Filter controls (already set above)
                 for vertex_result in vertex_results:
+                    if not isinstance(vertex_result, dict):
+                        logger.warning("Vertex result is not a dict; skipping entry: %s", vertex_result)
+                        continue
                     result_game_id = (
                         vertex_result.get('game_id')
                         or vertex_result.get('id')
