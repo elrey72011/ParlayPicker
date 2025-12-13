@@ -8264,34 +8264,19 @@ st.session_state['historical_data_builder'] = None
 st.session_state['ml_predictor'] = None
 st.session_state['historical_builder_error'] = None
 
-# ===============================
-# SAFE session_state bootstrap
-# ===============================
-if "sentiment_analyzer" not in st.session_state:
-    try:
-        st.session_state["sentiment_analyzer"] = SentimentAnalyzer()
-    except Exception:
-        st.session_state["sentiment_analyzer"] = None
-
-# --- Ensure sentiment_analyzer always exists (prevents KeyError crash) ---
-if "sentiment_analyzer" not in st.session_state:
-    try:
-        # If you have a real analyzer class available, keep it lightweight here.
-        st.session_state["sentiment_analyzer"] = SentimentAnalyzer()
-    except Exception:
-        st.session_state["sentiment_analyzer"] = None
-
-# Initialize AI optimizer with stub (safe)
-ml_predictor_state = st.session_state.get("ml_predictor")
-ai_optimizer = st.session_state.get("ai_optimizer")
-sentiment_state = st.session_state.get("sentiment_analyzer")
-
+# Initialize AI optimizer with stub
+ml_predictor_state = st.session_state.get('ml_predictor')
+ai_optimizer = st.session_state.get('ai_optimizer')
 if (
     ai_optimizer is None
-    or getattr(ai_optimizer, "ml", None) is not ml_predictor_state
-    or getattr(ai_optimizer, "sentiment", None) is not sentiment_state
+    or getattr(ai_optimizer, 'ml', None) is not ml_predictor_state
+    or getattr(ai_optimizer, 'sentiment', None) is not st.session_state['sentiment_analyzer']
 ):
-    st.session_state["ai_optimizer"] = AIOptimizer(sentiment_state, ml_predictor_state)
+    st.session_state['ai_optimizer'] = AIOptimizer(
+        st.session_state['sentiment_analyzer'],
+        ml_predictor_state,
+    )
+
 
 # Initialize advanced analyzers
 if 'sharp_detector' not in st.session_state:
@@ -8811,22 +8796,19 @@ with main_tab1:
                                 first = all_games[0]
                                 st.write("[DEBUG] Sample game keys:", list(first.keys())[:15])
 
-                            # 1. Get API Key & Clients safely from Session State
-                            odds_key_safe = st.session_state.get('api_key')
-                            nfl_client = st.session_state.get('apisports_nfl_client')
-                            nba_client = st.session_state.get('apisports_basketball_client')
-                            nhl_client = st.session_state.get('apisports_hockey_client')
-    
-                            # 2. Initialize Analyzer
+                            # 1. Define the variable first
+                            odds_api_key = st.session_state.get('api_key')
+
+                            # Initialize Analyzer (single shared helper)
                             analyzer = get_vertex_master_analyzer(
-                                odds_api_client=odds_key_safe,
-                                sportsdata_clients=st.session_state.get('sportsdata_clients', {}),
+                                odds_api_client=odds_api_key,
+                                sportsdata_clients=sportsdata_clients,
                                 apisports_clients={
-                                    "nba": nba_client,
-                                    "nfl": nfl_client,
-                                    "nhl": nhl_client,
-                                    "ncaab": nba_client, # Reuse NBA client for college
-                                    "ncaaf": nfl_client, # Reuse NFL client for college
+                                    "nba": basketball_client,
+                                    "nfl": apisports_client,
+                                    "nhl": hockey_client,
+                                    "ncaab": basketball_client,
+                                    "ncaaf": apisports_client,
                                 },
                                 theover_data={
                                     "spreads": theover_spreads_data,
@@ -8835,7 +8817,12 @@ with main_tab1:
                                 },
                                 kalshi_integrator=st.session_state.get("kalshi_integrator"),
                             )
-  
+
+                            st.write("[DEBUG] kalshi_integrator type:", type(st.session_state.get("kalshi_integrator")))
+                            st.write("[DEBUG] sentiment_analyzer type:",
+                                     type(st.session_state.get("sentiment_analyzer")))
+                            st.write("[DEBUG] ml_predictor type:", type(st.session_state.get("ml_predictor")))
+
                             # Run Analysis
                             results_df = analyzer.analyze_all_games(all_games, league='multi')
 
@@ -9123,36 +9110,34 @@ if is_vertex_ai_enabled():
                         kalshi_int = st.session_state.get("kalshi_integrator")
                         sentiment = st.session_state.get("sentiment_analyzer")
 
-                        # ✅ PASTE THIS SAFE BLOCK
                         if VertexMasterAnalyzer is None:
                             st.error(
                                 "❌ Vertex Master Analyzer failed to load.\n\n"
+                                "This usually means a syntax or import error in:\n"
+                                "- app_core/llm_assistant.py\n"
+                                "- vertex_master_analyzer.py\n\n"
                                 "Check the Streamlit logs ABOVE this message for the root cause."
                             )
                             st.stop()
-                            
-                        # --- FIX 2 (Line ~9130) ---
-                        # 1. Get API Key safely
-                        odds_key_safe = st.session_state.get('api_key')
-
-                        # 2. Initialize Analyzer
                         analyzer = get_vertex_master_analyzer(
-                            odds_api_client=odds_key_safe,  # ✅ FIXED: Was 'odds_client'
-                            sportsdata_clients=st.session_state.get('sportsdata_clients', {}),
+                            odds_api_client=odds_api_key,
+                            sportsdata_clients=sportsdata_clients,
                             apisports_clients={
-                                "nba": st.session_state.get('apisports_basketball_client'),
-                                "nfl": st.session_state.get('apisports_nfl_client'),
-                                "nhl": st.session_state.get('apisports_hockey_client'),
-                                "ncaab": st.session_state.get('apisports_basketball_client'),
-                                "ncaaf": st.session_state.get('apisports_nfl_client'),
+                                "nba": basketball_client,
+                                "nfl": apisports_client,
+                                "nhl": hockey_client,
                             },
                             theover_data={
                                 "spreads": theover_spreads_data,
                                 "totals": theover_totals_data,
                                 "ml": theover_ml_data,
                             },
-                            kalshi_integrator=st.session_state.get("kalshi_integrator"),
+                            kalshi_integrator=kalshi_int,
                         )
+
+                        st.write("[DEBUG] kalshi_integrator type:", type(st.session_state.get("kalshi_integrator")))
+                        st.write("[DEBUG] sentiment_analyzer type:", type(st.session_state.get("sentiment_analyzer")))
+                        st.write("[DEBUG] ml_predictor type:", type(st.session_state.get("ml_predictor")))
 
                         # 5) Run master analysis
                         results_df = analyzer.analyze_all_games(all_games, league="multi")
@@ -9689,22 +9674,13 @@ else:
     with st.spinner("Running Vertex AI Master Analysis..."):
         try:
             # Initialize Analyzer (single shared helper)
-            # 1. Get API Key & Clients safely from Session State
-            odds_key_safe = st.session_state.get('api_key')
-            nfl_client = st.session_state.get('apisports_nfl_client')
-            nba_client = st.session_state.get('apisports_basketball_client')
-            nhl_client = st.session_state.get('apisports_hockey_client')
-
-            # 2. Initialize Analyzer
             analyzer = get_vertex_master_analyzer(
-                odds_api_client=odds_key_safe,
-                sportsdata_clients=st.session_state.get('sportsdata_clients', {}),
+                odds_api_client=odds_api_key,
+                sportsdata_clients=sportsdata_clients,
                 apisports_clients={
-                    "nba": nba_client,
-                    "nfl": nfl_client,
-                    "nhl": nhl_client,
-                    "ncaab": nba_client, # Reuse NBA client for college
-                    "ncaaf": nfl_client, # Reuse NFL client for college
+                    "nba": basketball_client,
+                    "nfl": apisports_client,
+                    "nhl": hockey_client,
                 },
                 theover_data={
                     "spreads": theover_spreads_data,
@@ -9713,6 +9689,10 @@ else:
                 },
                 kalshi_integrator=st.session_state.get("kalshi_integrator"),
             )
+
+            st.write("[DEBUG] kalshi_integrator type:", type(st.session_state.get("kalshi_integrator")))
+            st.write("[DEBUG] sentiment_analyzer type:", type(st.session_state.get("sentiment_analyzer")))
+            st.write("[DEBUG] ml_predictor type:", type(st.session_state.get("ml_predictor")))
 
             # Run Analysis
             results_df = analyzer.analyze_all_games(all_games, league="multi")
@@ -9735,9 +9715,9 @@ else:
                 f"integrator_is_none={analyzer.kalshi is None}"
             )
 
-            #st.write("[DEBUG] kalshi_integrator type:", str(type(st.session_state.get("kalshi_integrator"))))
-            #st.write("[DEBUG] sentiment_analyzer type:", str(type(st.session_state.get("sentiment_analyzer"))))
-            #st.write("[DEBUG] ml_predictor type:", str(type(st.session_state.get("ml_predictor"))))
+            st.write("[DEBUG] kalshi_integrator type:", type(st.session_state.get("kalshi_integrator")))
+            st.write("[DEBUG] sentiment_analyzer type:", type(st.session_state.get("sentiment_analyzer")))
+            st.write("[DEBUG] ml_predictor type:", type(st.session_state.get("ml_predictor")))
 
             results_df = analyzer.analyze_all_games(all_games, league='multi')
             
