@@ -8823,12 +8823,15 @@ with main_tab1:
                             sent_obj = st.session_state.get("sentiment_analyzer")
                             ml_obj = st.session_state.get("ml_predictor")
 
-                            st.write(
-                                f"[DEBUG] kalshi_integrator type: {type(kalshi_obj).__name__ if kalshi_obj is not None else 'None'}")
-                            st.write(
-                                f"[DEBUG] sentiment_analyzer type: {type(sent_obj).__name__ if sent_obj is not None else 'None'}")
-                            st.write(
-                                f"[DEBUG] ml_predictor type: {type(ml_obj).__name__ if ml_obj is not None else 'None'}")
+                            st.write("[DEBUG] kalshi_integrator type:", type(st.session_state.get("kalshi_integrator")))
+                            st.write("[DEBUG] sentiment_analyzer type:",
+                                     type(st.session_state.get("sentiment_analyzer")))
+                            st.write("[DEBUG] ml_predictor type:", type(st.session_state.get("ml_predictor")))
+                            st.write("[DEBUG] TheOver ML raw:", st.session_state.get("theover_ml_data") is not None)
+                            if "theover_spreads_data" in locals() and theover_spreads_data is not None:
+                                st.write("[DEBUG] TheOver Spreads raw shape:", theover_spreads_data.shape)
+                            if "theover_totals_data" in locals() and theover_totals_data is not None:
+                                st.write("[DEBUG] TheOver Totals raw shape:", theover_totals_data.shape)
 
                             # Run Analysis
                             results_df = analyzer.analyze_all_games(all_games, league='multi')
@@ -9147,12 +9150,15 @@ if is_vertex_ai_enabled():
                         sent_obj = st.session_state.get("sentiment_analyzer")
                         ml_obj = st.session_state.get("ml_predictor")
 
-                        st.write(
-                            f"[DEBUG] kalshi_integrator type: {type(kalshi_obj).__name__ if kalshi_obj is not None else 'None'}")
-                        st.write(
-                            f"[DEBUG] sentiment_analyzer type: {type(sent_obj).__name__ if sent_obj is not None else 'None'}")
-                        st.write(
-                            f"[DEBUG] ml_predictor type: {type(ml_obj).__name__ if ml_obj is not None else 'None'}")
+                        st.write("[DEBUG] kalshi_integrator type:", type(st.session_state.get("kalshi_integrator")))
+                        st.write("[DEBUG] sentiment_analyzer type:", type(st.session_state.get("sentiment_analyzer")))
+                        st.write("[DEBUG] ml_predictor type:", type(st.session_state.get("ml_predictor")))
+
+                        st.write("[DEBUG] TheOver ML raw:", st.session_state.get("theover_ml_data") is not None)
+                        if "theover_spreads_data" in locals() and theover_spreads_data is not None:
+                            st.write("[DEBUG] TheOver Spreads raw shape:", theover_spreads_data.shape)
+                        if "theover_totals_data" in locals() and theover_totals_data is not None:
+                            st.write("[DEBUG] TheOver Totals raw shape:", theover_totals_data.shape)
 
                         # 5) Run master analysis
                         results_df = analyzer.analyze_all_games(all_games, league="multi")
@@ -9710,10 +9716,15 @@ else:
             sent_obj = st.session_state.get("sentiment_analyzer")
             ml_obj = st.session_state.get("ml_predictor")
 
-            st.write(
-                f"[DEBUG] kalshi_integrator type: {type(kalshi_obj).__name__ if kalshi_obj is not None else 'None'}")
-            st.write(f"[DEBUG] sentiment_analyzer type: {type(sent_obj).__name__ if sent_obj is not None else 'None'}")
-            st.write(f"[DEBUG] ml_predictor type: {type(ml_obj).__name__ if ml_obj is not None else 'None'}")
+            st.write("[DEBUG] kalshi_integrator type:", type(st.session_state.get("kalshi_integrator")))
+            st.write("[DEBUG] sentiment_analyzer type:", type(st.session_state.get("sentiment_analyzer")))
+            st.write("[DEBUG] ml_predictor type:", type(st.session_state.get("ml_predictor")))
+
+            st.write("[DEBUG] TheOver ML raw:", st.session_state.get("theover_ml_data") is not None)
+            if "theover_spreads_data" in locals() and theover_spreads_data is not None:
+                st.write("[DEBUG] TheOver Spreads raw shape:", theover_spreads_data.shape)
+            if "theover_totals_data" in locals() and theover_totals_data is not None:
+                st.write("[DEBUG] TheOver Totals raw shape:", theover_totals_data.shape)
 
             if results_df is not None and not results_df.empty:
                 cols_to_check = [
@@ -9748,10 +9759,15 @@ else:
             sent_obj = st.session_state.get("sentiment_analyzer")
             ml_obj = st.session_state.get("ml_predictor")
 
-            st.write(
-                f"[DEBUG] kalshi_integrator type: {type(kalshi_obj).__name__ if kalshi_obj is not None else 'None'}")
-            st.write(f"[DEBUG] sentiment_analyzer type: {type(sent_obj).__name__ if sent_obj is not None else 'None'}")
-            st.write(f"[DEBUG] ml_predictor type: {type(ml_obj).__name__ if ml_obj is not None else 'None'}")
+            st.write("[DEBUG] kalshi_integrator type:", type(st.session_state.get("kalshi_integrator")))
+            st.write("[DEBUG] sentiment_analyzer type:", type(st.session_state.get("sentiment_analyzer")))
+            st.write("[DEBUG] ml_predictor type:", type(st.session_state.get("ml_predictor")))
+
+            st.write("[DEBUG] TheOver ML raw:", st.session_state.get("theover_ml_data") is not None)
+            if "theover_spreads_data" in locals() and theover_spreads_data is not None:
+                st.write("[DEBUG] TheOver Spreads raw shape:", theover_spreads_data.shape)
+            if "theover_totals_data" in locals() and theover_totals_data is not None:
+                st.write("[DEBUG] TheOver Totals raw shape:", theover_totals_data.shape)
 
             results_df = analyzer.analyze_all_games(all_games, league='multi')
             
