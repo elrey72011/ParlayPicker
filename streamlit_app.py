@@ -114,11 +114,12 @@ def get_vertex_master_analyzer(
     kalshi_integrator=None,
 ):
     if VertexMasterAnalyzer is None:
-        st.error(
-            "❌ Vertex Master Analyzer failed to load.\n\n"
-            "Check Streamlit logs for the root import error."
-        )
+        st.error("❌ Vertex Master Analyzer failed to load.")
+        if VERTEX_MASTER_IMPORT_ERROR:
+            with st.expander("Show import traceback"):
+                st.code(VERTEX_MASTER_IMPORT_ERROR)
         st.stop()
+
     try:
         return VertexMasterAnalyzer(
             odds_api_client=odds_api_client,
