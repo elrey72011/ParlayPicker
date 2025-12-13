@@ -9697,6 +9697,18 @@ else:
             # Run Analysis
             results_df = analyzer.analyze_all_games(all_games, league="multi")
 
+            st.write(f"[DEBUG] rows returned: {0 if results_df is None else len(results_df)}")
+
+            if results_df is not None and not results_df.empty:
+                cols_to_check = [
+                    "win_prob", "final_win_prob", "market_prob",
+                    "vertex_home_prob", "kalshi_prob", "theover_home_prob",
+                    "prob_source"
+                ]
+                existing = [c for c in cols_to_check if c in results_df.columns]
+                st.write("[DEBUG] prediction columns present:", existing)
+                st.write("[DEBUG] null counts:", results_df[existing].isna().sum().to_dict())
+
             # Debug output (optional but recommended while stabilizing)
             st.write(f"[DEBUG] Master Analysis – rows returned: {len(results_df)}")
 
