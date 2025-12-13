@@ -8798,7 +8798,7 @@ with main_tab1:
 
                             # Initialize Analyzer (single shared helper)
                             analyzer = get_vertex_master_analyzer(
-                                odds_api_client=odds_client,
+                                odds_api_client=odds_api_key,
                                 sportsdata_clients=sportsdata_clients,
                                 apisports_clients={
                                     "nba": basketball_client,
@@ -9115,7 +9115,7 @@ if is_vertex_ai_enabled():
                             )
                             st.stop()
                         analyzer = get_vertex_master_analyzer(
-                            odds_api_client=odds_client,
+                            odds_api_client=odds_api_key,
                             sportsdata_clients=sportsdata_clients,
                             apisports_clients={
                                 "nba": basketball_client,
@@ -9670,7 +9670,7 @@ else:
         try:
             # Initialize Analyzer (single shared helper)
             analyzer = get_vertex_master_analyzer(
-                odds_api_client=odds_client,
+                odds_api_client=odds_api_key,
                 sportsdata_clients=sportsdata_clients,
                 apisports_clients={
                     "nba": basketball_client,
