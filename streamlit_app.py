@@ -8796,18 +8796,19 @@ with main_tab1:
                                 first = all_games[0]
                                 st.write("[DEBUG] Sample game keys:", list(first.keys())[:15])
 
-                            # 1. Define the variable first
+                            # 1. Ensure the API key variable is defined
                             odds_api_key = st.session_state.get('api_key')
-
-                            # Initialize Analyzer (single shared helper)
+    
+                            # 2. Initialize Analyzer with CORRECT variables
                             analyzer = get_vertex_master_analyzer(
-                                odds_api_client=odds_api_key,
+                                odds_api_client=odds_api_key,  # ✅ FIXED: Changed from 'odds_client'
                                 sportsdata_clients=sportsdata_clients,
                                 apisports_clients={
                                     "nba": basketball_client,
                                     "nfl": apisports_client,
                                     "nhl": hockey_client,
-                                    "ncaab": basketball_client,
+                                    # ✅ ADDED: College sports mapped to existing clients
+                                    "ncaab": basketball_client, 
                                     "ncaaf": apisports_client,
                                 },
                                 theover_data={
@@ -8815,7 +8816,7 @@ with main_tab1:
                                     "totals": theover_totals_data,
                                     "ml": theover_ml_data,
                                 },
-                                kalshi_integrator=st.session_state.get("kalshi_integrator"),
+                                kalshi_integrator=kalshi_int,
                             )
 
                             st.write("[DEBUG] kalshi_integrator type:", type(st.session_state.get("kalshi_integrator")))
