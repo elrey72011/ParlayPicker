@@ -8509,66 +8509,66 @@ st.write(f"[DEBUG] kalshi_integrator type: {type(kalshi_obj).__name__ if kalshi_
 st.write(f"[DEBUG] sentiment_analyzer type: {type(sent_obj).__name__ if sent_obj is not None else 'None'}")
 st.write(f"[DEBUG] ml_predictor type: {type(ml_obj).__name__ if ml_obj is not None else 'None'}")
 
-        # Test prediction button
-        if st.button("🧪 Test ML Prediction"):
+#Test prediction button
+if st.button("🧪 Test ML Prediction"):
+    try:
+        # Get sentiment analyzer
+        sentiment_analyzer = st.session_state.get('sentiment_analyzer')
+        sentiment_home = 0.0
+        sentiment_away = 0.0
+
+        # Try to get real sentiment for test teams
+        if sentiment_analyzer:
             try:
-                # Get sentiment analyzer
-                sentiment_analyzer = st.session_state.get('sentiment_analyzer')
-                sentiment_home = 0.0
-                sentiment_away = 0.0
-                
-                # Try to get real sentiment for test teams
-                if sentiment_analyzer:
-                    try:
-                        home_sent = sentiment_analyzer.get_sentiment("Kansas City Chiefs")
-                        away_sent = sentiment_analyzer.get_sentiment("Las Vegas Raiders")
-                        if home_sent and 'sentiment_score' in home_sent:
-                            sentiment_home = home_sent['sentiment_score']
-                        if away_sent and 'sentiment_score' in away_sent:
-                            sentiment_away = away_sent['sentiment_score']
-                        st.info(f"📊 Using sentiment: Home={sentiment_home:.2f}, Away={sentiment_away:.2f}")
-                    except:
-                        st.info("ℹ️ Using neutral sentiment (0.0) for test")
-                else:
-                    st.info("ℹ️ Sentiment analyzer not loaded, using neutral sentiment (0.0)")
-                
-                # Try with all parameters
-                try:
-                    test_result = ml_predictor.predict_game_outcome(
-                        home_team="Kansas City Chiefs",
-                        away_team="Las Vegas Raiders",
-                        home_odds=-200,  # Example odds
-                        away_odds=+175,
-                        sentiment_home=sentiment_home,
-                        sentiment_away=sentiment_away,
-                        sport_key="americanfootball_nfl"
-                    )
-                except TypeError as e:
-                    # Fallback: without sport_key (HistoricalMLPredictor)
-                    st.info("ℹ️ Using HistoricalMLPredictor (doesn't accept sport_key parameter)")
-                    test_result = ml_predictor.predict_game_outcome(
-                        home_team="Kansas City Chiefs",
-                        away_team="Las Vegas Raiders",
-                        home_odds=-200,
-                        away_odds=+175,
-                        sentiment_home=sentiment_home,
-                        sentiment_away=sentiment_away
-                    )
-                
-                if test_result:
-                    st.success("✅ ML Prediction successful!")
-                    st.json(test_result)
-                    if abs(test_result.get('home_win_prob', 0.58) - 0.58) < 0.01:
-                        st.warning("⚠️ Probability is very close to 58% - model might not be properly trained")
-                else:
-                    st.error("Prediction returned None")
-            except Exception as e:
-                st.error(f"Test prediction failed: {e}")
-                st.info("💡 Your predictor type: " + type(ml_predictor).__name__)
-                st.code(str(e), language="python")
-    else:
-        st.error("❌ ML Predictor Not Loaded")
-        st.info("Train a model in **Tab 5: ML Training** first")
+                home_sent = sentiment_analyzer.get_sentiment("Kansas City Chiefs")
+                away_sent = sentiment_analyzer.get_sentiment("Las Vegas Raiders")
+                if home_sent and 'sentiment_score' in home_sent:
+                    sentiment_home = home_sent['sentiment_score']
+                if away_sent and 'sentiment_score' in away_sent:
+                    sentiment_away = away_sent['sentiment_score']
+                st.info(f"📊 Using sentiment: Home={sentiment_home:.2f}, Away={sentiment_away:.2f}")
+            except:
+                st.info("ℹ️ Using neutral sentiment (0.0) for test")
+        else:
+            st.info("ℹ️ Sentiment analyzer not loaded, using neutral sentiment (0.0)")
+
+        # Try with all parameters
+        try:
+            test_result = ml_predictor.predict_game_outcome(
+                home_team="Kansas City Chiefs",
+                away_team="Las Vegas Raiders",
+                home_odds=-200,  # Example odds
+                away_odds=+175,
+                sentiment_home=sentiment_home,
+                sentiment_away=sentiment_away,
+                sport_key="americanfootball_nfl"
+            )
+        except TypeError as e:
+            # Fallback: without sport_key (HistoricalMLPredictor)
+            st.info("ℹ️ Using HistoricalMLPredictor (doesn't accept sport_key parameter)")
+            test_result = ml_predictor.predict_game_outcome(
+                home_team="Kansas City Chiefs",
+                away_team="Las Vegas Raiders",
+                home_odds=-200,
+                away_odds=+175,
+                sentiment_home=sentiment_home,
+                sentiment_away=sentiment_away
+            )
+
+        if test_result:
+            st.success("✅ ML Prediction successful!")
+            st.json(test_result)
+            if abs(test_result.get('home_win_prob', 0.58) - 0.58) < 0.01:
+                st.warning("⚠️ Probability is very close to 58% - model might not be properly trained")
+        else:
+            st.error("Prediction returned None")
+    except Exception as e:
+        st.error(f"Test prediction failed: {e}")
+        st.info("💡 Your predictor type: " + type(ml_predictor).__name__)
+        st.code(str(e), language="python")
+else:
+st.error("❌ ML Predictor Not Loaded")
+st.info("Train a model in **Tab 5: ML Training** first")
 
 def create_vertex_master_analyzer():
     """
