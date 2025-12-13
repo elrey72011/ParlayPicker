@@ -8807,6 +8807,8 @@ with main_tab1:
                                     "nba": basketball_client,
                                     "nfl": apisports_client,
                                     "nhl": hockey_client,
+                                    "ncaab": basketball_client,
+                                    "ncaaf": apisports_client,
                                 },
                                 theover_data={
                                     "spreads": theover_spreads_data,
