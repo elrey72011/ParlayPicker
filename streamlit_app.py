@@ -8264,19 +8264,25 @@ st.session_state['historical_data_builder'] = None
 st.session_state['ml_predictor'] = None
 st.session_state['historical_builder_error'] = None
 
-# Initialize AI optimizer with stub
-ml_predictor_state = st.session_state.get('ml_predictor')
-ai_optimizer = st.session_state.get('ai_optimizer')
+# --- Ensure sentiment_analyzer always exists (prevents KeyError crash) ---
+if "sentiment_analyzer" not in st.session_state:
+    try:
+        # If you have a real analyzer class available, keep it lightweight here.
+        st.session_state["sentiment_analyzer"] = SentimentAnalyzer()
+    except Exception:
+        st.session_state["sentiment_analyzer"] = None
+
+# Initialize AI optimizer with stub (safe)
+ml_predictor_state = st.session_state.get("ml_predictor")
+ai_optimizer = st.session_state.get("ai_optimizer")
+sentiment_state = st.session_state.get("sentiment_analyzer")
+
 if (
     ai_optimizer is None
-    or getattr(ai_optimizer, 'ml', None) is not ml_predictor_state
-    or getattr(ai_optimizer, 'sentiment', None) is not st.session_state['sentiment_analyzer']
+    or getattr(ai_optimizer, "ml", None) is not ml_predictor_state
+    or getattr(ai_optimizer, "sentiment", None) is not sentiment_state
 ):
-    st.session_state['ai_optimizer'] = AIOptimizer(
-        st.session_state['sentiment_analyzer'],
-        ml_predictor_state,
-    )
-
+    st.session_state["ai_optimizer"] = AIOptimizer(sentiment_state, ml_predictor_state)
 
 # Initialize advanced analyzers
 if 'sharp_detector' not in st.session_state:
