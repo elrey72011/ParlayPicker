@@ -633,10 +633,10 @@ def show_vertex_master_analysis(results_df: pd.DataFrame) -> None:
         except Exception:
             return str(x)
 
-if "game_time" in display_df.columns:
+    if "game_time" in display_df.columns:
         display_df["Commence (ET)"] = display_df["game_time"].apply(_fmt_commence)
-else:
-    display_df["Commence (ET)"] = ""
+    else:
+        display_df["Commence (ET)"] = ""
 
     # Kalshi display column
     def fmt_kalshi(row: pd.Series) -> str:
@@ -659,7 +659,7 @@ else:
 
     cols = [
         "game",
-        "Commence (ET)",  # Changed header to ET
+        "Commence (ET)",
         "the_pick",
         "pick_odds",
         "Win %",
@@ -668,7 +668,7 @@ else:
         "Kalshi",
         "Kalshi Match Debug",
     ]
-    
+
     # Filter only columns that actually exist to avoid KeyError
     existing_cols = [c for c in cols if c in display_df.columns]
     st.dataframe(display_df[existing_cols], width="stretch")
@@ -682,7 +682,7 @@ else:
         "kalshi_available", "kalshi_prob", "kalshi_status",
         "kalshi_ticker", "kalshi_date"
     ]
-    
+
     export_df = results_df.copy()
     for c in export_cols:
         if c not in export_df.columns:
