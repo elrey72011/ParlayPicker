@@ -9118,29 +9118,39 @@ if is_vertex_ai_enabled():
                         kalshi_int = st.session_state.get("kalshi_integrator")
                         sentiment = st.session_state.get("sentiment_analyzer")
 
+                        # ✅ PASTE THIS SAFE BLOCK
                         if VertexMasterAnalyzer is None:
                             st.error(
                                 "❌ Vertex Master Analyzer failed to load.\n\n"
-                                "This usually means a syntax or import error in:\n"
-                                "- app_core/llm_assistant.py\n"
-                                "- vertex_master_analyzer.py\n\n"
                                 "Check the Streamlit logs ABOVE this message for the root cause."
                             )
                             st.stop()
+
+                        # 1. Get API Key safely
+                        odds_key_safe = st.session_state.get('api_key')
+
+                        # 2. Get Clients directly from Session State to avoid NameErrors
+                        nfl_client = st.session_state.get('apisports_nfl_client')
+                        nba_client = st.session_state.get('apisports_basketball_client')
+                        nhl_client = st.session_state.get('apisports_hockey_client')
+
+                        # 3. Create Analyzer
                         analyzer = get_vertex_master_analyzer(
-                            odds_api_client=odds_api_key,
-                            sportsdata_clients=sportsdata_clients,
+                            odds_api_client=odds_key_safe,  # Correct variable
+                            sportsdata_clients=st.session_state.get('sportsdata_clients', {}),
                             apisports_clients={
-                                "nba": basketball_client,
-                                "nfl": apisports_client,
-                                "nhl": hockey_client,
+                                "nba": nba_client,
+                                "nfl": nfl_client,
+                                "nhl": nhl_client,
+                                "ncaab": nba_client,  # Reuse NBA client
+                                "ncaaf": nfl_client,  # Reuse NFL client
                             },
                             theover_data={
                                 "spreads": theover_spreads_data,
                                 "totals": theover_totals_data,
                                 "ml": theover_ml_data,
                             },
-                            kalshi_integrator=kalshi_int,
+                            kalshi_integrator=st.session_state.get("kalshi_integrator"),
                         )
 
                         st.write("[DEBUG] kalshi_integrator type:", type(st.session_state.get("kalshi_integrator")))
