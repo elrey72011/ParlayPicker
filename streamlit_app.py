@@ -8820,11 +8820,10 @@ with main_tab1:
                                 },
                                 kalshi_integrator=st.session_state.get("kalshi_integrator"),
                             )
-
-                            st.write("[DEBUG] kalshi_integrator type:", type(st.session_state.get("kalshi_integrator")))
-                            st.write("[DEBUG] sentiment_analyzer type:",
-                                     type(st.session_state.get("sentiment_analyzer")))
-                            st.write("[DEBUG] ml_predictor type:", type(st.session_state.get("ml_predictor")))
+  
+                            st.write("[DEBUG] kalshi_integrator type:", str(type(st.session_state.get("kalshi_integrator"))))
+                            st.write("[DEBUG] sentiment_analyzer type:", str(type(st.session_state.get("sentiment_analyzer"))))
+                            st.write("[DEBUG] ml_predictor type:", str(type(st.session_state.get("ml_predictor"))))
 
                             # Run Analysis
                             results_df = analyzer.analyze_all_games(all_games, league='multi')
@@ -9143,10 +9142,10 @@ if is_vertex_ai_enabled():
                             },
                             kalshi_integrator=st.session_state.get("kalshi_integrator"),
                         )
-
-                        st.write("[DEBUG] kalshi_integrator type:", type(st.session_state.get("kalshi_integrator")))
-                        st.write("[DEBUG] sentiment_analyzer type:", type(st.session_state.get("sentiment_analyzer")))
-                        st.write("[DEBUG] ml_predictor type:", type(st.session_state.get("ml_predictor")))
+                        
+                        st.write("[DEBUG] kalshi_integrator type:", str(type(st.session_state.get("kalshi_integrator"))))
+                        st.write("[DEBUG] sentiment_analyzer type:", str(type(st.session_state.get("sentiment_analyzer"))))
+                        st.write("[DEBUG] ml_predictor type:", str(type(st.session_state.get("ml_predictor"))))
 
                         # 5) Run master analysis
                         results_df = analyzer.analyze_all_games(all_games, league="multi")
@@ -9733,9 +9732,9 @@ else:
                 f"integrator_is_none={analyzer.kalshi is None}"
             )
 
-            st.write("[DEBUG] kalshi_integrator type:", type(st.session_state.get("kalshi_integrator")))
-            st.write("[DEBUG] sentiment_analyzer type:", type(st.session_state.get("sentiment_analyzer")))
-            st.write("[DEBUG] ml_predictor type:", type(st.session_state.get("ml_predictor")))
+            st.write("[DEBUG] kalshi_integrator type:", str(type(st.session_state.get("kalshi_integrator"))))
+            st.write("[DEBUG] sentiment_analyzer type:", str(type(st.session_state.get("sentiment_analyzer"))))
+            st.write("[DEBUG] ml_predictor type:", str(type(st.session_state.get("ml_predictor"))))
 
             results_df = analyzer.analyze_all_games(all_games, league='multi')
             
