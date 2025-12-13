@@ -37,7 +37,6 @@ except Exception as e:
 
 GEMINI_MODEL_NAME = os.getenv("GEMINI_MODEL_NAME", "gemini-1.5-flash")
 
-
 # -------------------------------------------------------------------
 # Pydantic schema for contract recommendations
 # -------------------------------------------------------------------
@@ -76,7 +75,6 @@ def _safe_json_extract(text: str) -> Dict[str, Any]:
             return {}
 
     return {}
-
 
 # -------------------------------------------------------------------
 # Public API
