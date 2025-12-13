@@ -8796,6 +8796,9 @@ with main_tab1:
                                 first = all_games[0]
                                 st.write("[DEBUG] Sample game keys:", list(first.keys())[:15])
 
+                            # 1. Define the variable first
+                            odds_api_key = st.session_state.get('api_key')
+
                             # Initialize Analyzer (single shared helper)
                             analyzer = get_vertex_master_analyzer(
                                 odds_api_client=odds_api_key,
