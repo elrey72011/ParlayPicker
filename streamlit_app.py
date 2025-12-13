@@ -8264,6 +8264,15 @@ st.session_state['historical_data_builder'] = None
 st.session_state['ml_predictor'] = None
 st.session_state['historical_builder_error'] = None
 
+# ===============================
+# SAFE session_state bootstrap
+# ===============================
+if "sentiment_analyzer" not in st.session_state:
+    try:
+        st.session_state["sentiment_analyzer"] = SentimentAnalyzer()
+    except Exception:
+        st.session_state["sentiment_analyzer"] = None
+
 # --- Ensure sentiment_analyzer always exists (prevents KeyError crash) ---
 if "sentiment_analyzer" not in st.session_state:
     try:
