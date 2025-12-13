@@ -708,7 +708,7 @@ class PerformanceMonitor:
         with st.expander("📊 Detailed Performance Log"):
             st.dataframe(
                 df[['timestamp', 'operation', 'duration', 'items']],
-                use_container_width=True
+                width="stretch"
             )
 
 # Initialize performance monitor
@@ -1371,7 +1371,7 @@ def render_saved_parlay_tracker(clients: Dict[str, Any], timezone_label: str) ->
 
         if summary_rows:
             summary_df = pd.DataFrame(summary_rows)
-            st.dataframe(summary_df, use_container_width=True, hide_index=True)
+            st.dataframe(summary_df, width="stretch", hide_index=True)
 
         for entry in tracked:
             evaluation = entry.get('evaluation', {})
@@ -1395,7 +1395,7 @@ def render_saved_parlay_tracker(clients: Dict[str, Any], timezone_label: str) ->
                     })
 
                 if detail_rows:
-                    st.dataframe(pd.DataFrame(detail_rows), use_container_width=True, hide_index=True)
+                    st.dataframe(pd.DataFrame(detail_rows), width="stretch", hide_index=True)
                 else:
                     st.info("No leg details available.")
 
@@ -2400,7 +2400,7 @@ def evaluate_tracked_parlays(
         if ai_expander.button(
             toggle_label,
             key="toggle_ml_predictions_button",
-            use_container_width=True,
+            width="stretch",
             help=toggle_help,
         ):
             use_ml_predictions = not use_ml_predictions
@@ -7936,7 +7936,7 @@ def render_parlay_section_ai(
         }
         st.dataframe(
             legs_df_display,
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
             column_config=column_config,
         )
@@ -8107,7 +8107,7 @@ def render_parlay_section_ai(
                     })
             
             if kalshi_details:
-                st.dataframe(pd.DataFrame(kalshi_details), use_container_width=True, hide_index=True)
+                st.dataframe(pd.DataFrame(kalshi_details), width="stretch", hide_index=True)
                 
                 # Summary metrics
                 st.markdown("**📈 Kalshi Impact Summary:**")
@@ -8678,7 +8678,7 @@ with main_tab1:
                 dataset = pd.read_csv(uploaded_file)
                 st.success(f"✅ Loaded {len(dataset)} rows from theover.ai")
                 with st.expander("📋 Preview uploaded data", expanded=False):
-                    st.dataframe(dataset.head(10), use_container_width=True)
+                    st.dataframe(dataset.head(10), width="stretch")
             except Exception as exc:
                 st.error(f"Error loading CSV: {exc}")
 
@@ -9263,7 +9263,7 @@ if is_vertex_ai_enabled():
                     qa_df = pd.DataFrame(all_results)
                     qa_df.sort_values("ai_edge", ascending=False, inplace=True)
                     st.subheader("📊 Quick AI Edge Table")
-                    st.dataframe(qa_df, use_container_width=True)
+                    st.dataframe(qa_df, width="stretch")
 
             except Exception as e:
                 st.error(f"Error during quick analysis: {e}")
@@ -10109,7 +10109,7 @@ else:
                 st.write("**Your Picks:**")
                 display_cols = ['Rank', 'League', 'Game', 'THE PICK', 'AI Win %', 'Edge', 'Consensus']
                 display_cols = [c for c in display_cols if c in results_df.columns]
-                st.dataframe(results_df[display_cols].head(20), use_container_width=True, hide_index=True)
+                st.dataframe(results_df[display_cols].head(20), width="stretch", hide_index=True)
                 
                 st.markdown("---")
                 st.subheader("🎯 Enter Results")
@@ -10508,7 +10508,7 @@ else:
         source_col1, source_col2 = st.columns(2)
         
         with source_col1:
-            if st.button("🎯 TheOddsAPI (Current Season)", type="primary", use_container_width=True, key="collect_odds"):
+            if st.button("🎯 TheOddsAPI (Current Season)", type="primary", width="stretch", key="collect_odds"):
                 odds_key = st.session_state.get('api_key', '') or os.environ.get('ODDS_API_KEY', '')
                 if not odds_key:
                     st.error("❌ TheOddsAPI key not configured!")
@@ -10655,7 +10655,7 @@ else:
         with source_col2:
             st.caption("⚠️ API-Sports free plan = historical only")
         
-        if st.button("📚 API-Sports (Historical 2024-2025)", use_container_width=True, key="collect_apisports"):
+        if st.button("📚 API-Sports (Historical 2024-2025)", width="stretch", key="collect_apisports"):
             if not collect_sports:
                 st.error("❌ Select at least one sport!")
             else:
@@ -10952,7 +10952,7 @@ else:
             col1, col2 = st.columns(2)
             with col1:
                 if st.checkbox("Show sample data", key="show_sample"):
-                    st.dataframe(df.head(10), use_container_width=True)
+                    st.dataframe(df.head(10), width="stretch")
             with col2:
                 csv_data = df.to_csv(index=False)
                 st.download_button(
@@ -10984,7 +10984,7 @@ else:
             with col2:
                 n_estimators = st.slider("Trees (n_estimators)", 50, 300, 150, 50)
             
-            if st.button("🚀 Train XGBoost Model", type="primary", use_container_width=True, key="train_model"):
+            if st.button("🚀 Train XGBoost Model", type="primary", width="stretch", key="train_model"):
                 with st.spinner("Training model..."):
                     try:
                         from sklearn.model_selection import train_test_split
@@ -11041,7 +11041,7 @@ else:
                             'Feature': FEATURE_NAMES,
                             'Importance': model.feature_importances_
                         }).sort_values('Importance', ascending=False).head(10)
-                        st.dataframe(importance, use_container_width=True)
+                        st.dataframe(importance, width="stretch")
                         
                         # Save model
                         model_path = "/tmp/sports_betting_model.joblib"
@@ -11252,7 +11252,7 @@ else:
     compute_best_bets = st.button(
         "🚀 Generate Best Bets" + (" (with Vertex AI)" if use_vertex_results else " (Legacy Mode)"),
         key="compute_best_bets",
-        use_container_width=True,
+        width="stretch",
         type="primary" if use_vertex_results else "secondary",
     )
 
@@ -11881,7 +11881,7 @@ else:
                     st.caption("Edge = AI Win % - Market Implied %. Positive edge = potential value.")
                     st.dataframe(
                         best_bets_df[display_cols],
-                        use_container_width=True,
+                        width="stretch",
                         hide_index=True
                     )
                     
@@ -11892,7 +11892,7 @@ else:
                         if len(consensus_picks) > 0:
                             st.dataframe(
                                 consensus_picks[display_cols],
-                                use_container_width=True,
+                                width="stretch",
                                 hide_index=True
                             )
                     
@@ -12033,7 +12033,7 @@ else:
                         lambda x: f"{float(x):g}" if pd.notna(x) and isinstance(x, (int, float)) else "—"
                     )
 
-                st.dataframe(display_df, use_container_width=True, hide_index=True)
+                st.dataframe(display_df, width="stretch", hide_index=True)
 
                 csv_export = best_bets_df.to_csv(index=False)
                 download_name = (
@@ -12847,7 +12847,7 @@ else:
                                 lambda x: f"{float(x):.3f}" if pd.notna(x) and isinstance(x, (int, float)) else "—"
                             )
 
-                        st.dataframe(top_display, use_container_width=True, hide_index=True)
+                        st.dataframe(top_display, width="stretch", hide_index=True)
 
                         top_csv = top_df.to_csv(index=False)
                         st.download_button(
@@ -13844,7 +13844,7 @@ with main_tab3:
                                 "Sentiment": leg['sentiment_trend']
                             })
                         
-                        st.dataframe(pd.DataFrame(leg_data), use_container_width=True, hide_index=True)
+                        st.dataframe(pd.DataFrame(leg_data), width="stretch", hide_index=True)
                         
                         # Payout Scenarios
                         st.markdown("### 💰 Payout Scenarios")
