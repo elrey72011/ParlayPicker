@@ -9705,10 +9705,7 @@ else:
                 kalshi_integrator=st.session_state.get("kalshi_integrator"),
             )
 
-            # -------------------------------
-            # DEBUG: Analyzer Dependency Types (SAFE)
-            # -------------------------------
-
+            # --- DEBUG (SAFE): never pass type/class objects directly into st.write ---
             kalshi_obj = st.session_state.get("kalshi_integrator")
             sent_obj = st.session_state.get("sentiment_analyzer")
             ml_obj = st.session_state.get("ml_predictor")
@@ -9717,11 +9714,6 @@ else:
                 f"[DEBUG] kalshi_integrator type: {type(kalshi_obj).__name__ if kalshi_obj is not None else 'None'}")
             st.write(f"[DEBUG] sentiment_analyzer type: {type(sent_obj).__name__ if sent_obj is not None else 'None'}")
             st.write(f"[DEBUG] ml_predictor type: {type(ml_obj).__name__ if ml_obj is not None else 'None'}")
-
-            # Run Analysis
-            results_df = analyzer.analyze_all_games(all_games, league="multi")
-
-            st.write(f"[DEBUG] rows returned: {0 if results_df is None else len(results_df)}")
 
             if results_df is not None and not results_df.empty:
                 cols_to_check = [
