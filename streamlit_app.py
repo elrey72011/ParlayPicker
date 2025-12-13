@@ -8500,14 +8500,15 @@ if len(tabs) != len(tab_labels):  # pragma: no cover - ultra-defensive guard
 
 main_tab1, main_tab2, main_tab3, main_tab4, main_tab5 = tabs
 
-# Debug Section - Show ML Predictor Status
-with st.expander("🔍 ML Predictor Status", expanded=False):
-    ml_predictor = st.session_state.get('ml_predictor')
-    if ml_predictor:
-        st.success("✅ ML Predictor Loaded")
-        st.write(f"**Type:** {type(ml_predictor).__name__}")
-        st.write(f"**Has predict_game_outcome method:** {hasattr(ml_predictor, 'predict_game_outcome')}")
-        
+# --- DEBUG (SAFE): single-line strings only ---
+kalshi_obj = st.session_state.get("kalshi_integrator")
+sent_obj = st.session_state.get("sentiment_analyzer")
+ml_obj = st.session_state.get("ml_predictor")
+
+st.write(f"[DEBUG] kalshi_integrator type: {type(kalshi_obj).__name__ if kalshi_obj is not None else 'None'}")
+st.write(f"[DEBUG] sentiment_analyzer type: {type(sent_obj).__name__ if sent_obj is not None else 'None'}")
+st.write(f"[DEBUG] ml_predictor type: {type(ml_obj).__name__ if ml_obj is not None else 'None'}")
+
         # Test prediction button
         if st.button("🧪 Test ML Prediction"):
             try:
@@ -8818,20 +8819,17 @@ with main_tab1:
                                 kalshi_integrator=st.session_state.get("kalshi_integrator"),
                             )
 
-                            # --- DEBUG (safe): dependency types ---
+                            # --- DEBUG (SAFE): never pass type/class objects directly into st.write ---
                             kalshi_obj = st.session_state.get("kalshi_integrator")
                             sent_obj = st.session_state.get("sentiment_analyzer")
                             ml_obj = st.session_state.get("ml_predictor")
 
-                            st.write("[DEBUG] kalshi_integrator type:", type(st.session_state.get("kalshi_integrator")))
-                            st.write("[DEBUG] sentiment_analyzer type:",
-                                     type(st.session_state.get("sentiment_analyzer")))
-                            st.write("[DEBUG] ml_predictor type:", type(st.session_state.get("ml_predictor")))
-                            st.write("[DEBUG] TheOver ML raw:", st.session_state.get("theover_ml_data") is not None)
-                            if "theover_spreads_data" in locals() and theover_spreads_data is not None:
-                                st.write("[DEBUG] TheOver Spreads raw shape:", theover_spreads_data.shape)
-                            if "theover_totals_data" in locals() and theover_totals_data is not None:
-                                st.write("[DEBUG] TheOver Totals raw shape:", theover_totals_data.shape)
+                            st.write(
+                                f"[DEBUG] kalshi_integrator type: {type(kalshi_obj).__name__ if kalshi_obj is not None else 'None'}")
+                            st.write(
+                                f"[DEBUG] sentiment_analyzer type: {type(sent_obj).__name__ if sent_obj is not None else 'None'}")
+                            st.write(
+                                f"[DEBUG] ml_predictor type: {type(ml_obj).__name__ if ml_obj is not None else 'None'}")
 
                             # Run Analysis
                             results_df = analyzer.analyze_all_games(all_games, league='multi')
@@ -9145,20 +9143,17 @@ if is_vertex_ai_enabled():
                             kalshi_integrator=kalshi_int,
                         )
 
-                        # --- DEBUG (safe): dependency types ---
+                        # --- DEBUG (SAFE): never pass type/class objects directly into st.write ---
                         kalshi_obj = st.session_state.get("kalshi_integrator")
                         sent_obj = st.session_state.get("sentiment_analyzer")
                         ml_obj = st.session_state.get("ml_predictor")
 
-                        st.write("[DEBUG] kalshi_integrator type:", type(st.session_state.get("kalshi_integrator")))
-                        st.write("[DEBUG] sentiment_analyzer type:", type(st.session_state.get("sentiment_analyzer")))
-                        st.write("[DEBUG] ml_predictor type:", type(st.session_state.get("ml_predictor")))
-
-                        st.write("[DEBUG] TheOver ML raw:", st.session_state.get("theover_ml_data") is not None)
-                        if "theover_spreads_data" in locals() and theover_spreads_data is not None:
-                            st.write("[DEBUG] TheOver Spreads raw shape:", theover_spreads_data.shape)
-                        if "theover_totals_data" in locals() and theover_totals_data is not None:
-                            st.write("[DEBUG] TheOver Totals raw shape:", theover_totals_data.shape)
+                        st.write(
+                            f"[DEBUG] kalshi_integrator type: {type(kalshi_obj).__name__ if kalshi_obj is not None else 'None'}")
+                        st.write(
+                            f"[DEBUG] sentiment_analyzer type: {type(sent_obj).__name__ if sent_obj is not None else 'None'}")
+                        st.write(
+                            f"[DEBUG] ml_predictor type: {type(ml_obj).__name__ if ml_obj is not None else 'None'}")
 
                         # 5) Run master analysis
                         results_df = analyzer.analyze_all_games(all_games, league="multi")
@@ -9711,20 +9706,15 @@ else:
                 kalshi_integrator=st.session_state.get("kalshi_integrator"),
             )
 
-            # --- DEBUG (safe): dependency types ---
+            # --- DEBUG (SAFE): single-line strings only ---
             kalshi_obj = st.session_state.get("kalshi_integrator")
             sent_obj = st.session_state.get("sentiment_analyzer")
             ml_obj = st.session_state.get("ml_predictor")
 
-            st.write("[DEBUG] kalshi_integrator type:", type(st.session_state.get("kalshi_integrator")))
-            st.write("[DEBUG] sentiment_analyzer type:", type(st.session_state.get("sentiment_analyzer")))
-            st.write("[DEBUG] ml_predictor type:", type(st.session_state.get("ml_predictor")))
-
-            st.write("[DEBUG] TheOver ML raw:", st.session_state.get("theover_ml_data") is not None)
-            if "theover_spreads_data" in locals() and theover_spreads_data is not None:
-                st.write("[DEBUG] TheOver Spreads raw shape:", theover_spreads_data.shape)
-            if "theover_totals_data" in locals() and theover_totals_data is not None:
-                st.write("[DEBUG] TheOver Totals raw shape:", theover_totals_data.shape)
+            st.write(
+                f"[DEBUG] kalshi_integrator type: {type(kalshi_obj).__name__ if kalshi_obj is not None else 'None'}")
+            st.write(f"[DEBUG] sentiment_analyzer type: {type(sent_obj).__name__ if sent_obj is not None else 'None'}")
+            st.write(f"[DEBUG] ml_predictor type: {type(ml_obj).__name__ if ml_obj is not None else 'None'}")
 
             if results_df is not None and not results_df.empty:
                 cols_to_check = [
@@ -9754,20 +9744,15 @@ else:
                 f"integrator_is_none={analyzer.kalshi is None}"
             )
 
-            # --- DEBUG (safe): dependency types ---
+            # --- DEBUG (SAFE): single-line strings only ---
             kalshi_obj = st.session_state.get("kalshi_integrator")
             sent_obj = st.session_state.get("sentiment_analyzer")
             ml_obj = st.session_state.get("ml_predictor")
 
-            st.write("[DEBUG] kalshi_integrator type:", type(st.session_state.get("kalshi_integrator")))
-            st.write("[DEBUG] sentiment_analyzer type:", type(st.session_state.get("sentiment_analyzer")))
-            st.write("[DEBUG] ml_predictor type:", type(st.session_state.get("ml_predictor")))
-
-            st.write("[DEBUG] TheOver ML raw:", st.session_state.get("theover_ml_data") is not None)
-            if "theover_spreads_data" in locals() and theover_spreads_data is not None:
-                st.write("[DEBUG] TheOver Spreads raw shape:", theover_spreads_data.shape)
-            if "theover_totals_data" in locals() and theover_totals_data is not None:
-                st.write("[DEBUG] TheOver Totals raw shape:", theover_totals_data.shape)
+            st.write(
+                f"[DEBUG] kalshi_integrator type: {type(kalshi_obj).__name__ if kalshi_obj is not None else 'None'}")
+            st.write(f"[DEBUG] sentiment_analyzer type: {type(sent_obj).__name__ if sent_obj is not None else 'None'}")
+            st.write(f"[DEBUG] ml_predictor type: {type(ml_obj).__name__ if ml_obj is not None else 'None'}")
 
             results_df = analyzer.analyze_all_games(all_games, league='multi')
             
