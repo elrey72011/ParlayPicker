@@ -3,12 +3,10 @@ app_core.llm_assistant
 
 Lightweight LLM assistant wrapper for ParlayPicker.
 
-Provides:
-    - analyze_kalshi_context_with_llm(context_markdown: str) -> List[dict]
+Used as a SECOND-OPINION reasoning engine (Gemini via Vertex AI),
+NOT as a replacement for Vertex Master Analysis.
 
-This is used as a SECOND-OPINION reasoning engine (Gemini via Vertex AI),
-NOT as a replacement for Vertex Master Analysis. If Gemini/Vertex isn't
-available, the function returns an empty list.
+If Gemini/Vertex isn't available, or anything fails, returns [].
 """
 
 from __future__ import annotations
@@ -17,15 +15,22 @@ import json
 import logging
 import os
 from typing import Any, Dict, List
-from pydantic import BaseModel, ValidationError
 
 logger = logging.getLogger(__name__)
+
+# -------------------------------------------------------------------
+# Optional: Pydantic (nice-to-have, not required)
+# -------------------------------------------------------------------
+try:
+    from pydantic import BaseModel, ValidationError  # type: ignore
+except Exception:
+    BaseModel = None  # type: ignore
+    ValidationError = Exception  # type: ignore
 
 # -------------------------------------------------------------------
 # GEMINI (VERTEX AI) SETUP
 # -------------------------------------------------------------------
 try:
-    # Vertex AI Gemini (preferred). Do NOT use google-generativeai here.
     from vertexai.generative_models import GenerativeModel  # type: ignore
 
     _GEMINI_AVAILABLE = True
@@ -36,34 +41,32 @@ except Exception as e:
 
 GEMINI_MODEL_NAME = os.getenv("GEMINI_MODEL_NAME", "gemini-1.5-flash")
 
+
 # -------------------------------------------------------------------
-# Pydantic schema for contract recommendations
+# Validation schema (optional)
 # -------------------------------------------------------------------
-class ContractRecommendation(BaseModel):
-    ticker: str
-    side: str          # "yes"/"no" or "home"/"away"
-    bid_price: int     # 0–100 (cents)
-    reason: str
-    confidence: int    # 0–100
+if BaseModel is not None:
+
+    class ContractRecommendation(BaseModel):  # type: ignore
+        ticker: str
+        side: str          # "yes"/"no" or "home"/"away"
+        bid_price: int     # 0–100 (cents)
+        reason: str
+        confidence: int    # 0–100
 
 
 def _safe_json_extract(text: str) -> Dict[str, Any]:
-    """
-    Best-effort extraction of a JSON object from model output.
-    We demand JSON-only, but models can still wrap in text; this tries to recover.
-    """
+    """Best-effort extraction of a JSON object from model output."""
     text = (text or "").strip()
     if not text:
         return {}
 
-    # Already JSON?
     if text.startswith("{") and text.endswith("}"):
         try:
             return json.loads(text)
         except Exception:
             pass
 
-    # Try to find the first {...} block
     start = text.find("{")
     end = text.rfind("}")
     if start >= 0 and end > start:
@@ -75,9 +78,7 @@ def _safe_json_extract(text: str) -> Dict[str, Any]:
 
     return {}
 
-# -------------------------------------------------------------------
-# Public API
-# -------------------------------------------------------------------
+
 def analyze_kalshi_context_with_llm(context_markdown: str) -> List[Dict[str, Any]]:
     """
     Use Gemini via Vertex AI to analyze a Kalshi-style context string and return
@@ -92,7 +93,6 @@ def analyze_kalshi_context_with_llm(context_markdown: str) -> List[Dict[str, Any
     if not context_markdown or not context_markdown.strip():
         return []
 
-    # Keep this as ONE triple-quoted string to avoid quote/f-string bugs.
     system_instructions = """You are a prediction market assistant that evaluates current prices for event contracts on Kalshi.
 
 You will receive a description of a single game, including:
@@ -138,14 +138,19 @@ CONTEXT:
         if not isinstance(contracts_raw, list):
             return []
 
+        # Optional validation if pydantic exists
+        if BaseModel is None:
+            # No validation layer; best effort return
+            return [c for c in contracts_raw if isinstance(c, dict)]
+
         cleaned: List[Dict[str, Any]] = []
         for item in contracts_raw:
             if not isinstance(item, dict):
                 continue
             try:
-                cr = ContractRecommendation(**item)
-                cleaned.append(cr.model_dump())
-            except ValidationError:
+                cr = ContractRecommendation(**item)  # type: ignore
+                cleaned.append(cr.model_dump())       # type: ignore
+            except Exception:
                 continue
 
         return cleaned
