@@ -9120,25 +9120,21 @@ if is_vertex_ai_enabled():
                                 "Check the Streamlit logs ABOVE this message for the root cause."
                             )
                             st.stop()
-
+                            
+                        # --- FIX 2 (Line ~9130) ---
                         # 1. Get API Key safely
                         odds_key_safe = st.session_state.get('api_key')
 
-                        # 2. Get Clients directly from Session State to avoid NameErrors
-                        nfl_client = st.session_state.get('apisports_nfl_client')
-                        nba_client = st.session_state.get('apisports_basketball_client')
-                        nhl_client = st.session_state.get('apisports_hockey_client')
-
-                        # 3. Create Analyzer
+                        # 2. Initialize Analyzer
                         analyzer = get_vertex_master_analyzer(
-                            odds_api_client=odds_key_safe,  # Correct variable
+                            odds_api_client=odds_key_safe,  # ✅ FIXED: Was 'odds_client'
                             sportsdata_clients=st.session_state.get('sportsdata_clients', {}),
                             apisports_clients={
-                                "nba": nba_client,
-                                "nfl": nfl_client,
-                                "nhl": nhl_client,
-                                "ncaab": nba_client,  # Reuse NBA client
-                                "ncaaf": nfl_client,  # Reuse NFL client
+                                "nba": st.session_state.get('apisports_basketball_client'),
+                                "nfl": st.session_state.get('apisports_nfl_client'),
+                                "nhl": st.session_state.get('apisports_hockey_client'),
+                                "ncaab": st.session_state.get('apisports_basketball_client'),
+                                "ncaaf": st.session_state.get('apisports_nfl_client'),
                             },
                             theover_data={
                                 "spreads": theover_spreads_data,
