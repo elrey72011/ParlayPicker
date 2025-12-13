@@ -8796,28 +8796,37 @@ with main_tab1:
                                 first = all_games[0]
                                 st.write("[DEBUG] Sample game keys:", list(first.keys())[:15])
 
-                            # 1. Ensure the API key variable is defined
-                            odds_api_key = st.session_state.get('api_key')
+                            # [DEBUG] lines are here...
+                        
+                            # --- SAFE INITIALIZATION BLOCK ---
+                            # 1. Get the API Key safely
+                            odds_key_safe = st.session_state.get('api_key')
     
-                            # 2. Initialize Analyzer with CORRECT variables
+                            # 2. Get Clients directly from Session State to avoid NameErrors
+                            # (We use .get() so it returns None instead of crashing if missing)
+                            nfl_client = st.session_state.get('apisports_nfl_client')
+                            nba_client = st.session_state.get('apisports_basketball_client')
+                            nhl_client = st.session_state.get('apisports_hockey_client')
+    
+                            # 3. Create the Analyzer with safe references
                             analyzer = get_vertex_master_analyzer(
-                                odds_api_client=odds_api_key,  # ✅ FIXED: Changed from 'odds_client'
-                                sportsdata_clients=sportsdata_clients,
+                                odds_api_client=odds_key_safe,  # ✅ Safe variable
+                                sportsdata_clients=st.session_state.get('sportsdata_clients', {}),
                                 apisports_clients={
-                                    "nba": basketball_client,
-                                    "nfl": apisports_client,
-                                    "nhl": hockey_client,
-                                    # ✅ ADDED: College sports mapped to existing clients
-                                    "ncaab": basketball_client, 
-                                    "ncaaf": apisports_client,
+                                    "nba": nba_client,
+                                    "nfl": nfl_client,
+                                    "nhl": nhl_client,
+                                    "ncaab": nba_client,  # Reuse NBA client for NCAAB
+                                    "ncaaf": nfl_client,  # Reuse NFL client for NCAAF
                                 },
                                 theover_data={
                                     "spreads": theover_spreads_data,
                                     "totals": theover_totals_data,
                                     "ml": theover_ml_data,
                                 },
-                                kalshi_integrator=kalshi_int,
+                                kalshi_integrator=st.session_state.get("kalshi_integrator"),
                             )
+                            # ---------------------------------
 
                             st.write("[DEBUG] kalshi_integrator type:", type(st.session_state.get("kalshi_integrator")))
                             st.write("[DEBUG] sentiment_analyzer type:",
