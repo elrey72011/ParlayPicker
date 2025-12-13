@@ -8567,8 +8567,8 @@ if st.button("🧪 Test ML Prediction"):
         st.info("💡 Your predictor type: " + type(ml_predictor).__name__)
         st.code(str(e), language="python")
 else:
-st.error("❌ ML Predictor Not Loaded")
-st.info("Train a model in **Tab 5: ML Training** first")
+    st.error("❌ ML Predictor Not Loaded")
+    st.info("Train a model in **Tab 5: ML Training** first")
 
 def create_vertex_master_analyzer():
     """
