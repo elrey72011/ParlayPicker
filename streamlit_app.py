@@ -8364,7 +8364,7 @@ if is_vertex_ai_enabled():
                 
                 if 'odds_client' not in locals():
                     try:
-                        from app_core.<that_file_name_without_py> import TheOddsAPIClient
+                        from app_core.odds_api import TheOddsAPIClient
                         odds_api_key = resolve_odds_api_key()
                         if odds_api_key:
                             odds_client = TheOddsAPIClient(odds_api_key)
