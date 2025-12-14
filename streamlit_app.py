@@ -2,6 +2,7 @@
 # AI-Enhanced parlay finder with sentiment analysis, ML predictions, and live market data
 # v9.2 Update: Integrated Vertex-first architecture - Vertex AI now calculates probabilities
 # BEFORE Best Bets and Parlays are generated for consistent, high-quality predictions
+from __future__ import annotations
 import os, io, json, itertools, re, copy, logging, hashlib, math
 import concurrent.futures  # For parallel API calls
 from functools import lru_cache  # For caching
@@ -18,7 +19,6 @@ import streamlit.components.v1 as components
 import pytz
 from pathlib import Path
 from collections import defaultdict
-from __future__ import annotations
 
 import sys
 from pathlib import Path
