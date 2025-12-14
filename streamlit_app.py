@@ -551,7 +551,7 @@ class PerformanceMonitor:
         with st.expander("📊 Detailed Performance Log"):
             st.dataframe(
                 df[['timestamp', 'operation', 'duration', 'items']],
-                use_container_width=True
+                width="stretch"
             )
 
 # Initialize performance monitor
@@ -1203,7 +1203,7 @@ def render_saved_parlay_tracker(clients: Dict[str, Any], timezone_label: str) ->
 
         if summary_rows:
             summary_df = pd.DataFrame(summary_rows)
-            st.dataframe(summary_df, use_container_width=True, hide_index=True)
+            st.dataframe(summary_df, width="stretch")
 
         for entry in tracked:
             evaluation = entry.get('evaluation', {})
@@ -1227,7 +1227,7 @@ def render_saved_parlay_tracker(clients: Dict[str, Any], timezone_label: str) ->
                     })
 
                 if detail_rows:
-                    st.dataframe(pd.DataFrame(detail_rows), use_container_width=True, hide_index=True)
+                    st.dataframe(pd.DataFrame(detail_rows), width="stretch"
                 else:
                     st.info("No leg details available.")
 
@@ -1464,7 +1464,7 @@ def render_sidebar_controls() -> Dict[str, Any]:
             toggle_label,
             key="toggle_ml_predictions_button",
             help=toggle_help,
-            use_container_width=True,
+            width="stretch",
         ):
             use_ml_predictions = not use_ml_predictions
             st.session_state['use_ml_predictions'] = use_ml_predictions
@@ -2698,7 +2698,7 @@ def evaluate_tracked_parlays(
         if ai_expander.button(
             toggle_label,
             key="toggle_ml_predictions_button",
-            use_container_width=True,
+            width="stretch",
             help=toggle_help,
         ):
             use_ml_predictions = not use_ml_predictions
@@ -7760,7 +7760,7 @@ def render_parlay_section_ai(
         }
         st.dataframe(
             legs_df_display,
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
             column_config=column_config,
         )
@@ -7931,7 +7931,7 @@ def render_parlay_section_ai(
                     })
             
             if kalshi_details:
-                st.dataframe(pd.DataFrame(kalshi_details), use_container_width=True, hide_index=True)
+                st.dataframe(pd.DataFrame(kalshi_details), width="stretch"
                 
                 # Summary metrics
                 st.markdown("**📈 Kalshi Impact Summary:**")
@@ -8288,7 +8288,7 @@ with main_tab1:
                 dataset = pd.read_csv(uploaded_file)
                 st.success(f"✅ Loaded {len(dataset)} rows from theover.ai")
                 with st.expander("📋 Preview uploaded data", expanded=False):
-                    st.dataframe(dataset.head(10), use_container_width=True)
+                    st.dataframe(dataset.head(10), width="stretch")
             except Exception as exc:
                 st.error(f"Error loading CSV: {exc}")
 
@@ -8896,7 +8896,7 @@ if is_vertex_ai_enabled():
         fetch_best_odds = st.button(
             "Show Best Odds",
             key="best_odds_button",
-            use_container_width=True,
+            width="stretch",
         )
 
     if fetch_best_odds:
@@ -8926,7 +8926,7 @@ if is_vertex_ai_enabled():
                         lambda x: f"{float(x):.1f}" if pd.notna(x) else "—"
                     )
 
-                st.dataframe(display_df, use_container_width=True, hide_index=True)
+                st.dataframe(df, width="stretch")
 
                 csv_export = best_odds_df.to_csv(index=False)
                 file_name = (
@@ -8986,7 +8986,7 @@ if is_vertex_ai_enabled():
     compute_best_bets = st.button(
         "🚀 Generate Best Bets" + (" (with Vertex AI)" if use_vertex_results else " (Legacy Mode)"),
         key="compute_best_bets",
-        use_container_width=True,
+        width="stretch",
         type="primary" if use_vertex_results else "secondary",
     )
 
@@ -9210,7 +9210,7 @@ if is_vertex_ai_enabled():
                         lambda x: f"{float(x):g}" if pd.notna(x) else "—"
                     )
 
-                st.dataframe(display_df, use_container_width=True, hide_index=True)
+                st.dataframe(df, width="stretch")
 
                 csv_export = best_bets_df.to_csv(index=False)
                 download_name = (
@@ -10017,7 +10017,7 @@ if is_vertex_ai_enabled():
                                 lambda x: f"{x:.3f}" if pd.notna(x) else "—"
                             )
 
-                        st.dataframe(top_display, use_container_width=True, hide_index=True)
+                        st.dataframe(df, width="stretch")
 
                         top_csv = top_df.to_csv(index=False)
                         st.download_button(
@@ -11033,7 +11033,7 @@ with main_tab3:
                                 "Sentiment": leg['sentiment_trend']
                             })
                         
-                        st.dataframe(pd.DataFrame(leg_data), use_container_width=True, hide_index=True)
+                        st.dataframe(df, width="stretch")
                         
                         # Payout Scenarios
                         st.markdown("### 💰 Payout Scenarios")
@@ -12212,7 +12212,7 @@ Return ONLY a JSON object with this exact structure:
         'Sources': r['sources_used']
     } for r in vertex_results])
     
-    st.dataframe(results_df, use_container_width=True)
+    st.dataframe(df, width="stretch")
     
     # Download option
     csv = results_df.to_csv(index=False)
@@ -12997,7 +12997,7 @@ if 'best_bets_df' in st.session_state and st.session_state['best_bets_df'] is no
             st.write("### 📋 Enriched Preview")
             preview_cols = ['Game', 'Market', 'AI Prob %', 'theover.ai %', 'theover Δ pp']
             available_cols = [col for col in preview_cols if col in enriched_df.columns]
-            st.dataframe(enriched_df[available_cols].head(10), use_container_width=True)
+            st.dataframe(enriched_df[available_cols].head(10), width="stretch")
             
             # Download
             csv_output = enriched_df.to_csv(index=False, encoding='utf-8-sig')
