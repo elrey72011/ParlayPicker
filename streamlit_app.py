@@ -1809,7 +1809,7 @@ class AIOptimizer:
     def __init__(
         self,
         sentiment_analyzer: SentimentAnalyzer,
-        ml_predictor: Optional[MLPredictor],
+        ml_predictor: Optional["MLPredictor"],
     ):
         self.sentiment = sentiment_analyzer
         self.ml = ml_predictor
