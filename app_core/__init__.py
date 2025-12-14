@@ -16,10 +16,9 @@ from .sportsdata import (
     SportsDataNHLClient,
     SportsDataTeamInsight,
 )
+from .ml import HistoricalDataBuilder, HistoricalMLPredictor, MLPredictor
 from .kalshi_integrator import KalshiIntegrator
 from .sentiment import RealSentimentAnalyzer, SentimentAnalyzer
-from .historical_data_builder import HistoricalDataBuilder
-from .ml_predictor import HistoricalMLPredictor, MLPredictor
 
 __all__ = [
     "APISportsBasketballClient",
