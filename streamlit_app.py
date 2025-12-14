@@ -1227,7 +1227,7 @@ def render_saved_parlay_tracker(clients: Dict[str, Any], timezone_label: str) ->
                     })
 
                 if detail_rows:
-                    st.dataframe(pd.DataFrame(detail_rows), width="stretch"
+                    st.dataframe(pd.DataFrame(detail_rows), width="stretch")
                 else:
                     st.info("No leg details available.")
 
