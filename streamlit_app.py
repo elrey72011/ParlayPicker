@@ -7931,7 +7931,7 @@ def render_parlay_section_ai(
                     })
             
             if kalshi_details:
-                st.dataframe(pd.DataFrame(kalshi_details), width="stretch"
+                st.dataframe(pd.DataFrame(kalshi_details), width="stretch")
                 
                 # Summary metrics
                 st.markdown("**📈 Kalshi Impact Summary:**")
