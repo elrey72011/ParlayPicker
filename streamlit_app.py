@@ -34,9 +34,6 @@ try:
         APISportsBasketballClient,
         APISportsFootballClient,
         APISportsHockeyClient,
-        HistoricalDataBuilder,
-        HistoricalMLPredictor,
-        MLPredictor,
         RealSentimentAnalyzer,
         SentimentAnalyzer,
         SportsDataNCAABClient,
@@ -44,7 +41,9 @@ try:
         SportsDataNBAClient,
         SportsDataNFLClient,
         SportsDataNHLClient,
+        KalshiIntegrator,
     )
+
 except Exception as e:
     import streamlit as st
     st.error(f"app_core import failed: {e}")
