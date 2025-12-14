@@ -22,6 +22,7 @@ from collections import defaultdict
 from app_core.ml import HistoricalDataBuilder, HistoricalMLPredictor, MLPredictor
 import sys
 from pathlib import Path
+from app_core.odds_api import TheOddsAPIClient
 
 # Ensure repo root is on sys.path so "app_core" can be imported
 REPO_ROOT = Path(__file__).resolve().parents[1]  # /mount/src
@@ -50,6 +51,36 @@ except Exception as e:
     st.error(f"app_core import failed: {e}")
     st.code(traceback.format_exc())
     st.stop()
+
+import streamlit as st
+from google.oauth2 import service_account
+import vertexai
+
+def init_vertex_from_secrets():
+    # Streamlit secrets TOML section: [gcp_service_account]
+    sa_info = st.secrets.get("gcp_service_account", None)
+    if not sa_info:
+        return False, "Missing [gcp_service_account] in Streamlit secrets."
+
+    creds = service_account.Credentials.from_service_account_info(
+        dict(sa_info),
+        scopes=["https://www.googleapis.com/auth/cloud-platform"],
+    )
+
+    project = st.secrets.get("GCP_PROJECT_ID") or st.secrets.get("gcp_project_id")
+    region = st.secrets.get("GCP_REGION") or "us-central1"
+
+    vertexai.init(project=project, location=region, credentials=creds)
+    return True, f"Vertex initialized for {project} / {region}"
+
+ODDS_API_SPORT_MAP = {
+    "NFL": "americanfootball_nfl",
+    "NCAAF": "americanfootball_ncaaf",
+    "NBA": "basketball_nba",
+    "NCAAB": "basketball_ncaab",
+    "NHL": "icehockey_nhl",
+    "MLB": "baseball_mlb",
+}
 
 from ml_predictions import show_vertex_ai_prediction_section, is_vertex_ai_enabled
 
@@ -118,6 +149,21 @@ except ImportError:
         def __init__(self, *args, **kwargs): pass
 
 logger = logging.getLogger(__name__)
+
+# ============================================================
+# EXTERNAL API CLIENT INITIALIZATION
+# ============================================================
+
+odds_api_key = (
+    st.secrets.get("ODDS_API_KEY")
+    or st.secrets.get("odds_api_key")
+)
+
+if odds_api_key:
+    odds_client = TheOddsAPIClient(odds_api_key)
+else:
+    odds_client = None
+    st.warning("Odds API key missing — odds disabled.")
 
 # ============================================================
 # ML PREDICTION OPTIMIZATION FUNCTIONS
@@ -8318,7 +8364,7 @@ if is_vertex_ai_enabled():
                 
                 if 'odds_client' not in locals():
                     try:
-                        from app_core import TheOddsAPIClient
+                        from app_core.<that_file_name_without_py> import TheOddsAPIClient
                         odds_api_key = resolve_odds_api_key()
                         if odds_api_key:
                             odds_client = TheOddsAPIClient(odds_api_key)
@@ -8329,8 +8375,9 @@ if is_vertex_ai_enabled():
                     except Exception as e:
                         logger.warning(f"Could not initialize odds client: {e}")
                         odds_client = None
-                
+
                 if odds_client:
+                    nfl_odds = odds_client.get_odds("americanfootball_nfl")
                     st.info("📥 Fetching games from The Odds API...")
                     for sport in selected_sports:
                         try:
