@@ -11870,7 +11870,6 @@ if st.sidebar.checkbox("🧪 Show Vertex AI Test", value=False):
 # Location: BEFORE your "Generate Best Bets" section
 # ============================================================================
 
-import anthropic
 import json
 from datetime import datetime
 
