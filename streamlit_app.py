@@ -8296,6 +8296,9 @@ with main_tab1:
 
     st.markdown("AI Moneyline ML projections")
     st.markdown("SPREAD projections")
+    theover_spreads_data = None
+    theover_totals_data = None
+    theover_spreads_data = _collect_theover_dataset("#### Spread projections", "theover_spreads")
     theover_totals_data = _collect_theover_dataset("#### ðŸ“ˆ Totals (Over/Under) projections", "theover_totals")
     
     # Vertex AI Analysis Integration
@@ -13158,6 +13161,7 @@ if uploaded_csv is not None:
         )
         
         st.success("ðŸŽ‰ Your CSV now has ALL columns filled with data!")
+
 
 
 
