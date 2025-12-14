@@ -34,20 +34,7 @@ from app_core import (
     SportsDataNFLClient,
     SportsDataNHLClient,
 )
-
-# Optional ml_predictions module
-try:
-    from ml_predictions import show_vertex_ai_prediction_section, is_vertex_ai_enabled
-except ImportError:
-    def show_vertex_ai_prediction_section(*args, **kwargs):
-        """Fallback function when ml_predictions module is not available"""
-        import streamlit as st
-        st.warning("⚠️ ml_predictions module not available. ML prediction features disabled.")
-        return None
-    
-    def is_vertex_ai_enabled():
-        """Fallback function when ml_predictions module is not available"""
-        return False
+from ml_predictions import show_vertex_ai_prediction_section, is_vertex_ai_enabled
 
 try:
     from theover_vertex_analyzer import (
@@ -57,29 +44,6 @@ try:
 except ImportError:
     analyze_theover_spreads_with_vertex = None
     show_best_bets_table = None
-
-# Google Gemini AI Integration (recommended - 24x cheaper than Claude!)
-try:
-    from gemini_integration import (
-        GeminiAnalyzer,
-        show_gemini_config_ui,
-        test_gemini_connection,
-        VERTEX_AI_AVAILABLE as GEMINI_AVAILABLE
-    )
-    # Gemini integration loaded successfully
-except ImportError as e:
-    GEMINI_AVAILABLE = False
-    # Gemini integration not available
-    def show_gemini_config_ui():
-        import streamlit as st
-        st.sidebar.markdown("---")
-        st.sidebar.markdown("### 💎 Google Gemini AI")
-        st.sidebar.info("💰 AI analysis for ~$1/month (24x cheaper than Claude)")
-        st.sidebar.code("pip install google-cloud-aiplatform")
-        st.sidebar.caption("Then add gemini_integration.py to your project")
-        return False
-    def test_gemini_connection(*args, **kwargs):
-        return False
 
 # Optional classes with fallbacks
 try:
@@ -1297,22 +1261,25 @@ def render_sidebar_controls() -> Dict[str, Any]:
     else:
         sidebar.caption("ℹ️ Using neutral fallback sentiment")
 
-    # --------------------- Anthropic/Claude REMOVED - Using Gemini Only ---------------------
-    # Claude API removed - Gemini/Vertex AI is 24x cheaper and better!
-    
-    # --------------------- Google Gemini AI (Recommended) ---------------------
-    if GEMINI_AVAILABLE:
-        sidebar.markdown("---")
-        gemini_configured = show_gemini_config_ui()
-        if gemini_configured:
-            st.session_state['ai_provider'] = 'gemini'
-            logger.info("Gemini configured as AI provider")
+    # --------------------- Anthropic API key ---------------------
+    st.session_state.setdefault('anthropic_api_key', 
+        os.environ.get("ANTHROPIC_API_KEY", "") or 
+        os.environ.get("anthropic_api_key", "") or
+        st.secrets.get("anthropic_api_key", "") or
+        st.secrets.get("ANTHROPIC_API_KEY", "")
+    )
+    anthropic_api_input = sidebar.text_input(
+        "Anthropic API key",
+        value=st.session_state.get('anthropic_api_key', ""),
+        type="password",
+        help="Required for Vertex AI analysis. Get from console.anthropic.com",
+    ).strip()
+    if anthropic_api_input != st.session_state.get('anthropic_api_key', ""):
+        st.session_state['anthropic_api_key'] = anthropic_api_input
+    if st.session_state.get('anthropic_api_key'):
+        sidebar.caption("🤖 Anthropic API key configured")
     else:
-        sidebar.markdown("---")
-        sidebar.markdown("### 💎 Gemini AI (Optional)")
-        sidebar.info("💰 AI analysis for ~$1/month (24x cheaper than Claude)")
-        sidebar.code("pip install google-cloud-aiplatform")
-        sidebar.caption("See GEMINI_QUICK_SETUP.md for instructions")
+        sidebar.caption("❌ Enter Anthropic API key for AI analysis")
     
     # --------------------- GCP Vertex AI Config ---------------------
     # Helper function to safely get secrets
@@ -1361,62 +1328,23 @@ def render_sidebar_controls() -> Dict[str, Any]:
             with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
                 json.dump(gcp_creds, f)
                 os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = f.name
-            logger.info("✅ GCP credentials loaded from secrets.toml")
-            sidebar.success("✅ Service Account loaded from secrets")
+            logger.info("GCP credentials loaded from secrets")
     except Exception as e:
         logger.warning(f"Could not load GCP credentials: {e}")
-        sidebar.warning("⚠️ Service Account not found in secrets")
-        sidebar.info("Add [gcp_service_account] section to .streamlit/secrets.toml")
     
     # Display GCP status in sidebar
     gcp_configured = st.session_state.get('gcp_project_id') and st.session_state.get('vertex_endpoint_id')
     if gcp_configured:
         sidebar.caption(f"☁️ Vertex AI: {st.session_state['gcp_project_id']}")
     else:
-        sidebar.caption("⚠️ GCP Vertex AI not configured")
-    
-    # GCP Configuration expander
-    with sidebar.expander("☁️ GCP Vertex AI Settings", expanded=not gcp_configured):
-        st.write("Configure your trained ML model endpoint:")
-        
-        gcp_project_input = st.text_input(
-            "GCP Project ID",
-            value=st.session_state.get('gcp_project_id', ''),
-            placeholder="e.g., parlaydesk-ml-12345",
-            key="gcp_project_input",
-            help="Your Google Cloud project ID"
-        )
-        if gcp_project_input:
-            st.session_state['gcp_project_id'] = gcp_project_input
-        
-        vertex_endpoint_input = st.text_input(
-            "Vertex AI Endpoint ID", 
-            value=st.session_state.get('vertex_endpoint_id', ''),
-            placeholder="e.g., 1234567890123456789",
-            key="vertex_endpoint_input",
-            help="The numeric endpoint ID from Vertex AI"
-        )
-        if vertex_endpoint_input:
-            st.session_state['vertex_endpoint_id'] = vertex_endpoint_input
-        
-        gcp_location_input = st.text_input(
-            "GCP Location",
-            value=st.session_state.get('gcp_location', 'us-central1'),
-            placeholder="us-central1",
-            key="gcp_location_input",
-            help="The region where your endpoint is deployed"
-        )
-        if gcp_location_input:
-            st.session_state['gcp_location'] = gcp_location_input
-        
-        # Status check
-        if st.session_state.get('gcp_project_id') and st.session_state.get('vertex_endpoint_id'):
-            st.success("✅ GCP Vertex AI configured!")
-            st.caption(f"Project: {st.session_state['gcp_project_id']}")
-            st.caption(f"Endpoint: {st.session_state['vertex_endpoint_id']}")
-        else:
-            st.info("Enter your GCP credentials above, or add to Streamlit secrets:")
-            st.code('gcp_project_id = "your-project-id"\nvertex_endpoint_id = "1234567890123456789"\ngcp_location = "us-central1"', language="toml")
+        sidebar.caption("⚠️ GCP Vertex AI not fully configured")
+        # Debug info
+        with sidebar.expander("🔧 GCP Debug"):
+            st.write(f"Project ID: {st.session_state.get('gcp_project_id', 'Not set')}")
+            st.write(f"Endpoint ID: {st.session_state.get('vertex_endpoint_id', 'Not set')}")
+            st.write(f"Location: {st.session_state.get('gcp_location', 'Not set')}")
+            st.write("Add to secrets:")
+            st.code('gcp_project_id = "sports-betting-ml"\nvertex_endpoint_id = "5396533911008313344"\ngcp_location = "us-central1"', language="toml")
     
     # --------------------- Kalshi Status ---------------------
     # Check if Kalshi is configured (will be loaded later in session init)
@@ -8766,105 +8694,6 @@ elif 'nba_apisports_api_key' not in st.session_state:
         basketball_client.api_key if basketball_client else ""
     )
 
-# Copy and Paste This Code Into Your App
-# Location: Line 8782 (right after the nba_apisports_api_key initialization)
-
-# ============================================================
-# CONSOLIDATE CLIENTS FOR VERTEX MASTER ANALYZER
-# ============================================================
-
-# Create consolidated client dictionaries for VertexMasterAnalyzer
-if 'sportsdata_clients' not in st.session_state:
-    st.session_state['sportsdata_clients'] = {}
-
-if 'apisports_clients' not in st.session_state:
-    st.session_state['apisports_clients'] = {}
-
-# Populate sportsdata_clients dictionary from individual clients
-sport_mappings = {
-    'nba': 'sportsdata_nba_client',
-    'basketball_nba': 'sportsdata_nba_client',
-    'nfl': 'sportsdata_nfl_client',
-    'americanfootball_nfl': 'sportsdata_nfl_client',
-    'nhl': 'sportsdata_nhl_client',
-    'icehockey_nhl': 'sportsdata_nhl_client',
-    'ncaab': 'sportsdata_ncaab_client',
-    'basketball_ncaab': 'sportsdata_ncaab_client',
-    'ncaaf': 'sportsdata_ncaaf_client',
-    'americanfootball_ncaaf': 'sportsdata_ncaaf_client',
-}
-
-for sport_key, client_key in sport_mappings.items():
-    if client_key in st.session_state and st.session_state[client_key]:
-        st.session_state['sportsdata_clients'][sport_key] = st.session_state[client_key]
-
-# Populate apisports_clients dictionary from individual clients
-apisports_mappings = {
-    'nba': 'apisports_basketball_client',
-    'basketball_nba': 'apisports_basketball_client',
-    'nfl': 'apisports_nfl_client',
-    'americanfootball_nfl': 'apisports_nfl_client',
-    'nhl': 'apisports_hockey_client',
-    'icehockey_nhl': 'apisports_hockey_client',
-}
-
-for sport_key, client_key in apisports_mappings.items():
-    if client_key in st.session_state and st.session_state[client_key]:
-        st.session_state['apisports_clients'][sport_key] = st.session_state[client_key]
-
-# Show status in sidebar
-with st.sidebar:
-    st.markdown("---")
-    st.markdown("### 🔌 Data Sources")
-    
-    # Kalshi status
-    if st.session_state.get('kalshi_integrator'):
-        kalshi = st.session_state['kalshi_integrator']
-        if hasattr(kalshi, 'api_key') and kalshi.api_key:
-            st.success("✅ Kalshi: Connected")
-        else:
-            st.warning("⚠️ Kalshi: No credentials")
-    else:
-        st.info("ℹ️ Kalshi: Not initialized")
-    
-    # SportsData status
-    sportsdata_count = len(set(st.session_state.get('sportsdata_clients', {}).values()))
-    if sportsdata_count > 0:
-        st.success(f"✅ SportsData.io: {sportsdata_count} sports")
-    else:
-        st.info("ℹ️ SportsData.io: Not configured")
-    
-    # API-Sports status
-    apisports_count = len(set(st.session_state.get('apisports_clients', {}).values()))
-    if apisports_count > 0:
-        st.success(f"✅ API-Sports: {apisports_count} sports")
-    else:
-        st.info("ℹ️ API-Sports: Not configured")
-    
-    # Sentiment status
-    if st.session_state.get('sentiment_analyzer'):
-        st.success("✅ Sentiment: Active")
-    else:
-        st.info("ℹ️ Sentiment: Not initialized")
-    
-    # ML Predictor status
-    if st.session_state.get('ml_predictor'):
-        st.success("✅ ML Predictor: Ready")
-    else:
-        st.info("ℹ️ ML Predictor: Not initialized")
-    
-    st.markdown("---")
-
-# Log what's available for debugging
-logger.info("="*60)
-logger.info("INTEGRATION STATUS:")
-logger.info(f"  Kalshi: {st.session_state.get('kalshi_integrator') is not None}")
-logger.info(f"  SportsData clients: {list(set(st.session_state.get('sportsdata_clients', {}).values()))}")
-logger.info(f"  APISports clients: {list(set(st.session_state.get('apisports_clients', {}).values()))}")
-logger.info(f"  Sentiment: {st.session_state.get('sentiment_analyzer') is not None}")
-logger.info(f"  ML Predictor: {st.session_state.get('ml_predictor') is not None}")
-logger.info("="*60)
-
 # Main navigation tabs (fallback to containers if tabs are unavailable)
 tab_labels = [
     "🎯 Sports Betting Parlays",
@@ -8896,75 +8725,6 @@ if len(tabs) != len(tab_labels):  # pragma: no cover - ultra-defensive guard
     tabs = [st.container() for _ in tab_labels]
 
 main_tab1, main_tab2, main_tab3, main_tab4, main_tab5 = tabs
-
-# Debug Section - Show ML Predictor Status
-with st.expander("🔍 ML Predictor Status", expanded=False):
-    ml_predictor = st.session_state.get('ml_predictor')
-    if ml_predictor:
-        st.success("✅ ML Predictor Loaded")
-        st.write(f"**Type:** {type(ml_predictor).__name__}")
-        st.write(f"**Has predict_game_outcome method:** {hasattr(ml_predictor, 'predict_game_outcome')}")
-        
-        # Test prediction button
-        if st.button("🧪 Test ML Prediction"):
-            try:
-                # Get sentiment analyzer
-                sentiment_analyzer = st.session_state.get('sentiment_analyzer')
-                sentiment_home = 0.0
-                sentiment_away = 0.0
-                
-                # Try to get real sentiment for test teams
-                if sentiment_analyzer:
-                    try:
-                        home_sent = sentiment_analyzer.get_sentiment("Kansas City Chiefs")
-                        away_sent = sentiment_analyzer.get_sentiment("Las Vegas Raiders")
-                        if home_sent and 'sentiment_score' in home_sent:
-                            sentiment_home = home_sent['sentiment_score']
-                        if away_sent and 'sentiment_score' in away_sent:
-                            sentiment_away = away_sent['sentiment_score']
-                        st.info(f"📊 Using sentiment: Home={sentiment_home:.2f}, Away={sentiment_away:.2f}")
-                    except:
-                        st.info("ℹ️ Using neutral sentiment (0.0) for test")
-                else:
-                    st.info("ℹ️ Sentiment analyzer not loaded, using neutral sentiment (0.0)")
-                
-                # Try with all parameters
-                try:
-                    test_result = ml_predictor.predict_game_outcome(
-                        home_team="Kansas City Chiefs",
-                        away_team="Las Vegas Raiders",
-                        home_odds=-200,  # Example odds
-                        away_odds=+175,
-                        sentiment_home=sentiment_home,
-                        sentiment_away=sentiment_away,
-                        sport_key="americanfootball_nfl"
-                    )
-                except TypeError as e:
-                    # Fallback: without sport_key (HistoricalMLPredictor)
-                    st.info("ℹ️ Using HistoricalMLPredictor (doesn't accept sport_key parameter)")
-                    test_result = ml_predictor.predict_game_outcome(
-                        home_team="Kansas City Chiefs",
-                        away_team="Las Vegas Raiders",
-                        home_odds=-200,
-                        away_odds=+175,
-                        sentiment_home=sentiment_home,
-                        sentiment_away=sentiment_away
-                    )
-                
-                if test_result:
-                    st.success("✅ ML Prediction successful!")
-                    st.json(test_result)
-                    if abs(test_result.get('home_win_prob', 0.58) - 0.58) < 0.01:
-                        st.warning("⚠️ Probability is very close to 58% - model might not be properly trained")
-                else:
-                    st.error("Prediction returned None")
-            except Exception as e:
-                st.error(f"Test prediction failed: {e}")
-                st.info("💡 Your predictor type: " + type(ml_predictor).__name__)
-                st.code(str(e), language="python")
-    else:
-        st.error("❌ ML Predictor Not Loaded")
-        st.info("Train a model in **Tab 5: ML Training** first")
 
 # ===== TAB 1: SPORTS BETTING PARLAYS =====
 with main_tab1:
@@ -9077,31 +8837,6 @@ with main_tab1:
     theover_spreads_data = _collect_theover_dataset("#### 📐 Spread projections", "theover_spreads")
     theover_totals_data = _collect_theover_dataset("#### 📈 Totals (Over/Under) projections", "theover_totals")
     
-    with st.sidebar.expander("🔍 Vertex AI Status"):
-        try:
-            from google.oauth2 import service_account
-            import vertexai
-            
-            # Load credentials from secrets
-            credentials = service_account.Credentials.from_service_account_info(
-                st.secrets["gcp_service_account"]
-            )
-        
-        # Initialize Vertex AI
-            vertexai.init(
-                project="elite-hangar-479017-m8",
-                location="us-central1",
-                credentials=credentials
-            )
-            
-            st.success("✅ Vertex AI Authenticated!")
-            st.write(f"**Project:** elite-hangar-479017-m8")
-            st.write(f"**Service Account:** {credentials.service_account_email}")
-            st.write(f"**Region:** us-central1")
-        
-        except Exception as e:
-            st.error(f"❌ Vertex AI Authentication Failed: {e}")
-    
     # Vertex AI Analysis Integration - Uses VertexMasterAnalyzer with BOTH spreads and totals
     if is_vertex_ai_enabled():
         if (theover_spreads_data is not None and len(theover_spreads_data) > 0) or \
@@ -9163,36 +8898,25 @@ with main_tab1:
                                     else:
                                         home_implied_prob = 0.5
                                     
-                                    # Determine if pick is home or away
-                                    pick_is_home = (pick == home_team or pick.lower() in home_team.lower() or home_team.lower() in pick.lower())
+                                    # For NHL, theover_prob = home team win probability
+                                    theover_prob = home_implied_prob
                                     
-                                    # theover_prob = PICKED team's win probability (NOT home team!)
-                                    if pick_is_home:
-                                        theover_prob = home_implied_prob
-                                    else:
-                                        theover_prob = 1.0 - home_implied_prob  # Away team's probability
-                                    
-                                    home_ml = int(moneyline) if pick_is_home else int(-moneyline * 0.9)
-                                    away_ml = int(-moneyline * 0.9) if pick_is_home else int(moneyline)
+                                    home_ml = int(moneyline) if pick == home_team else int(-moneyline * 0.9)
+                                    away_ml = int(-moneyline * 0.9) if pick == home_team else int(moneyline)
                                     spread = 1.5  # Standard puckline
-                                    home_spread = spread if pick_is_home else -spread
+                                    home_spread = spread  # Will be adjusted below
                                 else:
-                                    # Basketball/Football - Line is the PICKED team's spread!
-                                    # NOT the home team's spread!
-                                    # Example: "Dallas @ Lakers, Pick: Dallas, Line: 10.5"
-                                    # This means Dallas +10.5 (underdog), Lakers are -10.5 (favorites)
+                                    # Basketball/Football - line is spread for the PICK team
+                                    # Negative spread = favorite, Positive spread = underdog
+                                    pick_spread = line_value
                                     
-                                    pick_spread = line_value  # Line is already for the picked team!
-                                    
-                                    # Determine if pick is home or away
-                                    if pick == away_team or (pick and away_team and (pick.lower() in away_team.lower() or away_team.lower() in pick.lower())):
-                                        pick_is_home = False
-                                        # Pick is away, so home spread is opposite
-                                        home_spread = -line_value
+                                    # Calculate HOME team's spread (opposite of pick's if pick is away)
+                                    if pick == away_team or pick.lower() in away_team.lower() or away_team.lower() in pick.lower():
+                                        # Pick is away team, so home_spread is opposite
+                                        home_spread = -pick_spread
                                     else:
-                                        pick_is_home = True
-                                        # Pick is home, so home spread is same
-                                        home_spread = line_value
+                                        # Pick is home team
+                                        home_spread = pick_spread
                                     
                                     # Calculate home team win probability from HOME spread
                                     # Negative home_spread = home team is favorite = higher win prob
@@ -9200,11 +8924,15 @@ with main_tab1:
                                     home_implied_prob = 0.5 - (home_spread * 0.028)
                                     home_implied_prob = max(0.15, min(0.85, home_implied_prob))
                                     
-                                    # theover_probability = PICKED team's win probability (NOT home team!)
-                                    if pick_is_home:
-                                        theover_prob = home_implied_prob
+                                    # theover_probability = home team win probability
+                                    theover_prob = home_implied_prob
+                                    
+                                    # Add slight boost based on TheOver.ai pick (they have edge)
+                                    pick_boost = 0.02
+                                    if pick == home_team or pick.lower() in home_team.lower() or home_team.lower() in pick.lower():
+                                        theover_prob = min(0.85, theover_prob + pick_boost)
                                     else:
-                                        theover_prob = 1.0 - home_implied_prob  # Away team's probability
+                                        theover_prob = max(0.15, theover_prob - pick_boost)
                                     
                                     # Calculate moneylines from home implied probability
                                     if home_implied_prob > 0.5:
@@ -9214,7 +8942,7 @@ with main_tab1:
                                         home_ml = int(100 * (1 - home_implied_prob) / home_implied_prob)
                                         away_ml = int(-100 * (1 - home_implied_prob) / home_implied_prob)
                                     
-                                    spread = abs(line_value)  # Magnitude for display
+                                    spread = pick_spread  # Keep original for display
                                 
                                 all_games.append({
                                     'home_team': home_team,
@@ -9223,7 +8951,7 @@ with main_tab1:
                                     'league': league,
                                     'theover_probability': theover_prob,
                                     'theover_pick': pick,
-                                    'theover_spread': pick_spread,  # PICKED team's spread (correct!)
+                                    'theover_spread': pick_spread if 'pick_spread' in dir() else spread,
                                     'home_spread': home_spread,
                                     'home_ml_odds': home_ml,
                                     'away_ml_odds': away_ml,
@@ -9365,270 +9093,20 @@ with main_tab1:
             st.info("💡 Upload spread or totals picks above to enable Vertex AI analysis")
     
     st.markdown("---")
+    st.subheader("🏆 Best Overall Odds for Date Range")
+
+    # After "Best Overall Odds for Date Range" section
 
 # VERTEX AI MASTER ANALYSIS
 
-# =====================================================
-# SIMPLE THEODDSAPI-ONLY ANALYSIS
-# Uses ONLY TheOddsAPI for games + odds - no TheOver.ai complexity
-# =====================================================
+# VERTEX AI MASTER ANALYSIS
 if is_vertex_ai_enabled():
     st.markdown("---")
-    st.subheader("🎯 Quick Analysis (TheOddsAPI Only)")
-    st.caption("Simple analysis using only TheOddsAPI for odds. No CSV uploads needed!")
-    
-    if st.button("🚀 Run Quick Analysis", key="quick_analysis_btn", type="primary"):
-        with st.spinner("Fetching games and running AI analysis..."):
-            try:
-                # Get selected sports
-                selected_sports = []
-                sport_map = {
-                    'NFL': 'americanfootball_nfl',
-                    'NCAAF': 'americanfootball_ncaaf', 
-                    'NBA': 'basketball_nba',
-                    'NCAAB': 'basketball_ncaab',
-                    'NHL': 'icehockey_nhl',
-                }
-                for sport_name, sport_key in sport_map.items():
-                    if sport_name in st.session_state.get('selected_sports', []):
-                        selected_sports.append(sport_key)
-                
-                if not selected_sports:
-                    selected_sports = list(sport_map.values())
-                
-                # Initialize TheOddsAPI - use existing fetch function
-                odds_api_key = resolve_odds_api_key()
-                if not odds_api_key:
-                    st.error("❌ Please configure your The Odds API key in the sidebar settings.")
-                    st.stop()
-                
-                # Fetch all games with odds using existing function
-                all_results = []
-                for sport_key in selected_sports:
-                    try:
-                        # Use existing fetch_oddsapi_snapshot function
-                        snapshot = fetch_oddsapi_snapshot(odds_api_key, sport_key)
-                        games = snapshot.get('events', [])
-                        st.success(f"✅ Fetched {len(games)} {sport_key} games")
-                        
-                        for game in games:
-                            home_team = game.get('home_team', '')
-                            away_team = game.get('away_team', '')
-                            
-                            # Extract best moneyline odds from bookmakers
-                            home_ml = None
-                            away_ml = None
-                            home_spread = None
-                            away_spread = None
-                            spread_line = None
-                            
-                            for bookmaker in game.get('bookmakers', []):
-                                for market in bookmaker.get('markets', []):
-                                    if market['key'] == 'h2h':  # Moneyline
-                                        for outcome in market.get('outcomes', []):
-                                            if outcome['name'] == home_team:
-                                                if home_ml is None or outcome['price'] > home_ml:
-                                                    home_ml = outcome['price']
-                                            elif outcome['name'] == away_team:
-                                                if away_ml is None or outcome['price'] > away_ml:
-                                                    away_ml = outcome['price']
-                                    elif market['key'] == 'spreads':  # Spread
-                                        for outcome in market.get('outcomes', []):
-                                            if outcome['name'] == home_team:
-                                                home_spread = outcome.get('point', 0)
-                                                spread_line = outcome.get('point', 0)
-                                            elif outcome['name'] == away_team:
-                                                away_spread = outcome.get('point', 0)
-                            
-                            # Default moneylines if not found
-                            if home_ml is None:
-                                home_ml = -110
-                            if away_ml is None:
-                                away_ml = -110
-                            
-                            # Calculate implied probabilities from moneylines
-                            if home_ml < 0:
-                                home_implied = abs(home_ml) / (abs(home_ml) + 100)
-                            else:
-                                home_implied = 100 / (home_ml + 100)
-                            
-                            if away_ml < 0:
-                                away_implied = abs(away_ml) / (abs(away_ml) + 100)
-                            else:
-                                away_implied = 100 / (away_ml + 100)
-                            
-                            # Normalize to sum to 1 (remove vig)
-                            total_implied = home_implied + away_implied
-                            home_prob_market = home_implied / total_implied
-                            away_prob_market = away_implied / total_implied
-                            
-                            # Get league name
-                            league_map = {
-                                'americanfootball_nfl': 'NFL',
-                                'americanfootball_ncaaf': 'NCAAF',
-                                'basketball_nba': 'NBA',
-                                'basketball_ncaab': 'NCAAB',
-                                'icehockey_nhl': 'NHL',
-                            }
-                            league = league_map.get(sport_key, sport_key.upper())
-                            
-                            # Get Vertex AI prediction
-                            from ml_predictions import get_vertex_ai_prediction
-                            
-                            features = {
-                                'home_team': home_team,
-                                'away_team': away_team,
-                                'league': league,
-                                'home_ml_odds': home_ml,
-                                'away_ml_odds': away_ml,
-                                'implied_home_prob': home_prob_market,
-                                'home_spread': home_spread or 0,
-                            }
-                            
-                            context = f"{away_team} @ {home_team} ({league})"
-                            
-                            # Get AI prediction (returns HOME team win probability)
-                            ai_home_prob = get_vertex_ai_prediction(features, context)
-                            
-                            # Handle None or invalid predictions
-                            if ai_home_prob is None or pd.isna(ai_home_prob):
-                                ai_home_prob = 0.5
-                            
-                            # Ensure it's a decimal
-                            if ai_home_prob > 1:
-                                ai_home_prob = ai_home_prob / 100
-                            
-                            ai_away_prob = 1 - ai_home_prob
-                            
-                            # Determine best pick (higher AI probability)
-                            if ai_home_prob >= ai_away_prob:
-                                pick_team = home_team
-                                pick_prob = ai_home_prob
-                                pick_ml = home_ml
-                                market_prob = home_prob_market
-                                pick_spread = home_spread
-                            else:
-                                pick_team = away_team
-                                pick_prob = ai_away_prob
-                                pick_ml = away_ml
-                                market_prob = away_prob_market
-                                pick_spread = away_spread
-                            
-                            # Calculate edge
-                            edge = pick_prob - market_prob
-                            
-                            # Calculate EV
-                            if pick_ml > 0:
-                                potential_profit = pick_ml / 100
-                            else:
-                                potential_profit = 100 / abs(pick_ml)
-                            ev = (pick_prob * potential_profit) - ((1 - pick_prob) * 1)
-                            
-                            # Format pick text
-                            if pick_spread and pick_spread != 0:
-                                if pick_spread > 0:
-                                    pick_text = f"{pick_team} +{abs(pick_spread):.1f}"
-                                else:
-                                    pick_text = f"{pick_team} {pick_spread:.1f}"
-                            else:
-                                pick_text = f"{pick_team} ML"
-                            
-                            # Format ML odds
-                            if pick_ml > 0:
-                                odds_str = f"+{int(pick_ml)}"
-                            else:
-                                odds_str = str(int(pick_ml))
-                            
-                            # Determine if pick is the market favorite (negative ML = favorite)
-                            # Compare actual market moneylines
-                            is_market_favorite = pick_ml < 0 and (
-                                (pick_team == home_team and home_ml < away_ml) or
-                                (pick_team == away_team and away_ml < home_ml)
-                            )
-                            
-                            all_results.append({
-                                'League': league,
-                                'Game': f"{away_team} @ {home_team}",
-                                'THE PICK': pick_text,
-                                'AI Win %': round(pick_prob * 100, 1),
-                                'Market %': round(market_prob * 100, 1),
-                                'Edge': round(edge * 100, 1),
-                                'Favorite': '✅' if is_market_favorite else '❌',
-                                'EV': f"${ev * 100:.2f}",
-                                'Odds': odds_str,
-                                'Home ML': home_ml,
-                                'Away ML': away_ml,
-                            })
-                    
-                    except Exception as e:
-                        st.warning(f"⚠️ Error fetching {sport_key}: {e}")
-                        logger.error(f"Error fetching {sport_key}: {e}")
-                
-                if all_results:
-                    # Create DataFrame and sort by Edge
-                    results_df = pd.DataFrame(all_results)
-                    results_df = results_df.sort_values('Edge', ascending=False)
-                    results_df['Rank'] = range(1, len(results_df) + 1)
-                    
-                    # Reorder columns
-                    display_cols = ['Rank', 'League', 'Game', 'THE PICK', 'AI Win %', 'Market %', 'Edge', 'Favorite', 'EV', 'Odds']
-                    results_df = results_df[display_cols]
-                    
-                    st.success(f"✅ Analyzed {len(results_df)} games!")
-                    
-                    # Display results
-                    st.dataframe(
-                        results_df,
-                        use_container_width=True,
-                        hide_index=True,
-                        column_config={
-                            'AI Win %': st.column_config.NumberColumn('AI Win %', format="%.1f%%"),
-                            'Market %': st.column_config.NumberColumn('Market %', format="%.1f%%"),
-                            'Edge': st.column_config.NumberColumn('Edge', format="%.1f%%"),
-                        }
-                    )
-                    
-                    st.caption("**Edge** = AI Win % - Market %. Positive edge = AI sees value the market doesn't.")
-                    
-                    # Show positive edge picks
-                    positive_edge = results_df[results_df['Edge'] > 0]
-                    if len(positive_edge) > 0:
-                        st.success(f"🎯 Found **{len(positive_edge)} picks with positive edge!**")
-                    
-                    # Export
-                    csv_data = results_df.to_csv(index=False)
-                    st.download_button(
-                        "⬇️ Download Results (CSV)",
-                        csv_data,
-                        f"quick_analysis_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
-                        "text/csv",
-                        key="quick_analysis_export"
-                    )
-                    
-                    # Store for Best Bets
-                    st.session_state['quick_analysis_results'] = all_results
-                    st.session_state['quick_analysis_timestamp'] = datetime.now()
-                else:
-                    st.warning("⚠️ No games found. Check your sports selection.")
-                    
-            except Exception as e:
-                st.error(f"❌ Error: {e}")
-                logger.error(f"Quick analysis error: {e}", exc_info=True)
-                import traceback
-                with st.expander("🔍 Debug"):
-                    st.code(traceback.format_exc())
-
     st.markdown("---")
-
-# VERTEX AI MASTER ANALYSIS (Complex - with TheOver.ai integration)
-if is_vertex_ai_enabled():
-    st.markdown("---")
-    st.subheader("🌟 Vertex AI Master Analysis (Advanced)")
-    st.caption("Comprehensive analysis combining TheOddsAPI, TheOver.ai, sentiment, and more.")
     
     from vertex_master_analyzer import VertexMasterAnalyzer, show_vertex_master_analysis
     
-    if st.button("🌟 Run Vertex AI Master Analysis", key="vertex_master_btn", type="secondary"):
+    if st.button("🌟 Run Vertex AI Master Analysis", key="vertex_master_btn", type="primary"):
         with st.spinner("Running comprehensive AI analysis... Consolidating all data sources..."):
             try:
                 selected_sports = []
@@ -9645,190 +9123,212 @@ if is_vertex_ai_enabled():
                     selected_sports = ['basketball_nba', 'americanfootball_ncaaf', 'basketball_ncaab', 'icehockey_nhl']
                 
                 all_games = []
-
-                # =========================================================================
-                # PRIMARY DATA SOURCE: TheOddsAPI (Real Sportsbook Lines)
-                # Use TheOddsAPI for all spreads/totals/moneylines from real books (Novig, DraftKings, FanDuel, etc.)
-                # =========================================================================
-                odds_api_key = resolve_odds_api_key()
                 
-                if not odds_api_key:
-                    st.error("❌ TheOddsAPI key required for Vertex AI Master Analysis")
-                    st.info("💡 Add ODDS_API_KEY to secrets.toml or enter in sidebar")
-                    st.stop()
-                
-                st.info("📊 Fetching games from TheOddsAPI (all sportsbooks including Novig)...")
-                
-                # Get current time for filtering past games
-                from datetime import datetime, timezone
-                now_utc = datetime.now(timezone.utc)
-                
-                for sport in selected_sports:
+                if 'odds_client' not in locals():
                     try:
-                        snapshot = fetch_oddsapi_snapshot(odds_api_key, sport)
-                        games = snapshot.get('events', [])
-                        
-                        # Filter out games that have already started/finished
-                        upcoming_games = []
-                        for game in games:
-                            commence_time_str = game.get('commence_time')
-                            if commence_time_str:
-                                try:
-                                    # Parse commence_time (ISO format from TheOddsAPI)
-                                    commence_time = datetime.fromisoformat(commence_time_str.replace('Z', '+00:00'))
-                                    
-                                    # Only include games that haven't started yet (with 5 min buffer)
-                                    if commence_time > now_utc:
-                                        upcoming_games.append(game)
-                                    else:
-                                        logger.info(f"Filtered out past game: {game.get('home_team')} vs {game.get('away_team')} (commenced {commence_time})")
-                                except Exception as e:
-                                    # If we can't parse time, include the game to be safe
-                                    logger.warning(f"Could not parse commence_time for game, including anyway: {e}")
-                                    upcoming_games.append(game)
-                            else:
-                                # No commence_time, include it
-                                upcoming_games.append(game)
-                        
-                        # Add sport_key and league to each upcoming game
-                        for game in upcoming_games:
-                            game['sport_key'] = sport
-                            
-                            # Map sport_key to league abbreviation
-                            if sport == 'basketball_nba':
-                                game['league'] = 'NBA'
-                            elif sport == 'basketball_ncaab':
-                                game['league'] = 'NCAAB'
-                            elif sport == 'americanfootball_nfl':
-                                game['league'] = 'NFL'
-                            elif sport == 'americanfootball_ncaaf':
-                                game['league'] = 'NCAAF'
-                            elif sport == 'icehockey_nhl':
-                                game['league'] = 'NHL'
-                            else:
-                                game['league'] = 'NBA'
-                        
-                        filtered_count = len(games) - len(upcoming_games)
-                        all_games.extend(upcoming_games)
-                        
-                        if filtered_count > 0:
-                            st.success(f"✅ Fetched {len(upcoming_games)} upcoming {sport} games (filtered out {filtered_count} past games)")
+                        from app_core import TheOddsAPIClient
+                        odds_api_key = resolve_odds_api_key()
+                        if odds_api_key:
+                            odds_client = TheOddsAPIClient(odds_api_key)
+                            logger.info("✅ The Odds API client initialized")
                         else:
-                            st.success(f"✅ Fetched {len(upcoming_games)} {sport} games from TheOddsAPI")
-                        logger.info(f"Loaded {len(upcoming_games)} upcoming {sport} games (filtered {filtered_count} past games)")
-                        
+                            odds_client = None
+                            logger.warning("⚠️ No Odds API key found")
                     except Exception as e:
-                        st.warning(f"⚠️ Could not fetch {sport} from TheOddsAPI: {e}")
-                        logger.error(f"Error fetching {sport} from TheOddsAPI: {e}")
+                        logger.warning(f"Could not initialize odds client: {e}")
+                        odds_client = None
+                
+                if odds_client:
+                    st.info("📥 Fetching games from The Odds API...")
+                    for sport in selected_sports:
+                        try:
+                            games = odds_client.get_odds(sport)
+                            for game in games:
+                                game['sport_key'] = sport
+                            all_games.extend(games)
+                            st.success(f"✅ Fetched {len(games)} {sport} games")
+                        except Exception as e:
+                            st.warning(f"⚠️ Error fetching {sport}: {e}")
+                            logger.error(f"Error fetching {sport}: {e}")
+                else:
+                    st.warning("⚠️ The Odds API not configured")
+                    st.info("💡 Using theover.ai data if available...")
+                    
+                    if 'theover_spreads_data' in locals() and theover_spreads_data is not None:
+                        for _, row in theover_spreads_data.iterrows():
+                            # Get basic info
+                            home_team = row.get('home_team') or row.get('HomeTeam') or ''
+                            away_team = row.get('away_team') or row.get('AwayTeam') or ''
+                            league = (row.get('League') or row.get('league') or 'NBA').upper()
+                            pick = row.get('Pick') or row.get('pick') or ''
+                            
+                            # Extract line value
+                            line_value = row.get('Line') or row.get('Spread') or row.get('line') or 0
+                            try:
+                                line_value = float(line_value) if line_value else 0
+                            except:
+                                line_value = 0
+                            
+                            # Determine sport_key from league
+                            if league == 'NFL':
+                                sport_key = 'americanfootball_nfl'
+                            elif league == 'NBA':
+                                sport_key = 'basketball_nba'
+                            elif league == 'NHL':
+                                sport_key = 'icehockey_nhl'
+                            elif league == 'NCAAB':
+                                sport_key = 'basketball_ncaab'
+                            elif league == 'NCAAF':
+                                sport_key = 'americanfootball_ncaaf'
+                            else:
+                                sport_key = 'basketball_nba'
+                            
+                            # NHL uses MONEYLINES in the Line column (125, -150, etc.)
+                            # Other sports use point spreads (13.5, -7.5, etc.)
+                            is_nhl = league == 'NHL'
+                            
+                            if is_nhl:
+                                # Line is a moneyline for NHL
+                                moneyline = line_value
+                                spread = 1.5  # Standard puckline
+                                
+                                # Calculate probability from moneyline
+                                if moneyline > 0:
+                                    # Underdog: +150 means 100/(150+100) = 40%
+                                    pick_win_prob = 100 / (moneyline + 100)
+                                else:
+                                    # Favorite: -150 means 150/(150+100) = 60%
+                                    pick_win_prob = abs(moneyline) / (abs(moneyline) + 100)
+                                
+                                # Determine home/away probabilities based on pick
+                                pick_is_home = (pick == home_team) or (pick and (pick.lower() in home_team.lower() or home_team.lower() in pick.lower()))
+                                
+                                if pick_is_home:
+                                    home_implied_prob = pick_win_prob
+                                    home_ml = int(moneyline)
+                                    away_ml = int(-moneyline) if moneyline > 0 else int(100 * 100 / abs(moneyline))
+                                else:
+                                    home_implied_prob = 1 - pick_win_prob
+                                    away_ml = int(moneyline)
+                                    home_ml = int(-moneyline) if moneyline > 0 else int(100 * 100 / abs(moneyline))
+                                
+                                # theover_prob = HOME team win probability
+                                theover_prob = home_implied_prob
+                                home_spread = 1.5  # Standard puckline
+                                
+                            else:
+                                # Basketball/Football: Line is a point spread
+                                spread = abs(line_value)
+                                
+                                # Calculate probability from spread
+                                # Each point of spread ≈ 2.5-3% shift from 50%
+                                spread_shift = spread * 0.028  # ~2.8% per point
+                                
+                                # The pick is expected to COVER the spread
+                                # Positive line = underdog getting points (e.g., +13.5)
+                                # Negative line = favorite giving points (e.g., -7.5)
+                                
+                                if line_value > 0:
+                                    # Pick is underdog getting points
+                                    # They may lose outright but cover
+                                    pick_win_prob = max(0.20, 0.50 - spread_shift)
+                                else:
+                                    # Pick is favorite giving points  
+                                    pick_win_prob = min(0.80, 0.50 + spread_shift)
+                                
+                                # Determine home/away based on pick
+                                # CRITICAL: Calculate home_spread correctly based on whether pick is home or away
+                                pick_is_home = (pick == home_team) or (pick and (pick.lower() in home_team.lower() or home_team.lower() in pick.lower()))
+                                
+                                if pick_is_home:
+                                    # Pick is home team, so home_spread = line_value directly
+                                    home_implied_prob = pick_win_prob
+                                    home_spread = line_value
+                                else:
+                                    # Pick is away team, so home_spread = OPPOSITE of line_value
+                                    home_implied_prob = 1 - pick_win_prob
+                                    home_spread = -line_value  # Flip the sign!
+                                
+                                # theover_probability = home team win probability
+                                theover_prob = home_implied_prob
+                                
+                                # Calculate American odds from probability
+                                if home_implied_prob > 0.5:
+                                    home_ml = int(-100 * home_implied_prob / (1 - home_implied_prob))
+                                    away_ml = int(100 * (1 - home_implied_prob) / home_implied_prob)
+                                else:
+                                    home_ml = int(100 * (1 - home_implied_prob) / home_implied_prob)
+                                    away_ml = int(-100 * (1 - home_implied_prob) / home_implied_prob)
+                            
+                            all_games.append({
+                                'home_team': home_team,
+                                'away_team': away_team,
+                                'sport_key': sport_key,
+                                'league': league,
+                                'commence_time': None,
+                                # TheOver.ai specific data
+                                'theover_spread': line_value,  # Original line from CSV for the pick
+                                'theover_pick': pick,
+                                'theover_probability': theover_prob,  # Home team win probability
+                                'theover_line': line_value,  # Original line from CSV
+                                'is_moneyline': is_nhl,
+                                # Calculated odds
+                                'home_ml_odds': home_ml,
+                                'away_ml_odds': away_ml,
+                                # home_spread is the HOME team's spread (correctly calculated)
+                                'home_spread': home_spread if not is_nhl else 1.5,
+                                'implied_home_prob': home_implied_prob,
+                            })
+                        
+                        st.success(f"📊 Loaded {len(all_games)} games from theover.ai (spreads + NHL moneylines converted)")
                 
                 if not all_games:
-                    st.error("❌ No games found from TheOddsAPI")
-                    st.info("Check your API key and selected sports")
-                    st.stop()
-                
-                st.success(f"✅ Loaded {len(all_games)} total games from TheOddsAPI with real sportsbook lines")
-                
-                # =========================================================================
-                # SUPPLEMENTAL DATA: TheOver.ai Picks & Probabilities (NOT Lines!)
-                # Merge TheOver.ai picks/probabilities for consensus validation
-                # DO NOT use their Line column (unreliable signs)
-                # =========================================================================
-                theover_merged = 0
-                
-                if 'theover_spreads_data' in locals() and theover_spreads_data is not None and not theover_spreads_data.empty:
-                    st.info("🔄 Merging TheOver.ai picks & probabilities (consensus validation only)...")
-                    
-                    for game in all_games:
-                        home_team = game.get('home_team', '')
-                        away_team = game.get('away_team', '')
-                        
-                        # Find matching TheOver.ai row
-                        for _, row in theover_spreads_data.iterrows():
-                            theover_home = str(row.get('home_team') or row.get('HomeTeam') or '')
-                            theover_away = str(row.get('away_team') or row.get('AwayTeam') or '')
-                            
-                            # Fuzzy team name matching
-                            home_match = (home_team.lower() in theover_home.lower() or 
-                                         theover_home.lower() in home_team.lower())
-                            away_match = (away_team.lower() in theover_away.lower() or 
-                                         theover_away.lower() in away_team.lower())
-                            
-                            if home_match and away_match:
-                                # Get TheOver.ai pick and win probability
-                                theover_pick = str(row.get('Pick') or '')
-                                win_prob_pct = row.get('WinProbability', 50)
-                                
-                                try:
-                                    win_prob = float(win_prob_pct) / 100 if win_prob_pct > 1 else float(win_prob_pct)
-                                except:
-                                    win_prob = 0.5
-                                
-                                # Determine if pick is home team
-                                pick_is_home = (theover_pick.lower() in home_team.lower() or 
-                                               home_team.lower() in theover_pick.lower())
-                                
-                                # Convert to HOME team probability
-                                home_prob = win_prob if pick_is_home else (1.0 - win_prob)
-                                
-                                # Add TheOver.ai data to game (for consensus only!)
-                                game['theover_pick'] = theover_pick
-                                game['theover_probability'] = home_prob  # HOME team probability
-                                
-                                # DO NOT add theover_spread or theover_line!
-                                # Spreads come from TheOddsAPI bookmakers only!
-                                
-                                theover_merged += 1
-                                break  # Found match, move to next game
-                    
-                    st.success(f"✅ Merged TheOver.ai picks for {theover_merged}/{len(all_games)} games (using picks/probabilities, NOT their lines)")
+                    st.error("❌ No games found. Either:")
+                    st.write("- Configure The Odds API key in settings")
+                    st.write("- Upload theover.ai CSV files above")
                 else:
-                    st.info("ℹ️ No TheOver.ai data uploaded - using TheOddsAPI only")
-                
-                # =========================================================================
-                # Continue with analysis
-                # =========================================================================
-                st.info(f"🤖 Analyzing {len(all_games)} games across all selected sports...")
-                
-                # Get Kalshi integrator if available
-                kalshi_int = st.session_state.get('kalshi_integrator')
-                
-                # Get sentiment analyzer from session state
-                sentiment_analyzer = st.session_state.get('sentiment_analyzer')
-                
-                # Get ML predictor from session state
-                ml_predictor = st.session_state.get('ml_predictor')
-                
-                analyzer = VertexMasterAnalyzer(
-                    odds_api_client=odds_client if 'odds_client' in locals() else None,
-                    sportsdata_clients=sportsdata_clients if 'sportsdata_clients' in locals() else {},
-                    apisports_clients={
-                        'nba': basketball_client if 'basketball_client' in locals() else None,
-                        'nfl': apisports_client if 'apisports_client' in locals() else None,
-                        'nhl': hockey_client if 'hockey_client' in locals() else None,
-                    },
-                    sentiment_analyzer=sentiment_analyzer,  # From session_state
-                    local_ml_predictor=ml_predictor,  # From session_state
-                    theover_data={
-                        'spreads': theover_spreads_data if 'theover_spreads_data' in locals() else None,
-                        'totals': theover_totals_data if 'theover_totals_data' in locals() else None,
-                        'ml': theover_ml_data if 'theover_ml_data' in locals() else None,
-                    },
-                    kalshi_integrator=kalshi_int,
-                )
-                
-                results_df = analyzer.analyze_all_games(all_games, league='multi')
-                
-                if not results_df.empty:
-                    st.success(f"✅ Analysis complete! Found {len(results_df)} opportunities")
-                    show_vertex_master_analysis(results_df)
+                    st.info(f"🤖 Analyzing {len(all_games)} games across all selected sports...")
                     
-                    # Store results in session_state for Best Bets and Parlays
-                    vertex_results = []
-                    for _, row in results_df.iterrows():
-                        vertex_results.append({
-                            'home_team': row.get('home_team', ''),
-                            'away_team': row.get('away_team', ''),
-                            'league': row.get('league', ''),
+                    # Get Kalshi integrator if available
+                    kalshi_int = st.session_state.get('kalshi_integrator')
+                    
+                    # Get sentiment analyzer from session state
+                    sentiment_analyzer = st.session_state.get('sentiment_analyzer')
+                    
+                    # Get ML predictor from session state
+                    ml_predictor = st.session_state.get('ml_predictor')
+                    
+                    analyzer = VertexMasterAnalyzer(
+                        odds_api_client=odds_client if 'odds_client' in locals() else None,
+                        sportsdata_clients=sportsdata_clients if 'sportsdata_clients' in locals() else {},
+                        apisports_clients={
+                            'nba': basketball_client if 'basketball_client' in locals() else None,
+                            'nfl': apisports_client if 'apisports_client' in locals() else None,
+                            'nhl': hockey_client if 'hockey_client' in locals() else None,
+                        },
+                        sentiment_analyzer=sentiment_analyzer,  # From session_state
+                        local_ml_predictor=ml_predictor,  # From session_state
+                        theover_data={
+                            'spreads': theover_spreads_data if 'theover_spreads_data' in locals() else None,
+                            'totals': theover_totals_data if 'theover_totals_data' in locals() else None,
+                            'ml': theover_ml_data if 'theover_ml_data' in locals() else None,
+                        },
+                        kalshi_integrator=kalshi_int,
+                    )
+                    
+                    results_df = analyzer.analyze_all_games(all_games, league='multi')
+                    
+                    if not results_df.empty:
+                        st.success(f"✅ Analysis complete! Found {len(results_df)} opportunities")
+                        show_vertex_master_analysis(results_df)
+                        
+                        # Store results in session_state for Best Bets and Parlays
+                        vertex_results = []
+                        for _, row in results_df.iterrows():
+                            vertex_results.append({
+                                'home_team': row.get('home_team', ''),
+                                'away_team': row.get('away_team', ''),
+                                'league': row.get('league', ''),
                                 'vertex_prob': row.get('vertex_ai_prob', 0.5),
                                 # Calculate meaningful confidence: base 50% + (edge * 500) capped at 95%
                                 # Edge of 0.10 (10%) = 50 + 50 = 100% confidence
@@ -9849,7 +9349,7 @@ if is_vertex_ai_enabled():
                                 'sharp_money_indicator': row.get('sharp_money_indicator', 0),
                                 'home_ml_odds': row.get('home_ml_odds') or row.get('home_ml', 0),
                                 'away_ml_odds': row.get('away_ml_odds') or row.get('away_ml', 0),
-                                'spread': row.get('home_spread') or row.get('spread', 0) or 0,
+                                'spread': row.get('home_spread') or row.get('theover_spread') or row.get('spread', 0),
                                 'total': row.get('total_line') or row.get('total', 0),
                                 'implied_home_prob': row.get('implied_home_prob', 0.5),
                                 # Kalshi prediction market data
@@ -10188,1026 +9688,74 @@ if is_vertex_ai_enabled():
     render_saved_parlay_tracker(tracker_clients, user_timezone_label)
 
     st.markdown("---")
-    
-    # =====================================================
-    # RESULTS TRACKER - Check Previous Day's Best Bets
-    # =====================================================
-    st.subheader("📊 Results Tracker - Check Your Picks")
-    st.caption("Upload a previous day's best bets CSV to see which picks were accurate")
-    
-    with st.expander("📈 Track Previous Picks", expanded=False):
-        results_csv = st.file_uploader(
-            "Upload previous best_bets CSV",
-            type=['csv'],
-            key="results_tracker_upload",
-            help="Upload a best_bets CSV from a previous day to check results"
-        )
-        
-        if results_csv is not None:
-            try:
-                results_df = pd.read_csv(results_csv)
-                st.success(f"✅ Loaded {len(results_df)} picks from CSV")
-                
-                # Show the picks
-                st.write("**Your Picks:**")
-                display_cols = ['Rank', 'League', 'Game', 'THE PICK', 'AI Win %', 'Edge', 'Consensus']
-                display_cols = [c for c in display_cols if c in results_df.columns]
-                st.dataframe(results_df[display_cols].head(20), use_container_width=True, hide_index=True)
-                
-                st.markdown("---")
-                st.subheader("🎯 Enter Results")
-                st.info("Enter the final scores for each game to calculate accuracy")
-                
-                # Create editable results section
-                if 'tracked_results' not in st.session_state:
-                    st.session_state['tracked_results'] = {}
-                
-                results_data = []
-                
-                for idx, row in results_df.iterrows():
-                    game = row.get('Game', '')
-                    pick = row.get('THE PICK', '')
-                    league = row.get('League', '')
-                    ai_win_pct = row.get('AI Win %', 50)
-                    edge = row.get('Edge', 0)
-                    
-                    if not game or '@' not in game:
-                        continue
-                    
-                    # Parse teams
-                    parts = game.split('@')
-                    if len(parts) != 2:
-                        continue
-                    away_team = parts[0].strip()
-                    home_team = parts[1].strip()
-                    
-                    # Parse pick info
-                    pick_str = str(pick)
-                    pick_team = pick_str.split('+')[0].split('-')[0].strip() if pick_str else ''
-                    
-                    # Check if spread pick
-                    is_spread_pick = '+' in pick_str or (('-' in pick_str) and any(c.isdigit() for c in pick_str.split('-')[-1]))
-                    spread_value = 0
-                    if is_spread_pick:
-                        try:
-                            # Extract spread number
-                            if '+' in pick_str:
-                                spread_value = float(pick_str.split('+')[-1])
-                            elif '-' in pick_str:
-                                parts = pick_str.split('-')
-                                if len(parts) > 1 and parts[-1].replace('.', '').isdigit():
-                                    spread_value = -float(parts[-1])
-                        except:
-                            spread_value = 0
-                    
-                    # Determine if pick is home or away
-                    pick_is_home = pick_team.lower() in home_team.lower() or home_team.lower() in pick_team.lower()
-                    
-                    # Create unique key for this game
-                    game_key = f"{away_team}_{home_team}_{idx}"
-                    
-                    with st.container():
-                        col1, col2, col3, col4, col5 = st.columns([2, 1, 1, 1, 1])
-                        
-                        with col1:
-                            st.write(f"**{league}:** {game}")
-                            st.caption(f"Pick: {pick} (AI: {ai_win_pct}%)")
-                        
-                        with col2:
-                            away_score = st.number_input(
-                                f"{away_team[:10]}",
-                                min_value=0,
-                                max_value=200,
-                                value=st.session_state.get(f"away_{game_key}", 0),
-                                key=f"away_score_{game_key}"
-                            )
-                            st.session_state[f"away_{game_key}"] = away_score
-                        
-                        with col3:
-                            home_score = st.number_input(
-                                f"{home_team[:10]}",
-                                min_value=0,
-                                max_value=200,
-                                value=st.session_state.get(f"home_{game_key}", 0),
-                                key=f"home_score_{game_key}"
-                            )
-                            st.session_state[f"home_{game_key}"] = home_score
-                        
-                        with col4:
-                            # Determine winner
-                            if away_score > 0 or home_score > 0:
-                                if is_spread_pick:
-                                    # ATS (Against the Spread) calculation
-                                    if pick_is_home:
-                                        adjusted_score = home_score + spread_value
-                                        pick_won = adjusted_score > away_score
-                                        result_str = f"{home_score}{spread_value:+.1f}={adjusted_score:.1f} vs {away_score}"
-                                    else:
-                                        adjusted_score = away_score + spread_value
-                                        pick_won = adjusted_score > home_score
-                                        result_str = f"{away_score}{spread_value:+.1f}={adjusted_score:.1f} vs {home_score}"
-                                else:
-                                    # Moneyline
-                                    if pick_is_home:
-                                        pick_won = home_score > away_score
-                                    else:
-                                        pick_won = away_score > home_score
-                                    result_str = f"{away_score}-{home_score}"
-                                
-                                if pick_won:
-                                    st.success("✅ WIN")
-                                else:
-                                    st.error("❌ LOSS")
-                            else:
-                                pick_won = None
-                                result_str = "No score"
-                                st.write("—")
-                        
-                        with col5:
-                            if away_score > 0 or home_score > 0:
-                                st.caption(result_str)
-                        
-                        # Store result
-                        results_data.append({
-                            'Game': game,
-                            'Pick': pick,
-                            'League': league,
-                            'AI Win %': ai_win_pct,
-                            'Edge': edge,
-                            'Away Score': away_score,
-                            'Home Score': home_score,
-                            'Pick Won': pick_won,
-                            'Spread Pick': is_spread_pick,
-                        })
-                    
-                    st.markdown("---")
-                
-                # Calculate accuracy stats
-                if results_data:
-                    st.subheader("📈 Accuracy Summary")
-                    
-                    scored_games = [r for r in results_data if r['Pick Won'] is not None]
-                    
-                    if scored_games:
-                        total_scored = len(scored_games)
-                        wins = sum(1 for r in scored_games if r['Pick Won'])
-                        losses = total_scored - wins
-                        win_pct = (wins / total_scored * 100) if total_scored > 0 else 0
-                        
-                        col1, col2, col3, col4 = st.columns(4)
-                        with col1:
-                            st.metric("Total Picks", total_scored)
-                        with col2:
-                            st.metric("Wins", wins, delta=None)
-                        with col3:
-                            st.metric("Losses", losses, delta=None)
-                        with col4:
-                            delta_color = "normal" if win_pct >= 52.4 else "inverse"
-                            st.metric("Win Rate", f"{win_pct:.1f}%", 
-                                     delta=f"{win_pct - 52.4:.1f}% vs breakeven" if win_pct != 0 else None,
-                                     delta_color=delta_color)
-                        
-                        # Breakdown by confidence
-                        st.markdown("---")
-                        st.write("**Accuracy by AI Confidence:**")
-                        
-                        high_conf = [r for r in scored_games if r['AI Win %'] >= 65]
-                        med_conf = [r for r in scored_games if 55 <= r['AI Win %'] < 65]
-                        low_conf = [r for r in scored_games if r['AI Win %'] < 55]
-                        
-                        breakdown_col1, breakdown_col2, breakdown_col3 = st.columns(3)
-                        
-                        with breakdown_col1:
-                            if high_conf:
-                                high_wins = sum(1 for r in high_conf if r['Pick Won'])
-                                high_pct = high_wins / len(high_conf) * 100
-                                st.metric("High Conf (65%+)", f"{high_wins}/{len(high_conf)} ({high_pct:.0f}%)")
-                            else:
-                                st.metric("High Conf (65%+)", "0 picks")
-                        
-                        with breakdown_col2:
-                            if med_conf:
-                                med_wins = sum(1 for r in med_conf if r['Pick Won'])
-                                med_pct = med_wins / len(med_conf) * 100
-                                st.metric("Med Conf (55-65%)", f"{med_wins}/{len(med_conf)} ({med_pct:.0f}%)")
-                            else:
-                                st.metric("Med Conf (55-65%)", "0 picks")
-                        
-                        with breakdown_col3:
-                            if low_conf:
-                                low_wins = sum(1 for r in low_conf if r['Pick Won'])
-                                low_pct = low_wins / len(low_conf) * 100
-                                st.metric("Low Conf (<55%)", f"{low_wins}/{len(low_conf)} ({low_pct:.0f}%)")
-                            else:
-                                st.metric("Low Conf (<55%)", "0 picks")
-                        
-                        # Breakdown by Edge
-                        st.write("**Accuracy by Edge:**")
-                        
-                        pos_edge = [r for r in scored_games if float(r.get('Edge', 0) or 0) > 0]
-                        neg_edge = [r for r in scored_games if float(r.get('Edge', 0) or 0) <= 0]
-                        
-                        edge_col1, edge_col2 = st.columns(2)
-                        
-                        with edge_col1:
-                            if pos_edge:
-                                pos_wins = sum(1 for r in pos_edge if r['Pick Won'])
-                                pos_pct = pos_wins / len(pos_edge) * 100
-                                st.metric("Positive Edge Picks", f"{pos_wins}/{len(pos_edge)} ({pos_pct:.0f}%)")
-                            else:
-                                st.metric("Positive Edge Picks", "0 picks")
-                        
-                        with edge_col2:
-                            if neg_edge:
-                                neg_wins = sum(1 for r in neg_edge if r['Pick Won'])
-                                neg_pct = neg_wins / len(neg_edge) * 100
-                                st.metric("Negative Edge Picks", f"{neg_wins}/{len(neg_edge)} ({neg_pct:.0f}%)")
-                            else:
-                                st.metric("Negative Edge Picks", "0 picks")
-                        
-                        # Breakdown by League
-                        st.write("**Accuracy by League:**")
-                        leagues = set(r['League'] for r in scored_games)
-                        league_cols = st.columns(min(len(leagues), 4))
-                        
-                        for i, league in enumerate(sorted(leagues)):
-                            league_games = [r for r in scored_games if r['League'] == league]
-                            league_wins = sum(1 for r in league_games if r['Pick Won'])
-                            league_pct = league_wins / len(league_games) * 100 if league_games else 0
-                            
-                            with league_cols[i % len(league_cols)]:
-                                st.metric(league, f"{league_wins}/{len(league_games)} ({league_pct:.0f}%)")
-                        
-                        # ROI calculation (assuming -110 odds)
-                        st.markdown("---")
-                        st.write("**Estimated ROI (assuming -110 odds):**")
-                        
-                        # Standard -110 odds: risk 110 to win 100
-                        total_risked = total_scored * 110
-                        total_won = wins * 100
-                        total_lost = losses * 110
-                        net_profit = total_won - total_lost
-                        roi = (net_profit / total_risked) * 100 if total_risked > 0 else 0
-                        
-                        roi_col1, roi_col2, roi_col3 = st.columns(3)
-                        with roi_col1:
-                            st.metric("Units Risked", f"{total_scored * 1.1:.1f}u")
-                        with roi_col2:
-                            profit_color = "normal" if net_profit >= 0 else "inverse"
-                            st.metric("Net Profit", f"{net_profit/100:+.2f}u", delta_color=profit_color)
-                        with roi_col3:
-                            roi_color = "normal" if roi >= 0 else "inverse"
-                            st.metric("ROI", f"{roi:+.1f}%", delta_color=roi_color)
-                    
-                    else:
-                        st.info("Enter scores above to see accuracy stats")
-                
-            except Exception as e:
-                st.error(f"Error loading CSV: {e}")
-                import traceback
-                st.code(traceback.format_exc())
+    st.subheader("🏆 Best Overall Odds for Date Range")
 
-    # =====================================================
-    # ML MODEL TRAINING CENTER (API-SPORTS)
-    # =====================================================
-    st.subheader("🧠 ML Model Training Center")
-    st.caption("Collect data, train model, and deploy to GCP Vertex AI - all from here!")
-    
-    # API-Sports Configuration
-    API_SPORTS_URLS = {
-        "NBA": "https://v1.basketball.api-sports.io",
-        "NCAAB": "https://v1.basketball.api-sports.io",
-        "NHL": "https://v1.hockey.api-sports.io",
-        "NFL": "https://v1.american-football.api-sports.io",
-        "NCAAF": "https://v1.american-football.api-sports.io",
-    }
-    LEAGUE_IDS = {"NBA": 12, "NCAAB": 116, "NHL": 57, "NFL": 1, "NCAAF": 2}
-    
-    # Your API-Sports key (hardcoded as fallback)
-    HARDCODED_API_KEY = "07972c891e3d56fbc6298b5c2a07b152"
-    
-    # Get API keys from session state (sport-specific) with hardcoded fallback
-    def get_api_key_for_sport(sport):
-        """Get the appropriate API-Sports key for a sport"""
-        # Try session state first
-        if sport == "NBA":
-            key = st.session_state.get('nba_apisports_api_key', '')
-        elif sport == "NCAAB":
-            key = st.session_state.get('nba_apisports_api_key', '')
-        elif sport == "NHL":
-            key = st.session_state.get('nhl_apisports_api_key', '')
-        elif sport in ["NFL", "NCAAF"]:
-            key = st.session_state.get('nfl_apisports_api_key', '')
-        else:
-            key = ''
-        
-        # If no key in session state, use hardcoded fallback
-        if not key:
-            key = HARDCODED_API_KEY
-        
-        return key
-    
-    FEATURE_NAMES = [
-        "home_win_pct", "away_win_pct", "home_avg_points", "away_avg_points",
-        "home_def_rating", "away_def_rating", "spread_normalized",
-        "home_last_5", "away_last_5", "home_home_record", "away_away_record",
-        "head_to_head", "rest_advantage", "injuries_impact", "weather_factor",
-        "public_betting_pct", "sharp_money_indicator", "line_movement",
-        "total_movement", "model_consensus", "theover_probability",
-        "implied_home_prob", "home_streak", "away_streak", "division_game",
-        "back_to_back", "primetime_game",
-    ]
-    
-    with st.expander("📥 Step 1: Collect Training Data (API-Sports)", expanded=False):
-        st.write("**Collect completed games with real stats from API-Sports**")
-        
-        # Show which API keys are configured
-        st.write("**API Keys Status:**")
-        key_cols = st.columns(4)
-        with key_cols[0]:
-            nba_key = get_api_key_for_sport("NBA")
-            if nba_key:
-                st.success(f"✅ NBA: {nba_key[:8]}...")
-            else:
-                st.error("❌ NBA key missing")
-        with key_cols[1]:
-            nhl_key = get_api_key_for_sport("NHL")
-            if nhl_key:
-                st.success(f"✅ NHL: {nhl_key[:8]}...")
-            else:
-                st.error("❌ NHL key missing")
-        with key_cols[2]:
-            nfl_key = get_api_key_for_sport("NFL")
-            if nfl_key:
-                st.success(f"✅ NFL: {nfl_key[:8]}...")
-            else:
-                st.error("❌ NFL key missing")
-        with key_cols[3]:
-            st.info("NCAAB uses NBA key")
-        
-        # Debug: Test API connection
-        if st.checkbox("🔧 Debug: Test API Connection", key="debug_api"):
-            api_key = get_api_key_for_sport("NBA")
-            st.write(f"Testing with key: `{api_key[:12]}...`")
-            
-            # Test leagues endpoint
-            try:
-                resp = requests.get(
-                    "https://v1.basketball.api-sports.io/leagues",
-                    headers={"x-apisports-key": api_key},
-                    timeout=30
-                )
-                st.write(f"**Leagues Response:** Status {resp.status_code}")
-                
-                if resp.status_code == 200:
-                    data = resp.json()
-                    st.write(f"Total leagues: {data.get('results', 0)}")
-                    st.write(f"Errors: {data.get('errors', {})}")
-                    
-                    # Find NBA-related leagues
-                    leagues = data.get("response", [])
-                    nba_leagues = [l for l in leagues if "NBA" in l.get("name", "").upper()]
-                    
-                    if nba_leagues:
-                        st.success("**NBA Leagues Found:**")
-                        for lg in nba_leagues[:10]:
-                            lg_id = lg.get('id')
-                            lg_name = lg.get('name')
-                            lg_country = lg.get('country', {}).get('name', 'N/A')
-                            seasons = lg.get('seasons', [])
-                            latest_season = seasons[-1].get('season') if seasons else 'N/A'
-                            st.write(f"  • **ID: {lg_id}** - {lg_name} ({lg_country}) - Latest season: {latest_season}")
-                    else:
-                        st.warning("No NBA leagues found. First 15 leagues:")
-                        for lg in leagues[:15]:
-                            st.write(f"  • ID: {lg.get('id')}, Name: {lg.get('name')}")
-                else:
-                    st.error(f"API Error: {resp.text[:300]}")
-                    
-            except Exception as e:
-                st.error(f"Connection error: {e}")
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            collect_days = st.number_input(
-                "Days to look back",
-                min_value=7,
-                max_value=180,
-                value=60,
-                help="More days = more training data = better model"
-            )
-        with col2:
-            collect_sports = st.multiselect(
-                "Sports to collect",
-                options=["NBA", "NHL", "NCAAB", "NFL", "NCAAF"],
-                default=["NBA", "NHL"],
-                help="Select sports to include"
-            )
-        
-        st.write(f"**Estimated games:** ~{collect_days * len(collect_sports) * 8} games")
-        
-        # Data source selection
-        st.write("**Choose Data Source:**")
-        source_col1, source_col2 = st.columns(2)
-        
-        with source_col1:
-            if st.button("🎯 TheOddsAPI (Current Season)", type="primary", use_container_width=True, key="collect_odds"):
-                odds_key = st.session_state.get('api_key', '') or os.environ.get('ODDS_API_KEY', '')
-                if not odds_key:
-                    st.error("❌ TheOddsAPI key not configured!")
-                elif not collect_sports:
-                    st.error("❌ Select at least one sport!")
-                else:
-                    # Collect from TheOddsAPI
-                    all_games = []
-                    progress_bar = st.progress(0)
-                    status_text = st.empty()
-                    log_area = st.empty()
-                    logs = []
-                    
-                    sport_key_map = {
-                        "NBA": "basketball_nba",
-                        "NHL": "icehockey_nhl",
-                        "NCAAB": "basketball_ncaab",
-                        "NCAAF": "americanfootball_ncaaf",
-                        "NFL": "americanfootball_nfl",
-                    }
-                    
-                    for sport_idx, sport in enumerate(collect_sports):
-                        logs.append(f"🏀 Fetching {sport} from TheOddsAPI...")
-                        log_area.code("\n".join(logs[-10:]))
-                        status_text.text(f"Collecting {sport}...")
-                        
-                        sport_key = sport_key_map.get(sport, "")
-                        if not sport_key:
-                            logs.append(f"  ⚠️ Unknown sport key for {sport}")
-                            continue
-                        
-                        try:
-                            # TheOddsAPI scores endpoint - gets last 3 days
-                            url = f"https://api.the-odds-api.com/v4/sports/{sport_key}/scores"
-                            params = {
-                                "apiKey": odds_key,
-                                "daysFrom": 3,  # API max is 3 days
-                            }
-                            resp = requests.get(url, params=params, timeout=30)
-                            
-                            if resp.status_code == 200:
-                                scores = resp.json()
-                                remaining = resp.headers.get('x-requests-remaining', 'N/A')
-                                logs.append(f"  Found {len(scores)} games (API remaining: {remaining})")
-                                log_area.code("\n".join(logs[-10:]))
-                                
-                                completed = 0
-                                for game in scores:
-                                    if not game.get("completed", False):
-                                        continue
-                                    
-                                    home_team = game.get("home_team", "")
-                                    away_team = game.get("away_team", "")
-                                    
-                                    home_score = 0
-                                    away_score = 0
-                                    for score in game.get("scores", []):
-                                        if score.get("name") == home_team:
-                                            home_score = int(score.get("score", 0) or 0)
-                                        elif score.get("name") == away_team:
-                                            away_score = int(score.get("score", 0) or 0)
-                                    
-                                    if home_team and away_team and (home_score > 0 or away_score > 0):
-                                        game_date = game.get("commence_time", "")[:10]
-                                        
-                                        # Simple feature estimation based on scores
-                                        home_win_pct = 0.55 if home_score > away_score else 0.45
-                                        away_win_pct = 1 - home_win_pct
-                                        
-                                        all_games.append({
-                                            "game_id": game.get("id", f"{game_date}_{home_team}_{away_team}"),
-                                            "date": game_date,
-                                            "sport": sport,
-                                            "season": "2025-2026",
-                                            "home_team": home_team,
-                                            "away_team": away_team,
-                                            "home_score": home_score,
-                                            "away_score": away_score,
-                                            "home_won": 1 if home_score > away_score else 0,
-                                            "home_win_pct": home_win_pct,
-                                            "away_win_pct": away_win_pct,
-                                            "home_avg_points": 0.5,
-                                            "away_avg_points": 0.5,
-                                            "home_def_rating": 0.5,
-                                            "away_def_rating": 0.5,
-                                            "spread_normalized": 0.5,
-                                            "home_last_5": 0.5,
-                                            "away_last_5": 0.5,
-                                            "home_home_record": 0.5,
-                                            "away_away_record": 0.5,
-                                            "head_to_head": 0.5,
-                                            "rest_advantage": 0,
-                                            "injuries_impact": 0,
-                                            "weather_factor": 0,
-                                            "public_betting_pct": 0.5,
-                                            "sharp_money_indicator": 0,
-                                            "line_movement": 0,
-                                            "total_movement": 0,
-                                            "model_consensus": 0.5,
-                                            "theover_probability": home_win_pct,
-                                            "implied_home_prob": home_win_pct,
-                                            "home_streak": 0,
-                                            "away_streak": 0,
-                                            "division_game": 0,
-                                            "back_to_back": 0,
-                                            "primetime_game": 0,
-                                        })
-                                        completed += 1
-                                
-                                logs.append(f"  ✅ {completed} completed games added")
-                            else:
-                                logs.append(f"  ❌ API Error: {resp.status_code}")
-                            
-                            log_area.code("\n".join(logs[-10:]))
-                            
-                        except Exception as e:
-                            logs.append(f"  ❌ Error: {str(e)}")
-                            log_area.code("\n".join(logs[-10:]))
-                        
-                        progress_bar.progress((sport_idx + 1) / len(collect_sports))
-                        time.sleep(0.5)
-                    
-                    progress_bar.progress(1.0)
-                    
-                    if all_games:
-                        df = pd.DataFrame(all_games)
-                        
-                        # Append to existing or create new
-                        if 'training_data' in st.session_state:
-                            existing = st.session_state['training_data']
-                            combined = pd.concat([existing, df], ignore_index=True)
-                            combined = combined.drop_duplicates(subset=['game_id'], keep='last')
-                            st.session_state['training_data'] = combined
-                            df = combined
-                        else:
-                            st.session_state['training_data'] = df
-                        
-                        st.success(f"✅ Collected {len(all_games)} current season games! Total: {len(df)}")
-                        logs.append(f"✅ Total games in dataset: {len(df)}")
-                        log_area.code("\n".join(logs[-10:]))
-                    else:
-                        st.warning("No completed games found. Try again tomorrow for more games.")
-        
-        with source_col2:
-            st.caption("⚠️ API-Sports free plan = historical only")
-        
-        if st.button("📚 API-Sports (Historical 2024-2025)", use_container_width=True, key="collect_apisports"):
-            if not collect_sports:
-                st.error("❌ Select at least one sport!")
-            else:
-                # Helper functions
-                def calculate_win_pct(wins, losses, default=0.5):
-                    total = (wins or 0) + (losses or 0)
-                    return (wins or 0) / total if total > 0 else default
-                
-                def normalize_points(points, sport):
-                    ranges = {"NBA": (90, 130), "NCAAB": (50, 90), "NHL": (1.5, 4.5), "NFL": (14, 35), "NCAAF": (14, 45)}
-                    min_pts, max_pts = ranges.get(sport, (0, 100))
-                    if points is None:
-                        return 0.5
-                    return np.clip((float(points) - min_pts) / (max_pts - min_pts), 0, 1)
-                
-                def api_request(sport, endpoint, params=None):
-                    """Make API-Sports request with sport-specific key"""
-                    base_url = API_SPORTS_URLS.get(sport, "")
-                    api_key = get_api_key_for_sport(sport)
-                    url = f"{base_url}/{endpoint}"
-                    headers = {"x-apisports-key": api_key}
-                    
-                    try:
-                        resp = requests.get(url, headers=headers, params=params, timeout=30)
-                        remaining = resp.headers.get('x-ratelimit-requests-remaining', 'N/A')
-                        
-                        if resp.status_code == 200:
-                            data = resp.json()
-                            errors = data.get("errors", {})
-                            results_count = data.get("results", 0)
-                            
-                            # Show any API errors
-                            if errors and (isinstance(errors, dict) and errors or isinstance(errors, list) and len(errors) > 0):
-                                return [], f"API Error: {errors}"
-                            
-                            response_data = data.get("response", [])
-                            return response_data, f"OK ({results_count} results, {remaining} remaining)"
-                        else:
-                            return [], f"HTTP {resp.status_code}"
-                    except Exception as e:
-                        return [], f"Exception: {str(e)}"
-                
-                all_games = []
-                progress_bar = st.progress(0)
-                status_text = st.empty()
-                log_area = st.empty()
-                logs = []
-                
-                end_date = datetime.now() - timedelta(days=1)
-                start_date = end_date - timedelta(days=collect_days)
-                
-                total_sports = len(collect_sports)
-                
-                for sport_idx, sport in enumerate(collect_sports):
-                    status_text.text(f"📊 Collecting {sport}...")
-                    logs.append(f"🏀 Starting {sport}...")
-                    log_area.code("\n".join(logs[-15:]))
-                    
-                    league_id = LEAGUE_IDS.get(sport)
-                    api_key = get_api_key_for_sport(sport)
-                    
-                    logs.append(f"  API Key: {api_key[:12]}..." if api_key else "  ❌ No API key!")
-                    log_area.code("\n".join(logs[-15:]))
-                    
-                    # Try multiple seasons - free plan may only have old data
-                    if sport in ["NBA", "NCAAB", "NHL"]:
-                        seasons_to_try = ["2023-2024", "2022-2023", "2021-2022", "2020-2021"]
-                    else:
-                        seasons_to_try = ["2023", "2022", "2021", "2020"]
-                    
-                    # Try each season until we find one with data
-                    games = []
-                    standings = {}
-                    season = seasons_to_try[0]
-                    
-                    for try_season in seasons_to_try:
-                        logs.append(f"  Trying season: {try_season}...")
-                        log_area.code("\n".join(logs[-15:]))
-                        
-                        test_games, test_status = api_request(sport, "games", {"season": try_season, "league": league_id})
-                        
-                        if test_games and len(test_games) > 0 and "Error" not in test_status:
-                            season = try_season
-                            games = test_games
-                            logs.append(f"  ✅ Found {len(games)} games in {season}!")
-                            log_area.code("\n".join(logs[-15:]))
-                            
-                            # Get standings for this season
-                            standings_data, standings_status = api_request(sport, "standings", {"season": season, "league": league_id})
-                            if standings_data:
-                                for item in standings_data:
-                                    if isinstance(item, list):
-                                        for team in item:
-                                            team_id = team.get("team", {}).get("id")
-                                            if team_id:
-                                                standings[team_id] = team
-                                    elif isinstance(item, dict):
-                                        team_id = item.get("team", {}).get("id")
-                                        if team_id:
-                                            standings[team_id] = item
-                            break
-                        else:
-                            logs.append(f"  ❌ {try_season}: {test_status}")
-                            log_area.code("\n".join(logs[-15:]))
-                    
-                    logs.append(f"  Using season: {season}, Found {len(standings)} teams")
-                    log_area.code("\n".join(logs[-15:]))
-                    
-                    if not games:
-                        logs.append(f"  ⚠️ No games found in any season - skipping {sport}")
-                        log_area.code("\n".join(logs[-10:]))
-                        progress_bar.progress((sport_idx + 1) / total_sports)
-                        continue
-                    
-                    logs.append(f"  Processing {len(games)} total games...")
-                    log_area.code("\n".join(logs[-10:]))
-                    
-                    completed = 0
-                    max_games_per_sport = 500  # Limit to avoid too much data
-                    for game in games:
-                        if completed >= max_games_per_sport:
-                            logs.append(f"  ⚠️ Hit limit of {max_games_per_sport} games")
-                            log_area.code("\n".join(logs[-10:]))
-                            break
-                        # Check status (FT = Full Time, AOT = After OT)
-                        status = game.get("status", {})
-                        status_short = status.get("short", "")
-                        if status_short not in ["FT", "AOT", "AET", "AP"]:
-                            continue
-                        
-                        # Get date
-                        game_date_str = game.get("date", "")
-                        if not game_date_str:
-                            continue
-                        
-                        # No date filtering for historical seasons - take all completed games
-                        
-                        # Get teams
-                        teams = game.get("teams", {})
-                        home_data = teams.get("home", {})
-                        away_data = teams.get("away", {})
-                        home_name = home_data.get("name", "")
-                        away_name = away_data.get("name", "")
-                        home_id = home_data.get("id")
-                        away_id = away_data.get("id")
-                        
-                        if not home_name or not away_name:
-                            continue
-                        
-                        # Get scores
-                        scores = game.get("scores", {})
-                        if sport in ["NBA", "NCAAB"]:
-                            home_score = scores.get("home", {}).get("total", 0) or 0
-                            away_score = scores.get("away", {}).get("total", 0) or 0
-                        elif sport == "NHL":
-                            home_score = scores.get("home", 0) or 0
-                            away_score = scores.get("away", 0) or 0
-                        else:
-                            home_score = scores.get("home", {}).get("total", 0) or 0
-                            away_score = scores.get("away", {}).get("total", 0) or 0
-                        
-                        if home_score == 0 and away_score == 0:
-                            continue
-                        
-                        # Get standings data for each team
-                        home_standing = standings.get(home_id, {})
-                        away_standing = standings.get(away_id, {})
-                        
-                        # Extract features from standings
-                        home_games = home_standing.get("games", {})
-                        away_games = away_standing.get("games", {})
-                        
-                        if sport in ["NBA", "NCAAB"]:
-                            home_wins = home_games.get("win", {}).get("total", 0) or 0
-                            home_losses = home_games.get("lose", {}).get("total", 0) or 0
-                            away_wins = away_games.get("win", {}).get("total", 0) or 0
-                            away_losses = away_games.get("lose", {}).get("total", 0) or 0
-                            h_h_w = home_games.get("win", {}).get("home", 0) or 0
-                            h_h_l = home_games.get("lose", {}).get("home", 0) or 0
-                            a_a_w = away_games.get("win", {}).get("away", 0) or 0
-                            a_a_l = away_games.get("lose", {}).get("away", 0) or 0
-                        else:
-                            home_wins = home_standing.get("won", 0) or 0
-                            home_losses = home_standing.get("lost", 0) or 0
-                            away_wins = away_standing.get("won", 0) or 0
-                            away_losses = away_standing.get("lost", 0) or 0
-                            h_h_w = home_wins // 2
-                            h_h_l = home_losses // 2
-                            a_a_w = away_wins // 2
-                            a_a_l = away_losses // 2
-                        
-                        home_win_pct = calculate_win_pct(home_wins, home_losses)
-                        away_win_pct = calculate_win_pct(away_wins, away_losses)
-                        
-                        # Form (last 5)
-                        home_form = home_standing.get("form", "") or ""
-                        away_form = away_standing.get("form", "") or ""
-                        home_last_5 = home_form[-5:].count("W") / 5 if home_form else home_win_pct
-                        away_last_5 = away_form[-5:].count("W") / 5 if away_form else away_win_pct
-                        
-                        # Points (normalized)
-                        if sport in ["NBA", "NCAAB"]:
-                            home_pts = home_standing.get("points", {}).get("for", 100) or 100
-                            away_pts = away_standing.get("points", {}).get("for", 100) or 100
-                            home_def = home_standing.get("points", {}).get("against", 100) or 100
-                            away_def = away_standing.get("points", {}).get("against", 100) or 100
-                        else:
-                            home_pts = 3 if sport == "NHL" else 24
-                            away_pts = 3 if sport == "NHL" else 24
-                            home_def = 3 if sport == "NHL" else 24
-                            away_def = 3 if sport == "NHL" else 24
-                        
-                        # Build game record with all 27 features
-                        game_record = {
-                            "game_id": game.get("id", f"{game_date_str[:10]}_{home_name}_{away_name}"),
-                            "date": game_date_str[:10],
-                            "sport": sport,
-                            "season": season,
-                            "home_team": home_name,
-                            "away_team": away_name,
-                            "home_score": home_score,
-                            "away_score": away_score,
-                            "home_won": 1 if home_score > away_score else 0,
-                            # 27 Features
-                            "home_win_pct": home_win_pct,
-                            "away_win_pct": away_win_pct,
-                            "home_avg_points": normalize_points(home_pts, sport),
-                            "away_avg_points": normalize_points(away_pts, sport),
-                            "home_def_rating": normalize_points(home_def, sport),
-                            "away_def_rating": normalize_points(away_def, sport),
-                            "spread_normalized": 0.5,
-                            "home_last_5": home_last_5,
-                            "away_last_5": away_last_5,
-                            "home_home_record": calculate_win_pct(h_h_w, h_h_l),
-                            "away_away_record": calculate_win_pct(a_a_w, a_a_l),
-                            "head_to_head": 0.5,
-                            "rest_advantage": 0,
-                            "injuries_impact": 0,
-                            "weather_factor": 0,
-                            "public_betting_pct": 0.5,
-                            "sharp_money_indicator": 0,
-                            "line_movement": 0,
-                            "total_movement": 0,
-                            "model_consensus": 0.5,
-                            "theover_probability": home_win_pct,
-                            "implied_home_prob": home_win_pct,
-                            "home_streak": 0,
-                            "away_streak": 0,
-                            "division_game": 0,
-                            "back_to_back": 0,
-                            "primetime_game": 0,
-                        }
-                        
-                        all_games.append(game_record)
-                        completed += 1
-                    
-                    logs.append(f"  ✅ {completed} completed games in date range")
-                    log_area.code("\n".join(logs[-10:]))
-                    
-                    progress_bar.progress((sport_idx + 1) / total_sports)
-                    time.sleep(1)  # Rate limiting
-                
-                progress_bar.progress(1.0)
-                
-                if all_games:
-                    df = pd.DataFrame(all_games)
-                    st.session_state['training_data'] = df
-                    
-                    st.success(f"✅ Collected {len(df)} games!")
-                    
-                    summary_cols = st.columns(4)
-                    with summary_cols[0]:
-                        st.metric("Total Games", len(df))
-                    with summary_cols[1]:
-                        st.metric("Home Win Rate", f"{df['home_won'].mean():.1%}")
-                    with summary_cols[2]:
-                        st.metric("Sports", df['sport'].nunique())
-                    with summary_cols[3]:
-                        st.metric("Date Range", f"{df['date'].min()[:10]} to {df['date'].max()[:10]}")
-                    
-                    st.write("**By Sport:**")
-                    for sport in df['sport'].unique():
-                        sg = df[df['sport'] == sport]
-                        st.write(f"  • {sport}: {len(sg)} games ({sg['home_won'].mean():.1%} home win)")
-                else:
-                    st.warning("No games found. API-Sports may be rate limited or no games in date range.")
-        
-        # Show existing data
-        if 'training_data' in st.session_state and len(st.session_state['training_data']) > 0:
-            st.markdown("---")
-            df = st.session_state['training_data']
-            st.success(f"📊 **{len(df)} games ready for training**")
-            
-            col1, col2 = st.columns(2)
-            with col1:
-                if st.checkbox("Show sample data", key="show_sample"):
-                    st.dataframe(df.head(10), use_container_width=True)
-            with col2:
-                csv_data = df.to_csv(index=False)
-                st.download_button(
-                    "⬇️ Download CSV",
-                    data=csv_data,
-                    file_name=f"training_data_{datetime.now().strftime('%Y%m%d')}.csv",
-                    mime="text/csv"
-                )
-            
-            if st.button("🗑️ Clear Data", key="clear_data"):
-                del st.session_state['training_data']
-                st.rerun()
-    
-    with st.expander("🎯 Step 2: Train & Deploy Model", expanded=False):
-        if 'training_data' not in st.session_state or len(st.session_state.get('training_data', [])) == 0:
-            st.warning("⚠️ No training data. Complete Step 1 first!")
-        else:
-            df = st.session_state['training_data']
-            st.success(f"📊 {len(df)} games available for training")
-            
-            min_games = 100
-            if len(df) < min_games:
-                st.warning(f"⚠️ Recommend at least {min_games} games. You have {len(df)}. Collect more data for better results.")
-            
-            st.write("**Training Configuration:**")
-            col1, col2 = st.columns(2)
-            with col1:
-                test_size = st.slider("Test set size", 0.1, 0.3, 0.2, 0.05)
-            with col2:
-                n_estimators = st.slider("Trees (n_estimators)", 50, 300, 150, 50)
-            
-            if st.button("🚀 Train XGBoost Model", type="primary", use_container_width=True, key="train_model"):
-                with st.spinner("Training model..."):
-                    try:
-                        from sklearn.model_selection import train_test_split
-                        from sklearn.metrics import accuracy_score, roc_auc_score, classification_report
-                        import xgboost as xgb
-                        import joblib
-                        
-                        # Prepare features
-                        X = df[FEATURE_NAMES].values
-                        y = df['home_won'].values
-                        
-                        # Split
-                        X_train, X_test, y_train, y_test = train_test_split(
-                            X, y, test_size=test_size, random_state=42, stratify=y
-                        )
-                        
-                        st.write(f"Training: {len(X_train)} games, Testing: {len(X_test)} games")
-                        
-                        # Train
-                        model = xgb.XGBClassifier(
-                            n_estimators=n_estimators,
-                            max_depth=6,
-                            learning_rate=0.05,
-                            subsample=0.8,
-                            colsample_bytree=0.8,
-                            random_state=42,
-                            use_label_encoder=False,
-                            eval_metric='logloss'
-                        )
-                        
-                        model.fit(X_train, y_train, eval_set=[(X_test, y_test)], verbose=False)
-                        
-                        # Evaluate
-                        y_pred = model.predict(X_test)
-                        y_proba = model.predict_proba(X_test)[:, 1]
-                        
-                        accuracy = accuracy_score(y_test, y_pred)
-                        roc_auc = roc_auc_score(y_test, y_proba)
-                        
-                        st.success(f"✅ Model trained!")
-                        
-                        metric_cols = st.columns(3)
-                        with metric_cols[0]:
-                            st.metric("Accuracy", f"{accuracy:.1%}")
-                        with metric_cols[1]:
-                            st.metric("ROC-AUC", f"{roc_auc:.3f}")
-                        with metric_cols[2]:
-                            edge = (accuracy - 0.524) * 100
-                            st.metric("Edge vs 52.4%", f"{edge:+.1f}%")
-                        
-                        # Feature importance
-                        st.write("**Top 10 Features:**")
-                        importance = pd.DataFrame({
-                            'Feature': FEATURE_NAMES,
-                            'Importance': model.feature_importances_
-                        }).sort_values('Importance', ascending=False).head(10)
-                        st.dataframe(importance, use_container_width=True)
-                        
-                        # Save model
-                        model_path = "/tmp/sports_betting_model.joblib"
-                        joblib.dump(model, model_path)
-                        st.session_state['trained_model'] = model
-                        st.session_state['model_path'] = model_path
-                        
-                        st.success("✅ Model saved! Ready for deployment.")
-                        
-                    except ImportError as e:
-                        st.error(f"Missing library: {e}. Install with: pip install xgboost scikit-learn joblib")
-                    except Exception as e:
-                        st.error(f"Training error: {e}")
-                        import traceback
-                        st.code(traceback.format_exc())
-            
-            # Deploy section
-            st.markdown("---")
-            st.write("**Deploy to GCP Vertex AI:**")
-            
-            if 'trained_model' not in st.session_state:
-                st.info("Train a model first (above)")
-            else:
-                st.success("✅ Model ready for deployment")
-                
-                gcp_project = st.text_input("GCP Project ID", value="elite-hangar-479017-m8", key="deploy_project")
-                gcp_region = st.text_input("Region", value="us-central1", key="deploy_region")
-                
-                st.warning("""
-                **Manual Deployment Required:**
-                
-                Due to GCP authentication requirements, deploy from your local machine:
-                
-                1. Download the model file below
-                2. Run these commands:
-                ```bash
-                # Install Google Cloud SDK if needed
-                gcloud auth login
-                gcloud config set project elite-hangar-479017-m8
-                
-                # Upload model to Cloud Storage
-                gsutil cp sports_betting_model.joblib gs://your-bucket/models/
-                
-                # Deploy to Vertex AI (or use Console)
-                ```
-                
-                Or use GCP Console → Vertex AI → Model Registry → Import
-                """)
-                
-                if st.session_state.get('model_path'):
-                    with open(st.session_state['model_path'], 'rb') as f:
-                        st.download_button(
-                            "⬇️ Download Trained Model (.joblib)",
-                            data=f,
-                            file_name="sports_betting_model.joblib",
-                            mime="application/octet-stream"
-                        )
-
-    st.markdown("---")
-
-    # Default date range for AI/ML Best Bet section
     default_start = sel_date - timedelta(days=_day_window or 0)
     default_end = sel_date + timedelta(days=_day_window or 0)
+
+    col_start, col_end, col_action = st.columns([1, 1, 1])
+    with col_start:
+        best_odds_start = st.date_input(
+            "Start date",
+            value=default_start,
+            key="best_odds_start",
+        )
+    with col_end:
+        best_odds_end = st.date_input(
+            "End date",
+            value=default_end,
+            key="best_odds_end",
+        )
+    with col_action:
+        fetch_best_odds = st.button(
+            "Show Best Odds",
+            key="best_odds_button",
+            use_container_width=True,
+        )
+
+    if fetch_best_odds:
+        odds_key = st.session_state.get('api_key', "") or os.environ.get("ODDS_API_KEY", "") or st.secrets.get("ODDS_API_KEY", "")
+        if not odds_key:
+            st.error("Configure your The Odds API key to pull live odds data.")
+        else:
+            with st.spinner("Calculating top prices across sportsbooks..."):
+                best_odds_df = build_best_odds_report(
+                    odds_key,
+                    active_sports_list,
+                    best_odds_start,
+                    best_odds_end,
+                    sidebar_state["timezone_name"],
+                )
+
+            if best_odds_df.empty:
+                st.info("No qualifying odds found for the selected range.")
+            else:
+                display_df = best_odds_df.copy()
+                if "decimal_odds" in display_df.columns:
+                    display_df["decimal_odds"] = pd.to_numeric(display_df["decimal_odds"], errors='coerce')
+                    display_df["decimal_odds"] = display_df["decimal_odds"].apply(
+                        lambda x: f"{float(x):.3f}" if pd.notna(x) and isinstance(x, (int, float)) else "—"
+                    )
+                if "line" in display_df.columns:
+                    display_df["line"] = pd.to_numeric(display_df["line"], errors='coerce')
+                    display_df["line"] = display_df["line"].apply(
+                        lambda x: f"{float(x):.1f}" if pd.notna(x) and isinstance(x, (int, float)) else "—"
+                    )
+
+                st.dataframe(display_df, use_container_width=True, hide_index=True)
+
+                csv_export = best_odds_df.to_csv(index=False)
+                file_name = (
+                    f"best_odds_{best_odds_start.isoformat()}_{best_odds_end.isoformat()}.csv"
+                )
+                st.download_button(
+                    "💾 Download best odds CSV",
+                    data=csv_export,
+                    file_name=file_name,
+                    mime="text/csv",
+                    key="best_odds_download",
+                )
+
 
     st.subheader("🤖 AI/ML Best Bet Per Game (Parlay View)")
 
@@ -11344,13 +9892,6 @@ if is_vertex_ai_enabled():
         return enriched_df
     
     best_bets_df = st.session_state.get('best_bets_df', pd.DataFrame())
-
-    # Option to show ALL games (no filtering)
-    show_all_games = st.checkbox(
-        "📋 Show ALL Games Ranked (no confidence filter)",
-        value=True,
-        help="When checked, shows every game ranked by edge. When unchecked, filters by AI confidence threshold."
-    )
 
     compute_best_bets = st.button(
         "🚀 Generate Best Bets" + (" (with Vertex AI)" if use_vertex_results else " (Legacy Mode)"),
@@ -11578,254 +10119,178 @@ if is_vertex_ai_enabled():
                         'Commence (UTC)': leg.get('commence_time'),
                     })
 
-                # =====================================================
-                # BEST BETS - EDGE-BASED AND CONSENSUS PICKS
-                # Find picks where AI has an edge over the market
-                # and multiple signals agree
-                # =====================================================
-                
-                best_bets_rows = []
-                skipped_low_conf = 0
-                
-                st.info(f"📊 Analyzing {len(vertex_results)} games for Best Bets (Edge + Consensus)")
-                
-                for vertex_result in vertex_results:
-                    home_team = vertex_result.get('home_team', 'Home')
-                    away_team = vertex_result.get('away_team', 'Away')
-                    league = vertex_result.get('league', 'N/A').upper()
+                if not best_bets_rows:
+                    st.info("No qualifying bets found matching your criteria.")
+                else:
+                    # NO ODDS DATA - Generate Best Bets directly from Vertex Results
+                    st.info(f"📊 Generating Best Bets from {len(vertex_results)} Vertex AI analyzed games (TheOver.ai data)")
                     
-                    confidence = vertex_result.get('confidence', 50)
+                    # Debug: show confidence threshold
+                    st.caption(f"🔧 Confidence threshold: {min_ai_confidence * 100:.0f}%")
                     
-                    # Apply minimum confidence filter ONLY if show_all_games is False
-                    if not show_all_games and confidence < min_ai_confidence * 100:
-                        skipped_low_conf += 1
-                        continue
+                    # Check for stale/identical predictions (symptom of old analysis)
+                    unique_probs = set(r.get('vertex_prob', 0.5) for r in vertex_results)
+                    if len(unique_probs) <= 2:
+                        st.warning("⚠️ **Detected identical predictions for all games.** Please re-run 'Vertex AI Master Analysis' to get game-specific predictions based on spread data.")
+                    
+                    # Show sample data for debugging
+                    with st.expander("🔍 Debug: Sample Game Data"):
+                        sample = vertex_results[0] if vertex_results else {}
+                        st.write(f"**Sample Game:** {sample.get('away_team')} @ {sample.get('home_team')}")
+                        st.write(f"- Vertex Prob: {sample.get('vertex_prob', 'N/A')}")
+                        st.write(f"- TheOver Prob: {sample.get('theover_probability', 'N/A')}")
+                        st.write(f"- Spread: {sample.get('spread', 'N/A')}")
+                        st.write(f"- Implied Home Prob: {sample.get('implied_home_prob', 'N/A')}")
+                        st.write(f"- Home ML Odds: {sample.get('home_ml_odds', 'N/A')}")
                     
                     # =====================================================
-                    # GET THEOVER.AI PICK AND PROBABILITY
-                    # TheOver.ai is used for their PICK and PROBABILITY only
-                    # NOT for spread values (which come from market odds)
+                    # SINGLE BEST PICK PER GAME - Only generate ONE bet per game
+                    # Pick the FAVORITE (most likely winner) for each game
                     # =====================================================
-                    theover_pick = vertex_result.get('theover_pick', '') or ''
-                    theover_prob = vertex_result.get('theover_probability', None)
                     
-                    # GET MARKET SPREAD from TheOddsAPI (NOT from TheOver.ai!)
-                    market_home_spread = vertex_result.get('spread', 0) or 0
+                    skipped_low_conf = 0  # Initialize counter
                     
-                    # If market spread is missing, try to estimate from moneyline
-                    if not market_home_spread or market_home_spread == 0:
-                        home_ml = vertex_result.get('home_ml_odds') or 0
-                        away_ml = vertex_result.get('away_ml_odds') or 0
+                    for vertex_result in vertex_results:
+                        home_team = vertex_result.get('home_team', 'Home')
+                        away_team = vertex_result.get('away_team', 'Away')
+                        league = vertex_result.get('league', 'N/A').upper()
                         
-                        if home_ml and away_ml and home_ml != 0 and away_ml != 0:
-                            # Estimate spread from ML odds
-                            # Rough formula: favorite ML of -X ≈ X/30 points
-                            if home_ml < away_ml:
-                                # Home is favorite
-                                market_home_spread = home_ml / 30 if home_ml < 0 else 0
+                        confidence = vertex_result.get('confidence', 50)
+                        
+                        # Apply minimum confidence filter
+                        if confidence < min_ai_confidence * 100:
+                            skipped_low_conf += 1
+                            continue
+                        
+                        # Get HOME TEAM's spread (not the pick's spread)
+                        # Prioritize home_spread (correctly calculated) over theover_spread (raw from CSV)
+                        home_spread = vertex_result.get('home_spread')
+                        if home_spread is None or (isinstance(home_spread, float) and pd.isna(home_spread)):
+                            # Try theover_spread but be careful - it might need sign adjustment
+                            raw_spread = vertex_result.get('theover_spread', 0) or vertex_result.get('spread', 0) or 0
+                            home_spread = abs(raw_spread) if raw_spread else 0  # Just get magnitude for now
+                        
+                        # Ensure home_spread is a valid number (magnitude only)
+                        if home_spread is None or (isinstance(home_spread, float) and pd.isna(home_spread)):
+                            home_spread = 0
+                        spread_magnitude = abs(home_spread)
+                        
+                        # Get odds from stored data
+                        home_ml = vertex_result.get('home_ml_odds') or -110
+                        away_ml = vertex_result.get('away_ml_odds') or -110
+                        
+                        # =====================================================
+                        # DETERMINE TRUE FAVORITE USING COMMON SENSE RULES
+                        # =====================================================
+                        
+                        # Rule 1: For COLLEGE sports (NCAAB, NCAAF) with large spreads (10+ points),
+                        # the HOME team is almost ALWAYS the favorite
+                        is_college = league.upper() in ['NCAAB', 'NCAAF', 'CBB', 'CFB']
+                        large_spread = spread_magnitude >= 10
+                        
+                        if is_college and large_spread:
+                            # HOME team is the favorite in college sports with large spreads
+                            home_ml_prob = 50 + (spread_magnitude * 2.25)  # ~2.25% per point
+                            home_ml_prob = min(90, home_ml_prob)  # Cap at 90%
+                            away_ml_prob = 100 - home_ml_prob
+                        elif home_ml and away_ml and home_ml != -110 and away_ml != -110:
+                            # Use ML odds if available and not default values
+                            if home_ml < 0:
+                                home_ml_prob_from_odds = abs(home_ml) / (abs(home_ml) + 100) * 100
                             else:
-                                # Away is favorite
-                                market_home_spread = away_ml / 30 if away_ml < 0 else 0
-                                market_home_spread = -market_home_spread  # Flip sign
+                                home_ml_prob_from_odds = 100 / (home_ml + 100) * 100
                             
-                            logger.info(f"Estimated spread from ML for {away_team} @ {home_team}: {market_home_spread:.1f}")
-                    
-                    # Skip games without TheOver.ai data ONLY if show_all_games is False
-                    if not show_all_games and not theover_pick:
-                        continue
-                    
-                    # For games without TheOver.ai pick, use home team as default pick
-                    if not theover_pick:
-                        theover_pick = home_team
-                        theover_picked_home = True
-                    
-                    # Convert to percentage if needed
-                    if theover_prob is not None and theover_prob <= 1:
-                        theover_prob = theover_prob * 100
-                    
-                    # =====================================================
-                    # GET MARKET ODDS AND CALCULATE IMPLIED PROBABILITY
-                    # =====================================================
-                    home_ml = vertex_result.get('home_ml_odds') or -110
-                    away_ml = vertex_result.get('away_ml_odds') or -110
-                    
-                    # =====================================================
-                    # CALCULATE HOME AND AWAY AI PROBABILITIES
-                    # Pick the team with HIGHER AI probability (not TheOver.ai's pick!)
-                    # =====================================================
-                    
-                    # Get AI probabilities (calculate as HOME team probability first)
-                    vertex_ai_prob = vertex_result.get('vertex_probability') or vertex_result.get('vertex_ai_prob') or vertex_result.get('vertex_prob')
-                    if vertex_ai_prob is not None and vertex_ai_prob <= 1:
-                        vertex_ai_prob = vertex_ai_prob * 100
-                    
-                    # Determine HOME and AWAY AI probabilities
-                    if vertex_ai_prob is not None and vertex_ai_prob > 0:
-                        # We have Vertex AI prediction (HOME team probability)
-                        home_ai_prob = vertex_ai_prob
-                        away_ai_prob = 100 - vertex_ai_prob
-                        ml_source_type = 'vertex'
-                    elif theover_prob:
-                        # Fall back to TheOver.ai - convert to HOME/AWAY probabilities
-                        if theover_picked_home:
-                            home_ai_prob = theover_prob
-                            away_ai_prob = 100 - theover_prob
-                        else:
-                            away_ai_prob = theover_prob
-                            home_ai_prob = 100 - theover_prob
-                        ml_source_type = 'theover'
-                    else:
-                        # No AI prediction - use spread-derived estimate
-                        if market_home_spread and market_home_spread != 0:
-                            spread_shift = abs(market_home_spread) * 2.8
-                            if market_home_spread < 0:
-                                # Home is favorite
-                                home_ai_prob = min(80, 50 + spread_shift)
-                                away_ai_prob = 100 - home_ai_prob
+                            if away_ml < 0:
+                                away_ml_prob_from_odds = abs(away_ml) / (abs(away_ml) + 100) * 100
                             else:
-                                # Away is favorite
-                                away_ai_prob = min(80, 50 + spread_shift)
-                                home_ai_prob = 100 - away_ai_prob
-                            ml_source_type = 'spread_derived'
+                                away_ml_prob_from_odds = 100 / (away_ml + 100) * 100
+                            
+                            # Normalize to 100%
+                            total = home_ml_prob_from_odds + away_ml_prob_from_odds
+                            if total > 0:
+                                home_ml_prob = (home_ml_prob_from_odds / total) * 100
+                                away_ml_prob = (away_ml_prob_from_odds / total) * 100
+                            else:
+                                home_ml_prob = 50
+                                away_ml_prob = 50
                         else:
-                            home_ai_prob = 50
-                            away_ai_prob = 50
-                            ml_source_type = 'default'
-                    
-                    # =====================================================
-                    # PICK THE TEAM WITH HIGHER AI PROBABILITY
-                    # This is the key fix - use AI probability, not TheOver.ai's pick!
-                    # =====================================================
-                    if home_ai_prob >= away_ai_prob:
-                        # Home team has higher (or equal) AI win probability
-                        pick_team = home_team
-                        pick_spread = market_home_spread
-                        pick_ml_odds = home_ml
-                        ai_win_prob = home_ai_prob
-                        theover_picked_home = True  # Update for consistency
-                    else:
-                        # Away team has higher AI win probability
-                        pick_team = away_team
-                        pick_spread = -market_home_spread if market_home_spread else 0
-                        pick_ml_odds = away_ml
-                        ai_win_prob = away_ai_prob
-                        theover_picked_home = False  # Update for consistency
-                    
-                    # Calculate market implied probability for the PICKED team
-                    if pick_ml_odds and pick_ml_odds != 0:
-                        if pick_ml_odds < 0:
-                            market_implied_prob = abs(pick_ml_odds) / (abs(pick_ml_odds) + 100) * 100
-                        else:
-                            market_implied_prob = 100 / (pick_ml_odds + 100) * 100
-                    else:
-                        market_implied_prob = 50
-                    
-                    # =====================================================
-                    # CALCULATE EDGE
-                    # Edge = AI Probability - Market Implied Probability
-                    # =====================================================
-                    edge_pp = ai_win_prob - market_implied_prob  # Edge in percentage points
-                    
-                    # Calculate Expected Value (EV)
-                    # EV = (Win Prob * Potential Profit) - (Lose Prob * Stake)
-                    if pick_ml_odds and pick_ml_odds != 0:
-                        if pick_ml_odds > 0:
-                            potential_profit = pick_ml_odds / 100  # Per $1 bet
-                        else:
-                            potential_profit = 100 / abs(pick_ml_odds)
+                            # Fallback: use spread-based calculation (assume home gets the negative spread)
+                            if spread_magnitude > 0:
+                                home_ml_prob = 50 + (spread_magnitude * 2.25)
+                                home_ml_prob = min(90, max(10, home_ml_prob))
+                            else:
+                                home_ml_prob = 50
+                            away_ml_prob = 100 - home_ml_prob
                         
-                        ev_per_dollar = (ai_win_prob / 100 * potential_profit) - ((100 - ai_win_prob) / 100)
-                        ev_pct = ev_per_dollar * 100
-                    else:
-                        ev_pct = 0
-                    
-                    # =====================================================
-                    # CHECK CONSENSUS SIGNALS
-                    # =====================================================
-                    
-                    # Sentiment
-                    sentiment_diff = vertex_result.get('sentiment_diff', 0) or 0
-                    if theover_picked_home:
-                        sentiment_agrees = sentiment_diff > 0
-                    else:
-                        sentiment_agrees = sentiment_diff < 0
-                    
-                    # Kalshi
-                    kalshi_available = vertex_result.get('kalshi_available', False)
-                    kalshi_prob = vertex_result.get('kalshi_prob', 0.5)
-                    if kalshi_prob and kalshi_prob <= 1:
-                        kalshi_prob = kalshi_prob * 100
-                    
-                    if theover_picked_home:
-                        kalshi_agrees = kalshi_available and kalshi_prob > 50
-                        kalshi_pick_prob = kalshi_prob if kalshi_available else None
-                    else:
-                        kalshi_agrees = kalshi_available and kalshi_prob < 50
-                        kalshi_pick_prob = (100 - kalshi_prob) if kalshi_available else None
-                    
-                    # Count consensus signals
-                    consensus_count = 0
-                    if theover_prob and theover_prob > 50:  # TheOver.ai likes their pick
-                        consensus_count += 1
-                    if sentiment_agrees:
-                        consensus_count += 1
-                    if kalshi_agrees:
-                        consensus_count += 1
-                    if ai_win_prob > 55:  # AI has conviction
-                        consensus_count += 1
-                    
-                    # =====================================================
-                    # FORMAT THE PICK
-                    # Use MARKET spread (from TheOddsAPI), not TheOver.ai spread
-                    # =====================================================
-                    # DEBUG: Log the values to understand what's happening
-                    logger.info(f"DEBUG: {away_team} @ {home_team} | Pick: {pick_team} | market_spread: {pick_spread}")
-                    
-                    # pick_spread is the MARKET spread for the picked team
-                    # Positive spread = underdog getting points (+)
-                    # Negative spread = favorite giving points (-)
-                    spread_magnitude = abs(pick_spread) if pick_spread else 0
-                    if spread_magnitude > 0:
-                        if pick_spread > 0:
-                            # Positive spread = underdog getting points
-                            pick_str = f"{pick_team} +{spread_magnitude:.1f}"
+                        # Get sentiment and Kalshi data
+                        sentiment_diff = vertex_result.get('sentiment_diff', 0)
+                        kalshi_available = vertex_result.get('kalshi_available', False)
+                        kalshi_prob = vertex_result.get('kalshi_prob', 0.5) or 0.5
+                        kalshi_home = kalshi_prob * 100
+                        kalshi_away = 100 - kalshi_home
+                        
+                        # =====================================================
+                        # DETERMINE THE FAVORITE (MOST LIKELY WINNER)
+                        # Always pick the team with higher win probability
+                        # =====================================================
+                        
+                        if home_ml_prob >= away_ml_prob:
+                            # HOME team is favorite
+                            fav_team = home_team
+                            fav_prob = home_ml_prob
+                            # Favorite always has NEGATIVE spread
+                            fav_spread = -spread_magnitude if spread_magnitude else 0
+                            fav_ml_odds = home_ml
+                            fav_sentiment = '✅' if sentiment_diff > 0 else ('❌' if sentiment_diff < 0 else '—')
+                            fav_kalshi_agrees = '✅' if (kalshi_available and kalshi_home > 50) else ('❌' if kalshi_available else '—')
+                            fav_kalshi_pct = kalshi_home if kalshi_available else None
                         else:
-                            # Negative spread = favorite giving points
-                            pick_str = f"{pick_team} {pick_spread:.1f}"  # Already has minus sign
-                    else:
-                        pick_str = f"{pick_team} ML"
-                    
-                    logger.info(f"DEBUG: Formatted as: {pick_str}")
-                    
-                    # Format odds string
-                    if pick_ml_odds and pick_ml_odds != 0:
-                        if pick_ml_odds > 0:
-                            odds_str = f"+{int(pick_ml_odds)}"
+                            # AWAY team is favorite
+                            fav_team = away_team
+                            fav_prob = away_ml_prob
+                            # Favorite always has NEGATIVE spread
+                            fav_spread = -spread_magnitude if spread_magnitude else 0
+                            fav_ml_odds = away_ml
+                            fav_sentiment = '✅' if sentiment_diff < 0 else ('❌' if sentiment_diff > 0 else '—')
+                            fav_kalshi_agrees = '✅' if (kalshi_available and kalshi_away > 50) else ('❌' if kalshi_available else '—')
+                            fav_kalshi_pct = kalshi_away if kalshi_available else None
+                        
+                        # Format the pick string
+                        if fav_spread and fav_spread != 0:
+                            # Favorite always shows NEGATIVE spread (giving points)
+                            pick_str = f"{fav_team} {fav_spread:.1f}"
                         else:
-                            odds_str = str(int(pick_ml_odds))
-                    else:
-                        odds_str = "-110"
-                    
-                    # =====================================================
-                    # ADD TO BEST BETS
-                    # =====================================================
-                    best_bets_rows.append({
-                        'League': league,
-                        'Game': f"{away_team} @ {home_team}",
-                        'THE PICK': pick_str,
-                        'AI Win %': round(ai_win_prob, 1),
-                        'Market %': round(market_implied_prob, 1),
-                        'Edge': round(edge_pp, 1),
-                        'EV': f"${ev_pct:.2f}",
-                        'Consensus': f"{consensus_count}/4",
-                        'Sentiment': '✅' if sentiment_agrees else '❌',
-                        'Kalshi': '✅' if kalshi_agrees else ('❌' if kalshi_available else '—'),
-                        'Kalshi %': f"{kalshi_pick_prob:.0f}" if kalshi_pick_prob else '—',
-                        'TheOver %': f"{theover_prob:.0f}" if theover_prob else '—',
-                        'Odds': odds_str,
-                        'Confidence': round(confidence, 1),
-                        'ML Source': ml_source_type,
-                    })
+                            pick_str = f"{fav_team} ML"
+                        
+                        # Format odds
+                        if fav_ml_odds and fav_ml_odds != 0:
+                            if fav_ml_odds > 0:
+                                odds_str = f"+{int(fav_ml_odds)}"
+                            else:
+                                odds_str = str(int(fav_ml_odds))
+                        else:
+                            odds_str = "-110"
+                        
+                        # Calculate composite score for ranking
+                        composite = fav_prob
+                        if fav_sentiment == '✅':
+                            composite += 10
+                        if fav_kalshi_agrees == '✅':
+                            composite += 15
+                        
+                        # Add the SINGLE BEST PICK (the favorite)
+                        best_bets_rows.append({
+                            'League': league,
+                            'Game': f"{away_team} @ {home_team}",
+                            'THE PICK': pick_str,
+                            'Win %': round(fav_prob, 1),
+                            'Composite': round(composite, 1),
+                            'Sentiment': fav_sentiment,
+                            'Kalshi': fav_kalshi_agrees,
+                            'Kalshi %': f"{fav_kalshi_pct:.0f}" if fav_kalshi_pct else '—',
+                            'Odds': odds_str,
+                            'Confidence': round(confidence, 1),
+                        })
                 
                 # Display results
                 if skipped_low_conf > 0:
@@ -11834,121 +10299,53 @@ if is_vertex_ai_enabled():
                 if best_bets_rows:
                     best_bets_df = pd.DataFrame(best_bets_rows)
                     
-                    # Convert Edge to numeric for sorting
-                    best_bets_df['Edge_numeric'] = pd.to_numeric(best_bets_df['Edge'], errors='coerce')
-                    
-                    # Sort by Edge (highest first) - this shows the best value bets first
-                    best_bets_df = best_bets_df.sort_values('Edge_numeric', ascending=False)
+                    # Sort by Win % (highest first)
+                    if 'Win %' in best_bets_df.columns:
+                        best_bets_df = best_bets_df.sort_values('Win %', ascending=False)
                     
                     # Add rank column
                     best_bets_df.insert(0, 'Rank', range(1, len(best_bets_df) + 1))
                     
                     # Calculate summary stats
                     total_games = len(best_bets_df)
-                    avg_edge = best_bets_df['Edge_numeric'].mean() if 'Edge_numeric' in best_bets_df.columns else 0
-                    positive_edge = len(best_bets_df[best_bets_df['Edge_numeric'] > 0])
-                    high_consensus = len(best_bets_df[best_bets_df['Consensus'].isin(['3/4', '4/4'])])
+                    avg_win_prob = best_bets_df['Win %'].mean() if 'Win %' in best_bets_df.columns else 50.0
                     kalshi_agrees = len(best_bets_df[best_bets_df['Kalshi'] == '✅']) if 'Kalshi' in best_bets_df.columns else 0
                     sentiment_agrees = len(best_bets_df[best_bets_df['Sentiment'] == '✅']) if 'Sentiment' in best_bets_df.columns else 0
 
-                    st.success(f"🎯 **{total_games} Games Analyzed - Edge + Consensus Ranking**")
+                    st.success(f"🎯 **{total_games} Games - ONE Best Pick Per Game**")
 
                     # Display metrics
                     col1, col2, col3, col4 = st.columns(4)
                     with col1:
-                        st.metric("Positive Edge", f"{positive_edge}/{total_games}")
+                        st.metric("Total Games", total_games)
                     with col2:
-                        st.metric("Avg Edge", f"{avg_edge:+.1f}%")
+                        st.metric("Avg Win %", f"{avg_win_prob:.1f}%")
                     with col3:
-                        st.metric("High Consensus (3-4/4)", high_consensus)
+                        st.metric("Kalshi Agrees", f"{kalshi_agrees}/{total_games}")
                     with col4:
-                        st.metric("Kalshi + Sentiment", f"{kalshi_agrees}K / {sentiment_agrees}S")
+                        st.metric("Sentiment Agrees", f"{sentiment_agrees}/{total_games}")
                     
-                    # ML Source Summary
-                    if 'ML Source' in best_bets_df.columns:
-                        ml_counts = best_bets_df['ML Source'].value_counts()
-                        vertex_count = ml_counts.get('vertex', 0) + ml_counts.get('gcp_vertex', 0)
-                        theover_count = ml_counts.get('theover', 0)
-                        spread_count = ml_counts.get('spread_derived', 0)
-                        fallback_count = ml_counts.get('fallback_heuristic', 0) + ml_counts.get('unknown', 0) + ml_counts.get('default', 0)
-                        
-                        st.markdown("---")
-                        st.subheader("🤖 ML Prediction Source Summary")
-                        ml_col1, ml_col2, ml_col3, ml_col4 = st.columns(4)
-                        
-                        with ml_col1:
-                            if vertex_count > 0:
-                                st.success(f"☁️ **GCP Vertex AI**\n\n{vertex_count} games")
-                            else:
-                                st.info(f"☁️ GCP Vertex AI\n\n{vertex_count} games")
-                                st.caption("Configure GCP endpoint for custom model")
-                        
-                        with ml_col2:
-                            if theover_count > 0:
-                                st.info(f"🎯 **TheOver.ai**\n\n{theover_count} games")
-                            else:
-                                st.info(f"🎯 TheOver.ai\n\n{theover_count} games")
-                        
-                        with ml_col3:
-                            if spread_count > 0:
-                                st.info(f"📊 **Spread-Derived**\n\n{spread_count} games")
-                                st.caption("Using spread × 2.8% formula")
-                            else:
-                                st.info(f"📊 Spread-Derived\n\n{spread_count} games")
-                        
-                        with ml_col4:
-                            if fallback_count > 0:
-                                st.warning(f"🔄 **Fallback**\n\n{fallback_count} games")
-                            else:
-                                st.info(f"🔄 Fallback\n\n{fallback_count} games")
-                        
-                        # Show Kalshi integration status
-                        if kalshi_agrees > 0:
-                            st.caption(f"📈 Kalshi prediction market agrees on {kalshi_agrees}/{total_games} games")
-                        
-                        # Summary message
-                        if vertex_count > 0:
-                            st.success(f"✅ Using Gemini AI predictions via Vertex AI for {vertex_count} games")
-                        elif theover_count > 0:
-                            st.info(f"📊 Using spread-derived probabilities from TheOver.ai data (each point ≈ 2.8% shift)")
-                        elif spread_count > 0:
-                            st.info(f"📊 Using spread-derived probabilities (each point ≈ 2.8% shift from 50%)")
-                        st.markdown("---")
-                    
-                    # Display columns - new edge-based format
-                    display_cols = ['Rank', 'League', 'Game', 'THE PICK', 'AI Win %', 'Market %', 
-                                   'Edge', 'EV', 'Consensus', 'Sentiment', 'Kalshi', 'Kalshi %', 
-                                   'TheOver %', 'Odds', 'Confidence']
+                    # Display columns
+                    display_cols = ['Rank', 'League', 'Game', 'THE PICK', 'Win %', 'Composite', 
+                                   'Sentiment', 'Kalshi', 'Kalshi %', 'Odds', 'Confidence']
                     display_cols = [c for c in display_cols if c in best_bets_df.columns]
                     
-                    # Show the best bets table
-                    st.subheader("🏆 BEST BETS - Ranked by Edge")
-                    st.caption("Edge = AI Win % - Market Implied %. Positive edge = potential value.")
+                    # Show the single best picks table
+                    st.subheader("🏆 SINGLE BEST PICK PER GAME")
                     st.dataframe(
                         best_bets_df[display_cols],
                         use_container_width=True,
                         hide_index=True
                     )
                     
-                    # Show top picks with high consensus
-                    if high_consensus > 0:
-                        st.subheader("⭐ TOP CONSENSUS PICKS (3-4 signals agree)")
-                        consensus_picks = best_bets_df[best_bets_df['Consensus'].isin(['3/4', '4/4'])]
-                        if len(consensus_picks) > 0:
-                            st.dataframe(
-                                consensus_picks[display_cols],
-                                use_container_width=True,
-                                hide_index=True
-                            )
-                    
                     # CSV Download
                     csv_buffer = best_bets_df[display_cols].to_csv(index=False)
                     st.download_button(
-                        "⬇️ Download Best Bets (CSV)",
+                        "⬇️ Download Best Picks (CSV)",
                         data=csv_buffer,
-                        file_name=f"best_bets_{pd.Timestamp.now().strftime('%Y-%m-%d')}.csv",
+                        file_name=f"best_picks_{pd.Timestamp.now().strftime('%Y-%m-%d')}.csv",
                         mime="text/csv",
-                        key="best_bets_csv"
+                        key="single_picks_csv"
                     )
                     
                     # Store for parlay generation
@@ -12307,18 +10704,6 @@ if is_vertex_ai_enabled():
                                 
                                 baseline_confidence = max(min_ai_confidence, 0.55)
 
-                                # Get ML predictor from session state
-                                ml_predictor = st.session_state.get('ml_predictor')
-                                
-                                # Debug ML status (only log once per sport to avoid spam)
-                                if not hasattr(st.session_state, f'_ml_debug_logged_{skey}'):
-                                    if use_ml_predictions:
-                                        if ml_predictor:
-                                            logger.info(f"✅ ML Predictor active for {skey}")
-                                        else:
-                                            logger.warning(f"⚠️ ML Predictor not loaded for {skey} - train a model first!")
-                                    st.session_state[f'_ml_debug_logged_{skey}'] = True
-
                                 # Moneyline with AI
                                 if inc_ml and "h2h" in mkts:
                                     hp = _dig(mkts["h2h"], "home.price")
@@ -12332,29 +10717,18 @@ if is_vertex_ai_enabled():
                                         "sportsdata_home": sportsdata_payload_home,
                                         "sportsdata_away": sportsdata_payload_away,
                                     }
-                                    
-                                    # CRITICAL FIX: Actually call the ML predictor!
                                     ml_prediction_result = None
-                                    if use_ml_predictions and ml_predictor and hp is not None and ap is not None:
+                                    if use_ml_predictions and hp is not None and ap is not None:
                                         try:
-                                            logger.info(f"🤖 Calling ML predictor for {away} @ {home} ({skey})")
-                                            ml_prediction_result = ml_predictor.predict_game_outcome(
-                                                home_team=home,
-                                                away_team=away,
-                                                sport_key=skey
-                                            )
-                                            if ml_prediction_result:
-                                                logger.info(
-                                                    f"✅ ML prediction successful: "
-                                                    f"home={ml_prediction_result.get('home_win_prob', 0):.1%}, "
-                                                    f"away={ml_prediction_result.get('away_win_prob', 0):.1%}, "
-                                                    f"conf={ml_prediction_result.get('confidence', 0):.1%}"
-                                                )
-                                        except AttributeError as e:
-                                            logger.error(f"ML predictor missing predict_game_outcome method: {e}")
-                                            ml_prediction_result = None
-                                        except Exception as e:
-                                            logger.warning(f"ML prediction failed for {away} @ {home}: {e}")
+                                            games_to_predict = []
+                                            for game in games:
+                                                games_to_predict.append({
+                                                    'id': game.get('id'),
+                                                    'home_team': game['home'],
+                                                    'away_team': game['away'],
+                                                    'sport_key': sport_key
+                                                })
+                                        except Exception:
                                             ml_prediction_result = None
 
                                     if _is_reasonable_moneyline(hp):
@@ -12363,11 +10737,26 @@ if is_vertex_ai_enabled():
                                         base_prob = implied_p_from_american(hp)
                                         ai_prob = base_prob
 
-                                        # Use ML prediction if available
-                                        if ml_prediction_result:
-                                            ai_prob = ml_prediction_result.get('home_win_prob', base_prob)
-                                            ai_confidence = ml_prediction_result.get('confidence', baseline_confidence)
-                                            ai_edge = ml_prediction_result.get('edge', 0.0)
+                                        if use_ml_predictions and ap is not None:
+                                            if ml_prediction_result is None:
+                                                try:
+                                                    games_to_predict = []
+                                                    for game in games:
+                                                        games_to_predict.append({
+                                                            'id': game.get('id'),
+                                                            'home_team': game['home'],
+                                                            'away_team': game['away'],
+                                                            'sport_key': sport_key
+                                                        })
+                                                except Exception:
+                                                    ml_prediction_result = None
+                                            if ml_prediction_result:
+                                                ai_prob = ml_prediction_result['home_prob']
+                                                ai_confidence = ml_prediction_result['confidence']
+                                                ai_edge = ml_prediction_result['edge']
+                                            else:
+                                                ai_confidence = baseline_confidence
+                                                ai_edge = 0
                                         else:
                                             ai_confidence = baseline_confidence
                                             ai_edge = 0
@@ -12424,11 +10813,26 @@ if is_vertex_ai_enabled():
                                         base_prob = implied_p_from_american(ap)
                                         ai_prob = base_prob
 
-                                        # Reuse ML prediction from home team (same game!)
-                                        if ml_prediction_result:
-                                            ai_prob = ml_prediction_result.get('away_win_prob', base_prob)
-                                            ai_confidence = ml_prediction_result.get('confidence', baseline_confidence)
-                                            ai_edge = ml_prediction_result.get('edge', 0.0)
+                                        if use_ml_predictions and hp is not None:
+                                            if ml_prediction_result is None:
+                                                try:
+                                                    games_to_predict = []
+                                                    for game in games:
+                                                        games_to_predict.append({
+                                                            'id': game.get('id'),
+                                                            'home_team': game['home'],
+                                                            'away_team': game['away'],
+                                                            'sport_key': sport_key
+                                                        })
+                                                except Exception:
+                                                    ml_prediction_result = None
+                                            if ml_prediction_result:
+                                                ai_prob = ml_prediction_result['away_prob']
+                                                ai_confidence = ml_prediction_result['confidence']
+                                                ai_edge = ml_prediction_result['edge']
+                                            else:
+                                                ai_confidence = baseline_confidence
+                                                ai_edge = 0
                                         else:
                                             ai_confidence = baseline_confidence
                                             ai_edge = 0
@@ -14722,6 +13126,21 @@ with main_tab5:
             """
             components.html(widget_html, height=widget_height, scrolling=True)
 
+# ============================================================
+# VERTEX AI TEST (OPTIONAL - only shows if debug mode enabled)
+# ============================================================
+if st.sidebar.checkbox("🧪 Show Vertex AI Test", value=False):
+    if is_vertex_ai_enabled():
+        st.markdown("---")
+        st.header("🤖 Google Cloud Vertex AI Test")
+        st.caption("Quick test of Vertex AI predictions")
+        
+        test_home = st.text_input("Home Team (test)", value="Lakers", key="vertex_test_home")
+        test_away = st.text_input("Away Team (test)", value="Celtics", key="vertex_test_away")
+        
+        if test_home and test_away:
+            show_vertex_ai_prediction_section(test_home, test_away)
+
 # ============================================================================
 # PASTE THIS INTO YOUR STREAMLIT_APP.PY
 # Location: BEFORE your "Generate Best Bets" section
@@ -14731,71 +13150,56 @@ import importlib.util
 import json
 from datetime import datetime
 
-# Check for AI providers (Gemini or Claude)
-use_gemini = GEMINI_AVAILABLE and st.session_state.get('gcp_project_id')
-use_claude = False  # DISABLED - Using Gemini only
+anthropic_spec = importlib.util.find_spec("anthropic")
+anthropic_available = anthropic_spec is not None
 
-    # Show Gemini status
-if use_gemini:
-    st.success("🧠 Using Google Gemini AI (Vertex AI) - 24x cheaper than Claude!")
-    gcp_project = st.session_state.get('gcp_project_id', 'Not set')
-    endpoint = st.session_state.get('vertex_endpoint_id', 'Not set')
-    location = st.session_state.get('gcp_location', 'us-central1')
-    st.caption(f"📍 Project: {gcp_project} | Endpoint: {endpoint} | Region: {location}")
-
-ai_available = use_gemini or use_claude
-
-if not ai_available:
+if not anthropic_available:
     st.warning(
-        "⚠️ No AI provider configured. Configure Gemini (recommended) or Claude in the sidebar to enable AI analysis."
+        "Anthropic dependency missing. Vertex AI analysis is disabled until the `anthropic`"
+        " package from requirements is installed."
     )
-elif use_gemini:
-    st.success("✅ Using Google Gemini for AI analysis (~24x cheaper than Claude)")
 else:
-    st.info("ℹ️ Using Claude API for AI analysis")
+    import anthropic
 
 # ============================================================================
-# AI MASTER ANALYZER (RUNS FIRST)
+# VERTEX AI MASTER ANALYZER (RUNS FIRST)
 # ============================================================================
 
-st.header("🧠 AI Master Analysis")
+st.header("🧠 Vertex AI Master Analysis")
 st.write("**Run this FIRST to calculate probabilities for all games**")
 
-if not ai_available:
+if not anthropic_available:
     st.info(
-        "Configure **Gemini** (recommended, ~$1/month) or **Claude** in the sidebar to enable AI analysis. "
-        "Other app features will continue to work without it."
+        "Install the `anthropic` package to enable Vertex AI analysis. Other app features will"
+        " continue to work without it."
     )
 
-with st.expander("ℹ️ About AI-First Architecture", expanded=False):
+with st.expander("ℹ️ About Vertex-First Architecture", expanded=False):
     st.markdown("""
     **New Workflow:**
-    1. ✅ AI analyzes ALL games with ALL data sources
+    1. ✅ Vertex AI analyzes ALL games with ALL data sources
     2. ✅ Stores comprehensive results in session state
-    3. ✅ Best Bets generator uses AI probabilities
-    4. ✅ Parlay Optimizer uses AI probabilities
+    3. ✅ Best Bets generator uses Vertex probabilities
+    4. ✅ Parlay Optimizer uses Vertex probabilities
     
     **Benefits:**
     - Single source of truth
     - All data consolidated upfront
     - No post-processing enrichment needed
     - Consistent probabilities across all features
-    
-    **AI Providers:**
-    - **Gemini** (Recommended): ~$0.001/game, excellent quality
-    - **Claude**: ~$0.015/game, premium quality
     """)
 
 if st.button(
-    "🚀 Run AI Master Analysis",
+    "🚀 Run Vertex AI Master Analysis",
     type="primary",
     key="vertex_master",
-    disabled=not ai_available,
+    disabled=not anthropic_available,
 ):
 
-    if not ai_available:
+    if not anthropic_available:
         st.error(
-            "❌ No AI provider configured. Please configure Gemini (recommended) or Claude in the sidebar."
+            "Anthropic dependency missing. Install the `anthropic` package from requirements"
+            " to run Vertex AI analysis."
         )
         st.stop()
     
@@ -14860,45 +13264,15 @@ if st.button(
         st.warning("⚠️ SportsData not loaded")
     
     st.write("---")
+    st.write("🧠 **Running Vertex AI analysis...**")
     
-    # Determine which AI provider to use
-    use_gemini = GEMINI_AVAILABLE and st.session_state.get('gcp_project_id')
-    use_claude = False  # DISABLED - Using Gemini only
+    # Get Anthropic API key
+    anthropic_api_key = st.session_state.get('anthropic_api_key', '')
+    if not anthropic_api_key:
+        st.error("❌ Anthropic API key not found! Please enter it in the sidebar.")
+        st.stop()
     
-    if use_gemini:
-        st.write("🧠 **Running AI Analysis with Google Gemini...**")
-        st.success(f"💎 Using Gemini Pro (~${len(odds_data) * 0.001:.2f} for {len(odds_data)} games)")
-        st.caption("✨ 24x cheaper than Claude with excellent quality!")
-        
-        # Initialize Gemini
-        project_id = st.session_state.get('gcp_project_id')
-        region = st.session_state.get('gcp_region', 'us-central1')
-        
-        if not project_id:
-            st.error("❌ GCP Project ID not found! Please configure Gemini in the sidebar.")
-            st.stop()
-        
-        try:
-            analyzer = GeminiAnalyzer(project_id=project_id, region=region)
-            st.info(f"✅ Gemini initialized: {project_id} ({region})")
-        except Exception as e:
-            st.error(f"❌ Failed to initialize Gemini: {e}")
-            st.info("Make sure you've uploaded your service account key in the sidebar")
-            st.stop()
-        
-    elif use_claude:
-        st.write("🧠 **Running AI Analysis with Claude...**")
-        # Claude removed - should never reach here
-        st.error("❌ Claude is disabled. Please use Gemini/Vertex AI.")
-        st.stop()
-        
-    else:
-        st.error("❌ Gemini/Vertex AI not configured!")
-        st.info("**Configure Gemini in sidebar:**\n\n"
-                "1. Enter GCP Project ID: elite-hangar-479017-m8\n\n"
-                "2. Enter Vertex Endpoint ID: 5396533911008313344\n\n"
-                "3. Make sure [gcp_service_account] is in secrets.toml")
-        st.stop()
+    client = anthropic.Anthropic(api_key=anthropic_api_key)
     
     # Analyze each game
     vertex_results = []
@@ -14943,9 +13317,18 @@ if st.button(
                     }
                     break
         
-        # Get best odds FIRST (needed for ML predictor)
-        best_moneyline_home = None
-        best_moneyline_away = None
+        # Match ML predictions (implement your matching logic)
+        if 'ml' in data_sources:
+            # Add your ML matching logic here
+            pass
+        
+        # Match SportsData (implement your matching logic)
+        if 'sportsdata' in data_sources:
+            # Add your SportsData matching logic here
+            pass
+        
+        # Get best odds
+        best_moneyline = None
         best_spread = None
         
         for bookmaker in game.get('bookmakers', []):
@@ -14953,148 +13336,14 @@ if st.button(
                 if market['key'] == 'h2h':
                     for outcome in market.get('outcomes', []):
                         if outcome['name'] == home_team:
-                            best_moneyline_home = outcome['price']
-                        elif outcome['name'] == away_team:
-                            best_moneyline_away = outcome['price']
+                            best_moneyline = outcome['price']
                 elif market['key'] == 'spreads':
                     for outcome in market.get('outcomes', []):
                         if outcome['name'] == home_team:
                             best_spread = outcome.get('point')
         
-        # Match ML predictions - NOW with all required parameters!
-        if 'ml' in data_sources:
-            ml_predictor = st.session_state.get('ml_predictor')
-            if ml_predictor and best_moneyline_home and best_moneyline_away:
-                try:
-                    # Get sentiment for both teams
-                    sentiment_analyzer = st.session_state.get('sentiment_analyzer')
-                    sentiment_home = 0.0  # Neutral default
-                    sentiment_away = 0.0  # Neutral default
-                    
-                    if sentiment_analyzer:
-                        try:
-                            # Try to get real sentiment
-                            home_sentiment_result = sentiment_analyzer.get_sentiment(home_team)
-                            away_sentiment_result = sentiment_analyzer.get_sentiment(away_team)
-                            
-                            if home_sentiment_result and 'sentiment_score' in home_sentiment_result:
-                                sentiment_home = home_sentiment_result['sentiment_score']
-                            if away_sentiment_result and 'sentiment_score' in away_sentiment_result:
-                                sentiment_away = away_sentiment_result['sentiment_score']
-                        except Exception as e:
-                            logger.warning(f"Sentiment analysis failed, using neutral: {e}")
-                    
-                    # Call ML predictor with ALL required parameters
-                    try:
-                        # Try newer predictor interface (with sport_key)
-                        ml_result = ml_predictor.predict_game_outcome(
-                            home_team=home_team,
-                            away_team=away_team,
-                            home_odds=best_moneyline_home,
-                            away_odds=best_moneyline_away,
-                            sentiment_home=sentiment_home,
-                            sentiment_away=sentiment_away,
-                            sport_key=game.get('sport_key')
-                        )
-                    except TypeError:
-                        # Fallback: call without sport_key (HistoricalMLPredictor)
-                        ml_result = ml_predictor.predict_game_outcome(
-                            home_team=home_team,
-                            away_team=away_team,
-                            home_odds=best_moneyline_home,
-                            away_odds=best_moneyline_away,
-                            sentiment_home=sentiment_home,
-                            sentiment_away=sentiment_away
-                        )
-                    
-                    if ml_result:
-                        context_data['ml'] = {
-                            'home_win_prob': ml_result.get('home_win_prob'),
-                            'away_win_prob': ml_result.get('away_win_prob'),
-                            'confidence': ml_result.get('confidence'),
-                            'edge': ml_result.get('edge'),
-                            'model_used': ml_result.get('model_used', 'ML Model'),
-                            'sentiment_used': f"Home: {sentiment_home:.2f}, Away: {sentiment_away:.2f}"
-                        }
-                        logger.info(f"✅ ML+Sentiment data matched for {away_team} @ {home_team}")
-                except Exception as e:
-                    logger.warning(f"ML matching failed for {away_team} @ {home_team}: {e}")
-            elif ml_predictor and not (best_moneyline_home and best_moneyline_away):
-                logger.warning(f"ML predictor available but odds missing for {away_team} @ {home_team}")
-        
-        # Match SportsData
-        if 'sportsdata' in data_sources:
-            sportsdata_clients = st.session_state.get('sportsdata_clients', {})
-            sportsdata_client = sportsdata_clients.get(game.get('sport_key'))
-            if sportsdata_client and hasattr(sportsdata_client, 'is_configured') and sportsdata_client.is_configured():
-                try:
-                    context_data['sportsdata'] = {
-                        'client_available': True,
-                        'sport': game.get('sport_key')
-                    }
-                    logger.info(f"SportsData client available for {away_team} @ {home_team}")
-                except Exception as e:
-                    logger.warning(f"SportsData matching failed: {e}")
-        
-        # best_moneyline for backwards compatibility
-        best_moneyline = best_moneyline_home
-        
-        # Analyze with Gemini or Claude
-        if use_gemini:
-            try:
-                result = analyzer.analyze_game(
-                    home_team=home_team,
-                    away_team=away_team,
-                    sport_key=game.get('sport_key'),
-                    commence_time=game.get('commence_time'),
-                    best_moneyline=best_moneyline,
-                    best_spread=best_spread,
-                    context_data=context_data
-                )
-                
-                # Reformat result to match expected structure
-                vertex_results.append({
-                    'game_id': game.get('id', f"{away_team}_{home_team}"),
-                    'sport': game.get('sport_key'),
-                    'home_team': home_team,
-                    'away_team': away_team,
-                    'commence_time': game.get('commence_time'),
-                    'vertex_probability': result.get('gemini_probability', 50.0),
-                    'confidence': result.get('confidence', 50.0),
-                    'key_factors': ', '.join(result.get('key_factors', [])),
-                    'has_edge': result.get('has_edge', False),
-                    'edge_explanation': result.get('edge_explanation', ''),
-                    'sources_used': result.get('sources_used', 'market odds'),
-                    'best_moneyline': best_moneyline,
-                    'best_spread': best_spread,
-                    'ai_provider': 'gemini'
-                })
-                logger.info(f"✅ Gemini analyzed: {away_team} @ {home_team}")
-                
-            except Exception as e:
-                logger.error(f"Gemini analysis failed for {away_team} @ {home_team}: {e}")
-                st.warning(f"⚠️ Gemini error for {game_name}: {str(e)[:100]}")
-                # Add fallback result
-                vertex_results.append({
-                    'game_id': game.get('id', f"{away_team}_{home_team}"),
-                    'sport': game.get('sport_key'),
-                    'home_team': home_team,
-                    'away_team': away_team,
-                    'commence_time': game.get('commence_time'),
-                    'vertex_probability': 50.0,
-                    'confidence': 0.0,
-                    'key_factors': 'Error in analysis',
-                    'has_edge': False,
-                    'edge_explanation': f'Error: {str(e)}',
-                    'sources_used': 'error',
-                    'best_moneyline': best_moneyline,
-                    'best_spread': best_spread,
-                    'ai_provider': 'gemini_error'
-                })
-        
-        elif use_claude:
-            # Build Claude prompt
-            prompt = f"""You are an expert sports betting analyst. Analyze this game and provide a comprehensive probability assessment.
+        # Build Vertex AI prompt
+        prompt = f"""You are an expert sports betting analyst. Analyze this game and provide a comprehensive probability assessment.
 
 **Game Details:**
 - Away Team: {away_team}
@@ -15108,27 +13357,22 @@ if st.button(
 
 **Available Data Sources:**
 """
-            
-            sources_used = []
-            
-            if context_data['theover']:
-                prompt += f"\n- **theover.ai**: Pick={context_data['theover']['Pick']}, Line={context_data['theover']['Line']}, Market={context_data['theover']['Market']}"
-                sources_used.append('theover.ai')
-            
-            if context_data['ml']:
-                ml_data = context_data['ml']
-                prompt += f"\n- **ML Model Prediction**:"
-                prompt += f"\n  - Home Win Probability: {ml_data.get('home_win_prob', 0):.1%}"
-                prompt += f"\n  - Away Win Probability: {ml_data.get('away_win_prob', 0):.1%}"
-                prompt += f"\n  - Confidence: {ml_data.get('confidence', 0):.1%}"
-                prompt += f"\n  - Model: {ml_data.get('model_used', 'Unknown')}"
-                sources_used.append('ML Model')
-            
-            if context_data['sportsdata']:
-                prompt += f"\n- **SportsData**: Available for {context_data['sportsdata'].get('sport', 'this sport')}"
-                sources_used.append('SportsData')
-            
-            prompt += """
+        
+        sources_used = []
+        
+        if context_data['theover']:
+            prompt += f"\n- **theover.ai**: Pick={context_data['theover']['Pick']}, Line={context_data['theover']['Line']}, Market={context_data['theover']['Market']}"
+            sources_used.append('theover.ai')
+        
+        if context_data['ml']:
+            prompt += f"\n- **ML Model**: {context_data['ml']}"
+            sources_used.append('ML')
+        
+        if context_data['sportsdata']:
+            prompt += f"\n- **SportsData**: {context_data['sportsdata']}"
+            sources_used.append('SportsData')
+        
+        prompt += """
 
 **Task:**
 Analyze all available data and provide:
@@ -15147,65 +13391,63 @@ Return ONLY a JSON object with this exact structure:
     "edge_explanation": "<string>"
 }
 """
+        
+        try:
+            # Call Vertex AI (Claude)
+            response = client.messages.create(
+                model="claude-sonnet-4-20250514",
+                max_tokens=1000,
+                messages=[{"role": "user", "content": prompt}]
+            )
             
-            try:
-                # Call Claude API
-                response = client.messages.create(
-                    model="claude-sonnet-4-20250514",
-                    max_tokens=1000,
-                    messages=[{"role": "user", "content": prompt}]
-                )
-                
-                # Parse response
-                response_text = response.content[0].text.strip()
-                
-                # Extract JSON
-                if '```json' in response_text:
-                    response_text = response_text.split('```json')[1].split('```')[0].strip()
-                elif '```' in response_text:
-                    response_text = response_text.split('```')[1].split('```')[0].strip()
-                
-                vertex_analysis = json.loads(response_text)
-                
-                # Store result
-                vertex_results.append({
-                    'game_id': game.get('id', f"{away_team}_{home_team}"),
-                    'sport': game.get('sport_key'),
-                    'home_team': home_team,
-                    'away_team': away_team,
-                    'commence_time': game.get('commence_time'),
-                    'vertex_probability': vertex_analysis['home_win_probability'],
-                    'confidence': vertex_analysis['confidence'],
-                    'key_factors': vertex_analysis['key_factors'],
-                    'has_edge': vertex_analysis['has_edge'],
-                    'edge_explanation': vertex_analysis['edge_explanation'],
-                    'sources_used': ', '.join(sources_used) if sources_used else 'market odds only',
-                    'best_moneyline': best_moneyline,
-                    'best_spread': best_spread,
-                    'ai_provider': 'claude'
-                })
-                logger.info(f"✅ Claude analyzed: {away_team} @ {home_team}")
-                
-            except Exception as e:
-                logger.error(f"Claude analysis failed for {away_team} @ {home_team}: {e}")
-                st.error(f"❌ Error analyzing {game_name}: {str(e)[:100]}")
-                # Add fallback result
-                vertex_results.append({
-                    'game_id': game.get('id', f"{away_team}_{home_team}"),
-                    'sport': game.get('sport_key'),
-                    'home_team': home_team,
-                    'away_team': away_team,
-                    'commence_time': game.get('commence_time'),
-                    'vertex_probability': 50.0,
-                    'confidence': 50.0,
-                    'key_factors': 'Error in analysis',
-                    'has_edge': False,
-                    'edge_explanation': f'Error: {str(e)}',
-                    'sources_used': 'error',
-                    'best_moneyline': best_moneyline,
-                    'best_spread': best_spread,
-                    'ai_provider': 'claude_error'
-                })
+            # Parse response
+            response_text = response.content[0].text.strip()
+            
+            # Extract JSON
+            if '```json' in response_text:
+                response_text = response_text.split('```json')[1].split('```')[0].strip()
+            elif '```' in response_text:
+                response_text = response_text.split('```')[1].split('```')[0].strip()
+            
+            vertex_analysis = json.loads(response_text)
+            
+            # Store result
+            result = {
+                'game_id': game['id'],
+                'sport': game['sport_key'],
+                'home_team': home_team,
+                'away_team': away_team,
+                'commence_time': game['commence_time'],
+                'vertex_probability': vertex_analysis['home_win_probability'],
+                'confidence': vertex_analysis['confidence'],
+                'key_factors': vertex_analysis['key_factors'],
+                'has_edge': vertex_analysis['has_edge'],
+                'edge_explanation': vertex_analysis['edge_explanation'],
+                'sources_used': ', '.join(sources_used) if sources_used else 'market odds only',
+                'best_moneyline': best_moneyline,
+                'best_spread': best_spread
+            }
+            
+            vertex_results.append(result)
+            
+        except Exception as e:
+            st.error(f"❌ Error analyzing {game_name}: {e}")
+            # Add fallback result
+            vertex_results.append({
+                'game_id': game['id'],
+                'sport': game['sport_key'],
+                'home_team': home_team,
+                'away_team': away_team,
+                'commence_time': game['commence_time'],
+                'vertex_probability': 50.0,
+                'confidence': 50.0,
+                'key_factors': 'Error in analysis',
+                'has_edge': False,
+                'edge_explanation': f'Error: {str(e)}',
+                'sources_used': 'error',
+                'best_moneyline': best_moneyline,
+                'best_spread': best_spread
+            })
         
         progress_bar.progress((idx + 1) / len(odds_data))
     
@@ -15217,14 +13459,7 @@ Return ONLY a JSON object with this exact structure:
     st.session_state['vertex_analysis_complete'] = True
     st.session_state['vertex_timestamp'] = datetime.now()
     
-    # Show success message with cost
-    if use_gemini:
-        actual_cost = len(vertex_results) * 0.001
-        st.success(f"✅ **Gemini analysis complete!** {len(vertex_results)} games analyzed (~${actual_cost:.2f})")
-        st.balloons()
-    else:
-        actual_cost = len(vertex_results) * 0.015
-        st.success(f"✅ **Claude analysis complete!** {len(vertex_results)} games analyzed (~${actual_cost:.2f})")
+    st.success(f"✅ **Vertex AI analysis complete!** {len(vertex_results)} games analyzed")
     
     # Display summary
     st.write("---")
@@ -15262,76 +13497,2040 @@ Return ONLY a JSON object with this exact structure:
         "📥 Download Vertex Results CSV",
         csv,
         f"vertex_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-        "text/csv",
-        key="download_vertex_results"  # Add key to prevent conflicts
+        "text/csv"
     )
 
 # ============================================================================
-# PERSISTENT RESULTS DISPLAY (Shows even after page rerun)
+# DISPLAY VERTEX STATUS (for other sections to check)
 # ============================================================================
 
-# Check if we have previous results in session state
-if st.session_state.get('vertex_analysis_complete') and st.session_state.get('vertex_results'):
+if 'vertex_analysis_complete' in st.session_state:
+    vertex_count = len(st.session_state.get('vertex_results', []))
+    vertex_time = st.session_state.get('vertex_timestamp', datetime.now())
+    
+    st.info(f"""
+    ✅ **Vertex AI analysis available**
+    - {vertex_count} games analyzed
+    - Analyzed at: {vertex_time.strftime('%I:%M %p')}
+    - Ready to use for Best Bets and Parlays
+    """)
+
+st.markdown("---")
+
+# ============================================================================
+# NOW YOUR EXISTING BEST BETS SECTION CAN USE VERTEX RESULTS
+# ============================================================================
+
+# Your existing Best Bets section should check for vertex_results:
+# if 'vertex_results' in st.session_state:
+#     # Use Vertex probabilities instead of recalculating
+#     vertex_results = st.session_state['vertex_results']
+
+# ============================================================
+# BEST BET FINDER (Vertex AI)
+# ============================================================
+from best_bet_analyzer import BestBetAnalyzer, show_best_bets_analysis
+
+if is_vertex_ai_enabled():
+    st.markdown("---")
+    st.header("🎯 Best Bet Finder - AI Analysis")
+    
+    uploaded_file = st.file_uploader(
+        "Upload your odds CSV file",
+        type=['csv'],
+        key="best_bet_csv_upload",
+        help="CSV should have columns: home_team, away_team, home_odds, away_odds, total"
+    )
+    
+    if uploaded_file is not None:
+        # Initialize analyzer with your existing clients
+        analyzer = BestBetAnalyzer(
+            odds_api_client=odds_api_client if 'odds_api_client' in globals() else None,
+            sportsdata_client=sportsdata_clients.get('nfl') if 'sportsdata_clients' in globals() else None,
+            apisports_client=apisports_client if 'apisports_client' in globals() else None,
+            sentiment_analyzer=sentiment_analyzer if 'sentiment_analyzer' in globals() else None,
+            ml_predictor=st.session_state.get('ml_predictor')
+        )
+        
+        show_best_bets_analysis(uploaded_file, analyzer)
+
+# 🔍 ONE-BUTTON DIAGNOSTIC
+# Paste this ANYWHERE in your streamlit_app.py and click the button
+
+import streamlit as st
+
+st.sidebar.markdown("---")
+if st.sidebar.button("🔍 Diagnose Master Analyzer"):
+    st.header("🔍 Master Analyzer Diagnostic")
+    
+    # Step 1: Check if data exists
+    st.subheader("1️⃣ Check Data")
+    
+    has_spreads = False
+    spreads_data = None
+    
+    # Try to find theover.ai data
+    if 'theover_spreads_data' in locals():
+        spreads_data = theover_spreads_data
+        has_spreads = True
+    elif 'theover_spreads_data' in st.session_state:
+        spreads_data = st.session_state['theover_spreads_data']
+        has_spreads = True
+    
+    if has_spreads and spreads_data is not None:
+        st.success(f"✅ Found {len(spreads_data)} games")
+    else:
+        st.error("❌ No theover.ai data found - upload CSV first!")
+        st.stop()
+    
+    # Step 2: Test prediction function
+    st.subheader("2️⃣ Test Predictions")
+    
+    try:
+        from ml_predictions import get_vertex_ai_prediction
+        
+        test_features = [0.55, 0.45, 110, 105, 105, 108, 0.15, 0.6, 0.4]
+        result = get_vertex_ai_prediction(test_features)
+        
+        if result:
+            st.success(f"✅ Predictions work: {result:.3f}")
+        else:
+            st.error("❌ Predictions return None")
+            st.write("**This is your problem!**")
+            st.write("Fix: Update ml_predictions.py to latest version")
+            st.stop()
+    except Exception as e:
+        st.error(f"❌ Prediction function failed: {e}")
+        st.stop()
+    
+    # Step 3: Try analyzing one game
+    st.subheader("3️⃣ Test Single Game Analysis")
+    
+    try:
+        from vertex_master_analyzer import VertexMasterAnalyzer
+        
+        # Create analyzer
+        analyzer = VertexMasterAnalyzer()
+        
+        # Convert first row to game format
+        first_row = spreads_data.iloc[0]
+        test_game = {
+            'home_team': first_row.get('home_team') or first_row.get('HomeTeam'),
+            'away_team': first_row.get('away_team') or first_row.get('AwayTeam'),
+            'sport_key': first_row.get('league', 'NBA').lower(),
+            'commence_time': None,
+            'bookmakers': []
+        }
+        
+        st.write(f"**Testing:** {test_game['away_team']} @ {test_game['home_team']}")
+        
+        # Try to build features
+        try:
+            comp_features = analyzer.build_comprehensive_features(test_game, 'NBA')
+            st.success(f"✅ Built {len(comp_features)} comprehensive features")
+        except Exception as e:
+            st.error(f"❌ build_comprehensive_features() failed: {e}")
+            st.write("**This is likely your problem!**")
+            st.code(str(e))
+            st.stop()
+        
+        # Try to build vertex features
+        try:
+            vertex_features = analyzer.build_vertex_feature_vector(comp_features)
+            st.success(f"✅ Built {len(vertex_features)} vertex features")
+        except Exception as e:
+            st.error(f"❌ build_vertex_feature_vector() failed: {e}")
+            st.code(str(e))
+            st.stop()
+        
+        # Try to get prediction
+        try:
+            from ml_predictions import get_vertex_ai_prediction
+            prediction = get_vertex_ai_prediction(vertex_features)
+            
+            if prediction:
+                st.success(f"✅ Got prediction: {prediction:.3f}")
+            else:
+                st.error(f"❌ Prediction returned None")
+                st.write("Features passed to prediction:")
+                st.write(vertex_features)
+        except Exception as e:
+            st.error(f"❌ get_vertex_ai_prediction() failed: {e}")
+            st.code(str(e))
+    
+    except Exception as e:
+        st.error(f"❌ Single game test failed: {e}")
+        import traceback
+        st.code(traceback.format_exc())
+    
+    # Step 4: Summary
+    st.subheader("4️⃣ Summary")
+    st.write("""
+    **If all checks passed:**
+    - The Master Analyzer should work
+    - Try clicking "Run Master Analysis" again
+    - Lower confidence threshold to 25%
+    
+    **If a check failed:**
+    - Fix that specific issue first
+    - The error message above tells you what's wrong
+    """)
+
+# 🔍 MASTER ANALYZER DEBUG SCRIPT
+# Add this to your streamlit_app.py to see what's failing
+
+import streamlit as st
+import pandas as pd
+from typing import Dict, List
+
+st.header("🔍 Master Analyzer Debug Mode")
+
+# Check 1: Verify imports
+st.subheader("1️⃣ Check Imports")
+try:
+    from vertex_master_analyzer import VertexMasterAnalyzer
+    st.success("✅ VertexMasterAnalyzer imported")
+except Exception as e:
+    st.error(f"❌ Import failed: {e}")
+    st.stop()
+
+try:
+    from ml_predictions import get_vertex_ai_prediction, is_vertex_ai_enabled
+    st.success("✅ ml_predictions imported")
+except Exception as e:
+    st.error(f"❌ ml_predictions import failed: {e}")
+    st.stop()
+
+# Check 2: Verify Vertex AI is enabled
+st.subheader("2️⃣ Check Vertex AI Status")
+ai_enabled = is_vertex_ai_enabled()
+if ai_enabled:
+    st.success(f"✅ Vertex AI enabled")
+else:
+    st.error(f"❌ Vertex AI disabled")
+    st.stop()
+
+# Check 3: Test prediction function
+st.subheader("3️⃣ Test Prediction Function")
+test_features = [0.55, 0.45, 110, 105, 105, 108, 0.15, 0.6, 0.4]
+test_result = get_vertex_ai_prediction(test_features)
+
+if test_result:
+    st.success(f"✅ Prediction works: {test_result:.3f}")
+else:
+    st.error(f"❌ Prediction returns None")
+    st.stop()
+
+# Check 4: Verify theover.ai data
+st.subheader("4️⃣ Check theover.ai Data")
+
+if 'theover_spreads_data' in locals() or 'theover_spreads_data' in st.session_state:
+    # Get the data
+    if 'theover_spreads_data' in locals():
+        spreads_data = theover_spreads_data
+    else:
+        spreads_data = st.session_state.get('theover_spreads_data')
+    
+    if spreads_data is not None and len(spreads_data) > 0:
+        st.success(f"✅ Found {len(spreads_data)} games in theover.ai data")
+        
+        st.write("**Columns in CSV:**")
+        st.write(list(spreads_data.columns))
+        
+        st.write("**First row sample:**")
+        st.json(spreads_data.iloc[0].to_dict())
+    else:
+        st.error("❌ theover.ai data is empty")
+        st.stop()
+else:
+    st.error("❌ No theover.ai data found. Upload spreads CSV first!")
+    st.stop()
+
+# Check 5: Convert to Master Analyzer format
+st.subheader("5️⃣ Convert Data Format")
+
+st.write("Converting theover.ai CSV to game format...")
+
+games = []
+for idx, row in spreads_data.iterrows():
+    game = {
+        'home_team': row.get('home_team') or row.get('HomeTeam', 'Unknown'),
+        'away_team': row.get('away_team') or row.get('AwayTeam', 'Unknown'),
+        'sport_key': row.get('league', 'NBA').lower(),
+        'commence_time': None,
+        'bookmakers': []  # Empty since we don't have odds API
+    }
+    games.append(game)
+
+st.success(f"✅ Converted {len(games)} games")
+st.write("**First game:**")
+st.json(games[0])
+
+# Check 6: Initialize Analyzer
+st.subheader("6️⃣ Initialize Master Analyzer")
+
+try:
+    analyzer = VertexMasterAnalyzer(
+        odds_api_client=None,
+        sportsdata_clients={},
+        apisports_clients={},
+        sentiment_analyzer=None,
+        local_ml_predictor=None,
+        theover_data={'spreads': spreads_data}
+    )
+    st.success("✅ Analyzer initialized")
+except Exception as e:
+    st.error(f"❌ Initialization failed: {e}")
+    import traceback
+    st.code(traceback.format_exc())
+    st.stop()
+
+# Check 7: Analyze ONE game (detailed)
+st.subheader("7️⃣ Analyze Single Game (Detailed)")
+
+test_game = games[0]
+st.write(f"**Testing:** {test_game['away_team']} @ {test_game['home_team']}")
+
+try:
+    # Step 1: Build features
+    st.write("Step 1: Building comprehensive features...")
+    comp_features = analyzer.build_comprehensive_features(test_game, 'NBA')
+    st.success(f"✅ Got {len(comp_features)} features")
+    
+    with st.expander("View all features"):
+        st.json(comp_features)
+    
+    # Step 2: Build Vertex AI feature vector
+    st.write("Step 2: Building Vertex AI feature vector...")
+    vertex_features = analyzer.build_vertex_feature_vector(comp_features)
+    st.success(f"✅ Got {len(vertex_features)} vertex features")
+    st.write(f"**Feature vector:** {vertex_features[:5]}... (showing first 5)")
+    
+    # Step 3: Get prediction
+    st.write("Step 3: Getting Vertex AI prediction...")
+    vertex_prob = get_vertex_ai_prediction(vertex_features)
+    
+    if vertex_prob is not None:
+        st.success(f"✅ Got prediction: {vertex_prob:.3f} ({vertex_prob*100:.1f}%)")
+    else:
+        st.error("❌ Prediction returned None!")
+        st.stop()
+    
+except Exception as e:
+    st.error(f"❌ Error during analysis: {e}")
+    import traceback
+    st.code(traceback.format_exc())
+    st.stop()
+
+# Check 8: Analyze ALL games
+st.subheader("8️⃣ Analyze All Games")
+
+if st.button("🚀 Analyze All Games with Debug"):
+    st.write(f"Analyzing {len(games)} games...")
+    
+    results = []
+    errors = []
+    
+    progress = st.progress(0)
+    status = st.empty()
+    
+    for idx, game in enumerate(games):
+        status.write(f"Processing game {idx+1}/{len(games)}: {game['away_team']} @ {game['home_team']}")
+        
+        try:
+            # Build features
+            comp_features = analyzer.build_comprehensive_features(game, 'NBA')
+            
+            # Build vertex features
+            vertex_features = analyzer.build_vertex_feature_vector(comp_features)
+            
+            # Get prediction
+            vertex_prob = get_vertex_ai_prediction(vertex_features)
+            
+            if vertex_prob is not None:
+                # Add to results
+                result = comp_features.copy()
+                result['vertex_ai_prob'] = vertex_prob
+                result['vertex_ai_edge'] = vertex_prob - 0.5
+                result['vertex_ai_confidence'] = abs(vertex_prob - 0.5)
+                results.append(result)
+                
+                status.write(f"  ✅ Success: {vertex_prob:.3f}")
+            else:
+                errors.append(f"Game {idx+1}: Prediction returned None")
+                status.write(f"  ❌ Prediction failed")
+                
+        except Exception as e:
+            errors.append(f"Game {idx+1}: {str(e)}")
+            status.write(f"  ❌ Error: {e}")
+        
+        progress.progress((idx + 1) / len(games))
+    
+    progress.empty()
+    status.empty()
+    
+    # Show results
     st.write("---")
-    st.write("## 📊 Previous AI Analysis Results")
+    st.write("### 📊 Analysis Results")
+    st.write(f"**Total games:** {len(games)}")
+    st.write(f"**Successful:** {len(results)}")
+    st.write(f"**Failed:** {len(errors)}")
     
-    prev_results = st.session_state['vertex_results']
-    timestamp = st.session_state.get('vertex_timestamp', 'Unknown')
+    if errors:
+        with st.expander(f"⚠️ View {len(errors)} Errors"):
+            for error in errors:
+                st.write(f"- {error}")
     
-    st.info(f"🕐 Analysis from: {timestamp.strftime('%Y-%m-%d %H:%M:%S') if hasattr(timestamp, 'strftime') else timestamp}")
+    if len(results) > 0:
+        st.success(f"✅ Generated {len(results)} results!")
+        
+        results_df = pd.DataFrame(results)
+        
+        st.write("**Results DataFrame shape:**", results_df.shape)
+        st.write("**Columns:**", list(results_df.columns))
+        
+        # Show sample
+        st.write("**Sample results:**")
+        display_cols = ['home_team', 'away_team', 'vertex_ai_prob', 'vertex_ai_edge', 'vertex_ai_confidence']
+        available_cols = [col for col in display_cols if col in results_df.columns]
+        st.dataframe(results_df[available_cols].head())
+        
+    else:
+        st.error("❌ No results generated!")
+        st.write("**All games failed analysis. Check errors above.**")
+
+st.write("---")
+st.write("### 💡 What This Debug Shows")
+st.write("""
+This debug script will show you exactly where the Master Analyzer fails:
+
+1. ✅ Imports working
+2. ✅ Vertex AI enabled
+3. ✅ Predictions work standalone
+4. ✅ Data loaded correctly
+5. ✅ Data converted to right format
+6. ✅ Analyzer initializes
+7. ✅ Single game analysis works
+8. Then analyze all and see which step fails
+
+**Common issues:**
+- Missing columns in CSV (home_team, away_team, league)
+- build_comprehensive_features() failing
+- build_vertex_feature_vector() failing
+- get_vertex_ai_prediction() returning None
+""")
+
+# 🚨 IMMEDIATE DIAGNOSTIC - Paste this into your streamlit_app.py
+
+import streamlit as st
+import pandas as pd
+
+# Add this button RIGHT BEFORE the "Run Vertex AI Master Analysis" button
+st.markdown("---")
+st.subheader("🔍 Debug: What's Failing?")
+
+if st.button("🚨 Debug Master Analyzer", type="secondary"):
+    st.header("🔍 Master Analyzer Diagnostic")
     
-    # Summary metrics
+    # Step 1: Check if we have data
+    st.write("**Step 1: Check Data**")
+    if 'theover_spreads_data' not in locals() and 'theover_spreads_data' not in st.session_state:
+        st.error("❌ No theover.ai data found!")
+        st.stop()
+    
+    spreads_data = theover_spreads_data if 'theover_spreads_data' in locals() else st.session_state.get('theover_spreads_data')
+    st.success(f"✅ Found {len(spreads_data)} games")
+    
+    # Step 2: Test get_vertex_ai_prediction
+    st.write("**Step 2: Test Prediction Function**")
+    try:
+        from ml_predictions import get_vertex_ai_prediction, is_vertex_ai_enabled
+        
+        # Check if enabled
+        ai_enabled = is_vertex_ai_enabled()
+        if not ai_enabled:
+            st.error("❌ Vertex AI is disabled!")
+            st.write("Enable it in settings or update ml_predictions.py")
+            st.stop()
+        else:
+            st.success("✅ Vertex AI is enabled")
+        
+        # Test prediction
+        test_features = [0.55, 0.45, 110, 105, 105, 108, 0.15, 0.6, 0.4]
+        test_result = get_vertex_ai_prediction(test_features)
+        
+        if test_result is None:
+            st.error("❌ PROBLEM FOUND: get_vertex_ai_prediction() returns None!")
+            st.write("**This is why you're getting no results!**")
+            st.write("")
+            st.write("**Fix:**")
+            st.write("1. Update ml_predictions.py to latest version")
+            st.write("2. Or use the new consolidated_workflow_complete.py")
+            st.stop()
+        else:
+            st.success(f"✅ Prediction works: {test_result:.3f}")
+    
+    except Exception as e:
+        st.error(f"❌ Import failed: {e}")
+        st.code(str(e))
+        st.stop()
+    
+    # Step 3: Test Master Analyzer on ONE game
+    st.write("**Step 3: Test Master Analyzer on Single Game**")
+    try:
+        from vertex_master_analyzer import VertexMasterAnalyzer
+        
+        # Create analyzer
+        analyzer = VertexMasterAnalyzer(
+            odds_api_client=None,
+            sportsdata_clients={},
+            apisports_clients={},
+            sentiment_analyzer=None,
+            local_ml_predictor=None,
+            theover_data={'spreads': spreads_data}
+        )
+        st.success("✅ Analyzer created")
+        
+        # Convert first row to game format
+        first_row = spreads_data.iloc[0]
+        test_game = {
+            'home_team': first_row.get('home_team') or first_row.get('HomeTeam', 'Unknown'),
+            'away_team': first_row.get('away_team') or first_row.get('AwayTeam', 'Unknown'),
+            'sport_key': (first_row.get('league') or first_row.get('League', 'NBA')).lower(),
+            'commence_time': None,
+            'bookmakers': []
+        }
+        
+        st.write(f"**Testing:** {test_game['away_team']} @ {test_game['home_team']}")
+        
+        # Try to analyze
+        try:
+            # Build features
+            comp_features = analyzer.build_comprehensive_features(test_game, 'NBA')
+            st.success(f"✅ Built {len(comp_features)} comprehensive features")
+            
+            # Build vertex features
+            vertex_features = analyzer.build_vertex_feature_vector(comp_features)
+            st.success(f"✅ Built {len(vertex_features)} vertex features")
+            st.write(f"Feature vector sample: {vertex_features[:5]}")
+            
+            # Get prediction
+            from ml_predictions import get_vertex_ai_prediction
+            vertex_prob = get_vertex_ai_prediction(vertex_features)
+            
+            if vertex_prob is None:
+                st.error("❌ PROBLEM FOUND: Vertex prediction returned None for this game!")
+                st.write("**Even though the test prediction worked, this one failed.**")
+                st.write("**Possible causes:**")
+                st.write("- Feature vector format is wrong")
+                st.write("- Some feature values are invalid (NaN, infinity)")
+                st.write("")
+                st.write("**Feature vector:**")
+                st.write(vertex_features)
+            else:
+                st.success(f"✅ Got prediction: {vertex_prob:.3f}")
+                st.write("**The analyzer CAN work - but something is wrong with the full batch**")
+        
+        except Exception as e:
+            st.error(f"❌ Error during analysis: {e}")
+            st.code(str(e))
+            
+            import traceback
+            st.write("**Full traceback:**")
+            st.code(traceback.format_exc())
+    
+    except Exception as e:
+        st.error(f"❌ Could not test analyzer: {e}")
+        st.code(str(e))
+    
+    # Step 4: Summary
+    st.write("---")
+    st.write("### 💡 What to Do Next")
+    st.write("""
+    **If prediction test failed:**
+    - Update ml_predictions.py to latest version
+    - Restart Streamlit
+    
+    **If single game test failed:**
+    - Check the error message above
+    - Feature building or prediction has an issue
+    
+    **If everything passed but still no results:**
+    - The Master Analyzer is catching errors silently
+    - Use the new consolidated_workflow_complete.py instead
+    - It shows ALL errors and has no silent failures
+    """)
+
+# ============================================================
+# CSV ENRICHMENT HELPER FUNCTIONS
+# ============================================================
+
+def normalize_team(team):
+    """Normalize team name for matching."""
+    replacements = {
+        'ny': 'new york', 'la': 'los angeles', 'sf': 'san francisco',
+        'tb': 'tampa bay', 'gb': 'green bay', 'ne': 'new england',
+        'no': 'new orleans', 'kc': 'kansas city'
+    }
+    team_lower = str(team).lower()
+    for abbr, full in replacements.items():
+        if team_lower.startswith(abbr + ' ') or team_lower == abbr:
+            team_lower = team_lower.replace(abbr, full)
+    return team_lower.replace('.', '').replace(' ', '').strip()
+
+
+def fuzzy_match(team1, team2):
+    """Check if teams match using fuzzy string matching."""
+    if not team1 or not team2:
+        return False
+    norm1 = normalize_team(team1)
+    norm2 = normalize_team(team2)
+    if norm1 == norm2 or norm1 in norm2 or norm2 in norm1:
+        return True
+    from difflib import SequenceMatcher
+    return SequenceMatcher(None, norm1, norm2).ratio() >= 0.6
+
+
+def line_to_probability(line, market='Spread'):
+    """Estimate probability from betting line."""
+    if pd.isna(line) or line == '':
+        return 55.0
+    try:
+        line = float(line)
+    except:
+        return 55.0
+    
+    if market == 'Spread':
+        from scipy.stats import norm
+        std_dev = 13.5
+        prob = norm.cdf(-line / std_dev) * 100
+        prob = np.clip(prob, 15, 85)
+    else:
+        prob = 50.0
+    return float(prob)
+
+
+def enrich_best_bets_with_csv(best_bets_df):
+    """Enrich best bets DataFrame with theover.ai data from CSV files."""
+    # Load theover data
+    theover_df = None
+    try:
+        spreads = pd.read_csv('23_Nov_Spreads.csv')
+        totals = pd.read_csv('23_Nov_Totals.csv')
+        theover_df = pd.concat([spreads, totals], ignore_index=True)
+        theover_df['EstimatedProb'] = theover_df.apply(
+            lambda row: line_to_probability(row.get('Line'), row.get('Market', 'Spread')),
+            axis=1
+        )
+        st.write(f"✅ Loaded {len(theover_df)} theover.ai games")
+    except Exception as e:
+        st.warning(f"⚠️ Could not load theover.ai data: {e}")
+        st.info("Make sure 23_Nov_Spreads.csv and 23_Nov_Totals.csv are in the same directory")
+    
+    enriched_rows = []
+    matches_found = 0
+    
+    progress = st.progress(0)
+    status_text = st.empty()
+    
+    for idx, row in best_bets_df.iterrows():
+        enriched = row.to_dict()
+        game = row.get('Game', '')
+        
+        status_text.write(f"Processing {idx+1}/{len(best_bets_df)}: {game}")
+        
+        try:
+            parts = game.split('@')
+            if len(parts) == 2:
+                away_team = parts[0].strip()
+                home_team = parts[1].strip()
+            else:
+                enriched_rows.append(enriched)
+                progress.progress((idx + 1) / len(best_bets_df))
+                continue
+        except:
+            enriched_rows.append(enriched)
+            progress.progress((idx + 1) / len(best_bets_df))
+            continue
+        
+        if theover_df is not None:
+            market_type = row.get('Market', '')
+            selection = row.get('Selection', '')
+            
+            match_found = False
+            for _, theover_row in theover_df.iterrows():
+                t_home = str(theover_row.get('HomeTeam', ''))
+                t_away = str(theover_row.get('AwayTeam', ''))
+                t_market = str(theover_row.get('Market', ''))
+                
+                if fuzzy_match(home_team, t_home) and fuzzy_match(away_team, t_away):
+                    market_matches = (
+                        (market_type == 'Spread' and t_market == 'Spread') or
+                        (market_type == 'Total' and t_market == 'Total') or
+                        (market_type == 'Moneyline' and t_market == 'Spread')
+                    )
+                    
+                    if market_matches:
+                        est_prob = theover_row.get('EstimatedProb', 55.0)
+                        
+                        if market_type in ['Spread', 'Moneyline']:
+                            if home_team in selection or normalize_team(home_team) in normalize_team(selection):
+                                theover_prob = est_prob
+                            else:
+                                theover_prob = 100 - est_prob
+                        else:
+                            theover_prob = 50.0
+                        
+                        enriched['theover.ai %'] = f"{theover_prob:.1f}%"
+                        
+                        try:
+                            ai_prob = float(str(row.get('AI Prob %', '50')).replace('%', ''))
+                            enriched['theover Δ pp'] = f"{theover_prob - ai_prob:+.1f}"
+                        except:
+                            enriched['theover Δ pp'] = '—'
+                        
+                        enriched['theover Source'] = 'theover.ai (CSV)'
+                        match_found = True
+                        matches_found += 1
+                        break
+            
+            if not match_found:
+                enriched['theover.ai %'] = '—'
+                enriched['theover Δ pp'] = '—'
+                enriched['theover Source'] = '—'
+        else:
+            enriched['theover.ai %'] = '—'
+            enriched['theover Δ pp'] = '—'
+            enriched['theover Source'] = '—'
+        
+        if pd.isna(enriched.get('ML Prob %')) or enriched.get('ML Prob %') in ['—', '', 'nan', None]:
+            enriched['ML Prob %'] = enriched.get('AI Prob %', '52.0%')
+            enriched['ML Model'] = 'AI Fallback'
+        
+        enriched_rows.append(enriched)
+        progress.progress((idx + 1) / len(best_bets_df))
+    
+    progress.empty()
+    status_text.empty()
+    
+    enriched_df = pd.DataFrame(enriched_rows)
+    
+    st.success("✅ Enrichment Complete!")
+    
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Total Bets", len(enriched_df))
+    with col2:
+        match_rate = (matches_found / len(enriched_df)) * 100 if len(enriched_df) > 0 else 0
+        st.metric("theover Matches", f"{matches_found} ({match_rate:.0f}%)")
+    with col3:
+        filled = (enriched_df['theover.ai %'] != '—').sum()
+        st.metric("Enriched", f"{filled}/{len(enriched_df)}")
+    
+    return enriched_df
+
+
+# ============================================================
+# SINGLE CSV ENRICHMENT SECTION
+# ============================================================
+
+
+
+# ============================================================
+# COMPLETE BETTING PIPELINE: ML → VERTEX AI → ENRICHMENT → RANKINGS
+# ============================================================
+
+def run_complete_betting_pipeline(best_bets_df, anthropic_api_key=None):
+    """
+    Sequential pipeline that combines all analysis methods:
+    1. ML Best Bets (already generated)
+    2. Vertex AI Analysis (confidence, risk, stars)
+    3. CSV Enrichment (theover.ai data)
+    4. Composite Rankings (weighted score from all sources)
+    """
+    import json
+    
+    st.write("---")
+    st.write("### 🔄 Running Complete Analysis Pipeline")
+    st.write("")
+    
+    total_bets = len(best_bets_df)
+    
+    # Step 1: ML Best Bets (already done)
+    st.success(f"✅ **Step 1/4:** Generated {total_bets} ML best bets")
+    
+    # Step 2: Vertex AI Analysis
+    st.write("---")
+    st.write("🧠 **Step 2/4: Vertex AI Analysis**")
+    
+    if not anthropic_api_key:
+        st.warning("⚠️ No Anthropic API key - skipping Vertex AI analysis")
+        st.info("💡 Add API key in sidebar to enable Vertex AI deep analysis")
+        vertex_analyzed_df = best_bets_df.copy()
+        # Add placeholder columns
+        vertex_analyzed_df['Vertex Confidence'] = 75.0
+        vertex_analyzed_df['Vertex Risk'] = 'Medium'
+        vertex_analyzed_df['Vertex Stars'] = 3
+        vertex_analyzed_df['Vertex Factors'] = 'Skipped - no API key'
+    else:
+        try:
+            import anthropic
+            client = anthropic.Anthropic(api_key=anthropic_api_key)
+            
+            vertex_scores = []
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            
+            for idx, row in best_bets_df.iterrows():
+                game = row['Game']
+                market = row.get('Market', '')
+                selection = row.get('Selection', '')
+                ai_prob = row.get('AI Prob %', '50%')
+                ai_edge = row.get('AI Edge pp', 0)
+                
+                status_text.write(f"🔍 Analyzing {idx+1}/{total_bets}: {game}")
+                
+                # Vertex AI prompt for this specific bet
+                prompt = f"""Analyze this sports betting opportunity:
+
+Game: {game}
+Market: {market}
+Pick: {selection}
+ML Probability: {ai_prob}
+Edge: {ai_edge} percentage points
+
+Please provide a concise analysis with:
+1. confidence: Your confidence score (0-100) for this bet
+2. risk: Risk level (Low, Medium, or High)
+3. stars: Rating (1-5, where 5 is best)
+4. factors: Brief key factors (max 100 chars)
+
+Respond ONLY with valid JSON in this exact format:
+{{"confidence": 75, "risk": "Medium", "stars": 3, "factors": "key points here"}}"""
+                
+                try:
+                    message = client.messages.create(
+                        model="claude-sonnet-4-20250514",
+                        max_tokens=300,
+                        messages=[{"role": "user", "content": prompt}]
+                    )
+                    
+                    response_text = message.content[0].text
+                    
+                    # Extract JSON from response
+                    json_match = re.search(r'\{[^}]+\}', response_text, re.DOTALL)
+                    if json_match:
+                        analysis = json.loads(json_match.group())
+                        vertex_scores.append({
+                            'Game': game,
+                            'Vertex Confidence': float(analysis.get('confidence', 75)),
+                            'Vertex Risk': str(analysis.get('risk', 'Medium')),
+                            'Vertex Stars': int(analysis.get('stars', 3)),
+                            'Vertex Factors': str(analysis.get('factors', ''))[:100]
+                        })
+                    else:
+                        # Fallback if JSON parsing fails
+                        vertex_scores.append({
+                            'Game': game,
+                            'Vertex Confidence': 75.0,
+                            'Vertex Risk': 'Medium',
+                            'Vertex Stars': 3,
+                            'Vertex Factors': 'Analysis format error'
+                        })
+                        
+                except Exception as e:
+                    # Graceful fallback on API error
+                    vertex_scores.append({
+                        'Game': game,
+                        'Vertex Confidence': 75.0,
+                        'Vertex Risk': 'Medium',
+                        'Vertex Stars': 3,
+                        'Vertex Factors': f'Error: {str(e)[:50]}'
+                    })
+                
+                progress_bar.progress((idx + 1) / total_bets)
+            
+            progress_bar.empty()
+            status_text.empty()
+            
+            # Merge Vertex AI scores with best bets
+            vertex_df = pd.DataFrame(vertex_scores)
+            vertex_analyzed_df = best_bets_df.merge(vertex_df, on='Game', how='left')
+            
+            # Fill any missing values
+            vertex_analyzed_df['Vertex Confidence'] = vertex_analyzed_df['Vertex Confidence'].fillna(75.0)
+            vertex_analyzed_df['Vertex Risk'] = vertex_analyzed_df['Vertex Risk'].fillna('Medium')
+            vertex_analyzed_df['Vertex Stars'] = vertex_analyzed_df['Vertex Stars'].fillna(3)
+            
+            st.success(f"✅ **Step 2/4:** Vertex AI analyzed {len(vertex_scores)} bets")
+            
+        except Exception as e:
+            st.error(f"❌ Vertex AI error: {e}")
+            st.info("Continuing with ML data only...")
+            vertex_analyzed_df = best_bets_df.copy()
+            vertex_analyzed_df['Vertex Confidence'] = 75.0
+            vertex_analyzed_df['Vertex Risk'] = 'Medium'
+            vertex_analyzed_df['Vertex Stars'] = 3
+            vertex_analyzed_df['Vertex Factors'] = f'Error: {str(e)[:50]}'
+    
+    # Step 3: CSV Enrichment (theover.ai)
+    st.write("---")
+    st.write("📊 **Step 3/4: CSV Enrichment (theover.ai)**")
+    
+    with st.spinner("Enriching with theover.ai data..."):
+        try:
+            enriched_df = enrich_best_bets_with_csv(vertex_analyzed_df)
+            st.success("✅ **Step 3/4:** CSV enrichment complete")
+        except Exception as e:
+            st.warning(f"⚠️ CSV enrichment skipped: {e}")
+            enriched_df = vertex_analyzed_df.copy()
+            # Add placeholder columns
+            enriched_df['theover.ai %'] = '—'
+            enriched_df['theover Δ pp'] = '—'
+            enriched_df['theover Source'] = 'Not available'
+    
+    # Step 4: Composite Rankings
+    st.write("---")
+    st.write("🏆 **Step 4/4: Composite Rankings**")
+    
+    # Extract numeric values for calculations
+    def extract_percent(val):
+        """Extract numeric percentage from string"""
+        if pd.isna(val) or val == '—':
+            return 50.0
+        try:
+            return float(str(val).replace('%', ''))
+        except:
+            return 50.0
+    
+    # Get numeric probabilities
+    enriched_df['ML_Prob_Numeric'] = enriched_df['AI Prob %'].apply(extract_percent)
+    enriched_df['Vertex_Conf_Numeric'] = enriched_df['Vertex Confidence'].fillna(75.0)
+    enriched_df['theover_Prob_Numeric'] = enriched_df['theover.ai %'].apply(extract_percent)
+    
+    # Calculate consensus score (how much the models agree)
+    enriched_df['Consensus Score'] = 100 - (
+        abs(enriched_df['ML_Prob_Numeric'] - enriched_df['Vertex_Conf_Numeric']) +
+        abs(enriched_df['ML_Prob_Numeric'] - enriched_df['theover_Prob_Numeric']) +
+        abs(enriched_df['Vertex_Conf_Numeric'] - enriched_df['theover_Prob_Numeric'])
+    ) / 3
+    
+    # Calculate composite score (weighted average + consensus bonus)
+    enriched_df['Composite Score'] = (
+        enriched_df['ML_Prob_Numeric'] * 0.35 +           # ML weight: 35%
+        enriched_df['Vertex_Conf_Numeric'] * 0.35 +      # Vertex weight: 35%
+        enriched_df['theover_Prob_Numeric'] * 0.20 +     # theover weight: 20%
+        enriched_df['Consensus Score'] * 0.10            # Consensus bonus: 10%
+    )
+    
+    # Add risk penalty
+    risk_penalty = {'Low': 0, 'Medium': -2, 'High': -5}
+    enriched_df['Risk Penalty'] = enriched_df['Vertex Risk'].map(risk_penalty).fillna(-2)
+    enriched_df['Final Score'] = enriched_df['Composite Score'] + enriched_df['Risk Penalty']
+    
+    # Sort by final score
+    enriched_df = enriched_df.sort_values('Final Score', ascending=False).reset_index(drop=True)
+    enriched_df['Rank'] = range(1, len(enriched_df) + 1)
+    
+    st.success("✅ **Step 4/4:** Rankings calculated using multi-model consensus")
+    
+    # Display pipeline summary
+    st.write("---")
+    st.write("### 📈 Pipeline Summary")
+    
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
-        st.metric("Games Analyzed", len(prev_results))
+        st.metric("Total Bets Analyzed", total_bets)
     
     with col2:
-        avg_confidence = sum(r['confidence'] for r in prev_results) / len(prev_results) if prev_results else 0
-        st.metric("Avg Confidence", f"{avg_confidence:.1f}%")
+        avg_vertex = enriched_df['Vertex_Conf_Numeric'].mean()
+        st.metric("Avg Vertex Confidence", f"{avg_vertex:.1f}%")
     
     with col3:
-        with_edge = sum(1 for r in prev_results if r['has_edge'])
-        st.metric("Games with Edge", with_edge)
+        high_consensus = (enriched_df['Consensus Score'] >= 90).sum()
+        st.metric("High Consensus Bets", f"{high_consensus}")
     
     with col4:
-        # Show which AI provider was used
-        ai_provider = prev_results[0].get('ai_provider', 'unknown') if prev_results else 'unknown'
-        if 'gemini' in ai_provider:
-            st.metric("AI Provider", "Gemini 💎")
-        elif 'claude' in ai_provider:
-            st.metric("AI Provider", "Claude 🤖")
-        else:
-            st.metric("AI Provider", "Unknown")
+        five_star = (enriched_df['Vertex Stars'] >= 4).sum()
+        st.metric("4+ Star Bets", five_star)
     
-    # Results table
-    st.write("### 📋 All Results")
+
+    # Show top ranked bets with DETAILED ANALYSIS
+    st.write("---")
+    st.write("### 🏆 Top Ranked Opportunities (with Full Analysis)")
     
-    prev_df = pd.DataFrame([{
-        'Game': f"{r['away_team']} @ {r['home_team']}",
-        'Vertex Prob %': f"{r['vertex_probability']:.1f}%",
-        'Confidence %': f"{r['confidence']:.0f}%",
-        'Has Edge': '✅' if r['has_edge'] else '❌',
-        'Sources': r['sources_used']
-    } for r in prev_results])
+    # Display top 10 bets with expandable details
+    for idx, row in enriched_df.head(10).iterrows():
+        rank = row['Rank']
+        game = row['Game']
+        market = row.get('Market', 'N/A')
+        selection = row.get('Selection', 'N/A')
+        
+        # Get all the scores
+        ml_prob = row.get('AI Prob %', 'N/A')
+        vertex_conf = row.get('Vertex Confidence', 75)
+        vertex_risk = row.get('Vertex Risk', 'Medium')
+        vertex_stars = row.get('Vertex Stars', 3)
+        vertex_factors = row.get('Vertex Factors', 'No details')
+        theover_prob = row.get('theover.ai %', '—')
+        consensus = row.get('Consensus Score', 0)
+        final_score = row.get('Final Score', 0)
+        
+        # Create star display
+        star_display = '⭐' * int(vertex_stars)
+        
+        # Color-code risk
+        risk_color = {'Low': '🟢', 'Medium': '🟡', 'High': '🔴'}.get(vertex_risk, '⚪')
+        
+        # Create expandable section for each bet
+        with st.expander(f"**Rank #{rank}: {game}** | Score: {final_score:.1f} | {star_display}", expanded=(rank <= 3)):
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.markdown("### 📊 Bet Details")
+                st.write(f"**Market:** {market}")
+                st.write(f"**Pick:** {selection}")
+                st.write("")
+                
+                st.markdown("### 🤖 Model Probabilities")
+                st.metric("ML Probability", ml_prob)
+                st.metric("Vertex AI Confidence", f"{vertex_conf:.1f}%")
+                st.metric("theover.ai Probability", theover_prob)
+                st.metric("Consensus Score", f"{consensus:.1f}")
+                
+            with col2:
+                st.markdown("### 🧠 Vertex AI Analysis")
+                st.write(f"**Confidence:** {vertex_conf:.1f}%")
+                st.write(f"**Risk Level:** {risk_color} {vertex_risk}")
+                st.write(f"**Rating:** {star_display} ({vertex_stars}/5)")
+                st.write("")
+                
+                st.markdown("**Key Factors:**")
+                st.info(vertex_factors if vertex_factors else "No detailed analysis available")
+                
+                st.write("")
+                st.markdown("**Multi-Model Consensus:**")
+                if consensus >= 90:
+                    st.success(f"✅ **Excellent** ({consensus:.1f}/100) - All models strongly agree!")
+                elif consensus >= 80:
+                    st.success(f"✅ **Good** ({consensus:.1f}/100) - Strong model agreement")
+                elif consensus >= 70:
+                    st.info(f"ℹ️ **Moderate** ({consensus:.1f}/100) - Models mostly agree")
+                else:
+                    st.warning(f"⚠️ **Low** ({consensus:.1f}/100) - Models disagree - review carefully")
+            
+            # Add recommendation strength
+            st.write("---")
+            st.markdown("### 💡 Recommendation Strength")
+            
+            # Calculate overall recommendation
+            if final_score >= 75 and vertex_risk == 'Low' and vertex_stars >= 4:
+                st.success("🔥 **STRONG BET** - High score, low risk, excellent rating")
+            elif final_score >= 70 and vertex_risk in ['Low', 'Medium'] and vertex_stars >= 3:
+                st.success("✅ **GOOD BET** - Solid score with manageable risk")
+            elif final_score >= 65:
+                st.info("📊 **CONSIDER** - Decent opportunity, evaluate carefully")
+            else:
+                st.warning("⚠️ **CAUTION** - Lower confidence, higher risk")
     
-    st.dataframe(prev_df, use_container_width=True)
+    # Also show compact table for quick reference
+    st.write("---")
+    st.write("### 📋 Quick Reference Table (All Ranked Bets)")
     
-    # Download option (persists across reruns!)
-    csv_persistent = prev_df.to_csv(index=False)
+    display_cols = ['Rank', 'Game', 'Market', 'Selection', 'AI Prob %', 
+                    'Vertex Confidence', 'Vertex Stars', 'Vertex Risk',
+                    'theover.ai %', 'Consensus Score', 'Final Score']
+    available_cols = [col for col in display_cols if col in enriched_df.columns]
+    
+    st.dataframe(
+        enriched_df[available_cols],
+        use_container_width=True,
+        hide_index=True
+    )
+
+    
+    # Provide download
+    csv_output = enriched_df.to_csv(index=False, encoding='utf-8-sig')
+    timestamp = pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')
+    
     st.download_button(
-        "📥 Download Results CSV",
-        csv_persistent,
-        f"vertex_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+        "📥 Download Complete Analysis CSV",
+        csv_output,
+        f"complete_analysis_{timestamp}.csv",
         "text/csv",
-        key="download_persistent_results"
+        key='download_complete_analysis',
+        type="primary"
     )
     
-    # Option to clear results
-    if st.button("🗑️ Clear Results", key="clear_vertex_results"):
-        st.session_state['vertex_analysis_complete'] = False
-        st.session_state['vertex_results'] = []
-        st.rerun()
+    return enriched_df
 
 
-# End of main application
+
+st.markdown("---")
+st.header("📊 Best Bets CSV Enrichment")
+
+st.info("""
+**This section enriches your best bets with:**
+- ✅ theover.ai probabilities (from 23_Nov_Spreads.csv and 23_Nov_Totals.csv)
+- ✅ ML predictions (AI fallback if missing)
+
+**Two options:**
+1. Auto-enrich: Works with generated best bets above
+2. Manual upload: Upload your own CSV file
+""")
+
+if 'best_bets_df' in st.session_state and st.session_state['best_bets_df'] is not None:
+    best_bets_df = st.session_state['best_bets_df']
+    
+    st.success(f"✅ Found {len(best_bets_df)} best bets ready for enrichment")
+    
+    with st.expander("📊 Current Data Status"):
+        theover_filled = (best_bets_df.get('theover.ai %', pd.Series(['—'] * len(best_bets_df))) != '—').sum()
+        ml_filled = (best_bets_df.get('ML Prob %', pd.Series(['—'] * len(best_bets_df))) != '—').sum()
+        
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Total Bets", len(best_bets_df))
+        with col2:
+            st.metric("theover.ai % Filled", f"{theover_filled}/{len(best_bets_df)}")
+        with col3:
+            st.metric("ML Prob % Filled", f"{ml_filled}/{len(best_bets_df)}")
+    
+    if st.button("🚀 Auto-Enrich Best Bets", type="primary", key="auto_enrich"):
+        with st.spinner("🔄 Enriching best bets with CSV data..."):
+            enriched_df = enrich_best_bets_with_csv(best_bets_df)
+            
+            st.session_state['best_bets_df'] = enriched_df
+            
+            st.write("### 📋 Enriched Preview")
+            preview_cols = ['Game', 'Market', 'AI Prob %', 'theover.ai %', 'theover Δ pp']
+            available_cols = [col for col in preview_cols if col in enriched_df.columns]
+            st.dataframe(enriched_df[available_cols].head(10), use_container_width=True)
+            
+            csv_output = enriched_df.to_csv(index=False, encoding='utf-8-sig')
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            
+            st.download_button(
+                "📥 Download Enriched Best Bets",
+                csv_output,
+                f"best_bets_enriched_{timestamp}.csv",
+                "text/csv",
+                key='download_auto_enriched'
+            )
+            
+            st.success("🎉 Best bets have been enriched with CSV data!")
+
+else:
+    st.warning("⚠️ No best bets found. Generate best bets first using the section above.")
+    st.info("👆 Go to 'Best Bets Generation' and click 'Generate Best Bets'")
+
+st.markdown("---")
+st.subheader("📤 Manual CSV Upload (Optional)")
+
+uploaded_csv = st.file_uploader(
+    "Upload your own best bets CSV to enrich",
+    type=['csv'],
+    key='manual_csv_upload'
+)
+
+if uploaded_csv is not None:
+    if st.button("🚀 Enrich Uploaded CSV", type="secondary"):
+        uploaded_df = pd.read_csv(uploaded_csv)
+        
+        st.write(f"📊 Processing {len(uploaded_df)} bets from uploaded CSV...")
+        
+        with st.spinner("🔄 Enriching uploaded CSV..."):
+            enriched_df = enrich_best_bets_with_csv(uploaded_df)
+            
+            st.write("### 📊 Enriched CSV Preview")
+            preview_cols = ['Game', 'AI Prob %', 'theover.ai %', 'ML Prob %']
+            available_cols = [col for col in preview_cols if col in enriched_df.columns]
+            st.dataframe(enriched_df[available_cols].head(10))
+            
+            csv = enriched_df.to_csv(index=False)
+            st.download_button(
+                "📥 Download Enriched CSV",
+                csv,
+                f"best_bets_enriched_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                "text/csv",
+                key='download_manual_enriched'
+            )
+            
+            st.success("🎉 Your uploaded CSV has been enriched!")
+
+
+# ═══════════════════════════════════════════════════════════════
+# COMPLETE API VERIFICATION TOOL
+# Tests ALL APIs with real calls and shows exactly what works
+# ═══════════════════════════════════════════════════════════════
+
+import streamlit as st
+import requests
+import json
+from datetime import datetime
+
+def test_odds_api(api_key):
+    """Test The Odds API with real call"""
+    if not api_key:
+        return False, "❌ No API key provided"
+    
+    try:
+        url = "https://api.the-odds-api.com/v4/sports"
+        params = {'apiKey': api_key}
+        
+        response = requests.get(url, params=params, timeout=10)
+        
+        if response.status_code == 200:
+            sports = response.json()
+            return True, f"✅ Working! Found {len(sports)} sports. Remaining requests: {response.headers.get('x-requests-remaining', 'Unknown')}"
+        elif response.status_code == 401:
+            return False, "❌ Invalid API key (401 Unauthorized)"
+        elif response.status_code == 429:
+            return False, "❌ Rate limit exceeded (429)"
+        else:
+            return False, f"❌ Error: Status {response.status_code}"
+    
+    except requests.exceptions.Timeout:
+        return False, "❌ Timeout (>10s)"
+    except Exception as e:
+        return False, f"❌ Error: {str(e)[:100]}"
+
+
+def test_anthropic_api(api_key):
+    """Test Anthropic API (Vertex AI) with real call"""
+    if not api_key:
+        return False, "❌ No API key provided"
+    
+    try:
+        import anthropic
+        
+        client = anthropic.Anthropic(api_key=api_key)
+        
+        # Make a simple test call
+        message = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=100,
+            messages=[{
+                "role": "user",
+                "content": "Reply with just the number 42"
+            }],
+            timeout=15.0
+        )
+        
+        response_text = message.content[0].text
+        
+        # Check if we got a real response (not default/error)
+        if response_text and len(response_text) > 0:
+            return True, f"✅ Working! Response: '{response_text[:50]}...'"
+        else:
+            return False, "❌ Got empty response"
+    
+    except anthropic.AuthenticationError:
+        return False, "❌ Invalid API key (Authentication failed)"
+    except anthropic.RateLimitError:
+        return False, "❌ Rate limit exceeded"
+    except anthropic.APITimeoutError:
+        return False, "❌ Timeout (>15s)"
+    except anthropic.APIError as e:
+        return False, f"❌ API Error: {str(e)[:100]}"
+    except Exception as e:
+        return False, f"❌ Error: {str(e)[:100]}"
+
+
+def test_news_api(api_key):
+    """Test News API with real call"""
+    if not api_key:
+        return False, "❌ No API key provided"
+    
+    try:
+        url = "https://newsapi.org/v2/top-headlines"
+        params = {
+            'apiKey': api_key,
+            'category': 'sports',
+            'language': 'en',
+            'pageSize': 5
+        }
+        
+        response = requests.get(url, params=params, timeout=10)
+        
+        if response.status_code == 200:
+            data = response.json()
+            articles = data.get('articles', [])
+            total = data.get('totalResults', 0)
+            return True, f"✅ Working! Found {len(articles)} recent articles (Total: {total})"
+        elif response.status_code == 401:
+            return False, "❌ Invalid API key (401 Unauthorized)"
+        elif response.status_code == 429:
+            return False, "❌ Rate limit exceeded (429)"
+        else:
+            return False, f"❌ Error: Status {response.status_code}"
+    
+    except requests.exceptions.Timeout:
+        return False, "❌ Timeout (>10s)"
+    except Exception as e:
+        return False, f"❌ Error: {str(e)[:100]}"
+
+
+def test_anthropic_sports_analysis(api_key):
+    """Test Anthropic with actual sports analysis (like CSV workflow uses)"""
+    if not api_key:
+        return False, "❌ No API key provided", None
+    
+    try:
+        import anthropic
+        
+        client = anthropic.Anthropic(api_key=api_key)
+        
+        # Test with a real sports analysis prompt
+        prompt = """Analyze this game:
+
+Game: Lakers @ Celtics
+Sport: basketball_nba
+Date: 2024-11-24
+Home Odds: -150
+Away Odds: +130
+
+Provide analysis as JSON:
+{
+  "home_win_probability": 65.0,
+  "away_win_probability": 35.0,
+  "confidence_level": 78,
+  "risk_assessment": "Low",
+  "recommendation": "Home team moneyline"
+}
+
+Respond ONLY with valid JSON."""
+        
+        message = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=500,
+            messages=[{"role": "user", "content": prompt}],
+            timeout=20.0
+        )
+        
+        response_text = message.content[0].text
+        
+        # Try to parse JSON
+        import re
+        json_match = re.search(r'\{[\s\S]*\}', response_text)
+        
+        if json_match:
+            try:
+                analysis = json.loads(json_match.group())
+                home_prob = float(analysis.get('home_win_probability', 0))
+                
+                # Check if we got real analysis (not default 50%)
+                if home_prob > 0 and home_prob != 50.0 and home_prob != 50.5:
+                    return True, f"✅ Sports analysis working! Home win prob: {home_prob}%", analysis
+                else:
+                    return False, f"⚠️ Got default probability ({home_prob}%), might not be analyzing properly", analysis
+            except json.JSONDecodeError as e:
+                return False, f"❌ JSON parse error: {str(e)[:50]}", None
+        else:
+            return False, f"❌ No JSON found in response: {response_text[:200]}", None
+    
+    except Exception as e:
+        return False, f"❌ Error: {str(e)[:100]}", None
+
+
+# ═══════════════════════════════════════════════════════════════
+# STREAMLIT UI
+# ═══════════════════════════════════════════════════════════════
+
+st.write("---")
+st.write("---")
+st.header("🔍 Complete API Verification Tool")
+
+st.info("""
+**This tool tests ALL your APIs with REAL calls:**
+- ✅ = API working correctly
+- ❌ = API not working (see error)
+- ⚠️ = API responds but might have issues
+
+Run this to verify everything before analyzing games!
+""")
+
+# Collect API keys
+st.subheader("📋 Step 1: Collect API Keys")
+
+col1, col2 = st.columns(2)
+
+with col1:
+    st.write("**From Session State:**")
+    odds_key_session = st.session_state.get('api_key', '')
+    anthropic_key_session = st.session_state.get('anthropic_api_key', '')
+    news_key_session = st.session_state.get('news_api_key', '')
+    
+    st.write(f"- Odds API: {'✅' if odds_key_session else '❌'} {odds_key_session[:10] + '...' if odds_key_session else 'Not found'}")
+    st.write(f"- Anthropic: {'✅' if anthropic_key_session else '❌'} {anthropic_key_session[:10] + '...' if anthropic_key_session else 'Not found'}")
+    st.write(f"- News API: {'✅' if news_key_session else '❌'} {news_key_session[:10] + '...' if news_key_session else 'Not found'}")
+
+with col2:
+    st.write("**From Environment/Secrets:**")
+    import os
+    
+    odds_key_env = os.environ.get('ODDS_API_KEY', '') or st.secrets.get('ODDS_API_KEY', '')
+    anthropic_key_env = os.environ.get('anthropic_api_key', '') or st.secrets.get('anthropic_api_key', '')
+    news_key_env = os.environ.get('NEWS_API_KEY', '') or st.secrets.get('NEWS_API_KEY', '')
+    
+    st.write(f"- Odds API: {'✅' if odds_key_env else '❌'} {odds_key_env[:10] + '...' if odds_key_env else 'Not found'}")
+    st.write(f"- Anthropic: {'✅' if anthropic_key_env else '❌'} {anthropic_key_env[:10] + '...' if anthropic_key_env else 'Not found'}")
+    st.write(f"- News API: {'✅' if news_key_env else '❌'} {news_key_env[:10] + '...' if news_key_env else 'Not found'}")
+
+# Use best available keys
+final_odds_key = odds_key_session or odds_key_env
+final_anthropic_key = anthropic_key_session or anthropic_key_env
+final_news_key = news_key_session or news_key_env
+
+st.write("---")
+
+# Test APIs
+st.subheader("🧪 Step 2: Test APIs with Real Calls")
+
+if st.button("🚀 Run Complete API Test", type="primary"):
+    
+    results = {}
+    
+    # Test 1: The Odds API
+    st.write("### 1️⃣ Testing The Odds API")
+    with st.spinner("Testing..."):
+        success, message = test_odds_api(final_odds_key)
+        results['odds_api'] = (success, message)
+        
+        if success:
+            st.success(message)
+        else:
+            st.error(message)
+    
+    st.write("---")
+    
+    # Test 2: Anthropic API (Basic)
+    st.write("### 2️⃣ Testing Anthropic API (Basic)")
+    with st.spinner("Testing..."):
+        success, message = test_anthropic_api(final_anthropic_key)
+        results['anthropic_basic'] = (success, message)
+        
+        if success:
+            st.success(message)
+        else:
+            st.error(message)
+    
+    st.write("---")
+    
+    # Test 3: Anthropic API (Sports Analysis)
+    st.write("### 3️⃣ Testing Anthropic API (Sports Analysis)")
+    st.caption("This is the REAL test - simulates CSV workflow")
+    
+    with st.spinner("Testing sports analysis..."):
+        success, message, analysis = test_anthropic_sports_analysis(final_anthropic_key)
+        results['anthropic_sports'] = (success, message)
+        
+        if success:
+            st.success(message)
+            if analysis:
+                with st.expander("📊 View Full Analysis"):
+                    st.json(analysis)
+        else:
+            st.error(message)
+            if analysis:
+                with st.expander("⚠️ View Response (might show issue)"):
+                    st.json(analysis)
+    
+    st.write("---")
+    
+    # Test 4: News API
+    st.write("### 4️⃣ Testing News API (Sentiment)")
+    with st.spinner("Testing..."):
+        success, message = test_news_api(final_news_key)
+        results['news_api'] = (success, message)
+        
+        if success:
+            st.success(message)
+        else:
+            st.error(message)
+    
+    st.write("---")
+    st.write("---")
+    
+    # Summary
+    st.write("## 📊 Test Summary")
+    
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        status = "✅" if results.get('odds_api', (False,))[0] else "❌"
+        st.metric("Odds API", status)
+    
+    with col2:
+        status = "✅" if results.get('anthropic_basic', (False,))[0] else "❌"
+        st.metric("Anthropic (Basic)", status)
+    
+    with col3:
+        status = "✅" if results.get('anthropic_sports', (False,))[0] else "❌"
+        st.metric("Anthropic (Sports)", status)
+    
+    with col4:
+        status = "✅" if results.get('news_api', (False,))[0] else "❌"
+        st.metric("News API", status)
+    
+    # Diagnosis
+    st.write("---")
+    st.write("## 🔍 Diagnosis")
+    
+    all_working = all(result[0] for result in results.values())
+    
+    if all_working:
+        st.success("🎉 **ALL APIS WORKING!** You're ready to analyze games!")
+    else:
+        st.error("⚠️ **SOME APIS NOT WORKING** - See issues above")
+        
+        # Specific recommendations
+        if not results.get('odds_api', (False,))[0]:
+            st.warning("**The Odds API Issue:**")
+            st.write("- Check API key is correct")
+            st.write("- Verify you have remaining requests")
+            st.write("- Get key from: https://the-odds-api.com/")
+        
+        if not results.get('anthropic_basic', (False,))[0]:
+            st.warning("**Anthropic API Issue (Basic):**")
+            st.write("- Check API key is correct (starts with 'sk-ant-')")
+            st.write("- Verify account has credits")
+            st.write("- Get key from: https://console.anthropic.com/")
+        
+        if not results.get('anthropic_sports', (False,))[0]:
+            st.warning("**Anthropic Sports Analysis Issue:**")
+            st.write("- Basic API works but sports analysis doesn't")
+            st.write("- This is why you see 50.5% for everything!")
+            st.write("- Check error message above")
+            st.write("- Might be prompt issue or JSON parsing")
+        
+        if not results.get('news_api', (False,))[0]:
+            st.warning("**News API Issue (Sentiment):**")
+            st.write("- Check API key is correct")
+            st.write("- Sentiment analysis won't work")
+            st.write("- Get key from: https://newsapi.org/")
+    
+    st.write("---")
+    
+    # What to do next
+    st.write("## ✅ What To Do Next")
+    
+    if all_working:
+        st.info("""
+        **All APIs working! Now you can:**
+        1. Upload your CSV in the CSV workflow section
+        2. Run analysis with confidence
+        3. Get real probabilities (not 50.5%)
+        """)
+    else:
+        st.info("""
+        **Fix the failing APIs:**
+        1. Add/fix API keys as shown above
+        2. Re-run this test
+        3. Once all ✅, proceed to CSV analysis
+        """)
+
+st.write("---")
+st.write("---")
+
+
+# ═══════════════════════════════════════════════════════════════
+# CSV UPLOAD → VERTEX-POWERED ANALYSIS (FIXED WITH DEBUGGING)
+# Now with proper error handling and visible status messages
+# ═══════════════════════════════════════════════════════════════
+
+import streamlit as st
+import pandas as pd
+import numpy as np
+from datetime import datetime
+import json
+import re
+
+# ═══════════════════════════════════════════════════════════════
+# IMPROVED VERTEX FUNCTIONS WITH DEBUGGING
+# ═══════════════════════════════════════════════════════════════
+
+def vertex_analyze_historical_data_debug(game, anthropic_api_key):
+    """
+    Use Vertex AI to analyze historical game data - WITH DEBUGGING
+    """
+    if not anthropic_api_key:
+        return None, "❌ No API key provided"
+    
+    try:
+        import anthropic
+        client = anthropic.Anthropic(api_key=anthropic_api_key)
+        
+        prompt = f"""You are an expert sports analyst. Analyze this upcoming game:
+
+GAME: {game['away_team']} @ {game['home_team']}
+Sport: {game['sport']}
+Date: {game['date']}
+Home Odds: {game.get('home_odds', 'N/A')}
+Away Odds: {game.get('away_odds', 'N/A')}
+
+Analyze:
+1. Recent head-to-head history
+2. Home/away performance trends  
+3. Injuries or roster changes you know about
+4. Betting line value assessment
+5. Sport-specific factors (rest, travel, etc)
+
+RESPOND WITH ONLY THIS JSON (no other text):
+{{
+  "home_win_probability": 65.0,
+  "away_win_probability": 35.0,
+  "confidence_level": 78,
+  "risk_assessment": "Low",
+  "key_factors": ["Factor 1", "Factor 2", "Factor 3"],
+  "historical_edge": "Brief summary",
+  "betting_recommendation": "Specific bet",
+  "value_rating": 7.5,
+  "sentiment": "Bullish on home",
+  "concerns": ["Concern 1", "Concern 2"]
+}}"""
+        
+        # Call API with timeout
+        message = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=1000,
+            messages=[{"role": "user", "content": prompt}],
+            timeout=30.0
+        )
+        
+        response_text = message.content[0].text
+        
+        # Try to parse JSON
+        json_match = re.search(r'\{[\s\S]*\}', response_text)
+        if json_match:
+            analysis = json.loads(json_match.group())
+            
+            # Validate we got actual probabilities (not defaults)
+            home_prob = float(analysis.get('home_win_probability', 50.0))
+            if home_prob == 50.0 or home_prob == 50.5:
+                return None, "⚠️ Got default probability (50%), likely API issue"
+            
+            return analysis, "✅ Success"
+        else:
+            return None, f"❌ JSON parse failed. Response: {response_text[:200]}"
+    
+    except anthropic.APIError as e:
+        return None, f"❌ API Error: {str(e)[:100]}"
+    except anthropic.APITimeoutError:
+        return None, "❌ API Timeout (>30s)"
+    except json.JSONDecodeError as e:
+        return None, f"❌ JSON decode error: {str(e)[:100]}"
+    except Exception as e:
+        return None, f"❌ Unexpected error: {str(e)[:100]}"
+
+
+def comprehensive_vertex_analysis_debug(game, ml_result, sentiment_result, anthropic_api_key):
+    """
+    Vertex AI synthesizes ALL data for final winning probability - WITH DEBUGGING
+    """
+    if not anthropic_api_key:
+        return None, "❌ No API key"
+    
+    try:
+        import anthropic
+        client = anthropic.Anthropic(api_key=anthropic_api_key)
+        
+        prompt = f"""FINAL ANALYSIS - Synthesize all data to make best betting decision:
+
+GAME: {game['away_team']} @ {game['home_team']}
+Sport: {game['sport']}
+Date: {game['date']}
+
+MACHINE LEARNING:
+- ML Home Win: {ml_result['ml_home_prob']:.1f}%
+- ML Away Win: {ml_result['ml_away_prob']:.1f}%
+- ML Confidence: {ml_result['ml_confidence']:.1f}%
+
+SENTIMENT:
+- Sentiment: {sentiment_result['sentiment_label']}
+- Score: {sentiment_result['sentiment_score']:.1f}
+
+BETTING LINES:
+- Home Odds: {game.get('home_odds', 'N/A')}
+- Away Odds: {game.get('away_odds', 'N/A')}
+
+YOUR TASK: Produce FINAL winning probability combining ML, sentiment, lines, and YOUR sports knowledge.
+
+RESPOND WITH ONLY THIS JSON (no other text):
+{{
+  "final_home_win_probability": 62.5,
+  "final_away_win_probability": 37.5,
+  "overall_confidence": 82,
+  "risk_level": "Low",
+  "recommended_bet": "Home Team -5.5",
+  "bet_confidence": "High",
+  "value_assessment": 8.0,
+  "key_insights": ["Insight 1", "Insight 2", "Insight 3"],
+  "edge_analysis": "Edge description",
+  "final_verdict": "STRONG HOME PLAY",
+  "stars": 4
+}}"""
+        
+        message = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=1000,
+            messages=[{"role": "user", "content": prompt}],
+            timeout=30.0
+        )
+        
+        response_text = message.content[0].text
+        json_match = re.search(r'\{[\s\S]*\}', response_text)
+        
+        if json_match:
+            analysis = json.loads(json_match.group())
+            
+            # Validate actual analysis happened
+            final_prob = float(analysis.get('final_home_win_probability', 50.0))
+            if final_prob == 50.0 or final_prob == 50.5:
+                return None, "⚠️ Got default probability, API issue"
+            
+            return analysis, "✅ Success"
+        else:
+            return None, f"❌ Parse failed: {response_text[:200]}"
+    
+    except Exception as e:
+        return None, f"❌ Error: {str(e)[:100]}"
+
+
+def run_complete_analysis_with_debug(games, ml_predictor, sentiment_analyzer, anthropic_api_key):
+    """
+    Run complete analysis with DETAILED STATUS REPORTING
+    """
+    results = []
+    errors_log = []
+    
+    progress_bar = st.progress(0)
+    status_container = st.container()
+    
+    for idx, game in enumerate(games):
+        game_name = f"{game['away_team']} @ {game['home_team']}"
+        
+        with status_container:
+            st.write(f"### 🔍 Game {idx+1}/{len(games)}: {game_name}")
+            
+            # Step 1: Vertex Historical
+            hist_col, hist_status = st.columns([3, 1])
+            with hist_col:
+                st.write("🧠 Vertex Historical Analysis...")
+            
+            vertex_historical, hist_error = vertex_analyze_historical_data_debug(
+                game, anthropic_api_key
+            )
+            
+            with hist_status:
+                if vertex_historical:
+                    st.success("✅")
+                else:
+                    st.error("❌")
+                    st.caption(hist_error)
+                    errors_log.append(f"Game {idx+1} Historical: {hist_error}")
+            
+            # Step 2: ML
+            ml_col, ml_status = st.columns([3, 1])
+            with ml_col:
+                st.write("🤖 ML Predictions...")
+            
+            if ml_predictor:
+                try:
+                    prediction = ml_predictor.predict_game(game['home_team'], game['away_team'])
+                    ml_result = {
+                        'ml_home_prob': prediction.get('home_win_prob', 50.0),
+                        'ml_away_prob': prediction.get('away_win_prob', 50.0),
+                        'ml_confidence': prediction.get('confidence', 50.0)
+                    }
+                    with ml_status:
+                        st.success("✅")
+                except Exception as e:
+                    ml_result = {'ml_home_prob': 50.0, 'ml_away_prob': 50.0, 'ml_confidence': 50.0}
+                    with ml_status:
+                        st.warning("⚠️")
+                    errors_log.append(f"Game {idx+1} ML: {str(e)[:50]}")
+            else:
+                ml_result = {'ml_home_prob': 50.0, 'ml_away_prob': 50.0, 'ml_confidence': 50.0}
+                with ml_status:
+                    st.info("⊘")
+            
+            # Step 3: Sentiment
+            sent_col, sent_status = st.columns([3, 1])
+            with sent_col:
+                st.write("📰 Sentiment Analysis...")
+            
+            if sentiment_analyzer:
+                try:
+                    result = sentiment_analyzer.analyze_game(
+                        game['home_team'], game['away_team'], game['sport']
+                    )
+                    sentiment_result = {
+                        'sentiment_score': result.get('score', 50.0),
+                        'sentiment_label': result.get('label', 'Neutral')
+                    }
+                    with sent_status:
+                        st.success("✅")
+                except Exception as e:
+                    sentiment_result = {'sentiment_score': 50.0, 'sentiment_label': 'Neutral'}
+                    with sent_status:
+                        st.warning("⚠️")
+                    errors_log.append(f"Game {idx+1} Sentiment: {str(e)[:50]}")
+            else:
+                sentiment_result = {'sentiment_score': 50.0, 'sentiment_label': 'Neutral'}
+                with sent_status:
+                    st.info("⊘")
+            
+            # Step 4: Vertex Final Synthesis
+            final_col, final_status = st.columns([3, 1])
+            with final_col:
+                st.write("🎯 Vertex Final Synthesis...")
+            
+            final_analysis, final_error = comprehensive_vertex_analysis_debug(
+                game, ml_result, sentiment_result, anthropic_api_key
+            )
+            
+            with final_status:
+                if final_analysis:
+                    st.success("✅")
+                else:
+                    st.error("❌")
+                    st.caption(final_error)
+                    errors_log.append(f"Game {idx+1} Final: {final_error}")
+            
+            st.write("---")
+        
+        # Compile result
+        result = {
+            'Game': game_name,
+            'Sport': game['sport'],
+            'Date': game['date'],
+            
+            # Historical
+            'Vertex Historical': "✅" if vertex_historical else "❌",
+            'Historical Confidence': f"{vertex_historical.get('confidence_level', 0):.0f}%" if vertex_historical else "N/A",
+            
+            # ML
+            'ML Home %': f"{ml_result['ml_home_prob']:.1f}%",
+            'ML Away %': f"{ml_result['ml_away_prob']:.1f}%",
+            
+            # Sentiment
+            'Sentiment': sentiment_result['sentiment_label'],
+            'Sentiment Score': f"{sentiment_result['sentiment_score']:.1f}",
+            
+            # Final
+            'Final Analysis': "✅" if final_analysis else "❌",
+            'FINAL Home %': f"{final_analysis.get('final_home_win_probability', 0):.1f}%" if final_analysis else "N/A",
+            'FINAL Away %': f"{final_analysis.get('final_away_win_probability', 0):.1f}%" if final_analysis else "N/A",
+            'Confidence': f"{final_analysis.get('overall_confidence', 0):.0f}%" if final_analysis else "N/A",
+            'Risk': final_analysis.get('risk_level', 'N/A') if final_analysis else "N/A",
+            'Recommended Bet': final_analysis.get('recommended_bet', 'N/A') if final_analysis else "N/A",
+            'Stars': final_analysis.get('stars', 0) if final_analysis else 0,
+            'Verdict': final_analysis.get('final_verdict', 'N/A') if final_analysis else "N/A",
+            
+            # Errors
+            'Status': "✅ Complete" if (vertex_historical and final_analysis) else "⚠️ Partial" if (vertex_historical or final_analysis) else "❌ Failed"
+        }
+        
+        results.append(result)
+        progress_bar.progress((idx + 1) / len(games))
+    
+    progress_bar.empty()
+    
+    # Show error log
+    if errors_log:
+        with st.expander("⚠️ Errors Encountered", expanded=True):
+            for error in errors_log:
+                st.error(error)
+    
+    return pd.DataFrame(results)
+
+
+# ═══════════════════════════════════════════════════════════════
+# PARSE CSV FUNCTION (unchanged)
+# ═══════════════════════════════════════════════════════════════
+
+def parse_theover_csv(uploaded_file):
+    """Parse uploaded CSV"""
+    try:
+        df = pd.read_csv(uploaded_file)
+        df.columns = df.columns.str.strip().str.lower()
+        
+        games = []
+        for idx, row in df.iterrows():
+            # Try different column name variations
+            home = row.get('home_team') or row.get('home') or row.get('home team') or ''
+            away = row.get('away_team') or row.get('away') or row.get('away team') or ''
+            sport = row.get('sport') or row.get('league') or 'unknown'
+            date = row.get('date') or row.get('game_date') or row.get('game date') or ''
+            
+            if not home or not away:
+                continue  # Skip rows without teams
+            
+            games.append({
+                'game_id': f"game_{idx}",
+                'home_team': str(home).strip(),
+                'away_team': str(away).strip(),
+                'sport': str(sport).strip().lower(),
+                'date': str(date),
+                'home_odds': row.get('home_odds') or row.get('home odds'),
+                'away_odds': row.get('away_odds') or row.get('away odds'),
+                'spread': row.get('spread'),
+                'total': row.get('total')
+            })
+        
+        return games, df
+    
+    except Exception as e:
+        st.error(f"CSV parsing error: {e}")
+        return None, None
+
+
+# ═══════════════════════════════════════════════════════════════
+# STREAMLIT UI
+# ═══════════════════════════════════════════════════════════════
+
+st.write("---")
+st.write("---")
+st.header("📊 CSV Upload → Vertex Analysis (DEBUG MODE)")
+
+st.info("""
+**This version shows EXACTLY what's happening:**
+- ✅ = Step succeeded
+- ❌ = Step failed (with error message)
+- ⚠️ = Step partially worked
+- ⊘ = Step skipped (optional)
+
+Upload CSV and watch each step's status in real-time!
+""")
+
+# API Key Check
+st.subheader("🔑 Step 1: Verify API Key")
+anthropic_key = st.session_state.get('anthropic_api_key', '')
+
+if anthropic_key:
+    # Test the API key
+    try:
+        import anthropic
+        test_client = anthropic.Anthropic(api_key=anthropic_key)
+        st.success(f"✅ Anthropic API key detected ({anthropic_key[:8]}...)")
+    except Exception as e:
+        st.error(f"❌ API key invalid: {e}")
+        anthropic_key = None
+else:
+    st.error("❌ No Anthropic API key found")
+    st.info("Add your API key in the sidebar under 'Anthropic API Key'")
+
+st.write("---")
+
+# CSV Upload
+st.subheader("📤 Step 2: Upload CSV")
+uploaded_file = st.file_uploader(
+    "Upload CSV file",
+    type=['csv'],
+    help="Columns needed: Home Team, Away Team, Sport, Date"
+)
+
+if uploaded_file is not None:
+    with st.spinner("📊 Parsing CSV..."):
+        games, raw_df = parse_theover_csv(uploaded_file)
+    
+    if games:
+        st.success(f"✅ Parsed {len(games)} games")
+        
+        # Preview
+        with st.expander("📋 View Parsed Games"):
+            preview = pd.DataFrame([{
+                'Away': g['away_team'],
+                'Home': g['home_team'],
+                'Sport': g['sport'],
+                'Date': g['date']
+            } for g in games])
+            st.dataframe(preview, use_container_width=True)
+        
+        st.write("---")
+        
+        # Analysis
+        st.subheader("🚀 Step 3: Run Analysis")
+        
+        ml_predictor = st.session_state.get('ml_predictor')
+        sentiment_analyzer = st.session_state.get('sentiment_analyzer')
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            st.info(f"ML Predictor: {'✅ Available' if ml_predictor else '⊘ Not available'}")
+        with col2:
+            st.info(f"Sentiment: {'✅ Available' if sentiment_analyzer else '⊘ Not available'}")
+        
+        # Limit games for testing
+        max_games = st.slider("Max games to analyze (for testing)", 1, len(games), min(5, len(games)))
+        games_to_analyze = games[:max_games]
+        
+        if not anthropic_key:
+            st.error("❌ Cannot proceed without Anthropic API key")
+        else:
+            if st.button("🚀 Run Analysis with Debug Mode", type="primary"):
+                st.write("### 📊 Analysis Progress")
+                
+                results_df = run_complete_analysis_with_debug(
+                    games_to_analyze,
+                    ml_predictor,
+                    sentiment_analyzer,
+                    anthropic_key
+                )
+                
+                st.write("---")
+                st.success(f"✅ Analysis complete for {len(results_df)} games")
+                
+                # Summary
+                st.write("### 📊 Results Summary")
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    complete = len(results_df[results_df['Status'] == "✅ Complete"])
+                    st.metric("Fully Analyzed", complete)
+                with col2:
+                    partial = len(results_df[results_df['Status'] == "⚠️ Partial"])
+                    st.metric("Partial", partial)
+                with col3:
+                    failed = len(results_df[results_df['Status'] == "❌ Failed"])
+                    st.metric("Failed", failed)
+                
+                # Results table
+                st.write("### 📊 Results")
+                st.dataframe(results_df, use_container_width=True)
+                
+                # Download
+                csv = results_df.to_csv(index=False)
+                st.download_button(
+                    "📥 Download Results",
+                    csv,
+                    "vertex_analysis_debug.csv",
+                    "text/csv"
+                )
+                
+                # Analysis of problems
+                if failed > 0 or partial > 0:
+                    st.write("### 🔍 Problem Analysis")
+                    
+                    # Check what's failing
+                    hist_fails = len(results_df[results_df['Vertex Historical'] == "❌"])
+                    final_fails = len(results_df[results_df['Final Analysis'] == "❌"])
+                    
+                    if hist_fails > 0:
+                        st.error(f"❌ Historical analysis failed {hist_fails} times")
+                        st.info("Possible causes: API timeout, rate limit, JSON parse error")
+                    
+                    if final_fails > 0:
+                        st.error(f"❌ Final synthesis failed {final_fails} times")
+                        st.info("Possible causes: API timeout, rate limit, JSON parse error")
+                    
+                    # Recommendations
+                    st.write("**Recommendations:**")
+                    st.write("- Try analyzing fewer games at once")
+                    st.write("- Check your API key has sufficient credits")
+                    st.write("- Look at error messages in the expander above")
+                    st.write("- Try again with a delay between games")
+
+st.write("---")
