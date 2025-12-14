@@ -19,21 +19,38 @@ import pytz
 from pathlib import Path
 from collections import defaultdict
 
-from app_core import (
-    APISportsBasketballClient,
-    APISportsFootballClient,
-    APISportsHockeyClient,
-    HistoricalDataBuilder,
-    HistoricalMLPredictor,
-    MLPredictor,
-    RealSentimentAnalyzer,
-    SentimentAnalyzer,
-    SportsDataNCAABClient,
-    SportsDataNCAAFClient,
-    SportsDataNBAClient,
-    SportsDataNFLClient,
-    SportsDataNHLClient,
-)
+import sys
+from pathlib import Path
+
+# Ensure repo root is on sys.path so "app_core" can be imported
+REPO_ROOT = Path(__file__).resolve().parents[1]  # /mount/src
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+import traceback
+
+try:
+    from app_core import (
+        APISportsBasketballClient,
+        APISportsFootballClient,
+        APISportsHockeyClient,
+        HistoricalDataBuilder,
+        HistoricalMLPredictor,
+        MLPredictor,
+        RealSentimentAnalyzer,
+        SentimentAnalyzer,
+        SportsDataNCAABClient,
+        SportsDataNCAAFClient,
+        SportsDataNBAClient,
+        SportsDataNFLClient,
+        SportsDataNHLClient,
+    )
+except Exception as e:
+    import streamlit as st
+    st.error(f"app_core import failed: {e}")
+    st.code(traceback.format_exc())
+    st.stop()
+
 from ml_predictions import show_vertex_ai_prediction_section, is_vertex_ai_enabled
 
 try:
