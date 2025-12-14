@@ -8267,7 +8267,7 @@ with main_tab1:
     st.markdown("---")
 
     # theover.ai Integration Section
-    st.markdown("### ðŸ“Š theover.ai Integration (Optional)")
+    st.markdown("THEOVER.AI Integration (Optional)")
     st.caption("Upload separate datasets for ML picks and totals so each leg type can match correctly.")
 
     def _collect_theover_dataset(title: str, key_prefix: str) -> Optional[pd.DataFrame]:
@@ -8294,8 +8294,8 @@ with main_tab1:
 
         return dataset
 
-    theover_ml_data = _collect_theover_dataset("#### ðŸ¤– Moneyline ML projections", "theover_ml")
-    theover_spreads_data = _collect_theover_dataset("#### ðŸ“ Spread projections", "theover_spreads")
+    st.markdown("AI Moneyline ML projections")
+    st.markdown("SPREAD projections")
     theover_totals_data = _collect_theover_dataset("#### ðŸ“ˆ Totals (Over/Under) projections", "theover_totals")
     
     # Vertex AI Analysis Integration
@@ -13158,6 +13158,16 @@ if uploaded_csv is not None:
         )
         
         st.success("ðŸŽ‰ Your CSV now has ALL columns filled with data!")
+
+
+
+
+
+
+
+
+
+
 
 
 
