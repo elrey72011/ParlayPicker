@@ -18,6 +18,7 @@ import streamlit.components.v1 as components
 import pytz
 from pathlib import Path
 from collections import defaultdict
+from __future__ import annotations
 
 import sys
 from pathlib import Path
@@ -3044,7 +3045,7 @@ class AIOptimizer:
     def __init__(
         self,
         sentiment_analyzer: SentimentAnalyzer,
-        ml_predictor: Optional[MLPredictor],
+        ml_predictor: Optional["MLPredictor"],
     ):
         self.sentiment = sentiment_analyzer
         self.ml = ml_predictor
