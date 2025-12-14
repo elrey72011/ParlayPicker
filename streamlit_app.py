@@ -8326,7 +8326,11 @@ if 'kalshi_integrator' not in st.session_state:
     else:
         logger.info("Kalshi API keys not configured")
 
-    st.session_state['kalshi_integrator'] = KalshiIntegrator()
+    kalshi_key = os.environ.get("KALSHI_API_KEY", "") or get_secret("KALSHI_API_KEY", "")
+    kalshi_secret = os.environ.get("KALSHI_API_SECRET", "") or get_secret("KALSHI_API_SECRET", "")
+
+    st.session_state['kalshi_integrator'] = KalshiIntegrator(kalshi_key, kalshi_secret)
+
     kalshi_obj = st.session_state.get('kalshi_integrator')
     logger.info(f"[Kalshi INIT] integrator_created={kalshi_obj is not None}")
     if kalshi_obj is None:
