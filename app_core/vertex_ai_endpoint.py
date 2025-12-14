@@ -32,6 +32,27 @@ except Exception:
 
 logger = logging.getLogger(__name__)
 
+# add near imports in vertex_ai_endpoint.py
+from google.oauth2 import service_account  # type: ignore
+
+def _get_gcp_credentials():
+    """
+    Prefer Streamlit secrets: [gcp_service_account] (dict)
+    Fallback: GOOGLE_APPLICATION_CREDENTIALS (path)
+    """
+    # 1) Streamlit secrets dict
+    if st and getattr(st, "secrets", None):
+        sa = st.secrets.get("gcp_service_account")
+        if sa:
+            return service_account.Credentials.from_service_account_info(dict(sa))
+
+    # 2) Env var path
+    key_path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
+    if key_path:
+        return service_account.Credentials.from_service_account_file(key_path)
+
+    return None
+
 # -------------------------------------------------------------------
 # MODEL INPUT SCHEMA
 # -------------------------------------------------------------------
@@ -163,7 +184,8 @@ def _get_or_create_endpoint():
         return _vertex_endpoint_client
 
     # Explicitly init AI Platform with proper project & region
-    aiplatform.init(project=project_id, location=location)
+    creds = _get_gcp_credentials()
+    aiplatform.init(project=project_id, location=location, credentials=creds)
 
     logger.info(f"[VertexEndpoint] Using endpoint: {endpoint_name}")
     endpoint = aiplatform.Endpoint(endpoint_name)
@@ -171,7 +193,6 @@ def _get_or_create_endpoint():
     _vertex_endpoint_client = endpoint
     _vertex_endpoint_name = endpoint_name
     return endpoint
-
 
 # -------------------------------------------------------------------
 # PUBLIC HELPERS
