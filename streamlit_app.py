@@ -8420,6 +8420,27 @@ if is_vertex_ai_enabled():
                     st.write("- Upload theover.ai CSV files above")
                 else:
                     st.info(f" Analyzing {len(all_games)} games across all selected sports...")
+                    # --- AUTO-FIX: ensure analyzer exists before use ---
+                    from vertex_master_analyzer import VertexMasterAnalyzer
+                    analyzer = VertexMasterAnalyzer(
+                        odds_api_client=odds_client if 'odds_client' in locals() else None,
+                        sportsdata_clients=sportsdata_clients if 'sportsdata_clients' in locals() else {},
+                        apisports_clients={
+                            'nba': basketball_client if 'basketball_client' in locals() else None,
+                            'nfl': apisports_client if 'apisports_client' in locals() else None,
+                            'nhl': hockey_client if 'hockey_client' in locals() else None,
+                        },
+                        sentiment_analyzer=sentiment_analyzer if 'sentiment_analyzer' in locals() else None,
+                        local_ml_predictor=st.session_state.get('ml_predictor'),
+                        theover_data={
+                            'spreads': (theover_spreads_data if 'theover_spreads_data' in locals() else None),
+                            'totals': (theover_totals_data if 'theover_totals_data' in locals() else None),
+                            'ml': (theover_ml_data if 'theover_ml_data' in locals() else None),
+                        },
+                        kalshi_integrator=st.session_state.get('kalshi_integrator'),
+                    )
+                    # --- END AUTO-FIX ---
+
                     results_df = analyzer.analyze_all_games(all_games)
                     
                     if not results_df.empty:
