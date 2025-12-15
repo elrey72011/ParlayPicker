@@ -3,9 +3,6 @@
 # v9.2 Update: Integrated Vertex-first architecture - Vertex AI now calculates probabilities
 # BEFORE Best Bets and Parlays are generated for consistent, high-quality predictions
 from __future__ import annotations
-import streamlit as st
-from pathlib import Path
-st.sidebar.caption(f"RUNNING FILE: {Path(__file__).resolve()}")
 import os, io, json, itertools, re, copy, logging, hashlib, math
 import concurrent.futures  # For parallel API calls
 from functools import lru_cache  # For caching
