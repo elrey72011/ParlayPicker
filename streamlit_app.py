@@ -3,10 +3,6 @@
 # v9.2 Update: Integrated Vertex-first architecture - Vertex AI now calculates probabilities
 # BEFORE Best Bets and Parlays are generated for consistent, high-quality predictions
 from __future__ import annotations
-import streamlit as st
-from pathlib import Path
-st.sidebar.caption(f"RUNNING FILE: {Path(__file__).resolve()}")
-
 import os, io, json, itertools, re, copy, logging, hashlib, math
 import concurrent.futures  # For parallel API calls
 from functools import lru_cache  # For caching
@@ -84,6 +80,14 @@ ODDS_API_SPORT_MAP = {
     "NCAAB": "basketball_ncaab",
     "NHL": "icehockey_nhl",
     "MLB": "baseball_mlb",
+}
+
+SPORT_KEY_TO_LEAGUE = {
+    "basketball_nba": "NBA",
+    "basketball_ncaab": "NCAAB",
+    "americanfootball_nfl": "NFL",
+    "americanfootball_ncaaf": "NCAAF",
+    "icehockey_nhl": "NHL",
 }
 
 from ml_predictions import show_vertex_ai_prediction_section, is_vertex_ai_enabled
@@ -8416,6 +8420,45 @@ if is_vertex_ai_enabled():
                     st.write("- Upload theover.ai CSV files above")
                 else:
                     st.info(f"ðŸ¤– Analyzing {len(all_games)} games across all selected sports...")
+                    # ================= FIX B: SAFE GAME NORMALIZATION =================
+ pandas as pd
+                    
+ not all_games:
+                        st.error("No games available after Odds API fetch.")
+                        st.stop()
+                    
+ = pd.DataFrame(all_games)
+                    
+ = {
+                        "home_team": "",
+                        "away_team": "",
+                        "sport_key": "",
+                        "commence_time": None,
+                    }
+                    
+ col, default in required_cols.items():
+                        if col not in df.columns:
+                            df[col] = default
+                    
+["commence_time"] = pd.to_datetime(df["commence_time"], errors="coerce", utc=True)
+                    
+ = st.session_state.get("selected_date")
+ = int(st.session_state.get("day_window", 0))
+                    
+ selected_date:
+                        start = pd.Timestamp(selected_date, tz="UTC") - pd.Timedelta(days=day_window)
+                        end = pd.Timestamp(selected_date, tz="UTC") + pd.Timedelta(days=day_window + 1)
+                        before = len(df)
+                        df = df[(df["commence_time"].isna()) | ((df["commence_time"] >= start) & (df["commence_time"] < end))]
+                        after = len(df)
+                        st.write(f"DEBUG Fix B — rows before time filter: {before}, after: {after}")
+                    
+ df.empty:
+                        st.error("Fix B prevented silent drop, but DataFrame is still empty.")
+                        st.stop()
+                    
+.success(f"Fix B active — {len(df)} games retained for analysis.")
+                    # ================================================================
                     st.write('DEBUG all_games count:', len(all_games))
                     st.write('DEBUG all_games sample:', all_games[:3])
 
@@ -8437,7 +8480,7 @@ if is_vertex_ai_enabled():
                         }
                     )
                     
-                    results_df = analyzer.analyze_all_games(all_games, league='multi')
+                    results_df = analyzer.analyze_all_games(all_games)
                     
                     if not results_df.empty:
                         st.success(f"âœ… Analysis complete! Found {len(results_df)} opportunities")
@@ -13165,6 +13208,7 @@ if uploaded_csv is not None:
         )
         
         st.success("ðŸŽ‰ Your CSV now has ALL columns filled with data!")
+
 
 
 
