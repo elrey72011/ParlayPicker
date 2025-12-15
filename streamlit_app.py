@@ -1,4 +1,4 @@
-﻿# ParlayDesk_AI_Enhanced.py - v9.2 VERTEX-FIRST
+# ParlayDesk_AI_Enhanced.py - v9.2 VERTEX-FIRST
 # AI-Enhanced parlay finder with sentiment analysis, ML predictions, and live market data
 # v9.2 Update: Integrated Vertex-first architecture - Vertex AI now calculates probabilities
 # BEFORE Best Bets and Parlays are generated for consistent, high-quality predictions
@@ -21,7 +21,6 @@ from pathlib import Path
 from collections import defaultdict
 from app_core.ml import HistoricalDataBuilder, HistoricalMLPredictor, MLPredictor
 import sys
-from pathlib import Path
 from app_core.odds_api import TheOddsAPIClient
 
 # Ensure repo root is on sys.path so "app_core" can be imported
@@ -47,12 +46,10 @@ try:
     )
 
 except Exception as e:
-    import streamlit as st
     st.error(f"app_core import failed: {e}")
     st.code(traceback.format_exc())
     st.stop()
 
-import streamlit as st
 from google.oauth2 import service_account
 import vertexai
 
@@ -8358,7 +8355,60 @@ if is_vertex_ai_enabled():
     if st.button(" Run Vertex AI Master Analysis", key="vertex_master_btn", type="primary"):
         with st.spinner("Running comprehensive AI analysis... Consolidating all data sources..."):
             try:
-                selected_sports = []
+                # ---- AUTO: allow theover-only mode (build odds_data if missing) ----
+                if "odds_data" not in st.session_state or not st.session_state.get("odds_data"):
+                    st.warning("No odds_data in session state — building games from theover.ai CSVs if available...")
+
+                    built_games = []
+                    seen = set()
+
+                    def _add_game_row(row, fallback_league="NBA"):
+                        home = row.get("home_team") or row.get("HomeTeam") or row.get("home") or row.get("Home")
+                        away = row.get("away_team") or row.get("AwayTeam") or row.get("away") or row.get("Away")
+                        league = row.get("league") or row.get("League") or fallback_league
+                        if not home or not away:
+                            return
+                        key = (str(league).strip().lower(), str(home).strip(), str(away).strip())
+                        if key in seen:
+                            return
+                        seen.add(key)
+                        built_games.append({
+                            "home_team": str(home).strip(),
+                            "away_team": str(away).strip(),
+                            "sport_key": str(league).strip().lower(),
+                            "commence_time": None,
+                        })
+
+                    spreads_df = None
+                    totals_df  = None
+
+                    try:
+                        spreads_df = pd.read_csv("23_Nov_Spreads.csv")
+                    except Exception:
+                        spreads_df = None
+
+                    try:
+                        totals_df = pd.read_csv("23_Nov_Totals.csv")
+                    except Exception:
+                        totals_df = None
+
+                    if spreads_df is not None:
+                        for _, r in spreads_df.iterrows():
+                            _add_game_row(r, fallback_league="NBA")
+
+                    if totals_df is not None:
+                        for _, r in totals_df.iterrows():
+                            _add_game_row(r, fallback_league="NBA")
+
+                    if built_games:
+                        st.session_state["odds_data"] = built_games
+                        st.success(f"Built odds_data from theover.ai: {len(built_games)} games")
+                    else:
+                        st.error("No odds_data found AND could not build from theover CSVs. Fetch odds or add 23_Nov_Spreads.csv + 23_Nov_Totals.csv.")
+                        st.stop()
+
+                odds_data = st.session_state.get("odds_data", [])
+                # ---- END AUTO ------------------------------------------------------                selected_sports = []
                 if 'NCAAF' in st.session_state.get('selected_sports', []):
                     selected_sports.append('americanfootball_ncaaf')
                 if 'NBA' in st.session_state.get('selected_sports', []):
@@ -11938,867 +11988,6 @@ from datetime import datetime
 # VERTEX AI MASTER ANALYZER (RUNS FIRST)
 # ============================================================================
 
-st.header(" Vertex AI Master Analysis")
-st.write("**Run this FIRST to calculate probabilities for all games**")
-
-with st.expander(" About Vertex-First Architecture", expanded=False):
-    st.markdown("""
-    **New Workflow:**
-    1.  Vertex AI analyzes ALL games with ALL data sources
-    2.  Stores comprehensive results in session state
-    3.  Best Bets generator uses Vertex probabilities
-    4.  Parlay Optimizer uses Vertex probabilities
-    
-    **Benefits:**
-    - Single source of truth
-    - All data consolidated upfront
-    - No post-processing enrichment needed
-    - Consistent probabilities across all features
-    """)
-
-if st.button(" Run Vertex AI Master Analysis", type="primary", key="vertex_master"):
-    
-    # Check for odds data
-    if 'odds_data' not in st.session_state or not st.session_state['odds_data']:
-        st.error(" No odds data found! Please fetch odds first.")
-        st.stop()
-    
-    odds_data = st.session_state['odds_data']
-    
-    st.write(" Found odds data for games:")
-    st.info(f"**{len(odds_data)} games** ready for analysis")
-    
-    # Load available data sources
-    st.write("---")
-    st.write(" **Checking available data sources...**")
-    
-    data_sources = {}
-    
-    # 1. theover.ai data
-    try:
-        spreads_df = pd.read_csv('23_Nov_Spreads.csv')
-        totals_df = pd.read_csv('23_Nov_Totals.csv')
-        theover_df = pd.concat([spreads_df, totals_df], ignore_index=True)
-        data_sources['theover'] = theover_df
-        st.success(f" **theover.ai**: {len(theover_df)} games loaded")
-    except FileNotFoundError:
-        st.warning(" theover.ai CSV not found (upload 23_Nov_Spreads.csv and 23_Nov_Totals.csv)")
-    except Exception as e:
-        st.warning(f" Could not load theover.ai data: {e}")
-    
-    # 2. ML predictions
-    if 'ml_predictions' in st.session_state:
-        data_sources['ml'] = st.session_state['ml_predictions']
-        st.success(f" **ML Predictions**: {len(data_sources['ml'])} games")
-    else:
-        st.warning(" ML predictions not loaded")
-    
-    # 3. SportsData
-    if 'sportsdata_stats' in st.session_state:
-        data_sources['sportsdata'] = st.session_state['sportsdata_stats']
-        st.success(f" **SportsData**: {len(data_sources['sportsdata'])} records")
-    else:
-        st.warning(" SportsData not loaded")
-    
-    st.write("---")
-    st.write(" **Running Vertex AI analysis...**")
-    
-    # Get Anthropic API key
-    anthropic_api_key = st.session_state.get('anthropic_api_key', '')
-    if not anthropic_api_key:
-        st.error(" Anthropic API key not found! Please enter it in the sidebar.")
-        st.stop()
-    
-    client = anthropic.Anthropic(api_key=anthropic_api_key)
-    
-    # Analyze each game
-    vertex_results = []
-    
-    progress_bar = st.progress(0)
-    status_text = st.empty()
-    
-    for idx, game in enumerate(odds_data):
-        game_name = f"{game['away_team']} @ {game['home_team']}"
-        status_text.write(f"**Analyzing {idx+1}/{len(odds_data)}**: {game_name}")
-        
-        # Gather all available data for this game
-        home_team = game['home_team']
-        away_team = game['away_team']
-        
-        # Find matching data from sources
-        context_data = {
-            'theover': None,
-            'ml': None,
-            'sportsdata': None
-        }
-        
-        # Match theover.ai data
-        if 'theover' in data_sources:
-            def normalize_team(team):
-                return team.lower().replace('.', '').replace(' ', '')
-            
-            home_norm = normalize_team(home_team)
-            away_norm = normalize_team(away_team)
-            
-            for _, row in data_sources['theover'].iterrows():
-                t_home = normalize_team(str(row.get('HomeTeam', '')))
-                t_away = normalize_team(str(row.get('AwayTeam', '')))
-                
-                # Flexible matching
-                if (home_norm in t_home or t_home in home_norm) and \
-                   (away_norm in t_away or t_away in away_norm):
-                    context_data['theover'] = {
-                        'Pick': row.get('Pick'),
-                        'Line': row.get('Line'),
-                        'Market': row.get('Market')
-                    }
-                    break
-        
-        # Match ML predictions (implement your matching logic)
-        if 'ml' in data_sources:
-            # Add your ML matching logic here
-            pass
-        
-        # Match SportsData (implement your matching logic)
-        if 'sportsdata' in data_sources:
-            # Add your SportsData matching logic here
-            pass
-        
-        # Get best odds
-        best_moneyline = None
-        best_spread = None
-        
-        for bookmaker in game.get('bookmakers', []):
-            for market in bookmaker.get('markets', []):
-                if market['key'] == 'h2h':
-                    for outcome in market.get('outcomes', []):
-                        if outcome['name'] == home_team:
-                            best_moneyline = outcome['price']
-                elif market['key'] == 'spreads':
-                    for outcome in market.get('outcomes', []):
-                        if outcome['name'] == home_team:
-                            best_spread = outcome.get('point')
-        
-        # Build Vertex AI prompt
-        prompt = f"""You are an expert sports betting analyst. Analyze this game and provide a comprehensive probability assessment.
-
-**Game Details:**
-- Away Team: {away_team}
-- Home Team: {home_team}
-- Sport: {game.get('sport_key')}
-- Date: {game.get('commence_time')}
-
-**Market Odds:**
-- Moneyline (home): {best_moneyline}
-- Spread (home): {best_spread}
-
-**Available Data Sources:**
-"""
-        
-        sources_used = []
-        
-        if context_data['theover']:
-            prompt += f"\n- **theover.ai**: Pick={context_data['theover']['Pick']}, Line={context_data['theover']['Line']}, Market={context_data['theover']['Market']}"
-            sources_used.append('theover.ai')
-        
-        if context_data['ml']:
-            prompt += f"\n- **ML Model**: {context_data['ml']}"
-            sources_used.append('ML')
-        
-        if context_data['sportsdata']:
-            prompt += f"\n- **SportsData**: {context_data['sportsdata']}"
-            sources_used.append('SportsData')
-        
-        prompt += """
-
-**Task:**
-Analyze all available data and provide:
-
-1. **Win Probability** for the home team (0-100%)
-2. **Confidence Level** (0-100%) - how confident are you in this prediction?
-3. **Key Factors** - what drove your analysis?
-4. **Edge vs Market** - is there value compared to the odds?
-
-Return ONLY a JSON object with this exact structure:
-{
-    "home_win_probability": <float 0-100>,
-    "confidence": <float 0-100>,
-    "key_factors": "<string>",
-    "has_edge": <boolean>,
-    "edge_explanation": "<string>"
-}
-"""
-        
-        try:
-            # Call Vertex AI (Claude)
-            response = client.messages.create(
-                model="claude-sonnet-4-20250514",
-                max_tokens=1000,
-                messages=[{"role": "user", "content": prompt}]
-            )
-            
-            # Parse response
-            response_text = response.content[0].text.strip()
-            
-            # Extract JSON
-            if '```json' in response_text:
-                response_text = response_text.split('```json')[1].split('```')[0].strip()
-            elif '```' in response_text:
-                response_text = response_text.split('```')[1].split('```')[0].strip()
-            
-            vertex_analysis = json.loads(response_text)
-            
-            # Store result
-            result = {
-                'game_id': game['id'],
-                'sport': game['sport_key'],
-                'home_team': home_team,
-                'away_team': away_team,
-                'commence_time': game['commence_time'],
-                'vertex_probability': vertex_analysis['home_win_probability'],
-                'confidence': vertex_analysis['confidence'],
-                'key_factors': vertex_analysis['key_factors'],
-                'has_edge': vertex_analysis['has_edge'],
-                'edge_explanation': vertex_analysis['edge_explanation'],
-                'sources_used': ', '.join(sources_used) if sources_used else 'market odds only',
-                'best_moneyline': best_moneyline,
-                'best_spread': best_spread
-            }
-            
-            vertex_results.append(result)
-            
-        except Exception as e:
-            st.error(f" Error analyzing {game_name}: {e}")
-            # Add fallback result
-            vertex_results.append({
-                'game_id': game['id'],
-                'sport': game['sport_key'],
-                'home_team': home_team,
-                'away_team': away_team,
-                'commence_time': game['commence_time'],
-                'vertex_probability': 50.0,
-                'confidence': 50.0,
-                'key_factors': 'Error in analysis',
-                'has_edge': False,
-                'edge_explanation': f'Error: {str(e)}',
-                'sources_used': 'error',
-                'best_moneyline': best_moneyline,
-                'best_spread': best_spread
-            })
-        
-        progress_bar.progress((idx + 1) / len(odds_data))
-    
-    progress_bar.empty()
-    status_text.empty()
-    
-    # Store results in session state
-    st.session_state['vertex_results'] = vertex_results
-    st.session_state['vertex_analysis_complete'] = True
-    st.session_state['vertex_timestamp'] = datetime.now()
-    
-    st.success(f" **Vertex AI analysis complete!** {len(vertex_results)} games analyzed")
-    
-    # Display summary
-    st.write("---")
-    st.write("###  Analysis Summary")
-    
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        st.metric("Games Analyzed", len(vertex_results))
-    
-    with col2:
-        avg_confidence = sum(r['confidence'] for r in vertex_results) / len(vertex_results)
-        st.metric("Avg Confidence", f"{avg_confidence:.1f}%")
-    
-    with col3:
-        with_edge = sum(1 for r in vertex_results if r['has_edge'])
-        st.metric("Games with Edge", with_edge)
-    
-    # Display results table
-    st.write("###  Vertex AI Results")
-    
-    results_df = pd.DataFrame([{
-        'Game': f"{r['away_team']} @ {r['home_team']}",
-        'Vertex Prob %': f"{r['vertex_probability']:.1f}%",
-        'Confidence %': f"{r['confidence']:.0f}%",
-        'Has Edge': '' if r['has_edge'] else '',
-        'Sources': r['sources_used']
-    } for r in vertex_results])
-    
-    st.dataframe(df, width="stretch")
-    
-    # Download option
-    csv = results_df.to_csv(index=False)
-    st.download_button(
-        " Download Vertex Results CSV",
-        csv,
-        f"vertex_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-        "text/csv"
-    )
-
-# ============================================================================
-# DISPLAY VERTEX STATUS (for other sections to check)
-# ============================================================================
-
-if 'vertex_analysis_complete' in st.session_state:
-    vertex_count = len(st.session_state.get('vertex_results', []))
-    vertex_time = st.session_state.get('vertex_timestamp', datetime.now())
-    
-    st.info(f"""
-     **Vertex AI analysis available**
-    - {vertex_count} games analyzed
-    - Analyzed at: {vertex_time.strftime('%I:%M %p')}
-    - Ready to use for Best Bets and Parlays
-    """)
-
-st.markdown("---")
-
-# ============================================================================
-# NOW YOUR EXISTING BEST BETS SECTION CAN USE VERTEX RESULTS
-# ============================================================================
-
-# Your existing Best Bets section should check for vertex_results:
-# if 'vertex_results' in st.session_state:
-#     # Use Vertex probabilities instead of recalculating
-#     vertex_results = st.session_state['vertex_results']
-
-# ============================================================
-# BEST BET FINDER (Vertex AI)
-# ============================================================
-from best_bet_analyzer import BestBetAnalyzer, show_best_bets_analysis
-
-if is_vertex_ai_enabled():
-    st.markdown("---")
-    st.header(" Best Bet Finder - AI Analysis")
-    
-    uploaded_file = st.file_uploader(
-        "Upload your odds CSV file",
-        type=['csv'],
-        key="best_bet_csv_upload",
-        help="CSV should have columns: home_team, away_team, home_odds, away_odds, total"
-    )
-    
-    if uploaded_file is not None:
-        # Initialize analyzer with your existing clients
-        analyzer = BestBetAnalyzer(
-            odds_api_client=odds_api_client if 'odds_api_client' in globals() else None,
-            sportsdata_client=sportsdata_clients.get('nfl') if 'sportsdata_clients' in globals() else None,
-            apisports_client=apisports_client if 'apisports_client' in globals() else None,
-            sentiment_analyzer=sentiment_analyzer if 'sentiment_analyzer' in globals() else None,
-            ml_predictor=st.session_state.get('ml_predictor')
-        )
-        
-        show_best_bets_analysis(uploaded_file, analyzer)
-
-#  ONE-BUTTON DIAGNOSTIC
-# Paste this ANYWHERE in your streamlit_app.py and click the button
-
-import streamlit as st
-
-st.sidebar.markdown("---")
-if st.sidebar.button(" Diagnose Master Analyzer"):
-    st.header(" Master Analyzer Diagnostic")
-    
-    # Step 1: Check if data exists
-    st.subheader("1 Check Data")
-    
-    has_spreads = False
-    spreads_data = None
-    
-    # Try to find theover.ai data
-    if 'theover_spreads_data' in locals():
-        spreads_data = theover_spreads_data
-        has_spreads = True
-    elif 'theover_spreads_data' in st.session_state:
-        spreads_data = st.session_state['theover_spreads_data']
-        has_spreads = True
-    
-    if has_spreads and spreads_data is not None:
-        st.success(f" Found {len(spreads_data)} games")
-    else:
-        st.error(" No theover.ai data found - upload CSV first!")
-        st.stop()
-    
-    # Step 2: Test prediction function
-    st.subheader("2 Test Predictions")
-    
-    try:
-        from ml_predictions import get_vertex_ai_prediction
-        
-        test_features = [0.55, 0.45, 110, 105, 105, 108, 0.15, 0.6, 0.4]
-        result = get_vertex_ai_prediction(test_features)
-        
-        if result:
-            st.success(f" Predictions work: {result:.3f}")
-        else:
-            st.error(" Predictions return None")
-            st.write("**This is your problem!**")
-            st.write("Fix: Update ml_predictions.py to latest version")
-            st.stop()
-    except Exception as e:
-        st.error(f" Prediction function failed: {e}")
-        st.stop()
-    
-    # Step 3: Try analyzing one game
-    st.subheader("3 Test Single Game Analysis")
-    
-    try:
-        from vertex_master_analyzer import VertexMasterAnalyzer
-        
-        # Create analyzer
-        analyzer = VertexMasterAnalyzer()
-        
-        # Convert first row to game format
-        first_row = spreads_data.iloc[0]
-        test_game = {
-            'home_team': first_row.get('home_team') or first_row.get('HomeTeam'),
-            'away_team': first_row.get('away_team') or first_row.get('AwayTeam'),
-            'sport_key': first_row.get('league', 'NBA').lower(),
-            'commence_time': None,
-            'bookmakers': []
-        }
-        
-        st.write(f"**Testing:** {test_game['away_team']} @ {test_game['home_team']}")
-        
-        # Try to build features
-        try:
-            comp_features = analyzer.build_comprehensive_features(test_game, 'NBA')
-            st.success(f" Built {len(comp_features)} comprehensive features")
-        except Exception as e:
-            st.error(f" build_comprehensive_features() failed: {e}")
-            st.write("**This is likely your problem!**")
-            st.code(str(e))
-            st.stop()
-        
-        # Try to build vertex features
-        try:
-            vertex_features = analyzer.build_vertex_feature_vector(comp_features)
-            st.success(f" Built {len(vertex_features)} vertex features")
-        except Exception as e:
-            st.error(f" build_vertex_feature_vector() failed: {e}")
-            st.code(str(e))
-            st.stop()
-        
-        # Try to get prediction
-        try:
-            from ml_predictions import get_vertex_ai_prediction
-            prediction = get_vertex_ai_prediction(vertex_features)
-            
-            if prediction:
-                st.success(f" Got prediction: {prediction:.3f}")
-            else:
-                st.error(f" Prediction returned None")
-                st.write("Features passed to prediction:")
-                st.write(vertex_features)
-        except Exception as e:
-            st.error(f" get_vertex_ai_prediction() failed: {e}")
-            st.code(str(e))
-    
-    except Exception as e:
-        st.error(f" Single game test failed: {e}")
-        import traceback
-        st.code(traceback.format_exc())
-    
-    # Step 4: Summary
-    st.subheader("4 Summary")
-    st.write("""
-    **If all checks passed:**
-    - The Master Analyzer should work
-    - Try clicking "Run Master Analysis" again
-    - Lower confidence threshold to 25%
-    
-    **If a check failed:**
-    - Fix that specific issue first
-    - The error message above tells you what's wrong
-    """)
-
-#  MASTER ANALYZER DEBUG SCRIPT
-# Add this to your streamlit_app.py to see what's failing
-
-import streamlit as st
-import pandas as pd
-from typing import Dict, List
-
-st.header(" Master Analyzer Debug Mode")
-
-# Check 1: Verify imports
-st.subheader("1 Check Imports")
-try:
-    from vertex_master_analyzer import VertexMasterAnalyzer
-    st.success(" VertexMasterAnalyzer imported")
-except Exception as e:
-    st.error(f" Import failed: {e}")
-    st.stop()
-
-try:
-    from ml_predictions import get_vertex_ai_prediction, is_vertex_ai_enabled
-    st.success(" ml_predictions imported")
-except Exception as e:
-    st.error(f" ml_predictions import failed: {e}")
-    st.stop()
-
-# Check 2: Verify Vertex AI is enabled
-st.subheader("2 Check Vertex AI Status")
-ai_enabled = is_vertex_ai_enabled()
-if ai_enabled:
-    st.success(f" Vertex AI enabled")
-else:
-    st.error(f" Vertex AI disabled")
-    st.stop()
-
-# Check 3: Test prediction function
-st.subheader("3 Test Prediction Function")
-test_features = [0.55, 0.45, 110, 105, 105, 108, 0.15, 0.6, 0.4]
-test_result = get_vertex_ai_prediction(test_features)
-
-if test_result:
-    st.success(f" Prediction works: {test_result:.3f}")
-else:
-    st.error(f" Prediction returns None")
-    st.stop()
-
-# Check 4: Verify theover.ai data
-st.subheader("4 Check theover.ai Data")
-
-if 'theover_spreads_data' in locals() or 'theover_spreads_data' in st.session_state:
-    # Get the data
-    if 'theover_spreads_data' in locals():
-        spreads_data = theover_spreads_data
-    else:
-        spreads_data = st.session_state.get('theover_spreads_data')
-    
-    if spreads_data is not None and len(spreads_data) > 0:
-        st.success(f" Found {len(spreads_data)} games in theover.ai data")
-        
-        st.write("**Columns in CSV:**")
-        st.write(list(spreads_data.columns))
-        
-        st.write("**First row sample:**")
-        st.json(spreads_data.iloc[0].to_dict())
-    else:
-        st.error(" theover.ai data is empty")
-        st.stop()
-else:
-    st.error(" No theover.ai data found. Upload spreads CSV first!")
-    st.stop()
-
-# Check 5: Convert to Master Analyzer format
-st.subheader("5 Convert Data Format")
-
-st.write("Converting theover.ai CSV to game format...")
-
-games = []
-for idx, row in spreads_data.iterrows():
-    game = {
-        'home_team': row.get('home_team') or row.get('HomeTeam', 'Unknown'),
-        'away_team': row.get('away_team') or row.get('AwayTeam', 'Unknown'),
-        'sport_key': row.get('league', 'NBA').lower(),
-        'commence_time': None,
-        'bookmakers': []  # Empty since we don't have odds API
-    }
-    games.append(game)
-
-st.success(f" Converted {len(games)} games")
-st.write("**First game:**")
-st.json(games[0])
-
-# Check 6: Initialize Analyzer
-st.subheader("6 Initialize Master Analyzer")
-
-try:
-    analyzer = VertexMasterAnalyzer(
-        odds_api_client=None,
-        sportsdata_clients={},
-        apisports_clients={},
-        sentiment_analyzer=None,
-        local_ml_predictor=None,
-        theover_data={'spreads': spreads_data}
-    )
-    st.success(" Analyzer initialized")
-except Exception as e:
-    st.error(f" Initialization failed: {e}")
-    import traceback
-    st.code(traceback.format_exc())
-    st.stop()
-
-# Check 7: Analyze ONE game (detailed)
-st.subheader("7 Analyze Single Game (Detailed)")
-
-test_game = games[0]
-st.write(f"**Testing:** {test_game['away_team']} @ {test_game['home_team']}")
-
-try:
-    # Step 1: Build features
-    st.write("Step 1: Building comprehensive features...")
-    comp_features = analyzer.build_comprehensive_features(test_game, 'NBA')
-    st.success(f" Got {len(comp_features)} features")
-    
-    with st.expander("View all features"):
-        st.json(comp_features)
-    
-    # Step 2: Build Vertex AI feature vector
-    st.write("Step 2: Building Vertex AI feature vector...")
-    vertex_features = analyzer.build_vertex_feature_vector(comp_features)
-    st.success(f" Got {len(vertex_features)} vertex features")
-    st.write(f"**Feature vector:** {vertex_features[:5]}... (showing first 5)")
-    
-    # Step 3: Get prediction
-    st.write("Step 3: Getting Vertex AI prediction...")
-    vertex_prob = get_vertex_ai_prediction(vertex_features)
-    
-    if vertex_prob is not None:
-        st.success(f" Got prediction: {vertex_prob:.3f} ({vertex_prob*100:.1f}%)")
-    else:
-        st.error(" Prediction returned None!")
-        st.stop()
-    
-except Exception as e:
-    st.error(f" Error during analysis: {e}")
-    import traceback
-    st.code(traceback.format_exc())
-    st.stop()
-
-# Check 8: Analyze ALL games
-st.subheader("8 Analyze All Games")
-
-if st.button(" Analyze All Games with Debug"):
-    st.write(f"Analyzing {len(games)} games...")
-    
-    results = []
-    errors = []
-    
-    progress = st.progress(0)
-    status = st.empty()
-    
-    for idx, game in enumerate(games):
-        status.write(f"Processing game {idx+1}/{len(games)}: {game['away_team']} @ {game['home_team']}")
-        
-        try:
-            # Build features
-            comp_features = analyzer.build_comprehensive_features(game, 'NBA')
-            
-            # Build vertex features
-            vertex_features = analyzer.build_vertex_feature_vector(comp_features)
-            
-            # Get prediction
-            vertex_prob = get_vertex_ai_prediction(vertex_features)
-            
-            if vertex_prob is not None:
-                # Add to results
-                result = comp_features.copy()
-                result['vertex_ai_prob'] = vertex_prob
-                result['vertex_ai_edge'] = vertex_prob - 0.5
-                result['vertex_ai_confidence'] = abs(vertex_prob - 0.5)
-                results.append(result)
-                
-                status.write(f"   Success: {vertex_prob:.3f}")
-            else:
-                errors.append(f"Game {idx+1}: Prediction returned None")
-                status.write(f"   Prediction failed")
-                
-        except Exception as e:
-            errors.append(f"Game {idx+1}: {str(e)}")
-            status.write(f"   Error: {e}")
-        
-        progress.progress((idx + 1) / len(games))
-    
-    progress.empty()
-    status.empty()
-    
-    # Show results
-    st.write("---")
-    st.write("###  Analysis Results")
-    st.write(f"**Total games:** {len(games)}")
-    st.write(f"**Successful:** {len(results)}")
-    st.write(f"**Failed:** {len(errors)}")
-    
-    if errors:
-        with st.expander(f" View {len(errors)} Errors"):
-            for error in errors:
-                st.write(f"- {error}")
-    
-    if len(results) > 0:
-        st.success(f" Generated {len(results)} results!")
-        
-        results_df = pd.DataFrame(results)
-        
-        st.write("**Results DataFrame shape:**", results_df.shape)
-        st.write("**Columns:**", list(results_df.columns))
-        
-        # Show sample
-        st.write("**Sample results:**")
-        display_cols = ['home_team', 'away_team', 'vertex_ai_prob', 'vertex_ai_edge', 'vertex_ai_confidence']
-        available_cols = [col for col in display_cols if col in results_df.columns]
-        st.dataframe(results_df[available_cols].head())
-        
-    else:
-        st.error(" No results generated!")
-        st.write("**All games failed analysis. Check errors above.**")
-
-st.write("---")
-st.write("###  What This Debug Shows")
-st.write("""
-This debug script will show you exactly where the Master Analyzer fails:
-
-1.  Imports working
-2.  Vertex AI enabled
-3.  Predictions work standalone
-4.  Data loaded correctly
-5.  Data converted to right format
-6.  Analyzer initializes
-7.  Single game analysis works
-8. Then analyze all and see which step fails
-
-**Common issues:**
-- Missing columns in CSV (home_team, away_team, league)
-- build_comprehensive_features() failing
-- build_vertex_feature_vector() failing
-- get_vertex_ai_prediction() returning None
-""")
-
-#  IMMEDIATE DIAGNOSTIC - Paste this into your streamlit_app.py
-
-import streamlit as st
-import pandas as pd
-
-# Add this button RIGHT BEFORE the "Run Vertex AI Master Analysis" button
-st.markdown("---")
-st.subheader(" Debug: What's Failing?")
-
-if st.button(" Debug Master Analyzer", type="secondary"):
-    st.header(" Master Analyzer Diagnostic")
-    
-    # Step 1: Check if we have data
-    st.write("**Step 1: Check Data**")
-    if 'theover_spreads_data' not in locals() and 'theover_spreads_data' not in st.session_state:
-        st.error(" No theover.ai data found!")
-        st.stop()
-    
-    spreads_data = theover_spreads_data if 'theover_spreads_data' in locals() else st.session_state.get('theover_spreads_data')
-    st.success(f" Found {len(spreads_data)} games")
-    
-    # Step 2: Test get_vertex_ai_prediction
-    st.write("**Step 2: Test Prediction Function**")
-    try:
-        from ml_predictions import get_vertex_ai_prediction, is_vertex_ai_enabled
-        
-        # Check if enabled
-        ai_enabled = is_vertex_ai_enabled()
-        if not ai_enabled:
-            st.error(" Vertex AI is disabled!")
-            st.write("Enable it in settings or update ml_predictions.py")
-            st.stop()
-        else:
-            st.success(" Vertex AI is enabled")
-        
-        # Test prediction
-        test_features = [0.55, 0.45, 110, 105, 105, 108, 0.15, 0.6, 0.4]
-        test_result = get_vertex_ai_prediction(test_features)
-        
-        if test_result is None:
-            st.error(" PROBLEM FOUND: get_vertex_ai_prediction() returns None!")
-            st.write("**This is why you're getting no results!**")
-            st.write("")
-            st.write("**Fix:**")
-            st.write("1. Update ml_predictions.py to latest version")
-            st.write("2. Or use the new consolidated_workflow_complete.py")
-            st.stop()
-        else:
-            st.success(f" Prediction works: {test_result:.3f}")
-    
-    except Exception as e:
-        st.error(f" Import failed: {e}")
-        st.code(str(e))
-        st.stop()
-    
-    # Step 3: Test Master Analyzer on ONE game
-    st.write("**Step 3: Test Master Analyzer on Single Game**")
-    try:
-        from vertex_master_analyzer import VertexMasterAnalyzer
-        
-        # Create analyzer
-        analyzer = VertexMasterAnalyzer(
-            odds_api_client=None,
-            sportsdata_clients={},
-            apisports_clients={},
-            sentiment_analyzer=None,
-            local_ml_predictor=None,
-            theover_data={'spreads': spreads_data}
-        )
-        st.success(" Analyzer created")
-        
-        # Convert first row to game format
-        first_row = spreads_data.iloc[0]
-        test_game = {
-            'home_team': first_row.get('home_team') or first_row.get('HomeTeam', 'Unknown'),
-            'away_team': first_row.get('away_team') or first_row.get('AwayTeam', 'Unknown'),
-            'sport_key': (first_row.get('league') or first_row.get('League', 'NBA')).lower(),
-            'commence_time': None,
-            'bookmakers': []
-        }
-        
-        st.write(f"**Testing:** {test_game['away_team']} @ {test_game['home_team']}")
-        
-        # Try to analyze
-        try:
-            # Build features
-            comp_features = analyzer.build_comprehensive_features(test_game, 'NBA')
-            st.success(f" Built {len(comp_features)} comprehensive features")
-            
-            # Build vertex features
-            vertex_features = analyzer.build_vertex_feature_vector(comp_features)
-            st.success(f" Built {len(vertex_features)} vertex features")
-            st.write(f"Feature vector sample: {vertex_features[:5]}")
-            
-            # Get prediction
-            from ml_predictions import get_vertex_ai_prediction
-            vertex_prob = get_vertex_ai_prediction(vertex_features)
-            
-            if vertex_prob is None:
-                st.error(" PROBLEM FOUND: Vertex prediction returned None for this game!")
-                st.write("**Even though the test prediction worked, this one failed.**")
-                st.write("**Possible causes:**")
-                st.write("- Feature vector format is wrong")
-                st.write("- Some feature values are invalid (NaN, infinity)")
-                st.write("")
-                st.write("**Feature vector:**")
-                st.write(vertex_features)
-            else:
-                st.success(f" Got prediction: {vertex_prob:.3f}")
-                st.write("**The analyzer CAN work - but something is wrong with the full batch**")
-        
-        except Exception as e:
-            st.error(f" Error during analysis: {e}")
-            st.code(str(e))
-            
-            import traceback
-            st.write("**Full traceback:**")
-            st.code(traceback.format_exc())
-    
-    except Exception as e:
-        st.error(f" Could not test analyzer: {e}")
-        st.code(str(e))
-    
-    # Step 4: Summary
-    st.write("---")
-    st.write("###  What to Do Next")
-    st.write("""
-    **If prediction test failed:**
-    - Update ml_predictions.py to latest version
-    - Restart Streamlit
-    
-    **If single game test failed:**
-    - Check the error message above
-    - Feature building or prediction has an issue
-    
-    **If everything passed but still no results:**
-    - The Master Analyzer is catching errors silently
-    - Use the new consolidated_workflow_complete.py instead
-    - It shows ALL errors and has no silent failures
-    """)
-
-
 # ============================================================================
 # AUTOMATIC CSV ENRICHMENT SECTION
 # Works directly with generated best bets - no upload needed
@@ -13034,8 +12223,6 @@ else:
 #  PASTE THIS INTO YOUR STREAMLIT APP
 # Add this section to enrich your incomplete best bets CSVs
 
-import streamlit as st
-import pandas as pd
 import numpy as np
 
 st.markdown("---")
@@ -13169,22 +12356,3 @@ if uploaded_csv is not None:
         )
         
         st.success(" Your CSV now has ALL columns filled with data!")
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
