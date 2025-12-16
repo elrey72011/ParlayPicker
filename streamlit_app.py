@@ -512,12 +512,15 @@ def fetch_kalshi_markets(
             "raw": {"total": len(markets_raw), **raw_counts},
             "game_pool": {"total": len(game_pool), **game_pool_counts},
         }
-        st.session_state["kalshi_prefix_samples_game"] = [
-            ticker_upper(m) for m in game_pool
-        ][:20]
-        st.session_state["kalshi_game_pool_sample"] = [
-            ticker_upper(m) for m in game_pool
-        ][:10]
+        samples_game = []
+        for m in game_pool:
+            evt = str(m.get("event_ticker") or "").upper()
+            if evt.startswith("KXNBAGAME"):
+                samples_game.append(evt)
+            if len(samples_game) >= 20:
+                break
+        st.session_state["kalshi_prefix_samples_game"] = samples_game
+        st.session_state["kalshi_game_pool_sample"] = samples_game[:10]
         return game_pool
     except RuntimeError:
         st.session_state["last_exception"] = traceback.format_exc()
@@ -939,6 +942,17 @@ def nba_abbrev(team_name: str) -> Optional[str]:
     return None
 
 
+def kalshi_date_token_from_local(date_val: Any) -> Optional[str]:
+    """Return YYMONDD token (e.g., 25DEC16) for local YYYY-MM-DD date strings."""
+    try:
+        if not date_val:
+            return None
+        parsed = datetime.fromisoformat(str(date_val))
+        return parsed.strftime("%y%b%d").upper()
+    except Exception:
+        return None
+
+
 def kalshi_ticker_team_codes(market: Dict[str, Any]) -> Tuple[Optional[str], Optional[str]]:
     ticker = str(market.get("event_ticker") or market.get("ticker") or "")
     match = re.search(r"([A-Z]{6})$", ticker)
@@ -984,6 +998,24 @@ def match_kalshi_market(
 
     def norm_team(name: Any) -> str:
         return re.sub(r"[^a-z0-9 ]", "", str(name or "").lower()).strip()
+
+    def league_from_game(g: Dict[str, Any]) -> str:
+        skey = (g.get("sport_key") or g.get("league") or g.get("League") or "").lower()
+        mapping = {
+            "basketball_nba": "NBA",
+            "nba": "NBA",
+            "basketball_ncaab": "NCAAB",
+            "ncaab": "NCAAB",
+            "americanfootball_nfl": "NFL",
+            "nfl": "NFL",
+            "americanfootball_ncaaf": "NCAAF",
+            "ncaaf": "NCAAF",
+            "icehockey_nhl": "NHL",
+            "nhl": "NHL",
+            "baseball_mlb": "MLB",
+            "mlb": "MLB",
+        }
+        return mapping.get(skey, skey.upper())
 
     def team_score(market: Dict[str, Any], market_type: str) -> float:
         home_norm = norm_team(game.get("home_team"))
@@ -1166,9 +1198,46 @@ def match_kalshi_market(
         base = {t: base_result("no_game_like_markets_in_window", t) for t in ["total", "spread", "winner"]}
         return base, {"total": [], "spread": [], "winner": []}
 
+    league_name = league_from_game(game)
+    date_token = kalshi_date_token_from_local(game.get("commence_date_local"))
+    away_code_expected = nba_abbrev(game.get("away_team")) if league_name == "NBA" else None
+    home_code_expected = nba_abbrev(game.get("home_team")) if league_name == "NBA" else None
+    searched_prefix = None
+    winner_rejections = {"wrong_date": 0, "missing_code": 0}
+    candidate_event_tickers: List[str] = []
+
     totals = [m for m in kalshi_markets if classify_kalshi_market(m) == "total"]
     spreads = [m for m in kalshi_markets if classify_kalshi_market(m) == "spread"]
     winners = [m for m in kalshi_markets if classify_kalshi_market(m) == "winner"]
+
+    if league_name == "NBA" and date_token:
+        searched_prefix = f"KXNBAGAME-{date_token}"
+        date_bucket: List[Dict[str, Any]] = []
+        for m in winners:
+            event_tick = str(m.get("event_ticker") or "").upper()
+            tick = str(m.get("ticker") or "").upper()
+            composite = event_tick or tick
+            if composite.startswith("KXNBAGAME"):
+                candidate_event_tickers.append(event_tick or tick)
+            if not composite.startswith(searched_prefix):
+                winner_rejections["wrong_date"] += 1
+                continue
+            date_bucket.append(m)
+        filtered_winners: List[Dict[str, Any]] = []
+        for m in date_bucket:
+            composite = str(m.get("event_ticker") or m.get("ticker") or "").upper()
+            if away_code_expected and away_code_expected not in composite:
+                winner_rejections["missing_code"] += 1
+                continue
+            if home_code_expected and home_code_expected not in composite:
+                winner_rejections["missing_code"] += 1
+                continue
+            filtered_winners.append(m)
+        if filtered_winners:
+            winners = filtered_winners
+        else:
+            winners = []
+        candidate_event_tickers = list(dict.fromkeys(candidate_event_tickers))
 
     total_result, total_candidates = evaluate_partition(totals, "total")
     spread_result, spread_candidates = evaluate_partition(spreads, "spread")
@@ -1176,9 +1245,23 @@ def match_kalshi_market(
         winners, "winner", winner_reason_override or "no_winner_market_for_game"
     )
 
+    winner_meta = {
+        "expected_date_token": date_token,
+        "expected_codes": {"away": away_code_expected, "home": home_code_expected},
+        "candidate_event_tickers": candidate_event_tickers[:10],
+        "searched_prefix": searched_prefix,
+        "date_bucket_markets_count": len(winners),
+        "rejection_counts": winner_rejections,
+    }
+
     return (
         {"total": total_result, "spread": spread_result, "winner": winner_result},
-        {"total": total_candidates, "spread": spread_candidates, "winner": winner_candidates},
+        {
+            "total": total_candidates,
+            "spread": spread_candidates,
+            "winner": winner_candidates,
+            "winner_meta": winner_meta,
+        },
     )
 
 
@@ -1521,8 +1604,13 @@ with tab_master:
                         : (5 if k == "winner" else 3)
                     ]
                     for k, v in (candidate_debug or {}).items()
+                    if isinstance(v, list)
                 }
                 first_game_candidates["partition_counts"] = partition_counts
+                if "winner_meta" in candidate_debug:
+                    first_game_candidates["winner_meta"] = candidate_debug.get(
+                        "winner_meta", {}
+                    )
 
             matched_any = any(v.get("kalshi_matched") for v in kalshi_matches.values())
             if not matched_any:
@@ -1775,6 +1863,9 @@ with tab_master:
             if first_game_candidates
             else {},
             "first_winner_candidates_top5": first_game_candidates.get("winner")
+            if first_game_candidates
+            else None,
+            "first_winner_meta": first_game_candidates.get("winner_meta")
             if first_game_candidates
             else None,
             "first_game_full_market_search": first_game_full_search,
