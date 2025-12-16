@@ -290,7 +290,12 @@ def render_vertex_tab(config: Dict[str, Any]):
             kalshi,
         )
         if results is None or results.empty:
-            st.warning("Master analysis returned no rows.")
+            stats = st.session_state.get("vertex_master_stats", {})
+            st.error(
+                f"Master analysis returned no rows. games_in={stats.get('games_received')}, "
+                f"rows_out={stats.get('rows_produced')}"
+            )
+            st.session_state["last_exception"] = st.session_state.get("last_exception")
             return
 
         st.session_state["vertex_master_stats"] = st.session_state.get(
@@ -306,6 +311,7 @@ def render_vertex_tab(config: Dict[str, Any]):
                 "Commence (UTC)",
                 "Market",
                 "Pick",
+                "Implied_Prob",
                 "AI_Prob",
                 "AI_Edge",
                 "kalshi_available",

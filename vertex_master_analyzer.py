@@ -184,6 +184,8 @@ class VertexMasterAnalyzer:
             "missing_theover": 0,
             "no_candidates": 0,
             "unknown_away": 0,
+            "exceptions": 0,
+            "fallback_rows": 0,
         }
         progress = st.progress(0)
 
@@ -191,6 +193,65 @@ class VertexMasterAnalyzer:
         
         # Define target timezone for consistent date matching
         target_tz = pytz.timezone('US/Eastern')
+
+        def _extract_primary_odds(game_dict: Dict[str, Any]) -> Dict[str, Any]:
+            """Pull primary ML/Spread odds from bookmaker payload for baseline rows."""
+
+            home_team = game_dict.get("home_team")
+            away_team = game_dict.get("away_team")
+            home_ml = game_dict.get("home_ml_odds")
+            away_ml = game_dict.get("away_ml_odds")
+            implied_home_prob = game_dict.get("implied_home_prob")
+
+            home_spread = game_dict.get("home_spread")
+            away_spread = game_dict.get("away_spread")
+            home_spread_odds = game_dict.get("home_spread_odds")
+            away_spread_odds = game_dict.get("away_spread_odds")
+
+            # Parse bookmaker odds (prefer h2h then spreads)
+            for bm in game_dict.get("bookmakers", []) or []:
+                for market in bm.get("markets", []) or []:
+                    key = (market.get("key") or market.get("outcome_type") or "").lower()
+                    outcomes = market.get("outcomes") or []
+                    if key == "h2h":
+                        for outcome in outcomes:
+                            name = outcome.get("name")
+                            price = outcome.get("price")
+                            if home_team and name == home_team and home_ml is None:
+                                home_ml = price
+                            elif away_team and name == away_team and away_ml is None:
+                                away_ml = price
+                        # Fallback: if teams matched out of order
+                        if home_ml is None and away_ml is None and len(outcomes) == 2:
+                            prices = [outcomes[0].get("price"), outcomes[1].get("price")]
+                            home_ml, away_ml = prices[0], prices[1]
+                    elif key == "spreads":
+                        for outcome in outcomes:
+                            name = outcome.get("name")
+                            point = outcome.get("point")
+                            price = outcome.get("price")
+                            if home_team and name == home_team:
+                                home_spread = point if home_spread is None else home_spread
+                                home_spread_odds = price if home_spread_odds is None else home_spread_odds
+                            elif away_team and name == away_team:
+                                away_spread = point if away_spread is None else away_spread
+                                away_spread_odds = price if away_spread_odds is None else away_spread_odds
+
+            if implied_home_prob is None:
+                implied_home_prob = implied_prob_from_american(home_ml)
+                if implied_home_prob is None and away_ml is not None:
+                    away_imp = implied_prob_from_american(away_ml)
+                    implied_home_prob = 1 - away_imp if away_imp is not None else None
+
+            return {
+                "home_ml_odds": home_ml,
+                "away_ml_odds": away_ml,
+                "implied_home_prob": implied_home_prob,
+                "home_spread": home_spread,
+                "away_spread": away_spread,
+                "home_spread_odds": home_spread_odds,
+                "away_spread_odds": away_spread_odds,
+            }
 
         for idx, game in enumerate(games):
             try:
@@ -211,6 +272,22 @@ class VertexMasterAnalyzer:
                     "baseball_mlb": "MLB",
                 }
                 game_league = league_map.get(skey, league)
+
+                # Normalize commence time
+                commence_raw = game.get("commence_time") or game.get("commence_dt")
+                commence_dt: Optional[datetime] = None
+                if isinstance(commence_raw, datetime):
+                    commence_dt = commence_raw
+                elif commence_raw:
+                    try:
+                        commence_dt = datetime.fromisoformat(str(commence_raw).replace("Z", "+00:00"))
+                    except Exception:
+                        commence_dt = None
+                game["commence_time"] = commence_dt
+
+                # Extract bookmaker odds baseline
+                odds_bits = _extract_primary_odds(game)
+                game.update(odds_bits)
 
                 # 2. Kalshi Prefetch with Timezone Conversion
                 kalshi_info: Optional[Dict[str, Any]] = None
@@ -343,9 +420,29 @@ class VertexMasterAnalyzer:
                             warning=warn,
                         )
                     )
+                    stats["fallback_rows"] += 1
 
             except Exception as e:
                 logger.error(f"Error analyzing game {idx}: {e}")
+                stats["exceptions"] += 1
+                warn_parts = [f"exception: {e}"]
+                warn_parts.extend(game.get("normalization_warnings", []))
+                fallback_feats = {
+                    "home_team": game.get("home_team"),
+                    "away_team": game.get("away_team"),
+                    "game_time": game.get("commence_time") or game.get("commence_dt"),
+                    "normalization_warnings": warn_parts,
+                    "kalshi_available": False,
+                }
+                rows.append(
+                    self._fallback_row(
+                        feats=fallback_feats,
+                        game_league=game_league,
+                        vertex_home_prob=None,
+                        warning="exception during analysis",
+                    )
+                )
+                stats["fallback_rows"] += 1
 
             progress.progress((idx + 1) / len(games))
 
@@ -366,6 +463,7 @@ class VertexMasterAnalyzer:
                     "Commence (UTC)": None,
                     "Market": "N/A",
                     "Pick": "No candidates generated",
+                    "Implied_Prob": None,
                     "AI_Prob": None,
                     "AI_Edge": None,
                     "Warnings": "Analyzer produced no rows despite input games.",
@@ -665,6 +763,8 @@ class VertexMasterAnalyzer:
         g_time = feats.get("game_time")
         commence_utc = None
         if isinstance(g_time, datetime):
+            if g_time.tzinfo is None:
+                g_time = pytz.utc.localize(g_time)
             commence_utc = g_time.astimezone(pytz.utc)
         elif g_time:
             try:
@@ -684,6 +784,7 @@ class VertexMasterAnalyzer:
             "Commence (UTC)": commence_utc,
             "Market": best.get("market_type", "ML"),
             "Pick": best.get("the_pick"),
+            "Implied_Prob": best.get("market_prob", feats.get("implied_home_prob")),
             "AI_Prob": best.get("win_prob"),
             "AI_Edge": best.get("edge_vs_market"),
             "Kalshi_Prob": best.get("kalshi_home_prob"),
