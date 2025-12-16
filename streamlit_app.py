@@ -461,6 +461,78 @@ def fetch_kalshi_markets(selected_league: str) -> List[Dict[str, Any]]:
         return []
 
 
+def pick_sample_game_market(
+    markets: List[Dict[str, Any]]
+) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+    def parse_iso(dt_value: Any) -> Optional[datetime]:
+        try:
+            if not dt_value:
+                return None
+            raw = str(dt_value)
+            if raw.endswith("Z"):
+                raw = raw.replace("Z", "+00:00")
+            parsed = datetime.fromisoformat(raw)
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=timezone.utc)
+            else:
+                parsed = parsed.astimezone(timezone.utc)
+            return parsed
+        except Exception:
+            return None
+
+    now_utc = datetime.now(timezone.utc)
+    window = timedelta(days=7)
+    best_market: Optional[Dict[str, Any]] = None
+    best_reason: Optional[str] = None
+    best_within = False
+    best_diff: Optional[timedelta] = None
+    for m in markets or []:
+        try:
+            title = str(m.get("title") or "")
+            ticker = str(m.get("event_ticker") or m.get("ticker") or "")
+            lower_title = title.lower()
+            reason = None
+            if any(tok in lower_title for tok in [" vs ", " at ", "@"]):
+                reason = "contains_vs"
+            elif "game winner" in lower_title:
+                reason = "contains_game_winner"
+            elif any(tok in lower_title for tok in ["spread", "total"]):
+                reason = "contains_spread_total"
+            elif ticker and "game" in ticker.lower():
+                reason = "contains_game_ticker"
+            if not reason:
+                continue
+            close_dt = parse_iso(m.get("close_time")) or parse_iso(m.get("expiration_time"))
+            within_window = False
+            time_diff: Optional[timedelta] = None
+            if close_dt:
+                time_diff = abs(close_dt - now_utc)
+                within_window = timedelta(0) <= (close_dt - now_utc) <= window
+            reason_with_window = reason
+            if within_window:
+                reason_with_window = f"{reason}+within_7d"
+            if best_market is None:
+                best_market = m
+                best_reason = reason_with_window
+                best_within = within_window
+                best_diff = time_diff
+                continue
+            if within_window and not best_within:
+                best_market = m
+                best_reason = reason_with_window
+                best_within = True
+                best_diff = time_diff
+                continue
+            if within_window == best_within:
+                if time_diff is not None and (best_diff is None or time_diff < best_diff):
+                    best_market = m
+                    best_reason = reason_with_window
+                    best_diff = time_diff
+        except Exception:
+            continue
+    return best_market, best_reason
+
+
 def kalshi_health_check(selected_league: str) -> Dict[str, Any]:
     configured = bool(kalshi_integrator and kalshi_api_key and kalshi_api_secret)
     if not configured:
@@ -469,6 +541,8 @@ def kalshi_health_check(selected_league: str) -> Dict[str, Any]:
             "ok": False,
             "market_count": 0,
             "sample_market": None,
+            "sample_game_market": None,
+            "sample_game_market_reason": None,
             "error": "Kalshi is required but not configured.",
         }
     try:
@@ -477,11 +551,14 @@ def kalshi_health_check(selected_league: str) -> Dict[str, Any]:
         markets = []
     market_count = len(markets)
     ok = market_count > 0
+    sample_game_market, sample_reason = pick_sample_game_market(markets)
     return {
         "configured": configured,
         "ok": ok,
         "market_count": market_count,
         "sample_market": markets[0] if markets else None,
+        "sample_game_market": sample_game_market,
+        "sample_game_market_reason": sample_reason,
         "error": None
         if ok
         else "Kalshi is required but unavailable. Fix keys / API and retry.",
@@ -780,7 +857,7 @@ with tab_master:
                         "title": fm.get("title"),
                         "ticker": fm.get("event_ticker") or fm.get("ticker"),
                     }
-                    for fm in filtered_markets[:3]
+                    for fm in filtered_markets[:10]
                 ]
             if not filtered_markets:
                 kalshi_match = {
