@@ -130,6 +130,11 @@ project_id = read_secret("GCP_PROJECT_ID", "elite-hangar-479017-m8")
 location = read_secret("GCP_LOCATION", "us-central1")
 vertex_endpoint_id = read_secret("VERTEX_ENDPOINT_ID")
 
+            pick = home
+            implied_pick = implied_home
+            if implied_home is not None and implied_away is not None and implied_away > implied_home:
+                pick = away
+                implied_pick = implied_away
 
 @st.cache_data(ttl=60)
 def fetch_odds_games() -> List[Dict[str, Any]]:
