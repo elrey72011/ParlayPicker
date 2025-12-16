@@ -9,7 +9,7 @@ import os
 import time
 import base64
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 import pytz
@@ -364,55 +364,148 @@ class KalshiIntegrator:
             logger.error(f"Kalshi Connection Exception: {e}")
         return None
 
-    def get_markets(self, status: str = "open") -> List[Dict[str, Any]]:
-        """
-        Fetches ALL markets by handling pagination (cursors).
-        """
+    def get_markets(self, status: Optional[str] = "open") -> List[Dict[str, Any]]:
+        """Fetch all markets with pagination support and a sane cap."""
         now = time.time()
-        # 1) Use cache if still fresh (e.g., 5 minutes)
         if self._markets_cache and (now - self._markets_cache_ts) < self.cache_ttl_seconds:
             logger.info(f"Using cached markets ({len(self._markets_cache)} items)")
             return self._markets_cache
 
-        all_markets = []
-        cursor = None
-        
-        # Loop until no cursor is returned
+        all_markets: List[Dict[str, Any]] = []
+        cursor: Optional[str] = None
+        max_items = 5000
+
         while True:
-            params = {"limit": 1000, "status": status}
+            params = {"limit": 1000}
+            if status:
+                params["status"] = status
             if cursor:
                 params["cursor"] = cursor
 
             data = self._make_authenticated_request("GET", "/markets", params=params)
-            
             if not data:
                 break
-            
-            markets = data.get("markets", [])
-            if not markets:
-                break
-                
+
+            markets = data.get("markets", []) or []
             all_markets.extend(markets)
-            cursor = data.get("cursor")
-            
+
+            if len(all_markets) >= max_items:
+                all_markets = all_markets[:max_items]
+                logger.warning("Reached pagination cap when loading Kalshi markets")
+                break
+
+            cursor = (
+                data.get("cursor")
+                or data.get("next_cursor")
+                or data.get("next")
+                or data.get("next_token")
+            )
             if not cursor:
                 break
-                
-            # Rate limit safety
             time.sleep(0.1)
 
-        # Update cache
         self._markets_cache = all_markets
         self._markets_cache_ts = now
         logger.info(f"✅ Successfully loaded {len(all_markets)} Kalshi markets (paginated)")
         return all_markets
 
-    # Helpers required by app
-    def get_sports_markets(self):
-        return self.get_markets()
+    def _filter_markets_for_league(self, markets: List[Dict[str, Any]], league: Optional[str]) -> List[Dict[str, Any]]:
+        league_key = (league or "").upper()
+        prefix = LEAGUE_SERIES_MAP.get(league_key)
+        if not prefix:
+            return markets
 
+        ticker_upper = [str(m.get("ticker") or m.get("event_ticker") or "").upper() for m in markets]
+        prefix_filtered = [m for m, t in zip(markets, ticker_upper) if t.startswith(prefix)]
+        has_kxn_prefix = any(t.startswith("KXN") for t in [str(m.get("ticker") or m.get("event_ticker") or "").upper() for m in prefix_filtered])
+        if prefix_filtered and has_kxn_prefix:
+            return prefix_filtered
+
+        return markets
+
+    def _best_market_time(self, market: Dict[str, Any]) -> Optional[datetime]:
+        for key in [
+            "expected_expiration_time",
+            "latest_expiration_time",
+            "close_time",
+            "expiration_time",
+            "open_time",
+        ]:
+            val = market.get(key)
+            if not val:
+                continue
+            try:
+                raw = str(val)
+                if raw.endswith("Z"):
+                    raw = raw.replace("Z", "+00:00")
+                dt = datetime.fromisoformat(raw)
+                if dt.tzinfo is None:
+                    dt = pytz.utc.localize(dt)
+                else:
+                    dt = dt.astimezone(pytz.UTC)
+                return dt
+            except Exception:
+                continue
+        return None
+
+    def get_sports_markets(
+        self, league: Optional[str] = None, commence_times: Optional[List[str]] = None
+    ) -> List[Dict[str, Any]]:
+        try:
+            markets = self.get_markets(status=None)
+            filtered = self._filter_markets_for_league(markets, league)
+
+            commence_dt: List[datetime] = []
+            if commence_times:
+                for c in commence_times:
+                    try:
+                        raw = str(c)
+                        if raw.endswith("Z"):
+                            raw = raw.replace("Z", "+00:00")
+                        dt = datetime.fromisoformat(raw)
+                        if dt.tzinfo is None:
+                            dt = pytz.utc.localize(dt)
+                        else:
+                            dt = dt.astimezone(pytz.UTC)
+                        commence_dt.append(dt)
+                    except Exception:
+                        continue
+
+            if commence_dt:
+                window = timedelta(hours=72)
+                time_filtered: List[Dict[str, Any]] = []
+                for m in filtered:
+                    mt = self._best_market_time(m)
+                    if not mt:
+                        time_filtered.append(m)
+                        continue
+                    if any(abs(mt - cdt) <= window for cdt in commence_dt):
+                        time_filtered.append(m)
+                if time_filtered:
+                    filtered = time_filtered
+
+            if (league or "").upper() == "NBA":
+                ticker_upper = [str(m.get("ticker") or m.get("event_ticker") or "").upper() for m in filtered]
+                if not any(
+                    t.startswith("KXNBAGAME")
+                    or t.startswith("KXNBATOTAL")
+                    or t.startswith("KXNBASPREAD")
+                    for t in ticker_upper
+                ):
+                    filtered = markets
+
+            return filtered
+        except Exception:
+            logger.error("Kalshi get_sports_markets failed", exc_info=True)
+            return []
+
+    def get_markets_for_league(self, league: str) -> List[Dict[str, Any]]:
+        """Return markets for a given league without excluding game winners."""
+        return self.get_sports_markets(league=league)
+
+    # Helpers required by app
     def get_game_markets_for_events(self, league):
-        return self.get_markets()
+        return self.get_markets_for_league(league)
 
     def filter_markets_closing_today(self, markets):
         return markets
