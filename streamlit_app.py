@@ -647,8 +647,10 @@ def classify_kalshi_market(market: Dict[str, Any]) -> str:
     if (
         "winner" in title
         or title.endswith("winner?")
+        or "game" in ticker
         or ticker.startswith("kxnbagame")
         or "game-" in ticker
+        or ticker.upper().startswith("KXN")
         or "game winner" in rules
         or "wins the game" in rules
         or "wins outright" in rules
@@ -683,6 +685,57 @@ def team_tokens(name: str) -> set:
         "baseball",
     }
     return {t for t in tokens if t not in stopwords}
+
+
+def nba_abbrev(team_name: str) -> Optional[str]:
+    mapping = {
+        "atlanta hawks": "ATL",
+        "boston celtics": "BOS",
+        "brooklyn nets": "BKN",
+        "charlotte hornets": "CHA",
+        "chicago bulls": "CHI",
+        "cleveland cavaliers": "CLE",
+        "dallas mavericks": "DAL",
+        "denver nuggets": "DEN",
+        "detroit pistons": "DET",
+        "golden state warriors": "GSW",
+        "houston rockets": "HOU",
+        "indiana pacers": "IND",
+        "los angeles clippers": "LAC",
+        "la clippers": "LAC",
+        "los angeles lakers": "LAL",
+        "la lakers": "LAL",
+        "memphis grizzlies": "MEM",
+        "miami heat": "MIA",
+        "milwaukee bucks": "MIL",
+        "minnesota timberwolves": "MIN",
+        "new orleans pelicans": "NOP",
+        "new york knicks": "NYK",
+        "oklahoma city thunder": "OKC",
+        "orlando magic": "ORL",
+        "philadelphia 76ers": "PHI",
+        "phoenix suns": "PHX",
+        "portland trail blazers": "POR",
+        "sacramento kings": "SAC",
+        "san antonio spurs": "SAS",
+        "toronto raptors": "TOR",
+        "utah jazz": "UTA",
+        "washington wizards": "WAS",
+    }
+    cleaned = re.sub(r"[^a-z0-9 ]", " ", str(team_name or "").lower()).strip()
+    for key, code in mapping.items():
+        if key in cleaned:
+            return code
+    return None
+
+
+def kalshi_ticker_team_codes(market: Dict[str, Any]) -> Tuple[Optional[str], Optional[str]]:
+    ticker = str(market.get("event_ticker") or market.get("ticker") or "")
+    match = re.search(r"([A-Z]{6})$", ticker)
+    if match:
+        segment = match.group(1)
+        return segment[:3], segment[3:]
+    return None, None
 
 
 def extract_teams_from_kalshi_text(text: Any) -> Tuple[Optional[str], Optional[str]]:
@@ -720,7 +773,7 @@ def match_kalshi_market(
     def norm_team(name: Any) -> str:
         return re.sub(r"[^a-z0-9 ]", "", str(name or "").lower()).strip()
 
-    def team_score(market: Dict[str, Any]) -> float:
+    def team_score(market: Dict[str, Any], market_type: str) -> float:
         home_norm = norm_team(game.get("home_team"))
         away_norm = norm_team(game.get("away_team"))
         home_tokens = team_tokens(game.get("home_team"))
@@ -792,6 +845,21 @@ def match_kalshi_market(
             and home_city_tokens.issubset(market_tokens)
         ):
             return 0.85
+        if market_type == "winner":
+            away_expected = nba_abbrev(game.get("away_team"))
+            home_expected = nba_abbrev(game.get("home_team"))
+            away_code_market, home_code_market = kalshi_ticker_team_codes(market)
+            if (
+                away_expected
+                and home_expected
+                and away_code_market
+                and home_code_market
+                and (
+                    (away_expected == away_code_market and home_expected == home_code_market)
+                    or (away_expected == home_code_market and home_expected == away_code_market)
+                )
+            ):
+                return 1.0
         return 0.0
 
     def time_score(market: Dict[str, Any]) -> float:
@@ -831,13 +899,19 @@ def match_kalshi_market(
         candidates: List[Dict[str, Any]] = []
         any_positive_team = False
         for m in partition_markets:
-            ts = team_score(m)
+            ts = team_score(m, market_type)
             tms = time_score(m)
             final = 0.8 * ts + 0.2 * tms
             candidates.append(
                 {
                     "title": m.get("title"),
                     "ticker": m.get("event_ticker") or m.get("ticker"),
+                    "away_code_market": kalshi_ticker_team_codes(m)[0]
+                    if market_type == "winner"
+                    else None,
+                    "home_code_market": kalshi_ticker_team_codes(m)[1]
+                    if market_type == "winner"
+                    else None,
                     "team_score": ts,
                     "time_score": tms,
                     "final_score": final,
@@ -1057,6 +1131,7 @@ with tab_master:
         filtered_counts: List[int] = []
         sample_filtered_for_first_game: List[Dict[str, Any]] = []
         first_game_candidates: Dict[str, Any] = {}
+        first_game_expected_codes: Optional[Dict[str, Optional[str]]] = None
         first_filtered_best_time = None
         first_game_commence_utc = None
         first_filtered_market_title = None
@@ -1080,6 +1155,11 @@ with tab_master:
             commence_iso = g.get("commence_time_iso_utc") or safe_iso(g.get("commence_time_iso"))
             commence_local = fmt_local_time(g.get("commence_time_local"))
             commence_date_local = g.get("commence_date_local") or ""
+            if first_game_expected_codes is None:
+                first_game_expected_codes = {
+                    "away": nba_abbrev(away),
+                    "home": nba_abbrev(home),
+                }
             filtered_markets = filter_kalshi_game_markets(
                 kalshi_markets, g.get("commence_time_utc"), league_name
             )
@@ -1116,7 +1196,9 @@ with tab_master:
             kalshi_matches, candidate_debug = match_kalshi_market(g, filtered_markets)
             if not first_game_candidates and candidate_debug:
                 first_game_candidates = {
-                    k: sorted(v, key=lambda x: x.get("final_score", 0), reverse=True)[:3]
+                    k: sorted(v, key=lambda x: x.get("final_score", 0), reverse=True)[
+                        : (5 if k == "winner" else 3)
+                    ]
                     for k, v in (candidate_debug or {}).items()
                 }
                 first_game_candidates["partition_counts"] = partition_counts
@@ -1359,6 +1441,7 @@ with tab_master:
             "first_game_commence_time_utc": first_game_commence_utc,
             "first_filtered_market_title": first_filtered_market_title,
             "first_filtered_market_ticker": first_filtered_market_ticker,
+            "first_game_expected_codes": first_game_expected_codes,
             "first_game_partition_counts": first_game_candidates.get("partition_counts")
             if first_game_candidates
             else None,
@@ -1369,6 +1452,9 @@ with tab_master:
             }
             if first_game_candidates
             else {},
+            "first_winner_candidates_top5": first_game_candidates.get("winner")
+            if first_game_candidates
+            else None,
         }
         matches = master_stats.get("kalshi_matches", 0)
         total_games = master_stats.get("kalshi_total", 0) or 1
@@ -1488,9 +1574,15 @@ with tab_debug:
         if filter_stats.get("first_game_partition_counts"):
             st.caption("First game partition counts (total/spread/winner)")
             st.json(filter_stats.get("first_game_partition_counts"))
+        if filter_stats.get("first_game_expected_codes"):
+            st.caption("First game expected ticker codes (away/home)")
+            st.json(filter_stats.get("first_game_expected_codes"))
         if filter_stats.get("first_game_top_candidates"):
             st.caption("Top candidates by partition (first game)")
             st.json(filter_stats.get("first_game_top_candidates"))
+        if filter_stats.get("first_winner_candidates_top5"):
+            st.caption("Winner candidates top 5 (first game)")
+            st.json(filter_stats.get("first_winner_candidates_top5"))
         if non_match_reasons:
             reasons: Dict[str, int] = {}
             for reason in non_match_reasons:
