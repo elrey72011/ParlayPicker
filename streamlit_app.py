@@ -640,10 +640,20 @@ def filter_kalshi_game_markets(
 def classify_kalshi_market(market: Dict[str, Any]) -> str:
     title = str(market.get("title") or "").lower()
     rules = str(market.get("rules") or "").lower()
+    ticker = str(market.get("event_ticker") or market.get("ticker") or "").lower()
     has_points_strike = bool(
-        (market.get("floor_strike") is not None or market.get("cap_strike") is not None)
-        and ("points" in title or "points" in rules)
+        market.get("floor_strike") is not None or market.get("cap_strike") is not None
     )
+    if (
+        "winner" in title
+        or title.endswith("winner?")
+        or ticker.startswith("kxnbagame")
+        or "game-" in ticker
+        or "game winner" in rules
+        or "wins the game" in rules
+        or "wins outright" in rules
+    ):
+        return "winner"
     if (
         "total points" in title
         or "collectively score" in rules
@@ -653,15 +663,25 @@ def classify_kalshi_market(market: Dict[str, Any]) -> str:
         return "total"
     if "spread" in title or "win by" in rules or "point spread" in rules:
         return "spread"
-    if "game winner" in title or "wins the game" in rules or "wins outright" in rules:
-        return "winner"
     return "other"
 
 
 def team_tokens(name: str) -> set:
     cleaned = re.sub(r"[^a-z0-9 ]", " ", str(name or "").lower())
     tokens = [t for t in cleaned.split() if t]
-    stopwords = {"the", "fc", "sc", "university", "state", "college"}
+    stopwords = {
+        "the",
+        "fc",
+        "sc",
+        "university",
+        "state",
+        "college",
+        "team",
+        "basketball",
+        "football",
+        "hockey",
+        "baseball",
+    }
     return {t for t in tokens if t not in stopwords}
 
 
@@ -705,6 +725,41 @@ def match_kalshi_market(
         away_norm = norm_team(game.get("away_team"))
         home_tokens = team_tokens(game.get("home_team"))
         away_tokens = team_tokens(game.get("away_team"))
+        nickname_tokens = {
+            "knicks",
+            "spurs",
+            "lakers",
+            "celtics",
+            "bulls",
+            "nets",
+            "bucks",
+            "sixers",
+            "warriors",
+            "heat",
+            "suns",
+            "mavs",
+            "mavericks",
+            "clippers",
+            "kings",
+            "hawks",
+            "raptors",
+            "jazz",
+            "rockets",
+            "thunder",
+            "pelicans",
+            "nuggets",
+            "timberwolves",
+            "wolves",
+            "grizzlies",
+            "magic",
+            "pacers",
+            "pistons",
+            "cavaliers",
+            "cavs",
+            "blazers",
+            "wizards",
+            "76ers",
+        }
         title_away, title_home = extract_teams_from_kalshi_text(market.get("title"))
         rules_away, rules_home = extract_teams_from_kalshi_text(market.get("rules"))
         guesses = [
@@ -719,16 +774,24 @@ def match_kalshi_market(
                     away_guess_norm == away_norm and home_guess_norm == home_norm
                 ) or (away_guess_norm == home_norm and home_guess_norm == away_norm):
                     return 1.0
-        combined_tokens = team_tokens(
-            f"{market.get('title') or ''} {market.get('rules') or ''}"
-        )
+        market_text = f"{market.get('title') or ''} {market.get('rules') or ''}"
+        market_tokens = team_tokens(market_text)
         if (
             away_tokens
             and home_tokens
-            and away_tokens.issubset(combined_tokens)
-            and home_tokens.issubset(combined_tokens)
+            and away_tokens.issubset(market_tokens)
+            and home_tokens.issubset(market_tokens)
         ):
             return 1.0
+        away_city_tokens = {t for t in away_tokens if t not in nickname_tokens}
+        home_city_tokens = {t for t in home_tokens if t not in nickname_tokens}
+        if (
+            away_city_tokens
+            and home_city_tokens
+            and away_city_tokens.issubset(market_tokens)
+            and home_city_tokens.issubset(market_tokens)
+        ):
+            return 0.85
         return 0.0
 
     def time_score(market: Dict[str, Any]) -> float:
@@ -766,6 +829,7 @@ def match_kalshi_market(
         best_market: Optional[Dict[str, Any]] = None
         best_score = -1.0
         candidates: List[Dict[str, Any]] = []
+        any_positive_team = False
         for m in partition_markets:
             ts = team_score(m)
             tms = time_score(m)
@@ -779,10 +843,11 @@ def match_kalshi_market(
                     "final_score": final,
                 }
             )
-            if final > best_score:
+            if ts > 0 and final > best_score:
+                any_positive_team = True
                 best_score = final
                 best_market = m
-        if best_market:
+        if best_market and any_positive_team:
             prob, line = extract_prob_and_line(best_market, market_type)
             return {
                 "kalshi_available": True,
@@ -797,6 +862,10 @@ def match_kalshi_market(
                 "kalshi_line": line,
                 "kalshi_title": best_market.get("title"),
             }, candidates
+        if any_positive_team:
+            return base_result(f"no_{market_type}_market", market_type), candidates
+        if partition_markets:
+            return base_result("no_team_match", market_type), candidates
         return base_result(f"no_{market_type}_market", market_type), candidates
 
     if not kalshi_integrator:
@@ -1014,6 +1083,12 @@ with tab_master:
             filtered_markets = filter_kalshi_game_markets(
                 kalshi_markets, g.get("commence_time_utc"), league_name
             )
+            deduped: Dict[str, Dict[str, Any]] = {}
+            for fm in filtered_markets:
+                key = fm.get("event_ticker") or fm.get("ticker") or str(id(fm))
+                if key not in deduped:
+                    deduped[key] = fm
+            filtered_markets = list(deduped.values())
             filtered_counts.append(len(filtered_markets))
             if not sample_filtered_for_first_game:
                 sample_filtered_for_first_game = [
