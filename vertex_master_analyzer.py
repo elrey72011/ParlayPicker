@@ -17,6 +17,78 @@ import pytz  # Added pytz for timezone conversion
 
 logger = logging.getLogger(__name__)
 
+
+def _kalshi_prefix_counts(markets: List[Dict[str, Any]]) -> Dict[str, int]:
+    tickers = [str(m.get("ticker") or m.get("event_ticker") or "").upper() for m in markets]
+    return {
+        "count_prefix_KXNBATOTAL": len([t for t in tickers if t.startswith("KXNBATOTAL")]),
+        "count_prefix_KXNBASPREAD": len([t for t in tickers if t.startswith("KXNBASPREAD")]),
+        "count_prefix_KXNBAGAME": len([t for t in tickers if t.startswith("KXNBAGAME")]),
+    }
+
+
+def _filter_markets_for_league(league: str, markets: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    if not markets:
+        return []
+    league_key = (league or "").upper()
+    tickers = [str(m.get("ticker") or m.get("event_ticker") or "").upper() for m in markets]
+    if league_key != "NBA":
+        return markets
+    nba_markets = [m for m, t in zip(markets, tickers) if t.startswith("KXNBA") or "KXNBA" in t]
+    if not nba_markets:
+        return markets
+    preferred = [
+        m
+        for m, t in zip(nba_markets, [str(m.get("ticker") or m.get("event_ticker") or "").upper() for m in nba_markets])
+        if any(tag in t for tag in ["TOTAL", "SPREAD", "GAME", "WIN", "H2H"])
+    ]
+    return preferred or nba_markets
+
+
+def _title_match_score(title: str, home_team: str, away_team: str) -> float:
+    text = (title or "").lower()
+    if not text:
+        return 0.0
+    home_norm = re.sub(r"[^a-z0-9\s]", "", home_team.lower())
+    away_norm = re.sub(r"[^a-z0-9\s]", "", away_team.lower())
+    if all(token in text for token in [home_norm.split()[0], away_norm.split()[0]]):
+        return 1.0
+    if home_norm.split()[0] in text and away_norm.split()[-1] in text:
+        return 0.8
+    return 0.0
+
+
+def _fallback_match_by_title(
+    markets: List[Dict[str, Any]],
+    home_team: str,
+    away_team: str,
+    game_time: Optional[datetime] = None,
+) -> Optional[Dict[str, Any]]:
+    if not markets:
+        return None
+    best = None
+    best_score = 0.0
+    for m in markets:
+        title = m.get("title") or ""
+        score_team = _title_match_score(title, home_team, away_team)
+        if score_team <= 0:
+            continue
+        score_time = 0.0
+        if game_time and m.get("close_time"):
+            try:
+                dt = datetime.fromisoformat(str(m.get("close_time")).replace("Z", "+00:00"))
+                if dt.tzinfo is None:
+                    dt = pytz.utc.localize(dt)
+                delta_hours = abs((dt - game_time).total_seconds()) / 3600.0
+                score_time = max(0.0, 1.0 - min(delta_hours / 72.0, 1.0))
+            except Exception:
+                score_time = 0.0
+        final = 0.8 * score_team + 0.2 * score_time
+        if final > best_score:
+            best_score = final
+            best = m
+    return best
+
 # --- IMPORTS FROM APP_CORE ---
 try:
     from app_core.team_name_matcher import TeamNameMatcher
@@ -163,6 +235,50 @@ class VertexMasterAnalyzer:
         self.use_kalshi = bool(
             use_kalshi and st.session_state.get("kalshi_enabled", True)
         )
+        self._kalshi_league_cache: Dict[str, List[Dict[str, Any]]] = {}
+
+    def filter_kalshi_markets(self, league: str, markets: List[Dict[str, Any]]) -> Dict[str, Any]:
+        if not self.kalshi or not self.use_kalshi:
+            return {
+                "markets": [],
+                "counts": {},
+                "single_game_candidates": [],
+                "multivariate_bundles": [],
+                "fetch_debug": {"error": "kalshi_disabled"},
+            }
+
+        self.kalshi.assert_available()
+        cache_key = (league or "").upper()
+        if cache_key in self._kalshi_league_cache:
+            league_markets = self._kalshi_league_cache[cache_key]
+        else:
+            league_markets = self.kalshi.get_league_markets(
+                league, min_prefix_hits=200, max_pages=25
+            )
+            self._kalshi_league_cache[cache_key] = league_markets
+        split = self.kalshi.split_market_kinds(league_markets, league)
+        counts = _kalshi_prefix_counts(split.get("single_game_candidates", []))
+        meta = getattr(self.kalshi, "last_fetch_meta", {}) or {}
+        fetch_debug = {
+            "pages": meta.get("pages"),
+            "total_markets": meta.get("total_markets"),
+            "prefix_hits": meta.get("prefix_hits"),
+            "prefix": meta.get("prefix"),
+            "single_game_candidates": len(split.get("single_game_candidates", [])),
+            "multivariate_bundles": len(split.get("multivariate_bundles", [])),
+            "league_markets": len(league_markets),
+        }
+        if not split.get("single_game_candidates"):
+            raise RuntimeError(
+                "Kalshi is required but no single-game markets were found for NBA after deep pagination. This is likely an API filtering/pagination issue."
+            )
+        return {
+            "markets": league_markets,
+            "counts": counts,
+            "single_game_candidates": split.get("single_game_candidates", []),
+            "multivariate_bundles": split.get("multivariate_bundles", []),
+            "fetch_debug": fetch_debug,
+        }
 
     # -------------------------------
     # MAIN ENTRYPOINT
@@ -187,6 +303,16 @@ class VertexMasterAnalyzer:
             "vertex_none_count": 0,
             "exceptions_count": 0,
         }
+        kalshi_markets: List[Dict[str, Any]] = []
+        if self.use_kalshi and self.kalshi:
+            try:
+                kalshi_info = self.filter_kalshi_markets(league, games)
+                kalshi_markets = kalshi_info.get("single_game_candidates", [])
+                st.session_state["vertex_kalshi_debug"] = kalshi_info
+            except Exception as e:
+                st.session_state["vertex_kalshi_debug"] = {"error": str(e)}
+                if st.session_state.get("kalshi_required", True):
+                    raise
         progress = st.progress(0)
 
         def _safe_commence_iso(game_dict: Dict[str, Any]) -> Optional[str]:
