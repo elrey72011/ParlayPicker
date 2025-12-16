@@ -176,6 +176,15 @@ class VertexMasterAnalyzer:
 
         vertex_enabled = is_vertex_prediction_configured()
         rows: List[Dict[str, Any]] = []
+        stats: Dict[str, Any] = {
+            "games_received": len(games),
+            "rows_produced": 0,
+            "missing_vertex": 0,
+            "missing_kalshi": 0,
+            "missing_theover": 0,
+            "no_candidates": 0,
+            "unknown_away": 0,
+        }
         progress = st.progress(0)
 
         kalshi_active = bool(self.kalshi and self.use_kalshi)
@@ -241,6 +250,13 @@ class VertexMasterAnalyzer:
                     game, game_league, kalshi_info
                 )
 
+                away_name = feats.get("away_team") or ""
+                if str(away_name).upper() == "UNKNOWN_AWAY" or away_name == "":
+                    stats["unknown_away"] += 1
+
+                if not feats.get("kalshi_available"):
+                    stats["missing_kalshi"] += 1
+
                 # 4. Optional LLM Assistant
                 (
                     assistant_contracts,
@@ -266,6 +282,9 @@ class VertexMasterAnalyzer:
                             vertex_home_prob = float(probs[0])
                     except Exception as e:
                         logger.warning(f"Vertex prediction failed: {e}")
+                        stats["missing_vertex"] += 1
+                else:
+                    stats["missing_vertex"] += 1
 
                 # 6. Evaluate Candidates (Moneyline & Spread)
                 candidates: List[Dict[str, Any]] = []
@@ -312,12 +331,46 @@ class VertexMasterAnalyzer:
                         key=lambda x: x.get("edge_vs_market", -99),
                         reverse=True,
                     )[0]
-                    rows.append(best)
+                    rows.append(self._standardize_row(best, feats, game_league))
+                else:
+                    stats["no_candidates"] += 1
+                    warn = "No odds/candidates; returning fallback row"
+                    rows.append(
+                        self._fallback_row(
+                            feats=feats,
+                            game_league=game_league,
+                            vertex_home_prob=vertex_home_prob,
+                            warning=warn,
+                        )
+                    )
 
             except Exception as e:
                 logger.error(f"Error analyzing game {idx}: {e}")
 
             progress.progress((idx + 1) / len(games))
+
+        stats["rows_produced"] = len(rows)
+        logger.info(
+            "VertexMasterAnalyzer stats: %s",
+            stats,
+        )
+        st.session_state["vertex_master_stats"] = stats
+
+        if games and not rows:
+            # Safety net: never return empty when games were provided
+            rows.append(
+                {
+                    "League": league,
+                    "Home": None,
+                    "Away": None,
+                    "Commence (UTC)": None,
+                    "Market": "N/A",
+                    "Pick": "No candidates generated",
+                    "AI_Prob": None,
+                    "AI_Edge": None,
+                    "Warnings": "Analyzer produced no rows despite input games.",
+                }
+            )
 
         return pd.DataFrame(rows)
 
@@ -439,6 +492,7 @@ class VertexMasterAnalyzer:
             "home_team": game.get("home_team"),
             "away_team": game.get("away_team"),
             "game_time": game_time,
+            "normalization_warnings": game.get("normalization_warnings", []),
         }
 
         features.update(
@@ -580,6 +634,9 @@ class VertexMasterAnalyzer:
             "market_prob": market_prob,
             "edge_vs_market": edge,
             "ev": ev,
+            "market_type": market_type,
+            "selection": selection,
+            "line": line,
             # Kalshi fields
             "kalshi_available": bool(feats.get("kalshi_available", False)),
             "kalshi_prob": feats.get("kalshi_prob"),
@@ -595,6 +652,89 @@ class VertexMasterAnalyzer:
         result["market_home_prob"] = market_home_prob
 
         return result
+
+    def _standardize_row(
+        self,
+        best: Dict[str, Any],
+        feats: Dict[str, Any],
+        game_league: str,
+        warning: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Normalize candidate dict into UI-friendly row with fallbacks."""
+
+        g_time = feats.get("game_time")
+        commence_utc = None
+        if isinstance(g_time, datetime):
+            commence_utc = g_time.astimezone(pytz.utc)
+        elif g_time:
+            try:
+                commence_utc = datetime.fromisoformat(str(g_time).replace("Z", "+00:00"))
+            except Exception:
+                commence_utc = None
+
+        warn_parts = []
+        if warning:
+            warn_parts.append(warning)
+        warn_parts.extend(feats.get("normalization_warnings", []))
+        warn_text = "; ".join([p for p in warn_parts if p])
+        row = {
+            "League": best.get("league", game_league),
+            "Home": feats.get("home_team"),
+            "Away": feats.get("away_team"),
+            "Commence (UTC)": commence_utc,
+            "Market": best.get("market_type", "ML"),
+            "Pick": best.get("the_pick"),
+            "AI_Prob": best.get("win_prob"),
+            "AI_Edge": best.get("edge_vs_market"),
+            "Kalshi_Prob": best.get("kalshi_home_prob"),
+            "Kalshi_Edge": None,
+            "TheOver_Pick": None,
+            "TheOver_Prob": best.get("theover_home_prob"),
+            "Warnings": warn_text,
+        }
+
+        # Retain legacy keys for CSV/download consumers
+        row.update(best)
+        return row
+
+    def _fallback_row(
+        self,
+        feats: Dict[str, Any],
+        game_league: str,
+        vertex_home_prob: Optional[float],
+        warning: str,
+    ) -> Dict[str, Any]:
+        """Guarantee at least one row per game even when odds/candidates missing."""
+
+        pick_side = "home" if (vertex_home_prob or 0.5) >= 0.5 else "away"
+        pick_team = feats.get("home_team") if pick_side == "home" else feats.get("away_team")
+        best = {
+            "league": game_league,
+            "game": f"{feats.get('away_team')} @ {feats.get('home_team')}",
+            "game_time": feats.get("game_time"),
+            "the_pick": f"{pick_team} (no odds)",
+            "pick_odds": None,
+            "win_prob": vertex_home_prob,
+            "market_prob": None,
+            "edge_vs_market": None,
+            "ev": None,
+            "market_type": "Info",
+            "selection": pick_side,
+            "line": None,
+            "kalshi_available": bool(feats.get("kalshi_available", False)),
+            "kalshi_prob": feats.get("kalshi_prob"),
+            "kalshi_status": feats.get("kalshi_status", ""),
+            "kalshi_ticker": feats.get("kalshi_ticker"),
+            "kalshi_date": feats.get("kalshi_date"),
+            "final_win_prob": vertex_home_prob,
+            "vertex_home_prob": vertex_home_prob,
+            "theover_home_prob": feats.get("theover_home_prob"),
+            "kalshi_home_prob": feats.get("kalshi_prob")
+            if feats.get("kalshi_available")
+            else None,
+            "market_home_prob": feats.get("implied_home_prob"),
+        }
+        return self._standardize_row(best, feats, game_league, warning)
 
 # -------------------------------
 # STREAMLIT DISPLAY
