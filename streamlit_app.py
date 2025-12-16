@@ -1212,6 +1212,14 @@ def match_kalshi_market(
     spreads = [m for m in kalshi_markets if classify_kalshi_market(m) == "spread"]
     winners = [m for m in kalshi_markets if classify_kalshi_market(m) == "winner"]
 
+    # Date-token summary for debug (unique by event_ticker)
+    date_token_counts: Dict[str, int] = {}
+    for m in kalshi_markets:
+        et = str(m.get("event_ticker") or m.get("ticker") or "").upper()
+        if et.startswith("KXNBAGAME-") and len(et) >= 16:
+            token = et.split("KXNBAGAME-")[1][:7]
+            date_token_counts[token] = date_token_counts.get(token, 0) + 1
+
     if league_name == "NBA":
         searched_prefix = f"KXNBAGAME-{date_token}" if date_token else None
         candidate_event_tickers = []
@@ -1235,7 +1243,7 @@ def match_kalshi_market(
             date_bucket_event_tickers = list(bucket_map.keys())
             if not date_bucket:
                 winners = []
-                winner_reason = "no_kalshi_markets_for_date_bucket"
+                winner_reason = "no_kalshi_date_bucket"
             else:
                 candidates_set = set(candidate_event_tickers)
                 winners = [
@@ -1244,11 +1252,15 @@ def match_kalshi_market(
                     if str(m.get("event_ticker") or "").upper() in candidates_set
                 ]
                 if not winners:
-                    winner_reason = "no_exact_event_ticker_match"
+                    winner_reason = "no_exact_event_ticker_match_in_bucket"
+        elif winners:
+            # If we have winners but no searched_prefix/date_token, treat as missing token
+            winners = []
+            winner_reason = "no_kalshi_date_bucket"
         else:
             date_bucket_event_tickers = []
             if winner_reason == winner_reason_override or winner_reason == "no_winner_market_for_game":
-                winner_reason = "no_kalshi_markets_for_date_bucket"
+                winner_reason = "no_kalshi_date_bucket"
         candidate_event_tickers = list(dict.fromkeys(candidate_event_tickers))
 
     total_result, total_candidates = evaluate_partition(totals, "total")
@@ -1256,6 +1268,12 @@ def match_kalshi_market(
     winner_result, winner_candidates = evaluate_partition(
         winners, "winner", winner_reason
     )
+
+    # Guard against any cross-date matches that slipped through
+    if league_name == "NBA" and winner_result.get("kalshi_matched"):
+        evt = str(winner_result.get("kalshi_event_ticker") or "").upper()
+        if not date_token or (date_token and f"KXNBAGAME-{date_token}" not in evt):
+            winner_result = base_result("date_bucket_guard_triggered", "winner")
 
     match_status = "matched" if winner_result.get("kalshi_matched") else "no_match"
     no_match_reason = None if winner_result.get("kalshi_matched") else winner_result.get("kalshi_reason")
@@ -1267,6 +1285,7 @@ def match_kalshi_market(
         "expected_codes": {"away": away_code_expected, "home": home_code_expected},
         "candidate_event_tickers": candidate_event_tickers[:10],
         "searched_prefix": searched_prefix,
+        "date_bucket_counts": date_token_counts,
         "date_bucket_markets_count": len(date_bucket_event_tickers),
         "checked_event_tickers_sample": date_bucket_event_tickers[:10],
         "rejection_counts": winner_rejections,
