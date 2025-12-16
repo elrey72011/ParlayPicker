@@ -253,53 +253,91 @@ def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time:
         game_dt = game_time
         if game_dt.tzinfo is None:
             game_dt = NBA_TZ.localize(game_dt)
+        game_dt_utc = game_dt.astimezone(pytz.UTC)
         date_token = _nba_date_token(game_dt)
         away_code = _nba_code(away_team)
         home_code = _nba_code(home_team)
-        candidate_events = []
-        if away_code and home_code:
-            candidate_events = [
-                f"KXNBAGAME-{date_token}{away_code}{home_code}",
-                f"KXNBAGAME-{date_token}{home_code}{away_code}",
-            ]
-        bucket_info = kalshi.get_markets_for_date_token(
-            league_key, date_token, status=status
-        )
-        markets = bucket_info.get("bucket") or []
-        all_markets = bucket_info.get("all_markets") or []
-        meta = bucket_info.get("meta", {})
-        if not markets:
+        if not away_code or not home_code:
             return KalshiMatchResult(
                 matched=False,
-                kalshi_available=False,
+                kalshi_available=True,
                 label="",
                 probability=None,
                 raw_event_id=None,
                 league=league_key,
-                reason="no_kalshi_date_bucket",
+                reason="missing_team_code",
                 debug={
                     "date_token": date_token,
-                    "candidate_events": candidate_events,
-                    "bucket_meta": meta,
+                    "away_code": away_code,
+                    "home_code": home_code,
                 },
             )
 
-        # De-dupe by event_ticker for the date bucket (strict startswith to avoid cross-date)
+        matchup_code = f"{away_code}{home_code}"
+        bucket_info = kalshi.get_markets_for_date_token(
+            league_key, date_token, status=status
+        )
+        # Use all markets to allow fallback when the date bucket is missing but still require the matchup code
+        all_markets = bucket_info.get("all_markets") or []
+        meta = bucket_info.get("meta", {})
+
+        # De-dupe by event_ticker
         deduped: Dict[str, Dict[str, Any]] = {}
-        for m in markets:
+        for m in all_markets:
             et = str(m.get("event_ticker") or m.get("ticker") or "")
             if et and et not in deduped:
                 deduped[et] = m
-        bucket_prefix = f"KXNBAGAME-{date_token}"
-        date_bucket = [m for et, m in deduped.items() if et.startswith(bucket_prefix)]
+        markets = list(deduped.values())
+
+        matchup_candidates: List[Dict[str, Any]] = []
+        for m in markets:
+            et_upper = str(m.get("event_ticker") or "").upper()
+            if not et_upper.startswith("KXNBAGAME-"):
+                continue
+            if matchup_code not in et_upper:
+                continue
+            matchup_candidates.append(m)
+
         debug_info = {
             "date_token": date_token,
-            "candidate_event_tickers": candidate_events,
-            "date_bucket_count": len(date_bucket),
-            "date_bucket_sample": [str(m.get("event_ticker") or m.get("ticker") or "") for m in list(date_bucket)[:10]],
+            "away_code": away_code,
+            "home_code": home_code,
+            "matchup_code": matchup_code,
+            "candidate_event_tickers": [
+                f"KXNBAGAME-{date_token}{away_code}{home_code}",
+                f"KXNBAGAME-{date_token}{home_code}{away_code}",
+            ],
             "bucket_meta": meta,
+            "matchup_candidate_count": len(matchup_candidates),
         }
-        if not date_bucket:
+
+        if not matchup_candidates:
+            nearby: List[Dict[str, Any]] = []
+            for m in markets:
+                et_upper = str(m.get("event_ticker") or "").upper()
+                if not et_upper.startswith("KXNBAGAME-"):
+                    continue
+                has_any_code = away_code in et_upper or home_code in et_upper
+                if not has_any_code:
+                    continue
+                mt = kalshi._best_market_time(m)
+                diff_hours = None
+                if mt and game_dt_utc:
+                    diff_hours = abs((mt - game_dt_utc).total_seconds()) / 3600.0
+                nearby.append(
+                    {
+                        "event_ticker": et_upper,
+                        "title": m.get("title"),
+                        "diff_hours": diff_hours,
+                    }
+                )
+            nearby_sorted = sorted(
+                nearby,
+                key=lambda x: x.get("diff_hours")
+                if x.get("diff_hours") is not None
+                else float("inf"),
+            )
+            debug_info["nearby_one_team_candidates"] = nearby_sorted[:10]
             return KalshiMatchResult(
                 matched=False,
                 kalshi_available=True,
@@ -307,19 +345,24 @@ def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time:
                 probability=None,
                 raw_event_id=None,
                 league=league_key,
-                reason="no_kalshi_date_bucket",
+                reason="no_matchup_code_market",
                 debug=debug_info,
             )
 
-        exact_match = None
-        for m in date_bucket:
-            et = str(m.get("event_ticker") or "")
-            if et and et in candidate_events:
-                exact_match = m
-                break
+        window_lower = game_dt_utc - timedelta(hours=12)
+        window_upper = game_dt_utc + timedelta(hours=36)
+        timed_candidates: List[Tuple[float, Dict[str, Any]]] = []
+        for m in matchup_candidates:
+            mt = kalshi._best_market_time(m)
+            if not mt:
+                continue
+            if not (window_lower <= mt <= window_upper):
+                continue
+            diff_hours = abs((mt - game_dt_utc).total_seconds()) / 3600.0
+            timed_candidates.append((diff_hours, m))
 
-        if not exact_match:
-            debug_info["no_match_reason"] = "no_exact_event_ticker_match"
+        debug_info["candidates_in_window"] = len(timed_candidates)
+        if not timed_candidates:
             return KalshiMatchResult(
                 matched=False,
                 kalshi_available=True,
@@ -327,22 +370,12 @@ def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time:
                 probability=None,
                 raw_event_id=None,
                 league=league_key,
-                reason="no_exact_event_ticker_match_in_bucket",
+                reason="no_candidate_in_time_window",
                 debug=debug_info,
             )
 
-        if date_token not in str(exact_match.get("event_ticker") or ""):
-            debug_info["no_match_reason"] = "date_bucket_guard_triggered"
-            return KalshiMatchResult(
-                matched=False,
-                kalshi_available=True,
-                label="",
-                probability=None,
-                raw_event_id=None,
-                league=league_key,
-                reason="date_bucket_guard_triggered",
-                debug=debug_info,
-            )
+        timed_candidates.sort(key=lambda x: x[0])
+        exact_match = timed_candidates[0][1]
 
         yes_bid = exact_match.get("yes_bid")
         yes_ask = exact_match.get("yes_ask")
@@ -360,6 +393,7 @@ def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time:
 
         debug_info["matched_event_ticker"] = exact_match.get("event_ticker")
         debug_info["matched_side_ticker"] = exact_match.get("ticker")
+        debug_info["matched_close_time"] = str(exact_match.get("close_time"))
         return KalshiMatchResult(
             matched=True,
             kalshi_available=True,
