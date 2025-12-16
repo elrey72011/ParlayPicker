@@ -11,7 +11,7 @@ import base64
 import random
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import pytz
 import requests
@@ -22,6 +22,14 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 
 logger = logging.getLogger(__name__)
+
+
+class KalshiRateLimitError(Exception):
+    """Raised when Kalshi keeps returning 429 after retries."""
+
+
+class KalshiAPIError(Exception):
+    """Raised for non-auth Kalshi API errors."""
 
 # ---------------------------------------------------------------------------
 # Data Structures
@@ -299,6 +307,8 @@ class KalshiIntegrator:
         self._markets_cache: List[Dict[str, Any]] = []
         self._markets_cache_ts: float = 0.0
         self.cache_ttl_seconds: int = 120
+        self._markets_cache_by_key: Dict[Tuple[str, str], Dict[str, Any]] = {}
+        self._markets_cache_ttl_seconds: int = 600
         self.last_error: Optional[str] = None
         self._league_cache: Dict[str, Dict[str, Any]] = {}
         self._league_cache_ttl: int = 300
@@ -447,19 +457,19 @@ class KalshiIntegrator:
             status = resp.status_code
             if status == 429:
                 retry_429 += 1
-                if retry_429 > 6:
-                    self.last_error_info = {
-                        "status_code": status,
-                        "response_text": resp.text[:300],
-                    }
-                    raise RuntimeError(f"Kalshi rate limit (429): {resp.text[:200]}")
                 retry_after = resp.headers.get("Retry-After")
                 try:
                     delay = float(retry_after)
                 except Exception:
                     delay = backoff
-                time.sleep(max(0.5, backoff_delay(min(delay, 30.0))))
-                backoff = min(backoff * 2, 30.0)
+                if retry_429 > 6:
+                    self.last_error_info = {
+                        "status_code": status,
+                        "response_text": resp.text[:300],
+                    }
+                    raise KalshiRateLimitError("Kalshi rate limited (429)")
+                time.sleep(max(0.5, backoff_delay(min(delay, 32.0))))
+                backoff = min(backoff * 2, 32.0)
                 continue
             if 500 <= status < 600:
                 retry_other += 1
@@ -468,7 +478,7 @@ class KalshiIntegrator:
                         "status_code": status,
                         "response_text": resp.text[:300],
                     }
-                    raise RuntimeError(f"Kalshi server error {status}: {resp.text[:200]}")
+                    raise KalshiAPIError(f"Kalshi server error {status}")
                 time.sleep(backoff_delay(min(backoff, 5.0)))
                 backoff = min(backoff * 2, 20.0)
                 continue
@@ -478,8 +488,8 @@ class KalshiIntegrator:
                     "response_text": resp.text[:300],
                 }
                 if status in (401, 403):
-                    raise RuntimeError("Kalshi auth failed (401/403). Check key/secret.")
-                raise RuntimeError(f"Kalshi API error {status}: {resp.text[:300]}")
+                    raise KalshiAPIError("Kalshi auth failed (401/403). Check key/secret.")
+                raise KalshiAPIError(f"Kalshi API error {status}: {resp.text[:300]}")
 
             try:
                 data = resp.json()
@@ -737,9 +747,6 @@ class KalshiIntegrator:
     ) -> List[Dict[str, Any]]:
         try:
             league_key = (league or "").upper()
-            markets = self.get_league_markets(league_key, status=None)
-            filtered = markets
-
             commence_dt: List[datetime] = []
             if commence_times:
                 for c in commence_times:
@@ -755,6 +762,19 @@ class KalshiIntegrator:
                         commence_dt.append(dt)
                     except Exception:
                         continue
+            date_key = None
+            if commence_dt:
+                earliest = min(commence_dt)
+                date_key = earliest.astimezone(pytz.UTC).strftime("%Y%m%d")
+            cache_key = None
+            if league_key and date_key:
+                cache_key = (league_key, date_key)
+                cached = self._markets_cache_by_key.get(cache_key)
+                if cached and (time.time() - cached.get("ts", 0)) < self._markets_cache_ttl_seconds:
+                    return cached.get("markets", [])
+
+            markets = self.get_league_markets(league_key, status=None)
+            filtered = markets
 
             if commence_dt:
                 window = timedelta(hours=72)
@@ -768,6 +788,12 @@ class KalshiIntegrator:
                         time_filtered.append(m)
                 if time_filtered:
                     filtered = time_filtered
+
+            if cache_key:
+                self._markets_cache_by_key[cache_key] = {
+                    "ts": time.time(),
+                    "markets": filtered,
+                }
 
             return filtered
         except Exception:
