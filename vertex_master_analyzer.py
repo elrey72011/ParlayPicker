@@ -237,11 +237,41 @@ class VertexMasterAnalyzer:
         )
 
     def filter_kalshi_markets(self, league: str, markets: List[Dict[str, Any]]) -> Dict[str, Any]:
-        league_markets = _filter_markets_for_league(league, markets)
-        counts = _kalshi_prefix_counts(league_markets)
+        if not self.kalshi or not self.use_kalshi:
+            return {
+                "markets": [],
+                "counts": {},
+                "single_game_candidates": [],
+                "multivariate_bundles": [],
+                "fetch_debug": {"error": "kalshi_disabled"},
+            }
+
+        self.kalshi.assert_available()
+        league_markets = self.kalshi.get_league_markets(
+            league, min_prefix_hits=200, max_pages=300
+        )
+        split = self.kalshi.split_market_kinds(league_markets, league)
+        counts = _kalshi_prefix_counts(split.get("single_game_candidates", []))
+        meta = getattr(self.kalshi, "last_fetch_meta", {}) or {}
+        fetch_debug = {
+            "pages": meta.get("pages"),
+            "total_markets": meta.get("total_markets"),
+            "prefix_hits": meta.get("prefix_hits"),
+            "prefix": meta.get("prefix"),
+            "single_game_candidates": len(split.get("single_game_candidates", [])),
+            "multivariate_bundles": len(split.get("multivariate_bundles", [])),
+            "league_markets": len(league_markets),
+        }
+        if not split.get("single_game_candidates"):
+            raise RuntimeError(
+                "Kalshi is required but no single-game markets were found for NBA after deep pagination. This is likely an API filtering/pagination issue."
+            )
         return {
             "markets": league_markets,
             "counts": counts,
+            "single_game_candidates": split.get("single_game_candidates", []),
+            "multivariate_bundles": split.get("multivariate_bundles", []),
+            "fetch_debug": fetch_debug,
         }
 
     # -------------------------------
@@ -267,6 +297,16 @@ class VertexMasterAnalyzer:
             "vertex_none_count": 0,
             "exceptions_count": 0,
         }
+        kalshi_markets: List[Dict[str, Any]] = []
+        if self.use_kalshi and self.kalshi:
+            try:
+                kalshi_info = self.filter_kalshi_markets(league, games)
+                kalshi_markets = kalshi_info.get("single_game_candidates", [])
+                st.session_state["vertex_kalshi_debug"] = kalshi_info
+            except Exception as e:
+                st.session_state["vertex_kalshi_debug"] = {"error": str(e)}
+                if st.session_state.get("kalshi_required", True):
+                    raise
         progress = st.progress(0)
 
         def _safe_commence_iso(game_dict: Dict[str, Any]) -> Optional[str]:

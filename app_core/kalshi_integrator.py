@@ -275,7 +275,13 @@ def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time:
 # ---------------------------------------------------------------------------
 
 class KalshiIntegrator:
-    def __init__(self, api_key: Optional[str] = None, api_secret: Optional[str] = None) -> None:
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        api_secret: Optional[str] = None,
+        *,
+        required: bool = False,
+    ) -> None:
         # Resolve key + secret from args, env, or Streamlit secrets (only the official names)
         self.api_key = api_key or st.secrets.get("KALSHI_API_KEY") or os.getenv("KALSHI_API_KEY")
         raw_secret = api_secret or st.secrets.get("KALSHI_API_SECRET") or os.getenv("KALSHI_API_SECRET")
@@ -285,11 +291,29 @@ class KalshiIntegrator:
 
         self.api_url = "https://api.elections.kalshi.com/trade-api/v2"
 
+        # Required flag
+        self.required = required
+
         # Caching + error state
         self._markets_cache: List[Dict[str, Any]] = []
         self._markets_cache_ts: float = 0.0
         self.cache_ttl_seconds: int = 300
         self.last_error: Optional[str] = None
+        self._league_cache: Dict[str, Dict[str, Any]] = {}
+        self._league_cache_ttl: int = 300
+        self.last_fetch_meta: Dict[str, Any] = {}
+
+    @staticmethod
+    def _normalize_secret(secret_val: Optional[str]) -> Optional[str]:
+        if not secret_val:
+            return None
+        cleaned = str(secret_val).replace("\\n", "\n").strip()
+        if not cleaned:
+            return None
+        if "-----BEGIN RSA PRIVATE KEY-----" in cleaned or "-----BEGIN PRIVATE KEY-----" in cleaned:
+            return cleaned
+        # If no PEM markers, wrap as PKCS8
+        return "-----BEGIN PRIVATE KEY-----\n" + cleaned + "\n-----END PRIVATE KEY-----"
 
     @staticmethod
     def _normalize_secret(secret_val: Optional[str]) -> Optional[str]:
@@ -324,6 +348,16 @@ class KalshiIntegrator:
         except Exception as e:
             logger.error(f"Signing failed: {e}")
             return ""
+
+    def assert_available(self) -> None:
+        if not self.api_key or not self.api_secret_pem:
+            raise RuntimeError("Kalshi is required but missing keys in secrets.")
+        health = self.health_check()
+        if not health.get("ok"):
+            raise RuntimeError(
+                health.get("error")
+                or "Kalshi is required but unavailable (auth/keys/API)."
+            )
 
     def health_check(self) -> Dict[str, Any]:
         configured = bool(self.api_key and self.api_secret_pem)
@@ -365,13 +399,14 @@ class KalshiIntegrator:
                 }
             data = resp.json()
             markets = data.get("markets", []) or []
+            ok = len(markets) > 0
             return {
                 "configured": True,
-                "ok": len(markets) > 0,
+                "ok": ok,
                 "market_count": len(markets),
                 "sample_market": markets[0] if markets else None,
                 "markets": markets,
-                "error": None if markets else "Kalshi returned zero markets.",
+                "error": None if ok else "Kalshi returned zero markets.",
             }
         except Exception as exc:  # pragma: no cover - defensive
             return {
@@ -412,6 +447,41 @@ class KalshiIntegrator:
             logger.error(f"Kalshi Connection Exception: {e}")
         return None
 
+    def get_markets_paginated(
+        self,
+        status: Optional[str] = None,
+        limit: int = 1000,
+        max_pages: int = 200,
+        cursor: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        all_markets: List[Dict[str, Any]] = []
+        next_cursor = cursor
+        pages = 0
+        while pages < max_pages:
+            params = {"limit": limit}
+            if status:
+                params["status"] = status
+            if next_cursor:
+                params["cursor"] = next_cursor
+            data = self._make_authenticated_request("GET", "/markets", params=params)
+            if not data:
+                break
+            markets = data.get("markets", []) or []
+            all_markets.extend(markets)
+            pages += 1
+            next_cursor = (
+                data.get("cursor")
+                or data.get("next_cursor")
+                or data.get("next")
+                or data.get("next_token")
+            )
+            prefix_debug = {"page": pages, "received": len(markets), "cursor": bool(next_cursor)}
+            logger.debug(f"Kalshi page debug: {prefix_debug}")
+            if not next_cursor:
+                break
+            time.sleep(0.1)
+        return all_markets
+
     def get_markets(self, status: Optional[str] = "open") -> List[Dict[str, Any]]:
         """Fetch all markets with pagination support and a sane cap."""
         now = time.time()
@@ -419,42 +489,73 @@ class KalshiIntegrator:
             logger.info(f"Using cached markets ({len(self._markets_cache)} items)")
             return self._markets_cache
 
-        all_markets: List[Dict[str, Any]] = []
-        cursor: Optional[str] = None
-        max_items = 5000
+        all_markets = self.get_markets_paginated(status=status)
+        self._markets_cache = all_markets
+        self._markets_cache_ts = now
+        logger.info(f"✅ Successfully loaded {len(all_markets)} Kalshi markets (paginated)")
+        return all_markets
 
-        while True:
+    def get_league_markets(
+        self,
+        league: str,
+        *,
+        status: Optional[str] = None,
+        min_prefix_hits: int = 200,
+        max_pages: int = 300,
+    ) -> List[Dict[str, Any]]:
+        league_key = (league or "").upper()
+        prefix = LEAGUE_SERIES_MAP.get(league_key)
+        cache_key = f"{league_key}:{status or 'any'}"
+        now = time.time()
+        cached = self._league_cache.get(cache_key)
+        if cached and (now - cached.get("ts", 0)) < self._league_cache_ttl:
+            self.last_fetch_meta = cached.get("meta", {})
+            return cached.get("markets", [])
+
+        all_markets: List[Dict[str, Any]] = []
+        pages = 0
+        prefix_hits = 0
+        cursor: Optional[str] = None
+        while pages < max_pages:
             params = {"limit": 1000}
             if status:
                 params["status"] = status
             if cursor:
                 params["cursor"] = cursor
-
             data = self._make_authenticated_request("GET", "/markets", params=params)
             if not data:
                 break
-
-            markets = data.get("markets", []) or []
-            all_markets.extend(markets)
-
-            if len(all_markets) >= max_items:
-                all_markets = all_markets[:max_items]
-                logger.warning("Reached pagination cap when loading Kalshi markets")
-                break
-
+            chunk = data.get("markets", []) or []
+            all_markets.extend(chunk)
+            tickers = [str(m.get("ticker") or m.get("event_ticker") or "").upper() for m in chunk]
+            if prefix:
+                prefix_hits += len([t for t in tickers if t.startswith(prefix)])
+            pages += 1
             cursor = (
                 data.get("cursor")
                 or data.get("next_cursor")
                 or data.get("next")
                 or data.get("next_token")
             )
+            if prefix and prefix_hits >= min_prefix_hits:
+                break
             if not cursor:
                 break
             time.sleep(0.1)
 
-        self._markets_cache = all_markets
-        self._markets_cache_ts = now
-        logger.info(f"✅ Successfully loaded {len(all_markets)} Kalshi markets (paginated)")
+        self.last_fetch_meta = {
+            "league": league_key,
+            "status": status,
+            "pages": pages,
+            "total_markets": len(all_markets),
+            "prefix_hits": prefix_hits,
+            "prefix": prefix,
+        }
+        self._league_cache[cache_key] = {
+            "ts": now,
+            "markets": all_markets,
+            "meta": self.last_fetch_meta,
+        }
         return all_markets
 
     def _filter_markets_for_league(self, markets: List[Dict[str, Any]], league: Optional[str]) -> List[Dict[str, Any]]:
@@ -463,11 +564,11 @@ class KalshiIntegrator:
         if not prefix:
             return markets
 
-        ticker_upper = [str(m.get("ticker") or m.get("event_ticker") or "").upper() for m in markets]
-        prefix_filtered = [m for m, t in zip(markets, ticker_upper) if t.startswith(prefix)]
-        has_kxn_prefix = any(t.startswith("KXN") for t in [str(m.get("ticker") or m.get("event_ticker") or "").upper() for m in prefix_filtered])
-        if prefix_filtered and has_kxn_prefix:
-            return prefix_filtered
+            ticker_upper = [str(m.get("ticker") or m.get("event_ticker") or "").upper() for m in markets]
+            prefix_filtered = [m for m, t in zip(markets, ticker_upper) if t.startswith(prefix)]
+            has_kxn_prefix = any(t.startswith("KXN") for t in [str(m.get("ticker") or m.get("event_ticker") or "").upper() for m in prefix_filtered])
+            if prefix_filtered and has_kxn_prefix:
+                return prefix_filtered
 
         return markets
 
@@ -496,12 +597,48 @@ class KalshiIntegrator:
                 continue
         return None
 
+    @staticmethod
+    def is_multivariate_bundle(market: Dict[str, Any]) -> bool:
+        ticker = str(market.get("event_ticker") or market.get("ticker") or "").upper()
+        if ticker.startswith("KXMV") or "MVE" in ticker:
+            return True
+        if market.get("mve_collection_ticker") or market.get("mve_selected_legs"):
+            return True
+        custom = str(market.get("custom_strike") or "")
+        if custom and "Associated Events" in custom:
+            return True
+        return False
+
+    def split_market_kinds(self, markets: List[Dict[str, Any]], league: Optional[str] = None) -> Dict[str, List[Dict[str, Any]]]:
+        league_key = (league or "").upper()
+        prefix = LEAGUE_SERIES_MAP.get(league_key, "")
+        single_game: List[Dict[str, Any]] = []
+        multivariate: List[Dict[str, Any]] = []
+        other: List[Dict[str, Any]] = []
+        for m in markets or []:
+            if self.is_multivariate_bundle(m):
+                multivariate.append(m)
+                continue
+            t = str(m.get("event_ticker") or m.get("ticker") or "").upper()
+            if prefix and t.startswith(prefix):
+                single_game.append(m)
+            elif not prefix:
+                single_game.append(m)
+            else:
+                other.append(m)
+        return {
+            "single_game_candidates": single_game,
+            "multivariate_bundles": multivariate,
+            "other": other,
+        }
+
     def get_sports_markets(
         self, league: Optional[str] = None, commence_times: Optional[List[str]] = None
     ) -> List[Dict[str, Any]]:
         try:
-            markets = self.get_markets(status=None)
-            filtered = self._filter_markets_for_league(markets, league)
+            league_key = (league or "").upper()
+            markets = self.get_league_markets(league_key, status=None)
+            filtered = markets
 
             commence_dt: List[datetime] = []
             if commence_times:
@@ -531,16 +668,6 @@ class KalshiIntegrator:
                         time_filtered.append(m)
                 if time_filtered:
                     filtered = time_filtered
-
-            if (league or "").upper() == "NBA":
-                ticker_upper = [str(m.get("ticker") or m.get("event_ticker") or "").upper() for m in filtered]
-                if not any(
-                    t.startswith("KXNBAGAME")
-                    or t.startswith("KXNBATOTAL")
-                    or t.startswith("KXNBASPREAD")
-                    for t in ticker_upper
-                ):
-                    filtered = markets
 
             return filtered
         except Exception:

@@ -377,12 +377,15 @@ location = read_secret("GCP_LOCATION", "us-central1")
 vertex_endpoint_id = read_secret("VERTEX_ENDPOINT_ID")
 kalshi_api_key = read_secret("KALSHI_API_KEY") or read_secret("kalshi_api_key")
 kalshi_api_secret = read_secret("KALSHI_API_SECRET") or read_secret("kalshi_api_secret")
+st.session_state.setdefault("kalshi_required", True)
 kalshi_integrator: Optional[KalshiIntegrator] = None
 try:
     if "kalshi_integrator" not in st.session_state:
         if kalshi_api_key and kalshi_api_secret:
             st.session_state["kalshi_integrator"] = KalshiIntegrator(
-                kalshi_api_key, kalshi_api_secret
+                kalshi_api_key,
+                kalshi_api_secret,
+                required=st.session_state.get("kalshi_required", True),
             )
         else:
             st.session_state["kalshi_integrator"] = None
@@ -390,6 +393,8 @@ try:
 except Exception:
     st.session_state["last_exception"] = traceback.format_exc()
     kalshi_integrator = None
+if kalshi_integrator:
+    kalshi_integrator.required = st.session_state.get("kalshi_required", True)
 
 
 @st.cache_data(ttl=60)
@@ -466,52 +471,28 @@ def fetch_kalshi_markets(
         }
 
     try:
-        commence_tuple = tuple(commence_times_utc or [])
-        markets_raw = kalshi_integrator.get_sports_markets(
-            selected_league, commence_times=list(commence_tuple) if commence_tuple else None
+        markets_raw = kalshi_integrator.get_league_markets(
+            selected_league,
+            min_prefix_hits=200,
+            max_pages=300,
         )
+        if not markets_raw:
+            markets_raw = kalshi_integrator.get_markets_paginated(status=None, max_pages=300)
         markets_raw = markets_raw or []
 
-        # Build initial raw stats
         raw_counts = prefix_count(markets_raw)
+        split = kalshi_integrator.split_market_kinds(markets_raw, selected_league)
+        game_pool: List[Dict[str, Any]] = split.get("single_game_candidates", [])
+        game_pool_counts = prefix_count(game_pool)
 
-        game_pool: List[Dict[str, Any]] = markets_raw
-        game_pool_counts = raw_counts
-
-        if selected_league.upper() == "NBA":
-            game_pool = []
-            for m in markets_raw:
-                t = ticker_upper(m)
-                if not t:
-                    continue
-                if t.startswith("KXMV") or "MVE" in t:
-                    continue
-                if t.startswith("KXNBAGAME") or t.startswith("KXNBATOTAL") or t.startswith("KXNBASPREAD"):
-                    game_pool.append(m)
-            game_pool_counts = prefix_count(game_pool)
-
-            if not game_pool:
-                fallback_raw = kalshi_integrator.get_sports_markets(
-                    None, commence_times=list(commence_tuple) if commence_tuple else None
-                )
-                fallback_raw = fallback_raw or []
-                if fallback_raw:
-                    markets_raw = fallback_raw
-                    raw_counts = prefix_count(markets_raw)
-                    game_pool = []
-                    for m in markets_raw:
-                        t = ticker_upper(m)
-                        if not t:
-                            continue
-                        if t.startswith("KXMV") or "MVE" in t:
-                            continue
-                        if (
-                            t.startswith("KXNBAGAME")
-                            or t.startswith("KXNBATOTAL")
-                            or t.startswith("KXNBASPREAD")
-                        ):
-                            game_pool.append(m)
-                    game_pool_counts = prefix_count(game_pool)
+        if not game_pool and markets_raw:
+            fallback_raw = kalshi_integrator.get_markets_paginated(status=None, max_pages=300)
+            split_fb = kalshi_integrator.split_market_kinds(fallback_raw, selected_league)
+            if split_fb.get("single_game_candidates"):
+                markets_raw = fallback_raw or []
+                raw_counts = prefix_count(markets_raw)
+                game_pool = split_fb.get("single_game_candidates", [])
+                game_pool_counts = prefix_count(game_pool)
 
         st.session_state["kalshi_markets_raw"] = markets_raw
         st.session_state["kalshi_markets_game_pool"] = game_pool
@@ -523,6 +504,9 @@ def fetch_kalshi_markets(
         st.session_state["kalshi_prefix_samples_game"] = [
             ticker_upper(m) for m in game_pool
         ][:20]
+        st.session_state["kalshi_game_pool_sample"] = [
+            ticker_upper(m) for m in game_pool
+        ][:10]
         return game_pool
     except Exception:
         st.session_state["last_exception"] = traceback.format_exc()
@@ -640,6 +624,10 @@ def kalshi_health_check(selected_league: str) -> Dict[str, Any]:
 
     market_count = len(markets)
     ok = market_count > 0 and bool(base_health.get("ok", True))
+    if not ok and base_health.get("error"):
+        error_msg = base_health.get("error")
+    else:
+        error_msg = None if ok else "Kalshi returned zero markets."
     sample_game_market, sample_reason = pick_sample_game_market(markets)
     return {
         "configured": configured,
@@ -648,9 +636,7 @@ def kalshi_health_check(selected_league: str) -> Dict[str, Any]:
         "sample_market": markets[0] if markets else base_health.get("sample_market"),
         "sample_game_market": sample_game_market,
         "sample_game_market_reason": sample_reason,
-        "error": base_health.get("error")
-        if not ok
-        else None,
+        "error": error_msg,
         "status_code": base_health.get("status_code"),
         "response_text": base_health.get("response_text"),
     }
@@ -1233,6 +1219,12 @@ def load_games(selected_league: str) -> List[Dict[str, Any]]:
 st.sidebar.header("Controls")
 league = st.sidebar.selectbox("League", list(SPORT_KEYS.keys()), index=list(SPORT_KEYS.keys()).index(st.session_state.get("league", "NBA")))
 st.session_state["league"] = league
+kalshi_required_toggle = st.sidebar.checkbox(
+    "Kalshi required", value=st.session_state.get("kalshi_required", True)
+)
+st.session_state["kalshi_required"] = kalshi_required_toggle
+if kalshi_integrator:
+    kalshi_integrator.required = kalshi_required_toggle
 if st.sidebar.button("Load Games", use_container_width=True):
     load_games(league)
 
@@ -1311,7 +1303,7 @@ with tab_master:
     run_master = st.button(
         "Run Master Analysis",
         key="run_master",
-        disabled=not kalshi_status.get("ok"),
+        disabled=(not kalshi_status.get("ok")) and st.session_state.get("kalshi_required", True),
         help="Requires Kalshi availability",
     )
     games = st.session_state.get("games", [])
@@ -1319,6 +1311,12 @@ with tab_master:
         st.error("Kalshi is required but unavailable. Fix Kalshi first.")
         st.stop()
     if run_master:
+        if st.session_state.get("kalshi_required", True) and kalshi_integrator:
+            try:
+                kalshi_integrator.assert_available()
+            except Exception as exc:
+                st.error(str(exc))
+                st.stop()
         commence_times_utc = [
             g.get("commence_time_iso_utc")
             or g.get("commence_time")
