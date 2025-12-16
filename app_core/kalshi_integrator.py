@@ -98,6 +98,7 @@ TEAM_FUZZY_THRESHOLD = 1.0
 DATE_TOLERANCE_DAYS = 5
 DATE_SOFT_PENALTY = 0.10
 NBA_TZ = pytz.timezone("America/New_York")
+ALLOW_SAME_DAY_TEXT_FALLBACK = True
 
 # Strict NBA code mapping for winner event tickers
 NBA_TEAM_CODE_MAP: Dict[str, str] = {
@@ -260,7 +261,12 @@ def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time:
                 f"KXNBAGAME-{date_token}{away_code}{home_code}",
                 f"KXNBAGAME-{date_token}{home_code}{away_code}",
             ]
-        markets = kalshi.get_markets(status=status)
+        bucket_info = kalshi.get_markets_for_date_token(
+            league_key, date_token, status=status
+        )
+        markets = bucket_info.get("bucket") or []
+        all_markets = bucket_info.get("all_markets") or []
+        meta = bucket_info.get("meta", {})
         if not markets:
             return KalshiMatchResult(
                 matched=False,
@@ -269,11 +275,15 @@ def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time:
                 probability=None,
                 raw_event_id=None,
                 league=league_key,
-                reason="no_markets_found",
-                debug={"date_token": date_token, "candidate_events": candidate_events},
+                reason="no_kalshi_markets_for_date_bucket",
+                debug={
+                    "date_token": date_token,
+                    "candidate_events": candidate_events,
+                    "bucket_meta": meta,
+                },
             )
 
-        # De-dupe by event_ticker
+        # De-dupe by event_ticker for the date bucket
         deduped: Dict[str, Dict[str, Any]] = {}
         for m in markets:
             et = str(m.get("event_ticker") or m.get("ticker") or "")
@@ -286,18 +296,39 @@ def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time:
             "candidate_event_tickers": candidate_events,
             "date_bucket_count": len(date_bucket),
             "date_bucket_sample": [str(m.get("event_ticker") or m.get("ticker") or "") for m in list(date_bucket)[:10]],
+            "bucket_meta": meta,
         }
         if not date_bucket:
-            return KalshiMatchResult(
-                matched=False,
-                kalshi_available=True,
-                label="",
-                probability=None,
-                raw_event_id=None,
-                league=league_key,
-                reason="no_kalshi_markets_for_date_bucket",
-                debug=debug_info,
-            )
+            # Optional same-day fallback for special events (e.g., Cup) using date token only
+            fallback_candidates: List[Dict[str, Any]] = []
+            if ALLOW_SAME_DAY_TEXT_FALLBACK:
+                dt_upper = date_token.upper()
+                for m in all_markets:
+                    et_upper = str(m.get("event_ticker") or "").upper()
+                    title_upper = str(m.get("title") or "").upper()
+                    if dt_upper not in et_upper:
+                        continue
+                    if away_code and home_code:
+                        codes_ok = (away_code in et_upper or away_code in title_upper) and (
+                            home_code in et_upper or home_code in title_upper
+                        )
+                        if not codes_ok:
+                            continue
+                    fallback_candidates.append(m)
+
+            if not fallback_candidates:
+                return KalshiMatchResult(
+                    matched=False,
+                    kalshi_available=True,
+                    label="",
+                    probability=None,
+                    raw_event_id=None,
+                    league=league_key,
+                    reason="no_kalshi_markets_for_date_bucket",
+                    debug=debug_info,
+                )
+            date_bucket = fallback_candidates
+            debug_info["fallback_same_day_used"] = True
 
         exact_match = None
         for m in date_bucket:
@@ -315,7 +346,7 @@ def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time:
                 probability=None,
                 raw_event_id=None,
                 league=league_key,
-                reason="no_exact_event_ticker_match",
+                reason="no_exact_event_ticker_match_in_bucket",
                 debug=debug_info,
             )
 
@@ -945,6 +976,93 @@ class KalshiIntegrator:
     def get_markets_for_league(self, league: str) -> List[Dict[str, Any]]:
         """Return markets for a given league without excluding game winners."""
         return self.get_sports_markets(league=league)
+
+    def _filter_markets_by_date_token(
+        self, markets: List[Dict[str, Any]], date_token: str
+    ) -> List[Dict[str, Any]]:
+        token_upper = (date_token or "").upper()
+        if not token_upper:
+            return []
+        bucket: List[Dict[str, Any]] = []
+        for m in markets or []:
+            et_upper = str(m.get("event_ticker") or m.get("ticker") or "").upper()
+            if token_upper in et_upper:
+                bucket.append(m)
+        return bucket
+
+    def get_markets_for_date_token(
+        self,
+        league: str,
+        date_token: str,
+        *,
+        status: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        league_key = (league or "").upper()
+        cache_key = (league_key, date_token, status or "any")
+        now = time.time()
+        cached = self._markets_cache_by_key.get(cache_key)
+        if cached and (now - cached.get("ts", 0)) < self._markets_cache_ttl_seconds:
+            return cached.get("payload", {})
+
+        base_markets = self.get_league_markets(league_key, status=status)
+        bucket = self._filter_markets_by_date_token(base_markets, date_token)
+
+        fetch_meta = {
+            "league": league_key,
+            "date_token": date_token,
+            "initial_total": len(base_markets),
+            "initial_date_token_count": len(bucket),
+        }
+
+        # If bucket empty, broaden with limited pagination (avoid huge global fetch)
+        all_markets = list(base_markets)
+        if not bucket:
+            extra = self.get_markets_paginated(
+                status=status, limit=200, max_pages=10
+            )
+            all_markets.extend(extra)
+            # De-dupe merged markets by event_ticker or ticker
+            dedup: Dict[str, Dict[str, Any]] = {}
+            for m in all_markets:
+                key = str(m.get("event_ticker") or m.get("ticker") or "")
+                if key and key not in dedup:
+                    dedup[key] = m
+            all_markets = list(dedup.values())
+            bucket = self._filter_markets_by_date_token(all_markets, date_token)
+            fetch_meta.update(
+                {
+                    "broadened_total": len(all_markets),
+                    "broadened_date_token_count": len(bucket),
+                }
+            )
+
+        # Final de-dupe for bucket by event_ticker
+        final_bucket: Dict[str, Dict[str, Any]] = {}
+        for m in bucket:
+            key = str(m.get("event_ticker") or m.get("ticker") or "")
+            if key and key not in final_bucket:
+                final_bucket[key] = m
+
+        # Date-token summary counts from all_markets (for debug)
+        token_counts: Dict[str, int] = {}
+        for m in all_markets:
+            et = str(m.get("event_ticker") or m.get("ticker") or "").upper()
+            if "KXNBAGAME-" in et:
+                try:
+                    after = et.split("KXNBAGAME-")[1]
+                    token = after[:7]
+                    token_counts[token] = token_counts.get(token, 0) + 1
+                except Exception:
+                    continue
+        fetch_meta["token_counts"] = token_counts
+
+        payload = {
+            "bucket": list(final_bucket.values()),
+            "all_markets": all_markets,
+            "meta": fetch_meta,
+        }
+        self._markets_cache_by_key[cache_key] = {"ts": now, "payload": payload}
+        return payload
 
     # Helpers required by app
     def get_game_markets_for_events(self, league):
