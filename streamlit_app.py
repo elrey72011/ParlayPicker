@@ -138,6 +138,158 @@ def normalize_oddsapi_game(game: Dict[str, Any]) -> Dict[str, Any]:
     return normalized
 
 
+def american_to_implied(odds):
+    try:
+        o = float(odds)
+    except Exception:
+        return None
+    if o == 0:
+        return None
+    if o < 0:
+        return (-o) / ((-o) + 100.0)
+    return 100.0 / (o + 100.0)
+
+
+def safe_commence_iso(game: Dict[str, Any]):
+    if game.get("commence_time_iso"):
+        return game["commence_time_iso"]
+    ct = game.get("commence_time")
+    try:
+        import datetime as _dt
+
+        if isinstance(ct, _dt.datetime):
+            return ct.isoformat()
+    except Exception:
+        pass
+    return str(ct) if ct is not None else None
+
+
+def extract_h2h_prices(game: Dict[str, Any]) -> Dict[str, Any]:
+    home = game.get("home_team")
+    away = game.get("away_team")
+    for bm in (game.get("bookmakers") or []):
+        for m in (bm.get("markets") or []):
+            if m.get("key") != "h2h":
+                continue
+            outcomes = m.get("outcomes") or []
+            prices = {o.get("name"): o.get("price") for o in outcomes if o.get("name")}
+            if home in prices and away in prices:
+                return {
+                    "home_odds": prices.get(home),
+                    "away_odds": prices.get(away),
+                    "book": bm.get("title") or bm.get("key"),
+                }
+    return {"home_odds": None, "away_odds": None, "book": None}
+
+
+def league_from_sport_key(sport_key: Optional[str]) -> Optional[str]:
+    if not sport_key:
+        return None
+    if sport_key == "basketball_nba":
+        return "NBA"
+    if sport_key == "basketball_ncaab":
+        return "NCAAB"
+    if sport_key == "americanfootball_nfl":
+        return "NFL"
+    if sport_key == "americanfootball_ncaaf":
+        return "NCAAF"
+    if sport_key == "icehockey_nhl":
+        return "NHL"
+    if sport_key == "baseball_mlb":
+        return "MLB"
+    return sport_key.upper()
+
+
+def build_master_fallback_rows(
+    all_games: List[Dict[str, Any]], league_label: str
+) -> (pd.DataFrame, Dict[str, Any]):
+    rows: List[Dict[str, Any]] = []
+    stats: Dict[str, Any] = {
+        "games_in": len(all_games),
+        "rows_out": 0,
+        "h2h_found": 0,
+        "vertex_called": 0,
+        "vertex_none": 0,
+        "exceptions": 0,
+    }
+
+    for game in all_games:
+        try:
+            league = league_from_sport_key(game.get("sport_key")) or league_label
+            home = game.get("home_team")
+            away = game.get("away_team")
+            warnings: List[str] = []
+
+            prices = extract_h2h_prices(game)
+            home_odds, away_odds, book = (
+                prices.get("home_odds"),
+                prices.get("away_odds"),
+                prices.get("book"),
+            )
+            implied_home = american_to_implied(home_odds)
+            implied_away = american_to_implied(away_odds)
+            if implied_home is None and implied_away is None:
+                warnings.append("missing_h2h")
+            else:
+                stats["h2h_found"] += 1
+
+            pick = home
+            implied_pick = implied_home
+            if implied_home is not None and implied_away is not None and implied_away > implied_home:
+                pick = away
+                implied_pick = implied_away
+
+            if implied_pick is None:
+                implied_pick = implied_home or implied_away
+            ai_prob = None
+            warnings.append("vertex_none")
+            stats["vertex_none"] += 1
+
+            ai_edge = None
+            if ai_prob is not None and implied_pick is not None:
+                ai_edge = ai_prob - implied_pick
+
+            rows.append(
+                {
+                    "League": league,
+                    "Home": home,
+                    "Away": away,
+                    "Commence (UTC)": safe_commence_iso(game),
+                    "Market": "Moneyline",
+                    "Book": book,
+                    "Home_ML_Odds": home_odds,
+                    "Away_ML_Odds": away_odds,
+                    "Pick": pick,
+                    "Implied_Prob": implied_pick,
+                    "AI_Prob": ai_prob,
+                    "AI_Edge": ai_edge,
+                    "Warnings": ";".join(warnings) if warnings else "",
+                }
+            )
+        except Exception:
+            stats["exceptions"] += 1
+            rows.append(
+                {
+                    "League": league_label,
+                    "Home": game.get("home_team"),
+                    "Away": game.get("away_team"),
+                    "Commence (UTC)": safe_commence_iso(game),
+                    "Market": "Moneyline",
+                    "Book": None,
+                    "Home_ML_Odds": None,
+                    "Away_ML_Odds": None,
+                    "Pick": game.get("home_team") or game.get("away_team"),
+                    "Implied_Prob": None,
+                    "AI_Prob": None,
+                    "AI_Edge": None,
+                    "Warnings": "fallback_exception",
+                }
+            )
+
+    stats["rows_out"] = len(rows)
+    return pd.DataFrame(rows), stats
+
+
 def load_theover_data() -> Dict[str, pd.DataFrame]:
     """Load supplemental theover.ai CSVs if present."""
     data: Dict[str, pd.DataFrame] = {}
@@ -215,7 +367,27 @@ def run_vertex_master(
         kalshi_integrator=kalshi_integrator,
         use_kalshi=bool(kalshi_integrator),
     )
-    return analyzer.analyze_all_games(all_games, league=league_label)
+    stats: Dict[str, Any] = {
+        "games_in": len(all_games),
+        "rows_out": 0,
+    }
+
+    try:
+        results = analyzer.analyze_all_games(all_games, league=league_label)
+        stats.update(st.session_state.get("vertex_master_stats", {}))
+    except Exception:
+        st.session_state["last_exception"] = traceback.format_exc()
+        results = pd.DataFrame()
+
+    if (results is None or results.empty) and all_games:
+        results, fallback_stats = build_master_fallback_rows(all_games, league_label)
+        stats.update(fallback_stats)
+        stats.setdefault("rows_out", len(results))
+    else:
+        stats["rows_out"] = len(results) if results is not None else 0
+
+    st.session_state["vertex_master_stats"] = stats
+    return results
 
 
 def render_game_tab(config: Dict[str, Any]):
