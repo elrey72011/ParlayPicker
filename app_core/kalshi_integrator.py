@@ -9,7 +9,7 @@ import os
 import time
 import base64
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 import pytz
@@ -276,33 +276,12 @@ def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time:
 
 class KalshiIntegrator:
     def __init__(self, api_key: Optional[str] = None, api_secret: Optional[str] = None) -> None:
-        # Resolve key + secret from args, env, or Streamlit secrets
-        self.api_key = (
-            api_key
-            or os.getenv("KALSHI_API_KEY")
-            or st.secrets.get("KALSHI_API_KEY", "")
-        )
-        self.api_secret = (
-            api_secret
-            or st.secrets.get("KALSHI_API_SECRET", "")
-            or os.getenv("KALSHI_API_SECRET", "")
-        )
+        # Resolve key + secret from args, env, or Streamlit secrets (only the official names)
+        self.api_key = api_key or st.secrets.get("KALSHI_API_KEY") or os.getenv("KALSHI_API_KEY")
+        raw_secret = api_secret or st.secrets.get("KALSHI_API_SECRET") or os.getenv("KALSHI_API_SECRET")
 
         # --- Clean private key format ---
-        if self.api_secret:
-            # Turn literal "\n" into real newlines
-            cleaned = self.api_secret.replace("\\n", "\n").strip()
-
-            # If it already looks like PEM, trust it
-            if "-----BEGIN" in cleaned:
-                self.api_secret = cleaned
-            else:
-                # Only if you're really storing just the body (not recommended)
-                self.api_secret = (
-                    "-----BEGIN PRIVATE KEY-----\n"
-                    + cleaned +
-                    "\n-----END PRIVATE KEY-----"
-                )
+        self.api_secret_pem = self._normalize_secret(raw_secret)
 
         self.api_url = "https://api.elections.kalshi.com/trade-api/v2"
 
@@ -312,13 +291,25 @@ class KalshiIntegrator:
         self.cache_ttl_seconds: int = 300
         self.last_error: Optional[str] = None
 
+    @staticmethod
+    def _normalize_secret(secret_val: Optional[str]) -> Optional[str]:
+        if not secret_val:
+            return None
+        cleaned = str(secret_val).replace("\\n", "\n").strip()
+        if not cleaned:
+            return None
+        if "-----BEGIN RSA PRIVATE KEY-----" in cleaned or "-----BEGIN PRIVATE KEY-----" in cleaned:
+            return cleaned
+        # If no PEM markers, wrap as PKCS8
+        return "-----BEGIN PRIVATE KEY-----\n" + cleaned + "\n-----END PRIVATE KEY-----"
+
     def _sign_request(self, method: str, path: str, timestamp: str) -> str:
-        if not self.api_secret:
+        if not self.api_secret_pem:
             return ""
         msg_string = f"{timestamp}{method}{path}"
         try:
             private_key = serialization.load_pem_private_key(
-                self.api_secret.encode("utf-8"),
+                self.api_secret_pem.encode("utf-8"),
                 password=None,
             )
             signature = private_key.sign(
@@ -333,6 +324,63 @@ class KalshiIntegrator:
         except Exception as e:
             logger.error(f"Signing failed: {e}")
             return ""
+
+    def health_check(self) -> Dict[str, Any]:
+        configured = bool(self.api_key and self.api_secret_pem)
+        if not configured:
+            return {
+                "configured": False,
+                "ok": False,
+                "market_count": 0,
+                "sample_market": None,
+                "error": "Kalshi is required but not configured.",
+            }
+
+        endpoint = "/markets"
+        params = {"limit": 50}
+        url = f"{self.api_url}{endpoint}"
+        path_for_signing = f"/trade-api/v2{endpoint}"
+        timestamp = str(int(time.time() * 1000))
+        signature = self._sign_request("GET", path_for_signing, timestamp)
+        headers = {
+            "Content-Type": "application/json",
+            "KALSHI-ACCESS-KEY": self.api_key,
+            "KALSHI-ACCESS-SIGNATURE": signature,
+            "KALSHI-ACCESS-TIMESTAMP": timestamp,
+        }
+        try:
+            resp = requests.get(url, headers=headers, params=params, timeout=10)
+            status_code = resp.status_code
+            snippet = resp.text[:300] if resp is not None else None
+            if status_code != 200:
+                return {
+                    "configured": True,
+                    "ok": False,
+                    "market_count": 0,
+                    "sample_market": None,
+                    "status_code": status_code,
+                    "url": url,
+                    "response_text": snippet,
+                    "error": f"Kalshi auth failed: status {status_code}",
+                }
+            data = resp.json()
+            markets = data.get("markets", []) or []
+            return {
+                "configured": True,
+                "ok": len(markets) > 0,
+                "market_count": len(markets),
+                "sample_market": markets[0] if markets else None,
+                "markets": markets,
+                "error": None if markets else "Kalshi returned zero markets.",
+            }
+        except Exception as exc:  # pragma: no cover - defensive
+            return {
+                "configured": True,
+                "ok": False,
+                "market_count": 0,
+                "sample_market": None,
+                "error": str(exc),
+            }
 
     def _make_authenticated_request(
         self,
@@ -364,55 +412,148 @@ class KalshiIntegrator:
             logger.error(f"Kalshi Connection Exception: {e}")
         return None
 
-    def get_markets(self, status: str = "open") -> List[Dict[str, Any]]:
-        """
-        Fetches ALL markets by handling pagination (cursors).
-        """
+    def get_markets(self, status: Optional[str] = "open") -> List[Dict[str, Any]]:
+        """Fetch all markets with pagination support and a sane cap."""
         now = time.time()
-        # 1) Use cache if still fresh (e.g., 5 minutes)
         if self._markets_cache and (now - self._markets_cache_ts) < self.cache_ttl_seconds:
             logger.info(f"Using cached markets ({len(self._markets_cache)} items)")
             return self._markets_cache
 
-        all_markets = []
-        cursor = None
-        
-        # Loop until no cursor is returned
+        all_markets: List[Dict[str, Any]] = []
+        cursor: Optional[str] = None
+        max_items = 5000
+
         while True:
-            params = {"limit": 1000, "status": status}
+            params = {"limit": 1000}
+            if status:
+                params["status"] = status
             if cursor:
                 params["cursor"] = cursor
 
             data = self._make_authenticated_request("GET", "/markets", params=params)
-            
             if not data:
                 break
-            
-            markets = data.get("markets", [])
-            if not markets:
-                break
-                
+
+            markets = data.get("markets", []) or []
             all_markets.extend(markets)
-            cursor = data.get("cursor")
-            
+
+            if len(all_markets) >= max_items:
+                all_markets = all_markets[:max_items]
+                logger.warning("Reached pagination cap when loading Kalshi markets")
+                break
+
+            cursor = (
+                data.get("cursor")
+                or data.get("next_cursor")
+                or data.get("next")
+                or data.get("next_token")
+            )
             if not cursor:
                 break
-                
-            # Rate limit safety
             time.sleep(0.1)
 
-        # Update cache
         self._markets_cache = all_markets
         self._markets_cache_ts = now
         logger.info(f"✅ Successfully loaded {len(all_markets)} Kalshi markets (paginated)")
         return all_markets
 
-    # Helpers required by app
-    def get_sports_markets(self):
-        return self.get_markets()
+    def _filter_markets_for_league(self, markets: List[Dict[str, Any]], league: Optional[str]) -> List[Dict[str, Any]]:
+        league_key = (league or "").upper()
+        prefix = LEAGUE_SERIES_MAP.get(league_key)
+        if not prefix:
+            return markets
 
+        ticker_upper = [str(m.get("ticker") or m.get("event_ticker") or "").upper() for m in markets]
+        prefix_filtered = [m for m, t in zip(markets, ticker_upper) if t.startswith(prefix)]
+        has_kxn_prefix = any(t.startswith("KXN") for t in [str(m.get("ticker") or m.get("event_ticker") or "").upper() for m in prefix_filtered])
+        if prefix_filtered and has_kxn_prefix:
+            return prefix_filtered
+
+        return markets
+
+    def _best_market_time(self, market: Dict[str, Any]) -> Optional[datetime]:
+        for key in [
+            "expected_expiration_time",
+            "latest_expiration_time",
+            "close_time",
+            "expiration_time",
+            "open_time",
+        ]:
+            val = market.get(key)
+            if not val:
+                continue
+            try:
+                raw = str(val)
+                if raw.endswith("Z"):
+                    raw = raw.replace("Z", "+00:00")
+                dt = datetime.fromisoformat(raw)
+                if dt.tzinfo is None:
+                    dt = pytz.utc.localize(dt)
+                else:
+                    dt = dt.astimezone(pytz.UTC)
+                return dt
+            except Exception:
+                continue
+        return None
+
+    def get_sports_markets(
+        self, league: Optional[str] = None, commence_times: Optional[List[str]] = None
+    ) -> List[Dict[str, Any]]:
+        try:
+            markets = self.get_markets(status=None)
+            filtered = self._filter_markets_for_league(markets, league)
+
+            commence_dt: List[datetime] = []
+            if commence_times:
+                for c in commence_times:
+                    try:
+                        raw = str(c)
+                        if raw.endswith("Z"):
+                            raw = raw.replace("Z", "+00:00")
+                        dt = datetime.fromisoformat(raw)
+                        if dt.tzinfo is None:
+                            dt = pytz.utc.localize(dt)
+                        else:
+                            dt = dt.astimezone(pytz.UTC)
+                        commence_dt.append(dt)
+                    except Exception:
+                        continue
+
+            if commence_dt:
+                window = timedelta(hours=72)
+                time_filtered: List[Dict[str, Any]] = []
+                for m in filtered:
+                    mt = self._best_market_time(m)
+                    if not mt:
+                        time_filtered.append(m)
+                        continue
+                    if any(abs(mt - cdt) <= window for cdt in commence_dt):
+                        time_filtered.append(m)
+                if time_filtered:
+                    filtered = time_filtered
+
+            if (league or "").upper() == "NBA":
+                ticker_upper = [str(m.get("ticker") or m.get("event_ticker") or "").upper() for m in filtered]
+                if not any(
+                    t.startswith("KXNBAGAME")
+                    or t.startswith("KXNBATOTAL")
+                    or t.startswith("KXNBASPREAD")
+                    for t in ticker_upper
+                ):
+                    filtered = markets
+
+            return filtered
+        except Exception:
+            logger.error("Kalshi get_sports_markets failed", exc_info=True)
+            return []
+
+    def get_markets_for_league(self, league: str) -> List[Dict[str, Any]]:
+        """Return markets for a given league without excluding game winners."""
+        return self.get_sports_markets(league=league)
+
+    # Helpers required by app
     def get_game_markets_for_events(self, league):
-        return self.get_markets()
+        return self.get_markets_for_league(league)
 
     def filter_markets_closing_today(self, markets):
         return markets
