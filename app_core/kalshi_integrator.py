@@ -578,11 +578,10 @@ class KalshiIntegrator:
         if not prefix:
             return markets
 
-            ticker_upper = [str(m.get("ticker") or m.get("event_ticker") or "").upper() for m in markets]
-            prefix_filtered = [m for m, t in zip(markets, ticker_upper) if t.startswith(prefix)]
-            has_kxn_prefix = any(t.startswith("KXN") for t in [str(m.get("ticker") or m.get("event_ticker") or "").upper() for m in prefix_filtered])
-            if prefix_filtered and has_kxn_prefix:
-                return prefix_filtered
+        ticker_upper = [str(m.get("ticker") or m.get("event_ticker") or "").upper() for m in markets]
+        prefix_filtered = [m for m, t in zip(markets, ticker_upper) if t.startswith(prefix)]
+        if prefix_filtered:
+            return prefix_filtered
 
         return markets
 

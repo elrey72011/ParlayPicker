@@ -464,6 +464,7 @@ def fetch_kalshi_markets(
     def prefix_count(markets: List[Dict[str, Any]]) -> Dict[str, int]:
         tickers = [ticker_upper(m) for m in markets]
         return {
+            "count_prefix_KXNBA": len([t for t in tickers if t.startswith("KXNBA")]),
             "count_prefix_KXNBAGAME": len([t for t in tickers if t.startswith("KXNBAGAME")]),
             "count_prefix_KXNBATOTAL": len([t for t in tickers if t.startswith("KXNBATOTAL")]),
             "count_prefix_KXNBASPREAD": len([t for t in tickers if t.startswith("KXNBASPREAD")]),
@@ -483,6 +484,16 @@ def fetch_kalshi_markets(
         raw_counts = prefix_count(markets_raw)
         split = kalshi_integrator.split_market_kinds(markets_raw, selected_league)
         game_pool: List[Dict[str, Any]] = split.get("single_game_candidates", [])
+        if selected_league.upper() == "NBA":
+            filtered_game_pool: List[Dict[str, Any]] = []
+            for m in game_pool:
+                t = ticker_upper(m)
+                if t.startswith("KXMV") or "MVE" in t:
+                    continue
+                if t.startswith("KXNBA") or t.startswith("KXN"):
+                    filtered_game_pool.append(m)
+            if filtered_game_pool:
+                game_pool = filtered_game_pool
         game_pool_counts = prefix_count(game_pool)
 
         if not game_pool and markets_raw:
@@ -626,8 +637,17 @@ def kalshi_health_check(selected_league: str) -> Dict[str, Any]:
         st.session_state["last_exception"] = traceback.format_exc()
 
     market_count = len(markets)
+    prefix_counts = st.session_state.get("kalshi_prefix_counts", {})
+    game_pool_total = prefix_counts.get("game_pool", {}).get("total")
     ok = market_count > 0 and bool(base_health.get("ok", True))
-    if not ok and base_health.get("error"):
+    league_upper = (selected_league or "").upper()
+    if league_upper == "NBA" and ok:
+        if not game_pool_total:
+            ok = False
+            error_msg = "Kalshi reachable but no NBA markets returned."
+        else:
+            error_msg = None
+    elif not ok and base_health.get("error"):
         error_msg = base_health.get("error")
     else:
         error_msg = None if ok else "Kalshi returned zero markets."

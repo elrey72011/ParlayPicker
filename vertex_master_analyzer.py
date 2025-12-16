@@ -280,44 +280,6 @@ class VertexMasterAnalyzer:
             "fetch_debug": fetch_debug,
         }
 
-    def filter_kalshi_markets(self, league: str, markets: List[Dict[str, Any]]) -> Dict[str, Any]:
-        if not self.kalshi or not self.use_kalshi:
-            return {
-                "markets": [],
-                "counts": {},
-                "single_game_candidates": [],
-                "multivariate_bundles": [],
-                "fetch_debug": {"error": "kalshi_disabled"},
-            }
-
-        self.kalshi.assert_available()
-        league_markets = self.kalshi.get_league_markets(
-            league, min_prefix_hits=200, max_pages=300
-        )
-        split = self.kalshi.split_market_kinds(league_markets, league)
-        counts = _kalshi_prefix_counts(split.get("single_game_candidates", []))
-        meta = getattr(self.kalshi, "last_fetch_meta", {}) or {}
-        fetch_debug = {
-            "pages": meta.get("pages"),
-            "total_markets": meta.get("total_markets"),
-            "prefix_hits": meta.get("prefix_hits"),
-            "prefix": meta.get("prefix"),
-            "single_game_candidates": len(split.get("single_game_candidates", [])),
-            "multivariate_bundles": len(split.get("multivariate_bundles", [])),
-            "league_markets": len(league_markets),
-        }
-        if not split.get("single_game_candidates"):
-            raise RuntimeError(
-                "Kalshi is required but no single-game markets were found for NBA after deep pagination. This is likely an API filtering/pagination issue."
-            )
-        return {
-            "markets": league_markets,
-            "counts": counts,
-            "single_game_candidates": split.get("single_game_candidates", []),
-            "multivariate_bundles": split.get("multivariate_bundles", []),
-            "fetch_debug": fetch_debug,
-        }
-
     # -------------------------------
     # MAIN ENTRYPOINT
     # -------------------------------
