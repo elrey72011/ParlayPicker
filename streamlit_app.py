@@ -453,17 +453,100 @@ def fetch_kalshi_markets(
         )
         markets = markets or []
         ticker_upper = [str(m.get("event_ticker") or m.get("ticker") or "").upper() for m in markets]
-        st.session_state["kalshi_all_markets"] = markets
+
+        nba_filtered_markets = markets
+        nba_filter_counts: Dict[str, Any] = {}
+        if selected_league.upper() == "NBA":
+            nba_filtered_markets = []
+            for m, t in zip(markets, ticker_upper):
+                if not t:
+                    continue
+                if t.startswith("KXMV"):
+                    continue
+                if (t.startswith("KXNBA")) or (t.startswith("KXN") and "NBA" in t):
+                    nba_filtered_markets.append(m)
+            filtered_tickers = [
+                str(m.get("event_ticker") or m.get("ticker") or "").upper()
+                for m in nba_filtered_markets
+            ]
+            nba_filter_counts = {
+                "total_after_nba_filter": len(nba_filtered_markets),
+                "count_prefix_KXNBAGAME_filtered": len(
+                    [t for t in filtered_tickers if t.startswith("KXNBAGAME")]
+                ),
+                "count_prefix_KXNBATOTAL_filtered": len(
+                    [t for t in filtered_tickers if t.startswith("KXNBATOTAL")]
+                ),
+                "count_prefix_KXNBASPREAD_filtered": len(
+                    [t for t in filtered_tickers if t.startswith("KXNBASPREAD")]
+                ),
+                "count_prefix_KXMV_filtered": len(
+                    [t for t in filtered_tickers if t.startswith("KXMV")]
+                ),
+            }
+            if (
+                nba_filter_counts["count_prefix_KXNBAGAME_filtered"]
+                + nba_filter_counts["count_prefix_KXNBATOTAL_filtered"]
+                + nba_filter_counts["count_prefix_KXNBASPREAD_filtered"]
+                == 0
+            ):
+                fallback = kalshi_integrator.get_markets_for_league(selected_league)
+                fallback = fallback or []
+                fallback_tickers = [
+                    str(m.get("event_ticker") or m.get("ticker") or "").upper()
+                    for m in fallback
+                ]
+                alt_filtered = []
+                for m, t in zip(fallback, fallback_tickers):
+                    if not t:
+                        continue
+                    if t.startswith("KXMV"):
+                        continue
+                    if (t.startswith("KXNBA")) or (t.startswith("KXN") and "NBA" in t):
+                        alt_filtered.append(m)
+                if alt_filtered:
+                    nba_filtered_markets = alt_filtered
+                    filtered_tickers = [
+                        str(m.get("event_ticker") or m.get("ticker") or "").upper()
+                        for m in nba_filtered_markets
+                    ]
+                    nba_filter_counts.update(
+                        {
+                            "total_after_nba_filter": len(nba_filtered_markets),
+                            "count_prefix_KXNBAGAME_filtered": len(
+                                [t for t in filtered_tickers if t.startswith("KXNBAGAME")]
+                            ),
+                            "count_prefix_KXNBATOTAL_filtered": len(
+                                [t for t in filtered_tickers if t.startswith("KXNBATOTAL")]
+                            ),
+                            "count_prefix_KXNBASPREAD_filtered": len(
+                                [t for t in filtered_tickers if t.startswith("KXNBASPREAD")]
+                            ),
+                            "count_prefix_KXMV_filtered": len(
+                                [t for t in filtered_tickers if t.startswith("KXMV")]
+                            ),
+                        }
+                    )
+        final_markets = nba_filtered_markets if selected_league.upper() == "NBA" else markets
+        final_tickers = [
+            str(m.get("event_ticker") or m.get("ticker") or "").upper()
+            for m in final_markets
+        ]
+        st.session_state["kalshi_all_markets"] = final_markets
         st.session_state["kalshi_prefix_counts"] = {
             "total_markets_fetched": len(markets),
-            "count_prefix_KXNBAGAME": len([t for t in ticker_upper if t.startswith("KXNBAGAME")]),
-            "count_prefix_KXNBATOTAL": len([t for t in ticker_upper if t.startswith("KXNBATOTAL")]),
-            "count_prefix_KXNBASPREAD": len([t for t in ticker_upper if t.startswith("KXNBASPREAD")]),
+            "total_after_nba_filter": nba_filter_counts.get(
+                "total_after_nba_filter", len(final_markets)
+            ),
+            "count_prefix_KXNBAGAME": len([t for t in final_tickers if t.startswith("KXNBAGAME")]),
+            "count_prefix_KXNBATOTAL": len([t for t in final_tickers if t.startswith("KXNBATOTAL")]),
+            "count_prefix_KXNBASPREAD": len([t for t in final_tickers if t.startswith("KXNBASPREAD")]),
+            "count_prefix_KXMV": len([t for t in final_tickers if t.startswith("KXMV")]),
         }
         st.session_state["kalshi_prefix_samples_game"] = [
-            t for t in ticker_upper if t.startswith("KXNBAGAME")
+            t for t in final_tickers if t.startswith("KXNBAGAME")
         ][:20]
-        return markets
+        return final_markets
     except Exception:
         st.session_state["last_exception"] = traceback.format_exc()
         return []
