@@ -599,15 +599,21 @@ def pick_sample_game_market(
     return best_market, best_reason
 
 
-def kalshi_health_check(selected_league: str) -> Dict[str, Any]:
+def kalshi_health_check(selected_league: str, force: bool = False) -> Dict[str, Any]:
     integrator = st.session_state.get("kalshi_integrator")
+    now_ts = time.time()
+    cache_bucket = st.session_state.setdefault("kalshi_health_cache", {})
+    cache_entry = cache_bucket.get(selected_league)
+    if cache_entry and not force and (now_ts - cache_entry.get("ts", 0)) < 30:
+        return cache_entry.get("data", {})
+
     configured = bool(
         integrator
         and getattr(integrator, "api_key", None)
         and getattr(integrator, "api_secret_pem", None)
     )
     if not configured:
-        return {
+        result = {
             "configured": False,
             "ok": False,
             "market_count": 0,
@@ -616,6 +622,8 @@ def kalshi_health_check(selected_league: str) -> Dict[str, Any]:
             "sample_game_market_reason": None,
             "error": "Kalshi is required but not configured.",
         }
+        cache_bucket[selected_league] = {"ts": now_ts, "data": result}
+        return result
 
     base_health: Dict[str, Any] = integrator.health_check() if integrator else {}
     markets: List[Dict[str, Any]] = base_health.get("markets", []) or []
@@ -641,18 +649,22 @@ def kalshi_health_check(selected_league: str) -> Dict[str, Any]:
     game_pool_total = prefix_counts.get("game_pool", {}).get("total")
     ok = market_count > 0 and bool(base_health.get("ok", True))
     league_upper = (selected_league or "").upper()
-    if league_upper == "NBA" and ok:
+    error_msg = None
+    status_code = base_health.get("status_code")
+    response_text = base_health.get("response_text")
+    if status_code == 429 or (base_health.get("error") and "rate limit" in str(base_health.get("error")).lower()):
+        ok = False
+        error_msg = "Kalshi rate-limited (429). Backing off; try again soon."
+    elif league_upper == "NBA" and ok:
         if not game_pool_total:
             ok = False
             error_msg = "Kalshi reachable but no NBA markets returned."
-        else:
-            error_msg = None
     elif not ok and base_health.get("error"):
         error_msg = base_health.get("error")
-    else:
-        error_msg = None if ok else "Kalshi returned zero markets."
+    elif not ok:
+        error_msg = "Kalshi returned zero markets."
     sample_game_market, sample_reason = pick_sample_game_market(markets)
-    return {
+    result = {
         "configured": configured,
         "ok": ok,
         "market_count": market_count or base_health.get("market_count", 0),
@@ -660,9 +672,11 @@ def kalshi_health_check(selected_league: str) -> Dict[str, Any]:
         "sample_game_market": sample_game_market,
         "sample_game_market_reason": sample_reason,
         "error": error_msg,
-        "status_code": base_health.get("status_code"),
-        "response_text": base_health.get("response_text"),
+        "status_code": status_code,
+        "response_text": response_text,
     }
+    cache_bucket[selected_league] = {"ts": now_ts, "data": result}
+    return result
 
 
 def parse_kalshi_datetime(dt_value: Any) -> Optional[datetime]:

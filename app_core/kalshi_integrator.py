@@ -298,11 +298,13 @@ class KalshiIntegrator:
         # Caching + error state
         self._markets_cache: List[Dict[str, Any]] = []
         self._markets_cache_ts: float = 0.0
-        self.cache_ttl_seconds: int = 300
+        self.cache_ttl_seconds: int = 120
         self.last_error: Optional[str] = None
         self._league_cache: Dict[str, Dict[str, Any]] = {}
         self._league_cache_ttl: int = 300
         self.last_fetch_meta: Dict[str, Any] = {}
+        self.session = requests.Session()
+        self.last_error_info: Dict[str, Any] = {}
 
     @staticmethod
     def _normalize_secret(secret_val: Optional[str]) -> Optional[str]:
@@ -370,14 +372,19 @@ class KalshiIntegrator:
                 "sample_market": markets[0] if markets else None,
                 "markets": markets,
                 "error": None if ok else "Kalshi returned zero markets.",
+                "status_code": data.get("status_code"),
+                "response_text": data.get("response_text"),
             }
         except Exception as exc:  # pragma: no cover - defensive
+            info = self.last_error_info or {}
             return {
                 "configured": True,
                 "ok": False,
                 "market_count": 0,
                 "sample_market": None,
                 "error": str(exc),
+                "status_code": info.get("status_code"),
+                "response_text": info.get("response_text"),
             }
 
     def _request(
@@ -414,7 +421,7 @@ class KalshiIntegrator:
                 "KALSHI-ACCESS-TIMESTAMP": timestamp,
             }
             try:
-                resp = requests.request(
+                resp = self.session.request(
                     method,
                     url,
                     headers=headers,
@@ -441,29 +448,45 @@ class KalshiIntegrator:
             if status == 429:
                 retry_429 += 1
                 if retry_429 > 6:
-                    raise RuntimeError(f"Kalshi rate limit (429): {resp.text}")
+                    self.last_error_info = {
+                        "status_code": status,
+                        "response_text": resp.text[:300],
+                    }
+                    raise RuntimeError(f"Kalshi rate limit (429): {resp.text[:200]}")
                 retry_after = resp.headers.get("Retry-After")
                 try:
                     delay = float(retry_after)
                 except Exception:
                     delay = backoff
-                time.sleep(max(0.5, backoff_delay(delay)))
-                backoff = min(backoff * 2, 15.0)
+                time.sleep(max(0.5, backoff_delay(min(delay, 30.0))))
+                backoff = min(backoff * 2, 30.0)
                 continue
             if 500 <= status < 600:
                 retry_other += 1
                 if retry_other > 3:
-                    raise RuntimeError(f"Kalshi server error {status}: {resp.text}")
-                time.sleep(backoff_delay(backoff))
-                backoff = min(backoff * 2, 10.0)
+                    self.last_error_info = {
+                        "status_code": status,
+                        "response_text": resp.text[:300],
+                    }
+                    raise RuntimeError(f"Kalshi server error {status}: {resp.text[:200]}")
+                time.sleep(backoff_delay(min(backoff, 5.0)))
+                backoff = min(backoff * 2, 20.0)
                 continue
             if status >= 400:
+                self.last_error_info = {
+                    "status_code": status,
+                    "response_text": resp.text[:300],
+                }
+                if status in (401, 403):
+                    raise RuntimeError("Kalshi auth failed (401/403). Check key/secret.")
                 raise RuntimeError(f"Kalshi API error {status}: {resp.text[:300]}")
 
             try:
-                return resp.json()
+                data = resp.json()
             except Exception as exc:  # pragma: no cover
                 raise RuntimeError(f"Kalshi response parse error: {exc}")
+            self.last_error_info = {"status_code": status, "response_text": None}
+            return data
 
     def get_markets_paginated(
         self,
@@ -471,6 +494,7 @@ class KalshiIntegrator:
         limit: int = 200,
         max_pages: int = 25,
         cursor: Optional[str] = None,
+        extra_params: Optional[Dict[str, Any]] = None,
     ) -> List[Dict[str, Any]]:
         all_markets: List[Dict[str, Any]] = []
         next_cursor = cursor
@@ -481,6 +505,8 @@ class KalshiIntegrator:
                 params["status"] = status
             if next_cursor:
                 params["cursor"] = next_cursor
+            if extra_params:
+                params.update(extra_params)
             data = self._request("GET", "/markets", params=params)
             markets = data.get("markets", []) or []
             all_markets.extend(markets)
@@ -497,6 +523,76 @@ class KalshiIntegrator:
                 break
             time.sleep(0.1)
         return all_markets
+
+    def _get_nba_markets_targeted(
+        self,
+        *,
+        status: Optional[str] = None,
+        min_hits: int = 100,
+        max_pages: int = 25,
+    ) -> Dict[str, Any]:
+        prefix = LEAGUE_SERIES_MAP.get("NBA")
+        collected: List[Dict[str, Any]] = []
+        pages = 0
+        prefix_hits = 0
+        # Try explicit series_ticker queries first
+        series_candidates = ["KXNBA", "KXNBAGAME", "KXNBATOTAL", "KXNBASPREAD"]
+        for series in series_candidates:
+            next_cursor: Optional[str] = None
+            while pages < max_pages and prefix_hits < min_hits:
+                params = {"limit": 200, "series_ticker": series}
+                if status:
+                    params["status"] = status
+                if next_cursor:
+                    params["cursor"] = next_cursor
+                data = self._request("GET", "/markets", params=params)
+                chunk = data.get("markets", []) or []
+                collected.extend(chunk)
+                tickers = [str(m.get("ticker") or m.get("event_ticker") or "").upper() for m in chunk]
+                prefix_hits += len([t for t in tickers if t.startswith(prefix)])
+                pages += 1
+                next_cursor = (
+                    data.get("cursor")
+                    or data.get("next_cursor")
+                    or data.get("next")
+                    or data.get("next_token")
+                )
+                if not next_cursor:
+                    break
+                time.sleep(0.1)
+            if prefix_hits >= min_hits:
+                break
+
+        # Fallback: scan general pages for any KXNBA if still empty
+        if prefix_hits == 0:
+            next_cursor = None
+            while pages < max_pages:
+                params = {"limit": 200}
+                if status:
+                    params["status"] = status
+                if next_cursor:
+                    params["cursor"] = next_cursor
+                data = self._request("GET", "/markets", params=params)
+                chunk = data.get("markets", []) or []
+                collected.extend(chunk)
+                tickers = [str(m.get("ticker") or m.get("event_ticker") or "").upper() for m in chunk]
+                prefix_hits += len([t for t in tickers if t.startswith(prefix)])
+                pages += 1
+                next_cursor = (
+                    data.get("cursor")
+                    or data.get("next_cursor")
+                    or data.get("next")
+                    or data.get("next_token")
+                )
+                if prefix_hits >= min_hits or not next_cursor:
+                    break
+                time.sleep(0.1)
+
+        return {
+            "markets": collected,
+            "pages": pages,
+            "prefix_hits": prefix_hits,
+        }
 
     def get_markets(self, status: Optional[str] = "open") -> List[Dict[str, Any]]:
         """Fetch all markets with pagination support and a sane cap."""
@@ -528,34 +624,25 @@ class KalshiIntegrator:
             self.last_fetch_meta = cached.get("meta", {})
             return cached.get("markets", [])
 
-        all_markets: List[Dict[str, Any]] = []
-        pages = 0
-        prefix_hits = 0
-        cursor: Optional[str] = None
-        while pages < max_pages:
-            params = {"limit": 200}
-            if status:
-                params["status"] = status
-            if cursor:
-                params["cursor"] = cursor
-            data = self._request("GET", "/markets", params=params)
-            chunk = data.get("markets", []) or []
-            all_markets.extend(chunk)
-            tickers = [str(m.get("ticker") or m.get("event_ticker") or "").upper() for m in chunk]
-            if prefix:
-                prefix_hits += len([t for t in tickers if t.startswith(prefix)])
-            pages += 1
-            cursor = (
-                data.get("cursor")
-                or data.get("next_cursor")
-                or data.get("next")
-                or data.get("next_token")
+        if league_key == "NBA":
+            nba_result = self._get_nba_markets_targeted(
+                status=status, min_hits=min_prefix_hits, max_pages=max_pages
             )
-            if prefix and prefix_hits >= min_prefix_hits:
-                break
-            if not cursor:
-                break
-            time.sleep(0.1)
+            all_markets = nba_result.get("markets", [])
+            pages = nba_result.get("pages", 0)
+            prefix_hits = nba_result.get("prefix_hits", 0)
+        else:
+            all_markets = self.get_markets_paginated(
+                status=status, limit=200, max_pages=max_pages
+            )
+            pages = min(max_pages, len(all_markets) // 200 + 1)
+            tickers = [
+                str(m.get("ticker") or m.get("event_ticker") or "").upper()
+                for m in all_markets
+            ]
+            prefix_hits = (
+                len([t for t in tickers if t.startswith(prefix)]) if prefix else 0
+            )
 
         self.last_fetch_meta = {
             "league": league_key,
