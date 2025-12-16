@@ -723,7 +723,6 @@ with tab_master:
                 **kalshi_match,
             })
 
-            ai_prob = None
             try:
                 ai_prob = get_vertex_prob(g)
             except Exception:
