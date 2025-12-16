@@ -1205,53 +1205,75 @@ def match_kalshi_market(
     searched_prefix = None
     winner_rejections = {"wrong_date": 0, "missing_code": 0}
     candidate_event_tickers: List[str] = []
+    date_bucket_event_tickers: List[str] = []
+    winner_reason = winner_reason_override or "no_winner_market_for_game"
 
     totals = [m for m in kalshi_markets if classify_kalshi_market(m) == "total"]
     spreads = [m for m in kalshi_markets if classify_kalshi_market(m) == "spread"]
     winners = [m for m in kalshi_markets if classify_kalshi_market(m) == "winner"]
 
-    if league_name == "NBA" and date_token:
-        searched_prefix = f"KXNBAGAME-{date_token}"
-        date_bucket: List[Dict[str, Any]] = []
-        for m in winners:
-            event_tick = str(m.get("event_ticker") or "").upper()
-            tick = str(m.get("ticker") or "").upper()
-            composite = event_tick or tick
-            if composite.startswith("KXNBAGAME"):
-                candidate_event_tickers.append(event_tick or tick)
-            if not composite.startswith(searched_prefix):
-                winner_rejections["wrong_date"] += 1
-                continue
-            date_bucket.append(m)
-        filtered_winners: List[Dict[str, Any]] = []
-        for m in date_bucket:
-            composite = str(m.get("event_ticker") or m.get("ticker") or "").upper()
-            if away_code_expected and away_code_expected not in composite:
-                winner_rejections["missing_code"] += 1
-                continue
-            if home_code_expected and home_code_expected not in composite:
-                winner_rejections["missing_code"] += 1
-                continue
-            filtered_winners.append(m)
-        if filtered_winners:
-            winners = filtered_winners
+    if league_name == "NBA":
+        searched_prefix = f"KXNBAGAME-{date_token}" if date_token else None
+        candidate_event_tickers = []
+        if date_token and away_code_expected and home_code_expected:
+            candidate_event_tickers = [
+                f"KXNBAGAME-{date_token}{away_code_expected}{home_code_expected}",
+                f"KXNBAGAME-{date_token}{home_code_expected}{away_code_expected}",
+            ]
         else:
             winners = []
+            winner_reason = "missing_team_codes_or_date_token"
+
+        if winners and searched_prefix:
+            bucket_map: Dict[str, Dict[str, Any]] = {}
+            for m in winners:
+                event_tick = str(m.get("event_ticker") or "").upper()
+                if event_tick.startswith(searched_prefix):
+                    if event_tick not in bucket_map:
+                        bucket_map[event_tick] = m
+            date_bucket = list(bucket_map.values())
+            date_bucket_event_tickers = list(bucket_map.keys())
+            if not date_bucket:
+                winners = []
+                winner_reason = "no_kalshi_markets_for_date_bucket"
+            else:
+                candidates_set = set(candidate_event_tickers)
+                winners = [
+                    m
+                    for m in date_bucket
+                    if str(m.get("event_ticker") or "").upper() in candidates_set
+                ]
+                if not winners:
+                    winner_reason = "no_exact_event_ticker_match"
+        else:
+            date_bucket_event_tickers = []
+            if winner_reason == winner_reason_override or winner_reason == "no_winner_market_for_game":
+                winner_reason = "no_kalshi_markets_for_date_bucket"
         candidate_event_tickers = list(dict.fromkeys(candidate_event_tickers))
 
     total_result, total_candidates = evaluate_partition(totals, "total")
     spread_result, spread_candidates = evaluate_partition(spreads, "spread")
     winner_result, winner_candidates = evaluate_partition(
-        winners, "winner", winner_reason_override or "no_winner_market_for_game"
+        winners, "winner", winner_reason
     )
+
+    match_status = "matched" if winner_result.get("kalshi_matched") else "no_match"
+    no_match_reason = None if winner_result.get("kalshi_matched") else winner_result.get("kalshi_reason")
+    matched_event_ticker = winner_result.get("kalshi_event_ticker")
+    matched_ticker = winner_result.get("kalshi_ticker")
 
     winner_meta = {
         "expected_date_token": date_token,
         "expected_codes": {"away": away_code_expected, "home": home_code_expected},
         "candidate_event_tickers": candidate_event_tickers[:10],
         "searched_prefix": searched_prefix,
-        "date_bucket_markets_count": len(winners),
+        "date_bucket_markets_count": len(date_bucket_event_tickers),
+        "checked_event_tickers_sample": date_bucket_event_tickers[:10],
         "rejection_counts": winner_rejections,
+        "match_status": match_status,
+        "no_match_reason": no_match_reason,
+        "matched_event_ticker": matched_event_ticker,
+        "matched_ticker": matched_ticker,
     }
 
     return (
