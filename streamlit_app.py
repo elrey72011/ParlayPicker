@@ -2,7 +2,8 @@ import json
 import os
 import traceback
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 import requests
@@ -53,6 +54,87 @@ def safe_iso(value: Any) -> Optional[str]:
         return str(value)
     except Exception:
         return None
+
+
+def get_local_tz() -> str:
+    tz_name = None
+    try:
+        tz_name = st.secrets.get("APP_TIMEZONE")
+    except Exception:
+        tz_name = None
+    if not tz_name:
+        tz_name = "America/New_York"
+    return tz_name
+
+
+def parse_commence_to_utc(value: Any) -> Optional[datetime]:
+    raw = value
+    if raw is None:
+        return None
+    if isinstance(raw, datetime):
+        dt = raw
+    else:
+        try:
+            s = str(raw)
+            if s.endswith("Z"):
+                s = s.replace("Z", "+00:00")
+            dt = datetime.fromisoformat(s)
+        except Exception:
+            return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    try:
+        return dt.astimezone(timezone.utc)
+    except Exception:
+        return None
+
+
+def normalize_commence_times(games: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    tz_name = get_local_tz()
+    try:
+        local_tz = ZoneInfo(tz_name)
+    except Exception:
+        local_tz = None
+    parsed = 0
+    failed = 0
+    for g in games:
+        warnings = list(g.get("warnings") or [])
+        raw_time = g.get("commence_time") or g.get("commence_time_iso")
+        dt_utc = parse_commence_to_utc(raw_time)
+        if dt_utc is None:
+            failed += 1
+            warnings.append("commence_parse_failed")
+            g["commence_time_utc"] = None
+            g["commence_time_iso_utc"] = None
+            g["commence_time_local"] = None
+            g["commence_time_iso_local"] = None
+            g["commence_date_local"] = None
+        else:
+            parsed += 1
+            g["commence_time_utc"] = dt_utc
+            iso_utc = dt_utc.isoformat().replace("+00:00", "Z")
+            g["commence_time_iso_utc"] = iso_utc
+            if local_tz:
+                dt_local = dt_utc.astimezone(local_tz)
+                g["commence_time_local"] = dt_local
+                g["commence_time_iso_local"] = dt_local.isoformat()
+                g["commence_date_local"] = dt_local.strftime("%Y-%m-%d")
+            else:
+                g["commence_time_local"] = None
+                g["commence_time_iso_local"] = None
+                g["commence_date_local"] = None
+        g["warnings"] = warnings
+    stats = {"parsed": parsed, "failed": failed, "timezone": tz_name}
+    return games, stats
+
+
+def fmt_local_time(dt: Optional[datetime]) -> str:
+    try:
+        if dt is None:
+            return ""
+        return dt.strftime("%Y-%m-%d %H:%M")
+    except Exception:
+        return ""
 
 
 def extract_h2h_prices(game: Dict[str, Any]) -> Dict[str, Any]:
@@ -240,6 +322,8 @@ if "games" not in st.session_state:
     st.session_state["games"] = []
 if "league" not in st.session_state:
     st.session_state["league"] = "NBA"
+if "commence_stats" not in st.session_state:
+    st.session_state["commence_stats"] = {"parsed": 0, "failed": 0, "timezone": get_local_tz()}
 
 
 # -----------------
@@ -257,8 +341,10 @@ def load_games(selected_league: str) -> List[Dict[str, Any]]:
         st.session_state["last_exception"] = traceback.format_exc()
         return []
     normalized = [normalize_game({**g, "sport_key": sport_key}) for g in games_raw]
-    st.session_state["games"] = normalized
-    return normalized
+    with_times, commence_stats = normalize_commence_times(normalized)
+    st.session_state["games"] = with_times
+    st.session_state["commence_stats"] = commence_stats
+    return with_times
 
 
 # -----------------
@@ -313,7 +399,10 @@ with tab_games:
                     "League": g.get("league"),
                     "Home": g.get("home_team"),
                     "Away": g.get("away_team"),
-                    "Commence (UTC)": safe_iso(g.get("commence_time_iso")),
+                    "Commence (UTC)": g.get("commence_time_iso_utc")
+                    or safe_iso(g.get("commence_time_iso")),
+                    "Commence (Local)": fmt_local_time(g.get("commence_time_local")),
+                    "Local Date": g.get("commence_date_local") or "",
                     "Books": len(g.get("bookmakers") or []),
                     "MarketsAvailable": ", ".join(sorted(markets)),
                 }
@@ -347,7 +436,9 @@ with tab_master:
             league_name = g.get("league")
             home = g.get("home_team")
             away = g.get("away_team")
-            commence_iso = safe_iso(g.get("commence_time_iso"))
+            commence_iso = g.get("commence_time_iso_utc") or safe_iso(g.get("commence_time_iso"))
+            commence_local = fmt_local_time(g.get("commence_time_local"))
+            commence_date_local = g.get("commence_date_local") or ""
 
             h2h = extract_h2h_prices(g)
             if h2h.get("home_odds") is not None and h2h.get("away_odds") is not None:
@@ -390,6 +481,8 @@ with tab_master:
                     "Home": home,
                     "Away": away,
                     "Commence (UTC)": commence_iso,
+                    "Commence (Local)": commence_local,
+                    "Local Date": commence_date_local,
                     "Market": "Moneyline",
                     "Book": h2h.get("book"),
                     "Home_ML": h2h.get("home_odds"),
@@ -461,6 +554,23 @@ with tab_debug:
             "last_rows_out": st.session_state.get("last_rows_out", 0),
         }
     )
+
+    st.subheader("Timezones")
+    commence_stats = st.session_state.get("commence_stats", {})
+    st.json({"timezone_used": commence_stats.get("timezone") or get_local_tz()})
+    if games:
+        samples = []
+        for g in games[:3]:
+            samples.append(
+                {
+                    "home": g.get("home_team"),
+                    "away": g.get("away_team"),
+                    "utc": g.get("commence_time_iso_utc"),
+                    "local": g.get("commence_time_iso_local"),
+                }
+            )
+        st.caption("Sample commence conversions (first 3 games)")
+        st.json(samples)
 
     if games:
         st.subheader("Sample normalized game")
