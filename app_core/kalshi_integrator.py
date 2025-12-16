@@ -315,6 +315,18 @@ class KalshiIntegrator:
         # If no PEM markers, wrap as PKCS8
         return "-----BEGIN PRIVATE KEY-----\n" + cleaned + "\n-----END PRIVATE KEY-----"
 
+    @staticmethod
+    def _normalize_secret(secret_val: Optional[str]) -> Optional[str]:
+        if not secret_val:
+            return None
+        cleaned = str(secret_val).replace("\\n", "\n").strip()
+        if not cleaned:
+            return None
+        if "-----BEGIN RSA PRIVATE KEY-----" in cleaned or "-----BEGIN PRIVATE KEY-----" in cleaned:
+            return cleaned
+        # If no PEM markers, wrap as PKCS8
+        return "-----BEGIN PRIVATE KEY-----\n" + cleaned + "\n-----END PRIVATE KEY-----"
+
     def _sign_request(self, method: str, path: str, timestamp: str) -> str:
         if not self.api_secret_pem:
             return ""
