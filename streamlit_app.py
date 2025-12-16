@@ -638,34 +638,28 @@ def filter_kalshi_game_markets(
 
 
 def classify_kalshi_market(market: Dict[str, Any]) -> str:
+    ticker = str(market.get("ticker") or market.get("event_ticker") or "").upper()
     title = str(market.get("title") or "").lower()
     rules = str(market.get("rules") or "").lower()
-    ticker = str(market.get("event_ticker") or market.get("ticker") or "").lower()
-    has_points_strike = bool(
-        market.get("floor_strike") is not None or market.get("cap_strike") is not None
-    )
-    if (
-        "winner" in title
-        or title.endswith("winner?")
-        or "game" in ticker
-        or ticker.startswith("kxnbagame")
-        or "game-" in ticker
-        or ticker.upper().startswith("KXN")
-        or "game winner" in rules
-        or "wins the game" in rules
-        or "wins outright" in rules
-    ):
+
+    if "GAME-" in ticker or ticker.startswith("KXNBAGAME-") or "GAME" in ticker:
         return "winner"
-    if (
-        "total points" in title
-        or "collectively score" in rules
-        or "score more than" in rules
-        or has_points_strike
-    ):
+    if "TOTAL" in ticker:
         return "total"
-    if "spread" in title or "win by" in rules or "point spread" in rules:
+    if "SPREAD" in ticker:
         return "spread"
-    return "other"
+    if any(tok in ticker for tok in ["2D", "3D", "TD", "PTS", "REB", "AST"]) or any(
+        key in title for key in ["double", "triple"]
+    ):
+        return "prop"
+
+    if "total points" in title:
+        return "total"
+    if "spread" in title:
+        return "spread"
+    if "winner" in title or "win" in title or "wins the game" in rules:
+        return "winner"
+    return "unknown"
 
 
 def team_tokens(name: str) -> set:
