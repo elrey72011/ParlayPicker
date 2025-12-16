@@ -159,6 +159,7 @@ def render_game_tab(config: Dict[str, Any]):
             config["odds_client"], SPORT_OPTIONS[league]
         )
         st.session_state["selected_league"] = league
+        st.session_state["game_sample"] = st.session_state["all_games"][:3]
 
     games = st.session_state.get("all_games", [])
     st.caption(f"Loaded {len(games)} games for {st.session_state.get('selected_league', league)}")
@@ -182,6 +183,7 @@ def render_game_tab(config: Dict[str, Any]):
 def render_vertex_tab(config: Dict[str, Any]):
     league = st.session_state.get("selected_league", list(SPORT_OPTIONS.keys())[0])
     games = st.session_state.get("all_games", [])
+    st.session_state["game_sample"] = games[:3]
     st.write(f"Using {len(games)} games from {league}.")
 
     vertex_status = init_vertex_from_secrets(config["logger"])
@@ -214,6 +216,10 @@ def render_vertex_tab(config: Dict[str, Any]):
         if results is None or results.empty:
             st.warning("Master analysis returned no rows.")
             return
+
+        st.session_state["vertex_master_stats"] = st.session_state.get(
+            "vertex_master_stats", {}
+        )
 
         display_cols = [
             c
@@ -266,6 +272,8 @@ def main():
         st.session_state.get("api_config", {}),
         analyzer_path=str(Path(__file__).name),
         last_exception=st.session_state.get("last_exception"),
+        master_stats=st.session_state.get("vertex_master_stats"),
+        game_sample=st.session_state.get("game_sample"),
     )
 
 
