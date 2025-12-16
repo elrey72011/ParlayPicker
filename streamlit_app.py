@@ -632,7 +632,6 @@ with tab_master:
             if not kalshi_match.get("kalshi_available"):
                 warnings.append("kalshi_no_match")
 
-            ai_prob = None
             try:
                 ai_prob = get_vertex_prob(g)
             except Exception:
