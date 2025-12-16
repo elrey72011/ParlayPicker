@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional
 import pandas as pd
 import requests
 import streamlit as st
-st.set_page_config(title="ParlayDesk — Clean Core", layout="wide")
+st.set_page_config(page_title="ParlayDesk — Clean Core", layout="wide")
 
 
 # -----------------
