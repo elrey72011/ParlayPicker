@@ -1501,7 +1501,6 @@ with tab_master:
                 }
             )
 
-            ai_prob = None
             try:
                 ai_prob = get_vertex_prob(g)
             except Exception:
