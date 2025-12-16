@@ -8,9 +8,10 @@ import logging
 import os
 import time
 import base64
+import random
 from dataclasses import dataclass
-from datetime import datetime
-from typing import Any, Dict, List, Optional
+from datetime import datetime, timedelta
+from typing import Any, Dict, List, Optional, Tuple
 
 import pytz
 import requests
@@ -21,6 +22,14 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 
 logger = logging.getLogger(__name__)
+
+
+class KalshiRateLimitError(Exception):
+    """Raised when Kalshi keeps returning 429 after retries."""
+
+
+class KalshiAPIError(Exception):
+    """Raised for non-auth Kalshi API errors."""
 
 # ---------------------------------------------------------------------------
 # Data Structures
@@ -39,6 +48,7 @@ class KalshiMatchResult:
     direction: Optional[str] = None
     game_date: Optional[datetime] = None
     kalshi_volume: Optional[float] = None
+    debug: Optional[Dict[str, Any]] = None
 
 # ---------------------------------------------------------------------------
 # Constants & Mappings
@@ -87,6 +97,21 @@ KALSHI_TEAM_ABBREVIATIONS: Dict[str, List[str]] = {
 TEAM_FUZZY_THRESHOLD = 1.0
 DATE_TOLERANCE_DAYS = 5
 DATE_SOFT_PENALTY = 0.10
+NBA_TZ = pytz.timezone("America/New_York")
+
+# Strict NBA code mapping for winner event tickers
+NBA_TEAM_CODE_MAP: Dict[str, str] = {
+    "NEW YORK KNICKS": "NYK",
+    "SAN ANTONIO SPURS": "SAS",
+    "CHICAGO BULLS": "CHI",
+    "CLEVELAND CAVALIERS": "CLE",
+    "MINNESOTA TIMBERWOLVES": "MIN",
+    "MEMPHIS GRIZZLIES": "MEM",
+    "LOS ANGELES CLIPPERS": "LAC",
+    "LA CLIPPERS": "LAC",
+    "LOS ANGELES LAKERS": "LAL",
+    "LA LAKERS": "LAL",
+}
 
 # ---------------------------------------------------------------------------
 # Helper Functions
@@ -203,6 +228,129 @@ def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time:
     if not kalshi or not kalshi.api_key:
         return KalshiMatchResult(matched=False, kalshi_available=False, label="", probability=None, raw_event_id=None, reason="no_integrator")
 
+    def _nba_code(team: str) -> Optional[str]:
+        norm = normalize_name(team)
+        return NBA_TEAM_CODE_MAP.get(norm)
+
+    def _nba_date_token(dt: datetime) -> str:
+        local_dt = dt.astimezone(NBA_TZ)
+        return local_dt.strftime("%y%b%d").upper()
+
+    def _nba_bucket_and_match() -> KalshiMatchResult:
+        if not isinstance(game_time, datetime):
+            return KalshiMatchResult(
+                matched=False,
+                kalshi_available=True,
+                label="",
+                probability=None,
+                raw_event_id=None,
+                league=league_key,
+                reason="missing_game_time",
+                debug={"note": "no datetime for NBA match"},
+            )
+        game_dt = game_time
+        if game_dt.tzinfo is None:
+            game_dt = NBA_TZ.localize(game_dt)
+        date_token = _nba_date_token(game_dt)
+        away_code = _nba_code(away_team)
+        home_code = _nba_code(home_team)
+        candidate_events = []
+        if away_code and home_code:
+            candidate_events = [
+                f"KXNBAGAME-{date_token}{away_code}{home_code}",
+                f"KXNBAGAME-{date_token}{home_code}{away_code}",
+            ]
+        markets = kalshi.get_markets(status=status)
+        if not markets:
+            return KalshiMatchResult(
+                matched=False,
+                kalshi_available=False,
+                label="",
+                probability=None,
+                raw_event_id=None,
+                league=league_key,
+                reason="no_markets_found",
+                debug={"date_token": date_token, "candidate_events": candidate_events},
+            )
+
+        # De-dupe by event_ticker
+        deduped: Dict[str, Dict[str, Any]] = {}
+        for m in markets:
+            et = str(m.get("event_ticker") or m.get("ticker") or "")
+            if et and et not in deduped:
+                deduped[et] = m
+        bucket_prefix = f"KXNBAGAME-{date_token}"
+        date_bucket = [m for et, m in deduped.items() if et.startswith(bucket_prefix)]
+        debug_info = {
+            "date_token": date_token,
+            "candidate_event_tickers": candidate_events,
+            "date_bucket_count": len(date_bucket),
+            "date_bucket_sample": [str(m.get("event_ticker") or m.get("ticker") or "") for m in list(date_bucket)[:10]],
+        }
+        if not date_bucket:
+            return KalshiMatchResult(
+                matched=False,
+                kalshi_available=True,
+                label="",
+                probability=None,
+                raw_event_id=None,
+                league=league_key,
+                reason="no_kalshi_markets_for_date_bucket",
+                debug=debug_info,
+            )
+
+        exact_match = None
+        for m in date_bucket:
+            et = str(m.get("event_ticker") or "")
+            if et and et in candidate_events:
+                exact_match = m
+                break
+
+        if not exact_match:
+            debug_info["no_match_reason"] = "no_exact_event_ticker_match"
+            return KalshiMatchResult(
+                matched=False,
+                kalshi_available=True,
+                label="",
+                probability=None,
+                raw_event_id=None,
+                league=league_key,
+                reason="no_exact_event_ticker_match",
+                debug=debug_info,
+            )
+
+        yes_bid = exact_match.get("yes_bid")
+        yes_ask = exact_match.get("yes_ask")
+        probability = None
+        try:
+            vals = [v for v in [yes_bid, yes_ask] if v is not None]
+            if len(vals) == 2:
+                probability = max(0.0, min(1.0, ((float(vals[0]) + float(vals[1])) / 2) / 100))
+            elif len(vals) == 1:
+                probability = max(0.0, min(1.0, float(vals[0]) / 100))
+            else:
+                probability = price_to_prob(exact_match.get("last_price"))
+        except Exception:
+            probability = price_to_prob(exact_match.get("last_price"))
+
+        debug_info["matched_event_ticker"] = exact_match.get("event_ticker")
+        debug_info["matched_side_ticker"] = exact_match.get("ticker")
+        return KalshiMatchResult(
+            matched=True,
+            kalshi_available=True,
+            label=str(exact_match.get("title") or ""),
+            probability=probability,
+            raw_event_id=exact_match.get("event_ticker") or exact_match.get("ticker"),
+            league=league_key,
+            reason="matched_exact_event_ticker",
+            market_type="winner",
+            game_date=game_dt.astimezone(pytz.UTC),
+            debug=debug_info,
+        )
+
+    if league_key == "NBA":
+        return _nba_bucket_and_match()
+
     home_norm = normalize_name(home_team)
     away_norm = normalize_name(away_team)
     home_codes = _build_team_codes(home_team)
@@ -225,14 +373,16 @@ def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time:
 
     for m in markets:
         meta = _parse_market_metadata(m)
-        if not meta: continue
-        
+        if not meta:
+            continue
+
         ticker = (m.get("ticker") or "").upper()
         if series_prefix and not ticker.startswith(series_prefix):
             continue
 
         teams = meta.get("teams") or []
-        if len(teams) < 2: continue
+        if len(teams) < 2:
+            continue
 
         score_home_first = _team_score(teams[0], home_norm, home_codes) + _team_score(teams[1], away_norm, away_codes)
         score_away_first = _team_score(teams[0], away_norm, away_codes) + _team_score(teams[1], home_norm, home_codes)
@@ -244,7 +394,8 @@ def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time:
                 if m_date.tzinfo is None:
                     m_date = pytz.utc.localize(m_date)
                 diff = abs((m_date.date() - game_dt_utc.date()).days)
-                if diff > DATE_TOLERANCE_DAYS: continue
+                if diff > DATE_TOLERANCE_DAYS:
+                    continue
                 score -= (diff * DATE_SOFT_PENALTY)
             except Exception:
                 pass
@@ -267,7 +418,7 @@ def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time:
         league=league_key,
         reason="matched",
         market_type=meta["market_type"],
-        game_date=meta["market_date"]
+        game_date=meta["market_date"],
     )
 
 # ---------------------------------------------------------------------------
@@ -275,50 +426,57 @@ def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time:
 # ---------------------------------------------------------------------------
 
 class KalshiIntegrator:
-    def __init__(self, api_key: Optional[str] = None, api_secret: Optional[str] = None) -> None:
-        # Resolve key + secret from args, env, or Streamlit secrets
-        self.api_key = (
-            api_key
-            or os.getenv("KALSHI_API_KEY")
-            or st.secrets.get("KALSHI_API_KEY", "")
-        )
-        self.api_secret = (
-            api_secret
-            or st.secrets.get("KALSHI_API_SECRET", "")
-            or os.getenv("KALSHI_API_SECRET", "")
-        )
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        api_secret: Optional[str] = None,
+        *,
+        required: bool = False,
+    ) -> None:
+        # Resolve key + secret from args, env, or Streamlit secrets (only the official names)
+        self.api_key = api_key or st.secrets.get("KALSHI_API_KEY") or os.getenv("KALSHI_API_KEY")
+        raw_secret = api_secret or st.secrets.get("KALSHI_API_SECRET") or os.getenv("KALSHI_API_SECRET")
 
         # --- Clean private key format ---
-        if self.api_secret:
-            # Turn literal "\n" into real newlines
-            cleaned = self.api_secret.replace("\\n", "\n").strip()
-
-            # If it already looks like PEM, trust it
-            if "-----BEGIN" in cleaned:
-                self.api_secret = cleaned
-            else:
-                # Only if you're really storing just the body (not recommended)
-                self.api_secret = (
-                    "-----BEGIN PRIVATE KEY-----\n"
-                    + cleaned +
-                    "\n-----END PRIVATE KEY-----"
-                )
+        self.api_secret_pem = self._normalize_secret(raw_secret)
 
         self.api_url = "https://api.elections.kalshi.com/trade-api/v2"
+
+        # Required flag
+        self.required = required
 
         # Caching + error state
         self._markets_cache: List[Dict[str, Any]] = []
         self._markets_cache_ts: float = 0.0
-        self.cache_ttl_seconds: int = 300
+        self.cache_ttl_seconds: int = 120
+        self._markets_cache_by_key: Dict[Tuple[str, str], Dict[str, Any]] = {}
+        self._markets_cache_ttl_seconds: int = 600
         self.last_error: Optional[str] = None
+        self._league_cache: Dict[str, Dict[str, Any]] = {}
+        self._league_cache_ttl: int = 300
+        self.last_fetch_meta: Dict[str, Any] = {}
+        self.session = requests.Session()
+        self.last_error_info: Dict[str, Any] = {}
+
+    @staticmethod
+    def _normalize_secret(secret_val: Optional[str]) -> Optional[str]:
+        if not secret_val:
+            return None
+        cleaned = str(secret_val).replace("\\n", "\n").strip()
+        if not cleaned:
+            return None
+        if "-----BEGIN RSA PRIVATE KEY-----" in cleaned or "-----BEGIN PRIVATE KEY-----" in cleaned:
+            return cleaned
+        # If no PEM markers, wrap as PKCS8
+        return "-----BEGIN PRIVATE KEY-----\n" + cleaned + "\n-----END PRIVATE KEY-----"
 
     def _sign_request(self, method: str, path: str, timestamp: str) -> str:
-        if not self.api_secret:
+        if not self.api_secret_pem:
             return ""
         msg_string = f"{timestamp}{method}{path}"
         try:
             private_key = serialization.load_pem_private_key(
-                self.api_secret.encode("utf-8"),
+                self.api_secret_pem.encode("utf-8"),
                 password=None,
             )
             signature = private_key.sign(
@@ -334,85 +492,463 @@ class KalshiIntegrator:
             logger.error(f"Signing failed: {e}")
             return ""
 
-    def _make_authenticated_request(
-        self,
-        method: str,
-        endpoint: str,
-        params: Optional[Dict] = None,
-    ) -> Optional[dict]:
-        url = f"{self.api_url}{endpoint}"
-        path_for_signing = f"/trade-api/v2{endpoint}"
-        timestamp = str(int(time.time() * 1000))
-        signature = self._sign_request(method, path_for_signing, timestamp)
+    def assert_available(self) -> None:
+        if not self.api_key or not self.api_secret_pem:
+            raise RuntimeError("Kalshi is required but missing keys in secrets.")
+        health = self.health_check()
+        if not health.get("ok"):
+            raise RuntimeError(
+                health.get("error")
+                or "Kalshi is required but unavailable (auth/keys/API)."
+            )
 
-        headers = {
-            "Content-Type": "application/json",
-            "KALSHI-ACCESS-KEY": self.api_key,
-            "KALSHI-ACCESS-SIGNATURE": signature,
-            "KALSHI-ACCESS-TIMESTAMP": timestamp,
-        }
+    def health_check(self) -> Dict[str, Any]:
+        configured = bool(self.api_key and self.api_secret_pem)
+        if not configured:
+            return {
+                "configured": False,
+                "ok": False,
+                "market_count": 0,
+                "sample_market": None,
+                "error": "Kalshi is required but not configured.",
+            }
 
         try:
-            resp = requests.request(method, url, headers=headers, params=params, timeout=10)
-            if resp.status_code == 200:
-                return resp.json()
-            else:
-                self.last_error = f"Status {resp.status_code}: {resp.text}"
-                logger.error(f"Kalshi API Error: {self.last_error}")
-        except Exception as e:
-            self.last_error = str(e)
-            logger.error(f"Kalshi Connection Exception: {e}")
-        return None
+            data = self._request("GET", "/markets", params={"limit": 50})
+            markets = data.get("markets", []) or []
+            ok = len(markets) > 0
+            return {
+                "configured": True,
+                "ok": ok,
+                "market_count": len(markets),
+                "sample_market": markets[0] if markets else None,
+                "markets": markets,
+                "error": None if ok else "Kalshi returned zero markets.",
+                "status_code": data.get("status_code"),
+                "response_text": data.get("response_text"),
+            }
+        except Exception as exc:  # pragma: no cover - defensive
+            info = self.last_error_info or {}
+            return {
+                "configured": True,
+                "ok": False,
+                "market_count": 0,
+                "sample_market": None,
+                "error": str(exc),
+                "status_code": info.get("status_code"),
+                "response_text": info.get("response_text"),
+            }
 
-    def get_markets(self, status: str = "open") -> List[Dict[str, Any]]:
+    def _request(
+        self,
+        method: str,
+        path: str,
+        params: Optional[Dict] = None,
+        json: Optional[Dict] = None,
+    ) -> Dict[str, Any]:
         """
-        Fetches ALL markets by handling pagination (cursors).
+        Authenticated request with retry/backoff handling for rate limits and server errors.
         """
+
+        if not self.api_key or not self.api_secret_pem:
+            raise RuntimeError("Kalshi is required but missing keys in secrets.")
+
+        url = f"{self.api_url}{path}"
+        path_for_signing = f"/trade-api/v2{path}"
+
+        def backoff_delay(base: float) -> float:
+            return base + random.uniform(0, max(0.1, base * 0.25))
+
+        retry_429 = 0
+        retry_other = 0
+        backoff = 1.0
+
+        while True:
+            timestamp = str(int(time.time() * 1000))
+            signature = self._sign_request(method, path_for_signing, timestamp)
+            headers = {
+                "Content-Type": "application/json",
+                "KALSHI-ACCESS-KEY": self.api_key,
+                "KALSHI-ACCESS-SIGNATURE": signature,
+                "KALSHI-ACCESS-TIMESTAMP": timestamp,
+            }
+            try:
+                resp = self.session.request(
+                    method,
+                    url,
+                    headers=headers,
+                    params=params,
+                    json=json,
+                    timeout=10,
+                )
+            except requests.Timeout as exc:
+                retry_other += 1
+                if retry_other > 3:
+                    raise RuntimeError(f"Kalshi request timeout: {exc}")
+                time.sleep(backoff_delay(backoff))
+                backoff = min(backoff * 2, 10.0)
+                continue
+            except Exception as exc:
+                retry_other += 1
+                if retry_other > 3:
+                    raise RuntimeError(f"Kalshi request error: {exc}")
+                time.sleep(backoff_delay(backoff))
+                backoff = min(backoff * 2, 10.0)
+                continue
+
+            status = resp.status_code
+            if status == 429:
+                retry_429 += 1
+                retry_after = resp.headers.get("Retry-After")
+                try:
+                    delay = float(retry_after)
+                except Exception:
+                    delay = backoff
+                if retry_429 > 6:
+                    self.last_error_info = {
+                        "status_code": status,
+                        "response_text": resp.text[:300],
+                    }
+                    raise KalshiRateLimitError("Kalshi rate limited (429)")
+                time.sleep(max(0.5, backoff_delay(min(delay, 32.0))))
+                backoff = min(backoff * 2, 32.0)
+                continue
+            if 500 <= status < 600:
+                retry_other += 1
+                if retry_other > 3:
+                    self.last_error_info = {
+                        "status_code": status,
+                        "response_text": resp.text[:300],
+                    }
+                    raise KalshiAPIError(f"Kalshi server error {status}")
+                time.sleep(backoff_delay(min(backoff, 5.0)))
+                backoff = min(backoff * 2, 20.0)
+                continue
+            if status >= 400:
+                self.last_error_info = {
+                    "status_code": status,
+                    "response_text": resp.text[:300],
+                }
+                if status in (401, 403):
+                    raise KalshiAPIError("Kalshi auth failed (401/403). Check key/secret.")
+                raise KalshiAPIError(f"Kalshi API error {status}: {resp.text[:300]}")
+
+            try:
+                data = resp.json()
+            except Exception as exc:  # pragma: no cover
+                raise RuntimeError(f"Kalshi response parse error: {exc}")
+            self.last_error_info = {"status_code": status, "response_text": None}
+            return data
+
+    def get_markets_paginated(
+        self,
+        status: Optional[str] = None,
+        limit: int = 200,
+        max_pages: int = 25,
+        cursor: Optional[str] = None,
+        extra_params: Optional[Dict[str, Any]] = None,
+    ) -> List[Dict[str, Any]]:
+        all_markets: List[Dict[str, Any]] = []
+        next_cursor = cursor
+        pages = 0
+        while pages < max_pages:
+            params = {"limit": limit}
+            if status:
+                params["status"] = status
+            if next_cursor:
+                params["cursor"] = next_cursor
+            if extra_params:
+                params.update(extra_params)
+            data = self._request("GET", "/markets", params=params)
+            markets = data.get("markets", []) or []
+            all_markets.extend(markets)
+            pages += 1
+            next_cursor = (
+                data.get("cursor")
+                or data.get("next_cursor")
+                or data.get("next")
+                or data.get("next_token")
+            )
+            prefix_debug = {"page": pages, "received": len(markets), "cursor": bool(next_cursor)}
+            logger.debug(f"Kalshi page debug: {prefix_debug}")
+            if not next_cursor:
+                break
+            time.sleep(0.1)
+        return all_markets
+
+    def _get_nba_markets_targeted(
+        self,
+        *,
+        status: Optional[str] = None,
+        min_hits: int = 100,
+        max_pages: int = 25,
+    ) -> Dict[str, Any]:
+        prefix = LEAGUE_SERIES_MAP.get("NBA")
+        collected: List[Dict[str, Any]] = []
+        pages = 0
+        prefix_hits = 0
+        # Try explicit series_ticker queries first
+        series_candidates = ["KXNBA", "KXNBAGAME", "KXNBATOTAL", "KXNBASPREAD"]
+        for series in series_candidates:
+            next_cursor: Optional[str] = None
+            while pages < max_pages and prefix_hits < min_hits:
+                params = {"limit": 200, "series_ticker": series}
+                if status:
+                    params["status"] = status
+                if next_cursor:
+                    params["cursor"] = next_cursor
+                data = self._request("GET", "/markets", params=params)
+                chunk = data.get("markets", []) or []
+                collected.extend(chunk)
+                tickers = [str(m.get("ticker") or m.get("event_ticker") or "").upper() for m in chunk]
+                prefix_hits += len([t for t in tickers if t.startswith(prefix)])
+                pages += 1
+                next_cursor = (
+                    data.get("cursor")
+                    or data.get("next_cursor")
+                    or data.get("next")
+                    or data.get("next_token")
+                )
+                if not next_cursor:
+                    break
+                time.sleep(0.1)
+            if prefix_hits >= min_hits:
+                break
+
+        # Fallback: scan general pages for any KXNBA if still empty
+        if prefix_hits == 0:
+            next_cursor = None
+            while pages < max_pages:
+                params = {"limit": 200}
+                if status:
+                    params["status"] = status
+                if next_cursor:
+                    params["cursor"] = next_cursor
+                data = self._request("GET", "/markets", params=params)
+                chunk = data.get("markets", []) or []
+                collected.extend(chunk)
+                tickers = [str(m.get("ticker") or m.get("event_ticker") or "").upper() for m in chunk]
+                prefix_hits += len([t for t in tickers if t.startswith(prefix)])
+                pages += 1
+                next_cursor = (
+                    data.get("cursor")
+                    or data.get("next_cursor")
+                    or data.get("next")
+                    or data.get("next_token")
+                )
+                if prefix_hits >= min_hits or not next_cursor:
+                    break
+                time.sleep(0.1)
+
+        return {
+            "markets": collected,
+            "pages": pages,
+            "prefix_hits": prefix_hits,
+        }
+
+    def get_markets(self, status: Optional[str] = "open") -> List[Dict[str, Any]]:
+        """Fetch all markets with pagination support and a sane cap."""
         now = time.time()
-        # 1) Use cache if still fresh (e.g., 5 minutes)
         if self._markets_cache and (now - self._markets_cache_ts) < self.cache_ttl_seconds:
             logger.info(f"Using cached markets ({len(self._markets_cache)} items)")
             return self._markets_cache
 
-        all_markets = []
-        cursor = None
-        
-        # Loop until no cursor is returned
-        while True:
-            params = {"limit": 1000, "status": status}
-            if cursor:
-                params["cursor"] = cursor
-
-            data = self._make_authenticated_request("GET", "/markets", params=params)
-            
-            if not data:
-                break
-            
-            markets = data.get("markets", [])
-            if not markets:
-                break
-                
-            all_markets.extend(markets)
-            cursor = data.get("cursor")
-            
-            if not cursor:
-                break
-                
-            # Rate limit safety
-            time.sleep(0.1)
-
-        # Update cache
+        all_markets = self.get_markets_paginated(status=status)
         self._markets_cache = all_markets
         self._markets_cache_ts = now
         logger.info(f"✅ Successfully loaded {len(all_markets)} Kalshi markets (paginated)")
         return all_markets
 
-    # Helpers required by app
-    def get_sports_markets(self):
-        return self.get_markets()
+    def get_league_markets(
+        self,
+        league: str,
+        *,
+        status: Optional[str] = None,
+        min_prefix_hits: int = 200,
+        max_pages: int = 25,
+    ) -> List[Dict[str, Any]]:
+        league_key = (league or "").upper()
+        prefix = LEAGUE_SERIES_MAP.get(league_key)
+        cache_key = f"{league_key}:{status or 'any'}"
+        now = time.time()
+        cached = self._league_cache.get(cache_key)
+        if cached and (now - cached.get("ts", 0)) < self._league_cache_ttl:
+            self.last_fetch_meta = cached.get("meta", {})
+            return cached.get("markets", [])
 
+        if league_key == "NBA":
+            nba_result = self._get_nba_markets_targeted(
+                status=status, min_hits=min_prefix_hits, max_pages=max_pages
+            )
+            all_markets = nba_result.get("markets", [])
+            pages = nba_result.get("pages", 0)
+            prefix_hits = nba_result.get("prefix_hits", 0)
+        else:
+            all_markets = self.get_markets_paginated(
+                status=status, limit=200, max_pages=max_pages
+            )
+            pages = min(max_pages, len(all_markets) // 200 + 1)
+            tickers = [
+                str(m.get("ticker") or m.get("event_ticker") or "").upper()
+                for m in all_markets
+            ]
+            prefix_hits = (
+                len([t for t in tickers if t.startswith(prefix)]) if prefix else 0
+            )
+
+        self.last_fetch_meta = {
+            "league": league_key,
+            "status": status,
+            "pages": pages,
+            "total_markets": len(all_markets),
+            "prefix_hits": prefix_hits,
+            "prefix": prefix,
+        }
+        self._league_cache[cache_key] = {
+            "ts": now,
+            "markets": all_markets,
+            "meta": self.last_fetch_meta,
+        }
+        return all_markets
+
+    def _filter_markets_for_league(self, markets: List[Dict[str, Any]], league: Optional[str]) -> List[Dict[str, Any]]:
+        league_key = (league or "").upper()
+        prefix = LEAGUE_SERIES_MAP.get(league_key)
+        if not prefix:
+            return markets
+
+        ticker_upper = [str(m.get("ticker") or m.get("event_ticker") or "").upper() for m in markets]
+        prefix_filtered = [m for m, t in zip(markets, ticker_upper) if t.startswith(prefix)]
+        if prefix_filtered:
+            return prefix_filtered
+
+        return markets
+
+    def _best_market_time(self, market: Dict[str, Any]) -> Optional[datetime]:
+        for key in [
+            "expected_expiration_time",
+            "latest_expiration_time",
+            "close_time",
+            "expiration_time",
+            "open_time",
+        ]:
+            val = market.get(key)
+            if not val:
+                continue
+            try:
+                raw = str(val)
+                if raw.endswith("Z"):
+                    raw = raw.replace("Z", "+00:00")
+                dt = datetime.fromisoformat(raw)
+                if dt.tzinfo is None:
+                    dt = pytz.utc.localize(dt)
+                else:
+                    dt = dt.astimezone(pytz.UTC)
+                return dt
+            except Exception:
+                continue
+        return None
+
+    @staticmethod
+    def is_multivariate_bundle(market: Dict[str, Any]) -> bool:
+        ticker = str(market.get("event_ticker") or market.get("ticker") or "").upper()
+        if ticker.startswith("KXMV") or "MVE" in ticker:
+            return True
+        if market.get("mve_collection_ticker") or market.get("mve_selected_legs"):
+            return True
+        custom = str(market.get("custom_strike") or "")
+        if custom and "Associated Events" in custom:
+            return True
+        return False
+
+    def split_market_kinds(self, markets: List[Dict[str, Any]], league: Optional[str] = None) -> Dict[str, List[Dict[str, Any]]]:
+        league_key = (league or "").upper()
+        prefix = LEAGUE_SERIES_MAP.get(league_key, "")
+        single_game: List[Dict[str, Any]] = []
+        multivariate: List[Dict[str, Any]] = []
+        other: List[Dict[str, Any]] = []
+        for m in markets or []:
+            if self.is_multivariate_bundle(m):
+                multivariate.append(m)
+                continue
+            t = str(m.get("event_ticker") or m.get("ticker") or "").upper()
+            if prefix and t.startswith(prefix):
+                single_game.append(m)
+            elif not prefix:
+                single_game.append(m)
+            else:
+                other.append(m)
+        return {
+            "single_game_candidates": single_game,
+            "multivariate_bundles": multivariate,
+            "other": other,
+        }
+
+    def get_sports_markets(
+        self, league: Optional[str] = None, commence_times: Optional[List[str]] = None
+    ) -> List[Dict[str, Any]]:
+        try:
+            league_key = (league or "").upper()
+            commence_dt: List[datetime] = []
+            if commence_times:
+                for c in commence_times:
+                    try:
+                        raw = str(c)
+                        if raw.endswith("Z"):
+                            raw = raw.replace("Z", "+00:00")
+                        dt = datetime.fromisoformat(raw)
+                        if dt.tzinfo is None:
+                            dt = pytz.utc.localize(dt)
+                        else:
+                            dt = dt.astimezone(pytz.UTC)
+                        commence_dt.append(dt)
+                    except Exception:
+                        continue
+            date_key = None
+            if commence_dt:
+                earliest = min(commence_dt)
+                date_key = earliest.astimezone(pytz.UTC).strftime("%Y%m%d")
+            cache_key = None
+            if league_key and date_key:
+                cache_key = (league_key, date_key)
+                cached = self._markets_cache_by_key.get(cache_key)
+                if cached and (time.time() - cached.get("ts", 0)) < self._markets_cache_ttl_seconds:
+                    return cached.get("markets", [])
+
+            markets = self.get_league_markets(league_key, status=None)
+            filtered = markets
+
+            if commence_dt:
+                window = timedelta(hours=72)
+                time_filtered: List[Dict[str, Any]] = []
+                for m in filtered:
+                    mt = self._best_market_time(m)
+                    if not mt:
+                        time_filtered.append(m)
+                        continue
+                    if any(abs(mt - cdt) <= window for cdt in commence_dt):
+                        time_filtered.append(m)
+                if time_filtered:
+                    filtered = time_filtered
+
+            if cache_key:
+                self._markets_cache_by_key[cache_key] = {
+                    "ts": time.time(),
+                    "markets": filtered,
+                }
+
+            return filtered
+        except Exception:
+            logger.error("Kalshi get_sports_markets failed", exc_info=True)
+            return []
+
+    def get_markets_for_league(self, league: str) -> List[Dict[str, Any]]:
+        """Return markets for a given league without excluding game winners."""
+        return self.get_sports_markets(league=league)
+
+    # Helpers required by app
     def get_game_markets_for_events(self, league):
-        return self.get_markets()
+        return self.get_markets_for_league(league)
 
     def filter_markets_closing_today(self, markets):
         return markets
@@ -422,7 +958,7 @@ class KalshiIntegrator:
         return price_to_prob(price)
     
     def get_orderbook(self, ticker: str) -> Dict[str, Any]:
-        return self._make_authenticated_request("GET", f"/markets/{ticker}/orderbook") or {}
+        return self._request("GET", f"/markets/{ticker}/orderbook") or {}
 
 # ---------------------------------------------------------------------------
 # CROSSWALK UTILITY (Included at bottom)
