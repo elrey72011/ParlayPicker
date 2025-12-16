@@ -1,5 +1,6 @@
 import json
 import os
+import time
 import traceback
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
@@ -8,6 +9,12 @@ from zoneinfo import ZoneInfo
 import pandas as pd
 import requests
 import streamlit as st
+from app_core.kalshi_integrator import (
+    KalshiIntegrator,
+    LEAGUE_SERIES_MAP,
+    match_game_to_kalshi,
+    price_to_prob,
+)
 
 # Must be the first Streamlit call
 st.set_page_config(page_title="ParlayDesk", layout="wide")
@@ -372,8 +379,15 @@ news_api_key = read_secret("NEWS_API_KEY")
 project_id = read_secret("GCP_PROJECT_ID", "elite-hangar-479017-m8")
 location = read_secret("GCP_LOCATION", "us-central1")
 vertex_endpoint_id = read_secret("VERTEX_ENDPOINT_ID")
-kalshi_api_key = read_secret("KALSHI_API_KEY")
-kalshi_api_secret = read_secret("KALSHI_API_SECRET")
+kalshi_api_key = read_secret("KALSHI_API_KEY") or read_secret("kalshi_api_key")
+kalshi_api_secret = read_secret("KALSHI_API_SECRET") or read_secret("kalshi_api_secret")
+kalshi_integrator: Optional[KalshiIntegrator] = None
+try:
+    if kalshi_api_key and kalshi_api_secret:
+        kalshi_integrator = KalshiIntegrator(kalshi_api_key, kalshi_api_secret)
+except Exception:
+    st.session_state["last_exception"] = traceback.format_exc()
+    kalshi_integrator = None
 
 
 @st.cache_data(ttl=60)
@@ -426,11 +440,29 @@ def get_vertex_prob(game: Dict[str, Any]) -> Optional[float]:
 
 
 # -----------------
-# Kalshi stubs
+# Kalshi integration
 # -----------------
 
-def kalshi_health_check() -> Dict[str, Any]:
-    configured = bool(kalshi_api_key and kalshi_api_secret)
+
+@st.cache_data(ttl=60)
+def fetch_kalshi_markets(selected_league: str) -> List[Dict[str, Any]]:
+    if not kalshi_integrator:
+        return []
+    try:
+        markets = kalshi_integrator.get_sports_markets()
+        prefix = LEAGUE_SERIES_MAP.get((selected_league or "").upper())
+        if prefix:
+            markets = [
+                m for m in markets if str(m.get("ticker") or "").upper().startswith(prefix)
+            ]
+        return markets or []
+    except Exception:
+        st.session_state["last_exception"] = traceback.format_exc()
+        return []
+
+
+def kalshi_health_check(selected_league: str) -> Dict[str, Any]:
+    configured = bool(kalshi_integrator and kalshi_api_key and kalshi_api_secret)
     if not configured:
         return {
             "configured": False,
@@ -439,23 +471,60 @@ def kalshi_health_check() -> Dict[str, Any]:
             "sample_market": None,
             "error": "Kalshi is required but not configured.",
         }
-    # Placeholder: real API integration to be added; treat as available for now.
+    try:
+        markets = fetch_kalshi_markets(selected_league)
+    except Exception:
+        markets = []
+    market_count = len(markets)
+    ok = market_count > 0
     return {
-        "configured": True,
-        "ok": True,
-        "market_count": 0,
-        "sample_market": None,
-        "error": None,
+        "configured": configured,
+        "ok": ok,
+        "market_count": market_count,
+        "sample_market": markets[0] if markets else None,
+        "error": None
+        if ok
+        else "Kalshi is required but unavailable. Fix keys / API and retry.",
     }
 
 
-def match_kalshi_market(game: Dict[str, Any]) -> Dict[str, Any]:
-    return {
+def match_kalshi_market(game: Dict[str, Any], kalshi_markets: List[Dict[str, Any]]) -> Dict[str, Any]:
+    base = {
         "kalshi_available": False,
-        "kalshi_label": "no_match",
+        "kalshi_label": None,
         "kalshi_event_ticker": None,
-        "kalshi_reason": "Kalshi matching not yet implemented",
+        "kalshi_reason": "kalshi_not_configured",
+        "kalshi_matched": False,
+        "kalshi_prob": None,
+        "kalshi_market_type": None,
+        "kalshi_match_score": None,
     }
+    if not kalshi_integrator:
+        return base
+    try:
+        kalshi_integrator._markets_cache = kalshi_markets
+        kalshi_integrator._markets_cache_ts = time.time()
+        result = match_game_to_kalshi(
+            game.get("league"),
+            game.get("home_team"),
+            game.get("away_team"),
+            game.get("commence_time_utc"),
+            integrator=kalshi_integrator,
+            status="open",
+        )
+        return {
+            "kalshi_available": result.kalshi_available,
+            "kalshi_label": result.label,
+            "kalshi_event_ticker": result.raw_event_id,
+            "kalshi_reason": result.reason,
+            "kalshi_matched": result.matched,
+            "kalshi_prob": result.probability if result else None,
+            "kalshi_market_type": result.market_type,
+            "kalshi_match_score": None,
+        }
+    except Exception:
+        st.session_state["last_exception"] = traceback.format_exc()
+        return {**base, "kalshi_reason": "kalshi_match_error"}
 
 
 # -----------------
@@ -600,9 +669,11 @@ with tab_games:
 
 with tab_master:
     st.header("Master Analysis")
-    kalshi_status = kalshi_health_check()
+    kalshi_status = kalshi_health_check(league)
     if not kalshi_status.get("ok"):
-        st.error(kalshi_status.get("error") or "Kalshi is required but unavailable.")
+        st.error(
+            "Kalshi is required and is not healthy (missing keys / 0 markets / auth error). Fix Kalshi first."
+        )
         st.info("Master Analysis is disabled until Kalshi is available.")
     run_master = st.button(
         "Run Master Analysis",
@@ -611,7 +682,16 @@ with tab_master:
         help="Requires Kalshi availability",
     )
     games = st.session_state.get("games", [])
+    if run_master and not kalshi_status.get("ok"):
+        st.error("Kalshi is required but unavailable. Fix Kalshi first.")
+        st.stop()
     if run_master:
+        kalshi_markets = fetch_kalshi_markets(league)
+        if not kalshi_markets:
+            st.error(
+                "Kalshi is required but unavailable. Fix keys / API and retry."
+            )
+            st.stop()
         rows_out: List[Dict[str, Any]] = []
         master_stats = {
             "games_in": len(games),
@@ -619,7 +699,10 @@ with tab_master:
             "h2h_found": 0,
             "exceptions": 0,
             "market_rows_out": 0,
+            "kalshi_matches": 0,
+            "kalshi_total": len(games),
         }
+        kalshi_match_results: List[Dict[str, Any]] = []
         for g in games:
             warnings: List[str] = list(g.get("warnings") or [])
             league_name = g.get("league")
@@ -628,9 +711,17 @@ with tab_master:
             commence_iso = g.get("commence_time_iso_utc") or safe_iso(g.get("commence_time_iso"))
             commence_local = fmt_local_time(g.get("commence_time_local"))
             commence_date_local = g.get("commence_date_local") or ""
-            kalshi_match = match_kalshi_market(g)
-            if not kalshi_match.get("kalshi_available"):
-                warnings.append("kalshi_no_match")
+            kalshi_match = match_kalshi_market(g, kalshi_markets)
+            if not kalshi_match.get("kalshi_matched"):
+                warnings.append(f"kalshi_{kalshi_match.get('kalshi_reason')}")
+            else:
+                master_stats["kalshi_matches"] += 1
+            kalshi_match_results.append({
+                "home": home,
+                "away": away,
+                "league": league_name,
+                **kalshi_match,
+            })
 
             try:
                 ai_prob = get_vertex_prob(g)
@@ -679,6 +770,9 @@ with tab_master:
                         "kalshi_available": kalshi_match.get("kalshi_available"),
                         "kalshi_label": kalshi_match.get("kalshi_label"),
                         "kalshi_event_ticker": kalshi_match.get("kalshi_event_ticker"),
+                        "kalshi_matched": kalshi_match.get("kalshi_matched"),
+                        "kalshi_prob": kalshi_match.get("kalshi_prob"),
+                        "kalshi_reason": kalshi_match.get("kalshi_reason"),
                     }
                 )
                 master_stats["h2h_found"] += 1
@@ -723,6 +817,9 @@ with tab_master:
                         "kalshi_available": kalshi_match.get("kalshi_available"),
                         "kalshi_label": kalshi_match.get("kalshi_label"),
                         "kalshi_event_ticker": kalshi_match.get("kalshi_event_ticker"),
+                        "kalshi_matched": kalshi_match.get("kalshi_matched"),
+                        "kalshi_prob": kalshi_match.get("kalshi_prob"),
+                        "kalshi_reason": kalshi_match.get("kalshi_reason"),
                     }
                 )
                 spread_row_added = True
@@ -764,6 +861,9 @@ with tab_master:
                         "kalshi_available": kalshi_match.get("kalshi_available"),
                         "kalshi_label": kalshi_match.get("kalshi_label"),
                         "kalshi_event_ticker": kalshi_match.get("kalshi_event_ticker"),
+                        "kalshi_matched": kalshi_match.get("kalshi_matched"),
+                        "kalshi_prob": kalshi_match.get("kalshi_prob"),
+                        "kalshi_reason": kalshi_match.get("kalshi_reason"),
                     }
                 )
                 total_row_added = True
@@ -788,6 +888,9 @@ with tab_master:
                         "kalshi_available": kalshi_match.get("kalshi_available"),
                         "kalshi_label": kalshi_match.get("kalshi_label"),
                         "kalshi_event_ticker": kalshi_match.get("kalshi_event_ticker"),
+                        "kalshi_matched": kalshi_match.get("kalshi_matched"),
+                        "kalshi_prob": kalshi_match.get("kalshi_prob"),
+                        "kalshi_reason": kalshi_match.get("kalshi_reason"),
                     }
                 )
                 master_stats["market_rows_out"] += 1
@@ -796,6 +899,12 @@ with tab_master:
         master_stats["rows_out"] = len(df)
         st.session_state["last_rows_out"] = len(df)
         st.session_state["master_stats"] = master_stats
+        st.session_state["kalshi_match_results"] = kalshi_match_results
+        matches = master_stats.get("kalshi_matches", 0)
+        total_games = master_stats.get("kalshi_total", 0) or 1
+        st.caption(
+            f"Kalshi matches: {matches}/{total_games} ({matches/total_games:.1%})"
+        )
 
         if master_stats["games_in"] > 0 and master_stats["rows_out"] == 0:
             st.error("Master analysis produced 0 rows; see debug stats below.")
@@ -814,14 +923,14 @@ with tab_master:
 
 with tab_kalshi:
     st.header("Kalshi Health")
-    kalshi_status = kalshi_health_check()
+    kalshi_status = kalshi_health_check(league)
     st.json(kalshi_status)
     if not kalshi_status.get("configured"):
         st.error("Kalshi is required but not configured.")
     elif not kalshi_status.get("ok"):
-        st.error("Kalshi is configured but unavailable. Fix keys/API and retry.")
+        st.error("Kalshi is required but unavailable. Fix keys/API and retry.")
     else:
-        st.success("Kalshi credentials detected. Full integration coming soon.")
+        st.success("Kalshi credentials detected and markets available.")
 
 
 with tab_sentiment:
@@ -884,7 +993,23 @@ with tab_debug:
         st.code(json.dumps(games[0], indent=2, default=str))
 
     st.subheader("Kalshi health")
-    st.json(kalshi_health_check())
+    kalshi_health = kalshi_health_check(league)
+    st.json(kalshi_health)
+    if st.session_state.get("kalshi_match_results"):
+        matches = st.session_state.get("kalshi_match_results")
+        matched = [m for m in matches if m.get("kalshi_matched")]
+        non_matches = [m for m in matches if not m.get("kalshi_matched")]
+        if matched:
+            st.caption("Sample matched market")
+            st.json(matched[0])
+        if non_matches:
+            reasons = {}
+            for m in non_matches:
+                reason = m.get("kalshi_reason") or "unknown"
+                reasons[reason] = reasons.get(reason, 0) + 1
+            top_reasons = sorted(reasons.items(), key=lambda x: x[1], reverse=True)[:5]
+            st.caption("Top non-match reasons")
+            st.json(top_reasons)
 
     if "master_stats" in st.session_state:
         st.subheader("Master analysis stats")
