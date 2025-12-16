@@ -235,8 +235,9 @@ def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time:
         return NBA_TEAM_CODE_MAP.get(norm)
 
     def _nba_date_token(dt: datetime) -> str:
-        local_dt = dt.astimezone(NBA_TZ)
-        return local_dt.strftime("%y%b%d").upper()
+        """Kalshi winner tickers use the UTC date token (YYMONDD)."""
+        dt_utc = dt.astimezone(pytz.UTC)
+        return dt_utc.strftime("%y%b%d").upper()
 
     def _nba_bucket_and_match() -> KalshiMatchResult:
         if not isinstance(game_time, datetime):
@@ -254,7 +255,7 @@ def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time:
         if game_dt.tzinfo is None:
             game_dt = NBA_TZ.localize(game_dt)
         game_dt_utc = game_dt.astimezone(pytz.UTC)
-        date_token = _nba_date_token(game_dt)
+        date_token = _nba_date_token(game_dt_utc)
         away_code = _nba_code(away_team)
         home_code = _nba_code(home_team)
         if not away_code or not home_code:
@@ -274,6 +275,7 @@ def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time:
             )
 
         matchup_code = f"{away_code}{home_code}"
+        alt_matchup_code = f"{home_code}{away_code}"
         bucket_info = kalshi.get_markets_for_date_token(
             league_key, date_token, status=status
         )
@@ -281,7 +283,7 @@ def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time:
         all_markets = bucket_info.get("all_markets") or []
         meta = bucket_info.get("meta", {})
 
-        # De-dupe by event_ticker
+        # De-dupe by event_ticker and enforce strict UTC date + matchup code
         deduped: Dict[str, Dict[str, Any]] = {}
         for m in all_markets:
             et = str(m.get("event_ticker") or m.get("ticker") or "")
@@ -289,12 +291,13 @@ def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time:
                 deduped[et] = m
         markets = list(deduped.values())
 
+        strict_prefix = f"KXNBAGAME-{date_token}"
         matchup_candidates: List[Dict[str, Any]] = []
         for m in markets:
             et_upper = str(m.get("event_ticker") or "").upper()
-            if not et_upper.startswith("KXNBAGAME-"):
+            if not et_upper.startswith(strict_prefix):
                 continue
-            if matchup_code not in et_upper:
+            if matchup_code not in et_upper and alt_matchup_code not in et_upper:
                 continue
             matchup_candidates.append(m)
 
@@ -303,6 +306,7 @@ def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time:
             "away_code": away_code,
             "home_code": home_code,
             "matchup_code": matchup_code,
+            "kalshi_date_token_used": date_token,
             "candidate_event_tickers": [
                 f"KXNBAGAME-{date_token}{away_code}{home_code}",
                 f"KXNBAGAME-{date_token}{home_code}{away_code}",
@@ -312,32 +316,6 @@ def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time:
         }
 
         if not matchup_candidates:
-            nearby: List[Dict[str, Any]] = []
-            for m in markets:
-                et_upper = str(m.get("event_ticker") or "").upper()
-                if not et_upper.startswith("KXNBAGAME-"):
-                    continue
-                has_any_code = away_code in et_upper or home_code in et_upper
-                if not has_any_code:
-                    continue
-                mt = kalshi._best_market_time(m)
-                diff_hours = None
-                if mt and game_dt_utc:
-                    diff_hours = abs((mt - game_dt_utc).total_seconds()) / 3600.0
-                nearby.append(
-                    {
-                        "event_ticker": et_upper,
-                        "title": m.get("title"),
-                        "diff_hours": diff_hours,
-                    }
-                )
-            nearby_sorted = sorted(
-                nearby,
-                key=lambda x: x.get("diff_hours")
-                if x.get("diff_hours") is not None
-                else float("inf"),
-            )
-            debug_info["nearby_one_team_candidates"] = nearby_sorted[:10]
             return KalshiMatchResult(
                 matched=False,
                 kalshi_available=True,
@@ -345,7 +323,7 @@ def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time:
                 probability=None,
                 raw_event_id=None,
                 league=league_key,
-                reason="no_matchup_code_market",
+                reason="no_strict_kalshi_game_match_for_utc_date",
                 debug=debug_info,
             )
 
