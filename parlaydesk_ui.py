@@ -11,11 +11,15 @@ def render_debug_panel(
     last_exception: Optional[str],
     master_stats: Optional[Dict[str, Any]] = None,
     game_sample: Optional[List[Dict[str, Any]]] = None,
+    normalization_stats: Optional[Dict[str, Any]] = None,
 ):
     with st.expander("Debug info", expanded=False):
         st.write("API configuration flags:")
         st.json(api_config)
         st.write(f"Analyzer path: {analyzer_path}")
+        if normalization_stats:
+            st.write("Game normalization stats:")
+            st.json(normalization_stats)
         if master_stats:
             st.write("Vertex Master Analyzer stats:")
             st.json(master_stats)

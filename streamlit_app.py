@@ -76,6 +76,68 @@ def fetch_odds_games(odds_client: Any, sport_key: str) -> List[Dict[str, Any]]:
     return games
 
 
+def normalize_oddsapi_game(game: Dict[str, Any]) -> Dict[str, Any]:
+    """Ensure Odds API game dict has home/away and serializable commence_time."""
+
+    warnings: List[str] = []
+    home = game.get("home_team")
+    away = game.get("away_team")
+
+    # Derive away/home from bookmaker outcomes when missing
+    if not away or str(away).strip() == "":
+        candidates: List[str] = []
+        for bm in game.get("bookmakers", []) or []:
+            for market in bm.get("markets", []) or []:
+                for outcome in market.get("outcomes", []) or []:
+                    name = outcome.get("name")
+                    if not name:
+                        continue
+                    if str(name).lower() in {"over", "under"}:
+                        continue
+                    candidates.append(str(name))
+
+        unique_candidates = list(dict.fromkeys(candidates))
+        if len(unique_candidates) == 2:
+            if home and home in unique_candidates:
+                alt = [c for c in unique_candidates if c != home]
+                away = alt[0] if alt else unique_candidates[0]
+            elif home:
+                away = unique_candidates[0]
+                if len(unique_candidates) > 1:
+                    home = unique_candidates[1]
+            else:
+                home, away = unique_candidates[0], unique_candidates[1]
+        elif unique_candidates:
+            # Only one team found; leave home as-is and set unknown away
+            away = away or "UNKNOWN_AWAY"
+            warnings.append("missing_away_team")
+        else:
+            away = away or "UNKNOWN_AWAY"
+            warnings.append("missing_away_team")
+
+    commence_time = game.get("commence_time")
+    commence_time_iso = None
+    if isinstance(commence_time, datetime):
+        commence_time_iso = commence_time.isoformat()
+    elif commence_time:
+        try:
+            commence_time_iso = datetime.fromisoformat(str(commence_time).replace("Z", "+00:00")).isoformat()
+        except Exception:
+            commence_time_iso = None
+
+    normalized = dict(game)
+    normalized.update(
+        {
+            "home_team": home,
+            "away_team": away,
+            "commence_time": commence_time,
+            "commence_time_iso": commence_time_iso,
+            "normalization_warnings": warnings,
+        }
+    )
+    return normalized
+
+
 def load_theover_data() -> Dict[str, pd.DataFrame]:
     """Load supplemental theover.ai CSVs if present."""
     data: Dict[str, pd.DataFrame] = {}
@@ -92,8 +154,17 @@ def load_theover_data() -> Dict[str, pd.DataFrame]:
 
 def build_all_games(odds_client: Any, sport_key: str) -> List[Dict[str, Any]]:
     base_games = fetch_odds_games(odds_client, sport_key)
-    if base_games:
-        return base_games
+    before_missing = sum(1 for g in base_games if not g.get("away_team"))
+    normalized_games = [normalize_oddsapi_game(g) for g in base_games]
+    after_missing = sum(1 for g in normalized_games if not g.get("away_team"))
+    warning_count = sum(
+        len(g.get("normalization_warnings", [])) for g in normalized_games
+    )
+    st.session_state["missing_away_pre"] = before_missing
+    st.session_state["missing_away_post"] = after_missing
+    st.session_state["normalization_warnings"] = warning_count
+    if normalized_games:
+        return normalized_games
     # Odds API missing or returned nothing; fall back to CSV-only mode.
     csv_path = Path("data/theover_spreads.csv")
     if not csv_path.exists():
@@ -112,6 +183,11 @@ def build_all_games(odds_client: Any, sport_key: str) -> List[Dict[str, Any]]:
                     "bookmakers": [],
                 }
             )
+        st.session_state["missing_away_pre"] = st.session_state.get("missing_away_pre", 0)
+        st.session_state["missing_away_post"] = sum(1 for g in games if not g.get("away_team"))
+        st.session_state["normalization_warnings"] = st.session_state.get(
+            "normalization_warnings", 0
+        )
         st.warning("Operating in CSV-only mode; odds may be stale.")
         return games
     except Exception as exc:
@@ -274,6 +350,13 @@ def main():
         last_exception=st.session_state.get("last_exception"),
         master_stats=st.session_state.get("vertex_master_stats"),
         game_sample=st.session_state.get("game_sample"),
+        normalization_stats={
+            "missing_away_pre": st.session_state.get("missing_away_pre", 0),
+            "missing_away_post": st.session_state.get("missing_away_post", 0),
+            "normalization_warnings": st.session_state.get(
+                "normalization_warnings", 0
+            ),
+        },
     )
 
 

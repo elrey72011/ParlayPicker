@@ -183,6 +183,7 @@ class VertexMasterAnalyzer:
             "missing_kalshi": 0,
             "missing_theover": 0,
             "no_candidates": 0,
+            "unknown_away": 0,
         }
         progress = st.progress(0)
 
@@ -248,6 +249,10 @@ class VertexMasterAnalyzer:
                 feats = self.build_comprehensive_features(
                     game, game_league, kalshi_info
                 )
+
+                away_name = feats.get("away_team") or ""
+                if str(away_name).upper() == "UNKNOWN_AWAY" or away_name == "":
+                    stats["unknown_away"] += 1
 
                 if not feats.get("kalshi_available"):
                     stats["missing_kalshi"] += 1
@@ -487,6 +492,7 @@ class VertexMasterAnalyzer:
             "home_team": game.get("home_team"),
             "away_team": game.get("away_team"),
             "game_time": game_time,
+            "normalization_warnings": game.get("normalization_warnings", []),
         }
 
         features.update(
@@ -666,7 +672,11 @@ class VertexMasterAnalyzer:
             except Exception:
                 commence_utc = None
 
-        warn_text = warning or ""
+        warn_parts = []
+        if warning:
+            warn_parts.append(warning)
+        warn_parts.extend(feats.get("normalization_warnings", []))
+        warn_text = "; ".join([p for p in warn_parts if p])
         row = {
             "League": best.get("league", game_league),
             "Home": feats.get("home_team"),
