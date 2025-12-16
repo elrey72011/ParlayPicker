@@ -276,33 +276,12 @@ def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time:
 
 class KalshiIntegrator:
     def __init__(self, api_key: Optional[str] = None, api_secret: Optional[str] = None) -> None:
-        # Resolve key + secret from args, env, or Streamlit secrets
-        self.api_key = (
-            api_key
-            or os.getenv("KALSHI_API_KEY")
-            or st.secrets.get("KALSHI_API_KEY", "")
-        )
-        self.api_secret = (
-            api_secret
-            or st.secrets.get("KALSHI_API_SECRET", "")
-            or os.getenv("KALSHI_API_SECRET", "")
-        )
+        # Resolve key + secret from args, env, or Streamlit secrets (only the official names)
+        self.api_key = api_key or st.secrets.get("KALSHI_API_KEY") or os.getenv("KALSHI_API_KEY")
+        raw_secret = api_secret or st.secrets.get("KALSHI_API_SECRET") or os.getenv("KALSHI_API_SECRET")
 
         # --- Clean private key format ---
-        if self.api_secret:
-            # Turn literal "\n" into real newlines
-            cleaned = self.api_secret.replace("\\n", "\n").strip()
-
-            # If it already looks like PEM, trust it
-            if "-----BEGIN" in cleaned:
-                self.api_secret = cleaned
-            else:
-                # Only if you're really storing just the body (not recommended)
-                self.api_secret = (
-                    "-----BEGIN PRIVATE KEY-----\n"
-                    + cleaned +
-                    "\n-----END PRIVATE KEY-----"
-                )
+        self.api_secret_pem = self._normalize_secret(raw_secret)
 
         self.api_url = "https://api.elections.kalshi.com/trade-api/v2"
 
@@ -312,13 +291,25 @@ class KalshiIntegrator:
         self.cache_ttl_seconds: int = 300
         self.last_error: Optional[str] = None
 
+    @staticmethod
+    def _normalize_secret(secret_val: Optional[str]) -> Optional[str]:
+        if not secret_val:
+            return None
+        cleaned = str(secret_val).replace("\\n", "\n").strip()
+        if not cleaned:
+            return None
+        if "-----BEGIN RSA PRIVATE KEY-----" in cleaned or "-----BEGIN PRIVATE KEY-----" in cleaned:
+            return cleaned
+        # If no PEM markers, wrap as PKCS8
+        return "-----BEGIN PRIVATE KEY-----\n" + cleaned + "\n-----END PRIVATE KEY-----"
+
     def _sign_request(self, method: str, path: str, timestamp: str) -> str:
-        if not self.api_secret:
+        if not self.api_secret_pem:
             return ""
         msg_string = f"{timestamp}{method}{path}"
         try:
             private_key = serialization.load_pem_private_key(
-                self.api_secret.encode("utf-8"),
+                self.api_secret_pem.encode("utf-8"),
                 password=None,
             )
             signature = private_key.sign(
@@ -333,6 +324,63 @@ class KalshiIntegrator:
         except Exception as e:
             logger.error(f"Signing failed: {e}")
             return ""
+
+    def health_check(self) -> Dict[str, Any]:
+        configured = bool(self.api_key and self.api_secret_pem)
+        if not configured:
+            return {
+                "configured": False,
+                "ok": False,
+                "market_count": 0,
+                "sample_market": None,
+                "error": "Kalshi is required but not configured.",
+            }
+
+        endpoint = "/markets"
+        params = {"limit": 50}
+        url = f"{self.api_url}{endpoint}"
+        path_for_signing = f"/trade-api/v2{endpoint}"
+        timestamp = str(int(time.time() * 1000))
+        signature = self._sign_request("GET", path_for_signing, timestamp)
+        headers = {
+            "Content-Type": "application/json",
+            "KALSHI-ACCESS-KEY": self.api_key,
+            "KALSHI-ACCESS-SIGNATURE": signature,
+            "KALSHI-ACCESS-TIMESTAMP": timestamp,
+        }
+        try:
+            resp = requests.get(url, headers=headers, params=params, timeout=10)
+            status_code = resp.status_code
+            snippet = resp.text[:300] if resp is not None else None
+            if status_code != 200:
+                return {
+                    "configured": True,
+                    "ok": False,
+                    "market_count": 0,
+                    "sample_market": None,
+                    "status_code": status_code,
+                    "url": url,
+                    "response_text": snippet,
+                    "error": f"Kalshi auth failed: status {status_code}",
+                }
+            data = resp.json()
+            markets = data.get("markets", []) or []
+            return {
+                "configured": True,
+                "ok": len(markets) > 0,
+                "market_count": len(markets),
+                "sample_market": markets[0] if markets else None,
+                "markets": markets,
+                "error": None if markets else "Kalshi returned zero markets.",
+            }
+        except Exception as exc:  # pragma: no cover - defensive
+            return {
+                "configured": True,
+                "ok": False,
+                "market_count": 0,
+                "sample_market": None,
+                "error": str(exc),
+            }
 
     def _make_authenticated_request(
         self,

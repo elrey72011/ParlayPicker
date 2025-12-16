@@ -379,8 +379,14 @@ kalshi_api_key = read_secret("KALSHI_API_KEY") or read_secret("kalshi_api_key")
 kalshi_api_secret = read_secret("KALSHI_API_SECRET") or read_secret("kalshi_api_secret")
 kalshi_integrator: Optional[KalshiIntegrator] = None
 try:
-    if kalshi_api_key and kalshi_api_secret:
-        kalshi_integrator = KalshiIntegrator(kalshi_api_key, kalshi_api_secret)
+    if "kalshi_integrator" not in st.session_state:
+        if kalshi_api_key and kalshi_api_secret:
+            st.session_state["kalshi_integrator"] = KalshiIntegrator(
+                kalshi_api_key, kalshi_api_secret
+            )
+        else:
+            st.session_state["kalshi_integrator"] = None
+    kalshi_integrator = st.session_state.get("kalshi_integrator")
 except Exception:
     st.session_state["last_exception"] = traceback.format_exc()
     kalshi_integrator = None
@@ -596,7 +602,12 @@ def pick_sample_game_market(
 
 
 def kalshi_health_check(selected_league: str) -> Dict[str, Any]:
-    configured = bool(kalshi_integrator and kalshi_api_key and kalshi_api_secret)
+    integrator = st.session_state.get("kalshi_integrator")
+    configured = bool(
+        integrator
+        and getattr(integrator, "api_key", None)
+        and getattr(integrator, "api_secret_pem", None)
+    )
     if not configured:
         return {
             "configured": False,
@@ -607,6 +618,9 @@ def kalshi_health_check(selected_league: str) -> Dict[str, Any]:
             "sample_game_market_reason": None,
             "error": "Kalshi is required but not configured.",
         }
+
+    base_health: Dict[str, Any] = integrator.health_check() if integrator else {}
+    markets: List[Dict[str, Any]] = base_health.get("markets", []) or []
     try:
         games = st.session_state.get("games", [])
         commence_times_utc = [
@@ -618,22 +632,27 @@ def kalshi_health_check(selected_league: str) -> Dict[str, Any]:
             or g.get("commence_time")
             or g.get("commence_time_iso")
         ]
-        markets = fetch_kalshi_markets(selected_league, commence_times_utc)
+        league_markets = fetch_kalshi_markets(selected_league, commence_times_utc)
+        if league_markets:
+            markets = league_markets
     except Exception:
-        markets = []
+        st.session_state["last_exception"] = traceback.format_exc()
+
     market_count = len(markets)
-    ok = market_count > 0
+    ok = market_count > 0 and bool(base_health.get("ok", True))
     sample_game_market, sample_reason = pick_sample_game_market(markets)
     return {
         "configured": configured,
         "ok": ok,
-        "market_count": market_count,
-        "sample_market": markets[0] if markets else None,
+        "market_count": market_count or base_health.get("market_count", 0),
+        "sample_market": markets[0] if markets else base_health.get("sample_market"),
         "sample_game_market": sample_game_market,
         "sample_game_market_reason": sample_reason,
-        "error": None
-        if ok
-        else "Kalshi is required but unavailable. Fix keys / API and retry.",
+        "error": base_health.get("error")
+        if not ok
+        else None,
+        "status_code": base_health.get("status_code"),
+        "response_text": base_health.get("response_text"),
     }
 
 
@@ -1284,9 +1303,10 @@ with tab_master:
     st.header("Master Analysis")
     kalshi_status = kalshi_health_check(league)
     if not kalshi_status.get("ok"):
-        st.error(
-            "Kalshi is required and is not healthy (missing keys / 0 markets / auth error). Fix Kalshi first."
-        )
+        error_detail = kalshi_status.get("error") or "Kalshi is required and is not healthy (missing keys / 0 markets / auth error). Fix Kalshi first."
+        if kalshi_status.get("status_code"):
+            error_detail = f"{error_detail} (status {kalshi_status.get('status_code')}: {kalshi_status.get('response_text')})"
+        st.error(error_detail)
         st.info("Master Analysis is disabled until Kalshi is available.")
     run_master = st.button(
         "Run Master Analysis",
