@@ -578,6 +578,21 @@ def parse_kalshi_datetime(dt_value: Any) -> Optional[datetime]:
         return None
 
 
+def kalshi_market_best_time_utc(m: Dict[str, Any]) -> Optional[datetime]:
+    """Return the best available Kalshi timestamp for matching."""
+    for key in [
+        "expected_expiration_time",
+        "latest_expiration_time",
+        "close_time",
+        "expiration_time",
+        "open_time",
+    ]:
+        candidate = parse_kalshi_datetime(m.get(key))
+        if candidate:
+            return candidate
+    return None
+
+
 def filter_kalshi_game_markets(
     markets: List[Dict[str, Any]],
     game_time_utc: Optional[datetime],
@@ -595,20 +610,23 @@ def filter_kalshi_game_markets(
             try:
                 title = str(m.get("title") or "")
                 ticker = str(m.get("event_ticker") or m.get("ticker") or "")
+                rules = str(m.get("rules") or "")
                 lower_title = title.lower()
+                combined_lower = f"{lower_title} {rules.lower()}"
                 looks_game = any(
-                    token in lower_title for token in [" vs ", " at ", "@", " - "]
+                    token in combined_lower for token in [" vs ", " at ", "@", " - "]
                 ) or (ticker and "game" in ticker.lower())
                 if not looks_game:
                     continue
-                candidate_time = parse_kalshi_datetime(
-                    m.get("close_time")
-                ) or parse_kalshi_datetime(m.get("expiration_time"))
+                candidate_time = kalshi_market_best_time_utc(m)
                 if game_dt:
                     if candidate_time and abs(candidate_time - game_dt) <= window:
                         filtered.append(m)
                     elif candidate_time is None:
-                        continue
+                        if any(tok in combined_lower for tok in [" at ", " vs ", "@"]):
+                            filtered.append(m)
+                        else:
+                            continue
                 else:
                     filtered.append(m)
             except Exception:
@@ -638,6 +656,13 @@ def classify_kalshi_market(market: Dict[str, Any]) -> str:
     if "game winner" in title or "wins the game" in rules or "wins outright" in rules:
         return "winner"
     return "other"
+
+
+def team_tokens(name: str) -> set:
+    cleaned = re.sub(r"[^a-z0-9 ]", " ", str(name or "").lower())
+    tokens = [t for t in cleaned.split() if t]
+    stopwords = {"the", "fc", "sc", "university", "state", "college"}
+    return {t for t in tokens if t not in stopwords}
 
 
 def extract_teams_from_kalshi_text(text: Any) -> Tuple[Optional[str], Optional[str]]:
@@ -678,6 +703,8 @@ def match_kalshi_market(
     def team_score(market: Dict[str, Any]) -> float:
         home_norm = norm_team(game.get("home_team"))
         away_norm = norm_team(game.get("away_team"))
+        home_tokens = team_tokens(game.get("home_team"))
+        away_tokens = team_tokens(game.get("away_team"))
         title_away, title_home = extract_teams_from_kalshi_text(market.get("title"))
         rules_away, rules_home = extract_teams_from_kalshi_text(market.get("rules"))
         guesses = [
@@ -692,16 +719,21 @@ def match_kalshi_market(
                     away_guess_norm == away_norm and home_guess_norm == home_norm
                 ) or (away_guess_norm == home_norm and home_guess_norm == away_norm):
                     return 1.0
-        combined_text = f"{market.get('title') or ''} {market.get('rules') or ''}".lower()
-        if away_norm and home_norm and away_norm in combined_text and home_norm in combined_text:
+        combined_tokens = team_tokens(
+            f"{market.get('title') or ''} {market.get('rules') or ''}"
+        )
+        if (
+            away_tokens
+            and home_tokens
+            and away_tokens.issubset(combined_tokens)
+            and home_tokens.issubset(combined_tokens)
+        ):
             return 1.0
         return 0.0
 
     def time_score(market: Dict[str, Any]) -> float:
         game_dt = game.get("commence_time_utc")
-        market_dt = parse_kalshi_datetime(market.get("close_time")) or parse_kalshi_datetime(
-            market.get("expiration_time")
-        )
+        market_dt = kalshi_market_best_time_utc(market)
         if not isinstance(game_dt, datetime) or market_dt is None:
             return 0.0
         delta_hours = abs((market_dt - game_dt).total_seconds()) / 3600.0
@@ -956,6 +988,10 @@ with tab_master:
         filtered_counts: List[int] = []
         sample_filtered_for_first_game: List[Dict[str, Any]] = []
         first_game_candidates: Dict[str, Any] = {}
+        first_filtered_best_time = None
+        first_game_commence_utc = None
+        first_filtered_market_title = None
+        first_filtered_market_ticker = None
         rows_out: List[Dict[str, Any]] = []
         master_stats = {
             "games_in": len(games),
@@ -987,6 +1023,16 @@ with tab_master:
                     }
                     for fm in filtered_markets[:10]
                 ]
+                if filtered_markets:
+                    first_filtered_best_time = safe_iso(
+                        kalshi_market_best_time_utc(filtered_markets[0])
+                    )
+                    first_game_commence_utc = commence_iso
+                    first_filtered_market_title = filtered_markets[0].get("title")
+                    first_filtered_market_ticker = (
+                        filtered_markets[0].get("event_ticker")
+                        or filtered_markets[0].get("ticker")
+                    )
             partition_counts = {
                 "total": len([m for m in filtered_markets if classify_kalshi_market(m) == "total"]),
                 "spread": len([m for m in filtered_markets if classify_kalshi_market(m) == "spread"]),
@@ -1234,6 +1280,10 @@ with tab_master:
             "filtered_markets_min": min(filtered_counts) if filtered_counts else 0,
             "filtered_markets_max": max(filtered_counts) if filtered_counts else 0,
             "sample_filtered_first_game": sample_filtered_for_first_game,
+            "first_filtered_market_best_time_utc": first_filtered_best_time,
+            "first_game_commence_time_utc": first_game_commence_utc,
+            "first_filtered_market_title": first_filtered_market_title,
+            "first_filtered_market_ticker": first_filtered_market_ticker,
             "first_game_partition_counts": first_game_candidates.get("partition_counts")
             if first_game_candidates
             else None,
