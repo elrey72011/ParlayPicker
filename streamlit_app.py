@@ -445,14 +445,19 @@ def fetch_kalshi_markets(selected_league: str) -> List[Dict[str, Any]]:
     if not kalshi_integrator:
         return []
     try:
-        markets = kalshi_integrator.get_sports_markets()
-        prefix = LEAGUE_SERIES_MAP.get((selected_league or "").upper())
-        if prefix:
-            markets = [
-                m for m in markets if str(m.get("ticker") or "").upper().startswith(prefix)
-            ]
+        markets = kalshi_integrator.get_markets_for_league(selected_league)
         markets = markets or []
+        ticker_upper = [str(m.get("event_ticker") or m.get("ticker") or "").upper() for m in markets]
         st.session_state["kalshi_all_markets"] = markets
+        st.session_state["kalshi_prefix_counts"] = {
+            "total_markets_fetched": len(markets),
+            "count_prefix_KXNBAGAME": len([t for t in ticker_upper if t.startswith("KXNBAGAME")]),
+            "count_prefix_KXNBATOTAL": len([t for t in ticker_upper if t.startswith("KXNBATOTAL")]),
+            "count_prefix_KXNBASPREAD": len([t for t in ticker_upper if t.startswith("KXNBASPREAD")]),
+        }
+        st.session_state["kalshi_prefix_samples_game"] = [
+            t for t in ticker_upper if t.startswith("KXNBAGAME")
+        ][:20]
         return markets
     except Exception:
         st.session_state["last_exception"] = traceback.format_exc()
@@ -1728,6 +1733,14 @@ with tab_debug:
     if filter_stats:
         st.subheader("Kalshi filtering stats")
         st.json(filter_stats)
+    prefix_counts = st.session_state.get("kalshi_prefix_counts")
+    if prefix_counts:
+        st.subheader("Kalshi ticker prefix counts")
+        st.json(prefix_counts)
+        samples = st.session_state.get("kalshi_prefix_samples_game") or []
+        if samples:
+            st.caption("First 20 KXNBAGAME tickers")
+            st.json(samples)
     all_markets_debug = st.session_state.get("kalshi_all_markets") or []
     if games and all_markets_debug:
         fg = games[0]

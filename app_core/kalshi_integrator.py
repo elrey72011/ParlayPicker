@@ -365,54 +365,74 @@ class KalshiIntegrator:
         return None
 
     def get_markets(self, status: str = "open") -> List[Dict[str, Any]]:
-        """
-        Fetches ALL markets by handling pagination (cursors).
-        """
+        """Fetch all markets with pagination support and a sane cap."""
         now = time.time()
-        # 1) Use cache if still fresh (e.g., 5 minutes)
         if self._markets_cache and (now - self._markets_cache_ts) < self.cache_ttl_seconds:
             logger.info(f"Using cached markets ({len(self._markets_cache)} items)")
             return self._markets_cache
 
-        all_markets = []
-        cursor = None
-        
-        # Loop until no cursor is returned
+        all_markets: List[Dict[str, Any]] = []
+        cursor: Optional[str] = None
+        max_items = 5000
+
         while True:
-            params = {"limit": 1000, "status": status}
+            params = {"limit": 1000}
+            if status:
+                params["status"] = status
             if cursor:
                 params["cursor"] = cursor
 
             data = self._make_authenticated_request("GET", "/markets", params=params)
-            
             if not data:
                 break
-            
-            markets = data.get("markets", [])
-            if not markets:
-                break
-                
+
+            markets = data.get("markets", []) or []
             all_markets.extend(markets)
-            cursor = data.get("cursor")
-            
+
+            if len(all_markets) >= max_items:
+                all_markets = all_markets[:max_items]
+                logger.warning("Reached pagination cap when loading Kalshi markets")
+                break
+
+            cursor = (
+                data.get("cursor")
+                or data.get("next_cursor")
+                or data.get("next")
+                or data.get("next_token")
+            )
             if not cursor:
                 break
-                
-            # Rate limit safety
             time.sleep(0.1)
 
-        # Update cache
         self._markets_cache = all_markets
         self._markets_cache_ts = now
         logger.info(f"✅ Successfully loaded {len(all_markets)} Kalshi markets (paginated)")
         return all_markets
+
+    def get_markets_for_league(self, league: str) -> List[Dict[str, Any]]:
+        """Return markets for a given league without excluding game winners."""
+        try:
+            markets = self.get_markets()
+            prefix = LEAGUE_SERIES_MAP.get((league or "").upper())
+            if prefix:
+                return [
+                    m
+                    for m in markets
+                    if str(m.get("ticker") or m.get("event_ticker") or "")
+                    .upper()
+                    .startswith(prefix)
+                ]
+            return markets
+        except Exception:
+            logger.error("Kalshi get_markets_for_league failed", exc_info=True)
+            return []
 
     # Helpers required by app
     def get_sports_markets(self):
         return self.get_markets()
 
     def get_game_markets_for_events(self, league):
-        return self.get_markets()
+        return self.get_markets_for_league(league)
 
     def filter_markets_closing_today(self, markets):
         return markets
