@@ -130,11 +130,6 @@ project_id = read_secret("GCP_PROJECT_ID", "elite-hangar-479017-m8")
 location = read_secret("GCP_LOCATION", "us-central1")
 vertex_endpoint_id = read_secret("VERTEX_ENDPOINT_ID")
 
-            pick = home
-            implied_pick = implied_home
-            if implied_home is not None and implied_away is not None and implied_away > implied_home:
-                pick = away
-                implied_pick = implied_away
 
 @st.cache_data(ttl=60)
 def fetch_odds_games() -> List[Dict[str, Any]]:
@@ -273,14 +268,19 @@ with tab_vertex:
                 master_stats["h2h_found"] += 1
             home_p = american_to_implied(h2h.get("home_odds"))
             away_p = american_to_implied(h2h.get("away_odds"))
-            pick = home
-            implied_pick = home_p
-            if home_p is not None and away_p is not None:
-                if away_p > home_p:
+            implied_home = home_p
+            implied_away = away_p
+            # Decide pick deterministically
+            if implied_home is not None and implied_away is not None:
+                if implied_home >= implied_away:
+                    pick = home
+                    implied_pick = implied_home
+                else:
                     pick = away
-                    implied_pick = away_p
-            elif away:
-                pick = home or away
+                    implied_pick = implied_away
+            else:
+                pick = home
+                implied_pick = implied_home
 
             ai_prob = None
             try:
