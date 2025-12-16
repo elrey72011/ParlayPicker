@@ -574,7 +574,7 @@ with tab_debug:
 
     if games:
         st.subheader("Sample normalized game")
-        st.code(json.dumps(games[0], indent=2))
+        st.code(json.dumps(games[0], indent=2, default=str))
 
     st.subheader("Kalshi health")
     st.json(kalshi_health_check())
