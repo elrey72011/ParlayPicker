@@ -441,11 +441,16 @@ def get_vertex_prob(game: Dict[str, Any]) -> Optional[float]:
 
 
 @st.cache_data(ttl=60)
-def fetch_kalshi_markets(selected_league: str) -> List[Dict[str, Any]]:
+def fetch_kalshi_markets(
+    selected_league: str, commence_times_utc: Optional[List[str]] = None
+) -> List[Dict[str, Any]]:
     if not kalshi_integrator:
         return []
     try:
-        markets = kalshi_integrator.get_markets_for_league(selected_league)
+        commence_tuple = tuple(commence_times_utc or [])
+        markets = kalshi_integrator.get_sports_markets(
+            selected_league, commence_times=list(commence_tuple) if commence_tuple else None
+        )
         markets = markets or []
         ticker_upper = [str(m.get("event_ticker") or m.get("ticker") or "").upper() for m in markets]
         st.session_state["kalshi_all_markets"] = markets
@@ -549,7 +554,17 @@ def kalshi_health_check(selected_league: str) -> Dict[str, Any]:
             "error": "Kalshi is required but not configured.",
         }
     try:
-        markets = fetch_kalshi_markets(selected_league)
+        games = st.session_state.get("games", [])
+        commence_times_utc = [
+            g.get("commence_time_iso_utc")
+            or g.get("commence_time")
+            or g.get("commence_time_iso")
+            for g in games
+            if g.get("commence_time_iso_utc")
+            or g.get("commence_time")
+            or g.get("commence_time_iso")
+        ]
+        markets = fetch_kalshi_markets(selected_league, commence_times_utc)
     except Exception:
         markets = []
     market_count = len(markets)
@@ -1230,7 +1245,16 @@ with tab_master:
         st.error("Kalshi is required but unavailable. Fix Kalshi first.")
         st.stop()
     if run_master:
-        kalshi_markets = fetch_kalshi_markets(league)
+        commence_times_utc = [
+            g.get("commence_time_iso_utc")
+            or g.get("commence_time")
+            or g.get("commence_time_iso")
+            for g in games
+            if g.get("commence_time_iso_utc")
+            or g.get("commence_time")
+            or g.get("commence_time_iso")
+        ]
+        kalshi_markets = fetch_kalshi_markets(league, commence_times_utc)
         if not kalshi_markets:
             st.error(
                 "Kalshi is required but unavailable. Fix keys / API and retry."
