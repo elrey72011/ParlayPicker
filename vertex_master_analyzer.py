@@ -222,6 +222,65 @@ class VertexMasterAnalyzer:
                 "implied_away_prob": implied_away_prob,
             }
 
+        def _extract_primary_odds(game_dict: Dict[str, Any]) -> Dict[str, Any]:
+            """Pull primary ML/Spread odds from bookmaker payload for baseline rows."""
+
+            home_team = game_dict.get("home_team")
+            away_team = game_dict.get("away_team")
+            home_ml = game_dict.get("home_ml_odds")
+            away_ml = game_dict.get("away_ml_odds")
+            implied_home_prob = game_dict.get("implied_home_prob")
+
+            home_spread = game_dict.get("home_spread")
+            away_spread = game_dict.get("away_spread")
+            home_spread_odds = game_dict.get("home_spread_odds")
+            away_spread_odds = game_dict.get("away_spread_odds")
+
+            # Parse bookmaker odds (prefer h2h then spreads)
+            for bm in game_dict.get("bookmakers", []) or []:
+                for market in bm.get("markets", []) or []:
+                    key = (market.get("key") or market.get("outcome_type") or "").lower()
+                    outcomes = market.get("outcomes") or []
+                    if key == "h2h":
+                        for outcome in outcomes:
+                            name = outcome.get("name")
+                            price = outcome.get("price")
+                            if home_team and name == home_team and home_ml is None:
+                                home_ml = price
+                            elif away_team and name == away_team and away_ml is None:
+                                away_ml = price
+                        # Fallback: if teams matched out of order
+                        if home_ml is None and away_ml is None and len(outcomes) == 2:
+                            prices = [outcomes[0].get("price"), outcomes[1].get("price")]
+                            home_ml, away_ml = prices[0], prices[1]
+                    elif key == "spreads":
+                        for outcome in outcomes:
+                            name = outcome.get("name")
+                            point = outcome.get("point")
+                            price = outcome.get("price")
+                            if home_team and name == home_team:
+                                home_spread = point if home_spread is None else home_spread
+                                home_spread_odds = price if home_spread_odds is None else home_spread_odds
+                            elif away_team and name == away_team:
+                                away_spread = point if away_spread is None else away_spread
+                                away_spread_odds = price if away_spread_odds is None else away_spread_odds
+
+            if implied_home_prob is None:
+                implied_home_prob = implied_prob_from_american(home_ml)
+                if implied_home_prob is None and away_ml is not None:
+                    away_imp = implied_prob_from_american(away_ml)
+                    implied_home_prob = 1 - away_imp if away_imp is not None else None
+
+            return {
+                "home_ml_odds": home_ml,
+                "away_ml_odds": away_ml,
+                "implied_home_prob": implied_home_prob,
+                "home_spread": home_spread,
+                "away_spread": away_spread,
+                "home_spread_odds": home_spread_odds,
+                "away_spread_odds": away_spread_odds,
+            }
+
         for idx, game in enumerate(games):
             try:
                 skey = (game.get("sport_key") or "").lower()
