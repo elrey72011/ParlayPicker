@@ -181,11 +181,31 @@ class VertexMasterAnalyzer:
             "rows_out": 0,
             "dropped_missing_teams": 0,
             "dropped_no_markets": 0,
+            "h2h_found_count": 0,
             "vertex_calls": 0,
             "vertex_failures": 0,
+            "vertex_none_count": 0,
             "exceptions_count": 0,
         }
         progress = st.progress(0)
+
+        def _safe_commence_iso(game_dict: Dict[str, Any]) -> Optional[str]:
+            ts = (
+                game_dict.get("commence_time_iso")
+                or game_dict.get("commence_dt")
+                or game_dict.get("commence_time")
+            )
+            if isinstance(ts, datetime):
+                try:
+                    return ts.isoformat()
+                except Exception:
+                    return None
+            if ts:
+                try:
+                    return datetime.fromisoformat(str(ts).replace("Z", "+00:00")).isoformat()
+                except Exception:
+                    return None
+            return None
 
         def _extract_primary_odds(game_dict: Dict[str, Any]) -> Dict[str, Any]:
             """Pull primary ML odds from bookmaker payload for baseline rows."""
@@ -194,12 +214,15 @@ class VertexMasterAnalyzer:
             away_team = game_dict.get("away_team")
             home_ml = game_dict.get("home_ml_odds")
             away_ml = game_dict.get("away_ml_odds")
+            best_book = None
 
             for bm in game_dict.get("bookmakers", []) or []:
                 for market in bm.get("markets", []) or []:
                     key = (market.get("key") or market.get("outcome_type") or "").lower()
                     outcomes = market.get("outcomes") or []
-                    if key == "h2h":
+                    if key == "h2h" and outcomes:
+                        if best_book is None:
+                            best_book = bm.get("title") or bm.get("key")
                         for outcome in outcomes:
                             name = outcome.get("name")
                             price = outcome.get("price")
@@ -210,6 +233,7 @@ class VertexMasterAnalyzer:
                         if home_ml is None and away_ml is None and len(outcomes) == 2:
                             prices = [outcomes[0].get("price"), outcomes[1].get("price")]
                             home_ml, away_ml = prices[0], prices[1]
+                        break
 
             implied_home_prob = implied_prob_from_american(home_ml)
             implied_away_prob = implied_prob_from_american(away_ml)
@@ -220,65 +244,7 @@ class VertexMasterAnalyzer:
                 "away_ml_odds": away_ml,
                 "implied_home_prob": implied_home_prob,
                 "implied_away_prob": implied_away_prob,
-            }
-
-        def _extract_primary_odds(game_dict: Dict[str, Any]) -> Dict[str, Any]:
-            """Pull primary ML/Spread odds from bookmaker payload for baseline rows."""
-
-            home_team = game_dict.get("home_team")
-            away_team = game_dict.get("away_team")
-            home_ml = game_dict.get("home_ml_odds")
-            away_ml = game_dict.get("away_ml_odds")
-            implied_home_prob = game_dict.get("implied_home_prob")
-
-            home_spread = game_dict.get("home_spread")
-            away_spread = game_dict.get("away_spread")
-            home_spread_odds = game_dict.get("home_spread_odds")
-            away_spread_odds = game_dict.get("away_spread_odds")
-
-            # Parse bookmaker odds (prefer h2h then spreads)
-            for bm in game_dict.get("bookmakers", []) or []:
-                for market in bm.get("markets", []) or []:
-                    key = (market.get("key") or market.get("outcome_type") or "").lower()
-                    outcomes = market.get("outcomes") or []
-                    if key == "h2h":
-                        for outcome in outcomes:
-                            name = outcome.get("name")
-                            price = outcome.get("price")
-                            if home_team and name == home_team and home_ml is None:
-                                home_ml = price
-                            elif away_team and name == away_team and away_ml is None:
-                                away_ml = price
-                        # Fallback: if teams matched out of order
-                        if home_ml is None and away_ml is None and len(outcomes) == 2:
-                            prices = [outcomes[0].get("price"), outcomes[1].get("price")]
-                            home_ml, away_ml = prices[0], prices[1]
-                    elif key == "spreads":
-                        for outcome in outcomes:
-                            name = outcome.get("name")
-                            point = outcome.get("point")
-                            price = outcome.get("price")
-                            if home_team and name == home_team:
-                                home_spread = point if home_spread is None else home_spread
-                                home_spread_odds = price if home_spread_odds is None else home_spread_odds
-                            elif away_team and name == away_team:
-                                away_spread = point if away_spread is None else away_spread
-                                away_spread_odds = price if away_spread_odds is None else away_spread_odds
-
-            if implied_home_prob is None:
-                implied_home_prob = implied_prob_from_american(home_ml)
-                if implied_home_prob is None and away_ml is not None:
-                    away_imp = implied_prob_from_american(away_ml)
-                    implied_home_prob = 1 - away_imp if away_imp is not None else None
-
-            return {
-                "home_ml_odds": home_ml,
-                "away_ml_odds": away_ml,
-                "implied_home_prob": implied_home_prob,
-                "home_spread": home_spread,
-                "away_spread": away_spread,
-                "home_spread_odds": home_spread_odds,
-                "away_spread_odds": away_spread_odds,
+                "book": best_book,
             }
 
         for idx, game in enumerate(games):
@@ -339,6 +305,8 @@ class VertexMasterAnalyzer:
                 if implied_home_prob is None and implied_away_prob is None:
                     stats["dropped_no_markets"] += 1
                     warnings.append("missing_h2h")
+                else:
+                    stats["h2h_found_count"] += 1
 
                 vertex_home_prob: Optional[float] = None
                 if vertex_enabled:
@@ -356,7 +324,7 @@ class VertexMasterAnalyzer:
                         if probs and len(probs) > 0:
                             vertex_home_prob = float(probs[0])
                         else:
-                            stats["vertex_failures"] += 1
+                            stats["vertex_none_count"] += 1
                     except Exception as e:
                         logger.warning(f"Vertex prediction failed: {e}")
                         stats["vertex_failures"] += 1
@@ -375,6 +343,7 @@ class VertexMasterAnalyzer:
                 if vertex_home_prob is not None:
                     ai_prob = vertex_home_prob if pick_team == home_team else 1 - vertex_home_prob
                 else:
+                    stats["vertex_none_count"] += 1
                     warnings.append("vertex_failed")
 
                 ai_edge: Optional[float] = None
@@ -389,9 +358,12 @@ class VertexMasterAnalyzer:
                         "League": game_league,
                         "Home": home_team,
                         "Away": away_team,
-                        "Commence (UTC)": commence_dt.isoformat() if isinstance(commence_dt, datetime) else None,
+                        "Commence (UTC)": _safe_commence_iso(game),
                         "Market": "Moneyline",
                         "Pick": pick_team,
+                        "Book": odds_bits.get("book"),
+                        "Home_ML_Odds": odds_bits.get("home_ml_odds"),
+                        "Away_ML_Odds": odds_bits.get("away_ml_odds"),
                         "Implied_Prob": implied_pick_prob,
                         "AI_Prob": ai_prob,
                         "AI_Edge": ai_edge,
@@ -419,10 +391,6 @@ class VertexMasterAnalyzer:
 
             progress.progress((idx + 1) / len(games))
 
-        stats["rows_out"] = len(rows)
-        st.session_state["vertex_master_stats"] = stats
-        logger.info("VertexMasterAnalyzer stats: %s", stats)
-
         if games and not rows:
             rows.append(
                 {
@@ -438,6 +406,11 @@ class VertexMasterAnalyzer:
                     "Warnings": "Analyzer produced no rows despite input games.",
                 }
             )
+
+        stats["rows_out"] = len(rows)
+        stats["dropped"] = max(0, stats["games_in"] - stats["rows_out"])
+        st.session_state["vertex_master_stats"] = stats
+        logger.info("VertexMasterAnalyzer stats: %s", stats)
 
         return pd.DataFrame(rows)
 

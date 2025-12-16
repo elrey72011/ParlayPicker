@@ -297,6 +297,12 @@ def render_vertex_tab(config: Dict[str, Any]):
             st.session_state["last_exception"] = st.session_state.get("last_exception")
             return
 
+        if stats:
+            st.caption(
+                f"Master analysis rows: {stats.get('rows_out')} / {stats.get('games_in')}, "
+                f"vertex_failures={stats.get('vertex_failures')}, h2h_found={stats.get('h2h_found_count')}"
+            )
+
         display_cols = [
             c
             for c in [
