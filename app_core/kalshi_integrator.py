@@ -8,6 +8,7 @@ import logging
 import os
 import time
 import base64
+import random
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
@@ -315,18 +316,6 @@ class KalshiIntegrator:
         # If no PEM markers, wrap as PKCS8
         return "-----BEGIN PRIVATE KEY-----\n" + cleaned + "\n-----END PRIVATE KEY-----"
 
-    @staticmethod
-    def _normalize_secret(secret_val: Optional[str]) -> Optional[str]:
-        if not secret_val:
-            return None
-        cleaned = str(secret_val).replace("\\n", "\n").strip()
-        if not cleaned:
-            return None
-        if "-----BEGIN RSA PRIVATE KEY-----" in cleaned or "-----BEGIN PRIVATE KEY-----" in cleaned:
-            return cleaned
-        # If no PEM markers, wrap as PKCS8
-        return "-----BEGIN PRIVATE KEY-----\n" + cleaned + "\n-----END PRIVATE KEY-----"
-
     def _sign_request(self, method: str, path: str, timestamp: str) -> str:
         if not self.api_secret_pem:
             return ""
@@ -370,34 +359,8 @@ class KalshiIntegrator:
                 "error": "Kalshi is required but not configured.",
             }
 
-        endpoint = "/markets"
-        params = {"limit": 50}
-        url = f"{self.api_url}{endpoint}"
-        path_for_signing = f"/trade-api/v2{endpoint}"
-        timestamp = str(int(time.time() * 1000))
-        signature = self._sign_request("GET", path_for_signing, timestamp)
-        headers = {
-            "Content-Type": "application/json",
-            "KALSHI-ACCESS-KEY": self.api_key,
-            "KALSHI-ACCESS-SIGNATURE": signature,
-            "KALSHI-ACCESS-TIMESTAMP": timestamp,
-        }
         try:
-            resp = requests.get(url, headers=headers, params=params, timeout=10)
-            status_code = resp.status_code
-            snippet = resp.text[:300] if resp is not None else None
-            if status_code != 200:
-                return {
-                    "configured": True,
-                    "ok": False,
-                    "market_count": 0,
-                    "sample_market": None,
-                    "status_code": status_code,
-                    "url": url,
-                    "response_text": snippet,
-                    "error": f"Kalshi auth failed: status {status_code}",
-                }
-            data = resp.json()
+            data = self._request("GET", "/markets", params={"limit": 50})
             markets = data.get("markets", []) or []
             ok = len(markets) > 0
             return {
@@ -417,41 +380,96 @@ class KalshiIntegrator:
                 "error": str(exc),
             }
 
-    def _make_authenticated_request(
+    def _request(
         self,
         method: str,
-        endpoint: str,
+        path: str,
         params: Optional[Dict] = None,
-    ) -> Optional[dict]:
-        url = f"{self.api_url}{endpoint}"
-        path_for_signing = f"/trade-api/v2{endpoint}"
-        timestamp = str(int(time.time() * 1000))
-        signature = self._sign_request(method, path_for_signing, timestamp)
+        json: Optional[Dict] = None,
+    ) -> Dict[str, Any]:
+        """
+        Authenticated request with retry/backoff handling for rate limits and server errors.
+        """
 
-        headers = {
-            "Content-Type": "application/json",
-            "KALSHI-ACCESS-KEY": self.api_key,
-            "KALSHI-ACCESS-SIGNATURE": signature,
-            "KALSHI-ACCESS-TIMESTAMP": timestamp,
-        }
+        if not self.api_key or not self.api_secret_pem:
+            raise RuntimeError("Kalshi is required but missing keys in secrets.")
 
-        try:
-            resp = requests.request(method, url, headers=headers, params=params, timeout=10)
-            if resp.status_code == 200:
+        url = f"{self.api_url}{path}"
+        path_for_signing = f"/trade-api/v2{path}"
+
+        def backoff_delay(base: float) -> float:
+            return base + random.uniform(0, max(0.1, base * 0.25))
+
+        retry_429 = 0
+        retry_other = 0
+        backoff = 1.0
+
+        while True:
+            timestamp = str(int(time.time() * 1000))
+            signature = self._sign_request(method, path_for_signing, timestamp)
+            headers = {
+                "Content-Type": "application/json",
+                "KALSHI-ACCESS-KEY": self.api_key,
+                "KALSHI-ACCESS-SIGNATURE": signature,
+                "KALSHI-ACCESS-TIMESTAMP": timestamp,
+            }
+            try:
+                resp = requests.request(
+                    method,
+                    url,
+                    headers=headers,
+                    params=params,
+                    json=json,
+                    timeout=10,
+                )
+            except requests.Timeout as exc:
+                retry_other += 1
+                if retry_other > 3:
+                    raise RuntimeError(f"Kalshi request timeout: {exc}")
+                time.sleep(backoff_delay(backoff))
+                backoff = min(backoff * 2, 10.0)
+                continue
+            except Exception as exc:
+                retry_other += 1
+                if retry_other > 3:
+                    raise RuntimeError(f"Kalshi request error: {exc}")
+                time.sleep(backoff_delay(backoff))
+                backoff = min(backoff * 2, 10.0)
+                continue
+
+            status = resp.status_code
+            if status == 429:
+                retry_429 += 1
+                if retry_429 > 6:
+                    raise RuntimeError(f"Kalshi rate limit (429): {resp.text}")
+                retry_after = resp.headers.get("Retry-After")
+                try:
+                    delay = float(retry_after)
+                except Exception:
+                    delay = backoff
+                time.sleep(max(0.5, backoff_delay(delay)))
+                backoff = min(backoff * 2, 15.0)
+                continue
+            if 500 <= status < 600:
+                retry_other += 1
+                if retry_other > 3:
+                    raise RuntimeError(f"Kalshi server error {status}: {resp.text}")
+                time.sleep(backoff_delay(backoff))
+                backoff = min(backoff * 2, 10.0)
+                continue
+            if status >= 400:
+                raise RuntimeError(f"Kalshi API error {status}: {resp.text[:300]}")
+
+            try:
                 return resp.json()
-            else:
-                self.last_error = f"Status {resp.status_code}: {resp.text}"
-                logger.error(f"Kalshi API Error: {self.last_error}")
-        except Exception as e:
-            self.last_error = str(e)
-            logger.error(f"Kalshi Connection Exception: {e}")
-        return None
+            except Exception as exc:  # pragma: no cover
+                raise RuntimeError(f"Kalshi response parse error: {exc}")
 
     def get_markets_paginated(
         self,
         status: Optional[str] = None,
-        limit: int = 1000,
-        max_pages: int = 200,
+        limit: int = 200,
+        max_pages: int = 25,
         cursor: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         all_markets: List[Dict[str, Any]] = []
@@ -463,9 +481,7 @@ class KalshiIntegrator:
                 params["status"] = status
             if next_cursor:
                 params["cursor"] = next_cursor
-            data = self._make_authenticated_request("GET", "/markets", params=params)
-            if not data:
-                break
+            data = self._request("GET", "/markets", params=params)
             markets = data.get("markets", []) or []
             all_markets.extend(markets)
             pages += 1
@@ -501,7 +517,7 @@ class KalshiIntegrator:
         *,
         status: Optional[str] = None,
         min_prefix_hits: int = 200,
-        max_pages: int = 300,
+        max_pages: int = 25,
     ) -> List[Dict[str, Any]]:
         league_key = (league or "").upper()
         prefix = LEAGUE_SERIES_MAP.get(league_key)
@@ -517,14 +533,12 @@ class KalshiIntegrator:
         prefix_hits = 0
         cursor: Optional[str] = None
         while pages < max_pages:
-            params = {"limit": 1000}
+            params = {"limit": 200}
             if status:
                 params["status"] = status
             if cursor:
                 params["cursor"] = cursor
-            data = self._make_authenticated_request("GET", "/markets", params=params)
-            if not data:
-                break
+            data = self._request("GET", "/markets", params=params)
             chunk = data.get("markets", []) or []
             all_markets.extend(chunk)
             tickers = [str(m.get("ticker") or m.get("event_ticker") or "").upper() for m in chunk]
@@ -690,7 +704,7 @@ class KalshiIntegrator:
         return price_to_prob(price)
     
     def get_orderbook(self, ticker: str) -> Dict[str, Any]:
-        return self._make_authenticated_request("GET", f"/markets/{ticker}/orderbook") or {}
+        return self._request("GET", f"/markets/{ticker}/orderbook") or {}
 
 # ---------------------------------------------------------------------------
 # CROSSWALK UTILITY (Included at bottom)

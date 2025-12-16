@@ -451,7 +451,7 @@ def get_vertex_prob(game: Dict[str, Any]) -> Optional[float]:
 # -----------------
 
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=300)
 def fetch_kalshi_markets(
     selected_league: str, commence_times_utc: Optional[List[str]] = None
 ) -> List[Dict[str, Any]]:
@@ -474,10 +474,10 @@ def fetch_kalshi_markets(
         markets_raw = kalshi_integrator.get_league_markets(
             selected_league,
             min_prefix_hits=200,
-            max_pages=300,
+            max_pages=25,
         )
         if not markets_raw:
-            markets_raw = kalshi_integrator.get_markets_paginated(status=None, max_pages=300)
+            markets_raw = kalshi_integrator.get_markets_paginated(status=None, max_pages=25)
         markets_raw = markets_raw or []
 
         raw_counts = prefix_count(markets_raw)
@@ -486,7 +486,7 @@ def fetch_kalshi_markets(
         game_pool_counts = prefix_count(game_pool)
 
         if not game_pool and markets_raw:
-            fallback_raw = kalshi_integrator.get_markets_paginated(status=None, max_pages=300)
+            fallback_raw = kalshi_integrator.get_markets_paginated(status=None, max_pages=25)
             split_fb = kalshi_integrator.split_market_kinds(fallback_raw, selected_league)
             if split_fb.get("single_game_candidates"):
                 markets_raw = fallback_raw or []
@@ -508,9 +508,12 @@ def fetch_kalshi_markets(
             ticker_upper(m) for m in game_pool
         ][:10]
         return game_pool
+    except RuntimeError:
+        st.session_state["last_exception"] = traceback.format_exc()
+        raise
     except Exception:
         st.session_state["last_exception"] = traceback.format_exc()
-        return []
+        raise
 
 
 def pick_sample_game_market(
@@ -1326,7 +1329,18 @@ with tab_master:
             or g.get("commence_time")
             or g.get("commence_time_iso")
         ]
-        kalshi_markets = fetch_kalshi_markets(league, commence_times_utc)
+        try:
+            kalshi_markets = fetch_kalshi_markets(league, commence_times_utc)
+        except RuntimeError as exc:
+            msg = str(exc)
+            if "429" in msg or "rate limit" in msg.lower():
+                st.error("Kalshi rate-limited. Please retry in ~X seconds.")
+            else:
+                st.error(msg)
+            st.stop()
+        except Exception as exc:
+            st.error(str(exc))
+            st.stop()
         if not kalshi_markets:
             st.error(
                 "Kalshi is required but unavailable. Fix keys / API and retry."
