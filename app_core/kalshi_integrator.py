@@ -98,7 +98,8 @@ TEAM_FUZZY_THRESHOLD = 1.0
 DATE_TOLERANCE_DAYS = 5
 DATE_SOFT_PENALTY = 0.10
 NBA_TZ = pytz.timezone("America/New_York")
-ALLOW_SAME_DAY_TEXT_FALLBACK = True
+# Do not fallback to cross-date or fuzzy matches; only same-day, exact event tickers
+ALLOW_SAME_DAY_TEXT_FALLBACK = False
 
 # Strict NBA code mapping for winner event tickers
 NBA_TEAM_CODE_MAP: Dict[str, str] = {
@@ -275,7 +276,7 @@ def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time:
                 probability=None,
                 raw_event_id=None,
                 league=league_key,
-                reason="no_kalshi_markets_for_date_bucket",
+                reason="no_kalshi_date_bucket",
                 debug={
                     "date_token": date_token,
                     "candidate_events": candidate_events,
@@ -283,7 +284,7 @@ def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time:
                 },
             )
 
-        # De-dupe by event_ticker for the date bucket
+        # De-dupe by event_ticker for the date bucket (strict startswith to avoid cross-date)
         deduped: Dict[str, Dict[str, Any]] = {}
         for m in markets:
             et = str(m.get("event_ticker") or m.get("ticker") or "")
@@ -299,36 +300,16 @@ def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time:
             "bucket_meta": meta,
         }
         if not date_bucket:
-            # Optional same-day fallback for special events (e.g., Cup) using date token only
-            fallback_candidates: List[Dict[str, Any]] = []
-            if ALLOW_SAME_DAY_TEXT_FALLBACK:
-                dt_upper = date_token.upper()
-                for m in all_markets:
-                    et_upper = str(m.get("event_ticker") or "").upper()
-                    title_upper = str(m.get("title") or "").upper()
-                    if dt_upper not in et_upper:
-                        continue
-                    if away_code and home_code:
-                        codes_ok = (away_code in et_upper or away_code in title_upper) and (
-                            home_code in et_upper or home_code in title_upper
-                        )
-                        if not codes_ok:
-                            continue
-                    fallback_candidates.append(m)
-
-            if not fallback_candidates:
-                return KalshiMatchResult(
-                    matched=False,
-                    kalshi_available=True,
-                    label="",
-                    probability=None,
-                    raw_event_id=None,
-                    league=league_key,
-                    reason="no_kalshi_markets_for_date_bucket",
-                    debug=debug_info,
-                )
-            date_bucket = fallback_candidates
-            debug_info["fallback_same_day_used"] = True
+            return KalshiMatchResult(
+                matched=False,
+                kalshi_available=True,
+                label="",
+                probability=None,
+                raw_event_id=None,
+                league=league_key,
+                reason="no_kalshi_date_bucket",
+                debug=debug_info,
+            )
 
         exact_match = None
         for m in date_bucket:
@@ -347,6 +328,19 @@ def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time:
                 raw_event_id=None,
                 league=league_key,
                 reason="no_exact_event_ticker_match_in_bucket",
+                debug=debug_info,
+            )
+
+        if date_token not in str(exact_match.get("event_ticker") or ""):
+            debug_info["no_match_reason"] = "date_bucket_guard_triggered"
+            return KalshiMatchResult(
+                matched=False,
+                kalshi_available=True,
+                label="",
+                probability=None,
+                raw_event_id=None,
+                league=league_key,
+                reason="date_bucket_guard_triggered",
                 debug=debug_info,
             )
 
@@ -986,7 +980,7 @@ class KalshiIntegrator:
         bucket: List[Dict[str, Any]] = []
         for m in markets or []:
             et_upper = str(m.get("event_ticker") or m.get("ticker") or "").upper()
-            if token_upper in et_upper:
+            if et_upper.startswith(f"KXNBAGAME-{token_upper}"):
                 bucket.append(m)
         return bucket
 
@@ -1014,11 +1008,22 @@ class KalshiIntegrator:
             "initial_date_token_count": len(bucket),
         }
 
-        # If bucket empty, broaden with limited pagination (avoid huge global fetch)
+        # If bucket empty, broaden with limited pagination and targeted prefix pull
         all_markets = list(base_markets)
         if not bucket:
+            targeted_prefix = f"KXNBAGAME-{date_token}"
+            try:
+                targeted = self._get_markets_paginated(
+                    status=status,
+                    limit=200,
+                    max_pages=10,
+                    extra_params={"event_ticker_prefix": targeted_prefix},
+                )
+                all_markets.extend(targeted)
+            except Exception:
+                targeted = []
             extra = self.get_markets_paginated(
-                status=status, limit=200, max_pages=10
+                status=status, limit=200, max_pages=50
             )
             all_markets.extend(extra)
             # De-dupe merged markets by event_ticker or ticker
@@ -1033,6 +1038,8 @@ class KalshiIntegrator:
                 {
                     "broadened_total": len(all_markets),
                     "broadened_date_token_count": len(bucket),
+                    "targeted_prefix": targeted_prefix,
+                    "targeted_added": len(targeted),
                 }
             )
 
@@ -1045,6 +1052,7 @@ class KalshiIntegrator:
 
         # Date-token summary counts from all_markets (for debug)
         token_counts: Dict[str, int] = {}
+        token_samples: Dict[str, List[str]] = {}
         for m in all_markets:
             et = str(m.get("event_ticker") or m.get("ticker") or "").upper()
             if "KXNBAGAME-" in et:
@@ -1052,9 +1060,12 @@ class KalshiIntegrator:
                     after = et.split("KXNBAGAME-")[1]
                     token = after[:7]
                     token_counts[token] = token_counts.get(token, 0) + 1
+                    if len(token_samples.get(token, [])) < 10:
+                        token_samples.setdefault(token, []).append(et)
                 except Exception:
                     continue
         fetch_meta["token_counts"] = token_counts
+        fetch_meta["token_samples"] = token_samples
 
         payload = {
             "bucket": list(final_bucket.values()),
