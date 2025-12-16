@@ -2,7 +2,7 @@ import json
 import os
 import time
 import traceback
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 from zoneinfo import ZoneInfo
 
@@ -488,6 +488,63 @@ def kalshi_health_check(selected_league: str) -> Dict[str, Any]:
     }
 
 
+def filter_kalshi_game_markets(
+    markets: List[Dict[str, Any]],
+    game_time_utc: Optional[datetime],
+    league: str,
+) -> List[Dict[str, Any]]:
+    def parse_iso(dt_value: Any) -> Optional[datetime]:
+        try:
+            if not dt_value:
+                return None
+            raw = str(dt_value)
+            if raw.endswith("Z"):
+                raw = raw.replace("Z", "+00:00")
+            parsed = datetime.fromisoformat(raw)
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=timezone.utc)
+            else:
+                parsed = parsed.astimezone(timezone.utc)
+            return parsed
+        except Exception:
+            return None
+
+    window = timedelta(hours=72)
+    try:
+        game_dt = game_time_utc
+        if isinstance(game_dt, str):
+            game_dt = parse_iso(game_dt)
+        if isinstance(game_dt, datetime) and game_dt.tzinfo is None:
+            game_dt = game_dt.replace(tzinfo=timezone.utc)
+        filtered: List[Dict[str, Any]] = []
+        for m in markets or []:
+            try:
+                title = str(m.get("title") or "")
+                ticker = str(m.get("event_ticker") or m.get("ticker") or "")
+                lower_title = title.lower()
+                looks_game = any(
+                    token in lower_title for token in [" vs ", " at ", "@", " - "]
+                ) or (ticker and "game" in ticker.lower())
+                if not looks_game:
+                    continue
+                candidate_time = parse_iso(m.get("close_time")) or parse_iso(
+                    m.get("expiration_time")
+                )
+                if game_dt:
+                    if candidate_time and abs(candidate_time - game_dt) <= window:
+                        filtered.append(m)
+                    elif candidate_time is None:
+                        continue
+                else:
+                    filtered.append(m)
+            except Exception:
+                continue
+        return filtered
+    except Exception:
+        st.session_state["last_exception"] = traceback.format_exc()
+        return []
+
+
 def match_kalshi_market(game: Dict[str, Any], kalshi_markets: List[Dict[str, Any]]) -> Dict[str, Any]:
     base = {
         "kalshi_available": False,
@@ -692,6 +749,8 @@ with tab_master:
                 "Kalshi is required but unavailable. Fix keys / API and retry."
             )
             st.stop()
+        filtered_counts: List[int] = []
+        sample_filtered_for_first_game: List[Dict[str, Any]] = []
         rows_out: List[Dict[str, Any]] = []
         master_stats = {
             "games_in": len(games),
@@ -711,7 +770,31 @@ with tab_master:
             commence_iso = g.get("commence_time_iso_utc") or safe_iso(g.get("commence_time_iso"))
             commence_local = fmt_local_time(g.get("commence_time_local"))
             commence_date_local = g.get("commence_date_local") or ""
-            kalshi_match = match_kalshi_market(g, kalshi_markets)
+            filtered_markets = filter_kalshi_game_markets(
+                kalshi_markets, g.get("commence_time_utc"), league_name
+            )
+            filtered_counts.append(len(filtered_markets))
+            if not sample_filtered_for_first_game:
+                sample_filtered_for_first_game = [
+                    {
+                        "title": fm.get("title"),
+                        "ticker": fm.get("event_ticker") or fm.get("ticker"),
+                    }
+                    for fm in filtered_markets[:3]
+                ]
+            if not filtered_markets:
+                kalshi_match = {
+                    "kalshi_available": bool(kalshi_integrator),
+                    "kalshi_label": None,
+                    "kalshi_event_ticker": None,
+                    "kalshi_reason": "no_game_like_markets_in_window",
+                    "kalshi_matched": False,
+                    "kalshi_prob": None,
+                    "kalshi_market_type": None,
+                    "kalshi_match_score": None,
+                }
+            else:
+                kalshi_match = match_kalshi_market(g, filtered_markets)
             if not kalshi_match.get("kalshi_matched"):
                 warnings.append(f"kalshi_{kalshi_match.get('kalshi_reason')}")
             else:
@@ -900,6 +983,15 @@ with tab_master:
         st.session_state["last_rows_out"] = len(df)
         st.session_state["master_stats"] = master_stats
         st.session_state["kalshi_match_results"] = kalshi_match_results
+        st.session_state["kalshi_filter_stats"] = {
+            "total_markets_fetched": len(kalshi_markets),
+            "avg_filtered_markets_per_game": sum(filtered_counts) / len(filtered_counts)
+            if filtered_counts
+            else 0,
+            "filtered_markets_min": min(filtered_counts) if filtered_counts else 0,
+            "filtered_markets_max": max(filtered_counts) if filtered_counts else 0,
+            "sample_filtered_first_game": sample_filtered_for_first_game,
+        }
         matches = master_stats.get("kalshi_matches", 0)
         total_games = master_stats.get("kalshi_total", 0) or 1
         st.caption(
@@ -995,6 +1087,10 @@ with tab_debug:
     st.subheader("Kalshi health")
     kalshi_health = kalshi_health_check(league)
     st.json(kalshi_health)
+    filter_stats = st.session_state.get("kalshi_filter_stats") or {}
+    if filter_stats:
+        st.subheader("Kalshi filtering stats")
+        st.json(filter_stats)
     if st.session_state.get("kalshi_match_results"):
         matches = st.session_state.get("kalshi_match_results")
         matched = [m for m in matches if m.get("kalshi_matched")]
@@ -1002,6 +1098,9 @@ with tab_debug:
         if matched:
             st.caption("Sample matched market")
             st.json(matched[0])
+        if filter_stats.get("sample_filtered_first_game"):
+            st.caption("Sample filtered markets for first game")
+            st.json(filter_stats.get("sample_filtered_first_game"))
         if non_matches:
             reasons = {}
             for m in non_matches:
