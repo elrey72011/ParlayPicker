@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import time
 import traceback
 from datetime import datetime, timedelta, timezone
@@ -12,7 +13,6 @@ import streamlit as st
 from app_core.kalshi_integrator import (
     KalshiIntegrator,
     LEAGUE_SERIES_MAP,
-    match_game_to_kalshi,
     price_to_prob,
 )
 
@@ -565,32 +565,33 @@ def kalshi_health_check(selected_league: str) -> Dict[str, Any]:
     }
 
 
+def parse_kalshi_datetime(dt_value: Any) -> Optional[datetime]:
+    try:
+        if not dt_value:
+            return None
+        raw = str(dt_value)
+        if raw.endswith("Z"):
+            raw = raw.replace("Z", "+00:00")
+        parsed = datetime.fromisoformat(raw)
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        else:
+            parsed = parsed.astimezone(timezone.utc)
+        return parsed
+    except Exception:
+        return None
+
+
 def filter_kalshi_game_markets(
     markets: List[Dict[str, Any]],
     game_time_utc: Optional[datetime],
     league: str,
 ) -> List[Dict[str, Any]]:
-    def parse_iso(dt_value: Any) -> Optional[datetime]:
-        try:
-            if not dt_value:
-                return None
-            raw = str(dt_value)
-            if raw.endswith("Z"):
-                raw = raw.replace("Z", "+00:00")
-            parsed = datetime.fromisoformat(raw)
-            if parsed.tzinfo is None:
-                parsed = parsed.replace(tzinfo=timezone.utc)
-            else:
-                parsed = parsed.astimezone(timezone.utc)
-            return parsed
-        except Exception:
-            return None
-
     window = timedelta(hours=72)
     try:
         game_dt = game_time_utc
         if isinstance(game_dt, str):
-            game_dt = parse_iso(game_dt)
+            game_dt = parse_kalshi_datetime(game_dt)
         if isinstance(game_dt, datetime) and game_dt.tzinfo is None:
             game_dt = game_dt.replace(tzinfo=timezone.utc)
         filtered: List[Dict[str, Any]] = []
@@ -604,9 +605,9 @@ def filter_kalshi_game_markets(
                 ) or (ticker and "game" in ticker.lower())
                 if not looks_game:
                     continue
-                candidate_time = parse_iso(m.get("close_time")) or parse_iso(
-                    m.get("expiration_time")
-                )
+                candidate_time = parse_kalshi_datetime(
+                    m.get("close_time")
+                ) or parse_kalshi_datetime(m.get("expiration_time"))
                 if game_dt:
                     if candidate_time and abs(candidate_time - game_dt) <= window:
                         filtered.append(m)
@@ -622,43 +623,177 @@ def filter_kalshi_game_markets(
         return []
 
 
-def match_kalshi_market(game: Dict[str, Any], kalshi_markets: List[Dict[str, Any]]) -> Dict[str, Any]:
-    base = {
-        "kalshi_available": False,
-        "kalshi_label": None,
-        "kalshi_event_ticker": None,
-        "kalshi_reason": "kalshi_not_configured",
-        "kalshi_matched": False,
-        "kalshi_prob": None,
-        "kalshi_market_type": None,
-        "kalshi_match_score": None,
-    }
-    if not kalshi_integrator:
-        return base
-    try:
-        kalshi_integrator._markets_cache = kalshi_markets
-        kalshi_integrator._markets_cache_ts = time.time()
-        result = match_game_to_kalshi(
-            game.get("league"),
-            game.get("home_team"),
-            game.get("away_team"),
-            game.get("commence_time_utc"),
-            integrator=kalshi_integrator,
-            status="open",
-        )
+def classify_kalshi_market(market: Dict[str, Any]) -> str:
+    title = str(market.get("title") or "").lower()
+    rules = str(market.get("rules") or "").lower()
+    if "total points" in title or "score more than" in rules or "collectively score" in rules:
+        return "total"
+    if "spread" in title or "win by" in rules or "point spread" in rules:
+        return "spread"
+    if "game winner" in title or "wins the game" in rules or "wins outright" in rules:
+        return "winner"
+    return "other"
+
+
+def normalize_kalshi_title_teams(title_or_rules: Any) -> Tuple[Optional[str], Optional[str]]:
+    text = str(title_or_rules or "")
+    lower = text.lower()
+    patterns = [
+        r"(.+?)\s+at\s+(.+?)(:|\||-|$)",
+        r"(.+?)\s+vs\.?\s+(.+?)(:|\||-|$)",
+        r"(.+?)\s+@\s+(.+?)(:|\||-|$)",
+    ]
+    for pat in patterns:
+        match = re.search(pat, lower)
+        if match:
+            return match.group(1).strip(), match.group(2).strip()
+    return None, None
+
+
+def match_kalshi_market(
+    game: Dict[str, Any], kalshi_markets: List[Dict[str, Any]]
+) -> Tuple[Dict[str, Dict[str, Any]], Dict[str, List[Dict[str, Any]]]]:
+    def base_result(reason: str, market_type: str) -> Dict[str, Any]:
         return {
-            "kalshi_available": result.kalshi_available,
-            "kalshi_label": result.label,
-            "kalshi_event_ticker": result.raw_event_id,
-            "kalshi_reason": result.reason,
-            "kalshi_matched": result.matched,
-            "kalshi_prob": result.probability if result else None,
-            "kalshi_market_type": result.market_type,
+            "kalshi_available": bool(kalshi_integrator),
+            "kalshi_label": None,
+            "kalshi_event_ticker": None,
+            "kalshi_reason": reason,
+            "kalshi_matched": False,
+            "kalshi_prob": None,
+            "kalshi_market_type": market_type,
             "kalshi_match_score": None,
+            "kalshi_ticker": None,
+            "kalshi_line": None,
+            "kalshi_title": None,
         }
-    except Exception:
-        st.session_state["last_exception"] = traceback.format_exc()
-        return {**base, "kalshi_reason": "kalshi_match_error"}
+
+    def norm_team(name: Any) -> str:
+        return re.sub(r"[^a-z0-9 ]", "", str(name or "").lower()).strip()
+
+    def team_score(market: Dict[str, Any]) -> float:
+        home_norm = norm_team(game.get("home_team"))
+        away_norm = norm_team(game.get("away_team"))
+        combined_text = f"{market.get('title') or ''} {market.get('rules') or ''}".lower()
+        away_guess, home_guess = normalize_kalshi_title_teams(market.get("title"))
+        if not away_guess and not home_guess:
+            away_guess, home_guess = normalize_kalshi_title_teams(market.get("rules"))
+        if away_guess and home_guess:
+            away_guess_norm = norm_team(away_guess)
+            home_guess_norm = norm_team(home_guess)
+            if (
+                (away_guess_norm == away_norm and home_guess_norm == home_norm)
+                or (away_guess_norm == home_norm and home_guess_norm == away_norm)
+            ):
+                return 1.0
+        contains_both = away_norm in combined_text and home_norm in combined_text
+        if contains_both:
+            return 1.0
+        contains_one = away_norm in combined_text or home_norm in combined_text
+        return 0.5 if contains_one else 0.0
+
+    def time_score(market: Dict[str, Any]) -> float:
+        game_dt = game.get("commence_time_utc")
+        market_dt = parse_kalshi_datetime(market.get("close_time")) or parse_kalshi_datetime(
+            market.get("expiration_time")
+        )
+        if not isinstance(game_dt, datetime) or market_dt is None:
+            return 0.5
+        delta_hours = abs((market_dt - game_dt).total_seconds()) / 3600.0
+        return max(0.0, 1.0 - min(delta_hours / 36.0, 1.0))
+
+    def extract_prob_and_line(market: Dict[str, Any], market_type: str) -> Tuple[Optional[float], Optional[float]]:
+        price_candidates = []
+        for val in [market.get("yes_bid"), market.get("yes_ask")]:
+            try:
+                price_candidates.append(float(val))
+            except Exception:
+                continue
+        selected_price = None
+        if len(price_candidates) == 2:
+            selected_price = sum(price_candidates) / 2.0
+        elif price_candidates:
+            selected_price = price_candidates[0]
+        elif market.get("last_price") is not None:
+            try:
+                selected_price = float(market.get("last_price"))
+            except Exception:
+                selected_price = None
+        prob = price_to_prob(selected_price)
+        line = market.get("floor_strike") or market.get("cap_strike") or market.get("strike")
+        if line is None:
+            title = str(market.get("title") or "").lower()
+            if market_type == "total":
+                match_line = re.search(r"over\s+([0-9]+\.?[0-9]*)", title)
+                if match_line:
+                    line = match_line.group(1)
+            elif market_type == "spread":
+                match_line = re.search(r"([+-]?[0-9]+\.?[0-9]*)\s+spread", title)
+                if match_line:
+                    line = match_line.group(1)
+        try:
+            if line is not None:
+                line = float(line)
+        except Exception:
+            line = None
+        return prob, line
+
+    def evaluate_partition(partition_markets: List[Dict[str, Any]], market_type: str):
+        best_market: Optional[Dict[str, Any]] = None
+        best_score = -1.0
+        candidates: List[Dict[str, Any]] = []
+        for m in partition_markets:
+            ts = team_score(m)
+            tms = time_score(m)
+            final = 0.75 * ts + 0.25 * tms
+            candidates.append(
+                {
+                    "title": m.get("title"),
+                    "ticker": m.get("event_ticker") or m.get("ticker"),
+                    "team_score": ts,
+                    "time_score": tms,
+                    "final_score": final,
+                }
+            )
+            if final > best_score:
+                best_score = final
+                best_market = m
+        if best_market:
+            prob, line = extract_prob_and_line(best_market, market_type)
+            return {
+                "kalshi_available": True,
+                "kalshi_label": f"matched_{market_type}",
+                "kalshi_event_ticker": best_market.get("event_ticker") or best_market.get("ticker"),
+                "kalshi_reason": f"matched_{market_type}",
+                "kalshi_matched": True,
+                "kalshi_prob": prob,
+                "kalshi_market_type": market_type,
+                "kalshi_match_score": best_score,
+                "kalshi_ticker": best_market.get("event_ticker") or best_market.get("ticker"),
+                "kalshi_line": line,
+                "kalshi_title": best_market.get("title"),
+            }, candidates
+        return base_result(f"no_{market_type}_market", market_type), candidates
+
+    if not kalshi_integrator:
+        base = {t: base_result("kalshi_not_configured", t) for t in ["total", "spread", "winner"]}
+        return base, {"total": [], "spread": [], "winner": []}
+    if not kalshi_markets:
+        base = {t: base_result("no_game_like_markets_in_window", t) for t in ["total", "spread", "winner"]}
+        return base, {"total": [], "spread": [], "winner": []}
+
+    totals = [m for m in kalshi_markets if classify_kalshi_market(m) == "total"]
+    spreads = [m for m in kalshi_markets if classify_kalshi_market(m) == "spread"]
+    winners = [m for m in kalshi_markets if classify_kalshi_market(m) == "winner"]
+
+    total_result, total_candidates = evaluate_partition(totals, "total")
+    spread_result, spread_candidates = evaluate_partition(spreads, "spread")
+    winner_result, winner_candidates = evaluate_partition(winners, "winner")
+
+    return (
+        {"total": total_result, "spread": spread_result, "winner": winner_result},
+        {"total": total_candidates, "spread": spread_candidates, "winner": winner_candidates},
+    )
 
 
 # -----------------
@@ -828,6 +963,7 @@ with tab_master:
             st.stop()
         filtered_counts: List[int] = []
         sample_filtered_for_first_game: List[Dict[str, Any]] = []
+        first_game_candidates: Dict[str, Any] = {}
         rows_out: List[Dict[str, Any]] = []
         master_stats = {
             "games_in": len(games),
@@ -859,29 +995,34 @@ with tab_master:
                     }
                     for fm in filtered_markets[:10]
                 ]
-            if not filtered_markets:
-                kalshi_match = {
-                    "kalshi_available": bool(kalshi_integrator),
-                    "kalshi_label": None,
-                    "kalshi_event_ticker": None,
-                    "kalshi_reason": "no_game_like_markets_in_window",
-                    "kalshi_matched": False,
-                    "kalshi_prob": None,
-                    "kalshi_market_type": None,
-                    "kalshi_match_score": None,
+            partition_counts = {
+                "total": len([m for m in filtered_markets if classify_kalshi_market(m) == "total"]),
+                "spread": len([m for m in filtered_markets if classify_kalshi_market(m) == "spread"]),
+                "winner": len([m for m in filtered_markets if classify_kalshi_market(m) == "winner"]),
+            }
+            kalshi_matches, candidate_debug = match_kalshi_market(g, filtered_markets)
+            if not first_game_candidates and candidate_debug:
+                first_game_candidates = {
+                    k: sorted(v, key=lambda x: x.get("final_score", 0), reverse=True)[:3]
+                    for k, v in (candidate_debug or {}).items()
                 }
-            else:
-                kalshi_match = match_kalshi_market(g, filtered_markets)
-            if not kalshi_match.get("kalshi_matched"):
-                warnings.append(f"kalshi_{kalshi_match.get('kalshi_reason')}")
+                first_game_candidates["partition_counts"] = partition_counts
+
+            matched_any = any(v.get("kalshi_matched") for v in kalshi_matches.values())
+            if not matched_any:
+                for res in kalshi_matches.values():
+                    warnings.append(f"kalshi_{res.get('kalshi_reason')}")
             else:
                 master_stats["kalshi_matches"] += 1
-            kalshi_match_results.append({
-                "home": home,
-                "away": away,
-                "league": league_name,
-                **kalshi_match,
-            })
+            kalshi_match_results.append(
+                {
+                    "home": home,
+                    "away": away,
+                    "league": league_name,
+                    "matches": kalshi_matches,
+                    "candidates": candidate_debug,
+                }
+            )
 
             try:
                 ai_prob = get_vertex_prob(g)
@@ -893,6 +1034,10 @@ with tab_master:
             moneyline_row_added = False
             spread_row_added = False
             total_row_added = False
+
+            kalshi_total = kalshi_matches.get("total", {})
+            kalshi_spread = kalshi_matches.get("spread", {})
+            kalshi_winner = kalshi_matches.get("winner", {})
 
             home_ml = g.get("home_ml_price")
             away_ml = g.get("away_ml_price")
@@ -911,6 +1056,9 @@ with tab_master:
                 elif implied_home is None and implied_away is not None:
                     pick = away
                     implied_pick = implied_away
+                match_ref = kalshi_winner
+                if not match_ref.get("kalshi_matched"):
+                    warnings.append(f"kalshi_{match_ref.get('kalshi_reason')}")
                 rows_out.append(
                     {
                         "League": league_name,
@@ -927,12 +1075,17 @@ with tab_master:
                         "Implied_Prob": implied_pick,
                         "AI_Prob": ai_prob,
                         "Warnings": ";".join(warnings),
-                        "kalshi_available": kalshi_match.get("kalshi_available"),
-                        "kalshi_label": kalshi_match.get("kalshi_label"),
-                        "kalshi_event_ticker": kalshi_match.get("kalshi_event_ticker"),
-                        "kalshi_matched": kalshi_match.get("kalshi_matched"),
-                        "kalshi_prob": kalshi_match.get("kalshi_prob"),
-                        "kalshi_reason": kalshi_match.get("kalshi_reason"),
+                        "kalshi_available": match_ref.get("kalshi_available"),
+                        "kalshi_label": match_ref.get("kalshi_label"),
+                        "kalshi_event_ticker": match_ref.get("kalshi_event_ticker"),
+                        "kalshi_matched": match_ref.get("kalshi_matched"),
+                        "kalshi_prob": match_ref.get("kalshi_prob"),
+                        "kalshi_reason": match_ref.get("kalshi_reason"),
+                        "kalshi_market_type": match_ref.get("kalshi_market_type"),
+                        "kalshi_ticker": match_ref.get("kalshi_ticker"),
+                        "kalshi_line": match_ref.get("kalshi_line"),
+                        "kalshi_title": match_ref.get("kalshi_title"),
+                        "kalshi_match_score": match_ref.get("kalshi_match_score"),
                     }
                 )
                 master_stats["h2h_found"] += 1
@@ -956,6 +1109,9 @@ with tab_master:
                 elif away_spread_price is not None:
                     spread_pick = away
                     spread_pick_price = away_spread_price
+                match_ref = kalshi_spread
+                if not match_ref.get("kalshi_matched"):
+                    warnings.append(f"kalshi_{match_ref.get('kalshi_reason')}")
                 rows_out.append(
                     {
                         "League": league_name,
@@ -974,12 +1130,17 @@ with tab_master:
                         "Implied_Prob": american_to_implied_prob(spread_pick_price),
                         "AI_Prob": ai_prob,
                         "Warnings": ";".join(warnings),
-                        "kalshi_available": kalshi_match.get("kalshi_available"),
-                        "kalshi_label": kalshi_match.get("kalshi_label"),
-                        "kalshi_event_ticker": kalshi_match.get("kalshi_event_ticker"),
-                        "kalshi_matched": kalshi_match.get("kalshi_matched"),
-                        "kalshi_prob": kalshi_match.get("kalshi_prob"),
-                        "kalshi_reason": kalshi_match.get("kalshi_reason"),
+                        "kalshi_available": match_ref.get("kalshi_available"),
+                        "kalshi_label": match_ref.get("kalshi_label"),
+                        "kalshi_event_ticker": match_ref.get("kalshi_event_ticker"),
+                        "kalshi_matched": match_ref.get("kalshi_matched"),
+                        "kalshi_prob": match_ref.get("kalshi_prob"),
+                        "kalshi_reason": match_ref.get("kalshi_reason"),
+                        "kalshi_market_type": match_ref.get("kalshi_market_type"),
+                        "kalshi_ticker": match_ref.get("kalshi_ticker"),
+                        "kalshi_line": match_ref.get("kalshi_line"),
+                        "kalshi_title": match_ref.get("kalshi_title"),
+                        "kalshi_match_score": match_ref.get("kalshi_match_score"),
                     }
                 )
                 spread_row_added = True
@@ -1001,6 +1162,9 @@ with tab_master:
                 elif under_price is not None:
                     total_pick = "Under"
                     total_pick_price = under_price
+                match_ref = kalshi_total
+                if not match_ref.get("kalshi_matched"):
+                    warnings.append(f"kalshi_{match_ref.get('kalshi_reason')}")
                 rows_out.append(
                     {
                         "League": league_name,
@@ -1018,12 +1182,17 @@ with tab_master:
                         "Implied_Prob": american_to_implied_prob(total_pick_price),
                         "AI_Prob": ai_prob,
                         "Warnings": ";".join(warnings),
-                        "kalshi_available": kalshi_match.get("kalshi_available"),
-                        "kalshi_label": kalshi_match.get("kalshi_label"),
-                        "kalshi_event_ticker": kalshi_match.get("kalshi_event_ticker"),
-                        "kalshi_matched": kalshi_match.get("kalshi_matched"),
-                        "kalshi_prob": kalshi_match.get("kalshi_prob"),
-                        "kalshi_reason": kalshi_match.get("kalshi_reason"),
+                        "kalshi_available": match_ref.get("kalshi_available"),
+                        "kalshi_label": match_ref.get("kalshi_label"),
+                        "kalshi_event_ticker": match_ref.get("kalshi_event_ticker"),
+                        "kalshi_matched": match_ref.get("kalshi_matched"),
+                        "kalshi_prob": match_ref.get("kalshi_prob"),
+                        "kalshi_reason": match_ref.get("kalshi_reason"),
+                        "kalshi_market_type": match_ref.get("kalshi_market_type"),
+                        "kalshi_ticker": match_ref.get("kalshi_ticker"),
+                        "kalshi_line": match_ref.get("kalshi_line"),
+                        "kalshi_title": match_ref.get("kalshi_title"),
+                        "kalshi_match_score": match_ref.get("kalshi_match_score"),
                     }
                 )
                 total_row_added = True
@@ -1045,12 +1214,17 @@ with tab_master:
                         "Implied_Prob": None,
                         "AI_Prob": ai_prob,
                         "Warnings": ";".join(warnings),
-                        "kalshi_available": kalshi_match.get("kalshi_available"),
-                        "kalshi_label": kalshi_match.get("kalshi_label"),
-                        "kalshi_event_ticker": kalshi_match.get("kalshi_event_ticker"),
-                        "kalshi_matched": kalshi_match.get("kalshi_matched"),
-                        "kalshi_prob": kalshi_match.get("kalshi_prob"),
-                        "kalshi_reason": kalshi_match.get("kalshi_reason"),
+                        "kalshi_available": kalshi_winner.get("kalshi_available"),
+                        "kalshi_label": kalshi_winner.get("kalshi_label"),
+                        "kalshi_event_ticker": kalshi_winner.get("kalshi_event_ticker"),
+                        "kalshi_matched": kalshi_winner.get("kalshi_matched"),
+                        "kalshi_prob": kalshi_winner.get("kalshi_prob"),
+                        "kalshi_reason": kalshi_winner.get("kalshi_reason"),
+                        "kalshi_market_type": kalshi_winner.get("kalshi_market_type"),
+                        "kalshi_ticker": kalshi_winner.get("kalshi_ticker"),
+                        "kalshi_line": kalshi_winner.get("kalshi_line"),
+                        "kalshi_title": kalshi_winner.get("kalshi_title"),
+                        "kalshi_match_score": kalshi_winner.get("kalshi_match_score"),
                     }
                 )
                 master_stats["market_rows_out"] += 1
@@ -1068,6 +1242,16 @@ with tab_master:
             "filtered_markets_min": min(filtered_counts) if filtered_counts else 0,
             "filtered_markets_max": max(filtered_counts) if filtered_counts else 0,
             "sample_filtered_first_game": sample_filtered_for_first_game,
+            "first_game_partition_counts": first_game_candidates.get("partition_counts")
+            if first_game_candidates
+            else None,
+            "first_game_top_candidates": {
+                k: v
+                for k, v in first_game_candidates.items()
+                if k in {"total", "spread", "winner"}
+            }
+            if first_game_candidates
+            else {},
         }
         matches = master_stats.get("kalshi_matches", 0)
         total_games = master_stats.get("kalshi_total", 0) or 1
@@ -1170,18 +1354,29 @@ with tab_debug:
         st.json(filter_stats)
     if st.session_state.get("kalshi_match_results"):
         matches = st.session_state.get("kalshi_match_results")
-        matched = [m for m in matches if m.get("kalshi_matched")]
-        non_matches = [m for m in matches if not m.get("kalshi_matched")]
+        matched = []
+        non_match_reasons: List[str] = []
+        for m in matches:
+            for res in (m.get("matches") or {}).values():
+                if res.get("kalshi_matched"):
+                    matched.append(res)
+                else:
+                    non_match_reasons.append(res.get("kalshi_reason") or "unknown")
         if matched:
             st.caption("Sample matched market")
             st.json(matched[0])
         if filter_stats.get("sample_filtered_first_game"):
             st.caption("Sample filtered markets for first game")
             st.json(filter_stats.get("sample_filtered_first_game"))
-        if non_matches:
-            reasons = {}
-            for m in non_matches:
-                reason = m.get("kalshi_reason") or "unknown"
+        if filter_stats.get("first_game_partition_counts"):
+            st.caption("First game partition counts (total/spread/winner)")
+            st.json(filter_stats.get("first_game_partition_counts"))
+        if filter_stats.get("first_game_top_candidates"):
+            st.caption("Top candidates by partition (first game)")
+            st.json(filter_stats.get("first_game_top_candidates"))
+        if non_match_reasons:
+            reasons: Dict[str, int] = {}
+            for reason in non_match_reasons:
                 reasons[reason] = reasons.get(reason, 0) + 1
             top_reasons = sorted(reasons.items(), key=lambda x: x[1], reverse=True)[:5]
             st.caption("Top non-match reasons")
