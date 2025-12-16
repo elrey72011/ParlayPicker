@@ -446,107 +446,78 @@ def fetch_kalshi_markets(
 ) -> List[Dict[str, Any]]:
     if not kalshi_integrator:
         return []
+
+    def ticker_upper(market: Dict[str, Any]) -> str:
+        return str(market.get("event_ticker") or market.get("ticker") or "").upper()
+
+    def prefix_count(markets: List[Dict[str, Any]]) -> Dict[str, int]:
+        tickers = [ticker_upper(m) for m in markets]
+        return {
+            "count_prefix_KXNBAGAME": len([t for t in tickers if t.startswith("KXNBAGAME")]),
+            "count_prefix_KXNBATOTAL": len([t for t in tickers if t.startswith("KXNBATOTAL")]),
+            "count_prefix_KXNBASPREAD": len([t for t in tickers if t.startswith("KXNBASPREAD")]),
+            "count_prefix_KXMV": len([t for t in tickers if t.startswith("KXMV")]),
+        }
+
     try:
         commence_tuple = tuple(commence_times_utc or [])
-        markets = kalshi_integrator.get_sports_markets(
+        markets_raw = kalshi_integrator.get_sports_markets(
             selected_league, commence_times=list(commence_tuple) if commence_tuple else None
         )
-        markets = markets or []
-        ticker_upper = [str(m.get("event_ticker") or m.get("ticker") or "").upper() for m in markets]
+        markets_raw = markets_raw or []
 
-        nba_filtered_markets = markets
-        nba_filter_counts: Dict[str, Any] = {}
+        # Build initial raw stats
+        raw_counts = prefix_count(markets_raw)
+
+        game_pool: List[Dict[str, Any]] = markets_raw
+        game_pool_counts = raw_counts
+
         if selected_league.upper() == "NBA":
-            nba_filtered_markets = []
-            for m, t in zip(markets, ticker_upper):
+            game_pool = []
+            for m in markets_raw:
+                t = ticker_upper(m)
                 if not t:
                     continue
-                if t.startswith("KXMV"):
+                if t.startswith("KXMV") or "MVE" in t:
                     continue
-                if (t.startswith("KXNBA")) or (t.startswith("KXN") and "NBA" in t):
-                    nba_filtered_markets.append(m)
-            filtered_tickers = [
-                str(m.get("event_ticker") or m.get("ticker") or "").upper()
-                for m in nba_filtered_markets
-            ]
-            nba_filter_counts = {
-                "total_after_nba_filter": len(nba_filtered_markets),
-                "count_prefix_KXNBAGAME_filtered": len(
-                    [t for t in filtered_tickers if t.startswith("KXNBAGAME")]
-                ),
-                "count_prefix_KXNBATOTAL_filtered": len(
-                    [t for t in filtered_tickers if t.startswith("KXNBATOTAL")]
-                ),
-                "count_prefix_KXNBASPREAD_filtered": len(
-                    [t for t in filtered_tickers if t.startswith("KXNBASPREAD")]
-                ),
-                "count_prefix_KXMV_filtered": len(
-                    [t for t in filtered_tickers if t.startswith("KXMV")]
-                ),
-            }
-            if (
-                nba_filter_counts["count_prefix_KXNBAGAME_filtered"]
-                + nba_filter_counts["count_prefix_KXNBATOTAL_filtered"]
-                + nba_filter_counts["count_prefix_KXNBASPREAD_filtered"]
-                == 0
-            ):
-                fallback = kalshi_integrator.get_markets_for_league(selected_league)
-                fallback = fallback or []
-                fallback_tickers = [
-                    str(m.get("event_ticker") or m.get("ticker") or "").upper()
-                    for m in fallback
-                ]
-                alt_filtered = []
-                for m, t in zip(fallback, fallback_tickers):
-                    if not t:
-                        continue
-                    if t.startswith("KXMV"):
-                        continue
-                    if (t.startswith("KXNBA")) or (t.startswith("KXN") and "NBA" in t):
-                        alt_filtered.append(m)
-                if alt_filtered:
-                    nba_filtered_markets = alt_filtered
-                    filtered_tickers = [
-                        str(m.get("event_ticker") or m.get("ticker") or "").upper()
-                        for m in nba_filtered_markets
-                    ]
-                    nba_filter_counts.update(
-                        {
-                            "total_after_nba_filter": len(nba_filtered_markets),
-                            "count_prefix_KXNBAGAME_filtered": len(
-                                [t for t in filtered_tickers if t.startswith("KXNBAGAME")]
-                            ),
-                            "count_prefix_KXNBATOTAL_filtered": len(
-                                [t for t in filtered_tickers if t.startswith("KXNBATOTAL")]
-                            ),
-                            "count_prefix_KXNBASPREAD_filtered": len(
-                                [t for t in filtered_tickers if t.startswith("KXNBASPREAD")]
-                            ),
-                            "count_prefix_KXMV_filtered": len(
-                                [t for t in filtered_tickers if t.startswith("KXMV")]
-                            ),
-                        }
-                    )
-        final_markets = nba_filtered_markets if selected_league.upper() == "NBA" else markets
-        final_tickers = [
-            str(m.get("event_ticker") or m.get("ticker") or "").upper()
-            for m in final_markets
-        ]
-        st.session_state["kalshi_all_markets"] = final_markets
+                if t.startswith("KXNBAGAME") or t.startswith("KXNBATOTAL") or t.startswith("KXNBASPREAD"):
+                    game_pool.append(m)
+            game_pool_counts = prefix_count(game_pool)
+
+            if not game_pool:
+                fallback_raw = kalshi_integrator.get_sports_markets(
+                    None, commence_times=list(commence_tuple) if commence_tuple else None
+                )
+                fallback_raw = fallback_raw or []
+                if fallback_raw:
+                    markets_raw = fallback_raw
+                    raw_counts = prefix_count(markets_raw)
+                    game_pool = []
+                    for m in markets_raw:
+                        t = ticker_upper(m)
+                        if not t:
+                            continue
+                        if t.startswith("KXMV") or "MVE" in t:
+                            continue
+                        if (
+                            t.startswith("KXNBAGAME")
+                            or t.startswith("KXNBATOTAL")
+                            or t.startswith("KXNBASPREAD")
+                        ):
+                            game_pool.append(m)
+                    game_pool_counts = prefix_count(game_pool)
+
+        st.session_state["kalshi_markets_raw"] = markets_raw
+        st.session_state["kalshi_markets_game_pool"] = game_pool
+        st.session_state["kalshi_all_markets"] = markets_raw
         st.session_state["kalshi_prefix_counts"] = {
-            "total_markets_fetched": len(markets),
-            "total_after_nba_filter": nba_filter_counts.get(
-                "total_after_nba_filter", len(final_markets)
-            ),
-            "count_prefix_KXNBAGAME": len([t for t in final_tickers if t.startswith("KXNBAGAME")]),
-            "count_prefix_KXNBATOTAL": len([t for t in final_tickers if t.startswith("KXNBATOTAL")]),
-            "count_prefix_KXNBASPREAD": len([t for t in final_tickers if t.startswith("KXNBASPREAD")]),
-            "count_prefix_KXMV": len([t for t in final_tickers if t.startswith("KXMV")]),
+            "raw": {"total": len(markets_raw), **raw_counts},
+            "game_pool": {"total": len(game_pool), **game_pool_counts},
         }
         st.session_state["kalshi_prefix_samples_game"] = [
-            t for t in final_tickers if t.startswith("KXNBAGAME")
+            ticker_upper(m) for m in game_pool
         ][:20]
-        return final_markets
+        return game_pool
     except Exception:
         st.session_state["last_exception"] = traceback.format_exc()
         return []
@@ -1343,7 +1314,9 @@ with tab_master:
                 "Kalshi is required but unavailable. Fix keys / API and retry."
             )
             st.stop()
-        st.session_state["kalshi_all_markets"] = kalshi_markets
+        st.session_state["kalshi_all_markets"] = st.session_state.get(
+            "kalshi_markets_raw", kalshi_markets
+        )
         winner_refetch_attempted = False
         full_search_first_game: Optional[Dict[str, Any]] = None
         if games:
