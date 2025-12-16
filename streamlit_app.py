@@ -289,18 +289,13 @@ def render_vertex_tab(config: Dict[str, Any]):
             theover_data,
             kalshi,
         )
+        stats = st.session_state.get("vertex_master_stats", {})
         if results is None or results.empty:
-            stats = st.session_state.get("vertex_master_stats", {})
-            st.error(
-                f"Master analysis returned no rows. games_in={stats.get('games_received')}, "
-                f"rows_out={stats.get('rows_produced')}"
-            )
+            st.error("Master analysis returned no rows.", icon="🚫")
+            st.write("Master analysis stats:")
+            st.json(stats)
             st.session_state["last_exception"] = st.session_state.get("last_exception")
             return
-
-        st.session_state["vertex_master_stats"] = st.session_state.get(
-            "vertex_master_stats", {}
-        )
 
         display_cols = [
             c
@@ -314,6 +309,7 @@ def render_vertex_tab(config: Dict[str, Any]):
                 "Implied_Prob",
                 "AI_Prob",
                 "AI_Edge",
+                "Warnings",
                 "kalshi_available",
                 "kalshi_label",
             ]
