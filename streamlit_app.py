@@ -1,22 +1,19 @@
 import json
 import os
+import re
+import time
 import traceback
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import datetime, timedelta, timezone
+from typing import Any, Dict, List, Optional, Tuple
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 import requests
 import streamlit as st
-# Must be the first Streamlit call
-try:
-    st.set_page_config(page_title="ParlayDesk — Clean Core", layout="wide")
-except TypeError:
-    # Older/odd runtimes: retry with fewer args
-    try:
-        st.set_page_config(layout="wide")
-    except TypeError:
-        st.set_page_config()
+from app_core.kalshi_integrator import KalshiIntegrator, LEAGUE_SERIES_MAP
 
+# Must be the first Streamlit call
+st.set_page_config(page_title="ParlayDesk", layout="wide")
 
 # -----------------
 # Helper utilities
@@ -44,6 +41,20 @@ def american_to_implied(odds: Any) -> Optional[float]:
     return 100.0 / (o + 100.0)
 
 
+def american_to_implied_prob(odds: Any) -> Optional[float]:
+    if odds is None:
+        return None
+    try:
+        o = float(odds)
+    except Exception:
+        return None
+    if o > 0:
+        return 100.0 / (o + 100.0)
+    if o < 0:
+        return (-o) / ((-o) + 100.0)
+    return None
+
+
 def safe_iso(value: Any) -> Optional[str]:
     if value is None:
         return None
@@ -60,6 +71,87 @@ def safe_iso(value: Any) -> Optional[str]:
         return str(value)
     except Exception:
         return None
+
+
+def get_local_tz() -> str:
+    tz_name = None
+    try:
+        tz_name = st.secrets.get("APP_TIMEZONE")
+    except Exception:
+        tz_name = None
+    if not tz_name:
+        tz_name = "America/New_York"
+    return tz_name
+
+
+def parse_commence_to_utc(value: Any) -> Optional[datetime]:
+    raw = value
+    if raw is None:
+        return None
+    if isinstance(raw, datetime):
+        dt = raw
+    else:
+        try:
+            s = str(raw)
+            if s.endswith("Z"):
+                s = s.replace("Z", "+00:00")
+            dt = datetime.fromisoformat(s)
+        except Exception:
+            return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    try:
+        return dt.astimezone(timezone.utc)
+    except Exception:
+        return None
+
+
+def normalize_commence_times(games: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    tz_name = get_local_tz()
+    try:
+        local_tz = ZoneInfo(tz_name)
+    except Exception:
+        local_tz = None
+    parsed = 0
+    failed = 0
+    for g in games:
+        warnings = list(g.get("warnings") or [])
+        raw_time = g.get("commence_time") or g.get("commence_time_iso")
+        dt_utc = parse_commence_to_utc(raw_time)
+        if dt_utc is None:
+            failed += 1
+            warnings.append("commence_parse_failed")
+            g["commence_time_utc"] = None
+            g["commence_time_iso_utc"] = None
+            g["commence_time_local"] = None
+            g["commence_time_iso_local"] = None
+            g["commence_date_local"] = None
+        else:
+            parsed += 1
+            g["commence_time_utc"] = dt_utc
+            iso_utc = dt_utc.isoformat().replace("+00:00", "Z")
+            g["commence_time_iso_utc"] = iso_utc
+            if local_tz:
+                dt_local = dt_utc.astimezone(local_tz)
+                g["commence_time_local"] = dt_local
+                g["commence_time_iso_local"] = dt_local.isoformat()
+                g["commence_date_local"] = dt_local.strftime("%Y-%m-%d")
+            else:
+                g["commence_time_local"] = None
+                g["commence_time_iso_local"] = None
+                g["commence_date_local"] = None
+        g["warnings"] = warnings
+    stats = {"parsed": parsed, "failed": failed, "timezone": tz_name}
+    return games, stats
+
+
+def fmt_local_time(dt: Optional[datetime]) -> str:
+    try:
+        if dt is None:
+            return ""
+        return dt.strftime("%Y-%m-%d %H:%M")
+    except Exception:
+        return ""
 
 
 def extract_h2h_prices(game: Dict[str, Any]) -> Dict[str, Any]:
@@ -80,6 +172,140 @@ def extract_h2h_prices(game: Dict[str, Any]) -> Dict[str, Any]:
     return {"home_odds": None, "away_odds": None, "book": None}
 
 
+def _parse_last_update(value: Any) -> Optional[datetime]:
+    if not value:
+        return None
+    try:
+        s = str(value)
+        if s.endswith("Z"):
+            s = s.replace("Z", "+00:00")
+        dt = datetime.fromisoformat(s)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt
+    except Exception:
+        return None
+
+
+def extract_best_market(game: Dict[str, Any]) -> Dict[str, Any]:
+    home = game.get("home_team")
+    away = game.get("away_team")
+    bookmakers = game.get("bookmakers") or []
+    warnings: List[str] = list(game.get("warnings") or [])
+    if not bookmakers:
+        warnings.append("missing_bookmakers")
+
+    best_ml = None
+    best_spread = None
+    best_total = None
+
+    for bm in bookmakers:
+        bm_name = bm.get("title") or bm.get("key")
+        last_update = _parse_last_update(bm.get("last_update"))
+        for market in bm.get("markets") or []:
+            key = market.get("key")
+            outcomes = market.get("outcomes") or []
+            if key == "h2h":
+                prices = {o.get("name"): o.get("price") for o in outcomes if o.get("name")}
+                home_price = prices.get(home)
+                away_price = prices.get(away)
+                if home_price is None or away_price is None:
+                    continue
+                quality = max(abs(float(home_price)), abs(float(away_price))) if home_price and away_price else 0
+                candidate = {
+                    "book": bm_name,
+                    "home_price": home_price,
+                    "away_price": away_price,
+                    "quality": quality,
+                    "last_update": last_update,
+                }
+                if not best_ml or quality > best_ml["quality"]:
+                    best_ml = candidate
+                elif best_ml and quality == best_ml.get("quality"):
+                    if last_update and best_ml.get("last_update"):
+                        if last_update > best_ml["last_update"]:
+                            best_ml = candidate
+            elif key == "spreads":
+                price_map = {o.get("name"): (o.get("point"), o.get("price")) for o in outcomes if o.get("name")}
+                if home in price_map and away in price_map:
+                    home_point, home_price = price_map.get(home)
+                    away_point, away_price = price_map.get(away)
+                    if home_point is None or away_point is None:
+                        continue
+                    quality = max(
+                        abs(float(home_price)) if home_price is not None else 0,
+                        abs(float(away_price)) if away_price is not None else 0,
+                    )
+                    candidate = {
+                        "book": bm_name,
+                        "home_point": home_point,
+                        "home_price": home_price,
+                        "away_point": away_point,
+                        "away_price": away_price,
+                        "quality": quality,
+                        "last_update": last_update,
+                    }
+                    if not best_spread or quality > best_spread["quality"]:
+                        best_spread = candidate
+                    elif best_spread and quality == best_spread.get("quality"):
+                        if last_update and best_spread.get("last_update"):
+                            if last_update > best_spread["last_update"]:
+                                best_spread = candidate
+            elif key == "totals":
+                over = next((o for o in outcomes if o.get("name") == "Over"), None)
+                under = next((o for o in outcomes if o.get("name") == "Under"), None)
+                if over and under:
+                    over_point = over.get("point")
+                    under_point = under.get("point")
+                    if over_point is None or under_point is None or over_point != under_point:
+                        continue
+                    over_price = over.get("price")
+                    under_price = under.get("price")
+                    quality = max(
+                        abs(float(over_price)) if over_price is not None else 0,
+                        abs(float(under_price)) if under_price is not None else 0,
+                    )
+                    candidate = {
+                        "book": bm_name,
+                        "point": over_point,
+                        "over_price": over_price,
+                        "under_price": under_price,
+                        "quality": quality,
+                        "last_update": last_update,
+                    }
+                    if not best_total or quality > best_total["quality"]:
+                        best_total = candidate
+                    elif best_total and quality == best_total.get("quality"):
+                        if last_update and best_total.get("last_update"):
+                            if last_update > best_total["last_update"]:
+                                best_total = candidate
+
+    if not best_ml:
+        warnings.append("missing_h2h")
+    if not best_spread:
+        warnings.append("missing_spreads")
+    if not best_total:
+        warnings.append("missing_totals")
+
+    return {
+        "best_ml_book": best_ml.get("book") if best_ml else None,
+        "home_ml_price": best_ml.get("home_price") if best_ml else None,
+        "away_ml_price": best_ml.get("away_price") if best_ml else None,
+        "implied_prob_home": american_to_implied_prob(best_ml.get("home_price")) if best_ml else None,
+        "implied_prob_away": american_to_implied_prob(best_ml.get("away_price")) if best_ml else None,
+        "best_spread_book": best_spread.get("book") if best_spread else None,
+        "home_spread_point": best_spread.get("home_point") if best_spread else None,
+        "home_spread_price": best_spread.get("home_price") if best_spread else None,
+        "away_spread_point": best_spread.get("away_point") if best_spread else None,
+        "away_spread_price": best_spread.get("away_price") if best_spread else None,
+        "best_total_book": best_total.get("book") if best_total else None,
+        "total_point": best_total.get("point") if best_total else None,
+        "over_price": best_total.get("over_price") if best_total else None,
+        "under_price": best_total.get("under_price") if best_total else None,
+        "warnings": warnings,
+    }
+
+
 def league_from_sport_key(sk: Optional[str]) -> Optional[str]:
     if not sk:
         return None
@@ -89,6 +315,12 @@ def league_from_sport_key(sk: Optional[str]) -> Optional[str]:
         return "NCAAB"
     if sk == "americanfootball_nfl":
         return "NFL"
+    if sk == "americanfootball_ncaaf":
+        return "NCAAF"
+    if sk == "icehockey_nhl":
+        return "NHL"
+    if sk == "baseball_mlb":
+        return "MLB"
     return sk.upper()
 
 
@@ -103,7 +335,6 @@ def normalize_game(game: Dict[str, Any]) -> Dict[str, Any]:
     away = game.get("away_team")
     warnings: List[str] = []
     if not away:
-        # derive from h2h
         for bm in game.get("bookmakers") or []:
             for m in bm.get("markets") or []:
                 if m.get("key") != "h2h":
@@ -127,21 +358,50 @@ def normalize_game(game: Dict[str, Any]) -> Dict[str, Any]:
 
 
 # -----------------
-# API Clients
+# API Clients & config
 # -----------------
+
+SPORT_KEYS = {
+    "NBA": "basketball_nba",
+    "NCAAB": "basketball_ncaab",
+    "NFL": "americanfootball_nfl",
+    "NCAAF": "americanfootball_ncaaf",
+    "NHL": "icehockey_nhl",
+    "MLB": "baseball_mlb",
+}
 
 odds_api_key = read_secret("ODDS_API_KEY")
 news_api_key = read_secret("NEWS_API_KEY")
 project_id = read_secret("GCP_PROJECT_ID", "elite-hangar-479017-m8")
 location = read_secret("GCP_LOCATION", "us-central1")
 vertex_endpoint_id = read_secret("VERTEX_ENDPOINT_ID")
+kalshi_api_key = read_secret("KALSHI_API_KEY") or read_secret("kalshi_api_key")
+kalshi_api_secret = read_secret("KALSHI_API_SECRET") or read_secret("kalshi_api_secret")
+st.session_state.setdefault("kalshi_required", True)
+kalshi_integrator: Optional[KalshiIntegrator] = None
+try:
+    if "kalshi_integrator" not in st.session_state:
+        if kalshi_api_key and kalshi_api_secret:
+            st.session_state["kalshi_integrator"] = KalshiIntegrator(
+                kalshi_api_key,
+                kalshi_api_secret,
+                required=st.session_state.get("kalshi_required", True),
+            )
+        else:
+            st.session_state["kalshi_integrator"] = None
+    kalshi_integrator = st.session_state.get("kalshi_integrator")
+except Exception:
+    st.session_state["last_exception"] = traceback.format_exc()
+    kalshi_integrator = None
+if kalshi_integrator:
+    kalshi_integrator.required = st.session_state.get("kalshi_required", True)
 
 
 @st.cache_data(ttl=60)
-def fetch_odds_games() -> List[Dict[str, Any]]:
-    if not odds_api_key:
+def fetch_odds_games(sport_key: str) -> List[Dict[str, Any]]:
+    if not odds_api_key or not sport_key:
         return []
-    url = "https://api.the-odds-api.com/v4/sports/basketball_nba/odds/"
+    url = f"https://api.the-odds-api.com/v4/sports/{sport_key}/odds/"
     params = {
         "apiKey": odds_api_key,
         "regions": "us",
@@ -179,13 +439,747 @@ def get_vertex_prob(game: Dict[str, Any]) -> Optional[float]:
     """Stubbed Vertex call: return None if not configured or on error."""
     if not vertex_endpoint_id:
         return None
-    # Placeholder for real Vertex prediction. Keep resilient.
     try:
-        # TODO: integrate real Vertex endpoint invocation if available.
         return None
     except Exception:
         st.session_state["last_exception"] = traceback.format_exc()
         return None
+
+
+# -----------------
+# Kalshi integration
+# -----------------
+
+
+@st.cache_data(ttl=300)
+def fetch_kalshi_markets(
+    selected_league: str, commence_times_utc: Optional[List[str]] = None
+) -> List[Dict[str, Any]]:
+    if not kalshi_integrator:
+        return []
+
+    def ticker_upper(market: Dict[str, Any]) -> str:
+        return str(market.get("event_ticker") or market.get("ticker") or "").upper()
+
+    def prefix_count(markets: List[Dict[str, Any]]) -> Dict[str, int]:
+        tickers = [ticker_upper(m) for m in markets]
+        return {
+            "count_prefix_KXNBA": len([t for t in tickers if t.startswith("KXNBA")]),
+            "count_prefix_KXNBAGAME": len([t for t in tickers if t.startswith("KXNBAGAME")]),
+            "count_prefix_KXNBATOTAL": len([t for t in tickers if t.startswith("KXNBATOTAL")]),
+            "count_prefix_KXNBASPREAD": len([t for t in tickers if t.startswith("KXNBASPREAD")]),
+            "count_prefix_KXMV": len([t for t in tickers if t.startswith("KXMV")]),
+        }
+
+    try:
+        markets_raw = kalshi_integrator.get_league_markets(
+            selected_league,
+            min_prefix_hits=200,
+            max_pages=25,
+        )
+        if not markets_raw:
+            markets_raw = kalshi_integrator.get_markets_paginated(status=None, max_pages=25)
+        markets_raw = markets_raw or []
+
+        raw_counts = prefix_count(markets_raw)
+        split = kalshi_integrator.split_market_kinds(markets_raw, selected_league)
+        game_pool: List[Dict[str, Any]] = split.get("single_game_candidates", [])
+        if selected_league.upper() == "NBA":
+            filtered_game_pool: List[Dict[str, Any]] = []
+            for m in game_pool:
+                t = ticker_upper(m)
+                if t.startswith("KXMV") or "MVE" in t:
+                    continue
+                if t.startswith("KXNBA") or t.startswith("KXN"):
+                    filtered_game_pool.append(m)
+            if filtered_game_pool:
+                game_pool = filtered_game_pool
+        game_pool_counts = prefix_count(game_pool)
+
+        if not game_pool and markets_raw:
+            fallback_raw = kalshi_integrator.get_markets_paginated(status=None, max_pages=25)
+            split_fb = kalshi_integrator.split_market_kinds(fallback_raw, selected_league)
+            if split_fb.get("single_game_candidates"):
+                markets_raw = fallback_raw or []
+                raw_counts = prefix_count(markets_raw)
+                game_pool = split_fb.get("single_game_candidates", [])
+                game_pool_counts = prefix_count(game_pool)
+
+        st.session_state["kalshi_markets_raw"] = markets_raw
+        st.session_state["kalshi_markets_game_pool"] = game_pool
+        st.session_state["kalshi_all_markets"] = markets_raw
+        st.session_state["kalshi_prefix_counts"] = {
+            "raw": {"total": len(markets_raw), **raw_counts},
+            "game_pool": {"total": len(game_pool), **game_pool_counts},
+        }
+        st.session_state["kalshi_prefix_samples_game"] = [
+            ticker_upper(m) for m in game_pool
+        ][:20]
+        st.session_state["kalshi_game_pool_sample"] = [
+            ticker_upper(m) for m in game_pool
+        ][:10]
+        return game_pool
+    except RuntimeError:
+        st.session_state["last_exception"] = traceback.format_exc()
+        raise
+    except Exception:
+        st.session_state["last_exception"] = traceback.format_exc()
+        raise
+
+
+def pick_sample_game_market(
+    markets: List[Dict[str, Any]]
+) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+    def parse_iso(dt_value: Any) -> Optional[datetime]:
+        try:
+            if not dt_value:
+                return None
+            raw = str(dt_value)
+            if raw.endswith("Z"):
+                raw = raw.replace("Z", "+00:00")
+            parsed = datetime.fromisoformat(raw)
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=timezone.utc)
+            else:
+                parsed = parsed.astimezone(timezone.utc)
+            return parsed
+        except Exception:
+            return None
+
+    now_utc = datetime.now(timezone.utc)
+    window = timedelta(days=7)
+    best_market: Optional[Dict[str, Any]] = None
+    best_reason: Optional[str] = None
+    best_within = False
+    best_diff: Optional[timedelta] = None
+    for m in markets or []:
+        try:
+            title = str(m.get("title") or "")
+            ticker = str(m.get("event_ticker") or m.get("ticker") or "")
+            lower_title = title.lower()
+            reason = None
+            if any(tok in lower_title for tok in [" vs ", " at ", "@"]):
+                reason = "contains_vs"
+            elif "game winner" in lower_title:
+                reason = "contains_game_winner"
+            elif any(tok in lower_title for tok in ["spread", "total"]):
+                reason = "contains_spread_total"
+            elif ticker and "game" in ticker.lower():
+                reason = "contains_game_ticker"
+            if not reason:
+                continue
+            close_dt = parse_iso(m.get("close_time")) or parse_iso(m.get("expiration_time"))
+            within_window = False
+            time_diff: Optional[timedelta] = None
+            if close_dt:
+                time_diff = abs(close_dt - now_utc)
+                within_window = timedelta(0) <= (close_dt - now_utc) <= window
+            reason_with_window = reason
+            if within_window:
+                reason_with_window = f"{reason}+within_7d"
+            if best_market is None:
+                best_market = m
+                best_reason = reason_with_window
+                best_within = within_window
+                best_diff = time_diff
+                continue
+            if within_window and not best_within:
+                best_market = m
+                best_reason = reason_with_window
+                best_within = True
+                best_diff = time_diff
+                continue
+            if within_window == best_within:
+                if time_diff is not None and (best_diff is None or time_diff < best_diff):
+                    best_market = m
+                    best_reason = reason_with_window
+                    best_diff = time_diff
+        except Exception:
+            continue
+    return best_market, best_reason
+
+
+def kalshi_health_check(selected_league: str, force: bool = False) -> Dict[str, Any]:
+    integrator = st.session_state.get("kalshi_integrator")
+    now_ts = time.time()
+    cache_bucket = st.session_state.setdefault("kalshi_health_cache", {})
+    cache_entry = cache_bucket.get(selected_league)
+    if cache_entry and not force and (now_ts - cache_entry.get("ts", 0)) < 30:
+        return cache_entry.get("data", {})
+
+    configured = bool(
+        integrator
+        and getattr(integrator, "api_key", None)
+        and getattr(integrator, "api_secret_pem", None)
+    )
+    if not configured:
+        result = {
+            "configured": False,
+            "ok": False,
+            "market_count": 0,
+            "sample_market": None,
+            "sample_game_market": None,
+            "sample_game_market_reason": None,
+            "error": "Kalshi is required but not configured.",
+        }
+        cache_bucket[selected_league] = {"ts": now_ts, "data": result}
+        return result
+
+    base_health: Dict[str, Any] = integrator.health_check() if integrator else {}
+    markets: List[Dict[str, Any]] = base_health.get("markets", []) or []
+    try:
+        games = st.session_state.get("games", [])
+        commence_times_utc = [
+            g.get("commence_time_iso_utc")
+            or g.get("commence_time")
+            or g.get("commence_time_iso")
+            for g in games
+            if g.get("commence_time_iso_utc")
+            or g.get("commence_time")
+            or g.get("commence_time_iso")
+        ]
+        league_markets = fetch_kalshi_markets(selected_league, commence_times_utc)
+        if league_markets:
+            markets = league_markets
+    except Exception:
+        st.session_state["last_exception"] = traceback.format_exc()
+
+    market_count = len(markets)
+    prefix_counts = st.session_state.get("kalshi_prefix_counts", {})
+    game_pool_total = prefix_counts.get("game_pool", {}).get("total")
+    ok = market_count > 0 and bool(base_health.get("ok", True))
+    league_upper = (selected_league or "").upper()
+    error_msg = None
+    status_code = base_health.get("status_code")
+    response_text = base_health.get("response_text")
+    if status_code == 429 or (base_health.get("error") and "rate limit" in str(base_health.get("error")).lower()):
+        ok = False
+        error_msg = "Kalshi rate-limited (429). Backing off; try again soon."
+    elif league_upper == "NBA" and ok:
+        if not game_pool_total:
+            ok = False
+            error_msg = "Kalshi reachable but no NBA markets returned."
+    elif not ok and base_health.get("error"):
+        error_msg = base_health.get("error")
+    elif not ok:
+        error_msg = "Kalshi returned zero markets."
+    sample_game_market, sample_reason = pick_sample_game_market(markets)
+    result = {
+        "configured": configured,
+        "ok": ok,
+        "market_count": market_count or base_health.get("market_count", 0),
+        "sample_market": markets[0] if markets else base_health.get("sample_market"),
+        "sample_game_market": sample_game_market,
+        "sample_game_market_reason": sample_reason,
+        "error": error_msg,
+        "status_code": status_code,
+        "response_text": response_text,
+    }
+    cache_bucket[selected_league] = {"ts": now_ts, "data": result}
+    return result
+
+
+def parse_kalshi_datetime(dt_value: Any) -> Optional[datetime]:
+    try:
+        if not dt_value:
+            return None
+        raw = str(dt_value)
+        if raw.endswith("Z"):
+            raw = raw.replace("Z", "+00:00")
+        parsed = datetime.fromisoformat(raw)
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        else:
+            parsed = parsed.astimezone(timezone.utc)
+        return parsed
+    except Exception:
+        return None
+
+
+def kalshi_market_best_time_utc(m: Dict[str, Any]) -> Optional[datetime]:
+    """Return the best available Kalshi timestamp for matching."""
+    for key in [
+        "expected_expiration_time",
+        "latest_expiration_time",
+        "close_time",
+        "expiration_time",
+        "open_time",
+    ]:
+        candidate = parse_kalshi_datetime(m.get(key))
+        if candidate:
+            return candidate
+    return None
+
+
+def market_mentions_game_teams(
+    market: Dict[str, Any],
+    home_team: Any,
+    away_team: Any,
+    home_code: Optional[str] = None,
+    away_code: Optional[str] = None,
+) -> bool:
+    try:
+        ticker = str(market.get("event_ticker") or market.get("ticker") or "")
+        title = str(market.get("title") or "")
+        rules_primary = str(market.get("rules") or market.get("rules_primary") or "")
+        blob = f"{ticker} {title} {rules_primary}".lower()
+        if home_code and away_code:
+            if home_code.lower() in blob and away_code.lower() in blob:
+                return True
+
+        def nickname_token(name: Any) -> Optional[str]:
+            cleaned = re.sub(r"[^a-z0-9 ]", " ", str(name or "").lower()).strip()
+            if not cleaned:
+                return None
+            parts = [p for p in cleaned.split() if p]
+            return parts[-1] if parts else None
+
+        home_tok = nickname_token(home_team)
+        away_tok = nickname_token(away_team)
+        if home_tok and away_tok:
+            return home_tok in blob and away_tok in blob
+        return False
+    except Exception:
+        return False
+
+
+def debug_search_markets_for_game(
+    markets: List[Dict[str, Any]],
+    home_team: Any,
+    away_team: Any,
+    home_code: Optional[str] = None,
+    away_code: Optional[str] = None,
+    limit: int = 15,
+) -> Dict[str, Any]:
+    def text_blob(parts: List[str]) -> str:
+        return " ".join([p for p in parts if p]).lower()
+
+    def word_set(val: str) -> set:
+        cleaned = re.sub(r"[^a-z0-9 ]", " ", val.lower())
+        return {w for w in cleaned.split() if w}
+
+    home_tokens = team_tokens(home_team)
+    away_tokens = team_tokens(away_team)
+    matches: List[Dict[str, Any]] = []
+    found = {"winner": False, "total": False, "spread": False, "other": False}
+    counts = {"winner": 0, "total": 0, "spread": 0, "other": 0}
+    for m in markets or []:
+        try:
+            ticker = str(m.get("event_ticker") or m.get("ticker") or "")
+            title = str(m.get("title") or "")
+            rules = str(m.get("rules") or m.get("rules_primary") or "")
+            blob = text_blob([ticker, title, rules])
+            code_match = False
+            if home_code and away_code:
+                if home_code.lower() in blob and away_code.lower() in blob:
+                    code_match = True
+            blob_tokens = word_set(blob)
+            token_match = bool(home_tokens.intersection(blob_tokens)) and bool(
+                away_tokens.intersection(blob_tokens)
+            )
+            if not (code_match or token_match):
+                continue
+            ticker_upper = ticker.upper()
+            category = "other"
+            if ticker_upper.startswith("KXNBAGAME") or "GAME-" in ticker_upper:
+                category = "winner"
+            elif ticker_upper.startswith("KXNBATOTAL") or "TOTAL" in ticker_upper:
+                category = "total"
+            elif ticker_upper.startswith("KXNBASPREAD") or "SPREAD" in ticker_upper:
+                category = "spread"
+            found[category] = True
+            counts[category] += 1
+            matches.append({"ticker": ticker, "title": title, "category": category})
+        except Exception:
+            continue
+    return {
+        "found_any_winner_market_for_game": found["winner"],
+        "found_any_total_market_for_game": found["total"],
+        "found_any_spread_market_for_game": found["spread"],
+        "counts": counts,
+        "matches": matches[:limit],
+    }
+
+
+def filter_kalshi_game_markets(
+    markets: List[Dict[str, Any]],
+    game_time_utc: Optional[datetime],
+    league: str,
+    home_team: Any = None,
+    away_team: Any = None,
+    home_code: Optional[str] = None,
+    away_code: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    window = timedelta(hours=72)
+    try:
+        game_dt = game_time_utc
+        if isinstance(game_dt, str):
+            game_dt = parse_kalshi_datetime(game_dt)
+        if isinstance(game_dt, datetime) and game_dt.tzinfo is None:
+            game_dt = game_dt.replace(tzinfo=timezone.utc)
+        filtered: List[Dict[str, Any]] = []
+        for m in markets or []:
+            try:
+                title = str(m.get("title") or "")
+                ticker = str(m.get("event_ticker") or m.get("ticker") or "")
+                rules = str(m.get("rules") or "")
+                lower_title = title.lower()
+                combined_lower = f"{lower_title} {rules.lower()}"
+                looks_game = any(
+                    token in combined_lower for token in [" vs ", " at ", "@", " - "]
+                ) or (ticker and "game" in ticker.lower())
+                if not looks_game:
+                    continue
+                candidate_time = kalshi_market_best_time_utc(m)
+                if game_dt:
+                    if candidate_time and abs(candidate_time - game_dt) <= window:
+                        filtered.append(m)
+                    elif candidate_time is None:
+                        if any(tok in combined_lower for tok in [" at ", " vs ", "@"]):
+                            filtered.append(m)
+                        else:
+                            continue
+                else:
+                    filtered.append(m)
+            except Exception:
+                continue
+        filtered_by_team: List[Dict[str, Any]] = []
+        for m in filtered:
+            if market_mentions_game_teams(m, home_team, away_team, home_code, away_code):
+                filtered_by_team.append(m)
+        return filtered_by_team
+    except Exception:
+        st.session_state["last_exception"] = traceback.format_exc()
+        return []
+
+
+def classify_kalshi_market(market: Dict[str, Any]) -> str:
+    ticker = str(market.get("ticker") or market.get("event_ticker") or "").upper()
+    title = str(market.get("title") or "").lower()
+    rules = str(market.get("rules") or "").lower()
+
+    if "GAME-" in ticker or ticker.startswith("KXNBAGAME-") or "GAME" in ticker:
+        return "winner"
+    if "TOTAL" in ticker:
+        return "total"
+    if "SPREAD" in ticker:
+        return "spread"
+    if any(tok in ticker for tok in ["2D", "3D", "TD", "PTS", "REB", "AST"]) or any(
+        key in title for key in ["double", "triple"]
+    ):
+        return "prop"
+
+    if "total points" in title:
+        return "total"
+    if "spread" in title:
+        return "spread"
+    if "winner" in title or "win" in title or "wins the game" in rules:
+        return "winner"
+    return "unknown"
+
+
+def team_tokens(name: str) -> set:
+    cleaned = re.sub(r"[^a-z0-9 ]", " ", str(name or "").lower())
+    tokens = [t for t in cleaned.split() if t]
+    stopwords = {
+        "the",
+        "fc",
+        "sc",
+        "university",
+        "state",
+        "college",
+        "team",
+        "basketball",
+        "football",
+        "hockey",
+        "baseball",
+    }
+    return {t for t in tokens if t not in stopwords}
+
+
+def nba_abbrev(team_name: str) -> Optional[str]:
+    mapping = {
+        "atlanta hawks": "ATL",
+        "boston celtics": "BOS",
+        "brooklyn nets": "BKN",
+        "charlotte hornets": "CHA",
+        "chicago bulls": "CHI",
+        "cleveland cavaliers": "CLE",
+        "dallas mavericks": "DAL",
+        "denver nuggets": "DEN",
+        "detroit pistons": "DET",
+        "golden state warriors": "GSW",
+        "houston rockets": "HOU",
+        "indiana pacers": "IND",
+        "los angeles clippers": "LAC",
+        "la clippers": "LAC",
+        "los angeles lakers": "LAL",
+        "la lakers": "LAL",
+        "memphis grizzlies": "MEM",
+        "miami heat": "MIA",
+        "milwaukee bucks": "MIL",
+        "minnesota timberwolves": "MIN",
+        "new orleans pelicans": "NOP",
+        "new york knicks": "NYK",
+        "oklahoma city thunder": "OKC",
+        "orlando magic": "ORL",
+        "philadelphia 76ers": "PHI",
+        "phoenix suns": "PHX",
+        "portland trail blazers": "POR",
+        "sacramento kings": "SAC",
+        "san antonio spurs": "SAS",
+        "toronto raptors": "TOR",
+        "utah jazz": "UTA",
+        "washington wizards": "WAS",
+    }
+    cleaned = re.sub(r"[^a-z0-9 ]", " ", str(team_name or "").lower()).strip()
+    for key, code in mapping.items():
+        if key in cleaned:
+            return code
+    return None
+
+
+def kalshi_ticker_team_codes(market: Dict[str, Any]) -> Tuple[Optional[str], Optional[str]]:
+    ticker = str(market.get("event_ticker") or market.get("ticker") or "")
+    match = re.search(r"([A-Z]{6})$", ticker)
+    if match:
+        segment = match.group(1)
+        return segment[:3], segment[3:]
+    return None, None
+
+
+def extract_teams_from_kalshi_text(text: Any) -> Tuple[Optional[str], Optional[str]]:
+    content = str(text or "")
+    patterns = [
+        r"(.+?)\s+at\s+(.+?)(:|\||-|$)",
+        r"(.+?)\s+@\s+(.+?)(:|\||-|$)",
+        r"(.+?)\s+vs\.?\s+(.+?)(:|\||-|$)",
+    ]
+    for pat in patterns:
+        match = re.search(pat, content, flags=re.IGNORECASE)
+        if match:
+            return match.group(1).strip(), match.group(2).strip()
+    return None, None
+
+
+def match_kalshi_market(
+    game: Dict[str, Any],
+    kalshi_markets: List[Dict[str, Any]],
+    winner_reason_override: Optional[str] = None,
+) -> Tuple[Dict[str, Dict[str, Any]], Dict[str, List[Dict[str, Any]]]]:
+    def base_result(reason: str, market_type: str) -> Dict[str, Any]:
+        return {
+            "kalshi_available": bool(kalshi_integrator),
+            "kalshi_label": None,
+            "kalshi_event_ticker": None,
+            "kalshi_reason": reason,
+            "kalshi_matched": False,
+            "kalshi_prob": None,
+            "kalshi_market_type": market_type,
+            "kalshi_match_score": None,
+            "kalshi_ticker": None,
+            "kalshi_line": None,
+            "kalshi_title": None,
+        }
+
+    def norm_team(name: Any) -> str:
+        return re.sub(r"[^a-z0-9 ]", "", str(name or "").lower()).strip()
+
+    def team_score(market: Dict[str, Any], market_type: str) -> float:
+        home_norm = norm_team(game.get("home_team"))
+        away_norm = norm_team(game.get("away_team"))
+        home_tokens = team_tokens(game.get("home_team"))
+        away_tokens = team_tokens(game.get("away_team"))
+        nickname_tokens = {
+            "knicks",
+            "spurs",
+            "lakers",
+            "celtics",
+            "bulls",
+            "nets",
+            "bucks",
+            "sixers",
+            "warriors",
+            "heat",
+            "suns",
+            "mavs",
+            "mavericks",
+            "clippers",
+            "kings",
+            "hawks",
+            "raptors",
+            "jazz",
+            "rockets",
+            "thunder",
+            "pelicans",
+            "nuggets",
+            "timberwolves",
+            "wolves",
+            "grizzlies",
+            "magic",
+            "pacers",
+            "pistons",
+            "cavaliers",
+            "cavs",
+            "blazers",
+            "wizards",
+            "76ers",
+        }
+        title_away, title_home = extract_teams_from_kalshi_text(market.get("title"))
+        rules_away, rules_home = extract_teams_from_kalshi_text(market.get("rules"))
+        guesses = [
+            (title_away, title_home),
+            (rules_away, rules_home),
+        ]
+        for away_guess, home_guess in guesses:
+            if away_guess and home_guess:
+                away_guess_norm = norm_team(away_guess)
+                home_guess_norm = norm_team(home_guess)
+                if (
+                    away_guess_norm == away_norm and home_guess_norm == home_norm
+                ) or (away_guess_norm == home_norm and home_guess_norm == away_norm):
+                    return 1.0
+        market_text = f"{market.get('title') or ''} {market.get('rules') or ''}"
+        market_tokens = team_tokens(market_text)
+        if (
+            away_tokens
+            and home_tokens
+            and away_tokens.issubset(market_tokens)
+            and home_tokens.issubset(market_tokens)
+        ):
+            return 1.0
+        away_city_tokens = {t for t in away_tokens if t not in nickname_tokens}
+        home_city_tokens = {t for t in home_tokens if t not in nickname_tokens}
+        if (
+            away_city_tokens
+            and home_city_tokens
+            and away_city_tokens.issubset(market_tokens)
+            and home_city_tokens.issubset(market_tokens)
+        ):
+            return 0.85
+        if market_type == "winner":
+            away_expected = nba_abbrev(game.get("away_team"))
+            home_expected = nba_abbrev(game.get("home_team"))
+            away_code_market, home_code_market = kalshi_ticker_team_codes(market)
+            if (
+                away_expected
+                and home_expected
+                and away_code_market
+                and home_code_market
+                and (
+                    (away_expected == away_code_market and home_expected == home_code_market)
+                    or (away_expected == home_code_market and home_expected == away_code_market)
+                )
+            ):
+                return 1.0
+        return 0.0
+
+    def time_score(market: Dict[str, Any]) -> float:
+        game_dt = game.get("commence_time_utc")
+        market_dt = kalshi_market_best_time_utc(market)
+        if not isinstance(game_dt, datetime) or market_dt is None:
+            return 0.0
+        delta_hours = abs((market_dt - game_dt).total_seconds()) / 3600.0
+        return max(0.0, 1.0 - min(delta_hours / 36.0, 1.0))
+
+    def extract_prob_and_line(
+        market: Dict[str, Any], market_type: str
+    ) -> Tuple[Optional[float], Optional[float]]:
+        prices: List[float] = []
+        for val in [market.get("yes_bid"), market.get("yes_ask")]:
+            try:
+                prices.append(float(val))
+            except Exception:
+                continue
+        selected_price = None
+        if len(prices) == 2:
+            selected_price = sum(prices) / 2.0
+        elif prices:
+            selected_price = prices[0]
+        prob = (selected_price / 100.0) if selected_price is not None else None
+        line = market.get("floor_strike") or market.get("cap_strike")
+        if line is not None:
+            try:
+                line = float(line)
+            except Exception:
+                line = None
+        return prob, line
+
+    def evaluate_partition(
+        partition_markets: List[Dict[str, Any]],
+        market_type: str,
+        no_market_reason: Optional[str] = None,
+    ):
+        best_market: Optional[Dict[str, Any]] = None
+        best_score = -1.0
+        candidates: List[Dict[str, Any]] = []
+        any_positive_team = False
+        for m in partition_markets:
+            ts = team_score(m, market_type)
+            tms = time_score(m)
+            final = 0.8 * ts + 0.2 * tms
+            candidates.append(
+                {
+                    "title": m.get("title"),
+                    "ticker": m.get("event_ticker") or m.get("ticker"),
+                    "away_code_market": kalshi_ticker_team_codes(m)[0]
+                    if market_type == "winner"
+                    else None,
+                    "home_code_market": kalshi_ticker_team_codes(m)[1]
+                    if market_type == "winner"
+                    else None,
+                    "team_score": ts,
+                    "time_score": tms,
+                    "final_score": final,
+                }
+            )
+            if ts > 0 and final > best_score:
+                any_positive_team = True
+                best_score = final
+                best_market = m
+        if best_market and any_positive_team:
+            prob, line = extract_prob_and_line(best_market, market_type)
+            return {
+                "kalshi_available": True,
+                "kalshi_label": f"matched_{market_type}",
+                "kalshi_event_ticker": best_market.get("event_ticker") or best_market.get("ticker"),
+                "kalshi_reason": f"matched_{market_type}",
+                "kalshi_matched": True,
+                "kalshi_prob": prob,
+                "kalshi_market_type": market_type,
+                "kalshi_match_score": best_score,
+                "kalshi_ticker": best_market.get("event_ticker") or best_market.get("ticker"),
+                "kalshi_line": line,
+                "kalshi_title": best_market.get("title"),
+            }, candidates
+        no_market_message = no_market_reason or f"no_{market_type}_market"
+        if any_positive_team:
+            return base_result(no_market_message, market_type), candidates
+        if partition_markets:
+            return base_result("no_team_match", market_type), candidates
+        return base_result(no_market_message, market_type), candidates
+
+    if not kalshi_integrator:
+        base = {t: base_result("kalshi_not_configured", t) for t in ["total", "spread", "winner"]}
+        return base, {"total": [], "spread": [], "winner": []}
+    if not kalshi_markets:
+        base = {t: base_result("no_game_like_markets_in_window", t) for t in ["total", "spread", "winner"]}
+        return base, {"total": [], "spread": [], "winner": []}
+
+    totals = [m for m in kalshi_markets if classify_kalshi_market(m) == "total"]
+    spreads = [m for m in kalshi_markets if classify_kalshi_market(m) == "spread"]
+    winners = [m for m in kalshi_markets if classify_kalshi_market(m) == "winner"]
+
+    total_result, total_candidates = evaluate_partition(totals, "total")
+    spread_result, spread_candidates = evaluate_partition(spreads, "spread")
+    winner_result, winner_candidates = evaluate_partition(
+        winners, "winner", winner_reason_override or "no_winner_market_for_game"
+    )
+
+    return (
+        {"total": total_result, "spread": spread_result, "winner": winner_result},
+        {"total": total_candidates, "spread": spread_candidates, "winner": winner_candidates},
+    )
 
 
 # -----------------
@@ -196,168 +1190,633 @@ if "last_exception" not in st.session_state:
     st.session_state["last_exception"] = None
 if "last_rows_out" not in st.session_state:
     st.session_state["last_rows_out"] = 0
+if "games" not in st.session_state:
+    st.session_state["games"] = []
+if "league" not in st.session_state:
+    st.session_state["league"] = "NBA"
+if "commence_stats" not in st.session_state:
+    st.session_state["commence_stats"] = {"parsed": 0, "failed": 0, "timezone": get_local_tz()}
+if "market_counts" not in st.session_state:
+    st.session_state["market_counts"] = {
+        "moneyline_available_count": 0,
+        "spreads_available_count": 0,
+        "totals_available_count": 0,
+    }
 
 
 # -----------------
-# Data loading
+# Data loading helpers
 # -----------------
 
-try:
-    all_games_raw = fetch_odds_games()
-except Exception:
-    st.session_state["last_exception"] = traceback.format_exc()
-    all_games_raw = []
+def load_games(selected_league: str) -> List[Dict[str, Any]]:
+    sport_key = SPORT_KEYS.get(selected_league)
+    if not sport_key:
+        st.session_state["last_exception"] = f"Unknown league: {selected_league}"
+        return []
+    try:
+        games_raw = fetch_odds_games(sport_key)
+    except Exception:
+        st.session_state["last_exception"] = traceback.format_exc()
+        return []
+    normalized = [normalize_game({**g, "sport_key": sport_key}) for g in games_raw]
+    with_times, commence_stats = normalize_commence_times(normalized)
+    moneyline_count = 0
+    spreads_count = 0
+    totals_count = 0
+    for g in with_times:
+        try:
+            best = extract_best_market(g)
+            warnings = list(best.pop("warnings", []))
+            merged_warnings = list(dict.fromkeys((g.get("warnings") or []) + warnings))
+            g.update(best)
+            g["warnings"] = merged_warnings
+            if g.get("best_ml_book") is not None:
+                moneyline_count += 1
+            if g.get("best_spread_book") is not None:
+                spreads_count += 1
+            if g.get("best_total_book") is not None:
+                totals_count += 1
+        except Exception:
+            g["warnings"] = list(g.get("warnings") or []) + ["odds_extract_error"]
+            st.session_state["last_exception"] = traceback.format_exc()
+    st.session_state["games"] = with_times
+    st.session_state["commence_stats"] = commence_stats
+    st.session_state["market_counts"] = {
+        "moneyline_available_count": moneyline_count,
+        "spreads_available_count": spreads_count,
+        "totals_available_count": totals_count,
+    }
+    return with_times
 
-all_games_norm = [normalize_game(g) for g in all_games_raw]
+
+# -----------------
+# Sidebar
+# -----------------
+
+st.sidebar.header("Controls")
+league = st.sidebar.selectbox("League", list(SPORT_KEYS.keys()), index=list(SPORT_KEYS.keys()).index(st.session_state.get("league", "NBA")))
+st.session_state["league"] = league
+kalshi_required_toggle = st.sidebar.checkbox(
+    "Kalshi required", value=st.session_state.get("kalshi_required", True)
+)
+st.session_state["kalshi_required"] = kalshi_required_toggle
+if kalshi_integrator:
+    kalshi_integrator.required = kalshi_required_toggle
+if st.sidebar.button("Load Games", use_container_width=True):
+    load_games(league)
+
+st.sidebar.markdown("---")
+st.sidebar.subheader("Status")
+badges = {
+    "OddsAPI": bool(odds_api_key),
+    "Vertex": bool(vertex_endpoint_id),
+    "News": bool(news_api_key),
+    "API-Sports": False,
+    "SportsData": False,
+    "Kalshi": bool(kalshi_api_key and kalshi_api_secret),
+}
+for name, ok in badges.items():
+    color = "green" if ok else "red"
+    st.sidebar.markdown(f"**{name}:** :{color}[{'OK' if ok else 'Missing'}]")
 
 
 # -----------------
 # Tabs
 # -----------------
 
-tab_games, tab_vertex, tab_news, tab_debug = st.tabs([
-    "Games & Odds",
-    "Vertex Analysis",
-    "News",
-    "Debug",
-])
+tab_games, tab_master, tab_kalshi, tab_sentiment, tab_debug = st.tabs(
+    ["Games & Odds", "Master Analysis", "Kalshi", "Sentiment", "Debug"]
+)
 
 
 with tab_games:
     st.header("Games & Odds")
-    st.write(f"Loaded {len(all_games_norm)} NBA games")
-    rows = []
-    for g in all_games_norm:
-        markets = set()
-        for bm in g.get("bookmakers") or []:
-            for m in bm.get("markets") or []:
-                if m.get("key"):
-                    markets.add(m.get("key"))
-        rows.append(
-            {
-                "League": g.get("league"),
-                "Home": g.get("home_team"),
-                "Away": g.get("away_team"),
-                "Commence (UTC)": safe_iso(g.get("commence_time_iso")),
-                "Books": len(g.get("bookmakers") or []),
-                "MarketsAvailable": ", ".join(sorted(markets)),
-            }
-        )
-    if rows:
-        st.dataframe(pd.DataFrame(rows))
+    games = st.session_state.get("games", [])
+    if not games:
+        st.info("Load games from the sidebar to begin.")
     else:
-        st.info("No games available. Check Odds API configuration.")
+        rows = []
+        for g in games:
+            markets = set()
+            for bm in g.get("bookmakers") or []:
+                for m in bm.get("markets") or []:
+                    if m.get("key"):
+                        markets.add(m.get("key"))
+            rows.append(
+                {
+                    "League": g.get("league"),
+                    "Home": g.get("home_team"),
+                    "Away": g.get("away_team"),
+                    "Commence (UTC)": g.get("commence_time_iso_utc")
+                    or safe_iso(g.get("commence_time_iso")),
+                    "Commence (Local)": fmt_local_time(g.get("commence_time_local")),
+                    "Local Date": g.get("commence_date_local") or "",
+                    "Books": len(g.get("bookmakers") or []),
+                    "MarketsAvailable": ", ".join(sorted(markets)),
+                    "home_ml_price": g.get("home_ml_price"),
+                    "away_ml_price": g.get("away_ml_price"),
+                    "implied_prob_home": g.get("implied_prob_home"),
+                    "implied_prob_away": g.get("implied_prob_away"),
+                    "home_spread_point": g.get("home_spread_point"),
+                    "home_spread_price": g.get("home_spread_price"),
+                    "total_point": g.get("total_point"),
+                    "over_price": g.get("over_price"),
+                    "under_price": g.get("under_price"),
+                    "warnings": ",".join(g.get("warnings") or []),
+                }
+            )
+        st.dataframe(pd.DataFrame(rows))
 
 
-with tab_vertex:
-    st.header("Vertex Analysis")
-    run = st.button("Run Vertex Analysis", key="run_vertex")
-    if run:
+with tab_master:
+    st.header("Master Analysis")
+    kalshi_status = kalshi_health_check(league)
+    if not kalshi_status.get("ok"):
+        error_detail = kalshi_status.get("error") or "Kalshi is required and is not healthy (missing keys / 0 markets / auth error). Fix Kalshi first."
+        if kalshi_status.get("status_code"):
+            error_detail = f"{error_detail} (status {kalshi_status.get('status_code')}: {kalshi_status.get('response_text')})"
+        st.error(error_detail)
+        st.info("Master Analysis is disabled until Kalshi is available.")
+    run_master = st.button(
+        "Run Master Analysis",
+        key="run_master",
+        disabled=(not kalshi_status.get("ok")) and st.session_state.get("kalshi_required", True),
+        help="Requires Kalshi availability",
+    )
+    games = st.session_state.get("games", [])
+    if run_master and not kalshi_status.get("ok"):
+        st.error("Kalshi is required but unavailable. Fix Kalshi first.")
+        st.stop()
+    if run_master:
+        if st.session_state.get("kalshi_required", True) and kalshi_integrator:
+            try:
+                kalshi_integrator.assert_available()
+            except Exception as exc:
+                st.error(str(exc))
+                st.stop()
+        commence_times_utc = [
+            g.get("commence_time_iso_utc")
+            or g.get("commence_time")
+            or g.get("commence_time_iso")
+            for g in games
+            if g.get("commence_time_iso_utc")
+            or g.get("commence_time")
+            or g.get("commence_time_iso")
+        ]
+        try:
+            kalshi_markets = fetch_kalshi_markets(league, commence_times_utc)
+        except RuntimeError as exc:
+            msg = str(exc)
+            if "429" in msg or "rate limit" in msg.lower():
+                st.error("Kalshi rate-limited. Please retry in ~X seconds.")
+            else:
+                st.error(msg)
+            st.stop()
+        except Exception as exc:
+            st.error(str(exc))
+            st.stop()
+        if not kalshi_markets:
+            st.error(
+                "Kalshi is required but unavailable. Fix keys / API and retry."
+            )
+            st.stop()
+        st.session_state["kalshi_all_markets"] = st.session_state.get(
+            "kalshi_markets_raw", kalshi_markets
+        )
+        winner_refetch_attempted = False
+        full_search_first_game: Optional[Dict[str, Any]] = None
+        if games:
+            try:
+                fg = games[0]
+                full_search_first_game = debug_search_markets_for_game(
+                    kalshi_markets,
+                    fg.get("home_team"),
+                    fg.get("away_team"),
+                    nba_abbrev(fg.get("home_team")),
+                    nba_abbrev(fg.get("away_team")),
+                )
+            except Exception:
+                st.session_state["last_exception"] = traceback.format_exc()
+        if (
+            full_search_first_game
+            and league == "NBA"
+            and not full_search_first_game.get("found_any_winner_market_for_game")
+            and (
+                full_search_first_game.get("found_any_total_market_for_game")
+                or full_search_first_game.get("matches")
+            )
+        ):
+            winner_refetch_attempted = True
+            try:
+                refreshed = kalshi_integrator.get_sports_markets() if kalshi_integrator else []
+                prefix = LEAGUE_SERIES_MAP.get((league or "").upper())
+                if prefix:
+                    refreshed = [
+                        m
+                        for m in refreshed
+                        if str(m.get("ticker") or "").upper().startswith(prefix)
+                    ]
+                if refreshed:
+                    kalshi_markets = refreshed
+                    st.session_state["kalshi_all_markets"] = refreshed
+                    if games:
+                        try:
+                            fg = games[0]
+                            full_search_first_game = debug_search_markets_for_game(
+                                refreshed,
+                                fg.get("home_team"),
+                                fg.get("away_team"),
+                                nba_abbrev(fg.get("home_team")),
+                                nba_abbrev(fg.get("away_team")),
+                            )
+                        except Exception:
+                            st.session_state["last_exception"] = traceback.format_exc()
+            except Exception:
+                st.session_state["last_exception"] = traceback.format_exc()
+        filtered_counts: List[int] = []
+        sample_filtered_for_first_game: List[Dict[str, Any]] = []
+        first_game_candidates: Dict[str, Any] = {}
+        first_game_expected_codes: Optional[Dict[str, Optional[str]]] = None
+        first_filtered_best_time = None
+        first_game_commence_utc = None
+        first_filtered_market_title = None
+        first_filtered_market_ticker = None
+        first_game_full_search = full_search_first_game
+        rows_out: List[Dict[str, Any]] = []
         master_stats = {
-            "games_in": len(all_games_norm),
+            "games_in": len(games),
             "rows_out": 0,
             "h2h_found": 0,
-            "vertex_called": 0,
-            "vertex_none": 0,
             "exceptions": 0,
+            "market_rows_out": 0,
+            "kalshi_matches": 0,
+            "kalshi_total": len(games),
         }
-        rows_out: List[Dict[str, Any]] = []
-        for g in all_games_norm:
-            warnings: List[str] = []
-            league = g.get("league")
+        kalshi_match_results: List[Dict[str, Any]] = []
+        for idx, g in enumerate(games):
+            warnings: List[str] = list(g.get("warnings") or [])
+            league_name = g.get("league")
             home = g.get("home_team")
             away = g.get("away_team")
-            commence_iso = safe_iso(g.get("commence_time_iso"))
+            commence_iso = g.get("commence_time_iso_utc") or safe_iso(g.get("commence_time_iso"))
+            commence_local = fmt_local_time(g.get("commence_time_local"))
+            commence_date_local = g.get("commence_date_local") or ""
+            away_code = nba_abbrev(away)
+            home_code = nba_abbrev(home)
+            if first_game_expected_codes is None:
+                first_game_expected_codes = {"away": away_code, "home": home_code}
+            filtered_markets = filter_kalshi_game_markets(
+                kalshi_markets,
+                g.get("commence_time_utc"),
+                league_name,
+                home,
+                away,
+                home_code,
+                away_code,
+            )
+            deduped: Dict[str, Dict[str, Any]] = {}
+            for fm in filtered_markets:
+                key = fm.get("event_ticker") or fm.get("ticker") or str(id(fm))
+                if key not in deduped:
+                    deduped[key] = fm
+            filtered_markets = list(deduped.values())
+            filtered_counts.append(len(filtered_markets))
+            if not sample_filtered_for_first_game:
+                sample_filtered_for_first_game = [
+                    {
+                        "title": fm.get("title"),
+                        "ticker": fm.get("event_ticker") or fm.get("ticker"),
+                    }
+                    for fm in filtered_markets[:10]
+                ]
+                if filtered_markets:
+                    first_filtered_best_time = safe_iso(
+                        kalshi_market_best_time_utc(filtered_markets[0])
+                    )
+                    first_game_commence_utc = commence_iso
+                    first_filtered_market_title = filtered_markets[0].get("title")
+                    first_filtered_market_ticker = (
+                        filtered_markets[0].get("event_ticker")
+                        or filtered_markets[0].get("ticker")
+                    )
+            partition_counts = {
+                "total": len([m for m in filtered_markets if classify_kalshi_market(m) == "total"]),
+                "spread": len([m for m in filtered_markets if classify_kalshi_market(m) == "spread"]),
+                "winner": len([m for m in filtered_markets if classify_kalshi_market(m) == "winner"]),
+                "prop": len([m for m in filtered_markets if classify_kalshi_market(m) == "prop"]),
+            }
+            winner_reason_override = None
+            if (
+                idx == 0
+                and first_game_full_search
+                and not first_game_full_search.get("found_any_winner_market_for_game")
+            ):
+                winner_reason_override = "winner_not_in_fetched_markets"
+            kalshi_matches, candidate_debug = match_kalshi_market(
+                g, filtered_markets, winner_reason_override
+            )
+            if not first_game_candidates and candidate_debug:
+                first_game_candidates = {
+                    k: sorted(v, key=lambda x: x.get("final_score", 0), reverse=True)[
+                        : (5 if k == "winner" else 3)
+                    ]
+                    for k, v in (candidate_debug or {}).items()
+                }
+                first_game_candidates["partition_counts"] = partition_counts
 
-            h2h = extract_h2h_prices(g)
-            if h2h.get("home_odds") is not None and h2h.get("away_odds") is not None:
-                master_stats["h2h_found"] += 1
-            home_p = american_to_implied(h2h.get("home_odds"))
-            away_p = american_to_implied(h2h.get("away_odds"))
-            implied_home = home_p
-            implied_away = away_p
-            # Decide pick deterministically
-            if implied_home is not None and implied_away is not None:
-                if implied_home >= implied_away:
-                    pick = home
-                    implied_pick = implied_home
-                else:
-                    pick = away
-                    implied_pick = implied_away
+            matched_any = any(v.get("kalshi_matched") for v in kalshi_matches.values())
+            if not matched_any:
+                for res in kalshi_matches.values():
+                    warnings.append(f"kalshi_{res.get('kalshi_reason')}")
             else:
-                pick = home
-                implied_pick = implied_home
+                master_stats["kalshi_matches"] += 1
+            kalshi_match_results.append(
+                {
+                    "home": home,
+                    "away": away,
+                    "league": league_name,
+                    "matches": kalshi_matches,
+                    "candidates": candidate_debug,
+                }
+            )
 
             ai_prob = None
             try:
-                master_stats["vertex_called"] += 1
                 ai_prob = get_vertex_prob(g)
-                if ai_prob is None:
-                    master_stats["vertex_none"] += 1
-                    warnings.append("vertex_none")
             except Exception:
-                master_stats["exceptions"] += 1
-                st.session_state["last_exception"] = traceback.format_exc()
+                ai_prob = None
                 warnings.append("vertex_error")
+                st.session_state["last_exception"] = traceback.format_exc()
 
-            ai_edge = None
-            if ai_prob is not None and implied_pick is not None:
-                ai_edge = ai_prob - implied_pick
+            moneyline_row_added = False
+            spread_row_added = False
+            total_row_added = False
 
-            rows_out.append(
-                {
-                    "League": league,
-                    "Home": home,
-                    "Away": away,
-                    "Commence (UTC)": commence_iso,
-                    "Market": "Moneyline",
-                    "Book": h2h.get("book"),
-                    "Home_ML": h2h.get("home_odds"),
-                    "Away_ML": h2h.get("away_odds"),
-                    "Pick": pick,
-                    "Implied_Prob": implied_pick,
-                    "AI_Prob": ai_prob,
-                    "AI_Edge": ai_edge,
-                    "Warnings": ";".join(warnings),
-                }
-            )
+            kalshi_total = kalshi_matches.get("total", {})
+            kalshi_spread = kalshi_matches.get("spread", {})
+            kalshi_winner = kalshi_matches.get("winner", {})
+
+            home_ml = g.get("home_ml_price")
+            away_ml = g.get("away_ml_price")
+            implied_home = american_to_implied_prob(home_ml)
+            implied_away = american_to_implied_prob(away_ml)
+            if home_ml is not None or away_ml is not None:
+                pick = home
+                implied_pick = implied_home
+                if implied_home is not None and implied_away is not None:
+                    if implied_home >= implied_away:
+                        pick = home
+                        implied_pick = implied_home
+                    else:
+                        pick = away
+                        implied_pick = implied_away
+                elif implied_home is None and implied_away is not None:
+                    pick = away
+                    implied_pick = implied_away
+                match_ref = kalshi_winner
+                if not match_ref.get("kalshi_matched"):
+                    warnings.append(f"kalshi_{match_ref.get('kalshi_reason')}")
+                rows_out.append(
+                    {
+                        "League": league_name,
+                        "Home": home,
+                        "Away": away,
+                        "Commence (UTC)": commence_iso,
+                        "Commence (Local)": commence_local,
+                        "Local Date": commence_date_local,
+                        "Market": "Moneyline",
+                        "Book": g.get("best_ml_book"),
+                        "Home_ML": home_ml,
+                        "Away_ML": away_ml,
+                        "Pick": pick,
+                        "Implied_Prob": implied_pick,
+                        "AI_Prob": ai_prob,
+                        "Warnings": ";".join(warnings),
+                        "kalshi_available": match_ref.get("kalshi_available"),
+                        "kalshi_label": match_ref.get("kalshi_label"),
+                        "kalshi_event_ticker": match_ref.get("kalshi_event_ticker"),
+                        "kalshi_matched": match_ref.get("kalshi_matched"),
+                        "kalshi_prob": match_ref.get("kalshi_prob"),
+                        "kalshi_reason": match_ref.get("kalshi_reason"),
+                        "kalshi_market_type": match_ref.get("kalshi_market_type"),
+                        "kalshi_ticker": match_ref.get("kalshi_ticker"),
+                        "kalshi_line": match_ref.get("kalshi_line"),
+                        "kalshi_title": match_ref.get("kalshi_title"),
+                        "kalshi_match_score": match_ref.get("kalshi_match_score"),
+                    }
+                )
+                master_stats["h2h_found"] += 1
+                moneyline_row_added = True
+                master_stats["market_rows_out"] += 1
+
+            if (
+                g.get("home_spread_point") is not None
+                and g.get("away_spread_point") is not None
+                and g.get("home_spread_price") is not None
+                and g.get("away_spread_price") is not None
+            ):
+                spread_pick = home
+                home_spread_price = g.get("home_spread_price")
+                away_spread_price = g.get("away_spread_price")
+                spread_pick_price = home_spread_price
+                if away_spread_price is not None and home_spread_price is not None:
+                    if float(away_spread_price) > float(home_spread_price):
+                        spread_pick = away
+                        spread_pick_price = away_spread_price
+                elif away_spread_price is not None:
+                    spread_pick = away
+                    spread_pick_price = away_spread_price
+                match_ref = kalshi_spread
+                if not match_ref.get("kalshi_matched"):
+                    warnings.append(f"kalshi_{match_ref.get('kalshi_reason')}")
+                rows_out.append(
+                    {
+                        "League": league_name,
+                        "Home": home,
+                        "Away": away,
+                        "Commence (UTC)": commence_iso,
+                        "Commence (Local)": commence_local,
+                        "Local Date": commence_date_local,
+                        "Market": "Spread",
+                        "Book": g.get("best_spread_book"),
+                        "Home_Spread": g.get("home_spread_point"),
+                        "Home_Spread_Price": g.get("home_spread_price"),
+                        "Away_Spread": g.get("away_spread_point"),
+                        "Away_Spread_Price": g.get("away_spread_price"),
+                        "Pick": spread_pick,
+                        "Implied_Prob": american_to_implied_prob(spread_pick_price),
+                        "AI_Prob": ai_prob,
+                        "Warnings": ";".join(warnings),
+                        "kalshi_available": match_ref.get("kalshi_available"),
+                        "kalshi_label": match_ref.get("kalshi_label"),
+                        "kalshi_event_ticker": match_ref.get("kalshi_event_ticker"),
+                        "kalshi_matched": match_ref.get("kalshi_matched"),
+                        "kalshi_prob": match_ref.get("kalshi_prob"),
+                        "kalshi_reason": match_ref.get("kalshi_reason"),
+                        "kalshi_market_type": match_ref.get("kalshi_market_type"),
+                        "kalshi_ticker": match_ref.get("kalshi_ticker"),
+                        "kalshi_line": match_ref.get("kalshi_line"),
+                        "kalshi_title": match_ref.get("kalshi_title"),
+                        "kalshi_match_score": match_ref.get("kalshi_match_score"),
+                    }
+                )
+                spread_row_added = True
+                master_stats["market_rows_out"] += 1
+
+            if (
+                g.get("total_point") is not None
+                and g.get("over_price") is not None
+                and g.get("under_price") is not None
+            ):
+                total_pick = "Over"
+                over_price = g.get("over_price")
+                under_price = g.get("under_price")
+                total_pick_price = over_price
+                if under_price is not None and over_price is not None:
+                    if float(under_price) > float(over_price):
+                        total_pick = "Under"
+                        total_pick_price = under_price
+                elif under_price is not None:
+                    total_pick = "Under"
+                    total_pick_price = under_price
+                match_ref = kalshi_total
+                if not match_ref.get("kalshi_matched"):
+                    warnings.append(f"kalshi_{match_ref.get('kalshi_reason')}")
+                rows_out.append(
+                    {
+                        "League": league_name,
+                        "Home": home,
+                        "Away": away,
+                        "Commence (UTC)": commence_iso,
+                        "Commence (Local)": commence_local,
+                        "Local Date": commence_date_local,
+                        "Market": "Total",
+                        "Book": g.get("best_total_book"),
+                        "Total_Point": g.get("total_point"),
+                        "Over_Price": g.get("over_price"),
+                        "Under_Price": g.get("under_price"),
+                        "Pick": total_pick,
+                        "Implied_Prob": american_to_implied_prob(total_pick_price),
+                        "AI_Prob": ai_prob,
+                        "Warnings": ";".join(warnings),
+                        "kalshi_available": match_ref.get("kalshi_available"),
+                        "kalshi_label": match_ref.get("kalshi_label"),
+                        "kalshi_event_ticker": match_ref.get("kalshi_event_ticker"),
+                        "kalshi_matched": match_ref.get("kalshi_matched"),
+                        "kalshi_prob": match_ref.get("kalshi_prob"),
+                        "kalshi_reason": match_ref.get("kalshi_reason"),
+                        "kalshi_market_type": match_ref.get("kalshi_market_type"),
+                        "kalshi_ticker": match_ref.get("kalshi_ticker"),
+                        "kalshi_line": match_ref.get("kalshi_line"),
+                        "kalshi_title": match_ref.get("kalshi_title"),
+                        "kalshi_match_score": match_ref.get("kalshi_match_score"),
+                    }
+                )
+                total_row_added = True
+                master_stats["market_rows_out"] += 1
+
+            if not (moneyline_row_added or spread_row_added or total_row_added):
+                warnings = list(dict.fromkeys(warnings + ["no_markets"]))
+                rows_out.append(
+                    {
+                        "League": league_name,
+                        "Home": home,
+                        "Away": away,
+                        "Commence (UTC)": commence_iso,
+                        "Commence (Local)": commence_local,
+                        "Local Date": commence_date_local,
+                        "Market": "None",
+                        "Book": None,
+                        "Pick": None,
+                        "Implied_Prob": None,
+                        "AI_Prob": ai_prob,
+                        "Warnings": ";".join(warnings),
+                        "kalshi_available": kalshi_winner.get("kalshi_available"),
+                        "kalshi_label": kalshi_winner.get("kalshi_label"),
+                        "kalshi_event_ticker": kalshi_winner.get("kalshi_event_ticker"),
+                        "kalshi_matched": kalshi_winner.get("kalshi_matched"),
+                        "kalshi_prob": kalshi_winner.get("kalshi_prob"),
+                        "kalshi_reason": kalshi_winner.get("kalshi_reason"),
+                        "kalshi_market_type": kalshi_winner.get("kalshi_market_type"),
+                        "kalshi_ticker": kalshi_winner.get("kalshi_ticker"),
+                        "kalshi_line": kalshi_winner.get("kalshi_line"),
+                        "kalshi_title": kalshi_winner.get("kalshi_title"),
+                        "kalshi_match_score": kalshi_winner.get("kalshi_match_score"),
+                    }
+                )
+                master_stats["market_rows_out"] += 1
 
         df = pd.DataFrame(rows_out)
         master_stats["rows_out"] = len(df)
         st.session_state["last_rows_out"] = len(df)
+        st.session_state["master_stats"] = master_stats
+        st.session_state["kalshi_match_results"] = kalshi_match_results
+        st.session_state["kalshi_filter_stats"] = {
+            "total_markets_fetched": len(kalshi_markets),
+            "avg_filtered_markets_per_game": sum(filtered_counts) / len(filtered_counts)
+            if filtered_counts
+            else 0,
+            "filtered_markets_min": min(filtered_counts) if filtered_counts else 0,
+            "filtered_markets_max": max(filtered_counts) if filtered_counts else 0,
+            "sample_filtered_first_game": sample_filtered_for_first_game,
+            "filtered_first_game_titles_after_team_filter": sample_filtered_for_first_game,
+            "first_filtered_market_best_time_utc": first_filtered_best_time,
+            "first_game_commence_time_utc": first_game_commence_utc,
+            "first_filtered_market_title": first_filtered_market_title,
+            "first_filtered_market_ticker": first_filtered_market_ticker,
+            "first_game_expected_codes": first_game_expected_codes,
+            "first_game_partition_counts": first_game_candidates.get("partition_counts")
+            if first_game_candidates
+            else None,
+            "first_game_top_candidates": {
+                k: v
+                for k, v in first_game_candidates.items()
+                if k in {"total", "spread", "winner"}
+            }
+            if first_game_candidates
+            else {},
+            "first_winner_candidates_top5": first_game_candidates.get("winner")
+            if first_game_candidates
+            else None,
+            "first_game_full_market_search": first_game_full_search,
+            "kalshi_winner_refetch_attempted": winner_refetch_attempted,
+        }
+        matches = master_stats.get("kalshi_matches", 0)
+        total_games = master_stats.get("kalshi_total", 0) or 1
+        st.caption(
+            f"Kalshi matches: {matches}/{total_games} ({matches/total_games:.1%})"
+        )
 
         if master_stats["games_in"] > 0 and master_stats["rows_out"] == 0:
             st.error("Master analysis produced 0 rows; see debug stats below.")
             st.json(master_stats)
+        elif not games:
+            st.warning("No games loaded. Use the sidebar to load games first.")
         else:
-            st.success(f"Produced {len(df)} rows from {len(all_games_norm)} games")
+            st.success(f"Produced {len(df)} rows from {len(games)} games")
             st.dataframe(df)
-            st.caption(f"rows_out/games_in = {master_stats['rows_out']} / {master_stats['games_in']}")
+            st.caption(
+                f"rows_out/games_in = {master_stats['rows_out']} / {master_stats['games_in']}"
+            )
+    elif not games:
+        st.info("Load games from the sidebar, then run Master Analysis.")
 
-        st.session_state["master_stats"] = master_stats
 
-
-with tab_news:
-    st.header("News")
-    if news_api_key:
-        try:
-            articles = fetch_news()
-            if not articles:
-                st.info("No news articles returned.")
-            for art in articles:
-                title = art.get("title")
-                source = (art.get("source") or {}).get("name")
-                published = art.get("publishedAt") or art.get("published_at")
-                st.subheader(title or "(untitled)")
-                st.caption(f"{source or 'Unknown'} — {published}")
-                if art.get("url"):
-                    st.markdown(f"[Read more]({art['url']})")
-                st.write("---")
-        except Exception:
-            st.session_state["last_exception"] = traceback.format_exc()
-            st.error("Failed to fetch news.")
+with tab_kalshi:
+    st.header("Kalshi Health")
+    kalshi_status = kalshi_health_check(league)
+    st.json(kalshi_status)
+    if not kalshi_status.get("configured"):
+        st.error("Kalshi is required but not configured.")
+    elif not kalshi_status.get("ok"):
+        st.error("Kalshi is required but unavailable. Fix keys/API and retry.")
     else:
-        st.warning("NEWS_API_KEY not configured. Skipping news fetch.")
+        st.success("Kalshi credentials detected and markets available.")
+
+
+with tab_sentiment:
+    st.header("Sentiment (Stub)")
+    st.info("Sentiment analysis integration coming soon.")
 
 
 with tab_debug:
@@ -366,22 +1825,137 @@ with tab_debug:
         "odds_api": bool(odds_api_key),
         "news_api": bool(news_api_key),
         "vertex_configured": bool(vertex_endpoint_id),
+        "kalshi_configured": bool(kalshi_api_key and kalshi_api_secret),
     }
     st.subheader("Config Flags")
     st.json({**flags, "project_id": project_id, "location": location})
 
+    games = st.session_state.get("games", [])
     st.subheader("Counts")
     st.json(
         {
-            "games_loaded_raw": len(all_games_raw),
-            "games_normalized": len(all_games_norm),
+            "games_loaded_raw": len(games),
+            "games_normalized": len(games),
             "last_rows_out": st.session_state.get("last_rows_out", 0),
+            "moneyline_available_count": st.session_state.get("market_counts", {}).get(
+                "moneyline_available_count", 0
+            ),
+            "spreads_available_count": st.session_state.get("market_counts", {}).get(
+                "spreads_available_count", 0
+            ),
+            "totals_available_count": st.session_state.get("market_counts", {}).get(
+                "totals_available_count", 0
+            ),
+            "market_rows_out": st.session_state.get("master_stats", {}).get(
+                "market_rows_out", 0
+            ),
         }
     )
 
-    if all_games_norm:
+    st.subheader("Timezones")
+    commence_stats = st.session_state.get("commence_stats", {})
+    st.json({"timezone_used": commence_stats.get("timezone") or get_local_tz()})
+    if games:
+        samples = []
+        for g in games[:3]:
+            samples.append(
+                {
+                    "home": g.get("home_team"),
+                    "away": g.get("away_team"),
+                    "utc": g.get("commence_time_iso_utc"),
+                    "local": g.get("commence_time_iso_local"),
+                }
+            )
+        st.caption("Sample commence conversions (first 3 games)")
+        st.json(samples)
+
+    if games:
         st.subheader("Sample normalized game")
-        st.code(json.dumps(all_games_norm[0], indent=2))
+        st.code(json.dumps(games[0], indent=2, default=str))
+
+    st.subheader("Kalshi health")
+    kalshi_health = kalshi_health_check(league)
+    st.json(kalshi_health)
+    filter_stats = st.session_state.get("kalshi_filter_stats") or {}
+    if filter_stats:
+        st.subheader("Kalshi filtering stats")
+        st.json(filter_stats)
+    prefix_counts = st.session_state.get("kalshi_prefix_counts")
+    if prefix_counts:
+        st.subheader("Kalshi ticker prefix counts")
+        st.json(prefix_counts)
+        samples = st.session_state.get("kalshi_prefix_samples_game") or []
+        if samples:
+            st.caption("First 20 KXNBAGAME tickers")
+            st.json(samples)
+    all_markets_debug = st.session_state.get("kalshi_all_markets") or []
+    if games and all_markets_debug:
+        fg = games[0]
+        home_code_dbg = nba_abbrev(fg.get("home_team"))
+        away_code_dbg = nba_abbrev(fg.get("away_team"))
+        search_results = debug_search_markets_for_game(
+            all_markets_debug,
+            fg.get("home_team"),
+            fg.get("away_team"),
+            home_code_dbg,
+            away_code_dbg,
+            limit=15,
+        )
+        st.subheader("Kalshi full-market search (first game)")
+        st.json(
+            {
+                "expected_codes": {"home": home_code_dbg, "away": away_code_dbg},
+                "found_any_winner_market_for_game": search_results.get(
+                    "found_any_winner_market_for_game"
+                ),
+                "found_any_total_market_for_game": search_results.get(
+                    "found_any_total_market_for_game"
+                ),
+                "found_any_spread_market_for_game": search_results.get(
+                    "found_any_spread_market_for_game"
+                ),
+                "counts": search_results.get("counts"),
+                "top_matches": search_results.get("matches"),
+            }
+        )
+    if st.session_state.get("kalshi_match_results"):
+        matches = st.session_state.get("kalshi_match_results")
+        matched = []
+        non_match_reasons: List[str] = []
+        for m in matches:
+            for res in (m.get("matches") or {}).values():
+                if res.get("kalshi_matched"):
+                    matched.append(res)
+                else:
+                    non_match_reasons.append(res.get("kalshi_reason") or "unknown")
+        if matched:
+            st.caption("Sample matched market")
+            st.json(matched[0])
+        if filter_stats.get("sample_filtered_first_game"):
+            st.caption("Sample filtered markets for first game")
+            st.json(filter_stats.get("sample_filtered_first_game"))
+        if filter_stats.get("filtered_first_game_titles_after_team_filter"):
+            st.caption("Filtered markets after team filter (first game)")
+            st.json(filter_stats.get("filtered_first_game_titles_after_team_filter"))
+        if filter_stats.get("first_game_partition_counts"):
+            st.caption("First game partition counts (total/spread/winner/prop)")
+            st.json(filter_stats.get("first_game_partition_counts"))
+        if filter_stats.get("first_game_expected_codes"):
+            st.caption("First game expected ticker codes (away/home)")
+            st.json(filter_stats.get("first_game_expected_codes"))
+        if filter_stats.get("first_game_top_candidates"):
+            st.caption("Top candidates by partition (first game)")
+            st.json(filter_stats.get("first_game_top_candidates"))
+        if filter_stats.get("first_winner_candidates_top5"):
+            st.caption("Winner candidates top 5 (first game)")
+            st.json(filter_stats.get("first_winner_candidates_top5"))
+        if non_match_reasons:
+            reasons: Dict[str, int] = {}
+            for reason in non_match_reasons:
+                reasons[reason] = reasons.get(reason, 0) + 1
+            top_reasons = sorted(reasons.items(), key=lambda x: x[1], reverse=True)[:5]
+            st.caption("Top non-match reasons")
+            st.json(top_reasons)
 
     if "master_stats" in st.session_state:
         st.subheader("Master analysis stats")
@@ -390,4 +1964,3 @@ with tab_debug:
     if st.session_state.get("last_exception"):
         st.subheader("Last exception")
         st.code(st.session_state["last_exception"])
-
