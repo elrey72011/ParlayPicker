@@ -10,11 +10,7 @@ from zoneinfo import ZoneInfo
 import pandas as pd
 import requests
 import streamlit as st
-from app_core.kalshi_integrator import (
-    KalshiIntegrator,
-    LEAGUE_SERIES_MAP,
-    price_to_prob,
-)
+from app_core.kalshi_integrator import KalshiIntegrator, LEAGUE_SERIES_MAP
 
 # Must be the first Streamlit call
 st.set_page_config(page_title="ParlayDesk", layout="wide")
@@ -626,7 +622,16 @@ def filter_kalshi_game_markets(
 def classify_kalshi_market(market: Dict[str, Any]) -> str:
     title = str(market.get("title") or "").lower()
     rules = str(market.get("rules") or "").lower()
-    if "total points" in title or "score more than" in rules or "collectively score" in rules:
+    has_points_strike = bool(
+        (market.get("floor_strike") is not None or market.get("cap_strike") is not None)
+        and ("points" in title or "points" in rules)
+    )
+    if (
+        "total points" in title
+        or "collectively score" in rules
+        or "score more than" in rules
+        or has_points_strike
+    ):
         return "total"
     if "spread" in title or "win by" in rules or "point spread" in rules:
         return "spread"
@@ -635,16 +640,15 @@ def classify_kalshi_market(market: Dict[str, Any]) -> str:
     return "other"
 
 
-def normalize_kalshi_title_teams(title_or_rules: Any) -> Tuple[Optional[str], Optional[str]]:
-    text = str(title_or_rules or "")
-    lower = text.lower()
+def extract_teams_from_kalshi_text(text: Any) -> Tuple[Optional[str], Optional[str]]:
+    content = str(text or "")
     patterns = [
         r"(.+?)\s+at\s+(.+?)(:|\||-|$)",
-        r"(.+?)\s+vs\.?\s+(.+?)(:|\||-|$)",
         r"(.+?)\s+@\s+(.+?)(:|\||-|$)",
+        r"(.+?)\s+vs\.?\s+(.+?)(:|\||-|$)",
     ]
     for pat in patterns:
-        match = re.search(pat, lower)
+        match = re.search(pat, content, flags=re.IGNORECASE)
         if match:
             return match.group(1).strip(), match.group(2).strip()
     return None, None
@@ -674,23 +678,24 @@ def match_kalshi_market(
     def team_score(market: Dict[str, Any]) -> float:
         home_norm = norm_team(game.get("home_team"))
         away_norm = norm_team(game.get("away_team"))
+        title_away, title_home = extract_teams_from_kalshi_text(market.get("title"))
+        rules_away, rules_home = extract_teams_from_kalshi_text(market.get("rules"))
+        guesses = [
+            (title_away, title_home),
+            (rules_away, rules_home),
+        ]
+        for away_guess, home_guess in guesses:
+            if away_guess and home_guess:
+                away_guess_norm = norm_team(away_guess)
+                home_guess_norm = norm_team(home_guess)
+                if (
+                    away_guess_norm == away_norm and home_guess_norm == home_norm
+                ) or (away_guess_norm == home_norm and home_guess_norm == away_norm):
+                    return 1.0
         combined_text = f"{market.get('title') or ''} {market.get('rules') or ''}".lower()
-        away_guess, home_guess = normalize_kalshi_title_teams(market.get("title"))
-        if not away_guess and not home_guess:
-            away_guess, home_guess = normalize_kalshi_title_teams(market.get("rules"))
-        if away_guess and home_guess:
-            away_guess_norm = norm_team(away_guess)
-            home_guess_norm = norm_team(home_guess)
-            if (
-                (away_guess_norm == away_norm and home_guess_norm == home_norm)
-                or (away_guess_norm == home_norm and home_guess_norm == away_norm)
-            ):
-                return 1.0
-        contains_both = away_norm in combined_text and home_norm in combined_text
-        if contains_both:
+        if away_norm and home_norm and away_norm in combined_text and home_norm in combined_text:
             return 1.0
-        contains_one = away_norm in combined_text or home_norm in combined_text
-        return 0.5 if contains_one else 0.0
+        return 0.0
 
     def time_score(market: Dict[str, Any]) -> float:
         game_dt = game.get("commence_time_utc")
@@ -698,44 +703,31 @@ def match_kalshi_market(
             market.get("expiration_time")
         )
         if not isinstance(game_dt, datetime) or market_dt is None:
-            return 0.5
+            return 0.0
         delta_hours = abs((market_dt - game_dt).total_seconds()) / 3600.0
         return max(0.0, 1.0 - min(delta_hours / 36.0, 1.0))
 
-    def extract_prob_and_line(market: Dict[str, Any], market_type: str) -> Tuple[Optional[float], Optional[float]]:
-        price_candidates = []
+    def extract_prob_and_line(
+        market: Dict[str, Any], market_type: str
+    ) -> Tuple[Optional[float], Optional[float]]:
+        prices: List[float] = []
         for val in [market.get("yes_bid"), market.get("yes_ask")]:
             try:
-                price_candidates.append(float(val))
+                prices.append(float(val))
             except Exception:
                 continue
         selected_price = None
-        if len(price_candidates) == 2:
-            selected_price = sum(price_candidates) / 2.0
-        elif price_candidates:
-            selected_price = price_candidates[0]
-        elif market.get("last_price") is not None:
+        if len(prices) == 2:
+            selected_price = sum(prices) / 2.0
+        elif prices:
+            selected_price = prices[0]
+        prob = (selected_price / 100.0) if selected_price is not None else None
+        line = market.get("floor_strike") or market.get("cap_strike")
+        if line is not None:
             try:
-                selected_price = float(market.get("last_price"))
-            except Exception:
-                selected_price = None
-        prob = price_to_prob(selected_price)
-        line = market.get("floor_strike") or market.get("cap_strike") or market.get("strike")
-        if line is None:
-            title = str(market.get("title") or "").lower()
-            if market_type == "total":
-                match_line = re.search(r"over\s+([0-9]+\.?[0-9]*)", title)
-                if match_line:
-                    line = match_line.group(1)
-            elif market_type == "spread":
-                match_line = re.search(r"([+-]?[0-9]+\.?[0-9]*)\s+spread", title)
-                if match_line:
-                    line = match_line.group(1)
-        try:
-            if line is not None:
                 line = float(line)
-        except Exception:
-            line = None
+            except Exception:
+                line = None
         return prob, line
 
     def evaluate_partition(partition_markets: List[Dict[str, Any]], market_type: str):
@@ -745,7 +737,7 @@ def match_kalshi_market(
         for m in partition_markets:
             ts = team_score(m)
             tms = time_score(m)
-            final = 0.75 * ts + 0.25 * tms
+            final = 0.8 * ts + 0.2 * tms
             candidates.append(
                 {
                     "title": m.get("title"),
