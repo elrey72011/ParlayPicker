@@ -1558,13 +1558,7 @@ with tab_master:
             except Exception:
                 st.session_state["last_exception"] = traceback.format_exc()
         filtered_counts: List[int] = []
-        sample_filtered_for_first_game: List[Dict[str, Any]] = []
-        first_game_candidates: Dict[str, Any] = {}
-        first_game_expected_codes: Optional[Dict[str, Optional[str]]] = None
-        first_filtered_best_time = None
-        first_game_commence_utc = None
-        first_filtered_market_title = None
-        first_filtered_market_ticker = None
+        per_game_kalshi_debug: List[Dict[str, Any]] = []
         first_game_full_search = full_search_first_game
         rows_out: List[Dict[str, Any]] = []
         master_stats = {
@@ -1587,8 +1581,6 @@ with tab_master:
             commence_date_local = g.get("commence_date_local") or ""
             away_code = nba_abbrev(away)
             home_code = nba_abbrev(home)
-            if first_game_expected_codes is None:
-                first_game_expected_codes = {"away": away_code, "home": home_code}
             filtered_markets = filter_kalshi_game_markets(
                 kalshi_markets,
                 g.get("commence_time_utc"),
@@ -1605,24 +1597,6 @@ with tab_master:
                     deduped[key] = fm
             filtered_markets = list(deduped.values())
             filtered_counts.append(len(filtered_markets))
-            if not sample_filtered_for_first_game:
-                sample_filtered_for_first_game = [
-                    {
-                        "title": fm.get("title"),
-                        "ticker": fm.get("event_ticker") or fm.get("ticker"),
-                    }
-                    for fm in filtered_markets[:10]
-                ]
-                if filtered_markets:
-                    first_filtered_best_time = safe_iso(
-                        kalshi_market_best_time_utc(filtered_markets[0])
-                    )
-                    first_game_commence_utc = commence_iso
-                    first_filtered_market_title = filtered_markets[0].get("title")
-                    first_filtered_market_ticker = (
-                        filtered_markets[0].get("event_ticker")
-                        or filtered_markets[0].get("ticker")
-                    )
             partition_counts = {
                 "total": len([m for m in filtered_markets if classify_kalshi_market(m) == "total"]),
                 "spread": len([m for m in filtered_markets if classify_kalshi_market(m) == "spread"]),
@@ -1639,19 +1613,38 @@ with tab_master:
             kalshi_matches, candidate_debug = match_kalshi_market(
                 g, filtered_markets, winner_reason_override
             )
-            if not first_game_candidates and candidate_debug:
-                first_game_candidates = {
-                    k: sorted(v, key=lambda x: x.get("final_score", 0), reverse=True)[
-                        : (5 if k == "winner" else 3)
-                    ]
-                    for k, v in (candidate_debug or {}).items()
-                    if isinstance(v, list)
+            winner_sample = []
+            if candidate_debug and isinstance(candidate_debug.get("winner"), list):
+                winner_sample = candidate_debug.get("winner", [])[:3]
+            per_game_kalshi_debug.append(
+                {
+                    "game_index": idx,
+                    "game_home": home,
+                    "game_away": away,
+                    "game_commence_utc": commence_iso,
+                    "kalshi_date_token_used": (candidate_debug or {})
+                    .get("winner_meta", {})
+                    .get("expected_date_token"),
+                    "away_code": away_code,
+                    "home_code": home_code,
+                    "strict_filtered_count": len(filtered_markets),
+                    "strict_filtered_sample": [
+                        {
+                            "title": fm.get("title"),
+                            "ticker": fm.get("event_ticker") or fm.get("ticker"),
+                        }
+                        for fm in filtered_markets[:3]
+                    ],
+                    "winner_candidates_count": len(winner_sample),
+                    "winner_candidates_sample": winner_sample,
+                    "matched_ticker": kalshi_matches.get("winner", {}).get(
+                        "kalshi_event_ticker"
+                    ),
+                    "matched_title": kalshi_matches.get("winner", {}).get(
+                        "kalshi_title"
+                    ),
                 }
-                first_game_candidates["partition_counts"] = partition_counts
-                if "winner_meta" in candidate_debug:
-                    first_game_candidates["winner_meta"] = candidate_debug.get(
-                        "winner_meta", {}
-                    )
+            )
 
             matched_any = any(v.get("kalshi_matched") for v in kalshi_matches.values())
             if not matched_any:
@@ -1886,29 +1879,10 @@ with tab_master:
             else 0,
             "filtered_markets_min": min(filtered_counts) if filtered_counts else 0,
             "filtered_markets_max": max(filtered_counts) if filtered_counts else 0,
-            "sample_filtered_first_game": sample_filtered_for_first_game,
-            "filtered_first_game_titles_after_team_filter": sample_filtered_for_first_game,
-            "first_filtered_market_best_time_utc": first_filtered_best_time,
-            "first_game_commence_time_utc": first_game_commence_utc,
-            "first_filtered_market_title": first_filtered_market_title,
-            "first_filtered_market_ticker": first_filtered_market_ticker,
-            "first_game_expected_codes": first_game_expected_codes,
-            "first_game_partition_counts": first_game_candidates.get("partition_counts")
-            if first_game_candidates
-            else None,
-            "first_game_top_candidates": {
-                k: v
-                for k, v in first_game_candidates.items()
-                if k in {"total", "spread", "winner"}
-            }
-            if first_game_candidates
+            "per_game_debug": per_game_kalshi_debug,
+            "first_game_debug": per_game_kalshi_debug[0]
+            if per_game_kalshi_debug
             else {},
-            "first_winner_candidates_top5": first_game_candidates.get("winner")
-            if first_game_candidates
-            else None,
-            "first_winner_meta": first_game_candidates.get("winner_meta")
-            if first_game_candidates
-            else None,
             "first_game_full_market_search": first_game_full_search,
             "kalshi_winner_refetch_attempted": winner_refetch_attempted,
         }
@@ -2062,24 +2036,13 @@ with tab_debug:
         if matched:
             st.caption("Sample matched market")
             st.json(matched[0])
-        if filter_stats.get("sample_filtered_first_game"):
-            st.caption("Sample filtered markets for first game")
-            st.json(filter_stats.get("sample_filtered_first_game"))
-        if filter_stats.get("filtered_first_game_titles_after_team_filter"):
-            st.caption("Filtered markets after team filter (first game)")
-            st.json(filter_stats.get("filtered_first_game_titles_after_team_filter"))
-        if filter_stats.get("first_game_partition_counts"):
-            st.caption("First game partition counts (total/spread/winner/prop)")
-            st.json(filter_stats.get("first_game_partition_counts"))
-        if filter_stats.get("first_game_expected_codes"):
-            st.caption("First game expected ticker codes (away/home)")
-            st.json(filter_stats.get("first_game_expected_codes"))
-        if filter_stats.get("first_game_top_candidates"):
-            st.caption("Top candidates by partition (first game)")
-            st.json(filter_stats.get("first_game_top_candidates"))
-        if filter_stats.get("first_winner_candidates_top5"):
-            st.caption("Winner candidates top 5 (first game)")
-            st.json(filter_stats.get("first_winner_candidates_top5"))
+        first_game_debug = filter_stats.get("first_game_debug") or {}
+        if first_game_debug:
+            st.caption("Kalshi per-game debug (first game)")
+            st.json(first_game_debug)
+        if filter_stats.get("per_game_debug"):
+            st.caption("Kalshi per-game debug (all games)")
+            st.json(filter_stats.get("per_game_debug"))
         if non_match_reasons:
             reasons: Dict[str, int] = {}
             for reason in non_match_reasons:
