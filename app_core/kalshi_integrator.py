@@ -1,5 +1,5 @@
 """
-Kalshi Integrator with RSA Signing & Pagination.
+Kalshi Integrator with RSA Signing & Multi-Sport Fetching.
 Location: app_core/kalshi_integrator.py
 """
 from __future__ import annotations
@@ -24,37 +24,9 @@ from cryptography.hazmat.primitives.asymmetric import padding
 
 logger = logging.getLogger(__name__)
 
-
-class KalshiRateLimitError(Exception):
-    """Raised when Kalshi keeps returning 429 after retries."""
-
-
-class KalshiAPIError(Exception):
-    """Raised for non-auth Kalshi API errors."""
-
-# ---------------------------------------------------------------------------
-# Data Structures
-# ---------------------------------------------------------------------------
-
-@dataclass
-class KalshiMatchResult:
-    matched: bool
-    kalshi_available: bool
-    label: str
-    probability: Optional[float]
-    raw_event_id: Optional[str]
-    league: Optional[str] = None
-    reason: str = ""
-    market_type: Optional[str] = None
-    direction: Optional[str] = None
-    game_date: Optional[datetime] = None
-    kalshi_volume: Optional[float] = None
-    debug: Optional[Dict[str, Any]] = None
-
 # ---------------------------------------------------------------------------
 # Constants & Mappings
 # ---------------------------------------------------------------------------
-
 SUPPORTED_LEAGUES = {"NBA", "NFL", "MLB", "NHL", "NCAAF", "NCAAB"}
 SAFE_STATUS_ALLOWLIST = {"active", "closed", "finalized", "settled"}
 
@@ -99,57 +71,24 @@ KALSHI_TEAM_ABBREVIATIONS: Dict[str, List[str]] = {
     "SEATTLE KRAKEN": ["SEA"]
 }
 
-TEAM_FUZZY_THRESHOLD = 1.0
-DATE_TOLERANCE_DAYS = 5
-DATE_SOFT_PENALTY = 0.10
-NBA_TZ = pytz.timezone("America/New_York")
-# Do not fallback to cross-date or fuzzy matches; only same-day, exact event tickers
-ALLOW_SAME_DAY_TEXT_FALLBACK = False
-
-# Strict NBA code mapping for winner event tickers
 NBA_TEAM_CODE_MAP: Dict[str, str] = {
-    "NEW YORK KNICKS": "NYK",
-    "SAN ANTONIO SPURS": "SAS",
-    "CHICAGO BULLS": "CHI",
-    "CLEVELAND CAVALIERS": "CLE",
-    "MINNESOTA TIMBERWOLVES": "MIN",
-    "MEMPHIS GRIZZLIES": "MEM",
-    "LOS ANGELES CLIPPERS": "LAC",
-    "LA CLIPPERS": "LAC",
-    "LOS ANGELES LAKERS": "LAL",
-    "LA LAKERS": "LAL",
+    "NEW YORK KNICKS": "NYK", "SAN ANTONIO SPURS": "SAS", "CHICAGO BULLS": "CHI",
+    "CLEVELAND CAVALIERS": "CLE", "MINNESOTA TIMBERWOLVES": "MIN", "MEMPHIS GRIZZLIES": "MEM",
+    "LOS ANGELES CLIPPERS": "LAC", "LA CLIPPERS": "LAC", "LOS ANGELES LAKERS": "LAL", "LA LAKERS": "LAL",
 }
 
-# ---------------------------------------------------------------------------
-# Helper Functions
-# ---------------------------------------------------------------------------
-
-def normalize_name(name: str) -> str:
-    if not name:
-        return ""
-    return (
-        str(name)
-        .strip()
-        .upper()
-        .replace("&", "AND")
-        .replace(".", "")
-        .replace(",", "")
-        .replace("'", "")
-    )
+def normalize_status(status: Optional[str]) -> Optional[str]:
+    if not status: return None
+    s = str(status).strip().lower()
+    if s == "open": return None 
+    return s if s in SAFE_STATUS_ALLOWLIST else None
 
 def price_to_prob(price: Any) -> Optional[float]:
-    if price is None:
-        return None
+    if price is None: return None
     try:
         val = float(price)
-    except Exception:
-        return None
-    if val < 0:
-        return None
-    if 0.0 <= val <= 1.0:
-        return max(0.0, min(1.0, val))
-    if 0.0 <= val <= 100.0:
-        return max(0.0, min(1.0, val / 100.0))
+        if 0.0 <= val <= 100.0: return max(0.0, min(1.0, val / 100.0))
+    except: pass
     return None
 
 def _extract_market_type(title: str, ticker: str) -> str:
@@ -468,23 +407,12 @@ def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time:
 # ---------------------------------------------------------------------------
 
 class KalshiIntegrator:
-    def __init__(
-        self,
-        api_key: Optional[str] = None,
-        api_secret: Optional[str] = None,
-        *,
-        required: bool = False,
-    ) -> None:
-        # Resolve key + secret from args, env, or Streamlit secrets (only the official names)
+    def __init__(self, api_key: Optional[str] = None, api_secret: Optional[str] = None, *, required: bool = False):
         self.api_key = api_key or st.secrets.get("KALSHI_API_KEY") or os.getenv("KALSHI_API_KEY")
         raw_secret = api_secret or st.secrets.get("KALSHI_API_SECRET") or os.getenv("KALSHI_API_SECRET")
-
-        # --- Clean private key format ---
         self.api_secret_pem = self._normalize_secret(raw_secret)
-
         self.api_url = "https://api.elections.kalshi.com/trade-api/v2"
-
-        # Required flag
+        self.session = requests.Session()
         self.required = required
 
         # Caching + error state
@@ -505,15 +433,10 @@ class KalshiIntegrator:
 
     @staticmethod
     def _normalize_secret(secret_val: Optional[str]) -> Optional[str]:
-        if not secret_val:
-            return None
+        if not secret_val: return None
         cleaned = str(secret_val).replace("\\n", "\n").strip()
-        if not cleaned:
-            return None
-        if "-----BEGIN RSA PRIVATE KEY-----" in cleaned or "-----BEGIN PRIVATE KEY-----" in cleaned:
-            return cleaned
-        # If no PEM markers, wrap as PKCS8
-        return "-----BEGIN PRIVATE KEY-----\n" + cleaned + "\n-----END PRIVATE KEY-----"
+        if "-----BEGIN" in cleaned: return cleaned
+        return f"-----BEGIN PRIVATE KEY-----\n{cleaned}\n-----END PRIVATE KEY-----"
 
     def _sign_request(self, method: str, path: str, timestamp: str) -> str:
         if not self.api_secret_pem:
@@ -1074,30 +997,10 @@ class KalshiIntegrator:
             if not val:
                 continue
             try:
-                raw = str(val)
-                if raw.endswith("Z"):
-                    raw = raw.replace("Z", "+00:00")
-                dt = datetime.fromisoformat(raw)
-                if dt.tzinfo is None:
-                    dt = pytz.utc.localize(dt)
-                else:
-                    dt = dt.astimezone(pytz.UTC)
-                return dt
-            except Exception:
-                continue
+                dt = datetime.fromisoformat(str(val).replace("Z", "+00:00"))
+                return dt if dt.tzinfo else pytz.utc.localize(dt)
+            except: pass
         return None
-
-    @staticmethod
-    def is_multivariate_bundle(market: Dict[str, Any]) -> bool:
-        ticker = str(market.get("event_ticker") or market.get("ticker") or "").upper()
-        if ticker.startswith("KXMV") or "MVE" in ticker:
-            return True
-        if market.get("mve_collection_ticker") or market.get("mve_selected_legs"):
-            return True
-        custom = str(market.get("custom_strike") or "")
-        if custom and "Associated Events" in custom:
-            return True
-        return False
 
     def split_market_kinds(self, markets: List[Dict[str, Any]], league: Optional[str] = None) -> Dict[str, List[Dict[str, Any]]]:
         league_key = (league or "").upper()
@@ -1304,59 +1207,6 @@ class KalshiIntegrator:
     def get_game_markets_for_events(self, league):
         return self.get_markets_for_league(league)
 
-    def filter_markets_closing_today(self, markets):
-        return markets
-
-    @staticmethod
-    def price_to_prob(price: Any) -> Optional[float]:
-        return price_to_prob(price)
-    
-    def get_orderbook(self, ticker: str) -> Dict[str, Any]:
-        return self._request("GET", f"/markets/{ticker}/orderbook") or {}
-
-# ---------------------------------------------------------------------------
-# CROSSWALK UTILITY (Included at bottom)
-# ---------------------------------------------------------------------------
-def get_event_crosswalk(league: str, home_team: str, away_team: str) -> Dict[str, Any]:
-    """
-    Returns a dictionary linking identifiers across data sources (Kalshi, OddsAPI, etc.)
-    """
-    league = league.upper()
-    
-    # Mapping for TheOddsAPI
-    odds_api_keys = {
-        'NFL': 'americanfootball_nfl',
-        'NBA': 'basketball_nba',
-        'NHL': 'icehockey_nhl',
-        'MLB': 'baseball_mlb',
-        'NCAAF': 'americanfootball_ncaaf',
-        'NCAAB': 'basketball_ncaab'
-    }
-    
-    # Mapping for Kalshi Series Tickers
-    kalshi_series = {
-        'NFL': 'KXNFL', 'NBA': 'KXNBA', 'NHL': 'KXNHL', 'MLB': 'KXMLB'
-    }
-    
-    return {
-        "Matchup": f"{away_team} @ {home_team}",
-        "Sources": {
-            "TheOddsAPI": {
-                "sport_key": odds_api_keys.get(league),
-                "home": home_team,
-                "away": away_team
-            },
-            "Kalshi": {
-                # Kalshi tickers often look like KXNBA-23DEC25-LAL-BOS
-                "series_ticker": kalshi_series.get(league), 
-                "fuzzy_match_query": f"{away_team} {home_team}" 
-            },
-            "NewsAPI": {
-                # Strict query to avoid noise
-                "query": f'"{away_team}" AND "{home_team}" AND {league}'
-            },
-            "APISports": {
-                "endpoint": f"https://v1.{league.lower()}.api-sports.io/games",
-            }
-        }
-    }
+    def assert_available(self) -> None:
+        if not self.api_key or not self.api_secret_pem:
+            raise RuntimeError("Kalshi keys missing from secrets.")
