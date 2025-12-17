@@ -238,12 +238,19 @@ def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time:
         norm = normalize_name(team)
         return NBA_TEAM_CODE_MAP.get(norm)
 
-    def _nba_date_token(dt: datetime) -> str:
-        """Kalshi winner tickers use the UTC date token (YYMONDD)."""
-        dt_utc = dt.astimezone(pytz.UTC)
-        return dt_utc.strftime("%y%b%d").upper()
+def _nba_date_token(dt: datetime, tz_name: str = "America/New_York") -> str:
+    """Kalshi NBA game tickers use the *local* slate date token (YYMONDD).
 
-    def _nba_bucket_and_match() -> KalshiMatchResult:
+    Example: 2025-12-18T01:10:00Z is 2025-12-17 in America/New_York, and Kalshi uses 25DEC17.
+    """
+    try:
+        tz = pytz.timezone(tz_name)
+    except Exception:
+        tz = pytz.UTC
+    dt_local = dt.astimezone(tz)
+    return dt_local.strftime("%y%b%d").upper()
+
+def _nba_bucket_and_match() -> KalshiMatchResult:
         if not isinstance(game_time, datetime):
             return KalshiMatchResult(
                 matched=False,
@@ -465,6 +472,47 @@ def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time:
 # ---------------------------------------------------------------------------
 # KalshiIntegrator Class
 # ---------------------------------------------------------------------------
+
+from typing import Optional
+
+SAFE_STATUS_ALLOWLIST = {"active", "finalized", "settled", "closed"}
+
+def normalize_status(status: Optional[str]) -> Optional[str]:
+    if not status:
+        return None
+    s = str(status).lower().strip()
+    if s == "open":
+        return None
+    if s in SAFE_STATUS_ALLOWLIST:
+        return s
+    return None
+
+
+class KalshiIntegrator:
+    ...
+
+# -----------------------------
+# Kalshi param normalization
+# -----------------------------
+
+SAFE_STATUS_ALLOWLIST = {"active", "finalized", "settled", "closed"}
+
+def normalize_status(status: Optional[str]) -> Optional[str]:
+    """Kalshi API status filter normalization.
+
+    - Never send status='open' (Kalshi returns 400 invalid status filter).
+    - Only allow a small safe allowlist.
+    """
+    if not status:
+        return None
+    s = str(status).strip().lower()
+    if not s:
+        return None
+    if s == "open":
+        return None
+    if s in SAFE_STATUS_ALLOWLIST:
+        return s
+    return None
 
 class KalshiIntegrator:
     def __init__(
@@ -772,6 +820,7 @@ class KalshiIntegrator:
         all_markets: List[Dict[str, Any]] = []
         next_cursor = cursor
         pages = 0
+        normalized_status = normalize_status(status)
         while pages < max_pages:
             params = self._build_market_params(
                 status=status, limit=limit, cursor=next_cursor, extra_params=extra_params
