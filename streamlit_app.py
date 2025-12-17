@@ -15,6 +15,44 @@ from app_core.kalshi_integrator import KalshiIntegrator, LEAGUE_SERIES_MAP
 # Must be the first Streamlit call
 st.set_page_config(page_title="ParlayDesk", layout="wide")
 
+# Must be the first Streamlit call
+st.set_page_config(page_title="ParlayDesk", layout="wide")
+
+# ------------------------------------------------------------
+# Kalshi globals / shims (must exist before any call sites)
+# ------------------------------------------------------------
+kalshi_integrator: Optional[KalshiIntegrator] = None
+
+def kalshi_health_check(selected_league: str = "NBA") -> Dict[str, Any]:
+    """
+    MUST NOT crash. Used for UI gating + debug.
+    ok=True means "reachable/call succeeded", not "game markets exist".
+    """
+    try:
+        ki = kalshi_integrator
+        if ki is None:
+            return {
+                "configured": False,
+                "ok": False,
+                "error": "Kalshi integrator not initialized.",
+                "market_count": 0,
+            }
+
+        markets = ki.get_sports_markets(selected_league) or []
+        return {
+            "configured": True,
+            "ok": True,
+            "error": None,
+            "market_count": len(markets),
+        }
+    except Exception as e:
+        return {
+            "configured": True,
+            "ok": False,
+            "error": str(e),
+            "market_count": 0,
+        }
+
 # -----------------
 # Helper utilities
 # -----------------
