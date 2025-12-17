@@ -51,7 +51,7 @@ SUPPORTED_LEAGUES = {"NBA", "NFL", "MLB", "NHL", "NCAAF", "NCAAB"}
 SAFE_STATUS_ALLOWLIST = {"active", "finalized", "settled", "closed"}
 NBA_TZ = pytz.timezone("America/New_York")
 
-# Specific series mapping for daily slates vs futures
+# Mapping for daily slates vs futures
 LEAGUE_SERIES_MAP: Dict[str, Any] = {
     "NBA": [
         "KXNBAGAME",   # Daily Winners
@@ -78,10 +78,11 @@ def normalize_status(status: Optional[str]) -> Optional[str]:
     """Kalshi API v2 status filter normalization."""
     if not status: return None
     s = str(status).strip().lower()
-    if s == "open": return None # API v2 often defaults to active/open
+    if s == "open": return None 
     return s if s in SAFE_STATUS_ALLOWLIST else None
 
 def price_to_prob(price: Any) -> Optional[float]:
+    """Converts Kalshi 0-100 price to 0.0-1.0 probability."""
     if price is None: return None
     try:
         val = float(price)
@@ -90,7 +91,7 @@ def price_to_prob(price: Any) -> Optional[float]:
     return None
 
 def _nba_date_token(dt: datetime) -> str:
-    # Kalshi uses YYMONDD (e.g., 25DEC17) based on local game date
+    """Kalshi uses YYMONDD (e.g., 25DEC17) based on local game date."""
     return dt.astimezone(NBA_TZ).strftime("%y%b%d").upper()
 
 # ---------------------------------------------------------------------------
@@ -115,6 +116,7 @@ class KalshiIntegrator:
         return f"-----BEGIN PRIVATE KEY-----\n{cleaned}\n-----END PRIVATE KEY-----"
 
     def _sign_request(self, method: str, path: str, timestamp: str) -> str:
+        """RSA-PSS Signing for API v2."""
         if not self.api_secret_pem: return ""
         msg = f"{timestamp}{method}{path}"
         key = serialization.load_pem_private_key(self.api_secret_pem.encode("utf-8"), password=None)
@@ -134,6 +136,7 @@ class KalshiIntegrator:
         return resp.json()
 
     def get_markets_paginated(self, status: Optional[str] = None, extra_params: Optional[Dict] = None) -> List[Dict[str, Any]]:
+        """Handles pagination for large slates."""
         all_markets, cursor = [], None
         for _ in range(5):
             p = {"limit": 200, "cursor": cursor}
@@ -147,7 +150,7 @@ class KalshiIntegrator:
         return all_markets
 
     def get_league_markets(self, league: str, status: Optional[str] = None) -> List[Dict[str, Any]]:
-        """Multi-series fetch to find Winners, Totals, and Spreads."""
+        """Multi-series targeted fetch to find active daily slates."""
         league_key = league.upper()
         series_targets = LEAGUE_SERIES_MAP.get(league_key, [])
         if not isinstance(series_targets, list): series_targets = [series_targets]
@@ -164,6 +167,7 @@ class KalshiIntegrator:
         return self.get_league_markets(league)
 
     def get_markets_for_date_token(self, league: str, date_token: str, status: Optional[str] = None) -> Dict[str, Any]:
+        """Filters targeted series by date token."""
         all_m = self.get_league_markets(league, status=status)
         bucket = [m for m in all_m if date_token in (m.get("event_ticker") or m.get("ticker") or "")]
         return {"bucket": bucket, "all_markets": all_m}
@@ -179,6 +183,7 @@ class KalshiIntegrator:
         return None
 
     def split_market_kinds(self, markets: List[Dict[str, Any]], league: Optional[str] = None) -> Dict[str, List[Dict[str, Any]]]:
+        """Categorizes markets for analysis."""
         single, multi, other = [], [], []
         for m in (markets or []):
             t = (m.get("event_ticker") or m.get("ticker") or "").upper()
@@ -187,6 +192,7 @@ class KalshiIntegrator:
         return {"single_game_candidates": single, "multivariate_bundles": multi, "other": other}
 
 def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time: Optional[datetime], integrator: KalshiIntegrator = None, status: Optional[str] = None) -> KalshiMatchResult:
+    """Matches a game to its specific Kalshi daily slate ticker."""
     l_key, ki = league.upper(), (integrator or KalshiIntegrator())
     if not ki.api_key: return KalshiMatchResult(False, False, "", None, None, reason="no_auth")
     
@@ -198,6 +204,7 @@ def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time:
         
         matchup = f"{away_c}{home_c}"
         res = ki.get_markets_for_date_token(l_key, date_tok, status=status)
+        # Look for the specific matchup code within the slate bucket
         candidates = [m for m in res['bucket'] if matchup in (m.get("event_ticker") or "")]
         
         if not candidates: return KalshiMatchResult(False, True, "", None, None, reason="no_match")
