@@ -161,7 +161,15 @@ class KalshiIntegrator:
             except: break
         return all_markets
 
-    def get_league_markets(self, league: str, status: Optional[str] = None) -> List[Dict[str, Any]]:
+    def get_league_markets(
+        self, 
+        league: str, 
+        status: Optional[str] = None, 
+        min_prefix_hits: int = 20,     # <--- Add this parameter
+        max_pages: int = 5,            # <--- Ensure this is also present
+        **kwargs                       # <--- Catch any other unexpected arguments
+    ) -> List[Dict[str, Any]]:
+        """Targeted NBA Fetch with flexible parameters."""
         """Multi-series fetch to find Winners, Totals, and Spreads."""
         league_key = league.upper()
         series_targets = LEAGUE_SERIES_MAP.get(league_key, [])
