@@ -106,12 +106,12 @@ class KalshiIntegrator:
         self.api_url = "https://api.elections.kalshi.com/trade-api/v2"
         self.session = requests.Session()
         
-        # --- ADD THESE LINES TO FIX THE ATTRIBUTEERROR ---
-        self.last_error_info = {}       # Required by kalshi_health in app.py
-        self.last_status_code = None     # Required for debug and health checks
-        self.last_response_text = None   # Required for debug logs
-        self.last_request_params = None  # Tracks API parameters for troubleshooting
-        # -------------------------------------------------
+        # --- INITIALIZE MISSING ATTRIBUTES TO FIX CRASH ---
+        self.last_error_info = {}       # Fixes the current AttributeError
+        self.last_status_code = None     # Recommended for tracking API health
+        self.last_response_text = None   # Useful for debugging 200/empty responses
+        self.last_request_params = None  # Tracks what was sent to Kalshi
+        # --------------------------------------------------
 
         self._markets_cache = []
         self._league_cache = {}
