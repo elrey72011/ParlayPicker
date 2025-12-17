@@ -597,6 +597,85 @@ def fetch_kalshi_markets(
 
 
 def kalshi_health_check(selected_league: str) -> Dict[str, Any]:
+    def _ticker(m: Dict[str, Any]) -> str:
+        return str(m.get("event_ticker") or m.get("ticker") or "").upper()
+
+    status = {
+        "configured": bool(kalshi_integrator),
+        "ok": False,
+        "market_count": 0,
+        "has_game_markets": False,
+        "has_futures_markets": False,
+        "error": None,
+        "warning": None,
+        "status_code": None,
+        "response_text_snippet": None,
+        "request_params": None,
+    }
+
+    if not kalshi_integrator:
+        status["error"] = "Kalshi not configured."
+        return status
+
+    try:
+        markets = fetch_kalshi_markets(selected_league, commence_times_utc=None)
+        markets = markets or []
+        if not markets:
+            info = kalshi_integrator.last_error_info or {}
+            status_code = info.get("status_code") or kalshi_integrator.last_status_code
+            resp_text = info.get("response_text") or kalshi_integrator.last_response_text
+            if status_code == 200 and resp_text:
+                try:
+                    try:
+                        data = json.loads(resp_text)
+                    except Exception:
+                        data = {}
+                    parsed_markets = (data.get("markets") or []) if isinstance(data, dict) else []
+                    if parsed_markets:
+                        markets = parsed_markets
+                except Exception:
+                    markets = markets
+        status["market_count"] = len(markets)
+        game_markets = [
+            m
+            for m in markets
+            if _ticker(m).startswith("KXNBAGAME-")
+        ]
+        futures_markets = [
+            m
+            for m in markets
+            if _ticker(m).startswith("KXNBA")
+        ]
+        status["has_game_markets"] = bool(game_markets)
+        status["has_futures_markets"] = bool(futures_markets)
+        status["ok"] = True
+        if not status["has_game_markets"] and status["has_futures_markets"]:
+            status["warning"] = "Kalshi reachable; only futures markets returned for KXNBA series."
+        elif not status["has_game_markets"]:
+            status["warning"] = (
+                "Kalshi reachable, but no NBA KXNBAGAME markets returned (futures-only or slate not listed)."
+            )
+        info = kalshi_integrator.last_error_info or {}
+        status["status_code"] = info.get("status_code") or kalshi_integrator.last_status_code
+        snippet = info.get("response_text") or kalshi_integrator.last_response_text
+        if snippet:
+            status["response_text_snippet"] = snippet[:500]
+        status["request_params"] = kalshi_integrator.last_request_params
+        return status
+    except Exception as exc:
+        info = kalshi_integrator.last_error_info or {}
+        status["error"] = str(exc)
+        status["status_code"] = info.get("status_code") or kalshi_integrator.last_status_code
+        snippet = info.get("response_text") or kalshi_integrator.last_response_text
+        if snippet:
+            status["response_text_snippet"] = snippet[:500]
+        status["request_params"] = kalshi_integrator.last_request_params
+        cached = st.session_state.get("kalshi_markets_raw") or []
+        status["market_count"] = len(cached)
+        status["ok"] = False
+        return status
+
+def kalshi_health_check(selected_league: str) -> Dict[str, Any]:
     status = {
         "configured": bool(kalshi_integrator),
         "ok": False,
@@ -821,6 +900,9 @@ def kalshi_health(selected_league: str = "NBA") -> Dict[str, Any]:
             "count_prefix_KXMV": len([t for t in tickers if t.startswith("KXMV")]),
         }
 
+    def _ticker(m: Dict[str, Any]) -> str:
+        return str(m.get("event_ticker") or m.get("ticker") or "").upper()
+
     base_health = {
         "configured": bool(kalshi_integrator),
         "ok": False,
@@ -861,28 +943,32 @@ def kalshi_health(selected_league: str = "NBA") -> Dict[str, Any]:
         if not markets_raw:
             markets_raw = st.session_state.get("kalshi_markets_raw") or []
 
+        if not markets_raw:
+            info = kalshi_integrator.last_error_info or {}
+            status_code = info.get("status_code") or kalshi_integrator.last_status_code
+            resp_text = info.get("response_text") or kalshi_integrator.last_response_text
+            if status_code == 200 and resp_text:
+                try:
+                    try:
+                        data = json.loads(resp_text)
+                    except Exception:
+                        data = {}
+                    markets_raw = (data.get("markets") or []) if isinstance(data, dict) else []
+                except Exception:
+                    markets_raw = []
+
         base_health["market_count"] = len(markets_raw)
         base_health["sample_market"] = markets_raw[0] if markets_raw else None
 
-        game_markets = [
-            m
-            for m in markets_raw
-            if str(m.get("event_ticker") or m.get("ticker") or "").upper().startswith(
-                "KXNBAGAME-"
-            )
-        ]
-        futures_markets = [
-            m
-            for m in markets_raw
-            if str(m.get("event_ticker") or m.get("ticker") or "").upper().startswith(
-                "KXNBA-"
-            )
-        ]
+        game_markets = [m for m in markets_raw if _ticker(m).startswith("KXNBAGAME-")]
+        futures_markets = [m for m in markets_raw if _ticker(m).startswith("KXNBA")]
         base_health["sample_game_market"] = game_markets[0] if game_markets else None
         base_health["has_game_markets"] = bool(game_markets)
         base_health["has_futures_markets"] = bool(futures_markets)
         base_health["ok"] = True
-        if not base_health["has_game_markets"]:
+        if not base_health["has_game_markets"] and base_health["has_futures_markets"]:
+            base_health["warning"] = "Kalshi reachable; only futures markets returned for KXNBA series."
+        elif not base_health["has_game_markets"]:
             base_health["warning"] = (
                 "Kalshi reachable, but no NBA KXNBAGAME markets returned (futures-only or slate not listed)."
             )
@@ -2233,7 +2319,13 @@ with tab_kalshi:
     elif not kalshi_status.get("ok"):
         st.error("Kalshi is required but unavailable. Fix keys/API and retry.")
     else:
-        st.success("Kalshi credentials detected and markets available.")
+        if (kalshi_status.get("market_count") or 0) > 0:
+            st.success("Kalshi credentials detected and markets available.")
+        else:
+            st.warning(
+                kalshi_status.get("warning")
+                or "Kalshi reachable, but no NBA KXNBAGAME markets returned (futures-only or slate not listed)."
+            )
 
 
 with tab_sentiment:
