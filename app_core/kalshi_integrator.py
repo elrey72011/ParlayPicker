@@ -1,5 +1,5 @@
 """
-Kalshi Integrator with RSA Signing & Multi-Series NBA Fetching.
+Kalshi Integrator with RSA Signing & Multi-Sport Fetching.
 Location: app_core/kalshi_integrator.py
 """
 from __future__ import annotations
@@ -25,43 +25,20 @@ from cryptography.hazmat.primitives.asymmetric import padding
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Data Structures
-# ---------------------------------------------------------------------------
-
-@dataclass
-class KalshiMatchResult:
-    matched: bool
-    kalshi_available: bool
-    label: str
-    probability: Optional[float]
-    raw_event_id: Optional[str]
-    league: Optional[str] = None
-    reason: str = ""
-    market_type: Optional[str] = None
-    direction: Optional[str] = None
-    game_date: Optional[datetime] = None
-    kalshi_volume: Optional[float] = None
-    debug: Optional[Dict[str, Any]] = None
-
-# ---------------------------------------------------------------------------
 # Constants & Mappings
 # ---------------------------------------------------------------------------
-
 SUPPORTED_LEAGUES = {"NBA", "NFL", "MLB", "NHL", "NCAAF", "NCAAB"}
 SAFE_STATUS_ALLOWLIST = {"active", "finalized", "settled", "closed"}
 NBA_TZ = pytz.timezone("America/New_York")
 
-# Specific series mapping for daily slates vs futures
+# Updated Mapping for all requested leagues
 LEAGUE_SERIES_MAP: Dict[str, Any] = {
-    "NBA": [
-        "KXNBAGAME",   # Daily Winners
-        "KXNBATOTAL",  # Daily Totals
-        "KXNBASPREAD", # Daily Spreads
-        "KXNBA",       # Generic/Futures
-    ],
-    "NFL": ["KXNFL", "KXNFLGAME"],
-    "MLB": "KXMLB",
-    "NHL": "KXNHL",
+    "NBA": ["KXNBAGAME", "KXNBATOTAL", "KXNBASPREAD", "KXNBA"],
+    "NFL": ["KXNFLGAME", "KXNFLTOTAL", "KXNFLSPREAD", "KXNFL"],
+    "NHL": ["KXNHL", "KXNHLGAME"],
+    "MLB": ["KXMLB", "KXMLBGAME"],
+    "NCAAF": ["KXNCAAF", "KXNCAAFGAME"],
+    "NCAAB": ["KXNCAAB", "KXNCAABGAME"],
 }
 
 NBA_TEAM_CODE_MAP: Dict[str, str] = {
@@ -70,19 +47,13 @@ NBA_TEAM_CODE_MAP: Dict[str, str] = {
     "LOS ANGELES CLIPPERS": "LAC", "LA CLIPPERS": "LAC", "LOS ANGELES LAKERS": "LAL", "LA LAKERS": "LAL",
 }
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
 def normalize_status(status: Optional[str]) -> Optional[str]:
-    """Kalshi API v2 status filter normalization."""
     if not status: return None
     s = str(status).strip().lower()
     if s == "open": return None 
     return s if s in SAFE_STATUS_ALLOWLIST else None
 
 def price_to_prob(price: Any) -> Optional[float]:
-    """Converts Kalshi 0-100 price to 0.0-1.0 probability."""
     if price is None: return None
     try:
         val = float(price)
@@ -91,7 +62,6 @@ def price_to_prob(price: Any) -> Optional[float]:
     return None
 
 def _nba_date_token(dt: datetime) -> str:
-    """Kalshi uses YYMONDD (e.g., 25DEC17) based on local game date."""
     return dt.astimezone(NBA_TZ).strftime("%y%b%d").upper()
 
 # ---------------------------------------------------------------------------
@@ -107,8 +77,8 @@ class KalshiIntegrator:
         self.session = requests.Session()
         self.required = required
 
-        # --- MANDATORY PROPERTIES FOR STREAMLIT APP ---
-        self.last_error_info = {}       # Fixes the AttributeError
+        # --- MANDATORY PROPERTIES FOR APP.PY ---
+        self.last_error_info = {}       
         self.last_status_code = None
         self.last_response_text = None
         self.last_request_params = None
@@ -123,7 +93,6 @@ class KalshiIntegrator:
         return f"-----BEGIN PRIVATE KEY-----\n{cleaned}\n-----END PRIVATE KEY-----"
 
     def _sign_request(self, method: str, path: str, timestamp: str) -> str:
-        """RSA-PSS Signing for API v2."""
         if not self.api_secret_pem: return ""
         msg = f"{timestamp}{method}{path}"
         key = serialization.load_pem_private_key(self.api_secret_pem.encode("utf-8"), password=None)
@@ -149,7 +118,6 @@ class KalshiIntegrator:
             raise e
 
     def get_markets_paginated(self, status: Optional[str] = None, extra_params: Optional[Dict] = None) -> List[Dict[str, Any]]:
-        """Handles pagination for large slates."""
         all_markets, cursor = [], None
         for _ in range(5):
             p = {"limit": 200, "cursor": cursor}
@@ -164,16 +132,15 @@ class KalshiIntegrator:
             except: break
         return all_markets
 
-    # --- UPDATED TO FIX TYPEERROR (UNEXPECTED ARGUMENT) ---
     def get_league_markets(self, league: str, status: Optional[str] = None, **kwargs) -> List[Dict[str, Any]]:
-        """Multi-series targeted fetch to find Winners, Totals, and Spreads."""
+        """Multi-series fetch for multiple sports leagues."""
         league_key = league.upper()
         series_targets = LEAGUE_SERIES_MAP.get(league_key, [])
         if not isinstance(series_targets, list): series_targets = [series_targets]
         
         collected = {}
         for series in series_targets:
-            # Query each specific series ticker (e.g., KXNBAGAME)
+            # Iteratively query all winner, spread, and total series for that sport
             chunk = self.get_markets_paginated(status=status, extra_params={"series_ticker": series})
             for m in chunk:
                 ticker = m.get("ticker") or m.get("event_ticker")
@@ -202,30 +169,11 @@ class KalshiIntegrator:
         single, multi, other = [], [], []
         for m in (markets or []):
             t = (m.get("event_ticker") or m.get("ticker") or "").upper()
-            if "GAME-" in t or "KXNBAGAME" in t: single.append(m)
+            if "GAME-" in t or any(p in t for p in ["KXNBAGAME", "KXNHLGAME", "KXNFLGAME"]): 
+                single.append(m)
             else: other.append(m)
         return {"single_game_candidates": single, "multivariate_bundles": multi, "other": other}
 
     def assert_available(self) -> None:
         if not self.api_key or not self.api_secret_pem:
             raise RuntimeError("Kalshi keys missing from secrets.")
-
-def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time: Optional[datetime], integrator: KalshiIntegrator = None, status: Optional[str] = None) -> KalshiMatchResult:
-    l_key, ki = league.upper(), (integrator or KalshiIntegrator())
-    if not ki.api_key: return KalshiMatchResult(False, False, "", None, None, reason="no_auth")
-    
-    if l_key == "NBA":
-        if not game_time: return KalshiMatchResult(False, True, "", None, None, reason="no_time")
-        date_tok = _nba_date_token(game_time)
-        away_c, home_c = NBA_TEAM_CODE_MAP.get(away_team.upper()), NBA_TEAM_CODE_MAP.get(home_team.upper())
-        if not away_c or not home_c: return KalshiMatchResult(False, True, "", None, None, reason="no_codes")
-        
-        matchup = f"{away_c}{home_c}"
-        res = ki.get_markets_for_date_token(l_key, date_tok, status=status)
-        candidates = [m for m in res['bucket'] if matchup in (m.get("event_ticker") or "")]
-        
-        if not candidates: return KalshiMatchResult(False, True, "", None, None, reason="no_match")
-        exact = candidates[0]
-        return KalshiMatchResult(True, True, exact.get("title", ""), price_to_prob(exact.get("last_price")), exact.get("event_ticker"), league=l_key, market_type="winner")
-    
-    return KalshiMatchResult(False, True, "", None, None, reason="unsupported_league")
