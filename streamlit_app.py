@@ -762,6 +762,13 @@ def kalshi_health(selected_league: str = "NBA") -> Dict[str, Any]:
         base_health["error"] = f"Kalshi health check failed: {e}"
         return base_health
 
+def kalshi_health_check(selected_league: str = "NBA") -> Dict[str, Any]:
+    """
+    Backwards-compatible alias.
+    Some UI code calls kalshi_health_check(), but the implementation is kalshi_health().
+    """
+    return kalshi_health(selected_league)
+
 def parse_kalshi_datetime(dt_value: Any) -> Optional[datetime]:
     try:
         if not dt_value:
