@@ -818,6 +818,7 @@ class KalshiIntegrator:
         collected: Dict[str, Dict[str, Any]] = {}
         total_pages = 0
         total_hits = 0
+        normalized_status = self.normalize_status(status)
         # Prioritize single-game slates before futures so we do not short-circuit on KXNBA finals
         # KXNBAGAME carries the daily slate winners; KXNBA alone mostly serves season-long futures.
         series_candidates = ["KXNBAGAME", "KXNBATOTAL", "KXNBASPREAD", "KXNBA"]
@@ -830,7 +831,7 @@ class KalshiIntegrator:
             while series_pages < max_pages and series_hits < series_min_hits:
                 params = {"limit": 200, "series_ticker": series}
                 # NBA slate discovery should not be filtered out by status; omit invalid/"open" entirely.
-                params.update(self._status_param(None))
+                params.update(self._status_param(normalized_status))
                 if next_cursor:
                     params["cursor"] = next_cursor
                 try:
@@ -867,7 +868,14 @@ class KalshiIntegrator:
             if series != "KXNBA":
                 total_hits += series_hits
 
-        deduped_markets = list(collected.values())
+        deduped_markets_all = list(collected.values())
+        deduped_markets = [
+            m
+            for m in deduped_markets_all
+            if str(m.get("event_ticker") or m.get("ticker") or "").upper().startswith("KXNBAGAME-")
+        ]
+        if not deduped_markets:
+            deduped_markets = deduped_markets_all
         return {
             "markets": deduped_markets,
             "pages": total_pages,

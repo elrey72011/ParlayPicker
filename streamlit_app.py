@@ -606,58 +606,6 @@ def kalshi_health_check(selected_league: str = "NBA") -> Dict[str, Any]:
     """Wrapper to ensure health is always callable before first use."""
     return kalshi_health(selected_league)
 
-    if not kalshi_integrator:
-        status["error"] = "Kalshi not configured."
-        return status
-
-    try:
-        markets = fetch_kalshi_markets(selected_league, commence_times_utc=None)
-        markets = markets or []
-        status["market_count"] = len(markets)
-        status["ok"] = True
-        game_markets = [
-            m
-            for m in markets
-            if str(m.get("event_ticker") or m.get("ticker") or "").upper().startswith("KXNBAGAME-")
-        ]
-        if not game_markets:
-            status["warning"] = (
-                f"No {selected_league} game markets returned for the loaded slate dates."
-            )
-        info = kalshi_integrator.last_error_info or {}
-        status["status_code"] = info.get("status_code") or kalshi_integrator.last_status_code
-        snippet = info.get("response_text") or kalshi_integrator.last_response_text
-        if snippet:
-            status["response_text_snippet"] = snippet[:500]
-        status["request_params"] = kalshi_integrator.last_request_params
-        return status
-    except Exception as exc:
-        info = kalshi_integrator.last_error_info or {}
-        status["error"] = str(exc)
-        status["status_code"] = info.get("status_code") or kalshi_integrator.last_status_code
-        snippet = info.get("response_text") or kalshi_integrator.last_response_text
-        if snippet:
-            status["response_text_snippet"] = snippet[:500]
-        status["request_params"] = kalshi_integrator.last_request_params
-        cached = st.session_state.get("kalshi_markets_raw") or []
-        status["market_count"] = len(cached)
-        status["ok"] = False
-        return status
-
-def kalshi_health_check(selected_league: str) -> Dict[str, Any]:
-    status = {
-        "configured": bool(kalshi_integrator),
-        "ok": False,
-        "market_count": 0,
-        "error": None,
-        "status_code": None,
-        "response_text": None,
-    }
-
-    if not kalshi_integrator:
-        status["error"] = "Kalshi not configured."
-        return status
-
     try:
         markets = fetch_kalshi_markets(selected_league, commence_times_utc=None)
         markets = markets or []
@@ -1016,11 +964,13 @@ def filter_kalshi_game_markets(
 
         game_dt = game_time_utc
         if isinstance(game_dt, str):
-            game_dt = parse_kalshi_datetime(game_dt)
+            game_dt = parse_kalshi_datetime(game_dt) or parse_commence_to_utc(game_dt)
         if isinstance(game_dt, datetime) and game_dt.tzinfo is None:
             game_dt = game_dt.replace(tzinfo=timezone.utc)
         game_local = game_dt.astimezone(local_tz) if (game_dt and local_tz) else game_dt
         date_token = game_local.strftime("%y%b%d").upper() if game_local else None
+        if not date_token:
+            date_token = kalshi_date_token_from_local(game_time_utc)
 
         # Prefer provided codes; fall back to mapping from team names.
         home_code_upper = (home_code or nba_abbrev(home_team) or "").upper()
@@ -1294,7 +1244,12 @@ def match_kalshi_market(
 
     league_name = league_from_game(game)
 
-    game_dt_utc = game.get("commence_time_utc") or game.get("commence_time")
+    game_dt_utc = (
+        game.get("commence_time_utc")
+        or game.get("commence_time_iso_utc")
+        or game.get("commence_time")
+        or game.get("commence_time_iso")
+    )
     if isinstance(game_dt_utc, str):
         game_dt_utc = parse_kalshi_datetime(game_dt_utc)
     if isinstance(game_dt_utc, datetime) and game_dt_utc.tzinfo is None:
