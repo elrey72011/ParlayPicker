@@ -477,67 +477,8 @@ def fetch_kalshi_markets(
             if not dt_utc:
                 continue
             dt_local = dt_utc.astimezone(local_tz) if local_tz else dt_utc
-            # Kalshi uses YY + MON + DD with MON uppercase, e.g. 25DEC17
             tokens.add(dt_local.strftime("%y%b%d").upper())
         return tokens
-
-    try:
-        markets_raw = kalshi_integrator.get_league_markets(
-            selected_league,
-            min_prefix_hits=200,
-            max_pages=25,
-        )
-        if not markets_raw:
-            markets_raw = kalshi_integrator.get_markets_paginated(status=None, max_pages=25)
-        markets_raw = markets_raw or []
-
-        split = kalshi_integrator.split_market_kinds(markets_raw, selected_league)
-        game_pool: List[Dict[str, Any]] = split.get("single_game_candidates", []) or []
-
-        # Keep your NBA cleanup (avoid MVP/futures noise)
-        if league_upper == "NBA" and game_pool:
-            cleaned = []
-            for m in game_pool:
-                t = ticker_upper(m)
-                if t.startswith("KXMV") or "MVE" in t:
-                    continue
-                if t.startswith("KXNBA") or t.startswith("KXN"):
-                    cleaned.append(m)
-            if cleaned:
-                game_pool = cleaned
-
-        # ✅ NEW: restrict to the specific slate dates you actually loaded
-        wanted_tokens = date_tokens_from_commence(commence_times_utc)
-        if wanted_tokens:
-            filtered = []
-            for m in game_pool:
-                t = ticker_upper(m)
-                # match tokens anywhere in ticker: KXNBAGAME-25DEC17CLECHI...
-                if any(tok in t for tok in wanted_tokens):
-                    filtered.append(m)
-            if filtered:
-                game_pool = filtered
-
-        # Keep your session_state debug artifacts
-        st.session_state["kalshi_markets_raw"] = markets_raw
-        st.session_state["kalshi_markets_game_pool"] = game_pool
-        st.session_state["kalshi_all_markets"] = markets_raw
-
-        samples_game = []
-        for m in game_pool:
-            evt = ticker_upper(m)
-            if "GAME-" in evt:
-                samples_game.append(evt)
-            if len(samples_game) >= 20:
-                break
-        st.session_state["kalshi_prefix_samples_game"] = samples_game
-        st.session_state["kalshi_game_pool_sample"] = samples_game[:10]
-
-        return game_pool
-
-    except Exception:
-        st.session_state["last_exception"] = traceback.format_exc()
-        raise
 
     def prefix_count(markets: List[Dict[str, Any]]) -> Dict[str, int]:
         tickers = [ticker_upper(m) for m in markets]
@@ -552,36 +493,55 @@ def fetch_kalshi_markets(
     try:
         markets_raw = kalshi_integrator.get_league_markets(
             selected_league,
-            min_prefix_hits=200,
-            max_pages=25,
+            min_prefix_hits=20,
+            max_pages=5,
         )
+        st.session_state["kalshi_last_request_params"] = kalshi_integrator.last_request_params
         if not markets_raw:
-            markets_raw = kalshi_integrator.get_markets_paginated(status=None, max_pages=25)
+            markets_raw = kalshi_integrator.get_markets_paginated(status=None, max_pages=5)
+            st.session_state["kalshi_last_request_params"] = kalshi_integrator.last_request_params
         markets_raw = markets_raw or []
 
         raw_counts = prefix_count(markets_raw)
         split = kalshi_integrator.split_market_kinds(markets_raw, selected_league)
-        game_pool: List[Dict[str, Any]] = split.get("single_game_candidates", [])
-        if selected_league.upper() == "NBA":
-            filtered_game_pool: List[Dict[str, Any]] = []
-            for m in game_pool:
-                t = ticker_upper(m)
-                if t.startswith("KXMV") or "MVE" in t:
-                    continue
-                if t.startswith("KXNBA") or t.startswith("KXN"):
-                    filtered_game_pool.append(m)
-            if filtered_game_pool:
-                game_pool = filtered_game_pool
+        game_pool: List[Dict[str, Any]] = [
+            m for m in (split.get("single_game_candidates") or []) if ticker_upper(m).startswith("KXNBAGAME-")
+        ]
         game_pool_counts = prefix_count(game_pool)
 
+        wanted_tokens = date_tokens_from_commence(commence_times_utc)
+        if wanted_tokens:
+            filtered = []
+            for m in game_pool:
+                t = ticker_upper(m)
+                if any(tok in t for tok in wanted_tokens):
+                    filtered.append(m)
+            if filtered:
+                game_pool = filtered
+                game_pool_counts = prefix_count(game_pool)
+            elif game_pool:
+                st.session_state["kalshi_date_filter_warning"] = (
+                    "date_token_filter_removed_all_markets; using unfiltered pool"
+                )
+
         if not game_pool and markets_raw:
-            fallback_raw = kalshi_integrator.get_markets_paginated(status=None, max_pages=25)
+            fallback_raw = kalshi_integrator.get_markets_paginated(status=None, max_pages=5)
+            st.session_state["kalshi_last_request_params"] = kalshi_integrator.last_request_params
             split_fb = kalshi_integrator.split_market_kinds(fallback_raw, selected_league)
             if split_fb.get("single_game_candidates"):
                 markets_raw = fallback_raw or []
                 raw_counts = prefix_count(markets_raw)
-                game_pool = split_fb.get("single_game_candidates", [])
+                game_pool = [
+                    m
+                    for m in (split_fb.get("single_game_candidates") or [])
+                    if ticker_upper(m).startswith("KXNBAGAME-")
+                ]
                 game_pool_counts = prefix_count(game_pool)
+        if not game_pool and split.get("single_game_candidates"):
+            game_pool = [
+                m for m in (split.get("single_game_candidates") or []) if ticker_upper(m).startswith("KXNBAGAME-")
+            ]
+            game_pool_counts = prefix_count(game_pool)
 
         st.session_state["kalshi_markets_raw"] = markets_raw
         st.session_state["kalshi_markets_game_pool"] = game_pool
@@ -590,22 +550,30 @@ def fetch_kalshi_markets(
             "raw": {"total": len(markets_raw), **raw_counts},
             "game_pool": {"total": len(game_pool), **game_pool_counts},
         }
+        st.session_state["kalshi_fetch_debug"] = {
+            "fetched_total": len(markets_raw),
+            "fetched_game_prefix": game_pool_counts.get("count_prefix_KXNBAGAME"),
+            "wanted_tokens": sorted(list(wanted_tokens)) if wanted_tokens else [],
+            "after_token_filter": len(game_pool),
+        }
         samples_game = []
         for m in game_pool:
-            evt = str(m.get("event_ticker") or "").upper()
-            if evt.startswith("KXNBAGAME"):
+            evt = ticker_upper(m)
+            if "GAME-" in evt:
                 samples_game.append(evt)
             if len(samples_game) >= 20:
                 break
         st.session_state["kalshi_prefix_samples_game"] = samples_game
         st.session_state["kalshi_game_pool_sample"] = samples_game[:10]
         return game_pool
-    except RuntimeError:
-        st.session_state["last_exception"] = traceback.format_exc()
-        raise
     except Exception:
         st.session_state["last_exception"] = traceback.format_exc()
-        raise
+        return []
+
+
+def kalshi_health_check(selected_league: str = "NBA") -> Dict[str, Any]:
+    """Wrapper to ensure health is always callable before first use."""
+    return kalshi_health(selected_league)
 
 
 def pick_sample_game_market(
@@ -681,16 +649,34 @@ def pick_sample_game_market(
 
 
 def kalshi_health(selected_league: str = "NBA") -> Dict[str, Any]:
+    def prefix_count_local(tickers: List[str]) -> Dict[str, int]:
+        return {
+            "count_prefix_KXNBA": len([t for t in tickers if t.startswith("KXNBA")]),
+            "count_prefix_KXNBAGAME": len([t for t in tickers if t.startswith("KXNBAGAME")]),
+            "count_prefix_KXNBATOTAL": len([t for t in tickers if t.startswith("KXNBATOTAL")]),
+            "count_prefix_KXNBASPREAD": len([t for t in tickers if t.startswith("KXNBASPREAD")]),
+            "count_prefix_KXMV": len([t for t in tickers if t.startswith("KXMV")]),
+        }
+
+    def _ticker(m: Dict[str, Any]) -> str:
+        return str(m.get("event_ticker") or m.get("ticker") or "").upper()
+
     base_health = {
         "configured": bool(kalshi_integrator),
         "ok": False,
         "market_count": 0,
+        "game_market_count": 0,
+        "futures_market_count": 0,
         "sample_market": None,
         "sample_game_market": None,
         "sample_game_market_reason": None,
         "error": None,
         "status_code": None,
         "response_text": None,
+        "request_params": None,
+        "has_game_markets": False,
+        "has_futures_markets": False,
+        "warning": None,
     }
 
     if not kalshi_integrator:
@@ -698,36 +684,86 @@ def kalshi_health(selected_league: str = "NBA") -> Dict[str, Any]:
         return base_health
 
     try:
-        # If we already have counts from fetch_kalshi_markets, use them.
         prefix_counts = st.session_state.get("kalshi_prefix_counts")
+        markets_raw: List[Dict[str, Any]] = []
 
-        # Otherwise, do a lightweight pull to prove NBA markets exist.
         if not prefix_counts or not prefix_counts.get("game_pool"):
             markets_raw = kalshi_integrator.get_league_markets(
                 selected_league,
-                min_prefix_hits=1,   # IMPORTANT: don’t over-constrain health checks
-                max_pages=5,         # keep it light
+                min_prefix_hits=1,
+                max_pages=2,
             ) or []
-
             tickers = [m.get("event_ticker") or m.get("ticker") or "" for m in markets_raw]
             prefix_counts = {
-                "raw": prefix_count(tickers),
-                "game_pool": prefix_count([t for t in tickers if t.startswith("KXNBA")]),
+                "raw": prefix_count_local(tickers),
+                "game_pool": prefix_count_local([t for t in tickers if t.startswith("KXNBA")]),
             }
             st.session_state["kalshi_prefix_counts"] = prefix_counts
 
-            # Keep some sample rows for debug if available
-            base_health["market_count"] = len(markets_raw)
-            base_health["sample_market"] = markets_raw[0] if markets_raw else None
+        if not markets_raw:
+            markets_raw = st.session_state.get("kalshi_markets_raw") or []
 
-        game_pool_total = (prefix_counts.get("game_pool") or {}).get("total", 0)
-        base_health["ok"] = game_pool_total > 0
+        if not markets_raw:
+            info = kalshi_integrator.last_error_info or {}
+            status_code = info.get("status_code") or kalshi_integrator.last_status_code
+            resp_text = info.get("response_text") or kalshi_integrator.last_response_text
+            if status_code == 200 and resp_text:
+                try:
+                    try:
+                        data = json.loads(resp_text)
+                    except Exception:
+                        data = {}
+                    markets_raw = (data.get("markets") or []) if isinstance(data, dict) else []
+                except Exception:
+                    markets_raw = []
 
-        if not base_health["ok"]:
-            base_health["error"] = f"Kalshi reachable but no {selected_league} markets returned."
+        base_health["market_count"] = len(markets_raw)
+        base_health["sample_market"] = markets_raw[0] if markets_raw else None
+
+        game_markets = [m for m in markets_raw if _ticker(m).startswith("KXNBAGAME-")]
+        futures_markets = [
+            m
+            for m in markets_raw
+            if _ticker(m).startswith("KXNBA") and not _ticker(m).startswith("KXNBAGAME-")
+        ]
+        base_health["game_market_count"] = len(game_markets)
+        base_health["futures_market_count"] = len(futures_markets)
+        base_health["sample_game_market"] = game_markets[0] if game_markets else None
+        base_health["has_game_markets"] = bool(game_markets)
+        base_health["has_futures_markets"] = bool(futures_markets)
+        base_health["ok"] = True
+        if not base_health["has_game_markets"] and base_health["has_futures_markets"]:
+            base_health["warning"] = "Kalshi reachable; only futures markets returned for KXNBA series."
+        elif not base_health["has_game_markets"]:
+            base_health["warning"] = (
+                "Kalshi reachable, but no NBA KXNBAGAME markets returned (futures-only or slate not listed)."
+            )
+        info = kalshi_integrator.last_error_info or {}
+        base_health["status_code"] = info.get("status_code") or kalshi_integrator.last_status_code
+        base_health["response_text"] = (
+            (info.get("response_text") or kalshi_integrator.last_response_text or "")[:500]
+        )
+        base_health["request_params"] = kalshi_integrator.last_request_params
         return base_health
 
     except Exception as e:
+        if (kalshi_integrator.last_error_info or {}).get("status_code") == 429:
+            cached_markets = st.session_state.get("kalshi_markets_raw") or []
+            base_health["market_count"] = len(cached_markets)
+            base_health["sample_market"] = cached_markets[0] if cached_markets else None
+            game_markets = [
+                m
+                for m in cached_markets
+                if str(m.get("event_ticker") or m.get("ticker") or "").upper().startswith(
+                    "KXNBAGAME-"
+                )
+            ]
+            base_health["sample_game_market"] = game_markets[0] if game_markets else None
+            base_health["has_game_markets"] = bool(game_markets)
+            base_health["has_futures_markets"] = bool(cached_markets)
+            base_health["ok"] = False
+            base_health["error"] = "Kalshi rate limited; using cached markets"
+            return base_health
         base_health["error"] = f"Kalshi health check failed: {e}"
         return base_health
 
@@ -861,44 +897,70 @@ def filter_kalshi_game_markets(
     home_code: Optional[str] = None,
     away_code: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
-    window = timedelta(hours=72)
     try:
+        tz_name = get_local_tz()
+        local_tz = None
+        try:
+            local_tz = ZoneInfo(tz_name) if tz_name else None
+        except Exception:
+            local_tz = None
+
         game_dt = game_time_utc
         if isinstance(game_dt, str):
-            game_dt = parse_kalshi_datetime(game_dt)
+            game_dt = parse_kalshi_datetime(game_dt) or parse_commence_to_utc(game_dt)
         if isinstance(game_dt, datetime) and game_dt.tzinfo is None:
             game_dt = game_dt.replace(tzinfo=timezone.utc)
-        filtered: List[Dict[str, Any]] = []
+        game_local = game_dt.astimezone(local_tz) if (game_dt and local_tz) else game_dt
+        date_token = game_local.strftime("%y%b%d").upper() if game_local else None
+        if not date_token:
+            date_token = kalshi_date_token_from_local(game_time_utc)
+
+        # Prefer provided codes; fall back to mapping from team names.
+        home_code_upper = (home_code or nba_abbrev(home_team) or "").upper()
+        away_code_upper = (away_code or nba_abbrev(away_team) or "").upper()
+
+        def ticker_upper(market: Dict[str, Any]) -> str:
+            return str(market.get("event_ticker") or market.get("ticker") or "").upper()
+
+        primary_filtered: List[Dict[str, Any]] = []
         for m in markets or []:
-            try:
-                title = str(m.get("title") or "")
-                ticker = str(m.get("event_ticker") or m.get("ticker") or "")
-                rules = str(m.get("rules") or "")
-                lower_title = title.lower()
-                combined_lower = f"{lower_title} {rules.lower()}"
-                looks_game = any(
-                    token in combined_lower for token in [" vs ", " at ", "@", " - "]
-                ) or (ticker and "game" in ticker.lower())
-                if not looks_game:
-                    continue
-                candidate_time = kalshi_market_best_time_utc(m)
-                if game_dt:
-                    if candidate_time and abs(candidate_time - game_dt) <= window:
-                        filtered.append(m)
-                    elif candidate_time is None:
-                        if any(tok in combined_lower for tok in [" at ", " vs ", "@"]):
-                            filtered.append(m)
-                        else:
-                            continue
-                else:
-                    filtered.append(m)
-            except Exception:
+            t = ticker_upper(m)
+            if "KXNBAGAME-" not in t and league.upper() == "NBA":
                 continue
-        filtered_by_team: List[Dict[str, Any]] = []
-        for m in filtered:
-            if market_mentions_game_teams(m, home_team, away_team, home_code, away_code):
-                filtered_by_team.append(m)
-        return filtered_by_team
+            if date_token and date_token not in t:
+                continue
+            if home_code_upper and away_code_upper:
+                if (
+                    home_code_upper in t
+                    and away_code_upper in t
+                    and (
+                        f"{away_code_upper}{home_code_upper}" in t
+                        or f"{home_code_upper}{away_code_upper}" in t
+                    )
+                ):
+                    primary_filtered.append(m)
+            else:
+                primary_filtered.append(m)
+
+        if primary_filtered:
+            return primary_filtered
+
+        # Fallback to loose team-text matching without time window if ticker path empty.
+        fallback: List[Dict[str, Any]] = []
+        for m in markets or []:
+            blob = " ".join(
+                [
+                    str(m.get("title") or ""),
+                    str(m.get("rules") or m.get("rules_primary") or ""),
+                    str(m.get("event_ticker") or m.get("ticker") or ""),
+                ]
+            ).lower()
+            tokens_home = team_tokens(home_team)
+            tokens_away = team_tokens(away_team)
+            blob_tokens = word_set(blob)
+            if tokens_home and tokens_away and tokens_home.intersection(blob_tokens) and tokens_away.intersection(blob_tokens):
+                fallback.append(m)
+        return fallback
     except Exception:
         st.session_state["last_exception"] = traceback.format_exc()
         return []
@@ -1024,6 +1086,7 @@ def extract_teams_from_kalshi_text(text: Any) -> Tuple[Optional[str], Optional[s
     return None, None
 
 
+
 def match_kalshi_market(
     game: Dict[str, Any],
     kalshi_markets: List[Dict[str, Any]],
@@ -1065,103 +1128,6 @@ def match_kalshi_market(
         }
         return mapping.get(skey, skey.upper())
 
-    def team_score(market: Dict[str, Any], market_type: str) -> float:
-        home_norm = norm_team(game.get("home_team"))
-        away_norm = norm_team(game.get("away_team"))
-        home_tokens = team_tokens(game.get("home_team"))
-        away_tokens = team_tokens(game.get("away_team"))
-        nickname_tokens = {
-            "knicks",
-            "spurs",
-            "lakers",
-            "celtics",
-            "bulls",
-            "nets",
-            "bucks",
-            "sixers",
-            "warriors",
-            "heat",
-            "suns",
-            "mavs",
-            "mavericks",
-            "clippers",
-            "kings",
-            "hawks",
-            "raptors",
-            "jazz",
-            "rockets",
-            "thunder",
-            "pelicans",
-            "nuggets",
-            "timberwolves",
-            "wolves",
-            "grizzlies",
-            "magic",
-            "pacers",
-            "pistons",
-            "cavaliers",
-            "cavs",
-            "blazers",
-            "wizards",
-            "76ers",
-        }
-        title_away, title_home = extract_teams_from_kalshi_text(market.get("title"))
-        rules_away, rules_home = extract_teams_from_kalshi_text(market.get("rules"))
-        guesses = [
-            (title_away, title_home),
-            (rules_away, rules_home),
-        ]
-        for away_guess, home_guess in guesses:
-            if away_guess and home_guess:
-                away_guess_norm = norm_team(away_guess)
-                home_guess_norm = norm_team(home_guess)
-                if (
-                    away_guess_norm == away_norm and home_guess_norm == home_norm
-                ) or (away_guess_norm == home_norm and home_guess_norm == away_norm):
-                    return 1.0
-        market_text = f"{market.get('title') or ''} {market.get('rules') or ''}"
-        market_tokens = team_tokens(market_text)
-        if (
-            away_tokens
-            and home_tokens
-            and away_tokens.issubset(market_tokens)
-            and home_tokens.issubset(market_tokens)
-        ):
-            return 1.0
-        away_city_tokens = {t for t in away_tokens if t not in nickname_tokens}
-        home_city_tokens = {t for t in home_tokens if t not in nickname_tokens}
-        if (
-            away_city_tokens
-            and home_city_tokens
-            and away_city_tokens.issubset(market_tokens)
-            and home_city_tokens.issubset(market_tokens)
-        ):
-            return 0.85
-        if market_type == "winner":
-            away_expected = nba_abbrev(game.get("away_team"))
-            home_expected = nba_abbrev(game.get("home_team"))
-            away_code_market, home_code_market = kalshi_ticker_team_codes(market)
-            if (
-                away_expected
-                and home_expected
-                and away_code_market
-                and home_code_market
-                and (
-                    (away_expected == away_code_market and home_expected == home_code_market)
-                    or (away_expected == home_code_market and home_expected == away_code_market)
-                )
-            ):
-                return 1.0
-        return 0.0
-
-    def time_score(market: Dict[str, Any]) -> float:
-        game_dt = game.get("commence_time_utc")
-        market_dt = kalshi_market_best_time_utc(market)
-        if not isinstance(game_dt, datetime) or market_dt is None:
-            return 0.0
-        delta_hours = abs((market_dt - game_dt).total_seconds()) / 3600.0
-        return max(0.0, 1.0 - min(delta_hours / 36.0, 1.0))
-
     def extract_prob_and_line(
         market: Dict[str, Any], market_type: str
     ) -> Tuple[Optional[float], Optional[float]]:
@@ -1185,59 +1151,32 @@ def match_kalshi_market(
                 line = None
         return prob, line
 
-    def evaluate_partition(
-        partition_markets: List[Dict[str, Any]],
-        market_type: str,
-        no_market_reason: Optional[str] = None,
-    ):
-        best_market: Optional[Dict[str, Any]] = None
-        best_score = -1.0
-        candidates: List[Dict[str, Any]] = []
-        any_positive_team = False
-        for m in partition_markets:
-            ts = team_score(m, market_type)
-            tms = time_score(m)
-            final = 0.8 * ts + 0.2 * tms
-            candidates.append(
-                {
-                    "title": m.get("title"),
-                    "ticker": m.get("event_ticker") or m.get("ticker"),
-                    "away_code_market": kalshi_ticker_team_codes(m)[0]
-                    if market_type == "winner"
-                    else None,
-                    "home_code_market": kalshi_ticker_team_codes(m)[1]
-                    if market_type == "winner"
-                    else None,
-                    "team_score": ts,
-                    "time_score": tms,
-                    "final_score": final,
-                }
-            )
-            if ts > 0 and final > best_score:
-                any_positive_team = True
-                best_score = final
-                best_market = m
-        if best_market and any_positive_team:
-            prob, line = extract_prob_and_line(best_market, market_type)
-            return {
-                "kalshi_available": True,
-                "kalshi_label": f"matched_{market_type}",
-                "kalshi_event_ticker": best_market.get("event_ticker") or best_market.get("ticker"),
-                "kalshi_reason": f"matched_{market_type}",
-                "kalshi_matched": True,
-                "kalshi_prob": prob,
-                "kalshi_market_type": market_type,
-                "kalshi_match_score": best_score,
-                "kalshi_ticker": best_market.get("event_ticker") or best_market.get("ticker"),
-                "kalshi_line": line,
-                "kalshi_title": best_market.get("title"),
-            }, candidates
-        no_market_message = no_market_reason or f"no_{market_type}_market"
-        if any_positive_team:
-            return base_result(no_market_message, market_type), candidates
-        if partition_markets:
-            return base_result("no_team_match", market_type), candidates
-        return base_result(no_market_message, market_type), candidates
+    def winner_score(market: Dict[str, Any]) -> float:
+        for key in ["liquidity", "volume", "open_interest", "last_price"]:
+            try:
+                val = float(market.get(key))
+                if val is not None:
+                    return val
+            except Exception:
+                continue
+        return 0.0
+
+    def winner_prob(market: Dict[str, Any]) -> Optional[float]:
+        if market.get("last_price") is not None:
+            try:
+                return float(market.get("last_price")) / 100.0
+            except Exception:
+                return None
+        yes_prices: List[float] = []
+        for key in ["yes_bid", "yes_ask"]:
+            try:
+                if market.get(key) is not None:
+                    yes_prices.append(float(market.get(key)))
+            except Exception:
+                continue
+        if yes_prices:
+            return (sum(yes_prices) / len(yes_prices)) / 100.0
+        return None
 
     if not kalshi_integrator:
         base = {t: base_result("kalshi_not_configured", t) for t in ["total", "spread", "winner"]}
@@ -1247,111 +1186,137 @@ def match_kalshi_market(
         return base, {"total": [], "spread": [], "winner": []}
 
     league_name = league_from_game(game)
-    date_token = kalshi_date_token_from_local(game.get("commence_date_local"))
+
+    game_dt_utc = (
+        game.get("commence_time_utc")
+        or game.get("commence_time_iso_utc")
+        or game.get("commence_time")
+        or game.get("commence_time_iso")
+    )
+    if isinstance(game_dt_utc, str):
+        game_dt_utc = parse_kalshi_datetime(game_dt_utc)
+    if isinstance(game_dt_utc, datetime) and game_dt_utc.tzinfo is None:
+        game_dt_utc = game_dt_utc.replace(tzinfo=timezone.utc)
+
+    tz_name = get_local_tz()
+    local_tz = None
+    try:
+        local_tz = ZoneInfo(tz_name) if tz_name else None
+    except Exception:
+        local_tz = None
+    game_local = game_dt_utc.astimezone(local_tz) if (game_dt_utc and local_tz) else game_dt_utc
+    date_token = game_local.strftime("%y%b%d").upper() if game_local else kalshi_date_token_from_local(
+        game.get("commence_date_local")
+    )
+
     away_code_expected = nba_abbrev(game.get("away_team")) if league_name == "NBA" else None
     home_code_expected = nba_abbrev(game.get("home_team")) if league_name == "NBA" else None
-    searched_prefix = None
-    winner_rejections = {"wrong_date": 0, "missing_code": 0}
-    candidate_event_tickers: List[str] = []
-    date_bucket_event_tickers: List[str] = []
-    winner_reason = winner_reason_override or "no_winner_market_for_game"
+
+    filtered_markets = filter_kalshi_game_markets(
+        kalshi_markets,
+        game_dt_utc,
+        league_name,
+        game.get("home_team"),
+        game.get("away_team"),
+        home_code_expected,
+        away_code_expected,
+    )
+    deduped: Dict[str, Dict[str, Any]] = {}
+    for fm in filtered_markets:
+        key = str(fm.get("event_ticker") or fm.get("ticker") or "")
+        if key and key not in deduped:
+            deduped[key] = fm
+    filtered_markets = list(deduped.values())
 
     totals = [m for m in kalshi_markets if classify_kalshi_market(m) == "total"]
     spreads = [m for m in kalshi_markets if classify_kalshi_market(m) == "spread"]
-    winners = [m for m in kalshi_markets if classify_kalshi_market(m) == "winner"]
 
-    # Date-token summary for debug (unique by event_ticker)
-    date_token_counts: Dict[str, int] = {}
-    for m in kalshi_markets:
-        et = str(m.get("event_ticker") or m.get("ticker") or "").upper()
-        if et.startswith("KXNBAGAME-") and len(et) >= 16:
-            token = et.split("KXNBAGAME-")[1][:7]
-            date_token_counts[token] = date_token_counts.get(token, 0) + 1
+    winner_candidates: List[Dict[str, Any]] = []
+    for m in filtered_markets:
+        ticker_upper = str(m.get("event_ticker") or m.get("ticker") or "").upper()
+        title_lower = str(m.get("title") or "").lower()
+        if "KXNBAGAME-" in ticker_upper or "winner" in title_lower:
+            winner_candidates.append(m)
 
-    if league_name == "NBA":
-        searched_prefix = f"KXNBAGAME-{date_token}" if date_token else None
-        candidate_event_tickers = []
-        if date_token and away_code_expected and home_code_expected:
-            candidate_event_tickers = [
-                f"KXNBAGAME-{date_token}{away_code_expected}{home_code_expected}",
-                f"KXNBAGAME-{date_token}{home_code_expected}{away_code_expected}",
-            ]
-        else:
-            winners = []
-            winner_reason = "missing_team_codes_or_date_token"
+    best_winner: Optional[Dict[str, Any]] = None
+    best_score = -1.0
+    winner_candidate_debug: List[Dict[str, Any]] = []
+    for m in winner_candidates:
+        sc = winner_score(m)
+        winner_candidate_debug.append(
+            {
+                "title": m.get("title"),
+                "ticker": m.get("event_ticker") or m.get("ticker"),
+                "liquidity": m.get("liquidity"),
+                "volume": m.get("volume"),
+                "open_interest": m.get("open_interest"),
+                "last_price": m.get("last_price"),
+                "score": sc,
+            }
+        )
+        if sc > best_score:
+            best_score = sc
+            best_winner = m
 
-        if winners and searched_prefix:
-            bucket_map: Dict[str, Dict[str, Any]] = {}
-            for m in winners:
-                event_tick = str(m.get("event_ticker") or "").upper()
-                if event_tick.startswith(searched_prefix):
-                    if event_tick not in bucket_map:
-                        bucket_map[event_tick] = m
-            date_bucket = list(bucket_map.values())
-            date_bucket_event_tickers = list(bucket_map.keys())
-            if not date_bucket:
-                winners = []
-                winner_reason = "no_kalshi_date_bucket"
-            else:
-                candidates_set = set(candidate_event_tickers)
-                winners = [
-                    m
-                    for m in date_bucket
-                    if str(m.get("event_ticker") or "").upper() in candidates_set
-                ]
-                if not winners:
-                    winner_reason = "no_exact_event_ticker_match_in_bucket"
-        elif winners:
-            # If we have winners but no searched_prefix/date_token, treat as missing token
-            winners = []
-            winner_reason = "no_kalshi_date_bucket"
-        else:
-            date_bucket_event_tickers = []
-            if winner_reason == winner_reason_override or winner_reason == "no_winner_market_for_game":
-                winner_reason = "no_kalshi_date_bucket"
-        candidate_event_tickers = list(dict.fromkeys(candidate_event_tickers))
+    if best_winner:
+        prob = winner_prob(best_winner)
+        winner_result = {
+            "kalshi_available": True,
+            "kalshi_label": "matched_winner",
+            "kalshi_event_ticker": best_winner.get("event_ticker") or best_winner.get("ticker"),
+            "kalshi_reason": "matched_winner",
+            "kalshi_matched": True,
+            "kalshi_prob": prob,
+            "kalshi_market_type": "winner",
+            "kalshi_match_score": best_score,
+            "kalshi_ticker": best_winner.get("event_ticker") or best_winner.get("ticker"),
+            "kalshi_line": None,
+            "kalshi_title": best_winner.get("title"),
+        }
+    else:
+        no_reason = winner_reason_override or "no_winner_market_for_game"
+        winner_result = base_result(no_reason, "winner")
 
-    total_result, total_candidates = evaluate_partition(totals, "total")
-    spread_result, spread_candidates = evaluate_partition(spreads, "spread")
-    winner_result, winner_candidates = evaluate_partition(
-        winners, "winner", winner_reason
-    )
-
-    # Guard against any cross-date matches that slipped through
-    if league_name == "NBA" and winner_result.get("kalshi_matched"):
-        evt = str(winner_result.get("kalshi_event_ticker") or "").upper()
-        if not date_token or (date_token and f"KXNBAGAME-{date_token}" not in evt):
-            winner_result = base_result("date_bucket_guard_triggered", "winner")
-
-    match_status = "matched" if winner_result.get("kalshi_matched") else "no_match"
-    no_match_reason = None if winner_result.get("kalshi_matched") else winner_result.get("kalshi_reason")
-    matched_event_ticker = winner_result.get("kalshi_event_ticker")
-    matched_ticker = winner_result.get("kalshi_ticker")
+    def simple_select(markets: List[Dict[str, Any]], market_type: str) -> Dict[str, Any]:
+        if not markets:
+            return base_result(f"no_{market_type}_market", market_type)
+        chosen = markets[0]
+        prob, line = extract_prob_and_line(chosen, market_type)
+        return {
+            "kalshi_available": True,
+            "kalshi_label": f"matched_{market_type}",
+            "kalshi_event_ticker": chosen.get("event_ticker") or chosen.get("ticker"),
+            "kalshi_reason": f"matched_{market_type}",
+            "kalshi_matched": True,
+            "kalshi_prob": prob,
+            "kalshi_market_type": market_type,
+            "kalshi_match_score": None,
+            "kalshi_ticker": chosen.get("event_ticker") or chosen.get("ticker"),
+            "kalshi_line": line,
+            "kalshi_title": chosen.get("title"),
+        }
 
     winner_meta = {
         "expected_date_token": date_token,
         "expected_codes": {"away": away_code_expected, "home": home_code_expected},
-        "candidate_event_tickers": candidate_event_tickers[:10],
-        "searched_prefix": searched_prefix,
-        "date_bucket_counts": date_token_counts,
-        "date_bucket_markets_count": len(date_bucket_event_tickers),
-        "checked_event_tickers_sample": date_bucket_event_tickers[:10],
-        "rejection_counts": winner_rejections,
-        "match_status": match_status,
-        "no_match_reason": no_match_reason,
-        "matched_event_ticker": matched_event_ticker,
-        "matched_ticker": matched_ticker,
+        "winner_match_status": "matched" if winner_result.get("kalshi_matched") else "no_match",
+        "winner_no_match_reason": None if winner_result.get("kalshi_matched") else winner_result.get("kalshi_reason"),
+        "matched_event_ticker": winner_result.get("kalshi_event_ticker"),
+        "matched_ticker": winner_result.get("kalshi_ticker"),
     }
 
-    return (
-        {"total": total_result, "spread": spread_result, "winner": winner_result},
-        {
-            "total": total_candidates,
-            "spread": spread_candidates,
-            "winner": winner_candidates,
-            "winner_meta": winner_meta,
-        },
-    )
+    candidate_debug = {
+        "total": totals,
+        "spread": spreads,
+        "winner": winner_candidate_debug,
+        "winner_meta": winner_meta,
+    }
+
+    return {
+        "total": simple_select(totals, "total"),
+        "spread": simple_select(spreads, "spread"),
+        "winner": winner_result,
+    }, candidate_debug
 
 
 # -----------------
@@ -1503,20 +1468,26 @@ with tab_games:
 with tab_master:
     st.header("Master Analysis")
     kalshi_status = kalshi_health_check(league)
-    if not kalshi_status.get("ok"):
-        error_detail = kalshi_status.get("error") or "Kalshi is required and is not healthy (missing keys / 0 markets / auth error). Fix Kalshi first."
+    if not kalshi_status.get("configured"):
+        error_detail = kalshi_status.get("error") or "Kalshi is required and missing keys."
         if kalshi_status.get("status_code"):
-            error_detail = f"{error_detail} (status {kalshi_status.get('status_code')}: {kalshi_status.get('response_text')})"
+            error_detail = f"{error_detail} (status {kalshi_status.get('status_code')}: {kalshi_status.get('response_text_snippet')})"
         st.error(error_detail)
         st.info("Master Analysis is disabled until Kalshi is available.")
+    else:
+        if kalshi_status.get("error") and not kalshi_status.get("ok"):
+            warn_detail = kalshi_status.get("error") or "Kalshi reachable but returned no markets; proceeding without Kalshi data."
+            st.warning(warn_detail)
+        if kalshi_status.get("warning"):
+            st.warning(kalshi_status.get("warning"))
     run_master = st.button(
         "Run Master Analysis",
         key="run_master",
-        disabled=(not kalshi_status.get("ok")) and st.session_state.get("kalshi_required", True),
+        disabled=(not kalshi_status.get("configured")) and st.session_state.get("kalshi_required", True),
         help="Requires Kalshi availability",
     )
     games = st.session_state.get("games", [])
-    if run_master and not kalshi_status.get("ok"):
+    if run_master and (not kalshi_status.get("configured")):
         st.error("Kalshi is required but unavailable. Fix Kalshi first.")
         st.stop()
     if run_master:
@@ -1548,10 +1519,10 @@ with tab_master:
             st.error(str(exc))
             st.stop()
         if not kalshi_markets:
-            st.error(
-                "Kalshi is required but unavailable. Fix keys / API and retry."
+            st.warning(
+                "Kalshi markets could not be fetched; proceeding with cached/empty set."
             )
-            st.stop()
+            kalshi_markets = st.session_state.get("kalshi_markets_raw") or []
         st.session_state["kalshi_all_markets"] = st.session_state.get(
             "kalshi_markets_raw", kalshi_markets
         )
@@ -1673,6 +1644,9 @@ with tab_master:
                     "kalshi_date_token_used": (candidate_debug or {})
                     .get("winner_meta", {})
                     .get("expected_date_token"),
+                    "expected_codes": (candidate_debug or {})
+                    .get("winner_meta", {})
+                    .get("expected_codes"),
                     "away_code": away_code,
                     "home_code": home_code,
                     "strict_filtered_count": len(filtered_markets),
@@ -1690,6 +1664,9 @@ with tab_master:
                     ),
                     "matched_title": kalshi_matches.get("winner", {}).get(
                         "kalshi_title"
+                    ),
+                    "kalshi_reason": kalshi_matches.get("winner", {}).get(
+                        "kalshi_reason"
                     ),
                 }
             )
@@ -1920,8 +1897,19 @@ with tab_master:
         st.session_state["last_rows_out"] = len(df)
         st.session_state["master_stats"] = master_stats
         st.session_state["kalshi_match_results"] = kalshi_match_results
+        total_game_markets = len(
+            [
+                m
+                for m in kalshi_markets
+                if str(m.get("event_ticker") or m.get("ticker") or "").upper().startswith(
+                    "KXNBAGAME-"
+                )
+            ]
+        )
+        first_game_meta = per_game_kalshi_debug[0] if per_game_kalshi_debug else {}
         st.session_state["kalshi_filter_stats"] = {
             "total_markets_fetched": len(kalshi_markets),
+            "total_game_markets": total_game_markets,
             "avg_filtered_markets_per_game": sum(filtered_counts) / len(filtered_counts)
             if filtered_counts
             else 0,
@@ -1933,6 +1921,12 @@ with tab_master:
             else {},
             "first_game_full_market_search": first_game_full_search,
             "kalshi_winner_refetch_attempted": winner_refetch_attempted,
+            "first_game_expected": {
+                "expected_date_token": (first_game_meta or {}).get("kalshi_date_token_used"),
+                "expected_codes": (first_game_meta or {}).get("expected_codes"),
+                "matched_ticker": (first_game_meta or {}).get("matched_ticker"),
+                "kalshi_reason": (first_game_meta or {}).get("kalshi_reason"),
+            },
         }
         matches = master_stats.get("kalshi_matches", 0)
         total_games = master_stats.get("kalshi_total", 0) or 1
@@ -1964,7 +1958,13 @@ with tab_kalshi:
     elif not kalshi_status.get("ok"):
         st.error("Kalshi is required but unavailable. Fix keys/API and retry.")
     else:
-        st.success("Kalshi credentials detected and markets available.")
+        if (kalshi_status.get("market_count") or 0) > 0:
+            st.success("Kalshi credentials detected and markets available.")
+        else:
+            st.warning(
+                kalshi_status.get("warning")
+                or "Kalshi reachable, but no NBA KXNBAGAME markets returned (futures-only or slate not listed)."
+            )
 
 
 with tab_sentiment:
@@ -2029,9 +2029,35 @@ with tab_debug:
     st.subheader("Kalshi health")
     kalshi_health = kalshi_health_check(league)
     st.json(kalshi_health)
+    if kalshi_integrator and st.checkbox("Show Kalshi market counts", key="kalshi_market_counts_toggle"):
+        dbg_markets = kalshi_integrator.get_league_markets(
+            league, status="active", max_pages=2, min_prefix_hits=5
+        )
+        dbg_tickers = [str(m.get("event_ticker") or m.get("ticker") or "").upper() for m in dbg_markets]
+        st.json(
+            {
+                "kalshi_debug_counts": {
+                    "kxnbagame": len([t for t in dbg_tickers if t.startswith("KXNBAGAME")]),
+                    "kxnba_futures": len([
+                        t for t in dbg_tickers if t.startswith("KXNBA") and not t.startswith("KXNBAGAME")
+                    ]),
+                    "total": len(dbg_tickers),
+                }
+            }
+        )
     filter_stats = st.session_state.get("kalshi_filter_stats") or {}
     if filter_stats:
         st.subheader("Kalshi filtering stats")
+        st.json(
+            {
+                "total_markets_fetched": filter_stats.get("total_markets_fetched"),
+                "total_game_markets": filter_stats.get("total_game_markets"),
+                "avg_filtered_markets_per_game": filter_stats.get(
+                    "avg_filtered_markets_per_game"
+                ),
+                "first_game": filter_stats.get("first_game_expected"),
+            }
+        )
         st.json(filter_stats)
     prefix_counts = st.session_state.get("kalshi_prefix_counts")
     if prefix_counts:
@@ -2106,3 +2132,24 @@ with tab_debug:
     if st.session_state.get("last_exception"):
         st.subheader("Last exception")
         st.code(st.session_state["last_exception"])
+
+
+if __name__ == "__main__" and os.environ.get("KALSHI_SELF_TEST"):
+    fake_game = {
+        "home_team": "Chicago Bulls",
+        "away_team": "Cleveland Cavaliers",
+        "commence_time": "2025-12-18T01:10:00Z",
+        "commence_time_utc": parse_kalshi_datetime("2025-12-18T01:10:00Z"),
+    }
+    fake_markets = [
+        {
+            "event_ticker": "KXNBAGAME-25DEC17CLECHI",
+            "title": "Cleveland vs Chicago Winner?",
+            "last_price": 55,
+            "liquidity": 1000,
+        }
+    ]
+    winner_match, winner_debug = match_kalshi_market(fake_game, fake_markets)
+    print("Self-test winner matched:", winner_match.get("winner", {}).get("kalshi_matched"))
+    print("Self-test prob:", winner_match.get("winner", {}).get("kalshi_prob"))
+    print("Self-test debug:", winner_debug.get("winner_meta"))
