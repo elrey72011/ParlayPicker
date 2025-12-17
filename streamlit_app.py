@@ -530,6 +530,7 @@ def fetch_kalshi_markets(
         last_params = kalshi_integrator.last_request_params or {}
         st.session_state["kalshi_last_request_params"] = last_params
         st.session_state["kalshi_last_request_status_included"] = "status" in last_params
+        st.session_state["kalshi_request_params_snapshot"] = dict(last_params)
         if not markets_raw:
             markets_raw = kalshi_integrator.get_markets_paginated(status=None, max_pages=5)
             st.session_state["kalshi_last_request_params"] = kalshi_integrator.last_request_params
@@ -588,6 +589,7 @@ def fetch_kalshi_markets(
             "fetched_game_prefix": game_pool_counts.get("count_prefix_KXNBAGAME"),
             "wanted_tokens": sorted(list(wanted_tokens)) if wanted_tokens else [],
             "after_token_filter": len(game_pool),
+            "request_params": st.session_state.get("kalshi_request_params_snapshot", {}),
         }
         samples_game = []
         for m in game_pool:
@@ -603,6 +605,9 @@ def fetch_kalshi_markets(
         st.session_state["last_exception"] = traceback.format_exc()
         return []
 
+def kalshi_health_check(selected_league: str = "NBA") -> Dict[str, Any]:
+    """Wrapper to ensure health is always callable before first use."""
+    return kalshi_health(selected_league)
 
 def kalshi_health_check(selected_league: str = "NBA") -> Dict[str, Any]:
     """Wrapper to ensure health is always callable before first use."""

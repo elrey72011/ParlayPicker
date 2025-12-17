@@ -56,6 +56,7 @@ class KalshiMatchResult:
 # ---------------------------------------------------------------------------
 
 SUPPORTED_LEAGUES = {"NBA", "NFL", "MLB", "NHL", "NCAAF", "NCAAB"}
+SAFE_STATUS_ALLOWLIST = {"active", "closed", "finalized", "settled"}
 
 LEAGUE_SERIES_MAP: Dict[str, Any] = {
     "NBA": [
@@ -662,6 +663,26 @@ class KalshiIntegrator:
                 "response_text": info.get("response_text"),
             }
 
+    def self_test_no_open_status(self) -> Dict[str, Any]:
+        """Quick live call to ensure we never send status="open" in params."""
+        try:
+            payload = self._request("GET", "/markets", params={"limit": 10})
+            params_sent = self.last_request_params or {}
+            return {
+                "ok": True,
+                "status_code": self.last_status_code,
+                "request_params": params_sent,
+                "contains_status_open": params_sent.get("status") == "open",
+                "market_count": len(payload.get("markets", [])) if isinstance(payload, dict) else 0,
+            }
+        except Exception as exc:
+            return {
+                "ok": False,
+                "error": str(exc),
+                "request_params": self.last_request_params,
+                "status_code": self.last_status_code,
+            }
+
     def _request(
         self,
         method: str,
@@ -779,8 +800,7 @@ class KalshiIntegrator:
             return None
         if status_clean == "open":
             return None
-        allowed = {"active", "closed", "finalized", "settled"}
-        return status_clean if status_clean in allowed else None
+        return status_clean if status_clean in SAFE_STATUS_ALLOWLIST else None
 
     @staticmethod
     def _status_param(status: Optional[str]) -> Dict[str, Any]:
@@ -877,8 +897,6 @@ class KalshiIntegrator:
             series_min_hits = 50 if series == "KXNBAGAME" else min_hits
             while series_pages < max_pages and series_hits < series_min_hits:
                 params = {"limit": 200, "series_ticker": series}
-                # NBA slate discovery should not be filtered out by status; omit invalid/"open" entirely.
-                params.update(self._status_param(normalized_status))
                 if next_cursor:
                     params["cursor"] = next_cursor
                 try:
