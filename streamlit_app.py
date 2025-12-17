@@ -11,6 +11,8 @@ import pandas as pd
 import requests
 import streamlit as st
 from app_core.kalshi_integrator import KalshiIntegrator, LEAGUE_SERIES_MAP
+from app_core.sentiment_pipeline import build_team_sentiment_map
+from vertex_master_analyzer import blended_win_prob
 
 # Must be the first Streamlit call
 st.set_page_config(page_title="ParlayDesk", layout="wide")
@@ -604,6 +606,7 @@ def fetch_kalshi_markets(
     except Exception:
         st.session_state["last_exception"] = traceback.format_exc()
         return []
+
 
 def kalshi_health_check(selected_league: str = "NBA") -> Dict[str, Any]:
     """Wrapper to ensure health is always callable before first use."""
@@ -1443,6 +1446,10 @@ kalshi_required_toggle = st.sidebar.checkbox(
 st.session_state["kalshi_required"] = kalshi_required_toggle
 if kalshi_integrator:
     kalshi_integrator.required = kalshi_required_toggle
+enable_sentiment = st.sidebar.checkbox(
+    "Enable Sentiment", value=st.session_state.get("enable_sentiment", True)
+)
+st.session_state["enable_sentiment"] = enable_sentiment
 if st.sidebar.button("Load Games", use_container_width=True):
     load_games(league)
 
@@ -1550,6 +1557,24 @@ with tab_master:
             or g.get("commence_time")
             or g.get("commence_time_iso")
         ]
+        sentiment_enabled = st.session_state.get("enable_sentiment", True)
+        sentiment_map: Dict[str, float] = {}
+        sentiment_debug: Dict[str, Any] = {"enabled": sentiment_enabled}
+        if sentiment_enabled and news_api_key:
+            try:
+                sentiment_map, sentiment_debug = build_team_sentiment_map(
+                    news_api_key, games, league
+                )
+            except Exception as exc:
+                sentiment_map = {}
+                sentiment_debug["error"] = str(exc)
+                st.session_state["last_exception"] = traceback.format_exc()
+        else:
+            sentiment_debug["warning"] = (
+                "sentiment_disabled" if not sentiment_enabled else "missing_news_api_key"
+            )
+        st.session_state["sentiment_map"] = sentiment_map
+        st.session_state["sentiment_debug"] = sentiment_debug
         try:
             kalshi_markets = fetch_kalshi_markets(league, commence_times_utc)
         except RuntimeError as exc:
@@ -1644,6 +1669,9 @@ with tab_master:
             commence_date_local = g.get("commence_date_local") or ""
             away_code = nba_abbrev(away)
             home_code = nba_abbrev(home)
+            home_sent = sentiment_map.get(home, 0.0)
+            away_sent = sentiment_map.get(away, 0.0)
+            sentiment_diff = home_sent - away_sent
             filtered_markets = filter_kalshi_game_markets(
                 kalshi_markets,
                 g.get("commence_time_utc"),
@@ -1693,6 +1721,7 @@ with tab_master:
                     .get("expected_codes"),
                     "away_code": away_code,
                     "home_code": home_code,
+                    "sentiment_diff": sentiment_diff,
                     "strict_filtered_count": len(filtered_markets),
                     "strict_filtered_sample": [
                         {
@@ -1732,9 +1761,9 @@ with tab_master:
             )
 
             try:
-                ai_prob = get_vertex_prob(g)
+                vertex_prob_home = get_vertex_prob(g)
             except Exception:
-                ai_prob = None
+                vertex_prob_home = None
                 warnings.append("vertex_error")
                 st.session_state["last_exception"] = traceback.format_exc()
 
@@ -1750,6 +1779,20 @@ with tab_master:
             away_ml = g.get("away_ml_price")
             implied_home = american_to_implied_prob(home_ml)
             implied_away = american_to_implied_prob(away_ml)
+            market_home_prob = implied_home
+            if market_home_prob is None and implied_away is not None:
+                market_home_prob = max(0.0, min(1.0, 1.0 - implied_away))
+
+            def blended_for_selection(selection_team: str, market_prob_home: Optional[float]) -> float:
+                selection_flag = "home" if selection_team == home else "away"
+                return blended_win_prob(
+                    market_prob=market_prob_home,
+                    vertex_prob=vertex_prob_home,
+                    theover_prob=None,
+                    kalshi_prob=kalshi_winner.get("kalshi_prob"),
+                    sentiment_diff=sentiment_diff,
+                    selection=selection_flag,
+                )
             if home_ml is not None or away_ml is not None:
                 pick = home
                 implied_pick = implied_home
@@ -1766,6 +1809,7 @@ with tab_master:
                 match_ref = kalshi_winner
                 if not match_ref.get("kalshi_matched"):
                     warnings.append(f"kalshi_{match_ref.get('kalshi_reason')}")
+                ai_prob_row = blended_for_selection(pick, market_home_prob)
                 rows_out.append(
                     {
                         "League": league_name,
@@ -1780,7 +1824,7 @@ with tab_master:
                         "Away_ML": away_ml,
                         "Pick": pick,
                         "Implied_Prob": implied_pick,
-                        "AI_Prob": ai_prob,
+                        "AI_Prob": ai_prob_row,
                         "Warnings": ";".join(warnings),
                         "kalshi_available": match_ref.get("kalshi_available"),
                         "kalshi_label": match_ref.get("kalshi_label"),
@@ -1793,6 +1837,9 @@ with tab_master:
                         "kalshi_line": match_ref.get("kalshi_line"),
                         "kalshi_title": match_ref.get("kalshi_title"),
                         "kalshi_match_score": match_ref.get("kalshi_match_score"),
+                        "Home_Sentiment": home_sent,
+                        "Away_Sentiment": away_sent,
+                        "Sentiment_Diff": sentiment_diff,
                     }
                 )
                 master_stats["h2h_found"] += 1
@@ -1819,6 +1866,7 @@ with tab_master:
                 match_ref = kalshi_spread
                 if not match_ref.get("kalshi_matched"):
                     warnings.append(f"kalshi_{match_ref.get('kalshi_reason')}")
+                ai_prob_row = blended_for_selection(spread_pick, market_home_prob)
                 rows_out.append(
                     {
                         "League": league_name,
@@ -1835,7 +1883,7 @@ with tab_master:
                         "Away_Spread_Price": g.get("away_spread_price"),
                         "Pick": spread_pick,
                         "Implied_Prob": american_to_implied_prob(spread_pick_price),
-                        "AI_Prob": ai_prob,
+                        "AI_Prob": ai_prob_row,
                         "Warnings": ";".join(warnings),
                         "kalshi_available": match_ref.get("kalshi_available"),
                         "kalshi_label": match_ref.get("kalshi_label"),
@@ -1848,6 +1896,9 @@ with tab_master:
                         "kalshi_line": match_ref.get("kalshi_line"),
                         "kalshi_title": match_ref.get("kalshi_title"),
                         "kalshi_match_score": match_ref.get("kalshi_match_score"),
+                        "Home_Sentiment": home_sent,
+                        "Away_Sentiment": away_sent,
+                        "Sentiment_Diff": sentiment_diff,
                     }
                 )
                 spread_row_added = True
@@ -1872,6 +1923,7 @@ with tab_master:
                 match_ref = kalshi_total
                 if not match_ref.get("kalshi_matched"):
                     warnings.append(f"kalshi_{match_ref.get('kalshi_reason')}")
+                ai_prob_row = blended_for_selection(home, market_home_prob)
                 rows_out.append(
                     {
                         "League": league_name,
@@ -1887,7 +1939,7 @@ with tab_master:
                         "Under_Price": g.get("under_price"),
                         "Pick": total_pick,
                         "Implied_Prob": american_to_implied_prob(total_pick_price),
-                        "AI_Prob": ai_prob,
+                        "AI_Prob": ai_prob_row,
                         "Warnings": ";".join(warnings),
                         "kalshi_available": match_ref.get("kalshi_available"),
                         "kalshi_label": match_ref.get("kalshi_label"),
@@ -1900,6 +1952,9 @@ with tab_master:
                         "kalshi_line": match_ref.get("kalshi_line"),
                         "kalshi_title": match_ref.get("kalshi_title"),
                         "kalshi_match_score": match_ref.get("kalshi_match_score"),
+                        "Home_Sentiment": home_sent,
+                        "Away_Sentiment": away_sent,
+                        "Sentiment_Diff": sentiment_diff,
                     }
                 )
                 total_row_added = True
@@ -1919,7 +1974,7 @@ with tab_master:
                         "Book": None,
                         "Pick": None,
                         "Implied_Prob": None,
-                        "AI_Prob": ai_prob,
+                        "AI_Prob": vertex_prob_home,
                         "Warnings": ";".join(warnings),
                         "kalshi_available": kalshi_winner.get("kalshi_available"),
                         "kalshi_label": kalshi_winner.get("kalshi_label"),
@@ -1932,6 +1987,9 @@ with tab_master:
                         "kalshi_line": kalshi_winner.get("kalshi_line"),
                         "kalshi_title": kalshi_winner.get("kalshi_title"),
                         "kalshi_match_score": kalshi_winner.get("kalshi_match_score"),
+                        "Home_Sentiment": home_sent,
+                        "Away_Sentiment": away_sent,
+                        "Sentiment_Diff": sentiment_diff,
                     }
                 )
                 master_stats["market_rows_out"] += 1
@@ -2012,8 +2070,21 @@ with tab_kalshi:
 
 
 with tab_sentiment:
-    st.header("Sentiment (Stub)")
-    st.info("Sentiment analysis integration coming soon.")
+    st.header("Sentiment")
+    sentiment_enabled = st.session_state.get("enable_sentiment", True)
+    sent_map = st.session_state.get("sentiment_map") or {}
+    sent_debug = st.session_state.get("sentiment_debug") or {}
+    st.caption(f"Sentiment enabled: {sentiment_enabled}")
+    if sent_map:
+        scores_df = pd.DataFrame(
+            sorted(sent_map.items(), key=lambda kv: kv[0]),
+            columns=["Team", "Sentiment"],
+        )
+        st.dataframe(scores_df)
+    else:
+        st.info("No sentiment scores available yet (missing NewsAPI key or disabled).")
+    with st.expander("Sentiment Debug", expanded=False):
+        st.json(sent_debug)
 
 
 with tab_debug:
