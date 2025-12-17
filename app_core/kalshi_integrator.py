@@ -677,6 +677,17 @@ class KalshiIntegrator:
             self.last_error_info = {"status_code": status, "response_text": None}
             return data
 
+    @staticmethod
+    def _status_param(status: Optional[str]) -> Dict[str, Any]:
+        """Return a valid status parameter for /markets calls."""
+        allowed = {"unopened", "open", "closed", "settled"}
+        if not status:
+            return {}
+        status_clean = str(status).lower()
+        if status_clean in allowed:
+            return {"status": status_clean}
+        return {}
+
     def get_markets_paginated(
         self,
         status: Optional[str] = None,
@@ -690,8 +701,7 @@ class KalshiIntegrator:
         pages = 0
         while pages < max_pages:
             params = {"limit": limit}
-            if status:
-                params["status"] = status
+            params.update(self._status_param(status))
             if next_cursor:
                 params["cursor"] = next_cursor
             if extra_params:
@@ -742,8 +752,7 @@ class KalshiIntegrator:
             next_cursor: Optional[str] = None
             while pages < max_pages and prefix_hits < min_hits:
                 params = {"limit": 200, "series_ticker": series}
-                if status:
-                    params["status"] = status
+                params.update(self._status_param(status))
                 if next_cursor:
                     params["cursor"] = next_cursor
                 try:
@@ -864,11 +873,14 @@ class KalshiIntegrator:
         self.last_fetch_meta = {
             "league": league_key,
             "status": status,
+            "status_param": bool(self._status_param(status)),
             "pages": pages,
             "total_markets": len(all_markets),
             "prefix_hits": prefix_hits,
             "prefix": prefix,
         }
+        if not all_markets and not self.last_error_info:
+            self.last_fetch_meta["note"] = "reachable_but_empty"
         self._league_cache[cache_key] = {
             "ts": now,
             "markets": all_markets,
@@ -1053,7 +1065,7 @@ class KalshiIntegrator:
         if not bucket:
             targeted_prefix = f"KXNBAGAME-{date_token}"
             try:
-                targeted = self._get_markets_paginated(
+                targeted = self.get_markets_paginated(
                     status=status,
                     limit=200,
                     max_pages=5,

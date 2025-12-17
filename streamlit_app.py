@@ -511,70 +511,6 @@ def fetch_kalshi_markets(
             tokens.add(dt_local.strftime("%y%b%d").upper())  # 25DEC17
         return tokens
 
-    try:
-        # 1) Fetch
-        markets_raw = kalshi_integrator.get_league_markets(
-            selected_league,
-            min_prefix_hits=200,
-            max_pages=5,
-        ) or []
-
-        # Fallback: broader pagination if league fetch returns nothing
-        if not markets_raw:
-            markets_raw = kalshi_integrator.get_markets_paginated(status=None, max_pages=5) or []
-
-        # 2) Split
-        split = kalshi_integrator.split_market_kinds(markets_raw, selected_league) or {}
-        game_pool: List[Dict[str, Any]] = (split.get("single_game_candidates") or [])
-
-        # 3) Clean NBA “noise” (but DO NOT drop KXNBAGAME!)
-        if league_upper == "NBA" and game_pool:
-            cleaned = []
-            for m in game_pool:
-                t = ticker_upper(m)
-                if t.startswith("KXMV") or "MVE" in t:
-                    continue
-                cleaned.append(m)
-            game_pool = cleaned
-
-        # 4) Restrict to the slate you actually loaded (tokens like 25DEC17)
-        wanted_tokens = date_tokens_from_commence(commence_times_utc)
-        if wanted_tokens and game_pool:
-            filtered = []
-            for m in game_pool:
-                t = ticker_upper(m)
-                if any(tok in t for tok in wanted_tokens):
-                    filtered.append(m)
-            # IMPORTANT: don’t “if filtered: game_pool = filtered” — always apply it.
-            # Otherwise you keep irrelevant dates and matching gets worse.
-            game_pool = filtered
-
-        # 5) Debug artifacts (always set)
-        st.session_state["kalshi_markets_raw"] = markets_raw
-        st.session_state["kalshi_all_markets"] = markets_raw
-        st.session_state["kalshi_markets_game_pool"] = game_pool
-
-        st.session_state["kalshi_prefix_counts"] = {
-            "raw": {"total": len(markets_raw), **prefix_count(markets_raw)},
-            "game_pool": {"total": len(game_pool), **prefix_count(game_pool)},
-        }
-
-        samples_game = []
-        for m in game_pool:
-            evt = ticker_upper(m)
-            if evt.startswith("KXNBAGAME"):
-                samples_game.append(evt)
-            if len(samples_game) >= 20:
-                break
-        st.session_state["kalshi_prefix_samples_game"] = samples_game
-        st.session_state["kalshi_game_pool_sample"] = samples_game[:10]
-
-        return game_pool
-
-    except Exception:
-        st.session_state["last_exception"] = traceback.format_exc()
-        return []  # do NOT raise here or you’ll keep crashing Master Analysis
-
     def prefix_count(markets: List[Dict[str, Any]]) -> Dict[str, int]:
         tickers = [ticker_upper(m) for m in markets]
         return {
@@ -597,18 +533,30 @@ def fetch_kalshi_markets(
 
         raw_counts = prefix_count(markets_raw)
         split = kalshi_integrator.split_market_kinds(markets_raw, selected_league)
-        game_pool: List[Dict[str, Any]] = split.get("single_game_candidates", [])
-        if selected_league.upper() == "NBA":
+        game_pool: List[Dict[str, Any]] = split.get("single_game_candidates", []) or []
+
+        if league_upper == "NBA" and game_pool:
             filtered_game_pool: List[Dict[str, Any]] = []
             for m in game_pool:
                 t = ticker_upper(m)
                 if t.startswith("KXMV") or "MVE" in t:
                     continue
-                if t.startswith("KXNBA") or t.startswith("KXN"):
+                if t.startswith("KXNBAGAME") or t.startswith("KXNBATOTAL") or t.startswith("KXNBASPREAD") or t.startswith("KXNBA") or t.startswith("KXN"):
                     filtered_game_pool.append(m)
             if filtered_game_pool:
                 game_pool = filtered_game_pool
         game_pool_counts = prefix_count(game_pool)
+
+        wanted_tokens = date_tokens_from_commence(commence_times_utc)
+        if wanted_tokens:
+            filtered = []
+            for m in game_pool:
+                t = ticker_upper(m)
+                if any(tok in t for tok in wanted_tokens):
+                    filtered.append(m)
+            if filtered:
+                game_pool = filtered
+                game_pool_counts = prefix_count(game_pool)
 
         if not game_pool and markets_raw:
             fallback_raw = kalshi_integrator.get_markets_paginated(status=None, max_pages=5)
@@ -616,7 +564,7 @@ def fetch_kalshi_markets(
             if split_fb.get("single_game_candidates"):
                 markets_raw = fallback_raw or []
                 raw_counts = prefix_count(markets_raw)
-                game_pool = split_fb.get("single_game_candidates", [])
+                game_pool = split_fb.get("single_game_candidates", []) or []
                 game_pool_counts = prefix_count(game_pool)
 
         st.session_state["kalshi_markets_raw"] = markets_raw
@@ -628,20 +576,52 @@ def fetch_kalshi_markets(
         }
         samples_game = []
         for m in game_pool:
-            evt = str(m.get("event_ticker") or "").upper()
-            if evt.startswith("KXNBAGAME"):
+            evt = ticker_upper(m)
+            if "GAME-" in evt:
                 samples_game.append(evt)
             if len(samples_game) >= 20:
                 break
         st.session_state["kalshi_prefix_samples_game"] = samples_game
         st.session_state["kalshi_game_pool_sample"] = samples_game[:10]
         return game_pool
-    except RuntimeError:
-        st.session_state["last_exception"] = traceback.format_exc()
-        raise
     except Exception:
         st.session_state["last_exception"] = traceback.format_exc()
-        raise
+        return []
+
+
+def kalshi_health_check(selected_league: str) -> Dict[str, Any]:
+    status = {
+        "configured": bool(kalshi_integrator),
+        "ok": False,
+        "market_count": 0,
+        "error": None,
+        "status_code": None,
+        "response_text": None,
+    }
+
+    if not kalshi_integrator:
+        status["error"] = "Kalshi not configured."
+        return status
+
+    try:
+        markets = fetch_kalshi_markets(selected_league, commence_times_utc=None)
+        markets = markets or []
+        status["market_count"] = len(markets)
+        status["ok"] = bool(markets)
+        if not status["ok"]:
+            status["error"] = f"Kalshi reachable but no {selected_league} markets returned."
+        return status
+    except Exception as exc:
+        info = kalshi_integrator.last_error_info or {}
+        status["error"] = str(exc)
+        status["status_code"] = info.get("status_code")
+        status["response_text"] = info.get("response_text")
+        cached = st.session_state.get("kalshi_markets_raw") or []
+        status["market_count"] = len(cached)
+        status["ok"] = bool(cached)
+        if cached and not status["error"]:
+            status["error"] = "Using cached Kalshi markets"
+        return status
 
 def pick_sample_game_market(
     markets: List[Dict[str, Any]]
@@ -1625,20 +1605,23 @@ with tab_games:
 with tab_master:
     st.header("Master Analysis")
     kalshi_status = kalshi_health_check(league)
-    if not kalshi_status.get("ok"):
-        error_detail = kalshi_status.get("error") or "Kalshi is required and is not healthy (missing keys / 0 markets / auth error). Fix Kalshi first."
+    if not kalshi_status.get("configured"):
+        error_detail = kalshi_status.get("error") or "Kalshi is required and missing keys."
         if kalshi_status.get("status_code"):
             error_detail = f"{error_detail} (status {kalshi_status.get('status_code')}: {kalshi_status.get('response_text')})"
         st.error(error_detail)
         st.info("Master Analysis is disabled until Kalshi is available.")
+    elif not kalshi_status.get("ok"):
+        warn_detail = kalshi_status.get("error") or "Kalshi reachable but returned no markets; proceeding without Kalshi data."
+        st.warning(warn_detail)
     run_master = st.button(
         "Run Master Analysis",
         key="run_master",
-        disabled=(not kalshi_status.get("ok")) and st.session_state.get("kalshi_required", True),
+        disabled=(not kalshi_status.get("configured")) and st.session_state.get("kalshi_required", True),
         help="Requires Kalshi availability",
     )
     games = st.session_state.get("games", [])
-    if run_master and not kalshi_status.get("ok"):
+    if run_master and (not kalshi_status.get("configured")):
         st.error("Kalshi is required but unavailable. Fix Kalshi first.")
         st.stop()
     if run_master:
