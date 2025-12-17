@@ -724,10 +724,14 @@ class KalshiIntegrator:
     @staticmethod
     def _status_param(status: Optional[str]) -> Dict[str, Any]:
         """Return a valid status parameter for /markets calls."""
-        allowed = {"unopened", "open", "closed", "settled", "active"}
-        if not status:
+        allowed = {"active", "open", "closed", "settled"}
+        if not isinstance(status, str):
             return {}
-        status_clean = str(status).lower()
+        status_clean = status.strip().lower()
+        if not status_clean:
+            return {}
+        if status_clean in {"final", "finalized"}:
+            status_clean = "settled"
         if status_clean in allowed:
             return {"status": status_clean}
         return {}
@@ -743,8 +747,7 @@ class KalshiIntegrator:
         params: Dict[str, Any] = {}
         if limit is not None and limit != "":
             params["limit"] = limit
-        if status:
-            params.update(self._status_param(status))
+        params.update(self._status_param(status))
         if cursor:
             params["cursor"] = cursor
         if extra_params:
