@@ -9,6 +9,7 @@ import os
 import time
 import base64
 import random
+import json
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
@@ -553,22 +554,51 @@ class KalshiIntegrator:
                 "ok": False,
                 "market_count": 0,
                 "sample_market": None,
+                "has_game_markets": False,
+                "has_futures_markets": False,
                 "error": "Kalshi is required but not configured.",
             }
 
         try:
             data = self._request("GET", "/markets", params={"limit": 50})
-            markets = data.get("markets", []) or []
-            ok = len(markets) > 0
+            try:
+                markets = (data.get("markets") or []) if isinstance(data, dict) else []
+            except Exception:
+                markets = []
+            if not markets and self.last_response_text:
+                try:
+                    parsed = json.loads(self.last_response_text)
+                    if isinstance(parsed, dict):
+                        markets = parsed.get("markets") or markets
+                except Exception:
+                    markets = markets or []
+
+            markets = markets or []
+
+            def _ticker(m: Dict[str, Any]) -> str:
+                return str(m.get("event_ticker") or m.get("ticker") or "").upper()
+
+            has_game = any(_ticker(m).startswith("KXNBAGAME") for m in markets)
+            has_futures = any(
+                _ticker(m).startswith("KXNBA") and not _ticker(m).startswith("KXNBAGAME")
+                for m in markets
+            )
+            ok = True
+            warning: Optional[str] = None
+            if not has_game:
+                warning = "Kalshi reachable, but no NBA KXNBAGAME markets returned (futures-only or slate not listed)."
             return {
                 "configured": True,
                 "ok": ok,
                 "market_count": len(markets),
                 "sample_market": markets[0] if markets else None,
+                "has_game_markets": has_game,
+                "has_futures_markets": has_futures,
+                "warning": warning,
                 "markets": markets,
-                "error": None if ok else "Kalshi returned zero markets.",
-                "status_code": data.get("status_code"),
-                "response_text": data.get("response_text"),
+                "error": None,
+                "status_code": self.last_status_code,
+                "response_text": (self.last_response_text or "")[:500],
             }
         except Exception as exc:  # pragma: no cover - defensive
             info = self.last_error_info or {}
@@ -577,6 +607,8 @@ class KalshiIntegrator:
                 "ok": False,
                 "market_count": 0,
                 "sample_market": None,
+                "has_game_markets": False,
+                "has_futures_markets": False,
                 "error": str(exc),
                 "status_code": info.get("status_code"),
                 "response_text": info.get("response_text"),
@@ -774,15 +806,19 @@ class KalshiIntegrator:
         min_hits: int = 100,
         max_pages: int = 5,
     ) -> Dict[str, Any]:
-        prefix = LEAGUE_SERIES_MAP.get("NBA")
-        collected: List[Dict[str, Any]] = []
-        pages = 0
-        prefix_hits = 0
-        # Try explicit series_ticker queries first
-        series_candidates = ["KXNBA", "KXNBAGAME", "KXNBATOTAL", "KXNBASPREAD"]
+        collected: Dict[str, Dict[str, Any]] = {}
+        total_pages = 0
+        total_hits = 0
+        # Prioritize single-game slates before futures so we do not short-circuit on KXNBA finals
+        # KXNBAGAME carries the daily slate winners; KXNBA alone mostly serves season-long futures.
+        series_candidates = ["KXNBAGAME", "KXNBATOTAL", "KXNBASPREAD", "KXNBA"]
         for series in series_candidates:
+            series_pages = 0
+            series_hits = 0
             next_cursor: Optional[str] = None
-            while pages < max_pages and prefix_hits < min_hits:
+            # Give game winners their own hit target; futures/totals should not prevent slate discovery.
+            series_min_hits = 50 if series == "KXNBAGAME" else min_hits
+            while series_pages < max_pages and series_hits < series_min_hits:
                 params = {"limit": 200, "series_ticker": series}
                 params.update(self._status_param(status))
                 if next_cursor:
@@ -794,61 +830,38 @@ class KalshiIntegrator:
                     if status == 429:
                         logger.warning("Kalshi NBA targeted fetch rate limited; using cached data.")
                         cached = self._markets_cache or []
-                        return {"markets": collected or cached, "pages": pages, "prefix_hits": prefix_hits}
+                        merged = list(collected.values()) or cached
+                        return {"markets": merged, "pages": total_pages, "prefix_hits": total_hits}
                     raise
                 chunk = data.get("markets", []) or []
-                collected.extend(chunk)
+                for m in chunk:
+                    key = str(m.get("event_ticker") or m.get("ticker") or "").upper()
+                    if key and key not in collected:
+                        collected[key] = m
                 tickers = [str(m.get("ticker") or m.get("event_ticker") or "").upper() for m in chunk]
-                prefix_hits += len([t for t in tickers if t.startswith(prefix)])
-                pages += 1
+                series_hits += len([t for t in tickers if t.startswith(series)])
+                series_pages += 1
                 next_cursor = (
                     data.get("cursor")
                     or data.get("next_cursor")
                     or data.get("next")
                     or data.get("next_token")
                 )
+                if series == "KXNBAGAME" and series_hits >= series_min_hits:
+                    break
                 if not next_cursor:
                     break
                 time.sleep(0.1)
-            if prefix_hits >= min_hits:
-                break
+            # Do not let futures (KXNBA) decide we are "done" when still seeking game markets
+            total_pages += series_pages
+            if series != "KXNBA":
+                total_hits += series_hits
 
-        # Fallback: scan general pages for any KXNBA if still empty
-        if prefix_hits == 0:
-            next_cursor = None
-            while pages < max_pages:
-                params = {"limit": 200}
-                params.update(self._status_param(status))
-                if next_cursor:
-                    params["cursor"] = next_cursor
-                try:
-                    data = self._request("GET", "/markets", params=params)
-                except KalshiAPIError:
-                    status = (self.last_error_info or {}).get("status_code")
-                    if status == 429:
-                        logger.warning("Kalshi fallback fetch rate limited; using cached data.")
-                        cached = self._markets_cache or []
-                        return {"markets": collected or cached, "pages": pages, "prefix_hits": prefix_hits}
-                    raise
-                chunk = data.get("markets", []) or []
-                collected.extend(chunk)
-                tickers = [str(m.get("ticker") or m.get("event_ticker") or "").upper() for m in chunk]
-                prefix_hits += len([t for t in tickers if t.startswith(prefix)])
-                pages += 1
-                next_cursor = (
-                    data.get("cursor")
-                    or data.get("next_cursor")
-                    or data.get("next")
-                    or data.get("next_token")
-                )
-                if prefix_hits >= min_hits or not next_cursor:
-                    break
-                time.sleep(0.1)
-
+        deduped_markets = list(collected.values())
         return {
-            "markets": collected,
-            "pages": pages,
-            "prefix_hits": prefix_hits,
+            "markets": deduped_markets,
+            "pages": total_pages,
+            "prefix_hits": total_hits,
         }
 
     def get_markets(self, status: Optional[str] = "open") -> List[Dict[str, Any]]:
