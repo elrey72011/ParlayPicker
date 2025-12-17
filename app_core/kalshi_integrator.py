@@ -469,6 +469,23 @@ def _nba_bucket_and_match() -> KalshiMatchResult:
 # KalshiIntegrator Class
 # ---------------------------------------------------------------------------
 
+from typing import Optional
+
+SAFE_STATUS_ALLOWLIST = {"active", "finalized", "settled", "closed"}
+
+def normalize_status(status: Optional[str]) -> Optional[str]:
+    if not status:
+        return None
+    s = str(status).lower().strip()
+    if s == "open":
+        return None
+    if s in SAFE_STATUS_ALLOWLIST:
+        return s
+    return None
+
+
+class KalshiIntegrator:
+    ...
 
 # -----------------------------
 # Kalshi param normalization
