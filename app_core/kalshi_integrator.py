@@ -105,8 +105,13 @@ class KalshiIntegrator:
         self.api_secret_pem = self._normalize_secret(raw_secret)
         self.api_url = "https://api.elections.kalshi.com/trade-api/v2"
         self.session = requests.Session()
+        
+        # --- ADD THESE LINES TO FIX THE ATTRIBUTEERROR ---
+        self.last_error_info = {}  # This must be initialized as a dictionary
         self.last_status_code = None
         self.last_response_text = None
+        self.last_request_params = None
+        # -------------------------------------------------
 
     @staticmethod
     def _normalize_secret(secret_val: Optional[str]) -> Optional[str]:
