@@ -724,12 +724,15 @@ class KalshiIntegrator:
     @staticmethod
     def _status_param(status: Optional[str]) -> Dict[str, Any]:
         """Return a valid status parameter for /markets calls."""
-        allowed = {"active", "open", "closed", "settled"}
+        allowed = {"unopened", "open", "closed", "settled"}
         if not isinstance(status, str):
             return {}
         status_clean = status.strip().lower()
         if not status_clean:
             return {}
+        # Map legacy/alias values to the closest allowed Kalshi status
+        if status_clean == "active":
+            status_clean = "open"
         if status_clean in {"final", "finalized"}:
             status_clean = "settled"
         if status_clean in allowed:
