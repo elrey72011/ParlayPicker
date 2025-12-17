@@ -15,6 +15,41 @@ from app_core.kalshi_integrator import KalshiIntegrator, LEAGUE_SERIES_MAP
 # Must be the first Streamlit call
 st.set_page_config(page_title="ParlayDesk", layout="wide")
 
+# ------------------------------------------------------------
+# Kalshi globals / shims (must exist before any call sites)
+# ------------------------------------------------------------
+kalshi_integrator: Optional[KalshiIntegrator] = None
+
+def kalshi_health_check(selected_league: str = "NBA") -> Dict[str, Any]:
+    """
+    MUST NOT crash. Used for UI gating + debug.
+    ok=True means "reachable/call succeeded", not "game markets exist".
+    """
+    try:
+        ki = kalshi_integrator
+        if ki is None:
+            return {
+                "configured": False,
+                "ok": False,
+                "error": "Kalshi integrator not initialized.",
+                "market_count": 0,
+            }
+
+        markets = ki.get_sports_markets(selected_league) or []
+        return {
+            "configured": True,
+            "ok": True,
+            "error": None,
+            "market_count": len(markets),
+        }
+    except Exception as e:
+        return {
+            "configured": True,
+            "ok": False,
+            "error": str(e),
+            "market_count": 0,
+        }
+
 # -----------------
 # Helper utilities
 # -----------------
@@ -28,7 +63,6 @@ def read_secret(name: str, default: Optional[str] = None) -> Optional[str]:
         pass
     return os.getenv(name, default)
 
-
 def american_to_implied(odds: Any) -> Optional[float]:
     try:
         o = float(odds)
@@ -39,7 +73,6 @@ def american_to_implied(odds: Any) -> Optional[float]:
     if o < 0:
         return (-o) / ((-o) + 100.0)
     return 100.0 / (o + 100.0)
-
 
 def american_to_implied_prob(odds: Any) -> Optional[float]:
     if odds is None:
@@ -53,7 +86,6 @@ def american_to_implied_prob(odds: Any) -> Optional[float]:
     if o < 0:
         return (-o) / ((-o) + 100.0)
     return None
-
 
 def safe_iso(value: Any) -> Optional[str]:
     if value is None:
@@ -72,7 +104,6 @@ def safe_iso(value: Any) -> Optional[str]:
     except Exception:
         return None
 
-
 def get_local_tz() -> str:
     tz_name = None
     try:
@@ -82,7 +113,6 @@ def get_local_tz() -> str:
     if not tz_name:
         tz_name = "America/New_York"
     return tz_name
-
 
 def parse_commence_to_utc(value: Any) -> Optional[datetime]:
     raw = value
@@ -104,7 +134,6 @@ def parse_commence_to_utc(value: Any) -> Optional[datetime]:
         return dt.astimezone(timezone.utc)
     except Exception:
         return None
-
 
 def normalize_commence_times(games: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
     tz_name = get_local_tz()
@@ -144,7 +173,6 @@ def normalize_commence_times(games: List[Dict[str, Any]]) -> Tuple[List[Dict[str
     stats = {"parsed": parsed, "failed": failed, "timezone": tz_name}
     return games, stats
 
-
 def fmt_local_time(dt: Optional[datetime]) -> str:
     try:
         if dt is None:
@@ -152,7 +180,6 @@ def fmt_local_time(dt: Optional[datetime]) -> str:
         return dt.strftime("%Y-%m-%d %H:%M")
     except Exception:
         return ""
-
 
 def extract_h2h_prices(game: Dict[str, Any]) -> Dict[str, Any]:
     home = game.get("home_team")
@@ -171,7 +198,6 @@ def extract_h2h_prices(game: Dict[str, Any]) -> Dict[str, Any]:
                 }
     return {"home_odds": None, "away_odds": None, "book": None}
 
-
 def _parse_last_update(value: Any) -> Optional[datetime]:
     if not value:
         return None
@@ -185,7 +211,6 @@ def _parse_last_update(value: Any) -> Optional[datetime]:
         return dt
     except Exception:
         return None
-
 
 def extract_best_market(game: Dict[str, Any]) -> Dict[str, Any]:
     home = game.get("home_team")
@@ -305,7 +330,6 @@ def extract_best_market(game: Dict[str, Any]) -> Dict[str, Any]:
         "warnings": warnings,
     }
 
-
 def league_from_sport_key(sk: Optional[str]) -> Optional[str]:
     if not sk:
         return None
@@ -322,7 +346,6 @@ def league_from_sport_key(sk: Optional[str]) -> Optional[str]:
     if sk == "baseball_mlb":
         return "MLB"
     return sk.upper()
-
 
 def normalize_game(game: Dict[str, Any]) -> Dict[str, Any]:
     normalized = dict(game)
@@ -355,7 +378,6 @@ def normalize_game(game: Dict[str, Any]) -> Dict[str, Any]:
     normalized["away_team"] = away
     normalized.setdefault("warnings", warnings)
     return normalized
-
 
 # -----------------
 # API Clients & config
@@ -396,7 +418,6 @@ except Exception:
 if kalshi_integrator:
     kalshi_integrator.required = st.session_state.get("kalshi_required", True)
 
-
 @st.cache_data(ttl=60)
 def fetch_odds_games(sport_key: str) -> List[Dict[str, Any]]:
     if not odds_api_key or not sport_key:
@@ -413,7 +434,6 @@ def fetch_odds_games(sport_key: str) -> List[Dict[str, Any]]:
     resp.raise_for_status()
     return resp.json()
 
-
 @st.cache_data(ttl=300)
 def fetch_news() -> List[Dict[str, Any]]:
     if not news_api_key:
@@ -429,7 +449,6 @@ def fetch_news() -> List[Dict[str, Any]]:
     resp.raise_for_status()
     data = resp.json()
     return data.get("articles", [])
-
 
 # -----------------
 # Vertex stub
@@ -448,12 +467,13 @@ def get_vertex_prob(game: Dict[str, Any]) -> Optional[float]:
 # -----------------
 # Kalshi integration
 # -----------------
-
 @st.cache_data(ttl=300)
 def fetch_kalshi_markets(
     selected_league: str, commence_times_utc: Optional[List[str]] = None
 ) -> List[Dict[str, Any]]:
-    if not kalshi_integrator:
+    # Ensure the global exists, but don't crash if not initialized yet
+    global kalshi_integrator
+    if kalshi_integrator is None:
         return []
 
     league_upper = (selected_league or "").upper()
@@ -461,10 +481,21 @@ def fetch_kalshi_markets(
     def ticker_upper(market: Dict[str, Any]) -> str:
         return str(market.get("event_ticker") or market.get("ticker") or "").upper()
 
+    def prefix_count(markets: List[Dict[str, Any]]) -> Dict[str, int]:
+        tickers = [ticker_upper(m) for m in (markets or [])]
+        return {
+            "count_prefix_KXNBA": len([t for t in tickers if t.startswith("KXNBA")]),
+            "count_prefix_KXNBAGAME": len([t for t in tickers if t.startswith("KXNBAGAME")]),
+            "count_prefix_KXNBATOTAL": len([t for t in tickers if t.startswith("KXNBATOTAL")]),
+            "count_prefix_KXNBASPREAD": len([t for t in tickers if t.startswith("KXNBASPREAD")]),
+            "count_prefix_KXMV": len([t for t in tickers if t.startswith("KXMV")]),
+        }
+
     def date_tokens_from_commence(commence_list: Optional[List[str]]) -> set:
         """Convert commence_time ISO strings -> Kalshi tokens like 25DEC17 using APP_TIMEZONE."""
         if not commence_list:
             return set()
+
         tz_name = get_local_tz()
         try:
             local_tz = ZoneInfo(tz_name)
@@ -477,8 +508,7 @@ def fetch_kalshi_markets(
             if not dt_utc:
                 continue
             dt_local = dt_utc.astimezone(local_tz) if local_tz else dt_utc
-            # Kalshi uses YY + MON + DD with MON uppercase, e.g. 25DEC17
-            tokens.add(dt_local.strftime("%y%b%d").upper())
+            tokens.add(dt_local.strftime("%y%b%d").upper())  # 25DEC17
         return tokens
 
     def prefix_count(markets: List[Dict[str, Any]]) -> Dict[str, int]:
@@ -507,6 +537,19 @@ def fetch_kalshi_markets(
             m for m in (split.get("single_game_candidates") or []) if ticker_upper(m).startswith("KXNBAGAME-")
         ]
         game_pool_counts = prefix_count(game_pool)
+
+        wanted_tokens = date_tokens_from_commence(commence_times_utc)
+        if wanted_tokens:
+            filtered = []
+            for m in game_pool:
+                t = ticker_upper(m)
+                if any(tok in t for tok in wanted_tokens):
+                    filtered.append(m)
+            if filtered:
+                game_pool = filtered
+                game_pool_counts = prefix_count(game_pool)
+            elif game_pool:
+                st.session_state["kalshi_filter_warning"] = "date_filter_removed_all"
 
         wanted_tokens = date_tokens_from_commence(commence_times_utc)
         if wanted_tokens:
@@ -637,6 +680,227 @@ def kalshi_health_check(selected_league: str) -> Dict[str, Any]:
         status["ok"] = False
         return status
 
+def kalshi_health_check(selected_league: str) -> Dict[str, Any]:
+    def _ticker(m: Dict[str, Any]) -> str:
+        return str(m.get("event_ticker") or m.get("ticker") or "").upper()
+
+    status = {
+        "configured": bool(kalshi_integrator),
+        "ok": False,
+        "market_count": 0,
+        "has_game_markets": False,
+        "has_futures_markets": False,
+        "error": None,
+        "warning": None,
+        "status_code": None,
+        "response_text_snippet": None,
+        "request_params": None,
+    }
+
+    if not kalshi_integrator:
+        status["error"] = "Kalshi not configured."
+        return status
+
+    try:
+        markets = fetch_kalshi_markets(selected_league, commence_times_utc=None)
+        markets = markets or []
+        if not markets:
+            info = kalshi_integrator.last_error_info or {}
+            status_code = info.get("status_code") or kalshi_integrator.last_status_code
+            resp_text = info.get("response_text") or kalshi_integrator.last_response_text
+            if status_code == 200 and resp_text:
+                try:
+                    try:
+                        data = json.loads(resp_text)
+                    except Exception:
+                        data = {}
+                    parsed_markets = (data.get("markets") or []) if isinstance(data, dict) else []
+                    if parsed_markets:
+                        markets = parsed_markets
+                except Exception:
+                    markets = markets
+        status["market_count"] = len(markets)
+        game_markets = [
+            m
+            for m in markets
+            if _ticker(m).startswith("KXNBAGAME-")
+        ]
+        futures_markets = [
+            m
+            for m in markets
+            if _ticker(m).startswith("KXNBA")
+        ]
+        status["has_game_markets"] = bool(game_markets)
+        status["has_futures_markets"] = bool(futures_markets)
+        status["ok"] = True
+        if not status["has_game_markets"] and status["has_futures_markets"]:
+            status["warning"] = "Kalshi reachable; only futures markets returned for KXNBA series."
+        elif not status["has_game_markets"]:
+            status["warning"] = (
+                "Kalshi reachable, but no NBA KXNBAGAME markets returned (futures-only or slate not listed)."
+            )
+        info = kalshi_integrator.last_error_info or {}
+        status["status_code"] = info.get("status_code") or kalshi_integrator.last_status_code
+        snippet = info.get("response_text") or kalshi_integrator.last_response_text
+        if snippet:
+            status["response_text_snippet"] = snippet[:500]
+        status["request_params"] = kalshi_integrator.last_request_params
+        return status
+    except Exception as exc:
+        info = kalshi_integrator.last_error_info or {}
+        status["error"] = str(exc)
+        status["status_code"] = info.get("status_code") or kalshi_integrator.last_status_code
+        snippet = info.get("response_text") or kalshi_integrator.last_response_text
+        if snippet:
+            status["response_text_snippet"] = snippet[:500]
+        status["request_params"] = kalshi_integrator.last_request_params
+        cached = st.session_state.get("kalshi_markets_raw") or []
+        status["market_count"] = len(cached)
+        status["ok"] = False
+        return status
+
+def kalshi_health_check(selected_league: str) -> Dict[str, Any]:
+    status = {
+        "configured": bool(kalshi_integrator),
+        "ok": False,
+        "market_count": 0,
+        "has_game_markets": False,
+        "has_futures_markets": False,
+        "error": None,
+        "warning": None,
+        "status_code": None,
+        "response_text_snippet": None,
+        "request_params": None,
+    }
+
+    if not kalshi_integrator:
+        status["error"] = "Kalshi not configured."
+        return status
+
+    try:
+        markets = fetch_kalshi_markets(selected_league, commence_times_utc=None)
+        markets = markets or []
+        status["market_count"] = len(markets)
+        game_markets = [
+            m
+            for m in markets
+            if str(m.get("event_ticker") or m.get("ticker") or "").upper().startswith("KXNBAGAME-")
+        ]
+        futures_markets = [
+            m
+            for m in markets
+            if str(m.get("event_ticker") or m.get("ticker") or "").upper().startswith("KXNBA-")
+        ]
+        status["has_game_markets"] = bool(game_markets)
+        status["has_futures_markets"] = bool(futures_markets)
+        status["ok"] = True
+        if not status["has_game_markets"]:
+            status["warning"] = (
+                "Kalshi reachable, but no NBA KXNBAGAME markets returned (futures-only or slate not listed)."
+            )
+        info = kalshi_integrator.last_error_info or {}
+        status["status_code"] = info.get("status_code") or kalshi_integrator.last_status_code
+        snippet = info.get("response_text") or kalshi_integrator.last_response_text
+        if snippet:
+            status["response_text_snippet"] = snippet[:500]
+        status["request_params"] = kalshi_integrator.last_request_params
+        return status
+    except Exception as exc:
+        info = kalshi_integrator.last_error_info or {}
+        status["error"] = str(exc)
+        status["status_code"] = info.get("status_code") or kalshi_integrator.last_status_code
+        snippet = info.get("response_text") or kalshi_integrator.last_response_text
+        if snippet:
+            status["response_text_snippet"] = snippet[:500]
+        status["request_params"] = kalshi_integrator.last_request_params
+        cached = st.session_state.get("kalshi_markets_raw") or []
+        status["market_count"] = len(cached)
+        status["ok"] = False
+        return status
+
+def kalshi_health_check(selected_league: str) -> Dict[str, Any]:
+    status = {
+        "configured": bool(kalshi_integrator),
+        "ok": False,
+        "market_count": 0,
+        "error": None,
+        "warning": None,
+        "status_code": None,
+        "response_text_snippet": None,
+        "request_params": None,
+    }
+
+    if not kalshi_integrator:
+        status["error"] = "Kalshi not configured."
+        return status
+
+    try:
+        markets = fetch_kalshi_markets(selected_league, commence_times_utc=None)
+        markets = markets or []
+        status["market_count"] = len(markets)
+        status["ok"] = True
+        game_markets = [
+            m
+            for m in markets
+            if str(m.get("event_ticker") or m.get("ticker") or "").upper().startswith("KXNBAGAME-")
+        ]
+        if not game_markets:
+            status["warning"] = (
+                f"No {selected_league} game markets returned for the loaded slate dates."
+            )
+        info = kalshi_integrator.last_error_info or {}
+        status["status_code"] = info.get("status_code") or kalshi_integrator.last_status_code
+        snippet = info.get("response_text") or kalshi_integrator.last_response_text
+        if snippet:
+            status["response_text_snippet"] = snippet[:500]
+        status["request_params"] = kalshi_integrator.last_request_params
+        return status
+    except Exception as exc:
+        info = kalshi_integrator.last_error_info or {}
+        status["error"] = str(exc)
+        status["status_code"] = info.get("status_code") or kalshi_integrator.last_status_code
+        snippet = info.get("response_text") or kalshi_integrator.last_response_text
+        if snippet:
+            status["response_text_snippet"] = snippet[:500]
+        status["request_params"] = kalshi_integrator.last_request_params
+        cached = st.session_state.get("kalshi_markets_raw") or []
+        status["market_count"] = len(cached)
+        status["ok"] = False
+        return status
+
+def kalshi_health_check(selected_league: str) -> Dict[str, Any]:
+    status = {
+        "configured": bool(kalshi_integrator),
+        "ok": False,
+        "market_count": 0,
+        "error": None,
+        "status_code": None,
+        "response_text": None,
+    }
+
+    if not kalshi_integrator:
+        status["error"] = "Kalshi not configured."
+        return status
+
+    try:
+        markets = fetch_kalshi_markets(selected_league, commence_times_utc=None)
+        markets = markets or []
+        status["market_count"] = len(markets)
+        status["ok"] = bool(markets)
+        if not status["ok"]:
+            status["error"] = f"Kalshi reachable but no {selected_league} markets returned."
+        return status
+    except Exception as exc:
+        info = kalshi_integrator.last_error_info or {}
+        status["error"] = str(exc)
+        status["status_code"] = info.get("status_code")
+        status["response_text"] = info.get("response_text")
+        cached = st.session_state.get("kalshi_markets_raw") or []
+        status["market_count"] = len(cached)
+        status["ok"] = bool(cached)
+        if cached and not status["error"]:
+            status["error"] = "Using cached Kalshi markets"
+        return status
 
 def pick_sample_game_market(
     markets: List[Dict[str, Any]]
@@ -828,6 +1092,13 @@ def kalshi_health(selected_league: str = "NBA") -> Dict[str, Any]:
             return base_health
         base_health["error"] = f"Kalshi health check failed: {e}"
         return base_health
+
+def kalshi_health_check(selected_league: str = "NBA") -> Dict[str, Any]:
+    """
+    Backwards-compatible alias.
+    Some UI code calls kalshi_health_check(), but the implementation is kalshi_health().
+    """
+    return kalshi_health(selected_league)
 
 def parse_kalshi_datetime(dt_value: Any) -> Optional[datetime]:
     try:
