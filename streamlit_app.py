@@ -1515,7 +1515,6 @@ with tab_games:
             )
         st.dataframe(pd.DataFrame(rows))
 
-
 with tab_master:
     st.header("Master Analysis")
     kalshi_status = kalshi_health_check(league)
@@ -1664,6 +1663,25 @@ with tab_master:
             league_name = g.get("league")
             home = g.get("home_team")
             away = g.get("away_team")
+        
+            # 1. ADD STEP 2 HERE: Get team sentiment from the map built in Step 1
+            home_sent = sentiment_map.get(home, 0.0)  # cite: 5, 8
+            away_sent = sentiment_map.get(away, 0.0)  # cite: 5, 8
+            sent_diff = home_sent - away_sent          # cite: 5, 8
+        
+            # 2. Match Kalshi markets (Existing Logic)
+            kalshi_matches, candidate_debug = match_kalshi_market(
+                g, filtered_markets, winner_reason_override
+            )
+        
+            # 3. ADD STEP 2 FALLBACK: Safely get the Kalshi probability
+            k_prob = kalshi_matches.get("winner", {}).get("kalshi_prob")
+            if k_prob is None:
+                # Fallback to bookie implied probability if Kalshi is missing
+                k_prob = implied_pick if implied_pick else 0.5 # cite: 5, 8
+        
+            # 4. CALCULATE BLENDED PROBABILITY (Using the new Vertex logic)
+            final_prob = blended_win_prob(ai_prob, k_prob, sent_diff) # cite: 5, 8
             commence_iso = g.get("commence_time_iso_utc") or safe_iso(g.get("commence_time_iso"))
             commence_local = fmt_local_time(g.get("commence_time_local"))
             commence_date_local = g.get("commence_date_local") or ""
