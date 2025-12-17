@@ -106,13 +106,16 @@ class KalshiIntegrator:
         self.api_url = "https://api.elections.kalshi.com/trade-api/v2"
         self.session = requests.Session()
         
-        # --- ADD THESE LINES TO FIX THE ATTRIBUTEERROR ---
-        self.last_error_info = {}  # This must be initialized as a dictionary
+        # --- INITIALIZE MISSING ATTRIBUTES ---
+        self.last_error_info = {}       # Fixes the AttributeError
         self.last_status_code = None
         self.last_response_text = None
         self.last_request_params = None
-        # -------------------------------------------------
+        # -------------------------------------
 
+        # Add any other internal caches or metadata your app uses
+        self._markets_cache = []
+        self._league_cache = {}
     @staticmethod
     def _normalize_secret(secret_val: Optional[str]) -> Optional[str]:
         if not secret_val: return None
