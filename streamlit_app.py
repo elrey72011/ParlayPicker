@@ -541,7 +541,9 @@ def fetch_kalshi_markets(
                 t = ticker_upper(m)
                 if t.startswith("KXMV") or "MVE" in t:
                     continue
-                if t.startswith("KXNBAGAME") or t.startswith("KXNBATOTAL") or t.startswith("KXNBASPREAD") or t.startswith("KXNBA") or t.startswith("KXN"):
+                if t.startswith("KXNBAGAME") or t.startswith("KXNBATOTAL") or t.startswith("KXNBASPREAD") or t.startswith(
+                    "KXNBA"
+                ) or t.startswith("KXN"):
                     filtered_game_pool.append(m)
             if filtered_game_pool:
                 game_pool = filtered_game_pool
@@ -557,6 +559,8 @@ def fetch_kalshi_markets(
             if filtered:
                 game_pool = filtered
                 game_pool_counts = prefix_count(game_pool)
+            elif game_pool:
+                st.session_state["kalshi_filter_warning"] = "date_filter_removed_all"
 
         if not game_pool and markets_raw:
             fallback_raw = kalshi_integrator.get_markets_paginated(status=None, max_pages=5)
@@ -566,6 +570,9 @@ def fetch_kalshi_markets(
                 raw_counts = prefix_count(markets_raw)
                 game_pool = split_fb.get("single_game_candidates", []) or []
                 game_pool_counts = prefix_count(game_pool)
+        if not game_pool and split.get("single_game_candidates"):
+            game_pool = split.get("single_game_candidates", []) or []
+            game_pool_counts = prefix_count(game_pool)
 
         st.session_state["kalshi_markets_raw"] = markets_raw
         st.session_state["kalshi_markets_game_pool"] = game_pool
@@ -588,6 +595,56 @@ def fetch_kalshi_markets(
         st.session_state["last_exception"] = traceback.format_exc()
         return []
 
+
+def kalshi_health_check(selected_league: str) -> Dict[str, Any]:
+    status = {
+        "configured": bool(kalshi_integrator),
+        "ok": False,
+        "market_count": 0,
+        "error": None,
+        "warning": None,
+        "status_code": None,
+        "response_text_snippet": None,
+        "request_params": None,
+    }
+
+    if not kalshi_integrator:
+        status["error"] = "Kalshi not configured."
+        return status
+
+    try:
+        markets = fetch_kalshi_markets(selected_league, commence_times_utc=None)
+        markets = markets or []
+        status["market_count"] = len(markets)
+        status["ok"] = True
+        game_markets = [
+            m
+            for m in markets
+            if str(m.get("event_ticker") or m.get("ticker") or "").upper().startswith("KXNBAGAME-")
+        ]
+        if not game_markets:
+            status["warning"] = (
+                f"No {selected_league} game markets returned for the loaded slate dates."
+            )
+        info = kalshi_integrator.last_error_info or {}
+        status["status_code"] = info.get("status_code") or kalshi_integrator.last_status_code
+        snippet = info.get("response_text") or kalshi_integrator.last_response_text
+        if snippet:
+            status["response_text_snippet"] = snippet[:500]
+        status["request_params"] = kalshi_integrator.last_request_params
+        return status
+    except Exception as exc:
+        info = kalshi_integrator.last_error_info or {}
+        status["error"] = str(exc)
+        status["status_code"] = info.get("status_code") or kalshi_integrator.last_status_code
+        snippet = info.get("response_text") or kalshi_integrator.last_response_text
+        if snippet:
+            status["response_text_snippet"] = snippet[:500]
+        status["request_params"] = kalshi_integrator.last_request_params
+        cached = st.session_state.get("kalshi_markets_raw") or []
+        status["market_count"] = len(cached)
+        status["ok"] = False
+        return status
 
 def kalshi_health_check(selected_league: str) -> Dict[str, Any]:
     status = {
@@ -1608,12 +1665,15 @@ with tab_master:
     if not kalshi_status.get("configured"):
         error_detail = kalshi_status.get("error") or "Kalshi is required and missing keys."
         if kalshi_status.get("status_code"):
-            error_detail = f"{error_detail} (status {kalshi_status.get('status_code')}: {kalshi_status.get('response_text')})"
+            error_detail = f"{error_detail} (status {kalshi_status.get('status_code')}: {kalshi_status.get('response_text_snippet')})"
         st.error(error_detail)
         st.info("Master Analysis is disabled until Kalshi is available.")
-    elif not kalshi_status.get("ok"):
-        warn_detail = kalshi_status.get("error") or "Kalshi reachable but returned no markets; proceeding without Kalshi data."
-        st.warning(warn_detail)
+    else:
+        if kalshi_status.get("error") and not kalshi_status.get("ok"):
+            warn_detail = kalshi_status.get("error") or "Kalshi reachable but returned no markets; proceeding without Kalshi data."
+            st.warning(warn_detail)
+        if kalshi_status.get("warning"):
+            st.warning(kalshi_status.get("warning"))
     run_master = st.button(
         "Run Master Analysis",
         key="run_master",

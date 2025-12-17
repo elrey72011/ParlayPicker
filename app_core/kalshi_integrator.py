@@ -494,6 +494,9 @@ class KalshiIntegrator:
         self.last_fetch_meta: Dict[str, Any] = {}
         self.session = requests.Session()
         self.last_error_info: Dict[str, Any] = {}
+        self.last_status_code: Optional[int] = None
+        self.last_response_text: Optional[str] = None
+        self.last_request_params: Optional[Dict[str, Any]] = None
 
     @staticmethod
     def _normalize_secret(secret_val: Optional[str]) -> Optional[str]:
@@ -600,6 +603,10 @@ class KalshiIntegrator:
         retry_other = 0
         backoff = 1.0
 
+        self.last_status_code = None
+        self.last_response_text = None
+        self.last_request_params = params or json or None
+
         while True:
             timestamp = str(int(time.time() * 1000))
             signature = self._sign_request(method, path_for_signing, timestamp)
@@ -634,6 +641,8 @@ class KalshiIntegrator:
                 continue
 
             status = resp.status_code
+            self.last_status_code = status
+            self.last_response_text = resp.text[:1000]
             if status == 429:
                 retry_429 += 1
                 retry_after = resp.headers.get("Retry-After")
@@ -700,12 +709,18 @@ class KalshiIntegrator:
         next_cursor = cursor
         pages = 0
         while pages < max_pages:
-            params = {"limit": limit}
+            params: Dict[str, Any] = {}
+            if limit is not None and limit != "":
+                params["limit"] = limit
             params.update(self._status_param(status))
             if next_cursor:
                 params["cursor"] = next_cursor
             if extra_params:
-                params.update(extra_params)
+                for key, val in extra_params.items():
+                    if val is None or val == "":
+                        continue
+                    params[key] = val
+            self.last_request_params = params
             try:
                 data = self._request("GET", "/markets", params=params)
             except KalshiAPIError:
@@ -786,8 +801,7 @@ class KalshiIntegrator:
             next_cursor = None
             while pages < max_pages:
                 params = {"limit": 200}
-                if status:
-                    params["status"] = status
+                params.update(self._status_param(status))
                 if next_cursor:
                     params["cursor"] = next_cursor
                 try:
@@ -850,6 +864,7 @@ class KalshiIntegrator:
             self.last_fetch_meta = cached.get("meta", {})
             return cached.get("markets", [])
 
+        futures_noise: List[Dict[str, Any]] = []
         if league_key == "NBA":
             nba_result = self._get_nba_markets_targeted(
                 status=status, min_hits=min_prefix_hits, max_pages=max_pages
@@ -857,6 +872,20 @@ class KalshiIntegrator:
             all_markets = nba_result.get("markets", [])
             pages = nba_result.get("pages", 0)
             prefix_hits = nba_result.get("prefix_hits", 0)
+            filtered_markets: List[Dict[str, Any]] = []
+            for m in all_markets:
+                ticker = str(m.get("event_ticker") or m.get("ticker") or "").upper()
+                if ticker.startswith("KXNBAGAME-"):
+                    filtered_markets.append(m)
+                    continue
+                if ticker.startswith("KXNBATOTAL-") or ticker.startswith("KXNBASPREAD-"):
+                    filtered_markets.append(m)
+                    continue
+                if ticker.startswith("KXNBA-"):
+                    futures_noise.append(m)
+                    continue
+            if filtered_markets:
+                all_markets = filtered_markets
         else:
             all_markets = self.get_markets_paginated(
                 status=status, limit=200, max_pages=max_pages
@@ -878,6 +907,8 @@ class KalshiIntegrator:
             "total_markets": len(all_markets),
             "prefix_hits": prefix_hits,
             "prefix": prefix,
+            "futures_noise": len(futures_noise) if league_key == "NBA" else None,
+            "filtered_to_game_markets": bool(filtered_markets) if league_key == "NBA" else None,
         }
         if not all_markets and not self.last_error_info:
             self.last_fetch_meta["note"] = "reachable_but_empty"
