@@ -1001,6 +1001,21 @@ def kalshi_date_token_from_local(date_val: Any) -> Optional[str]:
         return None
 
 
+def kalshi_date_token_from_utc(dt_val: Any) -> Optional[str]:
+    """Return YYMONDD token using an aware UTC datetime."""
+    try:
+        if not isinstance(dt_val, datetime):
+            parsed = datetime.fromisoformat(str(dt_val).replace("Z", "+00:00"))
+        else:
+            parsed = dt_val
+        if parsed.tzinfo is None:
+            parsed = pytz.utc.localize(parsed)
+        parsed_utc = parsed.astimezone(pytz.utc)
+        return parsed_utc.strftime("%y%b%d").upper()
+    except Exception:
+        return None
+
+
 def kalshi_ticker_team_codes(market: Dict[str, Any]) -> Tuple[Optional[str], Optional[str]]:
     ticker = str(market.get("event_ticker") or market.get("ticker") or "")
     match = re.search(r"([A-Z]{6})$", ticker)
@@ -1247,7 +1262,9 @@ def match_kalshi_market(
         return base, {"total": [], "spread": [], "winner": []}
 
     league_name = league_from_game(game)
-    date_token = kalshi_date_token_from_local(game.get("commence_date_local"))
+    date_token_local = kalshi_date_token_from_local(game.get("commence_date_local"))
+    date_token_utc = kalshi_date_token_from_utc(game.get("commence_time_utc"))
+    date_token = date_token_utc or date_token_local
     away_code_expected = nba_abbrev(game.get("away_team")) if league_name == "NBA" else None
     home_code_expected = nba_abbrev(game.get("home_team")) if league_name == "NBA" else None
     searched_prefix = None
@@ -1291,16 +1308,23 @@ def match_kalshi_market(
             date_bucket_event_tickers = list(bucket_map.keys())
             if not date_bucket:
                 winners = []
-                winner_reason = "no_kalshi_date_bucket"
+                winner_reason = "no_strict_kalshi_winner_market_in_pool"
             else:
-                candidates_set = set(candidate_event_tickers)
-                winners = [
-                    m
-                    for m in date_bucket
-                    if str(m.get("event_ticker") or "").upper() in candidates_set
-                ]
+                strict_candidates: List[Dict[str, Any]] = []
+                for m in date_bucket:
+                    tick_upper = str(m.get("event_ticker") or "").upper()
+                    if (
+                        away_code_expected
+                        and home_code_expected
+                        and (
+                            f"{away_code_expected}{home_code_expected}" in tick_upper
+                            or f"{home_code_expected}{away_code_expected}" in tick_upper
+                        )
+                    ):
+                        strict_candidates.append(m)
+                winners = strict_candidates
                 if not winners:
-                    winner_reason = "no_exact_event_ticker_match_in_bucket"
+                    winner_reason = "no_strict_kalshi_winner_market_in_pool"
         elif winners:
             # If we have winners but no searched_prefix/date_token, treat as missing token
             winners = []
@@ -1334,6 +1358,11 @@ def match_kalshi_market(
         "candidate_event_tickers": candidate_event_tickers[:10],
         "searched_prefix": searched_prefix,
         "date_bucket_counts": date_token_counts,
+        "date_bucket_min_token": min(date_token_counts) if date_token_counts else None,
+        "date_bucket_max_token": max(date_token_counts) if date_token_counts else None,
+        "date_bucket_count_for_game": date_token_counts.get(date_token, 0)
+        if date_token
+        else None,
         "date_bucket_markets_count": len(date_bucket_event_tickers),
         "checked_event_tickers_sample": date_bucket_event_tickers[:10],
         "rejection_counts": winner_rejections,
@@ -1341,6 +1370,10 @@ def match_kalshi_market(
         "no_match_reason": no_match_reason,
         "matched_event_ticker": matched_event_ticker,
         "matched_ticker": matched_ticker,
+        "strict_candidate_count": len(winners),
+        "strict_candidate_sample": [
+            str(m.get("event_ticker") or m.get("ticker") or "") for m in winners[:3]
+        ],
     }
 
     return (
