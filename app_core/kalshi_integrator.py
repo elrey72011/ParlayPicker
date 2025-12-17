@@ -227,7 +227,7 @@ def _team_score(team_code: str, target_norm: str, target_codes: List[str]) -> fl
     
     return 0.0
 
-def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time: Optional[datetime], integrator: "KalshiIntegrator" = None, status: Optional[str] = "open") -> KalshiMatchResult:
+def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time: Optional[datetime], integrator: "KalshiIntegrator" = None, status: Optional[str] = None) -> KalshiMatchResult:
     league_key = (league or "").upper()
     kalshi = integrator or KalshiIntegrator()
     
@@ -722,21 +722,25 @@ class KalshiIntegrator:
             return data
 
     @staticmethod
-    def _status_param(status: Optional[str]) -> Dict[str, Any]:
-        """Return a valid status parameter for /markets calls."""
-        allowed = {"active", "closed", "finalized", "settled"}
+    def normalize_status(status: Optional[str]) -> Optional[str]:
+        """Sanitize caller-provided status to only supported Kalshi values."""
         if not isinstance(status, str):
-            return {}
+            return None
         status_clean = status.strip().lower()
         if not status_clean:
-            return {}
-        if status_clean == "open":
-            status_clean = "active"
+            return None
+        if status_clean == "open":  # Kalshi rejects "open"; treat as omit
+            return None
         if status_clean == "final":
             status_clean = "finalized"
-        if status_clean not in allowed:
-            return {}
-        return {"status": status_clean}
+        allowed = {"active", "closed", "finalized", "settled"}
+        return status_clean if status_clean in allowed else None
+
+    @staticmethod
+    def _status_param(status: Optional[str]) -> Dict[str, Any]:
+        """Return a valid status parameter for /markets calls."""
+        normalized = KalshiIntegrator.normalize_status(status)
+        return {"status": normalized} if normalized else {}
 
     def _build_market_params(
         self,
@@ -825,7 +829,8 @@ class KalshiIntegrator:
             series_min_hits = 50 if series == "KXNBAGAME" else min_hits
             while series_pages < max_pages and series_hits < series_min_hits:
                 params = {"limit": 200, "series_ticker": series}
-                params.update(self._status_param(status))
+                # NBA slate discovery should not be filtered out by status; omit invalid/"open" entirely.
+                params.update(self._status_param(None))
                 if next_cursor:
                     params["cursor"] = next_cursor
                 try:
@@ -869,7 +874,7 @@ class KalshiIntegrator:
             "prefix_hits": total_hits,
         }
 
-    def get_markets(self, status: Optional[str] = "open") -> List[Dict[str, Any]]:
+    def get_markets(self, status: Optional[str] = None) -> List[Dict[str, Any]]:
         """Fetch all markets with pagination support and a sane cap."""
         now = time.time()
         if self._markets_cache and (now - self._markets_cache_ts) < self.cache_ttl_seconds:
@@ -892,7 +897,8 @@ class KalshiIntegrator:
     ) -> List[Dict[str, Any]]:
         league_key = (league or "").upper()
         prefix = LEAGUE_SERIES_MAP.get(league_key)
-        cache_key = f"{league_key}:{status or 'any'}"
+        normalized_status = self.normalize_status(status)
+        cache_key = f"{league_key}:{normalized_status or 'any'}"
         now = time.time()
         cached = self._league_cache.get(cache_key)
         if cached and (now - cached.get("ts", 0)) < self._league_cache_ttl:
@@ -914,7 +920,7 @@ class KalshiIntegrator:
         if series_targets:
             for series in series_targets:
                 series_params = {"series_ticker": series} if series else None
-                series_status = status if status is not None else "active"
+                series_status = normalized_status
                 chunk = self.get_markets_paginated(
                     status=series_status,
                     limit=200,
@@ -940,7 +946,7 @@ class KalshiIntegrator:
             )
         else:
             all_markets = self.get_markets_paginated(
-                status=status, limit=200, max_pages=max_pages
+                status=normalized_status, limit=200, max_pages=max_pages
             )
             for m in all_markets:
                 key = str(m.get("event_ticker") or m.get("ticker") or "").upper()
@@ -963,7 +969,7 @@ class KalshiIntegrator:
             str(m.get("event_ticker") or m.get("ticker") or "").upper().startswith("KXNBAGAME-")
             for m in all_markets
         ):
-            broad_chunk = self.get_markets_paginated(status=status, limit=200, max_pages=max_pages)
+            broad_chunk = self.get_markets_paginated(status=normalized_status, limit=200, max_pages=max_pages)
             for m in broad_chunk or []:
                 key = str(m.get("event_ticker") or m.get("ticker") or "").upper()
                 if key.startswith("KXNBAGAME-") and key not in collected:
@@ -982,8 +988,8 @@ class KalshiIntegrator:
 
         self.last_fetch_meta = {
             "league": league_key,
-            "status": status,
-            "status_param": bool(self._status_param(status)),
+            "status": normalized_status,
+            "status_param": bool(self._status_param(normalized_status)),
             "pages": pages,
             "total_markets": len(all_markets),
             "prefix_hits": prefix_hits,

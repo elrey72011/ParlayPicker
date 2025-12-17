@@ -581,6 +581,12 @@ def fetch_kalshi_markets(
             "raw": {"total": len(markets_raw), **raw_counts},
             "game_pool": {"total": len(game_pool), **game_pool_counts},
         }
+        st.session_state["kalshi_fetch_debug"] = {
+            "fetched_total": len(markets_raw),
+            "fetched_game_prefix": game_pool_counts.get("count_prefix_KXNBAGAME"),
+            "wanted_tokens": sorted(list(wanted_tokens)) if wanted_tokens else [],
+            "after_token_filter": len(game_pool),
+        }
         samples_game = []
         for m in game_pool:
             evt = ticker_upper(m)
@@ -599,63 +605,6 @@ def fetch_kalshi_markets(
 def kalshi_health_check(selected_league: str = "NBA") -> Dict[str, Any]:
     """Wrapper to ensure health is always callable before first use."""
     return kalshi_health(selected_league)
-
-    if not kalshi_integrator:
-        status["error"] = "Kalshi not configured."
-        return status
-
-    try:
-        markets = fetch_kalshi_markets(selected_league, commence_times_utc=None)
-        markets = markets or []
-        status["market_count"] = len(markets)
-        game_markets = [
-            m
-            for m in markets
-            if str(m.get("event_ticker") or m.get("ticker") or "").upper().startswith("KXNBAGAME-")
-        ]
-        futures_markets = [
-            m
-            for m in markets
-            if str(m.get("event_ticker") or m.get("ticker") or "").upper().startswith("KXNBA-")
-        ]
-        status["has_game_markets"] = bool(game_markets)
-        status["has_futures_markets"] = bool(futures_markets)
-        status["ok"] = True
-        if not status["has_game_markets"]:
-            status["warning"] = (
-                "Kalshi reachable, but no NBA KXNBAGAME markets returned (futures-only or slate not listed)."
-            )
-        info = kalshi_integrator.last_error_info or {}
-        status["status_code"] = info.get("status_code") or kalshi_integrator.last_status_code
-        snippet = info.get("response_text") or kalshi_integrator.last_response_text
-        if snippet:
-            status["response_text_snippet"] = snippet[:500]
-        status["request_params"] = kalshi_integrator.last_request_params
-        return status
-    except Exception as exc:
-        info = kalshi_integrator.last_error_info or {}
-        status["error"] = str(exc)
-        status["status_code"] = info.get("status_code") or kalshi_integrator.last_status_code
-        snippet = info.get("response_text") or kalshi_integrator.last_response_text
-        if snippet:
-            status["response_text_snippet"] = snippet[:500]
-        status["request_params"] = kalshi_integrator.last_request_params
-        cached = st.session_state.get("kalshi_markets_raw") or []
-        status["market_count"] = len(cached)
-        status["ok"] = False
-        return status
-
-def kalshi_health_check(selected_league: str) -> Dict[str, Any]:
-    status = {
-        "configured": bool(kalshi_integrator),
-        "ok": False,
-        "market_count": 0,
-        "error": None,
-        "warning": None,
-        "status_code": None,
-        "response_text_snippet": None,
-        "request_params": None,
-    }
 
     if not kalshi_integrator:
         status["error"] = "Kalshi not configured."
