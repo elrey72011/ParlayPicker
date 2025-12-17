@@ -56,8 +56,11 @@ class KalshiMatchResult:
 
 SUPPORTED_LEAGUES = {"NBA", "NFL", "MLB", "NHL", "NCAAF", "NCAAB"}
 
-LEAGUE_SERIES_MAP: Dict[str, str] = {
-    "NBA": "KXNBA",
+LEAGUE_SERIES_MAP: Dict[str, Any] = {
+    "NBA": [
+        "KXNBAGAME",  # Pull single-game slates; KXNBA alone only returns futures
+        "KXNBA",  # Keep legacy futures as a secondary source for health/coverage
+    ],
     "NFL": "KXNFL",
     "MLB": "KXMLB",
     "NHL": "KXNHL",
@@ -689,7 +692,7 @@ class KalshiIntegrator:
     @staticmethod
     def _status_param(status: Optional[str]) -> Dict[str, Any]:
         """Return a valid status parameter for /markets calls."""
-        allowed = {"unopened", "open", "closed", "settled"}
+        allowed = {"unopened", "open", "closed", "settled", "active"}
         if not status:
             return {}
         status_clean = str(status).lower()
@@ -865,7 +868,7 @@ class KalshiIntegrator:
         self,
         league: str,
         *,
-        status: Optional[str] = None,
+        status: Optional[str] = "active",
         min_prefix_hits: int = 200,
         max_pages: int = 5,
     ) -> List[Dict[str, Any]]:
@@ -879,39 +882,57 @@ class KalshiIntegrator:
             return cached.get("markets", [])
 
         futures_noise: List[Dict[str, Any]] = []
-        if league_key == "NBA":
-            nba_result = self._get_nba_markets_targeted(
-                status=status, min_hits=min_prefix_hits, max_pages=max_pages
+        series_targets = (
+            prefix
+            if isinstance(prefix, list)
+            else [prefix] if prefix else []
+        )
+        collected: Dict[str, Dict[str, Any]] = {}
+        pages = 0
+        prefix_hits = 0
+
+        if series_targets:
+            for series in series_targets:
+                series_params = {"series_ticker": series} if series else None
+                series_status = status if status is not None else "active"
+                chunk = self.get_markets_paginated(
+                    status=series_status,
+                    limit=200,
+                    max_pages=max_pages,
+                    extra_params=series_params,
+                )
+                pages = max(pages, min(max_pages, len(chunk) // 200 + 1))
+                for m in chunk or []:
+                    key = str(m.get("event_ticker") or m.get("ticker") or "").upper()
+                    if key not in collected:
+                        collected[key] = m
+            prefix_hits = len(
+                [
+                    k
+                    for k in collected
+                    if any(k.startswith(str(s).upper()) for s in series_targets if s)
+                ]
             )
-            all_markets = nba_result.get("markets", [])
-            pages = nba_result.get("pages", 0)
-            prefix_hits = nba_result.get("prefix_hits", 0)
-            filtered_markets: List[Dict[str, Any]] = []
-            for m in all_markets:
-                ticker = str(m.get("event_ticker") or m.get("ticker") or "").upper()
-                if ticker.startswith("KXNBAGAME-"):
-                    filtered_markets.append(m)
-                    continue
-                if ticker.startswith("KXNBATOTAL-") or ticker.startswith("KXNBASPREAD-"):
-                    filtered_markets.append(m)
-                    continue
-                if ticker.startswith("KXNBA-"):
-                    futures_noise.append(m)
-                    continue
-            if filtered_markets:
-                all_markets = filtered_markets
         else:
             all_markets = self.get_markets_paginated(
                 status=status, limit=200, max_pages=max_pages
             )
+            for m in all_markets:
+                key = str(m.get("event_ticker") or m.get("ticker") or "").upper()
+                collected[key] = m
             pages = min(max_pages, len(all_markets) // 200 + 1)
-            tickers = [
-                str(m.get("ticker") or m.get("event_ticker") or "").upper()
-                for m in all_markets
-            ]
             prefix_hits = (
-                len([t for t in tickers if t.startswith(prefix)]) if prefix else 0
+                len([k for k in collected if prefix and k.startswith(prefix)])
+                if prefix
+                else 0
             )
+
+        all_markets = list(collected.values())
+        if league_key == "NBA":
+            for m in all_markets:
+                ticker = str(m.get("event_ticker") or m.get("ticker") or "").upper()
+                if ticker.startswith("KXNBA-") and not ticker.startswith("KXNBAGAME-"):
+                    futures_noise.append(m)
 
         self.last_fetch_meta = {
             "league": league_key,
@@ -922,7 +943,7 @@ class KalshiIntegrator:
             "prefix_hits": prefix_hits,
             "prefix": prefix,
             "futures_noise": len(futures_noise) if league_key == "NBA" else None,
-            "filtered_to_game_markets": bool(filtered_markets) if league_key == "NBA" else None,
+            "filtered_to_game_markets": None,
         }
         if not all_markets and not self.last_error_info:
             self.last_fetch_meta["note"] = "reachable_but_empty"
@@ -940,7 +961,14 @@ class KalshiIntegrator:
             return markets
 
         ticker_upper = [str(m.get("ticker") or m.get("event_ticker") or "").upper() for m in markets]
-        prefix_filtered = [m for m, t in zip(markets, ticker_upper) if t.startswith(prefix)]
+        if isinstance(prefix, list):
+            prefix_filtered = [
+                m
+                for m, t in zip(markets, ticker_upper)
+                if any(t.startswith(pfx) for pfx in prefix if pfx)
+            ]
+        else:
+            prefix_filtered = [m for m, t in zip(markets, ticker_upper) if t.startswith(prefix)]
         if prefix_filtered:
             return prefix_filtered
 
@@ -994,6 +1022,18 @@ class KalshiIntegrator:
                 multivariate.append(m)
                 continue
             t = str(m.get("event_ticker") or m.get("ticker") or "").upper()
+            if league_key == "NBA":
+                if t.startswith("KXNBAGAME-"):
+                    single_game.append(m)
+                else:
+                    other.append(m)
+                continue
+            if isinstance(prefix, list):
+                if any(t.startswith(pfx) for pfx in prefix):
+                    single_game.append(m)
+                else:
+                    other.append(m)
+                continue
             if prefix and t.startswith(prefix):
                 single_game.append(m)
             elif not prefix:

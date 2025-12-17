@@ -533,21 +533,23 @@ def fetch_kalshi_markets(
 
         raw_counts = prefix_count(markets_raw)
         split = kalshi_integrator.split_market_kinds(markets_raw, selected_league)
-        game_pool: List[Dict[str, Any]] = split.get("single_game_candidates", []) or []
+        game_pool: List[Dict[str, Any]] = [
+            m for m in (split.get("single_game_candidates") or []) if ticker_upper(m).startswith("KXNBAGAME-")
+        ]
+        game_pool_counts = prefix_count(game_pool)
 
-        if league_upper == "NBA" and game_pool:
-            filtered_game_pool: List[Dict[str, Any]] = []
+        wanted_tokens = date_tokens_from_commence(commence_times_utc)
+        if wanted_tokens:
+            filtered = []
             for m in game_pool:
                 t = ticker_upper(m)
-                if t.startswith("KXMV") or "MVE" in t:
-                    continue
-                if t.startswith("KXNBAGAME") or t.startswith("KXNBATOTAL") or t.startswith("KXNBASPREAD") or t.startswith(
-                    "KXNBA"
-                ) or t.startswith("KXN"):
-                    filtered_game_pool.append(m)
-            if filtered_game_pool:
-                game_pool = filtered_game_pool
-        game_pool_counts = prefix_count(game_pool)
+                if any(tok in t for tok in wanted_tokens):
+                    filtered.append(m)
+            if filtered:
+                game_pool = filtered
+                game_pool_counts = prefix_count(game_pool)
+            elif game_pool:
+                st.session_state["kalshi_filter_warning"] = "date_filter_removed_all"
 
         wanted_tokens = date_tokens_from_commence(commence_times_utc)
         if wanted_tokens:
@@ -568,10 +570,16 @@ def fetch_kalshi_markets(
             if split_fb.get("single_game_candidates"):
                 markets_raw = fallback_raw or []
                 raw_counts = prefix_count(markets_raw)
-                game_pool = split_fb.get("single_game_candidates", []) or []
+                game_pool = [
+                    m
+                    for m in (split_fb.get("single_game_candidates") or [])
+                    if ticker_upper(m).startswith("KXNBAGAME-")
+                ]
                 game_pool_counts = prefix_count(game_pool)
         if not game_pool and split.get("single_game_candidates"):
-            game_pool = split.get("single_game_candidates", []) or []
+            game_pool = [
+                m for m in (split.get("single_game_candidates") or []) if ticker_upper(m).startswith("KXNBAGAME-")
+            ]
             game_pool_counts = prefix_count(game_pool)
 
         st.session_state["kalshi_markets_raw"] = markets_raw
@@ -595,6 +603,82 @@ def fetch_kalshi_markets(
         st.session_state["last_exception"] = traceback.format_exc()
         return []
 
+
+def kalshi_health_check(selected_league: str) -> Dict[str, Any]:
+    def _ticker(m: Dict[str, Any]) -> str:
+        return str(m.get("event_ticker") or m.get("ticker") or "").upper()
+
+    status = {
+        "configured": bool(kalshi_integrator),
+        "ok": False,
+        "market_count": 0,
+        "game_market_count": 0,
+        "futures_market_count": 0,
+        "has_game_markets": False,
+        "has_futures_markets": False,
+        "error": None,
+        "warning": None,
+        "status_code": None,
+        "response_text_snippet": None,
+        "request_params": None,
+    }
+
+    if not kalshi_integrator:
+        status["error"] = "Kalshi not configured."
+        return status
+
+    try:
+        markets = kalshi_integrator.get_league_markets(
+            selected_league, status="active", max_pages=5
+        )
+        info = kalshi_integrator.last_error_info or {}
+        status["status_code"] = info.get("status_code") or kalshi_integrator.last_status_code
+        snippet = info.get("response_text") or kalshi_integrator.last_response_text
+        if snippet:
+            status["response_text_snippet"] = snippet[:500]
+        status["request_params"] = kalshi_integrator.last_request_params
+        markets = markets or []
+        if not markets and snippet:
+            try:
+                try:
+                    data = json.loads(snippet)
+                except Exception:
+                    data = json.loads(snippet or "{}")
+                parsed_markets = (data.get("markets") or []) if isinstance(data, dict) else []
+                markets = parsed_markets or markets
+            except Exception:
+                markets = markets
+        status["market_count"] = len(markets)
+        game_markets = [m for m in markets if _ticker(m).startswith("KXNBAGAME-")]
+        futures_markets = [
+            m
+            for m in markets
+            if _ticker(m).startswith("KXNBA") and not _ticker(m).startswith("KXNBAGAME-")
+        ]
+        status["game_market_count"] = len(game_markets)
+        status["futures_market_count"] = len(futures_markets)
+        status["has_game_markets"] = bool(game_markets)
+        status["has_futures_markets"] = bool(futures_markets)
+        status["ok"] = True
+        if not status["has_game_markets"] and status["has_futures_markets"]:
+            status["warning"] = "Kalshi reachable; only futures markets returned for KXNBA series."
+        elif not status["has_game_markets"]:
+            status["warning"] = (
+                "Kalshi reachable, but no NBA KXNBAGAME markets returned (futures-only or slate not listed)."
+            )
+        return status
+    except Exception as exc:
+        info = kalshi_integrator.last_error_info or {}
+        status["error"] = str(exc)
+        status["status_code"] = info.get("status_code") or kalshi_integrator.last_status_code
+        snippet = info.get("response_text") or kalshi_integrator.last_response_text
+        if snippet:
+            status["response_text_snippet"] = snippet[:500]
+        status["request_params"] = kalshi_integrator.last_request_params
+        cached = st.session_state.get("kalshi_markets_raw") or []
+        status["market_count"] = len(cached)
+        status["ok"] = False
+        return status
 
 def kalshi_health_check(selected_league: str) -> Dict[str, Any]:
     def _ticker(m: Dict[str, Any]) -> str:
@@ -907,6 +991,8 @@ def kalshi_health(selected_league: str = "NBA") -> Dict[str, Any]:
         "configured": bool(kalshi_integrator),
         "ok": False,
         "market_count": 0,
+        "game_market_count": 0,
+        "futures_market_count": 0,
         "sample_market": None,
         "sample_game_market": None,
         "sample_game_market_reason": None,
@@ -961,7 +1047,13 @@ def kalshi_health(selected_league: str = "NBA") -> Dict[str, Any]:
         base_health["sample_market"] = markets_raw[0] if markets_raw else None
 
         game_markets = [m for m in markets_raw if _ticker(m).startswith("KXNBAGAME-")]
-        futures_markets = [m for m in markets_raw if _ticker(m).startswith("KXNBA")]
+        futures_markets = [
+            m
+            for m in markets_raw
+            if _ticker(m).startswith("KXNBA") and not _ticker(m).startswith("KXNBAGAME-")
+        ]
+        base_health["game_market_count"] = len(game_markets)
+        base_health["futures_market_count"] = len(futures_markets)
         base_health["sample_game_market"] = game_markets[0] if game_markets else None
         base_health["has_game_markets"] = bool(game_markets)
         base_health["has_futures_markets"] = bool(futures_markets)
