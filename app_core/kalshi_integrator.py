@@ -891,7 +891,7 @@ class KalshiIntegrator:
         self,
         league: str,
         *,
-        status: Optional[str] = None,
+        status: Optional[str] = "active",
         min_prefix_hits: int = 200,
         max_pages: int = 5,
     ) -> List[Dict[str, Any]]:
