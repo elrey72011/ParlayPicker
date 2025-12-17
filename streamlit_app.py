@@ -15,9 +15,6 @@ from app_core.kalshi_integrator import KalshiIntegrator, LEAGUE_SERIES_MAP
 # Must be the first Streamlit call
 st.set_page_config(page_title="ParlayDesk", layout="wide")
 
-# Must be the first Streamlit call
-st.set_page_config(page_title="ParlayDesk", layout="wide")
-
 # ------------------------------------------------------------
 # Kalshi globals / shims (must exist before any call sites)
 # ------------------------------------------------------------
@@ -66,7 +63,6 @@ def read_secret(name: str, default: Optional[str] = None) -> Optional[str]:
         pass
     return os.getenv(name, default)
 
-
 def american_to_implied(odds: Any) -> Optional[float]:
     try:
         o = float(odds)
@@ -77,7 +73,6 @@ def american_to_implied(odds: Any) -> Optional[float]:
     if o < 0:
         return (-o) / ((-o) + 100.0)
     return 100.0 / (o + 100.0)
-
 
 def american_to_implied_prob(odds: Any) -> Optional[float]:
     if odds is None:
@@ -91,7 +86,6 @@ def american_to_implied_prob(odds: Any) -> Optional[float]:
     if o < 0:
         return (-o) / ((-o) + 100.0)
     return None
-
 
 def safe_iso(value: Any) -> Optional[str]:
     if value is None:
@@ -110,7 +104,6 @@ def safe_iso(value: Any) -> Optional[str]:
     except Exception:
         return None
 
-
 def get_local_tz() -> str:
     tz_name = None
     try:
@@ -120,7 +113,6 @@ def get_local_tz() -> str:
     if not tz_name:
         tz_name = "America/New_York"
     return tz_name
-
 
 def parse_commence_to_utc(value: Any) -> Optional[datetime]:
     raw = value
@@ -142,7 +134,6 @@ def parse_commence_to_utc(value: Any) -> Optional[datetime]:
         return dt.astimezone(timezone.utc)
     except Exception:
         return None
-
 
 def normalize_commence_times(games: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
     tz_name = get_local_tz()
@@ -182,7 +173,6 @@ def normalize_commence_times(games: List[Dict[str, Any]]) -> Tuple[List[Dict[str
     stats = {"parsed": parsed, "failed": failed, "timezone": tz_name}
     return games, stats
 
-
 def fmt_local_time(dt: Optional[datetime]) -> str:
     try:
         if dt is None:
@@ -190,7 +180,6 @@ def fmt_local_time(dt: Optional[datetime]) -> str:
         return dt.strftime("%Y-%m-%d %H:%M")
     except Exception:
         return ""
-
 
 def extract_h2h_prices(game: Dict[str, Any]) -> Dict[str, Any]:
     home = game.get("home_team")
@@ -209,7 +198,6 @@ def extract_h2h_prices(game: Dict[str, Any]) -> Dict[str, Any]:
                 }
     return {"home_odds": None, "away_odds": None, "book": None}
 
-
 def _parse_last_update(value: Any) -> Optional[datetime]:
     if not value:
         return None
@@ -223,7 +211,6 @@ def _parse_last_update(value: Any) -> Optional[datetime]:
         return dt
     except Exception:
         return None
-
 
 def extract_best_market(game: Dict[str, Any]) -> Dict[str, Any]:
     home = game.get("home_team")
@@ -343,7 +330,6 @@ def extract_best_market(game: Dict[str, Any]) -> Dict[str, Any]:
         "warnings": warnings,
     }
 
-
 def league_from_sport_key(sk: Optional[str]) -> Optional[str]:
     if not sk:
         return None
@@ -360,7 +346,6 @@ def league_from_sport_key(sk: Optional[str]) -> Optional[str]:
     if sk == "baseball_mlb":
         return "MLB"
     return sk.upper()
-
 
 def normalize_game(game: Dict[str, Any]) -> Dict[str, Any]:
     normalized = dict(game)
@@ -393,7 +378,6 @@ def normalize_game(game: Dict[str, Any]) -> Dict[str, Any]:
     normalized["away_team"] = away
     normalized.setdefault("warnings", warnings)
     return normalized
-
 
 # -----------------
 # API Clients & config
@@ -434,7 +418,6 @@ except Exception:
 if kalshi_integrator:
     kalshi_integrator.required = st.session_state.get("kalshi_required", True)
 
-
 @st.cache_data(ttl=60)
 def fetch_odds_games(sport_key: str) -> List[Dict[str, Any]]:
     if not odds_api_key or not sport_key:
@@ -451,7 +434,6 @@ def fetch_odds_games(sport_key: str) -> List[Dict[str, Any]]:
     resp.raise_for_status()
     return resp.json()
 
-
 @st.cache_data(ttl=300)
 def fetch_news() -> List[Dict[str, Any]]:
     if not news_api_key:
@@ -467,7 +449,6 @@ def fetch_news() -> List[Dict[str, Any]]:
     resp.raise_for_status()
     data = resp.json()
     return data.get("articles", [])
-
 
 # -----------------
 # Vertex stub
@@ -644,7 +625,6 @@ def fetch_kalshi_markets(
     except Exception:
         st.session_state["last_exception"] = traceback.format_exc()
         raise
-
 
 def pick_sample_game_market(
     markets: List[Dict[str, Any]]
