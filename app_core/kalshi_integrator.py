@@ -724,20 +724,19 @@ class KalshiIntegrator:
     @staticmethod
     def _status_param(status: Optional[str]) -> Dict[str, Any]:
         """Return a valid status parameter for /markets calls."""
-        allowed = {"unopened", "open", "closed", "settled"}
+        allowed = {"active", "closed", "finalized", "settled"}
         if not isinstance(status, str):
             return {}
         status_clean = status.strip().lower()
         if not status_clean:
             return {}
-        # Map legacy/alias values to the closest allowed Kalshi status
-        if status_clean == "active":
-            status_clean = "open"
-        if status_clean in {"final", "finalized"}:
-            status_clean = "settled"
-        if status_clean in allowed:
-            return {"status": status_clean}
-        return {}
+        if status_clean == "open":
+            status_clean = "active"
+        if status_clean == "final":
+            status_clean = "finalized"
+        if status_clean not in allowed:
+            return {}
+        return {"status": status_clean}
 
     def _build_market_params(
         self,
@@ -909,6 +908,8 @@ class KalshiIntegrator:
         collected: Dict[str, Dict[str, Any]] = {}
         pages = 0
         prefix_hits = 0
+        game_hits = 0
+        futures_hits = 0
 
         if series_targets:
             for series in series_targets:
@@ -925,6 +926,11 @@ class KalshiIntegrator:
                     key = str(m.get("event_ticker") or m.get("ticker") or "").upper()
                     if key not in collected:
                         collected[key] = m
+                    if league_key == "NBA":
+                        if key.startswith("KXNBAGAME-"):
+                            game_hits += 1
+                        elif key.startswith("KXNBA-"):
+                            futures_hits += 1
             prefix_hits = len(
                 [
                     k
@@ -939,6 +945,11 @@ class KalshiIntegrator:
             for m in all_markets:
                 key = str(m.get("event_ticker") or m.get("ticker") or "").upper()
                 collected[key] = m
+                if league_key == "NBA":
+                    if key.startswith("KXNBAGAME-"):
+                        game_hits += 1
+                    elif key.startswith("KXNBA-"):
+                        futures_hits += 1
             pages = min(max_pages, len(all_markets) // 200 + 1)
             prefix_hits = (
                 len([k for k in collected if prefix and k.startswith(prefix)])
@@ -947,11 +958,27 @@ class KalshiIntegrator:
             )
 
         all_markets = list(collected.values())
+        # If NBA still lacks game markets, sweep broadly so futures do not short-circuit slate discovery.
+        if league_key == "NBA" and not any(
+            str(m.get("event_ticker") or m.get("ticker") or "").upper().startswith("KXNBAGAME-")
+            for m in all_markets
+        ):
+            broad_chunk = self.get_markets_paginated(status=status, limit=200, max_pages=max_pages)
+            for m in broad_chunk or []:
+                key = str(m.get("event_ticker") or m.get("ticker") or "").upper()
+                if key.startswith("KXNBAGAME-") and key not in collected:
+                    collected[key] = m
+                    game_hits += 1
+            all_markets = list(collected.values())
         if league_key == "NBA":
             for m in all_markets:
                 ticker = str(m.get("event_ticker") or m.get("ticker") or "").upper()
                 if ticker.startswith("KXNBA-") and not ticker.startswith("KXNBAGAME-"):
                     futures_noise.append(m)
+                if ticker.startswith("KXNBAGAME-"):
+                    game_hits += 0
+                elif ticker.startswith("KXNBA-"):
+                    futures_hits += 0
 
         self.last_fetch_meta = {
             "league": league_key,
@@ -962,6 +989,8 @@ class KalshiIntegrator:
             "prefix_hits": prefix_hits,
             "prefix": prefix,
             "futures_noise": len(futures_noise) if league_key == "NBA" else None,
+            "nba_game_hits": game_hits if league_key == "NBA" else None,
+            "nba_futures_hits": futures_hits if league_key == "NBA" else None,
             "filtered_to_game_markets": None,
         }
         if not all_markets and not self.last_error_info:
