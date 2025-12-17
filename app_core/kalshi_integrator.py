@@ -235,6 +235,7 @@ def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time:
     if not kalshi or not kalshi.api_key:
         return KalshiMatchResult(matched=False, kalshi_available=False, label="", probability=None, raw_event_id=None, reason="no_integrator")
 
+    # --- Nested Helper Functions ---
     def _nba_code(team: str) -> Optional[str]:
         norm = normalize_name(team)
         return NBA_TEAM_CODE_MAP.get(norm)
