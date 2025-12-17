@@ -467,12 +467,13 @@ def get_vertex_prob(game: Dict[str, Any]) -> Optional[float]:
 # -----------------
 # Kalshi integration
 # -----------------
-
 @st.cache_data(ttl=300)
 def fetch_kalshi_markets(
     selected_league: str, commence_times_utc: Optional[List[str]] = None
 ) -> List[Dict[str, Any]]:
-    if not kalshi_integrator:
+    # Ensure the global exists, but don't crash if not initialized yet
+    global kalshi_integrator
+    if kalshi_integrator is None:
         return []
 
     league_upper = (selected_league or "").upper()
@@ -480,10 +481,21 @@ def fetch_kalshi_markets(
     def ticker_upper(market: Dict[str, Any]) -> str:
         return str(market.get("event_ticker") or market.get("ticker") or "").upper()
 
+    def prefix_count(markets: List[Dict[str, Any]]) -> Dict[str, int]:
+        tickers = [ticker_upper(m) for m in (markets or [])]
+        return {
+            "count_prefix_KXNBA": len([t for t in tickers if t.startswith("KXNBA")]),
+            "count_prefix_KXNBAGAME": len([t for t in tickers if t.startswith("KXNBAGAME")]),
+            "count_prefix_KXNBATOTAL": len([t for t in tickers if t.startswith("KXNBATOTAL")]),
+            "count_prefix_KXNBASPREAD": len([t for t in tickers if t.startswith("KXNBASPREAD")]),
+            "count_prefix_KXMV": len([t for t in tickers if t.startswith("KXMV")]),
+        }
+
     def date_tokens_from_commence(commence_list: Optional[List[str]]) -> set:
         """Convert commence_time ISO strings -> Kalshi tokens like 25DEC17 using APP_TIMEZONE."""
         if not commence_list:
             return set()
+
         tz_name = get_local_tz()
         try:
             local_tz = ZoneInfo(tz_name)
@@ -496,56 +508,61 @@ def fetch_kalshi_markets(
             if not dt_utc:
                 continue
             dt_local = dt_utc.astimezone(local_tz) if local_tz else dt_utc
-            # Kalshi uses YY + MON + DD with MON uppercase, e.g. 25DEC17
-            tokens.add(dt_local.strftime("%y%b%d").upper())
+            tokens.add(dt_local.strftime("%y%b%d").upper())  # 25DEC17
         return tokens
 
     try:
+        # 1) Fetch
         markets_raw = kalshi_integrator.get_league_markets(
             selected_league,
             min_prefix_hits=200,
             max_pages=5,
-        )
+        ) or []
+
+        # Fallback: broader pagination if league fetch returns nothing
         if not markets_raw:
-            markets_raw = kalshi_integrator.get_markets_paginated(status=None, max_pages=5)
-        markets_raw = markets_raw or []
+            markets_raw = kalshi_integrator.get_markets_paginated(status=None, max_pages=5) or []
 
-        split = kalshi_integrator.split_market_kinds(markets_raw, selected_league)
-        game_pool: List[Dict[str, Any]] = split.get("single_game_candidates", []) or []
+        # 2) Split
+        split = kalshi_integrator.split_market_kinds(markets_raw, selected_league) or {}
+        game_pool: List[Dict[str, Any]] = (split.get("single_game_candidates") or [])
 
-        # Keep your NBA cleanup (avoid MVP/futures noise)
+        # 3) Clean NBA “noise” (but DO NOT drop KXNBAGAME!)
         if league_upper == "NBA" and game_pool:
             cleaned = []
             for m in game_pool:
                 t = ticker_upper(m)
                 if t.startswith("KXMV") or "MVE" in t:
                     continue
-                if t.startswith("KXNBA") or t.startswith("KXN"):
-                    cleaned.append(m)
-            if cleaned:
-                game_pool = cleaned
+                cleaned.append(m)
+            game_pool = cleaned
 
-        # ✅ NEW: restrict to the specific slate dates you actually loaded
+        # 4) Restrict to the slate you actually loaded (tokens like 25DEC17)
         wanted_tokens = date_tokens_from_commence(commence_times_utc)
-        if wanted_tokens:
+        if wanted_tokens and game_pool:
             filtered = []
             for m in game_pool:
                 t = ticker_upper(m)
-                # match tokens anywhere in ticker: KXNBAGAME-25DEC17CLECHI...
                 if any(tok in t for tok in wanted_tokens):
                     filtered.append(m)
-            if filtered:
-                game_pool = filtered
+            # IMPORTANT: don’t “if filtered: game_pool = filtered” — always apply it.
+            # Otherwise you keep irrelevant dates and matching gets worse.
+            game_pool = filtered
 
-        # Keep your session_state debug artifacts
+        # 5) Debug artifacts (always set)
         st.session_state["kalshi_markets_raw"] = markets_raw
-        st.session_state["kalshi_markets_game_pool"] = game_pool
         st.session_state["kalshi_all_markets"] = markets_raw
+        st.session_state["kalshi_markets_game_pool"] = game_pool
+
+        st.session_state["kalshi_prefix_counts"] = {
+            "raw": {"total": len(markets_raw), **prefix_count(markets_raw)},
+            "game_pool": {"total": len(game_pool), **prefix_count(game_pool)},
+        }
 
         samples_game = []
         for m in game_pool:
             evt = ticker_upper(m)
-            if "GAME-" in evt:
+            if evt.startswith("KXNBAGAME"):
                 samples_game.append(evt)
             if len(samples_game) >= 20:
                 break
@@ -556,7 +573,7 @@ def fetch_kalshi_markets(
 
     except Exception:
         st.session_state["last_exception"] = traceback.format_exc()
-        raise
+        return []  # do NOT raise here or you’ll keep crashing Master Analysis
 
     def prefix_count(markets: List[Dict[str, Any]]) -> Dict[str, int]:
         tickers = [ticker_upper(m) for m in markets]
