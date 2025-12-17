@@ -31,15 +31,12 @@ SUPPORTED_LEAGUES = {"NBA", "NFL", "MLB", "NHL", "NCAAF", "NCAAB"}
 SAFE_STATUS_ALLOWLIST = {"active", "closed", "finalized", "settled"}
 
 LEAGUE_SERIES_MAP: Dict[str, Any] = {
-    "NBA": [
-        "KXNBAGAME",  # Pull single-game slates; KXNBA alone only returns futures
-        "KXNBA",  # Keep legacy futures as a secondary source for health/coverage
-    ],
-    "NFL": "KXNFL",
-    "MLB": "KXMLB",
-    "NHL": "KXNHL",
-    "NCAAF": "KXNCAAF",
-    "NCAAB": "KXNCAAB",
+    "NBA": ["KXNBAGAME", "KXNBATOTAL", "KXNBASPREAD", "KXNBA"],
+    "NFL": ["KXNFLGAME", "KXNFLTOTAL", "KXNFLSPREAD", "KXNFL"],
+    "MLB": ["KXMLBGAME", "KXMLB"],
+    "NHL": ["KXNHLGAME", "KXNHL"],
+    "NCAAF": ["KXNCAAFGAME", "KXNCAAF"],
+    "NCAAB": ["KXNCAABGAME", "KXNCAAB"],
 }
 
 # Extensive abbreviation list
@@ -414,6 +411,11 @@ class KalshiIntegrator:
         self.api_url = "https://api.elections.kalshi.com/trade-api/v2"
         self.session = requests.Session()
         self.required = required
+        self.last_error_info = {}
+        self.last_status_code = None
+        self.last_response_text = None
+        self._markets_cache = []
+        self._league_cache = {}
 
         # Caching + error state
         self._markets_cache: List[Dict[str, Any]] = []
