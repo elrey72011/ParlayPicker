@@ -377,7 +377,7 @@ location = read_secret("GCP_LOCATION", "us-central1")
 vertex_endpoint_id = read_secret("VERTEX_ENDPOINT_ID")
 kalshi_api_key = read_secret("KALSHI_API_KEY") or read_secret("kalshi_api_key")
 kalshi_api_secret = read_secret("KALSHI_API_SECRET") or read_secret("kalshi_api_secret")
-st.session_state.setdefault("kalshi_required", True)
+st.session_state.setdefault("kalshi_required", False)
 kalshi_integrator: Optional[KalshiIntegrator] = None
 try:
     if "kalshi_integrator" not in st.session_state:
