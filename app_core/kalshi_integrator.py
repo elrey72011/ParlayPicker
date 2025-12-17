@@ -697,6 +697,28 @@ class KalshiIntegrator:
             return {"status": status_clean}
         return {}
 
+    def _build_market_params(
+        self,
+        *,
+        status: Optional[str],
+        limit: Optional[int],
+        cursor: Optional[str],
+        extra_params: Optional[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        params: Dict[str, Any] = {}
+        if limit is not None and limit != "":
+            params["limit"] = limit
+        if status:
+            params.update(self._status_param(status))
+        if cursor:
+            params["cursor"] = cursor
+        if extra_params:
+            for key, val in extra_params.items():
+                if val is None or val == "":
+                    continue
+                params[key] = val
+        return params
+
     def get_markets_paginated(
         self,
         status: Optional[str] = None,
@@ -709,17 +731,9 @@ class KalshiIntegrator:
         next_cursor = cursor
         pages = 0
         while pages < max_pages:
-            params: Dict[str, Any] = {}
-            if limit is not None and limit != "":
-                params["limit"] = limit
-            params.update(self._status_param(status))
-            if next_cursor:
-                params["cursor"] = next_cursor
-            if extra_params:
-                for key, val in extra_params.items():
-                    if val is None or val == "":
-                        continue
-                    params[key] = val
+            params = self._build_market_params(
+                status=status, limit=limit, cursor=next_cursor, extra_params=extra_params
+            )
             self.last_request_params = params
             try:
                 data = self._request("GET", "/markets", params=params)
