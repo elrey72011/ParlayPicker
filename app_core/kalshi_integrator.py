@@ -1051,6 +1051,38 @@ class KalshiIntegrator:
             if alt_game_candidates:
                 game_markets = alt_game_candidates
                 used_game_prefix = alt_prefix or game_prefix
+
+        if not all_markets:
+            broad = self.get_markets_paginated(
+                status=normalized_status, limit=200, max_pages=max_pages
+            )
+            filtered_broad = self._filter_markets_for_league(broad, league_key)
+            if filtered_broad:
+                all_markets = filtered_broad
+                game_markets = [
+                    m
+                    for m in all_markets
+                    if str(m.get("event_ticker") or m.get("ticker") or "")
+                    .upper()
+                    .startswith(f"{game_prefix}-")
+                ]
+                if not game_markets and league_key == "NCAAB":
+                    alt_candidates: List[Dict[str, Any]] = []
+                    alt_prefix = None
+                    date_token_pattern = re.compile(r"\d{2}[A-Z]{3}\d{2}")
+                    for m in all_markets:
+                        t_upper = str(m.get("event_ticker") or m.get("ticker") or "").upper()
+                        if "GAME" in t_upper and ("NCAAB" in t_upper or "NCAA" in t_upper):
+                            alt_candidates.append(m)
+                            if not alt_prefix:
+                                alt_prefix = t_upper.split("-")[0]
+                        elif ("NCAAB" in t_upper or "NCAA" in t_upper) and date_token_pattern.search(t_upper):
+                            alt_candidates.append(m)
+                            if not alt_prefix:
+                                alt_prefix = t_upper.split("-")[0]
+                    if alt_candidates:
+                        game_markets = alt_candidates
+                        used_game_prefix = alt_prefix or game_prefix
         futures_noise = [
             m
             for m in all_markets
@@ -1059,10 +1091,14 @@ class KalshiIntegrator:
             and not str(m.get("event_ticker") or m.get("ticker") or "").upper().startswith(f"{game_prefix}-")
         ]
 
+        ticker_keys = [
+            str(m.get("event_ticker") or m.get("ticker") or "").upper()
+            for m in all_markets
+        ]
         prefix_hits = len(
             [
                 k
-                for k in collected
+                for k in ticker_keys
                 if any(k.startswith(str(s).upper()) for s in series_targets if s)
             ]
         )
