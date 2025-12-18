@@ -520,6 +520,8 @@ def fetch_kalshi_markets(
             tokens.add(dt_local.strftime("%y%b%d").upper())
         return tokens
 
+    wanted_tokens = date_tokens_from_commence(commence_times_utc)
+
     try:
         markets_raw = kalshi_integrator.get_league_markets(
             selected_league,
@@ -555,19 +557,28 @@ def fetch_kalshi_markets(
                 if ticker_upper(m).startswith(winner_prefix)
             ]
             game_prefix_used = winner_prefix
+        if not game_pool and league_upper == "NCAAB":
+            fallback_pool: List[Dict[str, Any]] = []
+            pattern = re.compile(r"\d{2}[A-Z]{3}\d{2}")
+            candidates = split.get("single_game_candidates") or markets_raw or []
+            for m in candidates:
+                t = ticker_upper(m)
+                if "NCAAB" in t or "NCAA" in t:
+                    if not wanted_tokens or any(tok in t for tok in wanted_tokens) or pattern.search(t):
+                        fallback_pool.append(m)
+            if fallback_pool:
+                game_pool = fallback_pool
+                detected_prefix = None
+                for m in fallback_pool:
+                    t = ticker_upper(m)
+                    if "-" in t:
+                        detected_prefix = t.split("-")[0]
+                        break
+                if detected_prefix:
+                    game_prefix_used = detected_prefix
+                game_pool_counts = prefix_count(game_pool, active_prefix=game_prefix_used)
         game_pool_counts = prefix_count(game_pool, active_prefix=game_prefix_used)
 
-        if league_upper == "NBA":
-            filtered_game_pool = [
-                m
-                for m in game_pool
-                if ticker_upper(m).startswith("KXNBAGAME-")
-            ]
-            if filtered_game_pool:
-                game_pool = filtered_game_pool
-                game_pool_counts = prefix_count(game_pool)
-
-        wanted_tokens = date_tokens_from_commence(commence_times_utc)
         if wanted_tokens:
             filtered = []
             for m in game_pool:
