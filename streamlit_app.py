@@ -649,10 +649,6 @@ def kalshi_health_check(selected_league: str = "NBA") -> Dict[str, Any]:
     """Wrapper to ensure health is always callable before first use."""
     return kalshi_health(selected_league)
 
-def kalshi_health_check(selected_league: str = "NBA") -> Dict[str, Any]:
-    """Wrapper to ensure health is always callable before first use."""
-    return kalshi_health(selected_league)
-
 def pick_sample_game_market(
     markets: List[Dict[str, Any]]
 ) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
