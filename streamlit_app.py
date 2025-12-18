@@ -6,6 +6,7 @@ import traceback
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 from zoneinfo import ZoneInfo
+
 import pandas as pd
 import requests
 import streamlit as st
@@ -191,7 +192,7 @@ with tab_master:
             home = g.get("home_team")
             away = g.get("away_team")
         
-            # 1. INITIALIZE DATA IMMEDIATELY (Prevents NameErrors)
+            # 1. INITIALIZE DATA IMMEDIATELY (Fixes NameErrors)
             h_code = nba_abbrev(home)
             a_code = nba_abbrev(away)
             
@@ -200,7 +201,7 @@ with tab_master:
             commence_local = fmt_local_time(g.get("commence_time_local"))
             commence_date_local = g.get("commence_date_local") or ""
             
-            # Calculate all external dependencies before row generation
+            # CALCULATE all external dependencies BEFORE generating any rows
             vertex_prob_home = get_vertex_prob(g)
             home_sent = sentiment_map.get(home, 0.0)
             away_sent = sentiment_map.get(away, 0.0)
@@ -223,7 +224,7 @@ with tab_master:
                     "League": league_name, "Home": home, "Away": away,
                     "Commence (UTC)": commence_iso,
                     "Market": "None",
-                    "AI_Prob": vertex_prob_home,
+                    "AI_Prob": vertex_prob_home, # Now safely defined
                     "kalshi_matched": kalshi_winner.get("kalshi_matched"),
                     "Sentiment_Diff": sentiment_diff,
                 })
