@@ -491,10 +491,11 @@ def fetch_kalshi_markets(
     def ticker_upper(market: Dict[str, Any]) -> str:
         return str(market.get("event_ticker") or market.get("ticker") or "").upper()
 
-    def prefix_count(markets: List[Dict[str, Any]]) -> Dict[str, int]:
+    def prefix_count(markets: List[Dict[str, Any]], active_prefix: Optional[str] = None) -> Dict[str, int]:
         tickers = [ticker_upper(m) for m in (markets or [])]
+        prefix_to_use = active_prefix or winner_prefix
         return {
-            "count_prefix_game": len([t for t in tickers if t.startswith(winner_prefix)]),
+            "count_prefix_game": len([t for t in tickers if t.startswith(prefix_to_use)]),
             "count_prefix_total": len([t for t in tickers if "TOTAL" in t]),
             "count_prefix_spread": len([t for t in tickers if "SPREAD" in t]),
         }
@@ -534,13 +535,27 @@ def fetch_kalshi_markets(
             st.session_state["kalshi_last_request_params"] = kalshi_integrator.last_request_params
         markets_raw = markets_raw or []
 
-        raw_counts = prefix_count(markets_raw)
-        kx_game_count = len([m for m in markets_raw if ticker_upper(m).startswith(f"{winner_prefix}-")])
+        game_prefix_used = (kalshi_integrator.last_fetch_meta or {}).get(
+            "game_prefix_used", winner_prefix
+        )
+        raw_counts = prefix_count(markets_raw, active_prefix=game_prefix_used)
+        kx_game_count = len(
+            [m for m in markets_raw if ticker_upper(m).startswith(f"{game_prefix_used}-")]
+        )
         split = kalshi_integrator.split_market_kinds(markets_raw, selected_league)
         game_pool: List[Dict[str, Any]] = [
-            m for m in (split.get("single_game_candidates") or []) if ticker_upper(m).startswith(winner_prefix)
+            m
+            for m in (split.get("single_game_candidates") or [])
+            if ticker_upper(m).startswith(game_prefix_used)
         ]
-        game_pool_counts = prefix_count(game_pool)
+        if not game_pool and game_prefix_used != winner_prefix:
+            game_pool = [
+                m
+                for m in (split.get("single_game_candidates") or [])
+                if ticker_upper(m).startswith(winner_prefix)
+            ]
+            game_prefix_used = winner_prefix
+        game_pool_counts = prefix_count(game_pool, active_prefix=game_prefix_used)
 
         if league_upper == "NBA":
             filtered_game_pool = [
@@ -594,7 +609,7 @@ def fetch_kalshi_markets(
         st.session_state["kalshi_debug_summary"] = {
             "league": league_upper,
             "fetched_total": len(markets_raw),
-            "game_prefix": winner_prefix,
+            "game_prefix": game_prefix_used,
             "kx_game_count": kx_game_count,
             "wanted_tokens": sorted(list(wanted_tokens)) if wanted_tokens else [],
             "after_token_filter": len(game_pool),
@@ -620,7 +635,10 @@ def fetch_kalshi_markets_for_leagues(
         ]
         markets = fetch_kalshi_markets(lg, commence_times_utc=commence_times_utc)
         league_upper = (lg or "").upper()
-        winner_prefix = league_game_prefix(league_upper)
+        meta_prefix = (kalshi_integrator.last_fetch_meta or {}).get(
+            "game_prefix_used"
+        )
+        winner_prefix = meta_prefix or league_game_prefix(league_upper)
         out[lg] = markets or []
         tokens = []
         try:

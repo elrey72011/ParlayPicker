@@ -1026,11 +1026,26 @@ class KalshiIntegrator:
                     collected[key] = m
 
         all_markets = list(collected.values())
+        used_game_prefix = game_prefix
         game_markets = [
             m
             for m in all_markets
             if str(m.get("event_ticker") or m.get("ticker") or "").upper().startswith(f"{game_prefix}-")
         ]
+
+        # Fallback: detect alternative game prefixes (e.g., NCAA basketball variants)
+        if not game_markets and league_key == "NCAAB":
+            alt_game_candidates: List[Dict[str, Any]] = []
+            alt_prefix: Optional[str] = None
+            for m in all_markets:
+                t_upper = str(m.get("event_ticker") or m.get("ticker") or "").upper()
+                if "GAME" in t_upper and ("NCAAB" in t_upper or "NCAA" in t_upper):
+                    alt_game_candidates.append(m)
+                    if not alt_prefix:
+                        alt_prefix = t_upper.split("-")[0]
+            if alt_game_candidates:
+                game_markets = alt_game_candidates
+                used_game_prefix = alt_prefix or game_prefix
         futures_noise = [
             m
             for m in all_markets
@@ -1064,6 +1079,7 @@ class KalshiIntegrator:
             "game_hits": game_hits,
             "filtered_to_game_markets": bool(game_hits),
             "series_targets": series_targets,
+            "game_prefix_used": used_game_prefix,
         }
         if not game_markets and all_markets:
             self.last_fetch_meta["warning"] = "game_markets_missing_or_futures_only"
@@ -1145,6 +1161,9 @@ class KalshiIntegrator:
                 continue
             t = str(m.get("event_ticker") or m.get("ticker") or "").upper()
             if t.startswith(f"{game_prefix}-"):
+                single_game.append(m)
+                continue
+            if league_key == "NCAAB" and "GAME" in t and ("NCAAB" in t or "NCAA" in t):
                 single_game.append(m)
                 continue
             if isinstance(prefix, list):
