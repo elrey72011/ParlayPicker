@@ -541,6 +541,16 @@ def fetch_kalshi_markets(
         ]
         game_pool_counts = prefix_count(game_pool)
 
+        if league_upper == "NBA":
+            filtered_game_pool = [
+                m
+                for m in game_pool
+                if ticker_upper(m).startswith("KXNBAGAME-")
+            ]
+            if filtered_game_pool:
+                game_pool = filtered_game_pool
+                game_pool_counts = prefix_count(game_pool)
+
         wanted_tokens = date_tokens_from_commence(commence_times_utc)
         if wanted_tokens:
             filtered = []
@@ -594,6 +604,9 @@ def fetch_kalshi_markets(
             "kxnbagame_in_raw": kx_game_count,
             "wanted_tokens": sorted(list(wanted_tokens)) if wanted_tokens else [],
             "after_token_filter": len(game_pool),
+            "kxnbagame_after_filter": len(
+                [m for m in game_pool if ticker_upper(m).startswith("KXNBAGAME-")]
+            ),
             "request_params": st.session_state.get("kalshi_request_params_snapshot", {}),
             "league": league_upper,
             "winner_prefix": winner_prefix,
@@ -623,7 +636,12 @@ def fetch_kalshi_markets_for_leagues(
     summary: Dict[str, Any] = {}
     out: Dict[str, List[Dict[str, Any]]] = {}
     for lg in leagues or []:
-        markets = fetch_kalshi_markets(lg, commence_times_by_league.get(lg))
+        commence_times_utc = [
+            g
+            for g in commence_times_by_league.get(lg, [])
+            if g
+        ]
+        markets = fetch_kalshi_markets(lg, commence_times_utc=commence_times_utc)
         league_upper = (lg or "").upper()
         winner_prefix = next(
             (p for p in (LEAGUE_SERIES_MAP.get(league_upper) or []) if "GAME" in p),
@@ -816,12 +834,13 @@ def kalshi_health(selected_league: str = "NBA") -> Dict[str, Any]:
         base_health["has_game_markets"] = bool(game_markets)
         base_health["has_futures_markets"] = bool(futures_markets)
         base_health["ok"] = True
-        if not base_health["has_game_markets"] and base_health["has_futures_markets"]:
-            base_health["warning"] = "Kalshi reachable; only futures markets returned for KXNBA series."
-        elif not base_health["has_game_markets"]:
-            base_health["warning"] = (
-                "Kalshi reachable, but no NBA KXNBAGAME markets returned (futures-only or slate not listed)."
-            )
+        if markets_raw and not base_health["has_game_markets"]:
+            if base_health["has_futures_markets"]:
+                base_health["warning"] = "Kalshi reachable; only futures markets returned for KXNBA series."
+            else:
+                base_health["warning"] = (
+                    "Kalshi reachable, but no NBA KXNBAGAME markets returned (futures-only or slate not listed)."
+                )
         info = kalshi_integrator.last_error_info or {}
         base_health["status_code"] = info.get("status_code") or kalshi_integrator.last_status_code
         base_health["response_text"] = (
@@ -1016,46 +1035,20 @@ def filter_kalshi_game_markets(
         def ticker_upper(market: Dict[str, Any]) -> str:
             return str(market.get("event_ticker") or market.get("ticker") or "").upper()
 
-        strict_filtered: List[Dict[str, Any]] = []
-        loose_matches: List[Dict[str, Any]] = []
+        matched: List[Dict[str, Any]] = []
         for m in markets or []:
             t = ticker_upper(m)
             if "GAME" not in t or not t.startswith(winner_prefix):
                 continue
             if date_token and date_token not in t:
                 continue
-            if home_code_upper and away_code_upper:
-                if (
-                    home_code_upper in t
-                    and away_code_upper in t
-                    and (
-                        f"{away_code_upper}{home_code_upper}" in t
-                        or f"{home_code_upper}{away_code_upper}" in t
-                    )
-                ):
-                    strict_filtered.append(m)
-                    continue
-            blob = " ".join(
-                [
-                    str(m.get("title") or ""),
-                    str(m.get("rules") or m.get("rules_primary") or ""),
-                    str(m.get("event_ticker") or m.get("ticker") or ""),
-                ]
-            ).upper()
-            if home_code_upper and away_code_upper and home_code_upper in blob and away_code_upper in blob:
-                loose_matches.append(m)
+            if home_code_upper and home_code_upper not in t:
                 continue
-            tokens_home = team_tokens(home_team)
-            tokens_away = team_tokens(away_team)
-            blob_tokens = word_set(blob.lower())
-            if tokens_home and tokens_away and tokens_home.intersection(blob_tokens) and tokens_away.intersection(blob_tokens):
-                loose_matches.append(m)
+            if away_code_upper and away_code_upper not in t:
+                continue
+            matched.append(m)
 
-        if strict_filtered:
-            return strict_filtered
-        if loose_matches:
-            return loose_matches
-        return []
+        return matched
     except Exception:
         st.session_state["last_exception"] = traceback.format_exc()
         return []
