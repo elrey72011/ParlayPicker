@@ -1710,11 +1710,11 @@ with tab_master:
             
             market_home_prob = implied_home if implied_home is not None else (1.0 - implied_away if implied_away else 0.5)
 
-            # --- 1. Define the helper function (Return only the value) ---
-            def blended_for_selection(selection_team: str, m_prob_home: Optional[float]) -> float:
+            # --- 1. The helper function should ONLY return the probability value ---
+            def blended_for_selection(selection_team: str, market_prob_home: Optional[float]) -> float:
                 selection_flag = "home" if selection_team == home else "away"
                 return blended_win_prob(
-                    market_prob=m_prob_home,
+                    market_prob=market_prob_home,
                     vertex_prob=vertex_prob_home,
                     theover_prob=None,
                     kalshi_prob=kalshi_matches.get("winner", {}).get("kalshi_prob"),
@@ -1722,17 +1722,17 @@ with tab_master:
                     selection=selection_flag,
                 )
             
-            # --- 2. MOVE THIS OUTSIDE THE FUNCTION (Fixes the missing rows) ---
-            kalshi_winner = kalshi_matches.get("winner", {}) # Ensure this is defined
+            # --- 2. MOVE THIS OUTSIDE (Indent it to match the 'def' line) ---
+            kalshi_winner = kalshi_matches.get("winner", {})
             
             if home_ml is not None or away_ml is not None:
-                # Determine the pick
+                # Determine which team is the "Pick"
                 if (implied_home or 0) >= (implied_away or 0):
                     pick, implied_pick = home, implied_home
                 else:
                     pick, implied_pick = away, implied_away
                 
-                # Now call the function to get the probability
+                # Call the function to get the final AI probability
                 ai_prob_row = blended_for_selection(pick, market_home_prob)
                 
                 rows_out.append({
@@ -1743,16 +1743,20 @@ with tab_master:
                     "Commence (Local)": commence_local,
                     "Local Date": commence_date_local,
                     "Market": "Moneyline",
+                    "Book": g.get("best_ml_book"),
+                    "Home_ML": home_ml,
+                    "Away_ML": away_ml,
                     "Pick": pick,
                     "Implied_Prob": implied_pick,
                     "AI_Prob": ai_prob_row,
-                    "Home_Sentiment": home_sent,
-                    "Away_Sentiment": away_sent,
-                    "Sentiment_Diff": sentiment_diff,
+                    "Warnings": ";".join(warnings),
+                    "kalshi_available": kalshi_winner.get("kalshi_available"),
                     "kalshi_matched": kalshi_winner.get("kalshi_matched"),
                     "kalshi_prob": kalshi_winner.get("kalshi_prob"),
                     "kalshi_event_ticker": kalshi_winner.get("kalshi_event_ticker"),
-                    "Warnings": ";".join(warnings),
+                    "Home_Sentiment": home_sent,
+                    "Away_Sentiment": away_sent,
+                    "Sentiment_Diff": sentiment_diff,
                 })
                 master_stats["h2h_found"] += 1
                 master_stats["market_rows_out"] += 1
