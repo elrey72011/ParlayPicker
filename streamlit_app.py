@@ -1800,6 +1800,13 @@ with tab_master:
                 {"game": g, "matches": kalshi_matches, "candidate_debug": candidate_debug}
             )
 
+            if (
+                kalshi_winner.get("kalshi_matched")
+                or kalshi_spread.get("kalshi_matched")
+                or kalshi_total.get("kalshi_matched")
+            ):
+                master_stats["kalshi_matches"] += 1
+
             # --- 5. FALLBACK: "NONE" MARKET ROW ---
             if not (g.get("home_ml_price") or g.get("home_spread_point") or g.get("total_point")):
                 warnings = list(dict.fromkeys(warnings + ["no_markets"]))
@@ -1888,7 +1895,7 @@ with tab_master:
             # TOTAL ROW
             if g.get("total_point") is not None:
                 ai_prob_row = blended_for_selection(home, market_home_prob)
-                
+
                 rows_out.append({
                     "League": league_name, "Home": home, "Away": away,
                     "Commence (UTC)": commence_iso, "Commence (Local)": commence_local,
@@ -1899,26 +1906,19 @@ with tab_master:
                     "Sentiment_Diff": sentiment_diff,
                 })
                 master_stats["market_rows_out"] += 1
-    
-                # SPREAD ROW
-                if g.get("home_spread_point") is not None:
-                    spread_pick = home if (g.get("home_spread_price") or 0) >= (g.get("away_spread_price") or 0) else away
-                    ai_prob_row = blended_for_selection(spread_pick, market_home_prob)
-                    
-                    rows_out.append({
-                        "League": league_name, "Home": home, "Away": away,
-                        "Commence (UTC)": commence_iso, "Commence (Local)": commence_local,
-                        "Market": "Spread", "Book": g.get("best_spread_book"),
-                        "Pick": spread_pick, "AI_Prob": ai_prob_row,
-                        "kalshi_matched": kalshi_spread.get("kalshi_matched"),
-                        "kalshi_prob": kalshi_spread.get("kalshi_prob"),
-                        "Sentiment_Diff": sentiment_diff,
-                    })
-                    master_stats["market_rows_out"] += 1
                     
         df = pd.DataFrame(rows_out)
-        master_stats["rows_out"] = len(df)
-        st.session_state["last_rows_out"] = len(df)
+        # Collapse to one row per game (prefer the first generated row, typically moneyline)
+        deduped_rows: Dict[Tuple[Any, Any, Any, Any], Dict[str, Any]] = {}
+        for row in rows_out:
+            key = (row.get("League"), row.get("Home"), row.get("Away"), row.get("Commence (UTC)"))
+            if key not in deduped_rows:
+                deduped_rows[key] = row
+        deduped_list = list(deduped_rows.values())
+        df = pd.DataFrame(deduped_list)
+
+        master_stats["rows_out"] = len(deduped_list)
+        st.session_state["last_rows_out"] = len(deduped_list)
         st.session_state["master_stats"] = master_stats
         st.session_state["kalshi_match_results"] = kalshi_match_results
         total_game_markets = len(
