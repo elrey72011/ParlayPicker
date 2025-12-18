@@ -557,6 +557,16 @@ def fetch_kalshi_markets(
             game_prefix_used = winner_prefix
         game_pool_counts = prefix_count(game_pool, active_prefix=game_prefix_used)
 
+        if league_upper == "NBA":
+            filtered_game_pool = [
+                m
+                for m in game_pool
+                if ticker_upper(m).startswith("KXNBAGAME-")
+            ]
+            if filtered_game_pool:
+                game_pool = filtered_game_pool
+                game_pool_counts = prefix_count(game_pool)
+
         wanted_tokens = date_tokens_from_commence(commence_times_utc)
         if wanted_tokens:
             filtered = []
