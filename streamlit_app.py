@@ -534,6 +534,7 @@ def fetch_kalshi_markets(
         markets_raw = markets_raw or []
 
         raw_counts = prefix_count(markets_raw)
+        kx_game_count = len([m for m in markets_raw if "KXNBAGAME-" in ticker_upper(m)])
         split = kalshi_integrator.split_market_kinds(markets_raw, selected_league)
         game_pool: List[Dict[str, Any]] = [
             m for m in (split.get("single_game_candidates") or []) if ticker_upper(m).startswith(winner_prefix)
@@ -568,6 +569,12 @@ def fetch_kalshi_markets(
                     if ticker_upper(m).startswith(winner_prefix)
                 ]
                 game_pool_counts = prefix_count(game_pool)
+        if not game_pool and markets_raw:
+            # Local fallback to avoid futures-only false positives
+            local_pool = [m for m in markets_raw if winner_prefix in ticker_upper(m)]
+            if local_pool:
+                game_pool = local_pool
+                game_pool_counts = prefix_count(game_pool)
         if not game_pool and split.get("single_game_candidates"):
             game_pool = [
                 m for m in (split.get("single_game_candidates") or []) if ticker_upper(m).startswith(winner_prefix)
@@ -584,6 +591,7 @@ def fetch_kalshi_markets(
         st.session_state["kalshi_fetch_debug"] = {
             "fetched_total": len(markets_raw),
             "fetched_game_prefix": game_pool_counts.get("count_prefix_game"),
+            "kxnbagame_in_raw": kx_game_count,
             "wanted_tokens": sorted(list(wanted_tokens)) if wanted_tokens else [],
             "after_token_filter": len(game_pool),
             "request_params": st.session_state.get("kalshi_request_params_snapshot", {}),
@@ -987,7 +995,7 @@ def filter_kalshi_game_markets(
 
         game_dt = game_time_utc
         if isinstance(game_dt, str):
-            game_dt = parse_kalshi_datetime(game_dt) or parse_commence_to_utc(game_dt)
+            game_dt = parse_commence_to_utc(game_dt)
         if isinstance(game_dt, datetime) and game_dt.tzinfo is None:
             game_dt = game_dt.replace(tzinfo=timezone.utc)
         game_local = game_dt.astimezone(local_tz) if (game_dt and local_tz) else game_dt
@@ -1275,14 +1283,13 @@ def match_kalshi_market(
 
     league_name = league_from_game(game)
 
-    game_dt_utc = (
-        game.get("commence_time_utc")
-        or game.get("commence_time_iso_utc")
+    commence_raw = (
+        game.get("commence_time_iso_utc")
         or game.get("commence_time")
         or game.get("commence_time_iso")
+        or game.get("commence_time_utc")
     )
-    if isinstance(game_dt_utc, str):
-        game_dt_utc = parse_kalshi_datetime(game_dt_utc)
+    game_dt_utc = parse_commence_to_utc(commence_raw)
     if isinstance(game_dt_utc, datetime) and game_dt_utc.tzinfo is None:
         game_dt_utc = game_dt_utc.replace(tzinfo=timezone.utc)
 
@@ -1781,10 +1788,17 @@ with tab_master:
             kalshi_spread: Dict[str, Any] = {}
             kalshi_total: Dict[str, Any] = {}
 
+            commence_for_match = (
+                g.get("commence_time_iso_utc")
+                or g.get("commence_time")
+                or g.get("commence_time_iso")
+                or g.get("commence_time_utc")
+            )
+
             # --- 2. Kalshi Matching Logic (RESTORED) ---
             filtered_markets = filter_kalshi_game_markets(
                 league_markets,
-                g.get("commence_time_utc"),
+                commence_for_match,
                 league_name,
                 home,
                 away,
