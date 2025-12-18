@@ -540,6 +540,9 @@ def fetch_kalshi_markets(
         game_prefix_used = (kalshi_integrator.last_fetch_meta or {}).get(
             "game_prefix_used", winner_prefix
         )
+        st.session_state.setdefault("kalshi_game_prefix_map", {})[
+            league_upper
+        ] = game_prefix_used
         raw_counts = prefix_count(markets_raw, active_prefix=game_prefix_used)
         kx_game_count = len(
             [m for m in markets_raw if ticker_upper(m).startswith(f"{game_prefix_used}-")]
@@ -578,6 +581,9 @@ def fetch_kalshi_markets(
                     game_prefix_used = detected_prefix
                 game_pool_counts = prefix_count(game_pool, active_prefix=game_prefix_used)
         game_pool_counts = prefix_count(game_pool, active_prefix=game_prefix_used)
+        st.session_state.setdefault("kalshi_game_prefix_map", {})[
+            league_upper
+        ] = game_prefix_used
 
         if wanted_tokens:
             filtered = []
@@ -1040,7 +1046,12 @@ def filter_kalshi_game_markets(
         date_token = game_local.strftime("%y%b%d").upper() if game_local else kalshi_date_token_from_local(game_time_utc)
         date_token = date_token or "UNKNOWN"
 
-        winner_prefix = league_game_prefix(league)
+        league_upper = (league or "").upper()
+        winner_prefix = league_game_prefix(league_upper)
+        prefix_overrides = (st.session_state.get("kalshi_game_prefix_map") or {}).get(
+            league_upper
+        )
+        allowed_prefixes = [p for p in [winner_prefix, prefix_overrides] if p]
 
         # Prefer provided codes; fall back to mapping from team names and extra heuristics.
         home_codes = []
@@ -1058,7 +1069,16 @@ def filter_kalshi_game_markets(
         matched: List[Dict[str, Any]] = []
         for m in markets or []:
             t = ticker_upper(m)
-            if "GAME" not in t or not t.startswith(winner_prefix):
+            if "GAME" not in t:
+                continue
+
+            prefix_ok = any(t.startswith(pfx) for pfx in allowed_prefixes)
+
+            if not prefix_ok and league_upper in {"NCAAB", "NCAAF"}:
+                if ("NCAAB" in t or "NCAA" in t or "NCAAF" in t) and "GAME" in t:
+                    prefix_ok = True
+
+            if not prefix_ok:
                 continue
             if date_token and date_token not in t:
                 continue
@@ -1716,6 +1736,11 @@ with tab_master:
             st.warning(warn_detail)
         if kalshi_status.get("warning"):
             st.warning(kalshi_status.get("warning"))
+    kalshi_match_only = st.checkbox(
+        "Show only games with a Kalshi match",
+        value=st.session_state.get("kalshi_match_only", False),
+    )
+    st.session_state["kalshi_match_only"] = kalshi_match_only
     run_master = st.button(
         "Run Master Analysis",
         key="run_master",
@@ -1975,13 +2000,21 @@ with tab_master:
                 )
 
             # --- 4. DATA ROW GENERATION ---
-            
+
             # MONEYLINE ROW
-            if home_ml is not None or away_ml is not None:
+            def _ml_extreme(price: Optional[float]) -> bool:
+                try:
+                    return abs(float(price)) >= 500
+                except Exception:
+                    return False
+
+            extreme_ml = _ml_extreme(home_ml) or _ml_extreme(away_ml)
+
+            if (home_ml is not None or away_ml is not None) and not extreme_ml:
                 pick = home if (implied_home or 0) >= (implied_away or 0) else away
                 implied_pick = implied_home if pick == home else implied_away
                 ai_prob_row = blended_for_selection(pick, market_home_prob)
-                
+
                 rows_out.append({
                     "League": league_name, "Home": home, "Away": away,
                     "Commence (UTC)": commence_iso, "Commence (Local)": commence_local,
@@ -1997,6 +2030,8 @@ with tab_master:
                 })
                 master_stats["h2h_found"] += 1
                 master_stats["market_rows_out"] += 1
+            elif extreme_ml:
+                warnings = list(dict.fromkeys(warnings + ["moneyline_extreme_skipped"]))
 
             # SPREAD ROW
             if g.get("home_spread_point") is not None:
@@ -2037,6 +2072,9 @@ with tab_master:
             if key not in deduped_rows:
                 deduped_rows[key] = row
         deduped_list = list(deduped_rows.values())
+
+        if st.session_state.get("kalshi_match_only"):
+            deduped_list = [r for r in deduped_list if r.get("kalshi_matched")]
         df = pd.DataFrame(deduped_list)
 
         master_stats["rows_out"] = len(deduped_list)
