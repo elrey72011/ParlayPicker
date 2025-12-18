@@ -440,8 +440,8 @@ class VertexMasterAnalyzer:
                     try:
                         feats = {
                             "implied_home_prob": implied_home_prob,
-                            "sentiment_diff": 0.0,
-                            "kalshi_prob": None,
+                            "sentiment_diff": game.get("sentiment_diff", 0.0), # Pull real sentiment
+                            "kalshi_prob": game.get("kalshi_prob"),           # Pull real Kalshi odds
                         }
                         feat_row = self.build_vertex_feature_row(feats)
                         probs = predict_win_probabilities(
