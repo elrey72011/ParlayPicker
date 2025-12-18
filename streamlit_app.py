@@ -1658,49 +1658,34 @@ with tab_master:
             "kalshi_total": len(games),
         }
         kalshi_match_results: List[Dict[str, Any]] = []
+        # --- CLEANED MASTER ANALYSIS LOOP ---
         for idx, g in enumerate(games):
             warnings: List[str] = list(g.get("warnings") or [])
             league_name = g.get("league")
             home = g.get("home_team")
             away = g.get("away_team")
-            commence_iso = g.get("commence_time_iso_utc") or safe_iso(g.get("commence_time_iso"))
-            commence_local = fmt_local_time(g.get("commence_time_local"))
-            commence_date_local = g.get("commence_date_local") or ""
-            away_code = nba_abbrev(away)
-            home_code = nba_abbrev(home)
-
-            # 1. Step 2 Integration: Get Sentiment Scores
+            
+            # 1. Fetch Sentiment Scores (calculated once per game)
             home_sent = sentiment_map.get(home, 0.0)
             away_sent = sentiment_map.get(away, 0.0)
             sentiment_diff = home_sent - away_sent
 
-            # 2. Kalshi Matching Logic
+            # 2. Kalshi Market Discovery & Matching
+            # This logic only needs to run once per game
             filtered_markets = filter_kalshi_game_markets(
                 kalshi_markets,
                 g.get("commence_time_utc"),
                 league_name,
                 home,
                 away,
-                home_code,
-                away_code,
+                nba_abbrev(home),
+                nba_abbrev(away),
             )
             
-            # De-dupe and count (The block you were asking about)
-            deduped: Dict[str, Dict[str, Any]] = {}
-            for fm in filtered_markets:
-                key = fm.get("event_ticker") or fm.get("ticker") or str(id(fm))
-                if key not in deduped:
-                    deduped[key] = fm
+            # De-dupe results
+            deduped = {m.get("event_ticker") or m.get("ticker"): m for m in filtered_markets}
             filtered_markets = list(deduped.values())
             filtered_counts.append(len(filtered_markets))
-            
-            partition_counts = {
-                "total": len([m for m in filtered_markets if classify_kalshi_market(m) == "total"]),
-                "spread": len([m for m in filtered_markets if classify_kalshi_market(m) == "spread"]),
-                "winner": len([m for m in filtered_markets if classify_kalshi_market(m) == "winner"]),
-                "prop": len([m for m in filtered_markets if classify_kalshi_market(m) == "prop"]),
-            }
-            # STOP PASTE HERE. The logic below handles the specific market results.
 
             winner_reason_override = None
             if (idx == 0 and first_game_full_search and not first_game_full_search.get("found_any_winner_market_for_game")):
@@ -1710,24 +1695,20 @@ with tab_master:
                 g, filtered_markets, winner_reason_override
             )
 
-            # 3. AI Predictions (Vertex)
-            vertex_prob_home = get_vertex_prob(g) # Fixed variable name
-
-            # 4. Final Blended Probabilities
+            # 3. AI & Market Probability Calculations
+            vertex_prob_home = get_vertex_prob(g)
             home_ml = g.get("home_ml_price")
             away_ml = g.get("away_ml_price")
             implied_home = american_to_implied_prob(home_ml)
             implied_away = american_to_implied_prob(away_ml)
             
-            # Use market_home_prob as the baseline for blending
-            market_home_prob = implied_home
-            if market_home_prob is None and implied_away is not None:
-                market_home_prob = max(0.0, min(1.0, 1.0 - implied_away))
+            market_home_prob = implied_home if implied_home is not None else (1.0 - implied_away if implied_away else 0.5)
 
-            def blended_for_selection(selection_team: str, market_prob_home: Optional[float]) -> float:
+            # Define the Blended Probability logic for this specific game
+            def blended_for_selection(selection_team: str, m_prob_home: Optional[float]) -> float:
                 selection_flag = "home" if selection_team == home else "away"
                 return blended_win_prob(
-                    market_prob=market_prob_home,
+                    market_prob=m_prob_home,
                     vertex_prob=vertex_prob_home,
                     theover_prob=None,
                     kalshi_prob=kalshi_matches.get("winner", {}).get("kalshi_prob"),
