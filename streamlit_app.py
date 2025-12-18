@@ -1718,7 +1718,8 @@ with tab_master:
                     "Sentiment_Diff": sentiment_diff,
                 })
                 master_stats["market_rows_out"] += 1
-        # --- 2. Kalshi Matching Logic (RESTORED) ---
+    
+            # --- 2. Kalshi Matching Logic (RESTORED) ---
             filtered_markets = filter_kalshi_game_markets(
                 kalshi_markets, g.get("commence_time_utc"), league_name,
                 home, away, home_code, away_code
@@ -1735,7 +1736,7 @@ with tab_master:
             
             kalshi_matches, candidate_debug = match_kalshi_market(g, filtered_markets, winner_reason_override)
             
-            # Extract specific Kalshi market results
+            # Extract specific Kalshi market results for the append logic
             kalshi_winner = kalshi_matches.get("winner", {})
             kalshi_spread = kalshi_matches.get("spread", {})
             kalshi_total = kalshi_matches.get("total", {})
