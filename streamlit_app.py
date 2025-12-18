@@ -1704,7 +1704,6 @@ with tab_master:
             
             market_home_prob = implied_home if implied_home is not None else (1.0 - implied_away if implied_away else 0.5)
 
-            # Define the Blended Probability logic for this specific game
             # Define the Blended Probability helper for this specific game
             def blended_for_selection(selection_team: str, market_prob_home: Optional[float]) -> float:
                 selection_flag = "home" if selection_team == home else "away"
