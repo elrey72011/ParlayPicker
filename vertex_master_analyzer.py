@@ -374,7 +374,7 @@ class VertexMasterAnalyzer:
             }
 
         # --- CORRECTED MASTER ANALYSIS LOOP ---
-                for idx, game in enumerate(games):
+        for idx, game in enumerate(games):
             try:
                 skey = (game.get("sport_key") or "").lower()
                 league_map = {
