@@ -81,6 +81,23 @@ NBA_TEAM_CODE_MAP: Dict[str, str] = {
     "SACRAMENTO KINGS": "SAC", "SAN ANTONIO SPURS": "SAS", "TORONTO RAPTORS": "TOR",
     "UTAH JAZZ": "UTA", "WASHINGTON WIZARDS": "WAS"
 }
+
+
+def team_name_to_code(league: str, team_name: str) -> Optional[str]:
+    """Translate a full team name into its Kalshi ticker code when available."""
+    if not team_name:
+        return None
+
+    league_u = (league or "").upper()
+    team_upper = str(team_name).strip().upper()
+
+    if league_u == "NBA":
+        mapping = globals().get("NBA_TEAM_CODE_MAP") or {}
+        if team_upper in mapping:
+            return mapping[team_upper]
+
+    cleaned = team_upper.replace(".", "").replace(",", "")
+    return None
 def normalize_status(status: Optional[str]) -> Optional[str]:
     if not status: return None
     s = str(status).strip().lower()
