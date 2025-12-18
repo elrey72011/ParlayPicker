@@ -1106,6 +1106,25 @@ class KalshiIntegrator:
             except: pass
         return None
 
+    def is_multivariate_bundle(self, market: Dict[str, Any]) -> bool:
+        """Identify multi-leg/bundle style markets that are not single-game lines."""
+
+        if not isinstance(market, dict):
+            return False
+
+        market_type = str(market.get("type") or "").lower()
+        if market_type in {"bundle", "multivariate", "portfolio"}:
+            return True
+
+        if market.get("legs") or market.get("leg_markets"):
+            return True
+
+        ticker = str(market.get("event_ticker") or market.get("ticker") or "").upper()
+        if ticker.startswith("KXMV"):
+            return True
+
+        return False
+
     def split_market_kinds(self, markets: List[Dict[str, Any]], league: Optional[str] = None) -> Dict[str, List[Dict[str, Any]]]:
         league_key = (league or "").upper()
         prefix = LEAGUE_SERIES_MAP.get(league_key, "")
