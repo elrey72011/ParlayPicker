@@ -567,14 +567,21 @@ def fetch_kalshi_markets(
                     "date_token_filter_removed_all_markets; using unfiltered pool"
                 )
 
-        st.session_state["kalshi_markets_raw"] = markets_raw
-        st.session_state["kalshi_markets_game_pool"] = game_pool
-        st.session_state["kalshi_all_markets"] = markets_raw
-        st.session_state["kalshi_prefix_counts"] = {
+        league_key = league_upper
+        st.session_state.setdefault("kalshi_markets_raw", {})[league_key] = markets_raw
+        st.session_state.setdefault("kalshi_markets_game_pool", {})[league_key] = game_pool
+        all_markets_map = st.session_state.setdefault("kalshi_all_markets_map", {})
+        all_markets_map[league_key] = markets_raw
+        combined_markets: List[Dict[str, Any]] = []
+        for mkts in all_markets_map.values():
+            combined_markets.extend(mkts or [])
+        st.session_state["kalshi_all_markets"] = combined_markets
+        prefix_counts_map = st.session_state.setdefault("kalshi_prefix_counts", {})
+        prefix_counts_map[league_key] = {
             "raw": {"total": len(markets_raw), **raw_counts},
             "game_pool": {"total": len(game_pool), **game_pool_counts},
         }
-        st.session_state["kalshi_prefix_samples_game"] = [
+        st.session_state.setdefault("kalshi_prefix_samples_game", {})[league_key] = [
             str(m.get("event_ticker") or m.get("ticker") or "")
             for m in game_pool[:20]
         ]
@@ -757,7 +764,8 @@ def kalshi_health(selected_league: str = "NBA") -> Dict[str, Any]:
         return base_health
 
     try:
-        prefix_counts = st.session_state.get("kalshi_prefix_counts")
+        all_prefix_counts = st.session_state.get("kalshi_prefix_counts") or {}
+        prefix_counts = all_prefix_counts.get(league_upper)
         markets_raw: List[Dict[str, Any]] = []
 
         if not prefix_counts or not prefix_counts.get("game_pool"):
@@ -773,10 +781,11 @@ def kalshi_health(selected_league: str = "NBA") -> Dict[str, Any]:
                     [t for t in tickers if t.startswith(base_series)]
                 ),
             }
-            st.session_state["kalshi_prefix_counts"] = prefix_counts
+            all_prefix_counts[league_upper] = prefix_counts
+            st.session_state["kalshi_prefix_counts"] = all_prefix_counts
 
         if not markets_raw:
-            markets_raw = st.session_state.get("kalshi_markets_raw") or []
+            markets_raw = (st.session_state.get("kalshi_markets_raw") or {}).get(league_upper, [])
 
         if not markets_raw:
             info = kalshi_integrator.last_error_info or {}
@@ -1004,9 +1013,15 @@ def filter_kalshi_game_markets(
 
         winner_prefix = league_game_prefix(league)
 
-        # Prefer provided codes; fall back to mapping from team names.
-        home_code_upper = (home_code or team_code_for_league(league, home_team) or "").upper()
-        away_code_upper = (away_code or team_code_for_league(league, away_team) or "").upper()
+        # Prefer provided codes; fall back to mapping from team names and extra heuristics.
+        home_codes = []
+        away_codes = []
+        if home_code:
+            home_codes.append(str(home_code).upper())
+        home_codes.extend(team_code_candidates(league, home_team))
+        if away_code:
+            away_codes.append(str(away_code).upper())
+        away_codes.extend(team_code_candidates(league, away_team))
 
         def ticker_upper(market: Dict[str, Any]) -> str:
             return str(market.get("event_ticker") or market.get("ticker") or "").upper()
@@ -1018,9 +1033,9 @@ def filter_kalshi_game_markets(
                 continue
             if date_token and date_token not in t:
                 continue
-            if home_code_upper and home_code_upper not in t:
+            if home_codes and not any(code in t for code in home_codes):
                 continue
-            if away_code_upper and away_code_upper not in t:
+            if away_codes and not any(code in t for code in away_codes):
                 continue
             matched.append(m)
 
@@ -1113,6 +1128,25 @@ def nba_abbrev(team_name: str) -> Optional[str]:
     for key, code in mapping.items():
         if key in cleaned:
             return code
+
+
+def team_code_candidates(league: str, team_name: Any) -> List[str]:
+    primary = (team_code_for_league(league, team_name) or "").upper()
+    cleaned = re.sub(r"[^A-Z0-9 ]", " ", str(team_name or "").upper()).strip()
+    tokens = [t for t in cleaned.split() if t]
+
+    candidates: List[str] = []
+    if primary:
+        candidates.append(primary)
+    for tok in tokens:
+        if tok:
+            candidates.extend([tok, tok[:3]])
+    if tokens:
+        initials = "".join(t[0] for t in tokens if t)
+        if len(initials) >= 2:
+            candidates.append(initials)
+    deduped = [c for c in dict.fromkeys(candidates) if c]
+    return deduped
     return None
 
 
@@ -1715,8 +1749,8 @@ with tab_master:
                     fg_markets,
                     fg.get("home_team"),
                     fg.get("away_team"),
-                    nba_abbrev(fg.get("home_team")),
-                    nba_abbrev(fg.get("away_team")),
+                    (team_code_candidates(fg_league, fg.get("home_team")) or [None])[0],
+                    (team_code_candidates(fg_league, fg.get("away_team")) or [None])[0],
                     league=fg_league,
                 )
             except Exception:
@@ -1750,8 +1784,8 @@ with tab_master:
                                 kalshi_markets_by_league.get(fg_league or league, []),
                                 fg.get("home_team"),
                                 fg.get("away_team"),
-                                nba_abbrev(fg.get("home_team")),
-                                nba_abbrev(fg.get("away_team")),
+                                (team_code_candidates(fg_league or league, fg.get("home_team")) or [None])[0],
+                                (team_code_candidates(fg_league or league, fg.get("away_team")) or [None])[0],
                                 league=fg_league or league,
                             )
                         except Exception:
@@ -2142,19 +2176,19 @@ with tab_debug:
             }
         )
         st.json(filter_stats)
-    prefix_counts = st.session_state.get("kalshi_prefix_counts")
-    if prefix_counts:
+    prefix_counts_map = st.session_state.get("kalshi_prefix_counts") or {}
+    if prefix_counts_map:
         st.subheader("Kalshi ticker prefix counts")
-        st.json(prefix_counts)
-        samples = st.session_state.get("kalshi_prefix_samples_game") or []
-        if samples:
-            st.caption("First 20 game-market tickers")
-            st.json(samples)
+        st.json(prefix_counts_map)
+        samples_map = st.session_state.get("kalshi_prefix_samples_game") or {}
+        if samples_map:
+            st.caption("First 20 game-market tickers (by league)")
+            st.json(samples_map)
     all_markets_debug = st.session_state.get("kalshi_all_markets") or []
     if games and all_markets_debug:
         fg = games[0]
-        home_code_dbg = nba_abbrev(fg.get("home_team"))
-        away_code_dbg = nba_abbrev(fg.get("away_team"))
+        home_code_dbg = (team_code_candidates(fg.get("league"), fg.get("home_team")) or [None])[0]
+        away_code_dbg = (team_code_candidates(fg.get("league"), fg.get("away_team")) or [None])[0]
         search_results = debug_search_markets_for_game(
             all_markets_debug,
             fg.get("home_team"),
