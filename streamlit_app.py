@@ -6,6 +6,7 @@ import traceback
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 from zoneinfo import ZoneInfo
+
 import pandas as pd
 import requests
 import streamlit as st
@@ -17,12 +18,12 @@ from vertex_master_analyzer import blended_win_prob
 st.set_page_config(page_title="ParlayDesk", layout="wide")
 
 # ------------------------------------------------------------
-# Kalshi Integration & Health
+# Kalshi Integration & Health Check
 # ------------------------------------------------------------
 kalshi_integrator: Optional[KalshiIntegrator] = None
 
 def kalshi_health_check(selected_league: str = "NBA") -> Dict[str, Any]:
-    """Unified health check for the UI."""
+    """Unified health check to replace all redundant definitions."""
     try:
         ki = st.session_state.get("kalshi_integrator")
         if ki is None:
@@ -42,7 +43,7 @@ def kalshi_health_check(selected_league: str = "NBA") -> Dict[str, Any]:
         return {"configured": True, "ok": False, "error": str(e)}
 
 # -----------------
-# Helper utilities
+# Helper Utilities
 # -----------------
 
 def read_secret(name: str, default: Optional[str] = None) -> Optional[str]:
@@ -55,10 +56,9 @@ def american_to_implied_prob(odds: Any) -> Optional[float]:
     if odds is None: return None
     try:
         o = float(odds)
-        if o > 0: return 100.0 / (o + 100.0)
-        if o < 0: return (-o) / ((-o) + 100.0)
-    except Exception: pass
-    return None
+        if o == 0: return None
+        return 100.0 / (o + 100.0) if o > 0 else (-o) / ((-o) + 100.0)
+    except Exception: return None
 
 def safe_iso(value: Any) -> Optional[str]:
     if value is None: return None
@@ -95,7 +95,6 @@ def normalize_commence_times(games: List[Dict[str, Any]]) -> Tuple[List[Dict[str
         else:
             parsed += 1
             g["commence_time_utc"] = dt_utc
-            g["commence_time_iso_utc"] = dt_utc.isoformat().replace("+00:00", "Z")
             dt_local = dt_utc.astimezone(local_tz)
             g["commence_time_local"] = dt_local
             g["commence_date_local"] = dt_local.strftime("%Y-%m-%d")
@@ -139,7 +138,7 @@ def extract_best_market(game: Dict[str, Any]) -> Dict[str, Any]:
     return results
 
 # -----------------
-# API CONFIG & STATE
+# API Clients
 # -----------------
 
 SPORT_KEYS = {"NBA": "basketball_nba", "NFL": "americanfootball_nfl", "NHL": "icehockey_nhl", "MLB": "baseball_mlb"}
@@ -156,11 +155,11 @@ if "kalshi_integrator" not in st.session_state:
         st.session_state["kalshi_integrator"] = None
 
 def get_vertex_prob(game: Dict[str, Any]) -> Optional[float]:
-    """Stub for Vertex score."""
+    """Stub for Vertex AI Master Analyzer."""
     return None
 
 # -----------------
-# MASTER ANALYSIS TAB
+# Streamlit Interface
 # -----------------
 
 st.sidebar.header("Controls")
@@ -173,60 +172,34 @@ if st.sidebar.button("Load Games"):
         for g in games: g.update(extract_best_market(g))
         st.session_state["games"] = games
 
-tab_master, tab_kalshi, tab_debug = st.tabs(["Master Analysis", "Kalshi Status", "Debug"])
+tab_games, tab_master, tab_kalshi, tab_sentiment, tab_debug = st.tabs(["Games", "Master Analysis", "Kalshi", "Sentiment", "Debug"])
 
 with tab_master:
     st.header("Master Analysis")
     games = st.session_state.get("games", [])
     if st.button("Run Master Analysis"):
+        # 1. PRE-CALCULATE AUXILIARY DATA
         sentiment_map, _ = build_team_sentiment_map(news_api_key, games, league) if news_api_key else ({}, {})
         kalshi_markets = st.session_state["kalshi_integrator"].get_sports_markets(league) if st.session_state["kalshi_integrator"] else []
         
         rows_out = []
         master_stats = {"market_rows_out": 0}
 
-        # --- CORRECTED MASTER ANALYSIS LOOP ---
         for idx, g in enumerate(games):
-            # 1. Core Data Gathering (Fixes NameErrors)
-            home, away = g.get("home_team"), g.get("away_team")
+            # 2. DEFINE VARIABLES AT THE START (Prevents NameErrors)
+            home, away = g["home_team"], g["away_team"]
             h_code, a_code = nba_abbrev(home), nba_abbrev(away)
             
-            # Calculate external data FIRST before generating any rows
+            # AI Score and Sentiment
             vertex_prob_home = get_vertex_prob(g)
-            
-            home_sent = sentiment_map.get(home, 0.0)
-            away_sent = sentiment_map.get(away, 0.0)
+            home_sent, away_sent = sentiment_map.get(home, 0.0), sentiment_map.get(away, 0.0)
             sentiment_diff = home_sent - away_sent
-        
-            # Kalshi Matching Logic
-            filtered_markets = filter_kalshi_game_markets(
-                kalshi_markets, g.get("commence_time_utc"), g.get("league"),
-                home, away, h_code, a_code
-            )
             
-            kalshi_matches, _ = match_kalshi_market(g, filtered_markets)
-            kalshi_winner = kalshi_matches.get("winner", {})
-        
-            # 2. Row Generation (Now safely uses defined variables)
-            if not (g.get("home_ml_price") or g.get("home_spread_point") or g.get("total_point")):
-                rows_out.append({
-                    "Game": f"{away} @ {home}",
-                    "AI_Prob": vertex_prob_home, # Now safely defined
-                    "kalshi_matched": kalshi_winner.get("kalshi_matched"),
-                    "Sentiment_Diff": sentiment_diff
-                })
-                continue
-        
-            # Proceed with Moneyline and Spread rows...
-            
-            # Kalshi Match (Helper logic used from your provided repository)
-            # Assuming match_kalshi_market is available or handled via integrator
-            k_winner = {"kalshi_prob": None, "kalshi_matched": False}
-            if st.session_state["kalshi_integrator"]:
-                 # This logic ensures BOS, GSW, etc. match correctly
-                 pass 
+            # Kalshi Matching
+            k_match, _ = match_kalshi_market(g, kalshi_markets) 
+            kalshi_winner = k_match.get("winner", {})
 
-            # Prob Helpers
+            # Probability Helpers
             implied_h = american_to_implied_prob(g.get("home_ml_price"))
             implied_a = american_to_implied_prob(g.get("away_ml_price"))
             market_home_prob = implied_h if implied_h else (1.0 - implied_a if implied_a else 0.5)
@@ -234,26 +207,26 @@ with tab_master:
             def blended_for_selection(team: str, m_prob: Optional[float]) -> float:
                 return blended_win_prob(
                     market_prob=m_prob, vertex_prob=vertex_prob_home,
-                    theover_prob=None, kalshi_prob=k_winner.get("kalshi_prob"),
+                    theover_prob=None, kalshi_prob=kalshi_winner.get("kalshi_prob"),
                     sentiment_diff=sentiment_diff, selection=("home" if team == home else "away")
                 )
 
-            # 3. GENERATE ROWS
+            # 3. GENERATE ROWS SAFELY
             if not (g.get("home_ml_price") or g.get("home_spread_point") or g.get("total_point")):
                 rows_out.append({
                     "Game": f"{away} @ {home}", "Market": "None", "AI_Prob": vertex_prob_home,
-                    "kalshi_matched": k_winner.get("kalshi_matched"), "Sentiment_Diff": sentiment_diff
+                    "kalshi_matched": kalshi_winner.get("kalshi_matched"), "Sentiment_Diff": sentiment_diff
                 })
                 master_stats["market_rows_out"] += 1
                 continue
 
-            # Moneyline Row
+            # Moneyline
             if g.get("home_ml_price") is not None:
                 pick = home if (implied_h or 0) >= (implied_a or 0) else away
                 rows_out.append({
                     "Game": f"{away} @ {home}", "Market": "Moneyline", "Pick": pick,
                     "AI_Prob": blended_for_selection(pick, market_home_prob),
-                    "Kalshi_Prob": k_winner.get("kalshi_prob")
+                    "Kalshi_Prob": kalshi_winner.get("kalshi_prob")
                 })
                 master_stats["market_rows_out"] += 1
 
@@ -261,3 +234,9 @@ with tab_master:
 
 with tab_kalshi:
     st.json(kalshi_health_check(league))
+
+with tab_sentiment:
+    st.write(st.session_state.get("sentiment_map", {}))
+
+with tab_debug:
+    st.write("Session State Stats:", master_stats if 'master_stats' in locals() else "No run yet")
