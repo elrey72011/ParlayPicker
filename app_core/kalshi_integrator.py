@@ -29,7 +29,18 @@ logger = logging.getLogger(__name__)
 # Constants & Mappings
 # ---------------------------------------------------------------------------
 SUPPORTED_LEAGUES = {"NBA", "NFL", "MLB", "NHL", "NCAAF", "NCAAB"}
-SAFE_STATUS_ALLOWLIST = {"active", "closed", "finalized", "settled"}
+SAFE_KALSHI_STATUSES = {"active", "finalized", "settled", "closed"}
+
+
+def normalize_status(status: Optional[str]) -> Optional[str]:
+    if not status:
+        return None
+    s = str(status).strip().lower()
+    if not s or s == "open":
+        return None
+    if s in SAFE_KALSHI_STATUSES:
+        return s
+    return None
 
 LEAGUE_SERIES_MAP: Dict[str, Any] = {
     "NBA": ["KXNBAGAME", "KXNBATOTAL", "KXNBASPREAD", "KXNBA"],
@@ -134,16 +145,6 @@ def team_code_for_league(league: str, team_name: str) -> str:
             return token_clean[:3]
 
     return (team_upper[:3] or "UNK").upper()
-def normalize_status(status: Optional[str]) -> Optional[str]:
-    """Allow only Kalshi-safe statuses; never return "open" or empty values."""
-
-    if status is None:
-        return None
-    s = str(status).strip().lower()
-    if not s or s == "open":
-        return None
-    return s if s in SAFE_STATUS_ALLOWLIST else None
-
 def price_to_prob(price: Any) -> Optional[float]:
     if price is None: return None
     try:
@@ -750,10 +751,10 @@ class KalshiIntegrator:
         cursor: Optional[str],
         extra_params: Optional[Dict[str, Any]],
     ) -> Dict[str, Any]:
+        norm = normalize_status(status)
         params: Dict[str, Any] = {}
         if limit is not None and limit != "":
             params["limit"] = limit
-        params.update(self._status_param(status))
         if cursor:
             params["cursor"] = cursor
         if extra_params:
@@ -761,7 +762,9 @@ class KalshiIntegrator:
                 if val is None or val == "":
                     continue
                 params[key] = val
-        return params
+        if norm:
+            params["status"] = norm
+        return {k: v for k, v in params.items() if v is not None and v != ""}
 
     def get_markets_paginated(
         self,
@@ -771,19 +774,26 @@ class KalshiIntegrator:
         cursor: Optional[str] = None,
         extra_params: Optional[Dict[str, Any]] = None,
     ) -> List[Dict[str, Any]]:
+        norm = normalize_status(status)
         all_markets: List[Dict[str, Any]] = []
         next_cursor = cursor
         pages = 0
         while pages < max_pages:
-            params = self._build_market_params(
-                status=status, limit=limit, cursor=next_cursor, extra_params=extra_params
-            )
+            params = {
+                "limit": limit,
+                "cursor": next_cursor,
+            }
+            if extra_params:
+                params.update(extra_params)
+            if norm:
+                params["status"] = norm
+            params = {k: v for k, v in params.items() if v is not None and v != ""}
             self.last_request_params = params
             try:
                 data = self._request("GET", "/markets", params=params)
             except KalshiAPIError:
-                status = (self.last_error_info or {}).get("status_code")
-                if status == 429:
+                status_code = (self.last_error_info or {}).get("status_code")
+                if status_code == 429:
                     logger.warning("Kalshi rate limited; returning cached markets where available.")
                     cached: List[Dict[str, Any]] = []
                     if self._markets_cache:
@@ -887,7 +897,8 @@ class KalshiIntegrator:
             logger.info(f"Using cached markets ({len(self._markets_cache)} items)")
             return self._markets_cache
 
-        all_markets = self.get_markets_paginated(status=status)
+        norm = normalize_status(status)
+        all_markets = self.get_markets_paginated(status=norm)
         self._markets_cache = all_markets
         self._markets_cache_ts = now
         logger.info(f"✅ Successfully loaded {len(all_markets)} Kalshi markets (paginated)")
@@ -926,7 +937,7 @@ class KalshiIntegrator:
     ) -> List[Dict[str, Any]]:
         league_key = (league or "").upper()
         prefix = LEAGUE_SERIES_MAP.get(league_key)
-        normalized_status = self.normalize_status(status)
+        normalized_status = normalize_status(status)
         cache_key = f"{league_key}:{normalized_status or 'any'}"
         now = time.time()
         cached = self._league_cache.get(cache_key)
@@ -947,19 +958,19 @@ class KalshiIntegrator:
         futures_hits = 0
 
         if league_key == "NBA":
-            nba_pages = self.get_nba_game_markets(
-                status=normalized_status, limit=200, max_pages=max_pages
-            )
-            pages = min(max_pages, max(1, len(nba_pages) // 200 + 1))
-            for m in nba_pages or []:
-                key = str(m.get("event_ticker") or m.get("ticker") or "").upper()
-                if key not in collected:
-                    collected[key] = m
-                if key.startswith("KXNBAGAME-"):
-                    game_hits += 1
-                elif key.startswith("KXNBA"):
-                    futures_hits += 1
-
+            series_order = ["KXNBAGAME", "KXNBA"]
+            for series in series_order:
+                chunk = self.get_markets_paginated(
+                    status=None,
+                    limit=200,
+                    max_pages=max_pages,
+                    extra_params={"series_ticker": series},
+                )
+                pages = max(pages, min(max_pages, len(chunk) // 200 + 1))
+                for m in chunk or []:
+                    key = str(m.get("event_ticker") or m.get("ticker") or "").upper()
+                    if key and key not in collected:
+                        collected[key] = m
             all_markets = list(collected.values())
             game_only = [
                 m
@@ -974,6 +985,8 @@ class KalshiIntegrator:
             ]
             if game_only:
                 all_markets = game_only
+            game_hits = len(game_only)
+            futures_hits = len(futures_noise)
         else:
             if series_targets:
                 for series in series_targets:
