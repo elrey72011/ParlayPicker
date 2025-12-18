@@ -18,12 +18,12 @@ from vertex_master_analyzer import blended_win_prob
 st.set_page_config(page_title="ParlayDesk", layout="wide")
 
 # ------------------------------------------------------------
-# Kalshi Integration & Health Check
+# Unified Kalshi Health Check
 # ------------------------------------------------------------
 kalshi_integrator: Optional[KalshiIntegrator] = None
 
 def kalshi_health_check(selected_league: str = "NBA") -> Dict[str, Any]:
-    """Unified health check to replace all redundant definitions."""
+    """Unified check to replace redundant definitions."""
     try:
         ki = st.session_state.get("kalshi_integrator")
         if ki is None:
@@ -56,9 +56,10 @@ def american_to_implied_prob(odds: Any) -> Optional[float]:
     if odds is None: return None
     try:
         o = float(odds)
-        if o == 0: return None
-        return 100.0 / (o + 100.0) if o > 0 else (-o) / ((-o) + 100.0)
-    except Exception: return None
+        if o > 0: return 100.0 / (o + 100.0)
+        if o < 0: return (-o) / ((-o) + 100.0)
+    except Exception: pass
+    return None
 
 def safe_iso(value: Any) -> Optional[str]:
     if value is None: return None
@@ -138,7 +139,7 @@ def extract_best_market(game: Dict[str, Any]) -> Dict[str, Any]:
     return results
 
 # -----------------
-# API Clients
+# API CONFIG & STATE
 # -----------------
 
 SPORT_KEYS = {"NBA": "basketball_nba", "NFL": "americanfootball_nfl", "NHL": "icehockey_nhl", "MLB": "baseball_mlb"}
@@ -151,15 +152,14 @@ kalshi_api_secret = read_secret("KALSHI_API_SECRET")
 if "kalshi_integrator" not in st.session_state:
     if kalshi_api_key and kalshi_api_secret:
         st.session_state["kalshi_integrator"] = KalshiIntegrator(kalshi_api_key, kalshi_api_secret)
-    else:
-        st.session_state["kalshi_integrator"] = None
+    else: st.session_state["kalshi_integrator"] = None
 
 def get_vertex_prob(game: Dict[str, Any]) -> Optional[float]:
-    """Stub for Vertex AI Master Analyzer."""
+    """Stub for Vertex score."""
     return None
 
 # -----------------
-# Streamlit Interface
+# MAIN INTERFACE
 # -----------------
 
 st.sidebar.header("Controls")
@@ -172,13 +172,12 @@ if st.sidebar.button("Load Games"):
         for g in games: g.update(extract_best_market(g))
         st.session_state["games"] = games
 
-tab_games, tab_master, tab_kalshi, tab_sentiment, tab_debug = st.tabs(["Games", "Master Analysis", "Kalshi", "Sentiment", "Debug"])
+tab_master, tab_kalshi, tab_debug = st.tabs(["Master Analysis", "Kalshi Status", "Debug"])
 
 with tab_master:
     st.header("Master Analysis")
     games = st.session_state.get("games", [])
     if st.button("Run Master Analysis"):
-        # 1. PRE-CALCULATE AUXILIARY DATA
         sentiment_map, _ = build_team_sentiment_map(news_api_key, games, league) if news_api_key else ({}, {})
         kalshi_markets = st.session_state["kalshi_integrator"].get_sports_markets(league) if st.session_state["kalshi_integrator"] else []
         
@@ -186,20 +185,20 @@ with tab_master:
         master_stats = {"market_rows_out": 0}
 
         for idx, g in enumerate(games):
-            # 2. DEFINE VARIABLES AT THE START (Prevents NameErrors)
+            # 1. SETUP VARIABLES (Fixes NameErrors)
             home, away = g["home_team"], g["away_team"]
             h_code, a_code = nba_abbrev(home), nba_abbrev(away)
             
-            # AI Score and Sentiment
+            # 2. CALCULATE EXTERNAL DATA BEFORE GENERATING ROWS
             vertex_prob_home = get_vertex_prob(g)
             home_sent, away_sent = sentiment_map.get(home, 0.0), sentiment_map.get(away, 0.0)
             sentiment_diff = home_sent - away_sent
             
-            # Kalshi Matching
+            # Kalshi Match (Uses correct internal team codes)
             k_match, _ = match_kalshi_market(g, kalshi_markets) 
             kalshi_winner = k_match.get("winner", {})
 
-            # Probability Helpers
+            # Prob Helpers
             implied_h = american_to_implied_prob(g.get("home_ml_price"))
             implied_a = american_to_implied_prob(g.get("away_ml_price"))
             market_home_prob = implied_h if implied_h else (1.0 - implied_a if implied_a else 0.5)
@@ -220,7 +219,7 @@ with tab_master:
                 master_stats["market_rows_out"] += 1
                 continue
 
-            # Moneyline
+            # Moneyline Row
             if g.get("home_ml_price") is not None:
                 pick = home if (implied_h or 0) >= (implied_a or 0) else away
                 rows_out.append({
@@ -234,9 +233,3 @@ with tab_master:
 
 with tab_kalshi:
     st.json(kalshi_health_check(league))
-
-with tab_sentiment:
-    st.write(st.session_state.get("sentiment_map", {}))
-
-with tab_debug:
-    st.write("Session State Stats:", master_stats if 'master_stats' in locals() else "No run yet")
