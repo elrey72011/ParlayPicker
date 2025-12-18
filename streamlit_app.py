@@ -1704,18 +1704,35 @@ with tab_master:
             
             market_home_prob = implied_home if implied_home is not None else (1.0 - implied_away if implied_away else 0.5)
 
-            # Define the Blended Probability helper for this specific game
-            def blended_for_selection(selection_team: str, market_prob_home: Optional[float]) -> float:
+            # 1. Define the Blended Probability logic (Return a single float)
+            def blended_for_selection(selection_team: str, m_prob_home: Optional[float]) -> float:
                 selection_flag = "home" if selection_team == home else "away"
-                # CRITICAL: Added the 'selection' argument to the function call
+                # Ensure ALL required arguments are passed
                 return blended_win_prob(
-                    market_prob=market_prob_home,
+                    market_prob=m_prob_home,
                     vertex_prob=vertex_prob_home,
                     theover_prob=None,
                     kalshi_prob=kalshi_matches.get("winner", {}).get("kalshi_prob"),
                     sentiment_diff=sentiment_diff,
-                    selection=selection_flag,  # <--- Fixes the TypeError
+                    selection=selection_flag, 
                 )
+
+            # 2. MONEYLINE ROW
+            if home_ml is not None or away_ml is not None:
+                pick = home if (implied_home or 0) >= (implied_away or 0) else away
+                implied_pick = implied_home if pick == home else implied_away
+                ai_prob_row = blended_for_selection(pick, market_home_prob)
+                
+                rows_out.append({
+                    "League": league_name,
+                    "Home": home, "Away": away,
+                    "Market": "Moneyline",
+                    "Pick": pick,
+                    "Implied_Prob": implied_pick,
+                    "AI_Prob": ai_prob_row,
+                    "Sentiment_Diff": sentiment_diff,
+                    # ... Add other columns like kalshi_matched here ...
+                })
                 rows_out.append(
                     {
                         "League": league_name,
