@@ -135,9 +135,11 @@ with tab_master:
             
             st.dataframe(pd.DataFrame(rows_out), use_container_width=True)
 
-# --- TAB DEFINITIONS ---
+# --- 1. DEFINE TABS FIRST (Fixes NameError) ---
+# This line must come BEFORE any "with tab_master:" blocks
 tab_master, tab_kalshi, tab_debug = st.tabs(["Master Analysis", "Kalshi Status", "Debug"])
 
+# --- 2. MASTER ANALYSIS TAB CONTENT ---
 with tab_master:
     st.header("Best Bets Analysis")
     games = st.session_state.get("games", [])
@@ -146,7 +148,7 @@ with tab_master:
         if not games:
             st.warning("No games loaded. Please load games from the sidebar first.")
         else:
-            # Gather global auxiliary data once per run
+            # Gather global data once per run
             ki = st.session_state.get("kalshi_integrator")
             k_markets = ki.get_sports_markets(selected_league) if ki else []
             sentiment_map, _ = build_team_sentiment_map(news_api_key, games, selected_league) if news_api_key else ({}, {})
@@ -155,18 +157,17 @@ with tab_master:
             master_stats = {"market_rows_out": 0}
 
             for idx, g in enumerate(games):
-                # 1. SETUP VARIABLES IMMEDIATELY (Fixes NameErrors)
+                # A. SETUP VARIABLES (Fixes NameErrors and Sequencing)
                 league_name = g.get("league") or selected_league
                 home, away = g.get("home_team"), g.get("away_team")
                 h_code, a_code = nba_abbrev(home), nba_abbrev(away)
                 
-                # 2. CALCULATE EXTERNAL DATA BEFORE GENERATING ROWS
-                # vertex_prob_home and sentiment_diff must be defined at the start of each iteration
+                # B. CALCULATE EXTERNAL DATA (Brain logic)
                 vertex_prob_home = get_vertex_prob(g)
                 home_sent, away_sent = sentiment_map.get(home, 0.0), sentiment_map.get(away, 0.0)
                 sentiment_diff = home_sent - away_sent
                 
-                # Kalshi Matching Logic
+                # C. KALSHI MATCHING
                 filtered_k = filter_kalshi_game_markets(
                     k_markets, g.get("commence_time_utc"), league_name,
                     home, away, h_code, a_code
@@ -177,60 +178,54 @@ with tab_master:
                 kalshi_spread = k_match_results.get("spread", {})
                 kalshi_total = k_match_results.get("total", {})
 
-                # 3. PROBABILITY HELPERS
-                home_ml = g.get("home_ml_price")
-                away_ml = g.get("away_ml_price")
+                # D. PROBABILITY HELPERS
+                home_ml, away_ml = g.get("home_ml_price"), g.get("away_ml_price")
                 implied_h = american_to_implied_prob(home_ml)
                 implied_a = american_to_implied_prob(away_ml)
                 market_home_prob = implied_h if implied_h else (1.0 - implied_a if implied_a else 0.5)
 
-                def blended_for_selection(team_side: str, m_prob_val: Optional[float], k_prob_val: Optional[float]) -> float:
+                def blended_for_selection(side: str, m_prob: Optional[float], k_prob: Optional[float]) -> float:
                     return blended_win_prob(
-                        market_prob=m_prob_val, vertex_prob=vertex_prob_home,
-                        theover_prob=None, kalshi_prob=k_prob_val,
-                        sentiment_diff=sentiment_diff, selection=team_side
+                        market_prob=m_prob, vertex_prob=vertex_prob_home,
+                        theover_prob=None, kalshi_prob=k_prob,
+                        sentiment_diff=sentiment_diff, selection=side
                     )
 
-                # 4. DATA ROW GENERATION
-                # FALLBACK: If no odds exist, show raw AI score
+                # E. RESTORE DATA ROWS (Moneyline, Spread, Total)
                 if not (home_ml or g.get("home_spread_point") or g.get("total_point")):
                     rows_out.append({
-                        "Game": f"{away} @ {home}", "Market": "None", "AI Prob": vertex_prob_home,
-                        "Kalshi": "No Match", "Sentiment": sentiment_diff
+                        "Game": f"{away} @ {home}", "Market": "None", "AI Win Prob": vertex_prob_home,
+                        "Kalshi Match": "No Match", "Sentiment Diff": sentiment_diff
                     })
                     continue
 
-                # MONEYLINE ROW
                 if home_ml is not None:
                     pick = home if (implied_h or 0) >= (implied_a or 0) else away
                     rows_out.append({
                         "Game": f"{away} @ {home}", "Market": "Moneyline", "Pick": pick,
                         "AI Win Prob": blended_for_selection("home" if pick == home else "away", market_home_prob, kalshi_winner.get("kalshi_prob")),
-                        "Kalshi Match": kalshi_winner.get("kalshi_matched")
+                        "Kalshi Prob": kalshi_winner.get("kalshi_prob")
                     })
                     master_stats["market_rows_out"] += 1
 
-                # SPREAD ROW
                 if g.get("home_spread_point") is not None:
                     rows_out.append({
                         "Game": f"{away} @ {home}", "Market": "Spread", "Line": g.get("home_spread_point"),
                         "AI Win Prob": blended_for_selection("home", market_home_prob, kalshi_spread.get("kalshi_prob")),
-                        "Kalshi Match": kalshi_spread.get("kalshi_matched")
+                        "Kalshi Prob": kalshi_spread.get("kalshi_prob")
                     })
                     master_stats["market_rows_out"] += 1
 
-                # TOTAL ROW
                 if g.get("total_point") is not None:
                     rows_out.append({
                         "Game": f"{away} @ {home}", "Market": "Total", "Line": g.get("total_point"),
                         "AI Win Prob": blended_for_selection("home", market_home_prob, kalshi_total.get("kalshi_prob")),
-                        "Kalshi Match": kalshi_total.get("kalshi_matched")
+                        "Kalshi Prob": kalshi_total.get("kalshi_prob")
                     })
                     master_stats["market_rows_out"] += 1
 
-            # Output as table
             st.dataframe(pd.DataFrame(rows_out), use_container_width=True)
-
+            
 with tab_kalshi:
     st.header("API Connectivity")
     if st.session_state.get("kalshi_integrator"):
