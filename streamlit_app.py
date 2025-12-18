@@ -1140,11 +1140,27 @@ def team_code_candidates(league: str, team_name: Any) -> List[str]:
         candidates.append(primary)
     for tok in tokens:
         if tok:
-            candidates.extend([tok, tok[:3]])
+            candidates.extend([tok, tok[:3], tok[:2]])
     if tokens:
         initials = "".join(t[0] for t in tokens if t)
         if len(initials) >= 2:
             candidates.append(initials)
+            candidates.append(initials[:2])
+        first_two_initials = "".join(t[0] for t in tokens[:2] if t)
+        if len(first_two_initials) >= 2:
+            candidates.append(first_two_initials)
+
+        # Common college-style abbreviations (e.g., ARST, MOSU)
+        if len(tokens) >= 2 and tokens[1] in {"STATE", "ST"}:
+            first = tokens[0]
+            first2 = first[:2]
+            first3 = first[:3]
+            candidates.extend([f"{first2}ST", f"{first3}ST", f"{first2}SU", f"{first3}SU"])
+        if len(tokens) >= 2 and tokens[1] in {"UNIVERSITY", "UNIV", "U"}:
+            first = tokens[0]
+            first2 = first[:2]
+            first3 = first[:3]
+            candidates.extend([f"{first2}U", f"{first3}U"])
     deduped = [c for c in dict.fromkeys(candidates) if c]
     return deduped
     return None
