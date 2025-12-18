@@ -25,11 +25,37 @@ from cryptography.hazmat.primitives.asymmetric import padding
 
 logger = logging.getLogger(__name__)
 
+__all__ = ["KalshiIntegrator", "LEAGUE_SERIES_MAP", "KalshiMatchResult"]
+
+
+@dataclass
+class KalshiMatchResult:
+    matched: bool = False
+    league: str = ""
+    event_ticker: Optional[str] = None
+    market_ticker: Optional[str] = None
+    title: Optional[str] = None
+    yes_bid: Optional[int] = None
+    yes_ask: Optional[int] = None
+    mid_prob: Optional[float] = None
+    reason: Optional[str] = None
+
 # ---------------------------------------------------------------------------
 # Constants & Mappings
 # ---------------------------------------------------------------------------
 SUPPORTED_LEAGUES = {"NBA", "NFL", "MLB", "NHL", "NCAAF", "NCAAB"}
-SAFE_STATUS_ALLOWLIST = {"active", "closed", "finalized", "settled"}
+SAFE_KALSHI_STATUSES = {"active", "finalized", "settled", "closed"}
+
+
+def normalize_status(status: Optional[str]) -> Optional[str]:
+    if not status:
+        return None
+    s = str(status).strip().lower()
+    if not s or s == "open":
+        return None
+    if s in SAFE_KALSHI_STATUSES:
+        return s
+    return None
 
 LEAGUE_SERIES_MAP: Dict[str, Any] = {
     "NBA": ["KXNBAGAME", "KXNBATOTAL", "KXNBASPREAD", "KXNBA"],
@@ -39,6 +65,29 @@ LEAGUE_SERIES_MAP: Dict[str, Any] = {
     "NCAAF": ["KXNCAAFGAME", "KXNCAAF"],
     "NCAAB": ["KXNCAABGAME", "KXNCAAB"],
 }
+
+
+def league_series_ticker(league: str) -> Optional[str]:
+    league_key = (league or "").upper()
+    prefix = LEAGUE_SERIES_MAP.get(league_key)
+    if isinstance(prefix, list):
+        for candidate in prefix:
+            if not candidate:
+                continue
+            cand_upper = candidate.upper()
+            if cand_upper == f"KX{league_key}":
+                return candidate
+        for candidate in prefix:
+            if candidate and "GAME" not in candidate.upper():
+                return candidate
+        return prefix[-1] if prefix else None
+    return prefix
+
+
+def league_game_prefix(league: str) -> str:
+    league_key = (league or "").upper()
+    series = league_series_ticker(league_key) or f"KX{league_key}"
+    return f"{series}GAME"
 
 # Extensive abbreviation list
 KALSHI_TEAM_ABBREVIATIONS: Dict[str, List[str]] = {
@@ -134,16 +183,6 @@ def team_code_for_league(league: str, team_name: str) -> str:
             return token_clean[:3]
 
     return (team_upper[:3] or "UNK").upper()
-def normalize_status(status: Optional[str]) -> Optional[str]:
-    """Allow only Kalshi-safe statuses; never return "open" or empty values."""
-
-    if status is None:
-        return None
-    s = str(status).strip().lower()
-    if not s or s == "open":
-        return None
-    return s if s in SAFE_STATUS_ALLOWLIST else None
-
 def price_to_prob(price: Any) -> Optional[float]:
     if price is None: return None
     try:
@@ -750,10 +789,10 @@ class KalshiIntegrator:
         cursor: Optional[str],
         extra_params: Optional[Dict[str, Any]],
     ) -> Dict[str, Any]:
+        norm = normalize_status(status)
         params: Dict[str, Any] = {}
         if limit is not None and limit != "":
             params["limit"] = limit
-        params.update(self._status_param(status))
         if cursor:
             params["cursor"] = cursor
         if extra_params:
@@ -761,7 +800,9 @@ class KalshiIntegrator:
                 if val is None or val == "":
                     continue
                 params[key] = val
-        return params
+        if norm:
+            params["status"] = norm
+        return {k: v for k, v in params.items() if v is not None and v != ""}
 
     def get_markets_paginated(
         self,
@@ -771,19 +812,26 @@ class KalshiIntegrator:
         cursor: Optional[str] = None,
         extra_params: Optional[Dict[str, Any]] = None,
     ) -> List[Dict[str, Any]]:
+        norm = normalize_status(status)
         all_markets: List[Dict[str, Any]] = []
         next_cursor = cursor
         pages = 0
         while pages < max_pages:
-            params = self._build_market_params(
-                status=status, limit=limit, cursor=next_cursor, extra_params=extra_params
-            )
+            params = {
+                "limit": limit,
+                "cursor": next_cursor,
+            }
+            if extra_params:
+                params.update(extra_params)
+            if norm:
+                params["status"] = norm
+            params = {k: v for k, v in params.items() if v is not None and v != ""}
             self.last_request_params = params
             try:
                 data = self._request("GET", "/markets", params=params)
             except KalshiAPIError:
-                status = (self.last_error_info or {}).get("status_code")
-                if status == 429:
+                status_code = (self.last_error_info or {}).get("status_code")
+                if status_code == 429:
                     logger.warning("Kalshi rate limited; returning cached markets where available.")
                     cached: List[Dict[str, Any]] = []
                     if self._markets_cache:
@@ -887,7 +935,8 @@ class KalshiIntegrator:
             logger.info(f"Using cached markets ({len(self._markets_cache)} items)")
             return self._markets_cache
 
-        all_markets = self.get_markets_paginated(status=status)
+        norm = normalize_status(status)
+        all_markets = self.get_markets_paginated(status=norm)
         self._markets_cache = all_markets
         self._markets_cache_ts = now
         logger.info(f"✅ Successfully loaded {len(all_markets)} Kalshi markets (paginated)")
@@ -926,7 +975,7 @@ class KalshiIntegrator:
     ) -> List[Dict[str, Any]]:
         league_key = (league or "").upper()
         prefix = LEAGUE_SERIES_MAP.get(league_key)
-        normalized_status = self.normalize_status(status)
+        normalized_status = normalize_status(status)
         cache_key = f"{league_key}:{normalized_status or 'any'}"
         now = time.time()
         cached = self._league_cache.get(cache_key)
@@ -935,83 +984,66 @@ class KalshiIntegrator:
             return cached.get("markets", [])
 
         futures_noise: List[Dict[str, Any]] = []
-        series_targets = (
-            prefix
-            if isinstance(prefix, list)
-            else [prefix] if prefix else []
-        )
         collected: Dict[str, Dict[str, Any]] = {}
         pages = 0
         prefix_hits = 0
         game_hits = 0
         futures_hits = 0
 
-        if league_key == "NBA":
-            nba_pages = self.get_nba_game_markets(
-                status=normalized_status, limit=200, max_pages=max_pages
-            )
-            pages = min(max_pages, max(1, len(nba_pages) // 200 + 1))
-            for m in nba_pages or []:
-                key = str(m.get("event_ticker") or m.get("ticker") or "").upper()
-                if key not in collected:
-                    collected[key] = m
-                if key.startswith("KXNBAGAME-"):
-                    game_hits += 1
-                elif key.startswith("KXNBA"):
-                    futures_hits += 1
+        series_targets: List[str] = []
+        game_prefix = league_game_prefix(league_key)
+        series_base = league_series_ticker(league_key)
 
-            all_markets = list(collected.values())
-            game_only = [
-                m
-                for m in all_markets
-                if str(m.get("event_ticker") or m.get("ticker") or "").upper().startswith("KXNBAGAME-")
-            ]
-            futures_noise = [
-                m
-                for m in all_markets
-                if str(m.get("event_ticker") or m.get("ticker") or "").upper().startswith("KXNBA-")
-                and not str(m.get("event_ticker") or m.get("ticker") or "").upper().startswith("KXNBAGAME-")
-            ]
-            if game_only:
-                all_markets = game_only
-        else:
-            if series_targets:
-                for series in series_targets:
-                    series_params = {"series_ticker": series} if series else None
-                    chunk = self.get_markets_paginated(
-                        status=normalized_status,
-                        limit=200,
-                        max_pages=max_pages,
-                        extra_params=series_params,
-                    )
-                    pages = max(pages, min(max_pages, len(chunk) // 200 + 1))
-                    for m in chunk or []:
-                        key = str(m.get("event_ticker") or m.get("ticker") or "").upper()
-                        if key not in collected:
-                            collected[key] = m
-                prefix_hits = len(
-                    [
-                        k
-                        for k in collected
-                        if any(k.startswith(str(s).upper()) for s in series_targets if s)
-                    ]
-                )
-            else:
-                all_markets = self.get_markets_paginated(
-                    status=normalized_status, limit=200, max_pages=max_pages
-                )
-                for m in all_markets:
-                    key = str(m.get("event_ticker") or m.get("ticker") or "").upper()
+        for candidate in [game_prefix, series_base]:
+            if candidate and candidate not in series_targets:
+                series_targets.append(candidate)
+        if isinstance(prefix, list):
+            for candidate in prefix:
+                if candidate and candidate not in series_targets:
+                    series_targets.append(candidate)
+        elif prefix and prefix not in series_targets:
+            series_targets.append(prefix)
+
+        for series in series_targets or [None]:
+            params = {"series_ticker": series} if series else None
+            chunk = self.get_markets_paginated(
+                status=None,
+                limit=200,
+                max_pages=max_pages,
+                extra_params=params,
+            )
+            pages = max(pages, min(max_pages, len(chunk) // 200 + 1))
+            for m in chunk or []:
+                key = str(m.get("event_ticker") or m.get("ticker") or "").upper()
+                if key and key not in collected:
                     collected[key] = m
-                pages = min(max_pages, len(all_markets) // 200 + 1)
-                prefix_hits = (
-                    len([k for k in collected if prefix and k.startswith(prefix)])
-                    if prefix
-                    else 0
-                )
-                all_markets = list(collected.values())
 
         all_markets = list(collected.values())
+        game_markets = [
+            m
+            for m in all_markets
+            if str(m.get("event_ticker") or m.get("ticker") or "").upper().startswith(f"{game_prefix}-")
+        ]
+        futures_noise = [
+            m
+            for m in all_markets
+            if series_base
+            and str(m.get("event_ticker") or m.get("ticker") or "").upper().startswith(f"{series_base}-")
+            and not str(m.get("event_ticker") or m.get("ticker") or "").upper().startswith(f"{game_prefix}-")
+        ]
+
+        prefix_hits = len(
+            [
+                k
+                for k in collected
+                if any(k.startswith(str(s).upper()) for s in series_targets if s)
+            ]
+        )
+        game_hits = len(game_markets)
+        futures_hits = len(futures_noise)
+
+        if game_markets:
+            all_markets = game_markets
 
         self.last_fetch_meta = {
             "league": league_key,
@@ -1021,13 +1053,13 @@ class KalshiIntegrator:
             "total_markets": len(all_markets),
             "prefix_hits": prefix_hits,
             "prefix": prefix,
-            "futures_noise": len(futures_noise) if league_key == "NBA" else None,
-            "nba_game_hits": game_hits if league_key == "NBA" else None,
-            "nba_futures_hits": futures_hits if league_key == "NBA" else None,
-            "filtered_to_game_markets": bool(game_hits) if league_key == "NBA" else None,
+            "futures_noise": len(futures_noise) if futures_noise else None,
+            "game_hits": game_hits,
+            "filtered_to_game_markets": bool(game_hits),
+            "series_targets": series_targets,
         }
-        if league_key == "NBA" and game_hits == 0 and all_markets:
-            self.last_fetch_meta["warning"] = "nba_futures_only_or_slate_missing"
+        if not game_markets and all_markets:
+            self.last_fetch_meta["warning"] = "game_markets_missing_or_futures_only"
         if not all_markets and not self.last_error_info:
             self.last_fetch_meta["note"] = "reachable_but_empty"
         self._league_cache[cache_key] = {
@@ -1074,9 +1106,29 @@ class KalshiIntegrator:
             except: pass
         return None
 
+    def is_multivariate_bundle(self, market: Dict[str, Any]) -> bool:
+        """Identify multi-leg/bundle style markets that are not single-game lines."""
+
+        if not isinstance(market, dict):
+            return False
+
+        market_type = str(market.get("type") or "").lower()
+        if market_type in {"bundle", "multivariate", "portfolio"}:
+            return True
+
+        if market.get("legs") or market.get("leg_markets"):
+            return True
+
+        ticker = str(market.get("event_ticker") or market.get("ticker") or "").upper()
+        if ticker.startswith("KXMV"):
+            return True
+
+        return False
+
     def split_market_kinds(self, markets: List[Dict[str, Any]], league: Optional[str] = None) -> Dict[str, List[Dict[str, Any]]]:
         league_key = (league or "").upper()
         prefix = LEAGUE_SERIES_MAP.get(league_key, "")
+        game_prefix = league_game_prefix(league_key)
         single_game: List[Dict[str, Any]] = []
         multivariate: List[Dict[str, Any]] = []
         other: List[Dict[str, Any]] = []
@@ -1085,11 +1137,8 @@ class KalshiIntegrator:
                 multivariate.append(m)
                 continue
             t = str(m.get("event_ticker") or m.get("ticker") or "").upper()
-            if league_key == "NBA":
-                if t.startswith("KXNBAGAME-"):
-                    single_game.append(m)
-                else:
-                    other.append(m)
+            if t.startswith(f"{game_prefix}-"):
+                single_game.append(m)
                 continue
             if isinstance(prefix, list):
                 if any(t.startswith(pfx) for pfx in prefix):
@@ -1172,15 +1221,16 @@ class KalshiIntegrator:
         return self.get_sports_markets(league=league)
 
     def _filter_markets_by_date_token(
-        self, markets: List[Dict[str, Any]], date_token: str
+        self, markets: List[Dict[str, Any]], date_token: str, league: Optional[str]
     ) -> List[Dict[str, Any]]:
         token_upper = (date_token or "").upper()
         if not token_upper:
             return []
+        game_prefix = league_game_prefix(league or "")
         bucket: List[Dict[str, Any]] = []
         for m in markets or []:
             et_upper = str(m.get("event_ticker") or m.get("ticker") or "").upper()
-            if et_upper.startswith(f"KXNBAGAME-{token_upper}"):
+            if et_upper.startswith(f"{game_prefix}-{token_upper}"):
                 bucket.append(m)
         return bucket
 
@@ -1199,7 +1249,7 @@ class KalshiIntegrator:
             return cached.get("payload", {})
 
         base_markets = self.get_league_markets(league_key, status=status)
-        bucket = self._filter_markets_by_date_token(base_markets, date_token)
+        bucket = self._filter_markets_by_date_token(base_markets, date_token, league_key)
 
         fetch_meta = {
             "league": league_key,
@@ -1210,8 +1260,10 @@ class KalshiIntegrator:
 
         # If bucket empty, broaden with limited pagination and targeted prefix pull
         all_markets = list(base_markets)
+        targeted: List[Dict[str, Any]] = []
+        targeted_prefix = f"{league_game_prefix(league_key)}-{date_token}"
+        extra: List[Dict[str, Any]] = []
         if not bucket:
-            targeted_prefix = f"KXNBAGAME-{date_token}"
             try:
                 targeted = self.get_markets_paginated(
                     status=status,
@@ -1219,29 +1271,32 @@ class KalshiIntegrator:
                     max_pages=5,
                     extra_params={"event_ticker_prefix": targeted_prefix},
                 )
-                all_markets.extend(targeted)
             except Exception:
                 targeted = []
-            extra = self.get_markets_paginated(
-                status=status, limit=200, max_pages=5
-            )
+            try:
+                extra = self.get_markets_paginated(
+                    status=status, limit=200, max_pages=5
+                )
+            except Exception:
+                extra = []
+            all_markets.extend(targeted)
             all_markets.extend(extra)
-            # De-dupe merged markets by event_ticker or ticker
-            dedup: Dict[str, Dict[str, Any]] = {}
-            for m in all_markets:
-                key = str(m.get("event_ticker") or m.get("ticker") or "")
-                if key and key not in dedup:
-                    dedup[key] = m
-            all_markets = list(dedup.values())
-            bucket = self._filter_markets_by_date_token(all_markets, date_token)
-            fetch_meta.update(
-                {
-                    "broadened_total": len(all_markets),
-                    "broadened_date_token_count": len(bucket),
-                    "targeted_prefix": targeted_prefix,
-                    "targeted_added": len(targeted),
-                }
-            )
+
+        dedup: Dict[str, Dict[str, Any]] = {}
+        for m in all_markets:
+            key = str(m.get("event_ticker") or m.get("ticker") or "")
+            if key and key not in dedup:
+                dedup[key] = m
+        all_markets = list(dedup.values())
+        bucket = self._filter_markets_by_date_token(all_markets, date_token, league_key)
+        fetch_meta.update(
+            {
+                "broadened_total": len(all_markets),
+                "broadened_date_token_count": len(bucket),
+                "targeted_prefix": targeted_prefix if not bucket else None,
+                "targeted_added": len(targeted),
+            }
+        )
 
         # Final de-dupe for bucket by event_ticker
         final_bucket: Dict[str, Dict[str, Any]] = {}
@@ -1253,11 +1308,12 @@ class KalshiIntegrator:
         # Date-token summary counts from all_markets (for debug)
         token_counts: Dict[str, int] = {}
         token_samples: Dict[str, List[str]] = {}
+        prefix_token = f"{league_game_prefix(league_key)}-"
         for m in all_markets:
             et = str(m.get("event_ticker") or m.get("ticker") or "").upper()
-            if "KXNBAGAME-" in et:
+            if prefix_token in et:
                 try:
-                    after = et.split("KXNBAGAME-")[1]
+                    after = et.split(prefix_token)[1]
                     token = after[:7]
                     token_counts[token] = token_counts.get(token, 0) + 1
                     if len(token_samples.get(token, [])) < 10:
