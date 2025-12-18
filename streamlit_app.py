@@ -1735,7 +1735,7 @@ with tab_master:
             
             kalshi_matches, candidate_debug = match_kalshi_market(g, filtered_markets, winner_reason_override)
             
-            # Extract specific Kalshi market results for the table
+            # Extract specific Kalshi market results
             kalshi_winner = kalshi_matches.get("winner", {})
             kalshi_spread = kalshi_matches.get("spread", {})
             kalshi_total = kalshi_matches.get("total", {})
@@ -1754,37 +1754,65 @@ with tab_master:
             def blended_for_selection(selection_team: str, m_prob_home: Optional[float]) -> float:
                 selection_flag = "home" if selection_team == home else "away"
                 return blended_win_prob(
-                    market_prob=m_prob_home,
-                    vertex_prob=vertex_prob_home,
-                    theover_prob=None,
-                    kalshi_prob=kalshi_winner.get("kalshi_prob"),
-                    sentiment_diff=sentiment_diff,
-                    selection=selection_flag
+                    market_prob=m_prob_home, vertex_prob=vertex_prob_home,
+                    theover_prob=None, kalshi_prob=kalshi_winner.get("kalshi_prob"),
+                    sentiment_diff=sentiment_diff, selection=selection_flag
                 )
 
-                # --- 4. DATA ROW GENERATION ---
+            # --- 4. DATA ROW GENERATION ---
+            
+            # MONEYLINE ROW
+            if home_ml is not None or away_ml is not None:
+                pick = home if (implied_home or 0) >= (implied_away or 0) else away
+                implied_pick = implied_home if pick == home else implied_away
+                ai_prob_row = blended_for_selection(pick, market_home_prob)
                 
-                # MONEYLINE ROW
-                if home_ml is not None or away_ml is not None:
-                    pick = home if (implied_home or 0) >= (implied_away or 0) else away
-                    implied_pick = implied_home if pick == home else implied_away
-                    ai_prob_row = blended_for_selection(pick, market_home_prob)
-                    
-                    rows_out.append({
-                        "League": league_name, "Home": home, "Away": away,
-                        "Commence (UTC)": commence_iso, "Commence (Local)": commence_local,
-                        "Local Date": commence_date_local, "Market": "Moneyline",
-                        "Book": g.get("best_ml_book"), "Home_ML": home_ml, "Away_ML": away_ml,
-                        "Pick": pick, "Implied_Prob": implied_pick, "AI_Prob": ai_prob_row,
-                        "Home_Sentiment": home_sent, "Away_Sentiment": away_sent, "Sentiment_Diff": sentiment_diff,
-                        "kalshi_available": kalshi_winner.get("kalshi_available"),
-                        "kalshi_matched": kalshi_winner.get("kalshi_matched"),
-                        "kalshi_prob": kalshi_winner.get("kalshi_prob"),
-                        "kalshi_event_ticker": kalshi_winner.get("kalshi_event_ticker"),
-                        "Warnings": ";".join(warnings),
-                    })
-                    master_stats["h2h_found"] += 1
-                    master_stats["market_rows_out"] += 1
+                rows_out.append({
+                    "League": league_name, "Home": home, "Away": away,
+                    "Commence (UTC)": commence_iso, "Commence (Local)": commence_local,
+                    "Local Date": commence_date_local, "Market": "Moneyline",
+                    "Book": g.get("best_ml_book"), "Home_ML": home_ml, "Away_ML": away_ml,
+                    "Pick": pick, "Implied_Prob": implied_pick, "AI_Prob": ai_prob_row,
+                    "Home_Sentiment": home_sent, "Away_Sentiment": away_sent, "Sentiment_Diff": sentiment_diff,
+                    "kalshi_available": kalshi_winner.get("kalshi_available"),
+                    "kalshi_matched": kalshi_winner.get("kalshi_matched"),
+                    "kalshi_prob": kalshi_winner.get("kalshi_prob"),
+                    "kalshi_event_ticker": kalshi_winner.get("kalshi_event_ticker"),
+                    "Warnings": ";".join(warnings),
+                })
+                master_stats["h2h_found"] += 1
+                master_stats["market_rows_out"] += 1
+
+            # SPREAD ROW
+            if g.get("home_spread_point") is not None:
+                spread_pick = home if (g.get("home_spread_price") or 0) >= (g.get("away_spread_price") or 0) else away
+                ai_prob_row = blended_for_selection(spread_pick, market_home_prob)
+                
+                rows_out.append({
+                    "League": league_name, "Home": home, "Away": away,
+                    "Commence (UTC)": commence_iso, "Commence (Local)": commence_local,
+                    "Market": "Spread", "Book": g.get("best_spread_book"),
+                    "Pick": spread_pick, "AI_Prob": ai_prob_row,
+                    "kalshi_matched": kalshi_spread.get("kalshi_matched"),
+                    "kalshi_prob": kalshi_spread.get("kalshi_prob"),
+                    "Sentiment_Diff": sentiment_diff,
+                })
+                master_stats["market_rows_out"] += 1
+
+            # TOTAL ROW
+            if g.get("total_point") is not None:
+                ai_prob_row = blended_for_selection(home, market_home_prob)
+                
+                rows_out.append({
+                    "League": league_name, "Home": home, "Away": away,
+                    "Commence (UTC)": commence_iso, "Commence (Local)": commence_local,
+                    "Market": "Total", "Book": g.get("best_total_book"),
+                    "Pick": "Over", "AI_Prob": ai_prob_row,
+                    "kalshi_matched": kalshi_total.get("kalshi_matched"),
+                    "kalshi_prob": kalshi_total.get("kalshi_prob"),
+                    "Sentiment_Diff": sentiment_diff,
+                })
+                master_stats["market_rows_out"] += 1
     
                 # SPREAD ROW
                 if g.get("home_spread_point") is not None:
@@ -1801,22 +1829,7 @@ with tab_master:
                         "Sentiment_Diff": sentiment_diff,
                     })
                     master_stats["market_rows_out"] += 1
-    
-                # TOTAL ROW
-                if g.get("total_point") is not None:
-                    ai_prob_row = blended_for_selection(home, market_home_prob)
                     
-                    rows_out.append({
-                        "League": league_name, "Home": home, "Away": away,
-                        "Commence (UTC)": commence_iso, "Commence (Local)": commence_local,
-                        "Market": "Total", "Book": g.get("best_total_book"),
-                        "Pick": "Over", "AI_Prob": ai_prob_row,
-                        "kalshi_matched": kalshi_total.get("kalshi_matched"),
-                        "kalshi_prob": kalshi_total.get("kalshi_prob"),
-                        "Sentiment_Diff": sentiment_diff,
-                    })
-                    master_stats["market_rows_out"] += 1
-                
         df = pd.DataFrame(rows_out)
         master_stats["rows_out"] = len(df)
         st.session_state["last_rows_out"] = len(df)
