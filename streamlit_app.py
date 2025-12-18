@@ -1710,35 +1710,52 @@ with tab_master:
             
             market_home_prob = implied_home if implied_home is not None else (1.0 - implied_away if implied_away else 0.5)
 
-            # 1. Define the Blended Probability logic (Return a single float)
+            # --- 1. Define the helper function (Return only the value) ---
             def blended_for_selection(selection_team: str, m_prob_home: Optional[float]) -> float:
                 selection_flag = "home" if selection_team == home else "away"
-                # Ensure ALL required arguments are passed
                 return blended_win_prob(
                     market_prob=m_prob_home,
                     vertex_prob=vertex_prob_home,
                     theover_prob=None,
                     kalshi_prob=kalshi_matches.get("winner", {}).get("kalshi_prob"),
                     sentiment_diff=sentiment_diff,
-                    selection=selection_flag, 
+                    selection=selection_flag,
                 )
-
-            # 2. MONEYLINE ROW
+            
+            # --- 2. MOVE THIS OUTSIDE THE FUNCTION (Fixes the missing rows) ---
+            kalshi_winner = kalshi_matches.get("winner", {}) # Ensure this is defined
+            
             if home_ml is not None or away_ml is not None:
-                pick = home if (implied_home or 0) >= (implied_away or 0) else away
-                implied_pick = implied_home if pick == home else implied_away
+                # Determine the pick
+                if (implied_home or 0) >= (implied_away or 0):
+                    pick, implied_pick = home, implied_home
+                else:
+                    pick, implied_pick = away, implied_away
+                
+                # Now call the function to get the probability
                 ai_prob_row = blended_for_selection(pick, market_home_prob)
                 
                 rows_out.append({
                     "League": league_name,
-                    "Home": home, "Away": away,
+                    "Home": home,
+                    "Away": away,
+                    "Commence (UTC)": commence_iso,
+                    "Commence (Local)": commence_local,
+                    "Local Date": commence_date_local,
                     "Market": "Moneyline",
                     "Pick": pick,
                     "Implied_Prob": implied_pick,
                     "AI_Prob": ai_prob_row,
+                    "Home_Sentiment": home_sent,
+                    "Away_Sentiment": away_sent,
                     "Sentiment_Diff": sentiment_diff,
-                    # ... Add other columns like kalshi_matched here ...
+                    "kalshi_matched": kalshi_winner.get("kalshi_matched"),
+                    "kalshi_prob": kalshi_winner.get("kalshi_prob"),
+                    "kalshi_event_ticker": kalshi_winner.get("kalshi_event_ticker"),
+                    "Warnings": ";".join(warnings),
                 })
+                master_stats["h2h_found"] += 1
+                master_stats["market_rows_out"] += 1
                 rows_out.append(
                     {
                         "League": league_name,
