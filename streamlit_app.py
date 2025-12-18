@@ -14,6 +14,7 @@ from app_core.kalshi_integrator import (
     KalshiIntegrator,
     LEAGUE_SERIES_MAP,
     league_game_prefix,
+    league_series_ticker,
     team_code_for_league,
 )
 from app_core.sentiment_pipeline import build_team_sentiment_map
