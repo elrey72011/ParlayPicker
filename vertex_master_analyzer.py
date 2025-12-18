@@ -374,135 +374,172 @@ class VertexMasterAnalyzer:
             }
 
         # --- CORRECTED MASTER ANALYSIS LOOP ---
-        for idx, g in enumerate(games):
-            warnings: List[str] = list(g.get("warnings") or [])
-            league_name = g.get("league")
-            home = g.get("home_team")
-            away = g.get("away_team")
-        
-            # Define codes immediately
-            h_code = nba_abbrev(home)
-            a_code = nba_abbrev(away)
-        
-            commence_iso = g.get("commence_time_iso_utc") or safe_iso(g.get("commence_time_iso"))
-            commence_local = fmt_local_time(g.get("commence_time_local"))
-            commence_date_local = g.get("commence_date_local") or ""
-            
-            # 1. CALCULATE EXTERNAL DATA FIRST (Fixes NameErrors)
-            vertex_prob_home = get_vertex_prob(g)
-            
-            home_sent = sentiment_map.get(home, 0.0)
-            away_sent = sentiment_map.get(away, 0.0)
-            sentiment_diff = home_sent - away_sent
-        
-            # Kalshi Filtering & Matching
-            filtered_markets = filter_kalshi_game_markets(
-                kalshi_markets,
-                g.get("commence_time_utc"),
-                league_name,
-                home,
-                away,
-                h_code,
-                a_code,
-            )
-            
-            deduped = {m.get("event_ticker") or m.get("ticker"): m for m in filtered_markets}
-            winner_reason_override = "winner_not_in_fetched_markets" if not filtered_markets else None
-            
-            kalshi_matches, candidate_debug = match_kalshi_market(g, list(deduped.values()), winner_reason_override)
-            
-            kalshi_winner = kalshi_matches.get("winner", {})
-            kalshi_spread = kalshi_matches.get("spread", {})
-            kalshi_total = kalshi_matches.get("total", {})
+                for idx, game in enumerate(games):
+            try:
+                skey = (game.get("sport_key") or "").lower()
+                league_map = {
+                    "nba": "NBA",
+                    "basketball_nba": "NBA",
+                    "nfl": "NFL",
+                    "americanfootball_nfl": "NFL",
+                    "ncaab": "NCAAB",
+                    "basketball_ncaab": "NCAAB",
+                    "ncaaf": "NCAAF",
+                    "americanfootball_ncaaf": "NCAAF",
+                    "nhl": "NHL",
+                    "icehockey_nhl": "NHL",
+                    "mlb": "MLB",
+                    "baseball_mlb": "MLB",
+                }
+                game_league = league_map.get(skey, league)
 
-            # 2. PROBABILITY HELPERS
-            home_ml = g.get("home_ml_price")
-            away_ml = g.get("away_ml_price")
-            implied_home = american_to_implied_prob(home_ml)
-            implied_away = american_to_implied_prob(away_ml)
-            
-            # Baseline probability
-            market_home_prob = implied_home if implied_home is not None else (1.0 - implied_away if implied_away else 0.5)
+                home_team = game.get("home_team")
+                away_team = game.get("away_team")
+                warnings: List[str] = list(game.get("normalization_warnings", []))
 
-            def blended_for_selection(selection_team: str, m_prob_home: Optional[float]) -> float:
-                selection_flag = "home" if selection_team == home else "away"
-                return blended_win_prob(
-                    market_prob=m_prob_home, vertex_prob=vertex_prob_home,
-                    theover_prob=None, kalshi_prob=kalshi_winner.get("kalshi_prob"),
-                    sentiment_diff=sentiment_diff, selection=selection_flag
+                if not home_team or not away_team:
+                    stats["dropped_missing_teams"] += 1
+                    warnings.append("missing_home_or_away")
+                    rows.append(
+                        {
+                            "League": game_league,
+                            "Home": home_team,
+                            "Away": away_team,
+                            "Commence (UTC)": None,
+                            "Market": "N/A",
+                            "Pick": home_team or away_team or "Unknown",
+                            "Implied_Prob": None,
+                            "AI_Prob": None,
+                            "AI_Edge": None,
+                            "Warnings": "; ".join(warnings),
+                        }
+                    )
+                    continue
+
+                commence_raw = game.get("commence_time") or game.get("commence_dt")
+                commence_dt: Optional[datetime] = None
+                if isinstance(commence_raw, datetime):
+                    commence_dt = commence_raw
+                elif commence_raw:
+                    try:
+                        commence_dt = datetime.fromisoformat(str(commence_raw).replace("Z", "+00:00"))
+                    except Exception:
+                        commence_dt = None
+
+                odds_bits = _extract_primary_odds(game)
+                implied_home_prob = odds_bits.get("implied_home_prob")
+                implied_away_prob = odds_bits.get("implied_away_prob")
+                if implied_home_prob is None and implied_away_prob is None:
+                    stats["dropped_no_markets"] += 1
+                    warnings.append("missing_h2h")
+                else:
+                    stats["h2h_found_count"] += 1
+
+                vertex_home_prob: Optional[float] = None
+                if vertex_enabled:
+                    stats["vertex_calls"] += 1
+                    try:
+                        feats = {
+                            "implied_home_prob": implied_home_prob,
+                            "sentiment_diff": game.get("sentiment_diff", 0.0), # Pull real sentiment
+                            "kalshi_prob": game.get("kalshi_prob"),           # Pull real Kalshi odds
+                        }
+                        feat_row = self.build_vertex_feature_row(feats)
+                        probs = predict_win_probabilities(
+                            pd.DataFrame([feat_row]), VERTEX_FEATURE_COLUMNS
+                        )
+                        if probs and len(probs) > 0:
+                            vertex_home_prob = float(probs[0])
+                        else:
+                            stats["vertex_none_count"] += 1
+                    except Exception as e:
+                        logger.warning(f"Vertex prediction failed: {e}")
+                        stats["vertex_failures"] += 1
+                        warnings.append("vertex_failed")
+                else:
+                    warnings.append("vertex_disabled")
+
+                pick_team = home_team
+                implied_pick_prob = implied_home_prob
+                if implied_home_prob is not None and implied_away_prob is not None:
+                    if implied_away_prob > implied_home_prob:
+                        pick_team = away_team
+                        implied_pick_prob = implied_away_prob
+
+                ai_prob: Optional[float] = None
+                if vertex_home_prob is not None:
+                    ai_prob = vertex_home_prob if pick_team == home_team else 1 - vertex_home_prob
+                else:
+                    stats["vertex_none_count"] += 1
+                    warnings.append("vertex_failed")
+
+                ai_edge: Optional[float] = None
+                if ai_prob is not None and implied_pick_prob is not None:
+                    try:
+                        ai_edge = ai_prob - implied_pick_prob
+                    except Exception:
+                        ai_edge = None
+
+                rows.append(
+                    {
+                        "League": game_league,
+                        "Home": home_team,
+                        "Away": away_team,
+                        "Commence (UTC)": _safe_commence_iso(game),
+                        "Market": "Moneyline",
+                        "Pick": pick_team,
+                        "Book": odds_bits.get("book"),
+                        "Home_ML_Odds": odds_bits.get("home_ml_odds"),
+                        "Away_ML_Odds": odds_bits.get("away_ml_odds"),
+                        "Implied_Prob": implied_pick_prob,
+                        "AI_Prob": ai_prob,
+                        "AI_Edge": ai_edge,
+                        "Warnings": "; ".join(warnings),
+                    }
                 )
 
-            # 3. GENERATE OUTPUT ROWS
-            
-            # FALLBACK: IF NO ODDS EXIST
-            if not (home_ml or g.get("home_spread_point") or g.get("total_point")):
-                warnings = list(dict.fromkeys(warnings + ["no_markets"]))
-                rows_out.append({
-                    "League": league_name, "Home": home, "Away": away,
-                    "Commence (UTC)": commence_iso, "Commence (Local)": commence_local,
-                    "Local Date": commence_date_local, "Market": "None",
-                    "Pick": None, "Implied_Prob": None, "AI_Prob": vertex_prob_home,
-                    "Warnings": ";".join(warnings),
-                    "kalshi_available": kalshi_winner.get("kalshi_available"),
-                    "kalshi_matched": kalshi_winner.get("kalshi_matched"),
-                    "kalshi_prob": kalshi_winner.get("kalshi_prob"),
-                    "Home_Sentiment": home_sent, "Away_Sentiment": away_sent, "Sentiment_Diff": sentiment_diff,
-                })
-                master_stats["market_rows_out"] += 1
-                continue
+            except Exception as e:
+                logger.error(f"Error analyzing game {idx}: {e}")
+                stats["exceptions_count"] += 1
+                rows.append(
+                    {
+                        "League": league,
+                        "Home": game.get("home_team"),
+                        "Away": game.get("away_team"),
+                        "Commence (UTC)": None,
+                        "Market": "N/A",
+                        "Pick": game.get("home_team") or game.get("away_team") or "Unknown",
+                        "Implied_Prob": None,
+                        "AI_Prob": None,
+                        "AI_Edge": None,
+                        "Warnings": f"exception: {e}",
+                    }
+                )
 
-            # MONEYLINE ROW
-            if home_ml is not None or away_ml is not None:
-                pick = home if (implied_home or 0) >= (implied_away or 0) else away
-                implied_pick = implied_home if pick == home else implied_away
-                ai_prob_row = blended_for_selection(pick, market_home_prob)
-                
-                rows_out.append({
-                    "League": league_name, "Home": home, "Away": away,
-                    "Commence (UTC)": commence_iso, "Commence (Local)": commence_local,
-                    "Local Date": commence_date_local, "Market": "Moneyline",
-                    "Book": g.get("best_ml_book"), "Home_ML": home_ml, "Away_ML": away_ml,
-                    "Pick": pick, "Implied_Prob": implied_pick, "AI_Prob": ai_prob_row,
-                    "Home_Sentiment": home_sent, "Away_Sentiment": away_sent, "Sentiment_Diff": sentiment_diff,
-                    "kalshi_available": kalshi_winner.get("kalshi_available"),
-                    "kalshi_matched": kalshi_winner.get("kalshi_matched"),
-                    "kalshi_prob": kalshi_winner.get("kalshi_prob"),
-                    "kalshi_event_ticker": kalshi_winner.get("kalshi_event_ticker"),
-                    "Warnings": ";".join(warnings),
-                })
-                master_stats["h2h_found"] += 1
-                master_stats["market_rows_out"] += 1
+            progress.progress((idx + 1) / len(games))
 
-            # SPREAD ROW
-            if g.get("home_spread_point") is not None:
-                spread_pick = home if (g.get("home_spread_price") or 0) >= (g.get("away_spread_price") or 0) else away
-                ai_prob_row = blended_for_selection(spread_pick, market_home_prob)
-                
-                rows_out.append({
-                    "League": league_name, "Home": home, "Away": away,
-                    "Commence (UTC)": commence_iso, "Commence (Local)": commence_local,
-                    "Market": "Spread", "Book": g.get("best_spread_book"),
-                    "Pick": spread_pick, "AI_Prob": ai_prob_row,
-                    "kalshi_matched": kalshi_spread.get("kalshi_matched"),
-                    "kalshi_prob": kalshi_spread.get("kalshi_prob"),
-                    "Sentiment_Diff": sentiment_diff,
-                })
-                master_stats["market_rows_out"] += 1
+        if games and not rows:
+            rows.append(
+                {
+                    "League": league,
+                    "Home": None,
+                    "Away": None,
+                    "Commence (UTC)": None,
+                    "Market": "N/A",
+                    "Pick": "No candidates generated",
+                    "Implied_Prob": None,
+                    "AI_Prob": None,
+                    "AI_Edge": None,
+                    "Warnings": "Analyzer produced no rows despite input games.",
+                }
+            )
 
-            # TOTAL ROW
-            if g.get("total_point") is not None:
-                ai_prob_row = blended_for_selection(home, market_home_prob)
-                
-                rows_out.append({
-                    "League": league_name, "Home": home, "Away": away,
-                    "Commence (UTC)": commence_iso, "Commence (Local)": commence_local,
-                    "Market": "Total", "Book": g.get("best_total_book"),
-                    "Pick": "Over", "AI_Prob": ai_prob_row,
-                    "kalshi_matched": kalshi_total.get("kalshi_matched"),
-                    "kalshi_prob": kalshi_total.get("kalshi_prob"),
-                    "Sentiment_Diff": sentiment_diff,
-                })
-                master_stats["market_rows_out"] += 1
+        stats["rows_out"] = len(rows)
+        stats["dropped"] = max(0, stats["games_in"] - stats["rows_out"])
+        st.session_state["vertex_master_stats"] = stats
+        logger.info("VertexMasterAnalyzer stats: %s", stats)
+
+        return pd.DataFrame(rows)
 
     # -------------------------------
     # LLM ASSISTANT HELPERS
