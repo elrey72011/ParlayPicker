@@ -1663,33 +1663,18 @@ with tab_master:
             league_name = g.get("league")
             home = g.get("home_team")
             away = g.get("away_team")
-        
-            # 1. ADD STEP 2 HERE: Get team sentiment from the map built in Step 1
-            home_sent = sentiment_map.get(home, 0.0)  # cite: 5, 8
-            away_sent = sentiment_map.get(away, 0.0)  # cite: 5, 8
-            sent_diff = home_sent - away_sent          # cite: 5, 8
-        
-            # 2. Match Kalshi markets (Existing Logic)
-            kalshi_matches, candidate_debug = match_kalshi_market(
-                g, filtered_markets, winner_reason_override
-            )
-        
-            # 3. ADD STEP 2 FALLBACK: Safely get the Kalshi probability
-            k_prob = kalshi_matches.get("winner", {}).get("kalshi_prob")
-            if k_prob is None:
-                # Fallback to bookie implied probability if Kalshi is missing
-                k_prob = implied_pick if implied_pick else 0.5 # cite: 5, 8
-        
-            # 4. CALCULATE BLENDED PROBABILITY (Using the new Vertex logic)
-            final_prob = blended_win_prob(ai_prob, k_prob, sent_diff) # cite: 5, 8
             commence_iso = g.get("commence_time_iso_utc") or safe_iso(g.get("commence_time_iso"))
             commence_local = fmt_local_time(g.get("commence_time_local"))
             commence_date_local = g.get("commence_date_local") or ""
             away_code = nba_abbrev(away)
             home_code = nba_abbrev(home)
+
+            # 1. Step 2 Integration: Get Sentiment Scores
             home_sent = sentiment_map.get(home, 0.0)
             away_sent = sentiment_map.get(away, 0.0)
             sentiment_diff = home_sent - away_sent
+
+            # 2. Kalshi Matching Logic
             filtered_markets = filter_kalshi_game_markets(
                 kalshi_markets,
                 g.get("commence_time_utc"),
@@ -1699,6 +1684,8 @@ with tab_master:
                 home_code,
                 away_code,
             )
+            
+            # De-dupe and count (The block you were asking about)
             deduped: Dict[str, Dict[str, Any]] = {}
             for fm in filtered_markets:
                 key = fm.get("event_ticker") or fm.get("ticker") or str(id(fm))
@@ -1706,97 +1693,33 @@ with tab_master:
                     deduped[key] = fm
             filtered_markets = list(deduped.values())
             filtered_counts.append(len(filtered_markets))
+            
             partition_counts = {
                 "total": len([m for m in filtered_markets if classify_kalshi_market(m) == "total"]),
                 "spread": len([m for m in filtered_markets if classify_kalshi_market(m) == "spread"]),
                 "winner": len([m for m in filtered_markets if classify_kalshi_market(m) == "winner"]),
                 "prop": len([m for m in filtered_markets if classify_kalshi_market(m) == "prop"]),
             }
+            # STOP PASTE HERE. The logic below handles the specific market results.
+
             winner_reason_override = None
-            if (
-                idx == 0
-                and first_game_full_search
-                and not first_game_full_search.get("found_any_winner_market_for_game")
-            ):
+            if (idx == 0 and first_game_full_search and not first_game_full_search.get("found_any_winner_market_for_game")):
                 winner_reason_override = "winner_not_in_fetched_markets"
+            
             kalshi_matches, candidate_debug = match_kalshi_market(
                 g, filtered_markets, winner_reason_override
             )
-            winner_sample = []
-            if candidate_debug and isinstance(candidate_debug.get("winner"), list):
-                winner_sample = candidate_debug.get("winner", [])[:3]
-            per_game_kalshi_debug.append(
-                {
-                    "game_index": idx,
-                    "game_home": home,
-                    "game_away": away,
-                    "game_commence_utc": commence_iso,
-                    "kalshi_date_token_used": (candidate_debug or {})
-                    .get("winner_meta", {})
-                    .get("expected_date_token"),
-                    "expected_codes": (candidate_debug or {})
-                    .get("winner_meta", {})
-                    .get("expected_codes"),
-                    "away_code": away_code,
-                    "home_code": home_code,
-                    "sentiment_diff": sentiment_diff,
-                    "strict_filtered_count": len(filtered_markets),
-                    "strict_filtered_sample": [
-                        {
-                            "title": fm.get("title"),
-                            "ticker": fm.get("event_ticker") or fm.get("ticker"),
-                        }
-                        for fm in filtered_markets[:3]
-                    ],
-                    "winner_candidates_count": len(winner_sample),
-                    "winner_candidates_sample": winner_sample,
-                    "matched_ticker": kalshi_matches.get("winner", {}).get(
-                        "kalshi_event_ticker"
-                    ),
-                    "matched_title": kalshi_matches.get("winner", {}).get(
-                        "kalshi_title"
-                    ),
-                    "kalshi_reason": kalshi_matches.get("winner", {}).get(
-                        "kalshi_reason"
-                    ),
-                }
-            )
 
-            matched_any = any(v.get("kalshi_matched") for v in kalshi_matches.values())
-            if not matched_any:
-                for res in kalshi_matches.values():
-                    warnings.append(f"kalshi_{res.get('kalshi_reason')}")
-            else:
-                master_stats["kalshi_matches"] += 1
-            kalshi_match_results.append(
-                {
-                    "home": home,
-                    "away": away,
-                    "league": league_name,
-                    "matches": kalshi_matches,
-                    "candidates": candidate_debug,
-                }
-            )
+            # 3. AI Predictions (Vertex)
+            vertex_prob_home = get_vertex_prob(g) # Fixed variable name
 
-            try:
-                vertex_prob_home = get_vertex_prob(g)
-            except Exception:
-                vertex_prob_home = None
-                warnings.append("vertex_error")
-                st.session_state["last_exception"] = traceback.format_exc()
-
-            moneyline_row_added = False
-            spread_row_added = False
-            total_row_added = False
-
-            kalshi_total = kalshi_matches.get("total", {})
-            kalshi_spread = kalshi_matches.get("spread", {})
-            kalshi_winner = kalshi_matches.get("winner", {})
-
+            # 4. Final Blended Probabilities
             home_ml = g.get("home_ml_price")
             away_ml = g.get("away_ml_price")
             implied_home = american_to_implied_prob(home_ml)
             implied_away = american_to_implied_prob(away_ml)
+            
+            # Use market_home_prob as the baseline for blending
             market_home_prob = implied_home
             if market_home_prob is None and implied_away is not None:
                 market_home_prob = max(0.0, min(1.0, 1.0 - implied_away))
@@ -1807,27 +1730,10 @@ with tab_master:
                     market_prob=market_prob_home,
                     vertex_prob=vertex_prob_home,
                     theover_prob=None,
-                    kalshi_prob=kalshi_winner.get("kalshi_prob"),
+                    kalshi_prob=kalshi_matches.get("winner", {}).get("kalshi_prob"),
                     sentiment_diff=sentiment_diff,
                     selection=selection_flag,
                 )
-            if home_ml is not None or away_ml is not None:
-                pick = home
-                implied_pick = implied_home
-                if implied_home is not None and implied_away is not None:
-                    if implied_home >= implied_away:
-                        pick = home
-                        implied_pick = implied_home
-                    else:
-                        pick = away
-                        implied_pick = implied_away
-                elif implied_home is None and implied_away is not None:
-                    pick = away
-                    implied_pick = implied_away
-                match_ref = kalshi_winner
-                if not match_ref.get("kalshi_matched"):
-                    warnings.append(f"kalshi_{match_ref.get('kalshi_reason')}")
-                ai_prob_row = blended_for_selection(pick, market_home_prob)
                 rows_out.append(
                     {
                         "League": league_name,
