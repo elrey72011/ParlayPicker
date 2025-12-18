@@ -607,15 +607,6 @@ def fetch_kalshi_markets(
         st.session_state["last_exception"] = traceback.format_exc()
         return []
 
-
-def kalshi_health_check(selected_league: str = "NBA") -> Dict[str, Any]:
-    """Wrapper to ensure health is always callable before first use."""
-    return kalshi_health(selected_league)
-
-def kalshi_health_check(selected_league: str = "NBA") -> Dict[str, Any]:
-    """Wrapper to ensure health is always callable before first use."""
-    return kalshi_health(selected_league)
-
 def pick_sample_game_market(
     markets: List[Dict[str, Any]]
 ) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
@@ -806,13 +797,6 @@ def kalshi_health(selected_league: str = "NBA") -> Dict[str, Any]:
             return base_health
         base_health["error"] = f"Kalshi health check failed: {e}"
         return base_health
-
-def kalshi_health_check(selected_league: str = "NBA") -> Dict[str, Any]:
-    """
-    Backwards-compatible alias.
-    Some UI code calls kalshi_health_check(), but the implementation is kalshi_health().
-    """
-    return kalshi_health(selected_league)
 
 def parse_kalshi_datetime(dt_value: Any) -> Optional[datetime]:
     try:
