@@ -25,6 +25,22 @@ from cryptography.hazmat.primitives.asymmetric import padding
 
 logger = logging.getLogger(__name__)
 
+
+@dataclass
+class KalshiMatchResult:
+    matched: bool = False
+    ticker: Optional[str] = None
+    title: Optional[str] = None
+    market: Optional[Dict[str, Any]] = None
+    reason: Optional[str] = None
+
+    # Pricing fields commonly used downstream
+    yes_bid: Optional[float] = None
+    yes_ask: Optional[float] = None
+    no_bid: Optional[float] = None
+    no_ask: Optional[float] = None
+    mid: Optional[float] = None  # 0-1 probability
+
 # ---------------------------------------------------------------------------
 # Constants & Mappings
 # ---------------------------------------------------------------------------
