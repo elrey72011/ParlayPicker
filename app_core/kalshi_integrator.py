@@ -10,6 +10,7 @@ import time
 import base64
 import random
 import json
+import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
@@ -81,6 +82,58 @@ NBA_TEAM_CODE_MAP: Dict[str, str] = {
     "SACRAMENTO KINGS": "SAC", "SAN ANTONIO SPURS": "SAS", "TORONTO RAPTORS": "TOR",
     "UTAH JAZZ": "UTA", "WASHINGTON WIZARDS": "WAS"
 }
+
+
+def team_name_to_code(league: str, team_name: str) -> Optional[str]:
+    """Translate a full team name into its Kalshi ticker code when available."""
+    if not team_name:
+        return None
+
+    league_u = (league or "").upper()
+    team_upper = str(team_name).strip().upper()
+
+    if league_u == "NBA":
+        mapping = globals().get("NBA_TEAM_CODE_MAP") or {}
+        if team_upper in mapping:
+            return mapping[team_upper]
+
+    cleaned = team_upper.replace(".", "").replace(",", "")
+    return None
+
+
+def team_code_for_league(league: str, team_name: str) -> str:
+    """Return a non-empty ticker-friendly code for a team within a league.
+
+    Prefers league-specific maps, then broader abbreviation lists, and finally
+    a sanitized three-letter fallback so callers never receive ``None``.
+    """
+
+    if not team_name:
+        return ""
+
+    league_u = (league or "").upper()
+    team_upper = str(team_name).strip().upper()
+
+    mapped = team_name_to_code(league_u, team_upper)
+    if mapped:
+        return mapped
+
+    if team_upper in KALSHI_TEAM_ABBREVIATIONS:
+        codes = KALSHI_TEAM_ABBREVIATIONS.get(team_upper) or []
+        if codes:
+            return str(codes[0]).upper()
+
+    cleaned = re.sub(r"[^A-Z]", "", team_upper)
+    if cleaned:
+        return cleaned[:3]
+
+    tokens = [t for t in re.split(r"\s+", team_upper) if t]
+    if tokens:
+        token_clean = re.sub(r"[^A-Z]", "", tokens[0].upper())
+        if token_clean:
+            return token_clean[:3]
+
+    return (team_upper[:3] or "UNK").upper()
 def normalize_status(status: Optional[str]) -> Optional[str]:
     if not status: return None
     s = str(status).strip().lower()
