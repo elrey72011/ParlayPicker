@@ -35,20 +35,16 @@ with tab_master:
 
         # --- CORRECTED MASTER ANALYSIS LOOP ---
         for idx, g in enumerate(games):
-            warnings: List[str] = list(g.get("warnings") or [])
+            # 1. DEFINE VARIABLES IMMEDIATELY
             league_name = g.get("league")
-            home = g.get("home_team")
-            away = g.get("away_team")
-        
-            # 1. INITIALIZE DATA IMMEDIATELY (Fixes NameErrors)
-            h_code = nba_abbrev(home)
-            a_code = nba_abbrev(away)
+            home, away = g.get("home_team"), g.get("away_team")
+            h_code, a_code = nba_abbrev(home), nba_abbrev(away)
             
-            # Standardize display strings
             commence_iso = g.get("commence_time_iso_utc") or safe_iso(g.get("commence_time_iso"))
             commence_local = fmt_local_time(g.get("commence_time_local"))
+            commence_date_local = g.get("commence_date_local") or ""
             
-            # CALCULATE external dependencies BEFORE generating rows
+            # 2. CALCULATE SCORES BEFORE APPENDING
             vertex_prob_home = get_vertex_prob(g)
             home_sent = sentiment_map.get(home, 0.0)
             away_sent = sentiment_map.get(away, 0.0)
@@ -65,15 +61,13 @@ with tab_master:
             
             kalshi_winner = kalshi_matches.get("winner", {})
 
-            # 2. GENERATE ROWS (Now safely uses pre-calculated variables)
+            # 3. APPEND FALLBACK IF NO ODDS
             if not (g.get("home_ml_price") or g.get("home_spread_point") or g.get("total_point")):
                 rows_out.append({
                     "League": league_name, "Home": home, "Away": away,
-                    "Commence (UTC)": commence_iso,
-                    "Market": "None",
-                    "AI_Prob": vertex_prob_home, # Now safely defined
-                    "kalshi_matched": kalshi_winner.get("kalshi_matched"),
-                    "Sentiment_Diff": sentiment_diff,
+                    "Market": "None", "AI_Prob": vertex_prob_home,
+                    "kalshi_matched": kalshi_winner.get("kalshi_matched"), 
+                    "Sentiment_Diff": sentiment_diff
                 })
                 master_stats["market_rows_out"] += 1
                 continue
