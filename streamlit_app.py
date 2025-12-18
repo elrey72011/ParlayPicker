@@ -33,44 +33,47 @@ with tab_master:
         rows_out = []
         master_stats = {"market_rows_out": 0}
 
+        # --- CORRECTED MASTER ANALYSIS LOOP ---
         for idx, g in enumerate(games):
-            # 1. SETUP VARIABLES IMMEDIATELY (Fixes NameErrors)
+            warnings: List[str] = list(g.get("warnings") or [])
             league_name = g.get("league")
-            home, away = g.get("home_team"), g.get("away_team")
-            h_code, a_code = nba_abbrev(home), nba_abbrev(away)
+            home = g.get("home_team")
+            away = g.get("away_team")
+        
+            # 1. INITIALIZE DATA IMMEDIATELY (Fixes NameErrors)
+            h_code = nba_abbrev(home)
+            a_code = nba_abbrev(away)
             
+            # Standardize display strings
             commence_iso = g.get("commence_time_iso_utc") or safe_iso(g.get("commence_time_iso"))
             commence_local = fmt_local_time(g.get("commence_time_local"))
             
-            # 2. CALCULATE EXTERNAL DATA BEFORE GENERATING ANY ROWS
+            # CALCULATE external dependencies BEFORE generating rows
             vertex_prob_home = get_vertex_prob(g)
-            home_sent, away_sent = sentiment_map.get(home, 0.0), sentiment_map.get(away, 0.0)
+            home_sent = sentiment_map.get(home, 0.0)
+            away_sent = sentiment_map.get(away, 0.0)
             sentiment_diff = home_sent - away_sent
+        
+            # Kalshi Matching
+            filtered_markets = filter_kalshi_game_markets(
+                kalshi_markets, g.get("commence_time_utc"), league_name,
+                home, away, h_code, a_code
+            )
+            deduped = {m.get("event_ticker") or m.get("ticker"): m for m in filtered_markets}
+            winner_reason_override = "winner_not_in_fetched_markets" if not filtered_markets else None
+            kalshi_matches, _ = match_kalshi_market(g, list(deduped.values()), winner_reason_override)
             
-            # Kalshi Matching Logic
-            k_winner = {"kalshi_prob": None, "kalshi_matched": False}
-            if st.session_state["kalshi_integrator"]:
-                 # Ensure matching logic is called here
-                 pass 
+            kalshi_winner = kalshi_matches.get("winner", {})
 
-            # Odds Probability Helpers
-            implied_h = american_to_implied_prob(g.get("home_ml_price"))
-            implied_a = american_to_implied_prob(g.get("away_ml_price"))
-            market_home_prob = implied_h if implied_h else (1.0 - implied_a if implied_a else 0.5)
-
-            def blended_for_selection(team: str, m_prob: Optional[float]) -> float:
-                return blended_win_prob(
-                    market_prob=m_prob, vertex_prob=vertex_prob_home,
-                    theover_prob=None, kalshi_prob=k_winner.get("kalshi_prob"),
-                    sentiment_diff=sentiment_diff, selection=("home" if team == home else "away")
-                )
-
-            # 3. GENERATE ROWS SAFELY (Variables are now defined)
+            # 2. GENERATE ROWS (Now safely uses pre-calculated variables)
             if not (g.get("home_ml_price") or g.get("home_spread_point") or g.get("total_point")):
                 rows_out.append({
                     "League": league_name, "Home": home, "Away": away,
-                    "Market": "None", "AI_Prob": vertex_prob_home,
-                    "kalshi_matched": k_winner.get("kalshi_matched"), "Sentiment_Diff": sentiment_diff
+                    "Commence (UTC)": commence_iso,
+                    "Market": "None",
+                    "AI_Prob": vertex_prob_home, # Now safely defined
+                    "kalshi_matched": kalshi_winner.get("kalshi_matched"),
+                    "Sentiment_Diff": sentiment_diff,
                 })
                 master_stats["market_rows_out"] += 1
                 continue
