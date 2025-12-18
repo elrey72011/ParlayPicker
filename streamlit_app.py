@@ -1710,7 +1710,7 @@ with tab_master:
             
             market_home_prob = implied_home if implied_home is not None else (1.0 - implied_away if implied_away else 0.5)
 
-            # --- 1. The helper function should ONLY return the probability value ---
+            # --- 1. The helper function should ONLY calculate and return the value ---
             def blended_for_selection(selection_team: str, market_prob_home: Optional[float]) -> float:
                 selection_flag = "home" if selection_team == home else "away"
                 return blended_win_prob(
@@ -1722,17 +1722,17 @@ with tab_master:
                     selection=selection_flag,
                 )
             
-            # --- 2. MOVE THIS OUTSIDE (Indent it to match the 'def' line) ---
+            # --- 2. MOVE THIS OUTSIDE THE 'DEF' BLOCK (Indent to match the 'def' line) ---
             kalshi_winner = kalshi_matches.get("winner", {})
             
             if home_ml is not None or away_ml is not None:
-                # Determine which team is the "Pick"
+                # Determine which team is the "Pick" based on bookie odds
                 if (implied_home or 0) >= (implied_away or 0):
                     pick, implied_pick = home, implied_home
                 else:
                     pick, implied_pick = away, implied_away
                 
-                # Call the function to get the final AI probability
+                # Now call the function to get the final AI probability
                 ai_prob_row = blended_for_selection(pick, market_home_prob)
                 
                 rows_out.append({
