@@ -6,7 +6,6 @@ import traceback
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 from zoneinfo import ZoneInfo
-
 import pandas as pd
 import requests
 import streamlit as st
@@ -185,49 +184,67 @@ with tab_master:
         rows_out = []
         master_stats = {"market_rows_out": 0}
 
+        # --- CORRECTED MASTER ANALYSIS LOOP ---
         for idx, g in enumerate(games):
-            # 1. SETUP VARIABLES (Fixes NameErrors)
-            home, away = g["home_team"], g["away_team"]
-            h_code, a_code = nba_abbrev(home), nba_abbrev(away)
+            warnings: List[str] = list(g.get("warnings") or [])
+            league_name = g.get("league")
+            home = g.get("home_team")
+            away = g.get("away_team")
+        
+            # 1. INITIALIZE DATA IMMEDIATELY (Prevents NameErrors)
+            h_code = nba_abbrev(home)
+            a_code = nba_abbrev(away)
             
-            # 2. CALCULATE EXTERNAL DATA BEFORE GENERATING ROWS
+            # Standardize display strings
+            commence_iso = g.get("commence_time_iso_utc") or safe_iso(g.get("commence_time_iso"))
+            commence_local = fmt_local_time(g.get("commence_time_local"))
+            commence_date_local = g.get("commence_date_local") or ""
+            
+            # Calculate all external dependencies before row generation
             vertex_prob_home = get_vertex_prob(g)
-            home_sent, away_sent = sentiment_map.get(home, 0.0), sentiment_map.get(away, 0.0)
+            home_sent = sentiment_map.get(home, 0.0)
+            away_sent = sentiment_map.get(away, 0.0)
             sentiment_diff = home_sent - away_sent
+        
+            # Kalshi Matching
+            filtered_markets = filter_kalshi_game_markets(
+                kalshi_markets, g.get("commence_time_utc"), league_name,
+                home, away, h_code, a_code
+            )
+            deduped = {m.get("event_ticker") or m.get("ticker"): m for m in filtered_markets}
+            winner_reason_override = "winner_not_in_fetched_markets" if not filtered_markets else None
+            kalshi_matches, _ = match_kalshi_market(g, list(deduped.values()), winner_reason_override)
             
-            # Kalshi Match
-            # match_kalshi_market must be defined in your app core
-            k_match, _ = match_kalshi_market(g, kalshi_markets) 
-            kalshi_winner = k_match.get("winner", {})
+            kalshi_winner = kalshi_matches.get("winner", {})
 
-            # Prob Helpers
-            implied_h = american_to_implied_prob(g.get("home_ml_price"))
-            implied_a = american_to_implied_prob(g.get("away_ml_price"))
-            market_home_prob = implied_h if implied_h else (1.0 - implied_a if implied_a else 0.5)
-
-            def blended_for_selection(team: str, m_prob: Optional[float]) -> float:
-                return blended_win_prob(
-                    market_prob=m_prob, vertex_prob=vertex_prob_home,
-                    theover_prob=None, kalshi_prob=kalshi_winner.get("kalshi_prob"),
-                    sentiment_diff=sentiment_diff, selection=("home" if team == home else "away")
-                )
-
-            # 3. GENERATE ROWS SAFELY
+            # 2. GENERATE ROWS (Now safely uses pre-calculated variables)
             if not (g.get("home_ml_price") or g.get("home_spread_point") or g.get("total_point")):
                 rows_out.append({
-                    "Game": f"{away} @ {home}", "Market": "None", "AI_Prob": vertex_prob_home,
-                    "kalshi_matched": kalshi_winner.get("kalshi_matched"), "Sentiment_Diff": sentiment_diff
+                    "League": league_name, "Home": home, "Away": away,
+                    "Commence (UTC)": commence_iso,
+                    "Market": "None",
+                    "AI_Prob": vertex_prob_home,
+                    "kalshi_matched": kalshi_winner.get("kalshi_matched"),
+                    "Sentiment_Diff": sentiment_diff,
                 })
                 master_stats["market_rows_out"] += 1
                 continue
 
-            # Moneyline row
-            if g.get("home_ml_price") is not None:
-                pick = home if (implied_h or 0) >= (implied_a or 0) else away
+            # Moneyline logic
+            home_ml = g.get("home_ml_price")
+            if home_ml is not None:
+                market_home_prob = american_to_implied_prob(home_ml)
+                ai_prob_row = blended_win_prob(
+                    market_prob=market_home_prob, vertex_prob=vertex_prob_home,
+                    kalshi_prob=kalshi_winner.get("kalshi_prob"),
+                    sentiment_diff=sentiment_diff, selection="home"
+                )
+                
                 rows_out.append({
-                    "Game": f"{away} @ {home}", "Market": "Moneyline", "Pick": pick,
-                    "AI_Prob": blended_for_selection(pick, market_home_prob),
-                    "Kalshi_Prob": kalshi_winner.get("kalshi_prob")
+                    "League": league_name, "Home": home, "Away": away,
+                    "Market": "Moneyline", "AI_Prob": ai_prob_row,
+                    "Kalshi_Prob": kalshi_winner.get("kalshi_prob"),
+                    "Sentiment_Diff": sentiment_diff,
                 })
                 master_stats["market_rows_out"] += 1
 
