@@ -6,7 +6,6 @@ import traceback
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 from zoneinfo import ZoneInfo
-
 import pandas as pd
 import requests
 import streamlit as st
@@ -186,15 +185,39 @@ with tab_master:
         rows_out = []
         master_stats = {"market_rows_out": 0}
 
+        # --- CORRECTED MASTER ANALYSIS LOOP ---
         for idx, g in enumerate(games):
-            # 1. SETUP VARIABLES (Fixes NameErrors)
-            home, away = g["home_team"], g["away_team"]
+            # 1. Core Data Gathering (Fixes NameErrors)
+            home, away = g.get("home_team"), g.get("away_team")
             h_code, a_code = nba_abbrev(home), nba_abbrev(away)
             
-            # 2. CALCULATE EXTERNAL DATA BEFORE GENERATING ROWS
+            # Calculate external data FIRST before generating any rows
             vertex_prob_home = get_vertex_prob(g)
-            home_sent, away_sent = sentiment_map.get(home, 0.0), sentiment_map.get(away, 0.0)
+            
+            home_sent = sentiment_map.get(home, 0.0)
+            away_sent = sentiment_map.get(away, 0.0)
             sentiment_diff = home_sent - away_sent
+        
+            # Kalshi Matching Logic
+            filtered_markets = filter_kalshi_game_markets(
+                kalshi_markets, g.get("commence_time_utc"), g.get("league"),
+                home, away, h_code, a_code
+            )
+            
+            kalshi_matches, _ = match_kalshi_market(g, filtered_markets)
+            kalshi_winner = kalshi_matches.get("winner", {})
+        
+            # 2. Row Generation (Now safely uses defined variables)
+            if not (g.get("home_ml_price") or g.get("home_spread_point") or g.get("total_point")):
+                rows_out.append({
+                    "Game": f"{away} @ {home}",
+                    "AI_Prob": vertex_prob_home, # Now safely defined
+                    "kalshi_matched": kalshi_winner.get("kalshi_matched"),
+                    "Sentiment_Diff": sentiment_diff
+                })
+                continue
+        
+            # Proceed with Moneyline and Spread rows...
             
             # Kalshi Match (Helper logic used from your provided repository)
             # Assuming match_kalshi_market is available or handled via integrator
