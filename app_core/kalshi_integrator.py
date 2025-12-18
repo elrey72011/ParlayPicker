@@ -575,7 +575,7 @@ class KalshiIntegrator:
                 or "Kalshi is required but unavailable (auth/keys/API)."
             )
 
-    def health_check(self) -> Dict[str, Any]:
+    def health_check(self, league: Optional[str] = None) -> Dict[str, Any]:
         configured = bool(self.api_key and self.api_secret_pem)
         if not configured:
             return {
@@ -587,6 +587,10 @@ class KalshiIntegrator:
                 "has_futures_markets": False,
                 "error": "Kalshi is required but not configured.",
             }
+
+        league_key = (league or "NBA").upper()
+        game_prefix = league_game_prefix(league_key)
+        series_prefix = league_series_ticker(league_key) or f"KX{league_key}"
 
         try:
             data = self._request("GET", "/markets", params={"limit": 50})
@@ -607,15 +611,18 @@ class KalshiIntegrator:
             def _ticker(m: Dict[str, Any]) -> str:
                 return str(m.get("event_ticker") or m.get("ticker") or "").upper()
 
-            has_game = any(_ticker(m).startswith("KXNBAGAME") for m in markets)
+            has_game = any(_ticker(m).startswith(f"{game_prefix}-") for m in markets)
             has_futures = any(
-                _ticker(m).startswith("KXNBA") and not _ticker(m).startswith("KXNBAGAME")
+                _ticker(m).startswith(series_prefix)
+                and not _ticker(m).startswith(f"{game_prefix}-")
                 for m in markets
             )
             ok = True
             warning: Optional[str] = None
             if markets and not has_game and has_futures:
-                warning = "Kalshi reachable, but no NBA KXNBAGAME markets returned (futures-only or slate not listed)."
+                warning = (
+                    f"Kalshi reachable, but no {league_key} {game_prefix} markets returned (futures-only or slate not listed)."
+                )
             return {
                 "configured": True,
                 "ok": ok,
