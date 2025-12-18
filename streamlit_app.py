@@ -1694,47 +1694,9 @@ with tab_master:
             filtered_counts.append(len(filtered_markets))
 
             winner_reason_override = None
-            if (idx == 0 and first_game_full_search and not first_game_full_search.get("found_any_winner_market_for_game")):
-                winner_reason_override = "winner_not_in_fetched_markets"
-            
-            kalshi_matches, candidate_debug = match_kalshi_market(
-                g, filtered_markets, winner_reason_override
-            )
-
-            # 3. AI & Market Probability Calculations
-            vertex_prob_home = get_vertex_prob(g)
-            home_ml = g.get("home_ml_price")
-            away_ml = g.get("away_ml_price")
-            implied_home = american_to_implied_prob(home_ml)
-            implied_away = american_to_implied_prob(away_ml)
-            
-            market_home_prob = implied_home if implied_home is not None else (1.0 - implied_away if implied_away else 0.5)
-
-            # --- 1. The helper function should ONLY calculate and return the value ---
-            def blended_for_selection(selection_team: str, market_prob_home: Optional[float]) -> float:
-                selection_flag = "home" if selection_team == home else "away"
-                return blended_win_prob(
-                    market_prob=market_prob_home,
-                    vertex_prob=vertex_prob_home,
-                    theover_prob=None,
-                    kalshi_prob=kalshi_matches.get("winner", {}).get("kalshi_prob"),
-                    sentiment_diff=sentiment_diff,
-                    selection=selection_flag,
-                )
-            
-            # --- 2. MOVE THIS OUTSIDE THE 'DEF' BLOCK (Indent to match the 'def' line) ---
-            kalshi_winner = kalshi_matches.get("winner", {})
-            
-            if home_ml is not None or away_ml is not None:
-                # Determine which team is the "Pick" based on bookie odds
-                if (implied_home or 0) >= (implied_away or 0):
-                    pick, implied_pick = home, implied_home
-                else:
-                    pick, implied_pick = away, implied_away
-                
-                # Now call the function to get the final AI probability
-                ai_prob_row = blended_for_selection(pick, market_home_prob)
-                
+           # --- 5. FALLBACK: "NONE" MARKET ROW ---
+            if not (g.get("home_ml_price") or g.get("home_spread_point") or g.get("total_point")):
+                warnings = list(dict.fromkeys(warnings + ["no_markets"]))
                 rows_out.append({
                     "League": league_name,
                     "Home": home,
@@ -1742,206 +1704,19 @@ with tab_master:
                     "Commence (UTC)": commence_iso,
                     "Commence (Local)": commence_local,
                     "Local Date": commence_date_local,
-                    "Market": "Moneyline",
-                    "Book": g.get("best_ml_book"),
-                    "Home_ML": home_ml,
-                    "Away_ML": away_ml,
-                    "Pick": pick,
-                    "Implied_Prob": implied_pick,
-                    "AI_Prob": ai_prob_row,
+                    "Market": "None",
+                    "Book": None,
+                    "Pick": None,
+                    "Implied_Prob": None,
+                    "AI_Prob": vertex_prob_home, # Raw AI score with no market blending
                     "Warnings": ";".join(warnings),
                     "kalshi_available": kalshi_winner.get("kalshi_available"),
                     "kalshi_matched": kalshi_winner.get("kalshi_matched"),
                     "kalshi_prob": kalshi_winner.get("kalshi_prob"),
-                    "kalshi_event_ticker": kalshi_winner.get("kalshi_event_ticker"),
                     "Home_Sentiment": home_sent,
                     "Away_Sentiment": away_sent,
                     "Sentiment_Diff": sentiment_diff,
                 })
-                master_stats["h2h_found"] += 1
-                master_stats["market_rows_out"] += 1
-                rows_out.append(
-                    {
-                        "League": league_name,
-                        "Home": home,
-                        "Away": away,
-                        "Commence (UTC)": commence_iso,
-                        "Commence (Local)": commence_local,
-                        "Local Date": commence_date_local,
-                        "Market": "Moneyline",
-                        "Book": g.get("best_ml_book"),
-                        "Home_ML": home_ml,
-                        "Away_ML": away_ml,
-                        "Pick": pick,
-                        "Implied_Prob": implied_pick,
-                        "AI_Prob": ai_prob_row,
-                        "Warnings": ";".join(warnings),
-                        "kalshi_available": match_ref.get("kalshi_available"),
-                        "kalshi_label": match_ref.get("kalshi_label"),
-                        "kalshi_event_ticker": match_ref.get("kalshi_event_ticker"),
-                        "kalshi_matched": match_ref.get("kalshi_matched"),
-                        "kalshi_prob": match_ref.get("kalshi_prob"),
-                        "kalshi_reason": match_ref.get("kalshi_reason"),
-                        "kalshi_market_type": match_ref.get("kalshi_market_type"),
-                        "kalshi_ticker": match_ref.get("kalshi_ticker"),
-                        "kalshi_line": match_ref.get("kalshi_line"),
-                        "kalshi_title": match_ref.get("kalshi_title"),
-                        "kalshi_match_score": match_ref.get("kalshi_match_score"),
-                        "Home_Sentiment": home_sent,
-                        "Away_Sentiment": away_sent,
-                        "Sentiment_Diff": sentiment_diff,
-                    }
-                )
-                master_stats["h2h_found"] += 1
-                moneyline_row_added = True
-                master_stats["market_rows_out"] += 1
-
-            if (
-                g.get("home_spread_point") is not None
-                and g.get("away_spread_point") is not None
-                and g.get("home_spread_price") is not None
-                and g.get("away_spread_price") is not None
-            ):
-                spread_pick = home
-                home_spread_price = g.get("home_spread_price")
-                away_spread_price = g.get("away_spread_price")
-                spread_pick_price = home_spread_price
-                if away_spread_price is not None and home_spread_price is not None:
-                    if float(away_spread_price) > float(home_spread_price):
-                        spread_pick = away
-                        spread_pick_price = away_spread_price
-                elif away_spread_price is not None:
-                    spread_pick = away
-                    spread_pick_price = away_spread_price
-                match_ref = kalshi_spread
-                if not match_ref.get("kalshi_matched"):
-                    warnings.append(f"kalshi_{match_ref.get('kalshi_reason')}")
-                ai_prob_row = blended_for_selection(spread_pick, market_home_prob)
-                rows_out.append(
-                    {
-                        "League": league_name,
-                        "Home": home,
-                        "Away": away,
-                        "Commence (UTC)": commence_iso,
-                        "Commence (Local)": commence_local,
-                        "Local Date": commence_date_local,
-                        "Market": "Spread",
-                        "Book": g.get("best_spread_book"),
-                        "Home_Spread": g.get("home_spread_point"),
-                        "Home_Spread_Price": g.get("home_spread_price"),
-                        "Away_Spread": g.get("away_spread_point"),
-                        "Away_Spread_Price": g.get("away_spread_price"),
-                        "Pick": spread_pick,
-                        "Implied_Prob": american_to_implied_prob(spread_pick_price),
-                        "AI_Prob": ai_prob_row,
-                        "Warnings": ";".join(warnings),
-                        "kalshi_available": match_ref.get("kalshi_available"),
-                        "kalshi_label": match_ref.get("kalshi_label"),
-                        "kalshi_event_ticker": match_ref.get("kalshi_event_ticker"),
-                        "kalshi_matched": match_ref.get("kalshi_matched"),
-                        "kalshi_prob": match_ref.get("kalshi_prob"),
-                        "kalshi_reason": match_ref.get("kalshi_reason"),
-                        "kalshi_market_type": match_ref.get("kalshi_market_type"),
-                        "kalshi_ticker": match_ref.get("kalshi_ticker"),
-                        "kalshi_line": match_ref.get("kalshi_line"),
-                        "kalshi_title": match_ref.get("kalshi_title"),
-                        "kalshi_match_score": match_ref.get("kalshi_match_score"),
-                        "Home_Sentiment": home_sent,
-                        "Away_Sentiment": away_sent,
-                        "Sentiment_Diff": sentiment_diff,
-                    }
-                )
-                spread_row_added = True
-                master_stats["market_rows_out"] += 1
-
-            if (
-                g.get("total_point") is not None
-                and g.get("over_price") is not None
-                and g.get("under_price") is not None
-            ):
-                total_pick = "Over"
-                over_price = g.get("over_price")
-                under_price = g.get("under_price")
-                total_pick_price = over_price
-                if under_price is not None and over_price is not None:
-                    if float(under_price) > float(over_price):
-                        total_pick = "Under"
-                        total_pick_price = under_price
-                elif under_price is not None:
-                    total_pick = "Under"
-                    total_pick_price = under_price
-                match_ref = kalshi_total
-                if not match_ref.get("kalshi_matched"):
-                    warnings.append(f"kalshi_{match_ref.get('kalshi_reason')}")
-                ai_prob_row = blended_for_selection(home, market_home_prob)
-                rows_out.append(
-                    {
-                        "League": league_name,
-                        "Home": home,
-                        "Away": away,
-                        "Commence (UTC)": commence_iso,
-                        "Commence (Local)": commence_local,
-                        "Local Date": commence_date_local,
-                        "Market": "Total",
-                        "Book": g.get("best_total_book"),
-                        "Total_Point": g.get("total_point"),
-                        "Over_Price": g.get("over_price"),
-                        "Under_Price": g.get("under_price"),
-                        "Pick": total_pick,
-                        "Implied_Prob": american_to_implied_prob(total_pick_price),
-                        "AI_Prob": ai_prob_row,
-                        "Warnings": ";".join(warnings),
-                        "kalshi_available": match_ref.get("kalshi_available"),
-                        "kalshi_label": match_ref.get("kalshi_label"),
-                        "kalshi_event_ticker": match_ref.get("kalshi_event_ticker"),
-                        "kalshi_matched": match_ref.get("kalshi_matched"),
-                        "kalshi_prob": match_ref.get("kalshi_prob"),
-                        "kalshi_reason": match_ref.get("kalshi_reason"),
-                        "kalshi_market_type": match_ref.get("kalshi_market_type"),
-                        "kalshi_ticker": match_ref.get("kalshi_ticker"),
-                        "kalshi_line": match_ref.get("kalshi_line"),
-                        "kalshi_title": match_ref.get("kalshi_title"),
-                        "kalshi_match_score": match_ref.get("kalshi_match_score"),
-                        "Home_Sentiment": home_sent,
-                        "Away_Sentiment": away_sent,
-                        "Sentiment_Diff": sentiment_diff,
-                    }
-                )
-                total_row_added = True
-                master_stats["market_rows_out"] += 1
-
-            if not (moneyline_row_added or spread_row_added or total_row_added):
-                warnings = list(dict.fromkeys(warnings + ["no_markets"]))
-                rows_out.append(
-                    {
-                        "League": league_name,
-                        "Home": home,
-                        "Away": away,
-                        "Commence (UTC)": commence_iso,
-                        "Commence (Local)": commence_local,
-                        "Local Date": commence_date_local,
-                        "Market": "None",
-                        "Book": None,
-                        "Pick": None,
-                        "Implied_Prob": None,
-                        "AI_Prob": vertex_prob_home,
-                        "Warnings": ";".join(warnings),
-                        "kalshi_available": kalshi_winner.get("kalshi_available"),
-                        "kalshi_label": kalshi_winner.get("kalshi_label"),
-                        "kalshi_event_ticker": kalshi_winner.get("kalshi_event_ticker"),
-                        "kalshi_matched": kalshi_winner.get("kalshi_matched"),
-                        "kalshi_prob": kalshi_winner.get("kalshi_prob"),
-                        "kalshi_reason": kalshi_winner.get("kalshi_reason"),
-                        "kalshi_market_type": kalshi_winner.get("kalshi_market_type"),
-                        "kalshi_ticker": kalshi_winner.get("kalshi_ticker"),
-                        "kalshi_line": kalshi_winner.get("kalshi_line"),
-                        "kalshi_title": kalshi_winner.get("kalshi_title"),
-                        "kalshi_match_score": kalshi_winner.get("kalshi_match_score"),
-                        "Home_Sentiment": home_sent,
-                        "Away_Sentiment": away_sent,
-                        "Sentiment_Diff": sentiment_diff,
-                    }
-                )
                 master_stats["market_rows_out"] += 1
 
         df = pd.DataFrame(rows_out)
@@ -2017,7 +1792,6 @@ with tab_kalshi:
                 kalshi_status.get("warning")
                 or "Kalshi reachable, but no NBA KXNBAGAME markets returned (futures-only or slate not listed)."
             )
-
 
 with tab_sentiment:
     st.header("Sentiment")
