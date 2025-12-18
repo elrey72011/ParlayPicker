@@ -1705,15 +1705,16 @@ with tab_master:
             market_home_prob = implied_home if implied_home is not None else (1.0 - implied_away if implied_away else 0.5)
 
             # Define the Blended Probability logic for this specific game
-            def blended_for_selection(selection_team: str, m_prob_home: Optional[float]) -> float:
+            def blended_for_selection(selection_team: str, market_prob_home: Optional[float]) -> float:
                 selection_flag = "home" if selection_team == home else "away"
+                # Ensure ALL 6 arguments are passed to match your analyzer logic
                 return blended_win_prob(
-                    market_prob=m_prob_home,
+                    market_prob=market_prob_home,
                     vertex_prob=vertex_prob_home,
                     theover_prob=None,
-                    kalshi_prob=kalshi_matches.get("winner", {}).get("kalshi_prob"),
+                    kalshi_prob=kalshi_winner.get("kalshi_prob"),
                     sentiment_diff=sentiment_diff,
-                    selection=selection_flag,
+                    selection=selection_flag,  # <--- CRITICAL FIX: Add this argument
                 )
                 rows_out.append(
                     {
