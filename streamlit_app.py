@@ -1659,39 +1659,42 @@ with tab_master:
         }
         kalshi_match_results: List[Dict[str, Any]] = []
         # --- CLEANED MASTER ANALYSIS LOOP ---
-        # --- FIX: Define variables at the start of the loop ---
         for idx, g in enumerate(games):
             warnings: List[str] = list(g.get("warnings") or [])
             league_name = g.get("league")
             home = g.get("home_team")
             away = g.get("away_team")
-
-            # DEFINE THESE HERE TO FIX THE NAMEERROR
+        
+            # FIX: Define codes immediately for use in filtering
+            h_code = nba_abbrev(home)
+            a_code = nba_abbrev(away)
+        
             commence_iso = g.get("commence_time_iso_utc") or safe_iso(g.get("commence_time_iso"))
             commence_local = fmt_local_time(g.get("commence_time_local"))
             commence_date_local = g.get("commence_date_local") or ""
             
-            # Now the rest of your sentiment and Kalshi logic...
+            # Sentiment logic
             home_sent = sentiment_map.get(home, 0.0)
             away_sent = sentiment_map.get(away, 0.0)
             sentiment_diff = home_sent - away_sent
         
-            # 2. Kalshi Market Discovery & Matching
-            # This logic only needs to run once per game
+            # 2. Kalshi Matching (Use the variables defined above)
             filtered_markets = filter_kalshi_game_markets(
                 kalshi_markets,
                 g.get("commence_time_utc"),
                 league_name,
                 home,
                 away,
-                nba_abbrev(home),
-                nba_abbrev(away),
+                h_code,
+                a_code,
             )
             
-            # De-dupe results
+            # De-dupe and match
             deduped = {m.get("event_ticker") or m.get("ticker"): m for m in filtered_markets}
-            filtered_markets = list(deduped.values())
-            filtered_counts.append(len(filtered_markets))
+            winner_reason_override = "winner_not_in_fetched_markets" if not filtered_markets else None
+            
+            kalshi_matches, _ = match_kalshi_market(g, list(deduped.values()), winner_reason_override)
+            kalshi_winner = kalshi_matches.get("winner", {})
 
             winner_reason_override = None
            # --- 5. FALLBACK: "NONE" MARKET ROW ---
