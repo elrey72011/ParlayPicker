@@ -13,6 +13,7 @@ import streamlit as st
 from app_core.kalshi_integrator import (
     KalshiIntegrator,
     LEAGUE_SERIES_MAP,
+    league_game_prefix,
     team_code_for_league,
 )
 from app_core.sentiment_pipeline import build_team_sentiment_map
@@ -484,8 +485,7 @@ def fetch_kalshi_markets(
         return []
 
     league_upper = (selected_league or "").upper()
-    league_series = LEAGUE_SERIES_MAP.get(league_upper) or []
-    winner_prefix = next((p for p in league_series if "GAME" in p), f"KX{league_upper}GAME")
+    winner_prefix = league_game_prefix(league_upper)
 
     def ticker_upper(market: Dict[str, Any]) -> str:
         return str(market.get("event_ticker") or market.get("ticker") or "").upper()
@@ -499,11 +499,11 @@ def fetch_kalshi_markets(
         }
 
     def date_tokens_from_commence(commence_list: Optional[List[str]]) -> set:
-        """Convert commence_time ISO strings -> Kalshi tokens like 25DEC17 using New York local date."""
+        """Convert commence_time ISO strings -> Kalshi tokens like 25DEC17 using app local date."""
         if not commence_list:
             return set()
 
-        tz_name = "America/New_York"
+        tz_name = get_local_tz()
         try:
             local_tz = ZoneInfo(tz_name)
         except Exception:
@@ -534,7 +534,7 @@ def fetch_kalshi_markets(
         markets_raw = markets_raw or []
 
         raw_counts = prefix_count(markets_raw)
-        kx_game_count = len([m for m in markets_raw if "KXNBAGAME-" in ticker_upper(m)])
+        kx_game_count = len([m for m in markets_raw if ticker_upper(m).startswith(f"{winner_prefix}-")])
         split = kalshi_integrator.split_market_kinds(markets_raw, selected_league)
         game_pool: List[Dict[str, Any]] = [
             m for m in (split.get("single_game_candidates") or []) if ticker_upper(m).startswith(winner_prefix)
@@ -566,30 +566,12 @@ def fetch_kalshi_markets(
                     "date_token_filter_removed_all_markets; using unfiltered pool"
                 )
 
-        if not game_pool and markets_raw:
-            fallback_raw = kalshi_integrator.get_markets_paginated(status=None, max_pages=5)
-            st.session_state["kalshi_last_request_params"] = kalshi_integrator.last_request_params
-            split_fb = kalshi_integrator.split_market_kinds(fallback_raw, selected_league)
-            if split_fb.get("single_game_candidates"):
-                markets_raw = fallback_raw or []
-                raw_counts = prefix_count(markets_raw)
-                game_pool = [
-                    m
-                    for m in (split_fb.get("single_game_candidates") or [])
-                    if ticker_upper(m).startswith(winner_prefix)
-                ]
-                game_pool_counts = prefix_count(game_pool)
-        if not game_pool and markets_raw:
-            # Local fallback to avoid futures-only false positives
-            local_pool = [m for m in markets_raw if winner_prefix in ticker_upper(m)]
-            if local_pool:
-                game_pool = local_pool
-                game_pool_counts = prefix_count(game_pool)
-        if not game_pool and split.get("single_game_candidates"):
+        if league_upper == "NBA":
             game_pool = [
-                m for m in (split.get("single_game_candidates") or []) if ticker_upper(m).startswith(winner_prefix)
-            ]
-            game_pool_counts = prefix_count(game_pool)
+                m
+                for m in game_pool
+                if ticker_upper(m).startswith("KXNBAGAME-")
+            ] or game_pool
 
         st.session_state["kalshi_markets_raw"] = markets_raw
         st.session_state["kalshi_markets_game_pool"] = game_pool
@@ -598,31 +580,25 @@ def fetch_kalshi_markets(
             "raw": {"total": len(markets_raw), **raw_counts},
             "game_pool": {"total": len(game_pool), **game_pool_counts},
         }
-        st.session_state["kalshi_fetch_debug"] = {
+        st.session_state["kalshi_prefix_samples_game"] = [
+            str(m.get("event_ticker") or m.get("ticker") or "")
+            for m in game_pool[:20]
+        ]
+        st.session_state["kalshi_request_params_snapshot"] = dict(
+            kalshi_integrator.last_request_params or {}
+        )
+        st.session_state["kalshi_last_request_params"] = (
+            kalshi_integrator.last_request_params or {}
+        )
+        st.session_state["kalshi_debug_summary"] = {
+            "league": league_upper,
             "fetched_total": len(markets_raw),
-            "fetched_game_prefix": game_pool_counts.get("count_prefix_game"),
-            "kxnbagame_in_raw": kx_game_count,
+            "game_prefix": winner_prefix,
+            "kx_game_count": kx_game_count,
             "wanted_tokens": sorted(list(wanted_tokens)) if wanted_tokens else [],
             "after_token_filter": len(game_pool),
-            "kxnbagame_after_filter": len(
-                [m for m in game_pool if ticker_upper(m).startswith("KXNBAGAME-")]
-            ),
-            "request_params": st.session_state.get("kalshi_request_params_snapshot", {}),
-            "league": league_upper,
-            "winner_prefix": winner_prefix,
-            "sample_first_10_tickers": [
-                ticker_upper(m) for m in (game_pool or markets_raw)[:10]
-            ],
+            "first_10_tickers": [ticker_upper(m) for m in markets_raw[:10]],
         }
-        samples_game = []
-        for m in game_pool:
-            evt = ticker_upper(m)
-            if "GAME-" in evt:
-                samples_game.append(evt)
-            if len(samples_game) >= 20:
-                break
-        st.session_state["kalshi_prefix_samples_game"] = samples_game
-        st.session_state["kalshi_game_pool_sample"] = samples_game[:10]
         return game_pool
     except Exception:
         st.session_state["last_exception"] = traceback.format_exc()
@@ -643,10 +619,7 @@ def fetch_kalshi_markets_for_leagues(
         ]
         markets = fetch_kalshi_markets(lg, commence_times_utc=commence_times_utc)
         league_upper = (lg or "").upper()
-        winner_prefix = next(
-            (p for p in (LEAGUE_SERIES_MAP.get(league_upper) or []) if "GAME" in p),
-            f"KX{league_upper}GAME",
-        )
+        winner_prefix = league_game_prefix(league_upper)
         out[lg] = markets or []
         tokens = []
         try:
@@ -1008,7 +981,7 @@ def filter_kalshi_game_markets(
     away_code: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     try:
-        tz_name = "America/New_York"
+        tz_name = get_local_tz()
         local_tz = None
         try:
             local_tz = ZoneInfo(tz_name)
@@ -1022,11 +995,9 @@ def filter_kalshi_game_markets(
             game_dt = game_dt.replace(tzinfo=timezone.utc)
         game_local = game_dt.astimezone(local_tz) if (game_dt and local_tz) else game_dt
         date_token = game_local.strftime("%y%b%d").upper() if game_local else kalshi_date_token_from_local(game_time_utc)
+        date_token = date_token or "UNKNOWN"
 
-        winner_prefix = next(
-            (p for p in (LEAGUE_SERIES_MAP.get((league or "").upper()) or []) if "GAME" in p),
-            f"KX{(league or '').upper()}GAME",
-        )
+        winner_prefix = league_game_prefix(league)
 
         # Prefer provided codes; fall back to mapping from team names.
         home_code_upper = (home_code or team_code_for_league(league, home_team) or "").upper()
@@ -1289,7 +1260,7 @@ def match_kalshi_market(
     if isinstance(game_dt_utc, datetime) and game_dt_utc.tzinfo is None:
         game_dt_utc = game_dt_utc.replace(tzinfo=timezone.utc)
 
-    tz_name = "America/New_York"
+    tz_name = get_local_tz()
     local_tz = None
     try:
         local_tz = ZoneInfo(tz_name)
@@ -1299,11 +1270,9 @@ def match_kalshi_market(
     date_token = game_local.strftime("%y%b%d").upper() if game_local else kalshi_date_token_from_local(
         game.get("commence_date_local")
     )
+    date_token = date_token or "UNKNOWN"
 
-    winner_prefix = next(
-        (p for p in (LEAGUE_SERIES_MAP.get(league_name) or []) if "GAME" in p),
-        f"KX{league_name}GAME",
-    )
+    winner_prefix = league_game_prefix(league_name)
 
     away_code_expected = team_code_for_league(league_name, game.get("away_team"))
     home_code_expected = team_code_for_league(league_name, game.get("home_team"))
@@ -2007,9 +1976,10 @@ with tab_kalshi:
         if (kalshi_status.get("market_count") or 0) > 0:
             st.success("Kalshi credentials detected and markets available.")
         else:
+            expected_prefix = league_game_prefix(league)
             st.warning(
                 kalshi_status.get("warning")
-                or "Kalshi reachable, but no NBA KXNBAGAME markets returned (futures-only or slate not listed)."
+                or f"Kalshi reachable, but no {league} {expected_prefix} markets returned (futures-only or slate not listed)."
             )
 
 with tab_sentiment:
