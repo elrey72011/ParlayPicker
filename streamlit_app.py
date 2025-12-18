@@ -35,33 +35,30 @@ with tab_master:
 
         # --- CORRECTED MASTER ANALYSIS LOOP ---
         for idx, g in enumerate(games):
-            # 1. DEFINE VARIABLES IMMEDIATELY
+            # 1. INITIALIZE VARIABLES IMMEDIATELY (Prevents NameErrors)
             league_name = g.get("league")
             home, away = g.get("home_team"), g.get("away_team")
             h_code, a_code = nba_abbrev(home), nba_abbrev(away)
             
+            # Standardize display strings
             commence_iso = g.get("commence_time_iso_utc") or safe_iso(g.get("commence_time_iso"))
             commence_local = fmt_local_time(g.get("commence_time_local"))
-            commence_date_local = g.get("commence_date_local") or ""
             
-            # 2. CALCULATE SCORES BEFORE APPENDING
+            # 2. CALCULATE ALL SCORES BEFORE GENERATING ROWS
             vertex_prob_home = get_vertex_prob(g)
             home_sent = sentiment_map.get(home, 0.0)
             away_sent = sentiment_map.get(away, 0.0)
             sentiment_diff = home_sent - away_sent
         
-            # Kalshi Matching
+            # Kalshi Matching Logic
             filtered_markets = filter_kalshi_game_markets(
                 kalshi_markets, g.get("commence_time_utc"), league_name,
                 home, away, h_code, a_code
             )
-            deduped = {m.get("event_ticker") or m.get("ticker"): m for m in filtered_markets}
-            winner_reason_override = "winner_not_in_fetched_markets" if not filtered_markets else None
-            kalshi_matches, _ = match_kalshi_market(g, list(deduped.values()), winner_reason_override)
-            
+            kalshi_matches, _ = match_kalshi_market(g, filtered_markets)
             kalshi_winner = kalshi_matches.get("winner", {})
-
-            # 3. APPEND FALLBACK IF NO ODDS
+        
+            # 3. GENERATE ROWS SAFELY (Variables are now defined)
             if not (g.get("home_ml_price") or g.get("home_spread_point") or g.get("total_point")):
                 rows_out.append({
                     "League": league_name, "Home": home, "Away": away,
