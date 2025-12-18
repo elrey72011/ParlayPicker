@@ -893,6 +893,29 @@ class KalshiIntegrator:
         logger.info(f"✅ Successfully loaded {len(all_markets)} Kalshi markets (paginated)")
         return all_markets
 
+    def get_nba_game_markets(
+        self, *, status: Optional[str] = None, limit: int = 200, max_pages: int = 10
+    ) -> List[Dict[str, Any]]:
+        """Fetch NBA markets broadly, returning KXNBAGAME entries when available."""
+
+        normalized_status = normalize_status(status)
+        markets: List[Dict[str, Any]] = []
+        try:
+            markets = self.get_markets_paginated(
+                status=normalized_status, limit=limit, max_pages=max_pages
+            )
+        except Exception:
+            logger.exception("NBA market pagination failed")
+            return []
+
+        game_markets = [
+            m
+            for m in markets or []
+            if str(m.get("event_ticker") or m.get("ticker") or "").upper().startswith("KXNBAGAME-")
+        ]
+
+        return game_markets if game_markets else markets
+
     def get_league_markets(
         self,
         league: str,
@@ -924,10 +947,10 @@ class KalshiIntegrator:
         futures_hits = 0
 
         if league_key == "NBA":
-            nba_pages = self.get_markets_paginated(
-                status=normalized_status, limit=200, max_pages=max_pages, extra_params=None
+            nba_pages = self.get_nba_game_markets(
+                status=normalized_status, limit=200, max_pages=max_pages
             )
-            pages = min(max_pages, len(nba_pages) // 200 + 1)
+            pages = min(max_pages, max(1, len(nba_pages) // 200 + 1))
             for m in nba_pages or []:
                 key = str(m.get("event_ticker") or m.get("ticker") or "").upper()
                 if key not in collected:
@@ -936,24 +959,6 @@ class KalshiIntegrator:
                     game_hits += 1
                 elif key.startswith("KXNBA"):
                     futures_hits += 1
-
-            # Optional prefix sweep if needed
-            if not game_hits:
-                prefix_chunk = self.get_markets_paginated(
-                    status=normalized_status,
-                    limit=200,
-                    max_pages=max_pages,
-                    extra_params={"series_ticker": "KXNBA"},
-                )
-                for m in prefix_chunk or []:
-                    key = str(m.get("event_ticker") or m.get("ticker") or "").upper()
-                    if key not in collected:
-                        collected[key] = m
-                    if key.startswith("KXNBAGAME-"):
-                        game_hits += 1
-                    elif key.startswith("KXNBA"):
-                        futures_hits += 1
-                pages = max(pages, min(max_pages, len(prefix_chunk) // 200 + 1))
 
             all_markets = list(collected.values())
             game_only = [

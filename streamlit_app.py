@@ -597,6 +597,9 @@ def fetch_kalshi_markets(
             "request_params": st.session_state.get("kalshi_request_params_snapshot", {}),
             "league": league_upper,
             "winner_prefix": winner_prefix,
+            "sample_first_10_tickers": [
+                ticker_upper(m) for m in (game_pool or markets_raw)[:10]
+            ],
         }
         samples_game = []
         for m in game_pool:
