@@ -1474,14 +1474,57 @@ def load_games(selected_leagues: Union[str, List[str]]) -> List[Dict[str, Any]]:
             deduped[key] = g
 
     games_final = list(deduped.values())
-    st.session_state["games"] = games_final
+
+    # Restrict to current local day (post-conversion)
+    tz_name = get_local_tz()
+    try:
+        local_tz = ZoneInfo(tz_name)
+    except Exception:
+        local_tz = timezone.utc
+    today_local = datetime.now(local_tz).date().isoformat()
+
+    def game_local_date(game: Dict[str, Any]) -> Optional[str]:
+        if game.get("commence_date_local"):
+            return str(game.get("commence_date_local"))
+        dt_utc = parse_commence_to_utc(
+            game.get("commence_time_iso_utc")
+            or game.get("commence_time")
+            or game.get("commence_time_iso")
+            or game.get("commence_time_utc")
+        )
+        if not dt_utc:
+            return None
+        if dt_utc.tzinfo is None:
+            dt_utc = dt_utc.replace(tzinfo=timezone.utc)
+        try:
+            return dt_utc.astimezone(local_tz).date().isoformat()
+        except Exception:
+            return None
+
+    filtered_games: List[Dict[str, Any]] = []
+    for g in games_final:
+        if game_local_date(g) == today_local:
+            filtered_games.append(g)
+
+    # Recompute counts to match filtered games
+    moneyline_count_filtered = sum(1 for g in filtered_games if g.get("best_ml_book") is not None)
+    spreads_count_filtered = sum(1 for g in filtered_games if g.get("best_spread_book") is not None)
+    totals_count_filtered = sum(1 for g in filtered_games if g.get("best_total_book") is not None)
+
+    st.session_state["games"] = filtered_games
     st.session_state["commence_stats"] = commence_stats_total
     st.session_state["market_counts"] = {
-        "moneyline_available_count": moneyline_count,
-        "spreads_available_count": spreads_count,
-        "totals_available_count": totals_count,
+        "moneyline_available_count": moneyline_count_filtered,
+        "spreads_available_count": spreads_count_filtered,
+        "totals_available_count": totals_count_filtered,
     }
-    return games_final
+    st.session_state["game_filter_info"] = {
+        "total_loaded": len(games_final),
+        "filtered_to_today": len(filtered_games),
+        "today_local": today_local,
+        "timezone": tz_name,
+    }
+    return filtered_games
 
 
 # -----------------
