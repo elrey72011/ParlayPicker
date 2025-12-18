@@ -1153,40 +1153,48 @@ class KalshiIntegrator:
 
         return False
 
-def split_market_kinds(self, markets: List[Dict[str, Any]], league: Optional[str] = None) -> Dict[str, List[Dict[str, Any]]]:
-    league_key = (league or "").upper()
-    prefix = LEAGUE_SERIES_MAP.get(league_key, "")
-    game_prefix = league_game_prefix(league_key)
-    date_token_pattern = re.compile(r"\d{2}[A-Z]{3}\d{2}")
-    single_game: List[Dict[str, Any]] = []
-    multivariate: List[Dict[str, Any]] = []
-    other: List[Dict[str, Any]] = []
-    for m in markets or []:
-        if self.is_multivariate_bundle(m):
-            multivariate.append(m)
-            continue
-        t = str(m.get("event_ticker") or m.get("ticker") or "").upper()
-        if t.startswith(f"{game_prefix}-"):
-            single_game.append(m)
-            continue
-        if league_key == "NCAAB" and "GAME" in t and ("NCAAB" in t or "NCAA" in t):
-            single_game.append(m)
-            continue
-        if league_key == "NCAAB" and ("NCAAB" in t or "NCAA" in t) and date_token_pattern.search(t):
-            single_game.append(m)
-            continue
-        if isinstance(prefix, list):
-            if any(t.startswith(pfx) for pfx in prefix):
-                single_game.append(m)
-            else:
-                other.append(m)
+    def split_market_kinds(
+        self, markets: List[Dict[str, Any]], league: Optional[str] = None
+    ) -> Dict[str, List[Dict[str, Any]]]:
+        league_key = (league or "").upper()
+        prefix = LEAGUE_SERIES_MAP.get(league_key, "")
+        game_prefix = league_game_prefix(league_key)
+        date_token_pattern = re.compile(r"\d{2}[A-Z]{3}\d{2}")
+
+        single_game: List[Dict[str, Any]] = []
+        multivariate: List[Dict[str, Any]] = []
+        other: List[Dict[str, Any]] = []
+
+        for m in markets or []:
+            if self.is_multivariate_bundle(m):
+                multivariate.append(m)
                 continue
-            if prefix and t.startswith(prefix):
+
+            t = str(m.get("event_ticker") or m.get("ticker") or "").upper()
+
+            if game_prefix and t.startswith(f"{game_prefix}-"):
                 single_game.append(m)
-            elif not prefix:
+                continue
+
+            if league_key == "NCAAB" and "GAME" in t and ("NCAAB" in t or "NCAA" in t):
                 single_game.append(m)
+                continue
+
+            if league_key == "NCAAB" and ("NCAAB" in t or "NCAA" in t) and date_token_pattern.search(t):
+                single_game.append(m)
+                continue
+
+            if isinstance(prefix, list):
+                if any(pfx and t.startswith(pfx) for pfx in prefix):
+                    single_game.append(m)
+                else:
+                    other.append(m)
             else:
-                other.append(m)
+                if prefix and t.startswith(prefix):
+                    single_game.append(m)
+                else:
+                    other.append(m)
+
         return {
             "single_game_candidates": single_game,
             "multivariate_bundles": multivariate,
