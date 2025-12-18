@@ -987,8 +987,11 @@ class KalshiIntegrator:
         now = time.time()
         cached = self._league_cache.get(cache_key)
         if cached and (now - cached.get("ts", 0)) < self._league_cache_ttl:
-            self.last_fetch_meta = cached.get("meta", {})
-            return cached.get("markets", [])
+            cached_markets = cached.get("markets") or []
+            # Re-fetch if the cached result was empty so we can pick up newly available markets.
+            if cached_markets:
+                self.last_fetch_meta = cached.get("meta", {})
+                return cached_markets
 
         futures_noise: List[Dict[str, Any]] = []
         collected: Dict[str, Dict[str, Any]] = {}
@@ -1140,7 +1143,21 @@ class KalshiIntegrator:
             return markets
 
         ticker_upper = [str(m.get("ticker") or m.get("event_ticker") or "").upper() for m in markets]
-        if isinstance(prefix, list):
+        if league_key == "NCAAB":
+            prefix_filtered = [
+                m
+                for m, t in zip(markets, ticker_upper)
+                if ("NCAAB" in t)
+                or ("NCAA" in t and "NCAAF" not in t and "FOOT" not in t)
+            ]
+        elif league_key == "NCAAF":
+            prefix_filtered = [
+                m
+                for m, t in zip(markets, ticker_upper)
+                if ("NCAAF" in t)
+                or ("NCAA" in t and "BASK" not in t and "NCAAB" not in t)
+            ]
+        elif isinstance(prefix, list):
             prefix_filtered = [
                 m
                 for m, t in zip(markets, ticker_upper)
