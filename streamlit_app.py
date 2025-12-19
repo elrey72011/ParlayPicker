@@ -1704,6 +1704,7 @@ tab_games, tab_master, tab_kalshi, tab_sentiment, tab_debug = st.tabs(
 with tab_games:
     st.header("Games & Odds")
     games = st.session_state.get("games", [])
+    sent_map = st.session_state.get("sentiment_map") or {}
     match_lookup: Dict[Tuple[Any, Any, Any, Any], Dict[str, Any]] = {}
     for entry in st.session_state.get("kalshi_match_results") or []:
         game = entry.get("game") or {}
@@ -1727,6 +1728,11 @@ with tab_games:
                 for m in bm.get("markets") or []:
                     if m.get("key"):
                         markets.add(m.get("key"))
+            home_sent = sent_map.get(g.get("home_team"))
+            away_sent = sent_map.get(g.get("away_team"))
+            sent_diff = None
+            if home_sent is not None and away_sent is not None:
+                sent_diff = home_sent - away_sent
             rows.append(
                 {
                     "League": g.get("league"),
@@ -1749,6 +1755,9 @@ with tab_games:
                     "total_point": g.get("total_point"),
                     "over_price": g.get("over_price"),
                     "under_price": g.get("under_price"),
+                    "Home_Sentiment": home_sent,
+                    "Away_Sentiment": away_sent,
+                    "Sentiment_Diff": sent_diff,
                     "warnings": ",".join(g.get("warnings") or []),
                 }
             )
@@ -2189,6 +2198,8 @@ with tab_master:
                     "Sentiment_Diff": sentiment_diff,
                     "Spread & Pick": f"{spread_pick} {spread_line}" if spread_pick is not None else None,
                     "Total & Pick": f"{total_pick} {total_line}" if total_pick is not None else None,
+                    "Home_Sentiment": home_sent,
+                    "Away_Sentiment": away_sent,
                 })
                 master_stats["market_rows_out"] += 1
 
@@ -2207,6 +2218,8 @@ with tab_master:
                     "Sentiment_Diff": sentiment_diff,
                     "Spread & Pick": f"{spread_pick} {spread_line}" if spread_pick is not None else None,
                     "Total & Pick": f"{total_pick} {total_line}" if total_pick is not None else None,
+                    "Home_Sentiment": home_sent,
+                    "Away_Sentiment": away_sent,
                 })
                 master_stats["market_rows_out"] += 1
                     
