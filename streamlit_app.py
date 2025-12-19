@@ -1088,6 +1088,24 @@ def filter_kalshi_game_markets(
                 continue
             matched.append(m)
 
+        # Fallback: if nothing matched for NCAA leagues, relax date token filtering while
+        # still enforcing league + team code presence to avoid cross-sport contamination.
+        if not matched and league_upper in {"NCAAB", "NCAAF"}:
+            for m in markets or []:
+                t = ticker_upper(m)
+                if "GAME" not in t:
+                    continue
+                if not (
+                    any(t.startswith(pfx) for pfx in allowed_prefixes)
+                    or ("NCAAB" in t or "NCAA" in t or "NCAAF" in t)
+                ):
+                    continue
+                if home_codes and not any(code in t for code in home_codes):
+                    continue
+                if away_codes and not any(code in t for code in away_codes):
+                    continue
+                matched.append(m)
+
         return matched
     except Exception:
         st.session_state["last_exception"] = traceback.format_exc()
@@ -2035,14 +2053,24 @@ with tab_master:
 
             # SPREAD ROW
             if g.get("home_spread_point") is not None:
-                spread_pick = home if (g.get("home_spread_price") or 0) >= (g.get("away_spread_price") or 0) else away
+                home_spread_prob = american_to_implied_prob(g.get("home_spread_price"))
+                away_spread_prob = american_to_implied_prob(g.get("away_spread_price"))
+                spread_pick = home
+                spread_implied = home_spread_prob
+                if away_spread_prob is not None and (away_spread_prob >= (home_spread_prob or 0)):
+                    spread_pick = away
+                    spread_implied = away_spread_prob
+                elif home_spread_prob is None and away_spread_prob is not None:
+                    spread_pick = away
+                    spread_implied = away_spread_prob
                 ai_prob_row = blended_for_selection(spread_pick, market_home_prob)
+                spread_line = g.get("home_spread_point") if spread_pick == home else g.get("away_spread_point")
                 
                 rows_out.append({
                     "League": league_name, "Home": home, "Away": away,
                     "Commence (UTC)": commence_iso, "Commence (Local)": commence_local,
                     "Market": "Spread", "Book": g.get("best_spread_book"),
-                    "Pick": spread_pick, "AI_Prob": ai_prob_row,
+                    "Pick": spread_pick, "Implied_Prob": spread_implied, "Line": spread_line, "AI_Prob": ai_prob_row,
                     "kalshi_matched": kalshi_spread.get("kalshi_matched"),
                     "kalshi_prob": kalshi_spread.get("kalshi_prob"),
                     "Sentiment_Diff": sentiment_diff,
@@ -2051,13 +2079,23 @@ with tab_master:
 
             # TOTAL ROW
             if g.get("total_point") is not None:
+                over_prob = american_to_implied_prob(g.get("over_price"))
+                under_prob = american_to_implied_prob(g.get("under_price"))
+                total_pick = "Over"
+                total_implied = over_prob
+                if under_prob is not None and (under_prob >= (over_prob or 0)):
+                    total_pick = "Under"
+                    total_implied = under_prob
+                elif over_prob is None and under_prob is not None:
+                    total_pick = "Under"
+                    total_implied = under_prob
                 ai_prob_row = blended_for_selection(home, market_home_prob)
 
                 rows_out.append({
                     "League": league_name, "Home": home, "Away": away,
                     "Commence (UTC)": commence_iso, "Commence (Local)": commence_local,
                     "Market": "Total", "Book": g.get("best_total_book"),
-                    "Pick": "Over", "AI_Prob": ai_prob_row,
+                    "Pick": total_pick, "Implied_Prob": total_implied, "Line": g.get("total_point"), "AI_Prob": ai_prob_row,
                     "kalshi_matched": kalshi_total.get("kalshi_matched"),
                     "kalshi_prob": kalshi_total.get("kalshi_prob"),
                     "Sentiment_Diff": sentiment_diff,
