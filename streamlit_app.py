@@ -2043,6 +2043,8 @@ with tab_master:
         # --- CLEANED MASTER ANALYSIS LOOP ---
         # --- FIX: Define variables at the start of the loop ---
         for idx, g in enumerate(games):
+            kalshi_prob_used: Optional[float] = None
+            kalshi_event_used: Optional[str] = None
             warnings: List[str] = list(g.get("warnings") or [])
             league_name = g.get("league")
             home = g.get("home_team")
