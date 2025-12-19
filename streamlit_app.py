@@ -2057,8 +2057,14 @@ with tab_master:
             home_sent = sentiment_map.get(home)
             away_sent = sentiment_map.get(away)
             sentiment_diff = home_sent - away_sent if (home_sent is not None and away_sent is not None) else None
-            sentiment_adj = compute_sentiment_adj(sentiment_diff)
-            sentiment_source = "news_api" if sentiment_diff is not None else None
+            league_sent_debug = (st.session_state.get("sentiment_debug") or {}).get("per_league", {}).get(league_name, {})
+            article_total = 0
+            if isinstance(league_sent_debug, dict):
+                counts = league_sent_debug.get("article_counts") or {}
+                article_total = sum(counts.values()) if isinstance(counts, dict) else 0
+            sentiment_valid = bool(sentiment_diff is not None and article_total > 0)
+            sentiment_adj = compute_sentiment_adj(sentiment_diff) if sentiment_valid else None
+            sentiment_source = "newsapi" if sentiment_valid else "none"
             reddit_used = False
 
             vertex_prob_home = safe_float(get_vertex_prob(g))
@@ -2222,9 +2228,9 @@ with tab_master:
                 if ai_prob is None:
                     notes.append("Missing AI_Prob")
                     return None, notes
-                weights: List[Tuple[Optional[float], float]] = [(ai_prob, 0.75)]
+                weights: List[Tuple[Optional[float], float]] = [(ai_prob, 0.80)]
                 if kalshi_prob_used is not None:
-                    weights.append((kalshi_prob_used, 0.25))
+                    weights.append((kalshi_prob_used, 0.20))
                 consensus_val = blend_probs(weights)
                 if consensus_val is None:
                     notes.append("Consensus N/A")
@@ -2258,11 +2264,11 @@ with tab_master:
                     "Pick": pick, "Implied_Prob": implied_pick, "AI_Prob": ai_prob_row, "ai_prob_adj": ai_prob_row,
                     "consensus_prob": consensus_prob,
                     "Home_Sentiment": home_sent, "Away_Sentiment": away_sent, "Sentiment_Diff": sentiment_diff,
-                    "sentiment_adj": sentiment_adj, "sentiment_source": sentiment_source, "reddit_used": reddit_used,
+                    "sentiment_adj": sentiment_adj, "sentiment_source": sentiment_source, "reddit_used": reddit_used, "sentiment_valid": sentiment_valid,
                     "kalshi_available": kalshi_winner.get("kalshi_available"),
                     "kalshi_matched": kalshi_winner.get("kalshi_matched"),
-                    "kalshi_prob": kalshi_prob_used,
-                    "kalshi_event_ticker": kalshi_event_used,
+                    "kalshi_prob": kalshi_prob_used, "kalshi_prob_used": kalshi_prob_used,
+                    "kalshi_event_ticker": kalshi_event_used, "kalshi_event_ticker_used": kalshi_event_used,
                     "Spread & Pick": f"{spread_pick} {spread_line}" if spread_pick is not None else None,
                     "Total & Pick": f"{total_pick} {total_line}" if total_pick is not None else None,
                     "Vertex Spread Prob": vertex_spread_prob,
@@ -2291,10 +2297,12 @@ with tab_master:
                     "Market": "Spread", "Book": g.get("best_spread_book"),
                     "Pick": spread_pick, "Implied_Prob": spread_implied, "Line": spread_line, "AI_Prob": ai_prob_row,
                     "ai_prob_adj": ai_prob_row, "consensus_prob": consensus_prob,
-                    "sentiment_adj": sentiment_adj, "sentiment_source": sentiment_source, "reddit_used": reddit_used,
+                    "sentiment_adj": sentiment_adj, "sentiment_source": sentiment_source, "reddit_used": reddit_used, "sentiment_valid": sentiment_valid,
                     "Vertex Spread Prob": vertex_spread_prob,
                     "kalshi_matched": kalshi_spread.get("kalshi_matched"),
                     "kalshi_prob": kalshi_prob_used if kalshi_spread.get("kalshi_matched") else None,
+                    "kalshi_prob_used": kalshi_prob_used if kalshi_spread.get("kalshi_matched") else None,
+                    "kalshi_event_ticker_used": kalshi_event_used if kalshi_spread.get("kalshi_matched") else None,
                     "Sentiment_Diff": sentiment_diff,
                     "Spread & Pick": f"{spread_pick} {spread_line}" if spread_pick is not None else None,
                     "Total & Pick": f"{total_pick} {total_line}" if total_pick is not None else None,
@@ -2319,12 +2327,14 @@ with tab_master:
                     "Vertex Total Prob": vertex_total_prob,
                     "kalshi_matched": kalshi_total.get("kalshi_matched"),
                     "kalshi_prob": kalshi_prob_used if kalshi_total.get("kalshi_matched") else None,
+                    "kalshi_prob_used": kalshi_prob_used if kalshi_total.get("kalshi_matched") else None,
+                    "kalshi_event_ticker_used": kalshi_event_used if kalshi_total.get("kalshi_matched") else None,
                     "Sentiment_Diff": sentiment_diff,
                     "Spread & Pick": f"{spread_pick} {spread_line}" if spread_pick is not None else None,
                     "Total & Pick": f"{total_pick} {total_line}" if total_pick is not None else None,
                     "Home_Sentiment": home_sent,
                     "Away_Sentiment": away_sent,
-                    "sentiment_adj": sentiment_adj, "sentiment_source": sentiment_source, "reddit_used": reddit_used,
+                    "sentiment_adj": sentiment_adj, "sentiment_source": sentiment_source, "reddit_used": reddit_used, "sentiment_valid": sentiment_valid,
                 })
                 master_stats["market_rows_out"] += 1
                     
@@ -2348,13 +2358,15 @@ with tab_master:
         export_cols = [
             "AI_Prob",
             "Implied_Prob",
-            "kalshi_matched",
-            "kalshi_prob",
-            "sentiment_source",
-            "reddit_used",
-            "sentiment_adj",
             "ai_prob_adj",
             "consensus_prob",
+            "kalshi_matched",
+            "kalshi_prob_used",
+            "kalshi_event_ticker_used",
+            "sentiment_source",
+            "reddit_used",
+            "sentiment_valid",
+            "sentiment_adj",
         ]
         export_df = df.copy()
         for col in export_cols:
