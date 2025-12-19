@@ -2121,6 +2121,14 @@ with tab_master:
                 {"game": g, "matches": kalshi_matches, "candidate_debug": candidate_debug}
             )
 
+            # Null-safe Kalshi fields used downstream
+            kalshi_prob_used = (
+                kalshi_winner.get("kalshi_prob") if kalshi_winner.get("kalshi_matched") else None
+            )
+            kalshi_event_used = (
+                kalshi_winner.get("kalshi_event_ticker") if kalshi_winner.get("kalshi_matched") else None
+            )
+
             if (
                 kalshi_winner.get("kalshi_matched")
                 or kalshi_spread.get("kalshi_matched")
