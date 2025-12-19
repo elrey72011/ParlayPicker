@@ -2025,6 +2025,8 @@ with tab_master:
             total_pick = None
             total_implied = None
             total_line = g.get("total_point")
+            vertex_spread_prob = None
+            vertex_total_prob = None
             if g.get("total_point") is not None:
                 over_prob = american_to_implied_prob(g.get("over_price"))
                 under_prob = american_to_implied_prob(g.get("under_price"))
@@ -2036,6 +2038,8 @@ with tab_master:
                 elif over_prob is None and under_prob is not None:
                     total_pick = "Under"
                     total_implied = under_prob
+                # Vertex proxy for totals: use home win prob as directional signal
+                vertex_total_prob = vertex_prob_home
             
             # Baseline probability (Home Win)
             market_home_prob = implied_home if implied_home is not None else (1.0 - implied_away if implied_away else 0.5)
@@ -2088,13 +2092,16 @@ with tab_master:
             # SPREAD ROW
             if g.get("home_spread_point") is not None and spread_pick is not None:
                 ai_prob_row = blended_for_selection(spread_pick, market_home_prob)
-                spread_line = g.get("home_spread_point") if spread_pick == home else g.get("away_spread_point")
+                vertex_spread_prob = vertex_prob_home if spread_pick == home else (
+                    1.0 - vertex_prob_home if vertex_prob_home is not None else None
+                )
                 
                 rows_out.append({
                     "League": league_name, "Home": home, "Away": away,
                     "Commence (UTC)": commence_iso, "Commence (Local)": commence_local,
                     "Market": "Spread", "Book": g.get("best_spread_book"),
                     "Pick": spread_pick, "Implied_Prob": spread_implied, "Line": spread_line, "AI_Prob": ai_prob_row,
+                    "Vertex Spread Prob": vertex_spread_prob,
                     "kalshi_matched": kalshi_spread.get("kalshi_matched"),
                     "kalshi_prob": kalshi_spread.get("kalshi_prob"),
                     "Sentiment_Diff": sentiment_diff,
@@ -2112,6 +2119,7 @@ with tab_master:
                     "Commence (UTC)": commence_iso, "Commence (Local)": commence_local,
                     "Market": "Total", "Book": g.get("best_total_book"),
                     "Pick": total_pick, "Implied_Prob": total_implied, "Line": total_line, "AI_Prob": ai_prob_row,
+                    "Vertex Total Prob": vertex_total_prob,
                     "kalshi_matched": kalshi_total.get("kalshi_matched"),
                     "kalshi_prob": kalshi_total.get("kalshi_prob"),
                     "Sentiment_Diff": sentiment_diff,
@@ -2125,7 +2133,11 @@ with tab_master:
         deduped_rows: Dict[Tuple[Any, Any, Any, Any], Dict[str, Any]] = {}
         for row in rows_out:
             key = (row.get("League"), row.get("Home"), row.get("Away"), row.get("Commence (UTC)"))
-            if key not in deduped_rows:
+            existing = deduped_rows.get(key)
+            # Prefer rows with kalshi match; otherwise keep the first one seen.
+            if (existing is None) or (
+                not existing.get("kalshi_matched") and row.get("kalshi_matched")
+            ):
                 deduped_rows[key] = row
         deduped_list = list(deduped_rows.values())
 
