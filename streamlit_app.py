@@ -20,6 +20,61 @@ from app_core.kalshi_integrator import (
 from app_core.sentiment_pipeline import build_team_sentiment_map
 from vertex_master_analyzer import blended_win_prob
 
+# -----------------
+# Utility helpers (null-safe probability handling)
+# -----------------
+
+def safe_float(x: Any) -> Optional[float]:
+    """Convert to float; return None on blanks/NaN/non-numeric."""
+    if x is None:
+        return None
+    if isinstance(x, str) and x.strip().lower() in {"", "none", "nan", "n/a"}:
+        return None
+    try:
+        val = float(x)
+        if val != val:  # NaN check
+            return None
+        return val
+    except Exception:
+        return None
+
+
+def clamp(x: Optional[float], lo: float = 0.0, hi: float = 1.0) -> Optional[float]:
+    if x is None:
+        return None
+    try:
+        return max(lo, min(hi, float(x)))
+    except Exception:
+        return None
+
+
+def compute_sentiment_adj(sentiment_diff: Optional[float]) -> Optional[float]:
+    if sentiment_diff is None:
+        return None
+    try:
+        return clamp(sentiment_diff * 0.03, -0.06, 0.06)
+    except Exception:
+        return None
+
+
+def blend_probs(weighted_probs: List[Tuple[Optional[float], float]]) -> Optional[float]:
+    usable_raw = []
+    for p, w in weighted_probs:
+        if w is None or w <= 0:
+            continue
+        p_val = safe_float(p)
+        if p_val is None:
+            continue
+        usable_raw.append((p_val, w))
+    usable = usable_raw
+    if not usable:
+        return None
+    total_weight = sum(w for _, w in usable)
+    if total_weight <= 0:
+        return None
+    blended = sum((p or 0.0) * w for p, w in usable) / total_weight
+    return clamp(blended, 0.0, 1.0)
+
 # Must be the first Streamlit call
 st.set_page_config(page_title="ParlayDesk", layout="wide")
 
@@ -1999,10 +2054,14 @@ with tab_master:
             commence_local = fmt_local_time(g.get("commence_time_local"))
             commence_date_local = g.get("commence_date_local") or ""
 
-            home_sent = sentiment_map.get(home, 0.0)
-            away_sent = sentiment_map.get(away, 0.0)
+            home_sent = sentiment_map.get(home)
+            away_sent = sentiment_map.get(away)
             sentiment_diff = home_sent - away_sent if (home_sent is not None and away_sent is not None) else None
-            vertex_prob_home = get_vertex_prob(g)
+            sentiment_adj = compute_sentiment_adj(sentiment_diff)
+            sentiment_source = "news_api" if sentiment_diff is not None else None
+            reddit_used = False
+
+            vertex_prob_home = safe_float(get_vertex_prob(g))
 
             home_code: Optional[str] = None
             away_code: Optional[str] = None
@@ -2129,23 +2188,47 @@ with tab_master:
                 elif over_prob is None and under_prob is not None:
                     total_pick = "Under"
                     total_implied = under_prob
-                # Vertex proxy for totals: use Vertex win prob when available, else lean on market_home_prob, else 0.5
+                # Vertex proxy for totals: use Vertex win prob only when available
                 vertex_base = vertex_prob_home if vertex_prob_home is not None else None
-                if vertex_base is None:
-                    vertex_base = market_home_prob if 'market_home_prob' in locals() and market_home_prob is not None else None
-                vertex_total_prob = vertex_base if vertex_base is not None else 0.5
+                vertex_total_prob = vertex_base
             
             # Baseline probability (Home Win)
-            market_home_prob = implied_home if implied_home is not None else (1.0 - implied_away if implied_away else 0.5)
+            if implied_home is not None:
+                market_home_prob = implied_home
+            elif implied_away is not None:
+                market_home_prob = 1.0 - implied_away
+            else:
+                market_home_prob = None
 
-            # Helper for blended win prob
-            def blended_for_selection(selection_team: str, m_prob_home: Optional[float]) -> float:
-                selection_flag = "home" if selection_team == home else "away"
-                return blended_win_prob(
-                    market_prob=m_prob_home, vertex_prob=vertex_prob_home,
-                    theover_prob=None, kalshi_prob=kalshi_winner.get("kalshi_prob"),
-                    sentiment_diff=sentiment_diff, selection=selection_flag
-                )
+            def prob_for_selection(base_prob: Optional[float], selection_team: str) -> Optional[float]:
+                if base_prob is None:
+                    return None
+                return base_prob if selection_team == home else (1.0 - base_prob)
+
+            # AI probability (null-safe, no defaults)
+            def ai_prob_for_selection(selection_team: str) -> Optional[float]:
+                base = prob_for_selection(vertex_prob_home, selection_team)
+                if base is None:
+                    return None
+                if sentiment_adj is None:
+                    return clamp(base, 0.0, 1.0)
+                adj = sentiment_adj if selection_team == home else -sentiment_adj
+                return clamp(base + adj, 0.01, 0.99)
+
+            # Consensus blending for the selection
+            def consensus_for_selection(selection_team: str, kalshi_prob_used: Optional[float]) -> Tuple[Optional[float], List[str]]:
+                notes: List[str] = []
+                ai_prob = ai_prob_for_selection(selection_team)
+                if ai_prob is None:
+                    notes.append("Missing AI_Prob")
+                    return None, notes
+                weights: List[Tuple[Optional[float], float]] = [(ai_prob, 0.75)]
+                if kalshi_prob_used is not None:
+                    weights.append((kalshi_prob_used, 0.25))
+                consensus_val = blend_probs(weights)
+                if consensus_val is None:
+                    notes.append("Consensus N/A")
+                return consensus_val, notes
 
             # --- 4. DATA ROW GENERATION ---
 
@@ -2161,19 +2244,25 @@ with tab_master:
             if (home_ml is not None or away_ml is not None) and not extreme_ml:
                 pick = home if (implied_home or 0) >= (implied_away or 0) else away
                 implied_pick = implied_home if pick == home else implied_away
-                ai_prob_row = blended_for_selection(pick, market_home_prob)
+                ai_prob_row = ai_prob_for_selection(pick)
+
+                consensus_prob, consensus_notes = consensus_for_selection(pick, kalshi_prob_used)
+                if consensus_notes:
+                    warnings = list(dict.fromkeys(warnings + consensus_notes))
 
                 rows_out.append({
                     "League": league_name, "Home": home, "Away": away,
                     "Commence (UTC)": commence_iso, "Commence (Local)": commence_local,
                     "Local Date": commence_date_local, "Market": "Moneyline",
                     "Book": g.get("best_ml_book"), "Home_ML": home_ml, "Away_ML": away_ml,
-                    "Pick": pick, "Implied_Prob": implied_pick, "AI_Prob": ai_prob_row,
+                    "Pick": pick, "Implied_Prob": implied_pick, "AI_Prob": ai_prob_row, "ai_prob_adj": ai_prob_row,
+                    "consensus_prob": consensus_prob,
                     "Home_Sentiment": home_sent, "Away_Sentiment": away_sent, "Sentiment_Diff": sentiment_diff,
+                    "sentiment_adj": sentiment_adj, "sentiment_source": sentiment_source, "reddit_used": reddit_used,
                     "kalshi_available": kalshi_winner.get("kalshi_available"),
                     "kalshi_matched": kalshi_winner.get("kalshi_matched"),
-                    "kalshi_prob": kalshi_winner.get("kalshi_prob"),
-                    "kalshi_event_ticker": kalshi_winner.get("kalshi_event_ticker"),
+                    "kalshi_prob": kalshi_prob_used,
+                    "kalshi_event_ticker": kalshi_event_used,
                     "Spread & Pick": f"{spread_pick} {spread_line}" if spread_pick is not None else None,
                     "Total & Pick": f"{total_pick} {total_line}" if total_pick is not None else None,
                     "Vertex Spread Prob": vertex_spread_prob,
@@ -2187,20 +2276,25 @@ with tab_master:
 
             # SPREAD ROW
             if g.get("home_spread_point") is not None and spread_pick is not None:
-                ai_prob_row = blended_for_selection(spread_pick, market_home_prob)
+                ai_prob_row = ai_prob_for_selection(spread_pick)
+                consensus_prob, consensus_notes = consensus_for_selection(spread_pick, kalshi_prob_used)
+                if consensus_notes:
+                    warnings = list(dict.fromkeys(warnings + consensus_notes))
                 base_vertex = vertex_prob_home if vertex_prob_home is not None else None
-                if base_vertex is None:
-                    base_vertex = market_home_prob if market_home_prob is not None else 0.5
-                vertex_spread_prob = base_vertex if spread_pick == home else (1.0 - base_vertex)
+                vertex_spread_prob = base_vertex if base_vertex is not None and spread_pick == home else (
+                    1.0 - base_vertex if base_vertex is not None else None
+                )
                 
                 rows_out.append({
                     "League": league_name, "Home": home, "Away": away,
                     "Commence (UTC)": commence_iso, "Commence (Local)": commence_local,
                     "Market": "Spread", "Book": g.get("best_spread_book"),
                     "Pick": spread_pick, "Implied_Prob": spread_implied, "Line": spread_line, "AI_Prob": ai_prob_row,
+                    "ai_prob_adj": ai_prob_row, "consensus_prob": consensus_prob,
+                    "sentiment_adj": sentiment_adj, "sentiment_source": sentiment_source, "reddit_used": reddit_used,
                     "Vertex Spread Prob": vertex_spread_prob,
                     "kalshi_matched": kalshi_spread.get("kalshi_matched"),
-                    "kalshi_prob": kalshi_spread.get("kalshi_prob"),
+                    "kalshi_prob": kalshi_prob_used if kalshi_spread.get("kalshi_matched") else None,
                     "Sentiment_Diff": sentiment_diff,
                     "Spread & Pick": f"{spread_pick} {spread_line}" if spread_pick is not None else None,
                     "Total & Pick": f"{total_pick} {total_line}" if total_pick is not None else None,
@@ -2211,21 +2305,26 @@ with tab_master:
 
             # TOTAL ROW
             if g.get("total_point") is not None and total_pick is not None:
-                ai_prob_row = blended_for_selection(home, market_home_prob)
+                ai_prob_row = ai_prob_for_selection(home)
+                consensus_prob, consensus_notes = consensus_for_selection(home, kalshi_prob_used)
+                if consensus_notes:
+                    warnings = list(dict.fromkeys(warnings + consensus_notes))
 
                 rows_out.append({
                     "League": league_name, "Home": home, "Away": away,
                     "Commence (UTC)": commence_iso, "Commence (Local)": commence_local,
                     "Market": "Total", "Book": g.get("best_total_book"),
                     "Pick": total_pick, "Implied_Prob": total_implied, "Line": total_line, "AI_Prob": ai_prob_row,
+                    "ai_prob_adj": ai_prob_row, "consensus_prob": consensus_prob,
                     "Vertex Total Prob": vertex_total_prob,
                     "kalshi_matched": kalshi_total.get("kalshi_matched"),
-                    "kalshi_prob": kalshi_total.get("kalshi_prob"),
+                    "kalshi_prob": kalshi_prob_used if kalshi_total.get("kalshi_matched") else None,
                     "Sentiment_Diff": sentiment_diff,
                     "Spread & Pick": f"{spread_pick} {spread_line}" if spread_pick is not None else None,
                     "Total & Pick": f"{total_pick} {total_line}" if total_pick is not None else None,
                     "Home_Sentiment": home_sent,
                     "Away_Sentiment": away_sent,
+                    "sentiment_adj": sentiment_adj, "sentiment_source": sentiment_source, "reddit_used": reddit_used,
                 })
                 master_stats["market_rows_out"] += 1
                     
@@ -2245,6 +2344,30 @@ with tab_master:
         if st.session_state.get("kalshi_match_only"):
             deduped_list = [r for r in deduped_list if r.get("kalshi_matched")]
         df = pd.DataFrame(deduped_list)
+
+        export_cols = [
+            "AI_Prob",
+            "Implied_Prob",
+            "kalshi_matched",
+            "kalshi_prob",
+            "sentiment_source",
+            "reddit_used",
+            "sentiment_adj",
+            "ai_prob_adj",
+            "consensus_prob",
+        ]
+        export_df = df.copy()
+        for col in export_cols:
+            if col not in export_df.columns:
+                export_df[col] = None
+        export_csv = export_df[export_cols].to_csv(index=False).encode("utf-8")
+        st.download_button(
+            "Download Master Analysis CSV",
+            data=export_csv,
+            file_name="master_analysis.csv",
+            mime="text/csv",
+            key="master_analysis_csv",
+        )
 
         master_stats["rows_out"] = len(deduped_list)
         st.session_state["last_rows_out"] = len(deduped_list)
