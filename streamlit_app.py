@@ -1870,16 +1870,22 @@ with tab_master:
             commence_times_by_league.setdefault(lg, []).append(commence_val)
         sentiment_enabled = st.session_state.get("enable_sentiment", True)
         sentiment_map: Dict[str, float] = {}
-        sentiment_debug: Dict[str, Any] = {"enabled": sentiment_enabled}
+        sentiment_debug: Dict[str, Any] = {"enabled": sentiment_enabled, "per_league": {}}
         if sentiment_enabled and news_api_key:
-            try:
-                sentiment_map, sentiment_debug = build_team_sentiment_map(
-                    news_api_key, games, league
-                )
-            except Exception as exc:
-                sentiment_map = {}
-                sentiment_debug["error"] = str(exc)
-                st.session_state["last_exception"] = traceback.format_exc()
+            leagues_for_sentiment = list({g.get("league") for g in games if g.get("league")})
+            for lg in leagues_for_sentiment:
+                try:
+                    lg_games = [g for g in games if g.get("league") == lg]
+                    if not lg_games:
+                        continue
+                    lg_map, lg_debug = build_team_sentiment_map(news_api_key, lg_games, lg)
+                    sentiment_map.update(lg_map or {})
+                    sentiment_debug["per_league"][lg] = lg_debug
+                except Exception as exc:
+                    sentiment_debug["per_league"][lg] = {"error": str(exc)}
+                    st.session_state["last_exception"] = traceback.format_exc()
+            if not sentiment_debug["per_league"]:
+                sentiment_debug["warning"] = "no_league_sentiment_computed"
         else:
             sentiment_debug["warning"] = (
                 "sentiment_disabled" if not sentiment_enabled else "missing_news_api_key"
@@ -1995,7 +2001,7 @@ with tab_master:
 
             home_sent = sentiment_map.get(home, 0.0)
             away_sent = sentiment_map.get(away, 0.0)
-            sentiment_diff = home_sent - away_sent
+            sentiment_diff = home_sent - away_sent if (home_sent is not None and away_sent is not None) else None
             vertex_prob_home = get_vertex_prob(g)
 
             home_code: Optional[str] = None
