@@ -2088,6 +2088,7 @@ with tab_master:
             # SPREAD ROW
             if g.get("home_spread_point") is not None and spread_pick is not None:
                 ai_prob_row = blended_for_selection(spread_pick, market_home_prob)
+                spread_line = g.get("home_spread_point") if spread_pick == home else g.get("away_spread_point")
                 
                 rows_out.append({
                     "League": league_name, "Home": home, "Away": away,
