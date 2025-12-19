@@ -2004,6 +2004,38 @@ with tab_master:
             away_ml = g.get("away_ml_price")
             implied_home = american_to_implied_prob(home_ml)
             implied_away = american_to_implied_prob(away_ml)
+
+            # Pre-compute spread and total picks/probabilities so we can surface them on summary rows.
+            spread_pick = None
+            spread_implied = None
+            spread_line = None
+            if g.get("home_spread_point") is not None:
+                home_spread_prob = american_to_implied_prob(g.get("home_spread_price"))
+                away_spread_prob = american_to_implied_prob(g.get("away_spread_price"))
+                spread_pick = home
+                spread_implied = home_spread_prob
+                if away_spread_prob is not None and (away_spread_prob >= (home_spread_prob or 0)):
+                    spread_pick = away
+                    spread_implied = away_spread_prob
+                elif home_spread_prob is None and away_spread_prob is not None:
+                    spread_pick = away
+                    spread_implied = away_spread_prob
+                spread_line = g.get("home_spread_point") if spread_pick == home else g.get("away_spread_point")
+
+            total_pick = None
+            total_implied = None
+            total_line = g.get("total_point")
+            if g.get("total_point") is not None:
+                over_prob = american_to_implied_prob(g.get("over_price"))
+                under_prob = american_to_implied_prob(g.get("under_price"))
+                total_pick = "Over"
+                total_implied = over_prob
+                if under_prob is not None and (under_prob >= (over_prob or 0)):
+                    total_pick = "Under"
+                    total_implied = under_prob
+                elif over_prob is None and under_prob is not None:
+                    total_pick = "Under"
+                    total_implied = under_prob
             
             # Baseline probability (Home Win)
             market_home_prob = implied_home if implied_home is not None else (1.0 - implied_away if implied_away else 0.5)
@@ -2044,6 +2076,8 @@ with tab_master:
                     "kalshi_matched": kalshi_winner.get("kalshi_matched"),
                     "kalshi_prob": kalshi_winner.get("kalshi_prob"),
                     "kalshi_event_ticker": kalshi_winner.get("kalshi_event_ticker"),
+                    "Spread & Pick": f"{spread_pick} {spread_line}" if spread_pick is not None else None,
+                    "Total & Pick": f"{total_pick} {total_line}" if total_pick is not None else None,
                     "Warnings": ";".join(warnings),
                 })
                 master_stats["h2h_found"] += 1
@@ -2052,17 +2086,7 @@ with tab_master:
                 warnings = list(dict.fromkeys(warnings + ["moneyline_extreme_skipped"]))
 
             # SPREAD ROW
-            if g.get("home_spread_point") is not None:
-                home_spread_prob = american_to_implied_prob(g.get("home_spread_price"))
-                away_spread_prob = american_to_implied_prob(g.get("away_spread_price"))
-                spread_pick = home
-                spread_implied = home_spread_prob
-                if away_spread_prob is not None and (away_spread_prob >= (home_spread_prob or 0)):
-                    spread_pick = away
-                    spread_implied = away_spread_prob
-                elif home_spread_prob is None and away_spread_prob is not None:
-                    spread_pick = away
-                    spread_implied = away_spread_prob
+            if g.get("home_spread_point") is not None and spread_pick is not None:
                 ai_prob_row = blended_for_selection(spread_pick, market_home_prob)
                 spread_line = g.get("home_spread_point") if spread_pick == home else g.get("away_spread_point")
                 
@@ -2074,31 +2098,25 @@ with tab_master:
                     "kalshi_matched": kalshi_spread.get("kalshi_matched"),
                     "kalshi_prob": kalshi_spread.get("kalshi_prob"),
                     "Sentiment_Diff": sentiment_diff,
+                    "Spread & Pick": f"{spread_pick} {spread_line}" if spread_pick is not None else None,
+                    "Total & Pick": f"{total_pick} {total_line}" if total_pick is not None else None,
                 })
                 master_stats["market_rows_out"] += 1
 
             # TOTAL ROW
-            if g.get("total_point") is not None:
-                over_prob = american_to_implied_prob(g.get("over_price"))
-                under_prob = american_to_implied_prob(g.get("under_price"))
-                total_pick = "Over"
-                total_implied = over_prob
-                if under_prob is not None and (under_prob >= (over_prob or 0)):
-                    total_pick = "Under"
-                    total_implied = under_prob
-                elif over_prob is None and under_prob is not None:
-                    total_pick = "Under"
-                    total_implied = under_prob
+            if g.get("total_point") is not None and total_pick is not None:
                 ai_prob_row = blended_for_selection(home, market_home_prob)
 
                 rows_out.append({
                     "League": league_name, "Home": home, "Away": away,
                     "Commence (UTC)": commence_iso, "Commence (Local)": commence_local,
                     "Market": "Total", "Book": g.get("best_total_book"),
-                    "Pick": total_pick, "Implied_Prob": total_implied, "Line": g.get("total_point"), "AI_Prob": ai_prob_row,
+                    "Pick": total_pick, "Implied_Prob": total_implied, "Line": total_line, "AI_Prob": ai_prob_row,
                     "kalshi_matched": kalshi_total.get("kalshi_matched"),
                     "kalshi_prob": kalshi_total.get("kalshi_prob"),
                     "Sentiment_Diff": sentiment_diff,
+                    "Spread & Pick": f"{spread_pick} {spread_line}" if spread_pick is not None else None,
+                    "Total & Pick": f"{total_pick} {total_line}" if total_pick is not None else None,
                 })
                 master_stats["market_rows_out"] += 1
                     
