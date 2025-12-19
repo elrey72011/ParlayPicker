@@ -2114,8 +2114,8 @@ with tab_master:
                 elif over_prob is None and under_prob is not None:
                     total_pick = "Under"
                     total_implied = under_prob
-                # Vertex proxy for totals: use home win prob as directional signal
-                vertex_total_prob = vertex_prob_home
+                # Vertex proxy for totals: use home win prob as directional signal, defaulting to 0.5 if missing
+                vertex_total_prob = vertex_prob_home if vertex_prob_home is not None else 0.5
             
             # Baseline probability (Home Win)
             market_home_prob = implied_home if implied_home is not None else (1.0 - implied_away if implied_away else 0.5)
@@ -2158,6 +2158,8 @@ with tab_master:
                     "kalshi_event_ticker": kalshi_winner.get("kalshi_event_ticker"),
                     "Spread & Pick": f"{spread_pick} {spread_line}" if spread_pick is not None else None,
                     "Total & Pick": f"{total_pick} {total_line}" if total_pick is not None else None,
+                    "Vertex Spread Prob": vertex_spread_prob,
+                    "Vertex Total Prob": vertex_total_prob,
                     "Warnings": ";".join(warnings),
                 })
                 master_stats["h2h_found"] += 1
@@ -2168,9 +2170,8 @@ with tab_master:
             # SPREAD ROW
             if g.get("home_spread_point") is not None and spread_pick is not None:
                 ai_prob_row = blended_for_selection(spread_pick, market_home_prob)
-                vertex_spread_prob = vertex_prob_home if spread_pick == home else (
-                    1.0 - vertex_prob_home if vertex_prob_home is not None else None
-                )
+                base_vertex = vertex_prob_home if vertex_prob_home is not None else 0.5
+                vertex_spread_prob = base_vertex if spread_pick == home else (1.0 - base_vertex)
                 
                 rows_out.append({
                     "League": league_name, "Home": home, "Away": away,
