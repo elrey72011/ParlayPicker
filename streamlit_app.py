@@ -2114,8 +2114,11 @@ with tab_master:
                 elif over_prob is None and under_prob is not None:
                     total_pick = "Under"
                     total_implied = under_prob
-                # Vertex proxy for totals: use home win prob as directional signal, defaulting to 0.5 if missing
-                vertex_total_prob = vertex_prob_home if vertex_prob_home is not None else 0.5
+                # Vertex proxy for totals: use Vertex win prob when available, else lean on market_home_prob, else 0.5
+                vertex_base = vertex_prob_home if vertex_prob_home is not None else None
+                if vertex_base is None:
+                    vertex_base = market_home_prob if 'market_home_prob' in locals() and market_home_prob is not None else None
+                vertex_total_prob = vertex_base if vertex_base is not None else 0.5
             
             # Baseline probability (Home Win)
             market_home_prob = implied_home if implied_home is not None else (1.0 - implied_away if implied_away else 0.5)
@@ -2170,7 +2173,9 @@ with tab_master:
             # SPREAD ROW
             if g.get("home_spread_point") is not None and spread_pick is not None:
                 ai_prob_row = blended_for_selection(spread_pick, market_home_prob)
-                base_vertex = vertex_prob_home if vertex_prob_home is not None else 0.5
+                base_vertex = vertex_prob_home if vertex_prob_home is not None else None
+                if base_vertex is None:
+                    base_vertex = market_home_prob if market_home_prob is not None else 0.5
                 vertex_spread_prob = base_vertex if spread_pick == home else (1.0 - base_vertex)
                 
                 rows_out.append({
