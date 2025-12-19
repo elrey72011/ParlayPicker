@@ -17,8 +17,13 @@ from app_core.kalshi_integrator import (
     league_series_ticker,
     team_code_for_league,
 )
-from app_core.sentiment_pipeline import build_team_sentiment_map
+from app_core.sentiment_pipeline import fetch_team_news, team_sentiment_from_articles
 from vertex_master_analyzer import blended_win_prob
+
+try:
+    from app_core.sentiment import RealSentimentAnalyzer
+except Exception:  # pragma: no cover - optional import
+    RealSentimentAnalyzer = None
 
 # -----------------
 # Utility helpers (null-safe probability handling)
@@ -74,6 +79,103 @@ def blend_probs(weighted_probs: List[Tuple[Optional[float], float]]) -> Optional
         return None
     blended = sum((p or 0.0) * w for p, w in usable) / total_weight
     return clamp(blended, 0.0, 1.0)
+
+
+def is_missing_prob(val: Optional[float]) -> bool:
+    return val is None or (isinstance(val, float) and val != val)
+
+
+def normalize_team_name(name: Any) -> str:
+    cleaned = re.sub(r"[^a-z0-9 ]", " ", str(name or "").lower())
+    tokens = [t for t in cleaned.split() if t]
+    return " ".join(tokens)
+
+
+def sentiment_payload_to_meta(payload: Dict[str, Any]) -> Dict[str, Any]:
+    score = safe_float(payload.get("score"))
+    confidence = safe_float(payload.get("confidence"))
+    try:
+        sources = int(payload.get("sources") or 0)
+    except Exception:
+        sources = 0
+    method = str(payload.get("method") or payload.get("source") or "").lower()
+    sentiment_valid = bool(sources >= 1 and (confidence or 0) > 0.25)
+    sentiment_source = "newsapi" if sentiment_valid else "none"
+    return {
+        "score": score if sentiment_valid else None,
+        "confidence": confidence,
+        "sources": sources,
+        "sentiment_valid": sentiment_valid,
+        "sentiment_source": sentiment_source,
+        "method": method or None,
+        "reddit_used": False,
+    }
+
+
+def compute_team_sentiment_map(news_api_key: Optional[str], games: List[Dict[str, Any]], league: str) -> Tuple[Dict[str, Optional[float]], Dict[str, Dict[str, Any]], Dict[str, Any]]:
+    teams = set()
+    for g in games or []:
+        if g.get("home_team"):
+            teams.add(str(g.get("home_team")))
+        if g.get("away_team"):
+            teams.add(str(g.get("away_team")))
+
+    sentiment_map: Dict[str, Optional[float]] = {}
+    sentiment_meta: Dict[str, Dict[str, Any]] = {}
+    debug: Dict[str, Any] = {
+        "total_teams": len(teams),
+        "article_counts": {},
+        "missing_teams": [],
+        "articles_total": 0,
+        "raw": {},
+    }
+
+    analyzer = RealSentimentAnalyzer(news_api_key) if RealSentimentAnalyzer and news_api_key else None
+
+    for team in sorted(teams):
+        raw_payload: Dict[str, Any] = {}
+        if analyzer:
+            try:
+                raw_payload = analyzer.get_team_sentiment(team, league) or {}
+            except Exception:
+                raw_payload = {}
+        if not raw_payload:
+            articles = fetch_team_news(news_api_key or "", team, league) if news_api_key else []
+            score = team_sentiment_from_articles(articles)
+            raw_payload = {
+                "score": score,
+                "confidence": 0.6 if articles else 0.0,
+                "sources": len(articles),
+                "method": "newsapi_simple" if articles else "none",
+            }
+
+        meta = sentiment_payload_to_meta(raw_payload)
+        sentiment_meta[team] = meta
+        debug["raw"][team] = raw_payload
+        debug["article_counts"][team] = meta.get("sources") or 0
+        debug["articles_total"] += meta.get("sources") or 0
+        if meta["sentiment_valid"]:
+            sentiment_map[team] = meta["score"]
+        else:
+            sentiment_map[team] = None
+            debug["missing_teams"].append(team)
+
+    if sentiment_map:
+        present_scores = [(t, s) for t, s in sentiment_map.items() if s is not None]
+        sorted_scores = sorted(present_scores, key=lambda kv: kv[1]) if present_scores else []
+        debug["bottom_5"] = sorted_scores[:5]
+        debug["top_5"] = sorted_scores[-5:] if sorted_scores else []
+    else:
+        debug["bottom_5"] = []
+        debug["top_5"] = []
+
+    return sentiment_map, sentiment_meta, {
+        "article_counts": debug.get("article_counts"),
+        "articles_total": debug.get("articles_total"),
+        "missing_teams": debug.get("missing_teams"),
+        "raw": debug.get("raw"),
+    }
+
 
 # Must be the first Streamlit call
 st.set_page_config(page_title="ParlayDesk", layout="wide")
@@ -1444,47 +1546,64 @@ def match_kalshi_market(
     except Exception:
         local_tz = None
     game_local = game_dt_utc.astimezone(local_tz) if (game_dt_utc and local_tz) else game_dt_utc
-    date_token = game_local.strftime("%y%b%d").upper() if game_local else kalshi_date_token_from_local(
-        game.get("commence_date_local")
-    )
-    date_token = date_token or "UNKNOWN"
-
+    base_date = game_local.date() if game_local else None
+    allowed_date_tokens: List[str] = []
+    if base_date:
+        for delta in (-1, 0, 1):
+            allowed_date_tokens.append((base_date + timedelta(days=delta)).strftime("%y%b%d").upper())
+    if not allowed_date_tokens:
+        token_from_local = kalshi_date_token_from_local(game.get("commence_date_local"))
+        if token_from_local:
+            allowed_date_tokens.append(token_from_local)
+    date_token = allowed_date_tokens[1] if len(allowed_date_tokens) > 1 else (allowed_date_tokens[0] if allowed_date_tokens else None)
     winner_prefix = league_game_prefix(league_name)
 
     away_code_expected = team_code_for_league(league_name, game.get("away_team"))
     home_code_expected = team_code_for_league(league_name, game.get("home_team"))
 
-    filtered_markets = filter_kalshi_game_markets(
-        kalshi_markets,
-        game_dt_utc,
-        league_name,
-        game.get("home_team"),
-        game.get("away_team"),
-        home_code_expected,
-        away_code_expected,
-    )
-    deduped: Dict[str, Dict[str, Any]] = {}
-    for fm in filtered_markets:
-        key = str(fm.get("event_ticker") or fm.get("ticker") or "")
-        if key and key not in deduped:
-            deduped[key] = fm
-    filtered_markets = list(deduped.values())
+    def market_tokens(market: Dict[str, Any]) -> set:
+        blob = " ".join(
+            [
+                str(market.get("event_ticker") or market.get("ticker") or ""),
+                str(market.get("title") or ""),
+                str(market.get("rules") or market.get("rules_primary") or ""),
+            ]
+        )
+        cleaned = re.sub(r"[^a-z0-9 ]", " ", blob.lower())
+        return {t for t in cleaned.split() if t}
+
+    def team_token_set(team_name: Any) -> set:
+        base_tokens = team_tokens(team_name)
+        codes = {c.lower() for c in team_code_candidates(league_name, team_name) or []}
+        return set(base_tokens).union(codes)
+
+    home_tokens = team_token_set(game.get("home_team"))
+    away_tokens = team_token_set(game.get("away_team"))
 
     totals = [m for m in kalshi_markets if classify_kalshi_market(m) == "total"]
     spreads = [m for m in kalshi_markets if classify_kalshi_market(m) == "spread"]
 
     winner_candidates: List[Dict[str, Any]] = []
-    for m in filtered_markets:
-        ticker_upper = str(m.get("event_ticker") or m.get("ticker") or "").upper()
-        title_lower = str(m.get("title") or "").lower()
-        if ticker_upper.startswith(winner_prefix) or "GAME-" in ticker_upper or "winner" in title_lower:
-            winner_candidates.append(m)
-
+    winner_candidate_debug: List[Dict[str, Any]] = []
     best_winner: Optional[Dict[str, Any]] = None
     best_score = -1.0
-    winner_candidate_debug: List[Dict[str, Any]] = []
-    for m in winner_candidates:
-        sc = winner_score(m)
+
+    for m in kalshi_markets or []:
+        ticker_upper = str(m.get("event_ticker") or m.get("ticker") or "").upper()
+        title_lower = str(m.get("title") or "").lower()
+        if not (
+            ticker_upper.startswith(winner_prefix)
+            or "GAME-" in ticker_upper
+            or "GAME" in ticker_upper
+            or "winner" in title_lower
+        ):
+            continue
+        tokens = market_tokens(m)
+        date_match = bool(allowed_date_tokens and any(tok in ticker_upper for tok in allowed_date_tokens))
+        home_hit = bool(home_tokens.intersection(tokens))
+        away_hit = bool(away_tokens.intersection(tokens))
+        score = (1 if date_match else 0) + (2 if home_hit else 0) + (2 if away_hit else 0)
+        winner_candidates.append(m)
         winner_candidate_debug.append(
             {
                 "title": m.get("title"),
@@ -1493,11 +1612,14 @@ def match_kalshi_market(
                 "volume": m.get("volume"),
                 "open_interest": m.get("open_interest"),
                 "last_price": m.get("last_price"),
-                "score": sc,
+                "score": score,
+                "date_match": date_match,
+                "home_hit": home_hit,
+                "away_hit": away_hit,
             }
         )
-        if sc > best_score:
-            best_score = sc
+        if score > best_score and home_hit and away_hit and date_match:
+            best_score = score
             best_winner = m
 
     if best_winner:
@@ -1555,6 +1677,8 @@ def match_kalshi_market(
         "spread": spreads,
         "winner": winner_candidate_debug,
         "winner_meta": winner_meta,
+        "candidate_count": len(winner_candidates),
+        "best_score": best_score if best_score >= 0 else None,
     }
 
     return {
@@ -1924,7 +2048,8 @@ with tab_master:
                 continue
             commence_times_by_league.setdefault(lg, []).append(commence_val)
         sentiment_enabled = st.session_state.get("enable_sentiment", True)
-        sentiment_map: Dict[str, float] = {}
+        sentiment_map: Dict[str, Optional[float]] = {}
+        sentiment_meta_map: Dict[str, Dict[str, Any]] = {}
         sentiment_debug: Dict[str, Any] = {"enabled": sentiment_enabled, "per_league": {}}
         if sentiment_enabled and news_api_key:
             leagues_for_sentiment = list({g.get("league") for g in games if g.get("league")})
@@ -1933,8 +2058,9 @@ with tab_master:
                     lg_games = [g for g in games if g.get("league") == lg]
                     if not lg_games:
                         continue
-                    lg_map, lg_debug = build_team_sentiment_map(news_api_key, lg_games, lg)
+                    lg_map, lg_meta, lg_debug = compute_team_sentiment_map(news_api_key, lg_games, lg)
                     sentiment_map.update(lg_map or {})
+                    sentiment_meta_map.update(lg_meta or {})
                     sentiment_debug["per_league"][lg] = lg_debug
                 except Exception as exc:
                     sentiment_debug["per_league"][lg] = {"error": str(exc)}
@@ -1946,6 +2072,7 @@ with tab_master:
                 "sentiment_disabled" if not sentiment_enabled else "missing_news_api_key"
             )
         st.session_state["sentiment_map"] = sentiment_map
+        st.session_state["sentiment_meta_map"] = sentiment_meta_map
         st.session_state["sentiment_debug"] = sentiment_debug
         leagues_for_fetch = list({k for k in commence_times_by_league.keys() if k}) or (selected_sports or [league])
         try:
@@ -2058,13 +2185,15 @@ with tab_master:
 
             home_sent = sentiment_map.get(home)
             away_sent = sentiment_map.get(away)
+            sentiment_meta_map = st.session_state.get("sentiment_meta_map") or {}
+            home_meta = sentiment_meta_map.get(home, {})
+            away_meta = sentiment_meta_map.get(away, {})
             sentiment_diff = home_sent - away_sent if (home_sent is not None and away_sent is not None) else None
-            league_sent_debug = (st.session_state.get("sentiment_debug") or {}).get("per_league", {}).get(league_name, {})
-            article_total = 0
-            if isinstance(league_sent_debug, dict):
-                counts = league_sent_debug.get("article_counts") or {}
-                article_total = sum(counts.values()) if isinstance(counts, dict) else 0
-            sentiment_valid = bool(sentiment_diff is not None and article_total > 0)
+            sentiment_valid = bool(
+                sentiment_diff is not None
+                and home_meta.get("sentiment_valid")
+                and away_meta.get("sentiment_valid")
+            )
             sentiment_adj = compute_sentiment_adj(sentiment_diff) if sentiment_valid else None
             sentiment_source = "newsapi" if sentiment_valid else "none"
             reddit_used = False
@@ -2222,14 +2351,15 @@ with tab_master:
                 return base_prob if selection_team == home else (1.0 - base_prob)
 
             # AI probability (null-safe, no defaults)
-            def ai_prob_for_selection(selection_team: str) -> Optional[float]:
+            def ai_prob_for_selection(selection_team: str, adjusted: bool = True) -> Optional[float]:
                 base = prob_for_selection(vertex_prob_home, selection_team)
                 if base is None:
                     return None
-                if sentiment_adj is None:
-                    return clamp(base, 0.0, 1.0)
+                base = clamp(base, 0.0, 1.0)
+                if not adjusted or sentiment_adj is None:
+                    return base
                 adj = sentiment_adj if selection_team == home else -sentiment_adj
-                return clamp(base + adj, 0.01, 0.99)
+                return clamp((base or 0.0) + adj, 0.01, 0.99)
 
             # Consensus blending for the selection
             def consensus_for_selection(selection_team: str, kalshi_prob_used: Optional[float]) -> Tuple[Optional[float], List[str]]:
@@ -2260,9 +2390,10 @@ with tab_master:
             if (home_ml is not None or away_ml is not None) and not extreme_ml:
                 pick = home if (implied_home or 0) >= (implied_away or 0) else away
                 implied_pick = implied_home if pick == home else implied_away
-                ai_prob_row = ai_prob_for_selection(pick)
+                ai_prob_base = ai_prob_for_selection(pick, adjusted=False)
+                ai_prob_row = ai_prob_for_selection(pick, adjusted=True)
 
-                consensus_prob, consensus_notes = consensus_for_selection(pick, kalshi_prob_used)
+                consensus_prob, consensus_notes = consensus_for_selection(pick, kalshi_prob_used if kalshi_winner.get("kalshi_matched") else None)
                 if consensus_notes:
                     warnings = list(dict.fromkeys(warnings + consensus_notes))
 
@@ -2271,7 +2402,7 @@ with tab_master:
                     "Commence (UTC)": commence_iso, "Commence (Local)": commence_local,
                     "Local Date": commence_date_local, "Market": "Moneyline",
                     "Book": g.get("best_ml_book"), "Home_ML": home_ml, "Away_ML": away_ml,
-                    "Pick": pick, "Implied_Prob": implied_pick, "AI_Prob": ai_prob_row, "ai_prob_adj": ai_prob_row,
+                    "Pick": pick, "Implied_Prob": implied_pick, "AI_Prob": ai_prob_base, "ai_prob_adj": ai_prob_row,
                     "consensus_prob": consensus_prob,
                     "Home_Sentiment": home_sent, "Away_Sentiment": away_sent, "Sentiment_Diff": sentiment_diff,
                     "sentiment_adj": sentiment_adj, "sentiment_source": sentiment_source, "reddit_used": reddit_used, "sentiment_valid": sentiment_valid,
@@ -2279,6 +2410,9 @@ with tab_master:
                     "kalshi_matched": kalshi_winner.get("kalshi_matched"),
                     "kalshi_prob": kalshi_prob_used, "kalshi_prob_used": kalshi_prob_used,
                     "kalshi_event_ticker": kalshi_event_used, "kalshi_event_ticker_used": kalshi_event_used,
+                    "kalshi_candidate_count": candidate_debug.get("candidate_count"),
+                    "kalshi_best_score": candidate_debug.get("best_score"),
+                    "kalshi_match_reason": kalshi_winner.get("kalshi_reason"),
                     "Spread & Pick": f"{spread_pick} {spread_line}" if spread_pick is not None else None,
                     "Total & Pick": f"{total_pick} {total_line}" if total_pick is not None else None,
                     "Vertex Spread Prob": vertex_spread_prob,
@@ -2292,8 +2426,9 @@ with tab_master:
 
             # SPREAD ROW
             if g.get("home_spread_point") is not None and spread_pick is not None:
-                ai_prob_row = ai_prob_for_selection(spread_pick)
-                consensus_prob, consensus_notes = consensus_for_selection(spread_pick, kalshi_prob_used)
+                ai_prob_base = ai_prob_for_selection(spread_pick, adjusted=False)
+                ai_prob_row = ai_prob_for_selection(spread_pick, adjusted=True)
+                consensus_prob, consensus_notes = consensus_for_selection(spread_pick, kalshi_prob_used if kalshi_spread.get("kalshi_matched") else None)
                 if consensus_notes:
                     warnings = list(dict.fromkeys(warnings + consensus_notes))
                 base_vertex = vertex_prob_home if vertex_prob_home is not None else None
@@ -2305,7 +2440,7 @@ with tab_master:
                     "League": league_name, "Home": home, "Away": away,
                     "Commence (UTC)": commence_iso, "Commence (Local)": commence_local,
                     "Market": "Spread", "Book": g.get("best_spread_book"),
-                    "Pick": spread_pick, "Implied_Prob": spread_implied, "Line": spread_line, "AI_Prob": ai_prob_row,
+                    "Pick": spread_pick, "Implied_Prob": spread_implied, "Line": spread_line, "AI_Prob": ai_prob_base,
                     "ai_prob_adj": ai_prob_row, "consensus_prob": consensus_prob,
                     "sentiment_adj": sentiment_adj, "sentiment_source": sentiment_source, "reddit_used": reddit_used, "sentiment_valid": sentiment_valid,
                     "Vertex Spread Prob": vertex_spread_prob,
@@ -2313,6 +2448,9 @@ with tab_master:
                     "kalshi_prob": kalshi_prob_used if kalshi_spread.get("kalshi_matched") else None,
                     "kalshi_prob_used": kalshi_prob_used if kalshi_spread.get("kalshi_matched") else None,
                     "kalshi_event_ticker_used": kalshi_event_used if kalshi_spread.get("kalshi_matched") else None,
+                    "kalshi_candidate_count": candidate_debug.get("candidate_count"),
+                    "kalshi_best_score": candidate_debug.get("best_score"),
+                    "kalshi_match_reason": kalshi_spread.get("kalshi_reason") or kalshi_winner.get("kalshi_reason"),
                     "Sentiment_Diff": sentiment_diff,
                     "Spread & Pick": f"{spread_pick} {spread_line}" if spread_pick is not None else None,
                     "Total & Pick": f"{total_pick} {total_line}" if total_pick is not None else None,
@@ -2323,8 +2461,9 @@ with tab_master:
 
             # TOTAL ROW
             if g.get("total_point") is not None and total_pick is not None:
-                ai_prob_row = ai_prob_for_selection(home)
-                consensus_prob, consensus_notes = consensus_for_selection(home, kalshi_prob_used)
+                ai_prob_base = ai_prob_for_selection(home, adjusted=False)
+                ai_prob_row = ai_prob_for_selection(home, adjusted=True)
+                consensus_prob, consensus_notes = consensus_for_selection(home, kalshi_prob_used if kalshi_total.get("kalshi_matched") else None)
                 if consensus_notes:
                     warnings = list(dict.fromkeys(warnings + consensus_notes))
 
@@ -2332,13 +2471,16 @@ with tab_master:
                     "League": league_name, "Home": home, "Away": away,
                     "Commence (UTC)": commence_iso, "Commence (Local)": commence_local,
                     "Market": "Total", "Book": g.get("best_total_book"),
-                    "Pick": total_pick, "Implied_Prob": total_implied, "Line": total_line, "AI_Prob": ai_prob_row,
+                    "Pick": total_pick, "Implied_Prob": total_implied, "Line": total_line, "AI_Prob": ai_prob_base,
                     "ai_prob_adj": ai_prob_row, "consensus_prob": consensus_prob,
                     "Vertex Total Prob": vertex_total_prob,
                     "kalshi_matched": kalshi_total.get("kalshi_matched"),
                     "kalshi_prob": kalshi_prob_used if kalshi_total.get("kalshi_matched") else None,
                     "kalshi_prob_used": kalshi_prob_used if kalshi_total.get("kalshi_matched") else None,
                     "kalshi_event_ticker_used": kalshi_event_used if kalshi_total.get("kalshi_matched") else None,
+                    "kalshi_candidate_count": candidate_debug.get("candidate_count"),
+                    "kalshi_best_score": candidate_debug.get("best_score"),
+                    "kalshi_match_reason": kalshi_total.get("kalshi_reason") or kalshi_winner.get("kalshi_reason"),
                     "Sentiment_Diff": sentiment_diff,
                     "Spread & Pick": f"{spread_pick} {spread_line}" if spread_pick is not None else None,
                     "Total & Pick": f"{total_pick} {total_line}" if total_pick is not None else None,
@@ -2373,6 +2515,9 @@ with tab_master:
             "kalshi_matched",
             "kalshi_prob_used",
             "kalshi_event_ticker_used",
+            "kalshi_candidate_count",
+            "kalshi_best_score",
+            "kalshi_match_reason",
             "sentiment_source",
             "reddit_used",
             "sentiment_valid",
