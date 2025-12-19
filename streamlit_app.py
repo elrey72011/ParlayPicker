@@ -1704,6 +1704,19 @@ tab_games, tab_master, tab_kalshi, tab_sentiment, tab_debug = st.tabs(
 with tab_games:
     st.header("Games & Odds")
     games = st.session_state.get("games", [])
+    match_lookup: Dict[Tuple[Any, Any, Any, Any], Dict[str, Any]] = {}
+    for entry in st.session_state.get("kalshi_match_results") or []:
+        game = entry.get("game") or {}
+        matches = entry.get("matches") or {}
+        winner = matches.get("winner") or {}
+        key = (
+            game.get("league"),
+            game.get("home_team"),
+            game.get("away_team"),
+            game.get("commence_time_iso_utc") or game.get("commence_time"),
+        )
+        match_lookup[key] = winner
+
     if not games:
         st.info("Load games from the sidebar to begin.")
     else:
@@ -1731,13 +1744,76 @@ with tab_games:
                     "implied_prob_away": g.get("implied_prob_away"),
                     "home_spread_point": g.get("home_spread_point"),
                     "home_spread_price": g.get("home_spread_price"),
+                    "away_spread_point": g.get("away_spread_point"),
+                    "away_spread_price": g.get("away_spread_price"),
                     "total_point": g.get("total_point"),
                     "over_price": g.get("over_price"),
                     "under_price": g.get("under_price"),
                     "warnings": ",".join(g.get("warnings") or []),
                 }
             )
-        st.dataframe(pd.DataFrame(rows))
+        # Add quick pick/prob columns for ML/Spread/Total plus any known Kalshi match info.
+        enriched_rows = []
+        for r in rows:
+            implied_home = r.get("implied_prob_home")
+            implied_away = r.get("implied_prob_away")
+            ml_pick = None
+            ml_pick_prob = None
+            if implied_home is not None or implied_away is not None:
+                if (implied_home or 0) >= (implied_away or 0):
+                    ml_pick = r["Home"]
+                    ml_pick_prob = implied_home
+                else:
+                    ml_pick = r["Away"]
+                    ml_pick_prob = implied_away
+
+            # Spread pick
+            spread_pick = None
+            spread_pick_prob = None
+            spread_line = None
+            home_spread_prob = american_to_implied_prob(r.get("home_spread_price"))
+            away_spread_prob = american_to_implied_prob(r.get("away_spread_price"))
+            if r.get("home_spread_point") is not None:
+                spread_pick = r["Home"]
+                spread_pick_prob = home_spread_prob
+                spread_line = r.get("home_spread_point")
+                if away_spread_prob is not None and (away_spread_prob >= (home_spread_prob or 0)):
+                    spread_pick = r["Away"]
+                    spread_pick_prob = away_spread_prob
+                    spread_line = r.get("away_spread_point")
+
+            # Total pick
+            total_pick = None
+            total_pick_prob = None
+            if r.get("total_point") is not None:
+                over_prob = american_to_implied_prob(r.get("over_price"))
+                under_prob = american_to_implied_prob(r.get("under_price"))
+                total_pick = "Over"
+                total_pick_prob = over_prob
+                if under_prob is not None and (under_prob >= (over_prob or 0)):
+                    total_pick = "Under"
+                    total_pick_prob = under_prob
+
+            key = (r["League"], r["Home"], r["Away"], r["Commence (UTC)"])
+            kalshi_info = match_lookup.get(key, {})
+
+            enriched_rows.append(
+                {
+                    **r,
+                    "ML Pick": ml_pick,
+                    "ML Pick Prob": ml_pick_prob,
+                    "Spread Pick": f"{spread_pick} {spread_line}" if spread_pick is not None else None,
+                    "Spread Pick Prob": spread_pick_prob,
+                    "Total Pick": f"{total_pick} {r.get('total_point')}" if total_pick else None,
+                    "Total Pick Prob": total_pick_prob,
+                    "kalshi_available": kalshi_info.get("kalshi_available"),
+                    "kalshi_matched": kalshi_info.get("kalshi_matched"),
+                    "kalshi_prob": kalshi_info.get("kalshi_prob"),
+                    "kalshi_event_ticker": kalshi_info.get("kalshi_event_ticker"),
+                }
+            )
+
+        st.dataframe(pd.DataFrame(enriched_rows))
 
 with tab_master:
     st.header("Master Analysis")
