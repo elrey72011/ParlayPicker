@@ -646,15 +646,22 @@ def extract_best_market(game: Dict[str, Any]) -> Dict[str, Any]:
 
     best_spread = None
     median_spread = None
+    mode_spread = None
     if spread_candidates:
+        points = [c["home_point"] for c in spread_candidates if c.get("home_point") is not None]
         try:
-            median_spread = statistics.median([c["home_point"] for c in spread_candidates if c.get("home_point") is not None])
+            mode_spread = statistics.mode(points)
+        except Exception:
+            mode_spread = None
+        try:
+            median_spread = statistics.median(points)
         except Exception:
             median_spread = None
+        consensus_spread = mode_spread if mode_spread is not None else median_spread
         best_spread = sorted(
             spread_candidates,
             key=lambda c: (
-                abs(float(c.get("home_point") or 0) - float(median_spread or 0)),
+                abs(float(c.get("home_point") or 0) - float(consensus_spread or 0)),
                 c.get("price_score") if c.get("price_score") is not None else 999,
                 _recency_score(c.get("last_update")),
                 _book_priority(c.get("book")),
@@ -665,15 +672,22 @@ def extract_best_market(game: Dict[str, Any]) -> Dict[str, Any]:
 
     best_total = None
     median_total = None
+    mode_total = None
     if total_candidates:
+        points = [c["point"] for c in total_candidates if c.get("point") is not None]
         try:
-            median_total = statistics.median([c["point"] for c in total_candidates if c.get("point") is not None])
+            mode_total = statistics.mode(points)
+        except Exception:
+            mode_total = None
+        try:
+            median_total = statistics.median(points)
         except Exception:
             median_total = None
+        consensus_total = mode_total if mode_total is not None else median_total
         best_total = sorted(
             total_candidates,
             key=lambda c: (
-                abs(float(c.get("point") or 0) - float(median_total or 0)),
+                abs(float(c.get("point") or 0) - float(consensus_total or 0)),
                 c.get("price_score") if c.get("price_score") is not None else 999,
                 _recency_score(c.get("last_update")),
                 _book_priority(c.get("book")),
@@ -696,6 +710,7 @@ def extract_best_market(game: Dict[str, Any]) -> Dict[str, Any]:
         "best_spread_last_update": best_spread.get("last_update") if best_spread else None,
         "best_spread_price_score": best_spread.get("price_score") if best_spread else None,
         "best_spread_median_point": median_spread,
+        "best_spread_mode_point": mode_spread,
         "best_total_book": best_total.get("book") if best_total else None,
         "total_point": best_total.get("point") if best_total else None,
         "over_price": best_total.get("over_price") if best_total else None,
@@ -703,6 +718,7 @@ def extract_best_market(game: Dict[str, Any]) -> Dict[str, Any]:
         "best_total_last_update": best_total.get("last_update") if best_total else None,
         "best_total_price_score": best_total.get("price_score") if best_total else None,
         "best_total_median_point": median_total,
+        "best_total_mode_point": mode_total,
         "warnings": warnings,
     }
 
@@ -2675,19 +2691,25 @@ with tab_master:
                 return clamp((base or 0.0) + adj, 0.01, 0.99)
 
             # Consensus blending for the selection
-            def consensus_for_selection(selection_team: str, kalshi_prob_used: Optional[float]) -> Tuple[Optional[float], List[str]]:
+            def consensus_for_selection(selection_team: str, kalshi_prob_used: Optional[float], implied_pick_prob: Optional[float]) -> Tuple[Optional[float], Optional[float], List[str]]:
                 notes: List[str] = []
                 ai_prob = ai_prob_for_selection(selection_team)
                 if ai_prob is None:
                     notes.append("Missing AI_Prob")
-                    return None, notes
-                weights: List[Tuple[Optional[float], float]] = [(ai_prob, 0.80)]
+                    return None, None, notes
+                weights: List[Tuple[Optional[float], float]] = [(ai_prob, 0.40)]
+                if implied_pick_prob is not None:
+                    weights.append((implied_pick_prob, 0.40))
                 if kalshi_prob_used is not None:
                     weights.append((kalshi_prob_used, 0.20))
                 consensus_val = blend_probs(weights)
                 if consensus_val is None:
                     notes.append("Consensus N/A")
-                return consensus_val, notes
+                signed_sent_adj = None
+                if sentiment_adj is not None:
+                    signed_sent_adj = sentiment_adj if selection_team == home else -sentiment_adj
+                consensus_adj = clamp((consensus_val or 0.0) + (signed_sent_adj or 0.0)) if (consensus_val is not None and signed_sent_adj is not None) else consensus_val
+                return consensus_val, consensus_adj, notes
 
             # --- 4. DATA ROW GENERATION ---
 
@@ -2719,44 +2741,48 @@ with tab_master:
                     ai_prob_base = ai_prob_for_selection(pick, adjusted=False)
                     ai_prob_row = ai_prob_for_selection(pick, adjusted=True)
 
-                    consensus_prob, consensus_notes = consensus_for_selection(pick, kalshi_prob_used if kalshi_winner.get("kalshi_matched") else None)
-                    if consensus_notes:
-                        warnings = list(dict.fromkeys(warnings + consensus_notes))
+                consensus_prob, consensus_prob_adj, consensus_notes = consensus_for_selection(
+                    pick,
+                    kalshi_prob_used if kalshi_winner.get("kalshi_matched") else None,
+                    implied_pick,
+                )
+                if consensus_notes:
+                    warnings = list(dict.fromkeys(warnings + consensus_notes))
 
-                    rows_out.append({
-                        "League": league_name, "Home": home, "Away": away,
-                        "Commence (UTC)": commence_iso, "Commence (Local)": commence_local,
-                        "Local Date": commence_date_local, "Market": "Moneyline",
-                        "Book": g.get("best_ml_book"), "Home_ML": home_ml, "Away_ML": away_ml,
-                        "Pick": pick, "Implied_Prob": implied_pick, "AI_Prob": ai_prob_base, "ai_prob_adj": ai_prob_row,
-                        "consensus_prob": consensus_prob,
-                        "Home_Sentiment": home_sent, "Away_Sentiment": away_sent, "Sentiment_Diff": sentiment_diff,
-                        "sentiment_adj": sentiment_adj, "sentiment_source": sentiment_source, "reddit_used": reddit_used, "sentiment_valid": sentiment_valid,
-                        "kalshi_available": kalshi_winner.get("kalshi_available"),
-                        "kalshi_matched": kalshi_winner.get("kalshi_matched"),
-                        "kalshi_prob": kalshi_prob_used, "kalshi_prob_used": kalshi_prob_used,
-                        "kalshi_event_ticker": kalshi_event_used, "kalshi_event_ticker_used": kalshi_event_used,
-                        "kalshi_candidate_count": candidate_debug.get("candidate_count"),
-                        "kalshi_best_score": candidate_debug.get("best_score"),
-                        "kalshi_match_reason": kalshi_winner.get("kalshi_reason"),
-                        "kalshi_game_prefix_used": (candidate_debug.get("winner_meta") or {}).get("winner_prefix"),
-                        "kalshi_wanted_tokens": (candidate_debug.get("winner_meta") or {}).get("allowed_date_tokens"),
-                        "Spread & Pick": f"{spread_pick} {spread_line}" if spread_pick is not None else None,
-                        "Total & Pick": f"{total_pick} {total_line}" if total_pick is not None else None,
-                        "Vertex Spread Prob": vertex_spread_prob,
-                        "Vertex Total Prob": vertex_total_prob,
-                        "Warnings": ";".join(warnings),
-                        "best_spread_book": g.get("best_spread_book"),
-                        "best_spread_last_update": g.get("best_spread_last_update"),
-                        "best_spread_price_score": g.get("best_spread_price_score"),
-                        "best_spread_median_point": g.get("best_spread_median_point"),
-                        "best_total_book": g.get("best_total_book"),
-                        "best_total_last_update": g.get("best_total_last_update"),
-                        "best_total_price_score": g.get("best_total_price_score"),
-                        "best_total_median_point": g.get("best_total_median_point"),
-                    })
-                    master_stats["h2h_found"] += 1
-                    master_stats["market_rows_out"] += 1
+                rows_out.append({
+                    "League": league_name, "Home": home, "Away": away,
+                    "Commence (UTC)": commence_iso, "Commence (Local)": commence_local,
+                    "Local Date": commence_date_local, "Market": "Moneyline",
+                    "Book": g.get("best_ml_book"), "Home_ML": home_ml, "Away_ML": away_ml,
+                    "Pick": pick, "Implied_Prob": implied_pick, "AI_Prob": ai_prob_base, "ai_prob_adj": ai_prob_row,
+                    "consensus_prob": consensus_prob, "consensus_prob_adj": consensus_prob_adj,
+                    "Home_Sentiment": home_sent, "Away_Sentiment": away_sent, "Sentiment_Diff": sentiment_diff,
+                    "sentiment_adj": sentiment_adj, "sentiment_source": sentiment_source, "reddit_used": reddit_used, "sentiment_valid": sentiment_valid,
+                    "kalshi_available": kalshi_winner.get("kalshi_available"),
+                    "kalshi_matched": kalshi_winner.get("kalshi_matched"),
+                    "kalshi_prob": kalshi_prob_used, "kalshi_prob_used": kalshi_prob_used,
+                    "kalshi_event_ticker": kalshi_event_used, "kalshi_event_ticker_used": kalshi_event_used,
+                    "kalshi_candidate_count": candidate_debug.get("candidate_count"),
+                    "kalshi_best_score": candidate_debug.get("best_score"),
+                    "kalshi_match_reason": kalshi_winner.get("kalshi_reason"),
+                    "kalshi_game_prefix_used": (candidate_debug.get("winner_meta") or {}).get("winner_prefix"),
+                    "kalshi_wanted_tokens": (candidate_debug.get("winner_meta") or {}).get("allowed_date_tokens"),
+                    "Spread & Pick": f"{spread_pick} {spread_line}" if spread_pick is not None else None,
+                    "Total & Pick": f"{total_pick} {total_line}" if total_pick is not None else None,
+                    "Vertex Spread Prob": vertex_spread_prob,
+                    "Vertex Total Prob": vertex_total_prob,
+                    "Warnings": ";".join(warnings),
+                    "best_spread_book": g.get("best_spread_book"),
+                    "best_spread_last_update": g.get("best_spread_last_update"),
+                    "best_spread_price_score": g.get("best_spread_price_score"),
+                    "best_spread_median_point": g.get("best_spread_median_point"),
+                    "best_total_book": g.get("best_total_book"),
+                    "best_total_last_update": g.get("best_total_last_update"),
+                    "best_total_price_score": g.get("best_total_price_score"),
+                    "best_total_median_point": g.get("best_total_median_point"),
+                })
+                master_stats["h2h_found"] += 1
+                master_stats["market_rows_out"] += 1
             elif extreme_ml:
                 warnings = list(dict.fromkeys(warnings + ["moneyline_extreme_skipped"]))
 
@@ -2764,7 +2790,11 @@ with tab_master:
             if g.get("home_spread_point") is not None and spread_pick is not None:
                 ai_prob_base = ai_prob_for_selection(spread_pick, adjusted=False)
                 ai_prob_row = ai_prob_for_selection(spread_pick, adjusted=True)
-                consensus_prob, consensus_notes = consensus_for_selection(spread_pick, kalshi_prob_used if kalshi_spread.get("kalshi_matched") else None)
+                consensus_prob, consensus_prob_adj, consensus_notes = consensus_for_selection(
+                    spread_pick,
+                    kalshi_prob_used if kalshi_spread.get("kalshi_matched") else None,
+                    spread_implied,
+                )
                 if consensus_notes:
                     warnings = list(dict.fromkeys(warnings + consensus_notes))
                 if vertex_prob_home is not None and "vertex_proxy_for_spread_total" not in warnings:
@@ -2779,7 +2809,7 @@ with tab_master:
                     "Commence (UTC)": commence_iso, "Commence (Local)": commence_local,
                     "Market": "Spread", "Book": g.get("best_spread_book"),
                     "Pick": spread_pick, "Implied_Prob": spread_implied, "Line": spread_line, "AI_Prob": ai_prob_base,
-                    "ai_prob_adj": ai_prob_row, "consensus_prob": consensus_prob,
+                    "ai_prob_adj": ai_prob_row, "consensus_prob": consensus_prob, "consensus_prob_adj": consensus_prob_adj,
                     "sentiment_adj": sentiment_adj, "sentiment_source": sentiment_source, "reddit_used": reddit_used, "sentiment_valid": sentiment_valid,
                     "Vertex Spread Prob": vertex_spread_prob,
                     "kalshi_matched": kalshi_spread.get("kalshi_matched"),
@@ -2811,7 +2841,11 @@ with tab_master:
             if g.get("total_point") is not None and total_pick is not None:
                 ai_prob_base = ai_prob_for_selection(home, adjusted=False)
                 ai_prob_row = ai_prob_for_selection(home, adjusted=True)
-                consensus_prob, consensus_notes = consensus_for_selection(home, kalshi_prob_used if kalshi_total.get("kalshi_matched") else None)
+                consensus_prob, consensus_prob_adj, consensus_notes = consensus_for_selection(
+                    home,
+                    kalshi_prob_used if kalshi_total.get("kalshi_matched") else None,
+                    total_implied,
+                )
                 if consensus_notes:
                     warnings = list(dict.fromkeys(warnings + consensus_notes))
                 if vertex_prob_home is not None and "vertex_proxy_for_spread_total" not in warnings:
@@ -2822,7 +2856,7 @@ with tab_master:
                     "Commence (UTC)": commence_iso, "Commence (Local)": commence_local,
                     "Market": "Total", "Book": g.get("best_total_book"),
                     "Pick": total_pick, "Implied_Prob": total_implied, "Line": total_line, "AI_Prob": ai_prob_base,
-                    "ai_prob_adj": ai_prob_row, "consensus_prob": consensus_prob,
+                    "ai_prob_adj": ai_prob_row, "consensus_prob": consensus_prob, "consensus_prob_adj": consensus_prob_adj,
                     "Vertex Total Prob": vertex_total_prob,
                     "kalshi_matched": kalshi_total.get("kalshi_matched"),
                     "kalshi_prob": kalshi_prob_used if kalshi_total.get("kalshi_matched") else None,
@@ -2881,14 +2915,17 @@ with tab_master:
             "kalshi_match_reason",
             "kalshi_game_prefix_used",
             "kalshi_wanted_tokens",
+            "consensus_prob_adj",
             "best_spread_book",
             "best_spread_last_update",
             "best_spread_price_score",
             "best_spread_median_point",
+            "best_spread_mode_point",
             "best_total_book",
             "best_total_last_update",
             "best_total_price_score",
             "best_total_median_point",
+            "best_total_mode_point",
         ]
         for col in required_display_cols:
             if col not in df.columns:
@@ -2913,14 +2950,17 @@ with tab_master:
             "reddit_used",
             "sentiment_valid",
             "sentiment_adj",
+            "consensus_prob_adj",
             "best_spread_book",
             "best_spread_last_update",
             "best_spread_price_score",
             "best_spread_median_point",
+            "best_spread_mode_point",
             "best_total_book",
             "best_total_last_update",
             "best_total_price_score",
             "best_total_median_point",
+            "best_total_mode_point",
         ]
         export_df = df.copy()
         for col in export_cols:
