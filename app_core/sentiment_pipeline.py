@@ -95,6 +95,7 @@ def fetch_team_news(news_api_key: str, team: str, league: str) -> List[Dict[str,
         "NCAAB": "college basketball",
         "NHL": "NHL hockey",
         "MLB": "MLB baseball",
+        "WNBA": "WNBA basketball",
     }.get((league or "").upper(), league or "")
     to_date = datetime.utcnow().date()
     from_date = to_date - timedelta(days=3)

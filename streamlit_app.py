@@ -922,15 +922,22 @@ def get_vertex_prob(game: Dict[str, Any], sentiment_diff: Optional[float]) -> Tu
         return None, "vertex_missing_prob"
     try:
         features_df = _build_vertex_feature_row(game, sentiment_diff)
+        payload_hash = hash(tuple(features_df.to_dict(orient="records")[0].items()))
         preds = predict_win_probabilities(features_df, feature_columns=VERTEX_FEATURE_COLUMNS)
+        st.session_state["vertex_last_payload_hash"] = payload_hash
         if not preds:
             return None, "vertex_predict_failed"
         prob = safe_float(preds[0])
         if prob is None:
             return None, "vertex_invalid_response"
+        try:
+            st.session_state["vertex_last_raw_response"] = str(preds[:1])
+        except Exception:
+            st.session_state["vertex_last_raw_response"] = None
         return clamp(prob, 0.01, 0.99), None
     except Exception:
         st.session_state["last_exception"] = traceback.format_exc()
+        st.session_state["vertex_last_error"] = st.session_state.get("last_exception")
         return None, "vertex_predict_failed"
 
 # -----------------
@@ -2597,6 +2604,10 @@ with tab_master:
             kalshi_matches, candidate_debug = match_kalshi_market(
                 g, filtered_markets, winner_reason_override
             )
+            candidate_debug["candidate_count"] = len(filtered_markets)
+            candidate_debug["league_markets_len"] = len(league_markets)
+            if not filtered_markets and league_markets:
+                candidate_debug["reason"] = "filtered_to_zero"
 
             # Extract specific Kalshi market results for the append logic
             kalshi_winner = kalshi_matches.get("winner", {})
@@ -2853,10 +2864,7 @@ with tab_master:
                     warnings = list(dict.fromkeys(warnings + consensus_notes))
                 if vertex_prob_home is not None and "vertex_proxy_for_spread_total" not in warnings:
                     warnings.append("vertex_proxy_for_spread_total")
-                base_vertex = vertex_prob_home if vertex_prob_home is not None else None
-                vertex_spread_prob = base_vertex if base_vertex is not None and spread_pick == home else (
-                    1.0 - base_vertex if base_vertex is not None else None
-                )
+                vertex_spread_prob = None
                 
                 warnings_field = ";".join(warnings) if warnings else None
                 rows_out.append({
@@ -2918,7 +2926,7 @@ with tab_master:
                     "Market": "Total", "Book": g.get("best_total_book"),
                     "Pick": total_pick, "Implied_Prob": total_implied, "Line": total_line, "AI_Prob": ai_prob_base,
                     "ai_prob_adj": ai_prob_row, "consensus_prob": consensus_prob, "consensus_prob_adj": consensus_prob_adj,
-                    "Vertex Total Prob": vertex_total_prob,
+                    "Vertex Total Prob": None,
                     "kalshi_matched": kalshi_total.get("kalshi_matched"),
                     "kalshi_prob": kalshi_prob_used if kalshi_total.get("kalshi_matched") else None,
                     "kalshi_prob_used": kalshi_prob_used if kalshi_total.get("kalshi_matched") else None,
