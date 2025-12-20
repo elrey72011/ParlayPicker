@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 from typing import Dict, Optional
 
 import requests
+from app_core.sentiment_pipeline import league_label
 
 
 class RealSentimentAnalyzer:
@@ -111,20 +112,14 @@ class RealSentimentAnalyzer:
         to_date = datetime.now().strftime("%Y-%m-%d")
 
         sport_norm = (sport or "").upper()
-        league_label = {
-            "NBA": "NBA basketball",
-            "NFL": "NFL football",
-            "NCAAF": "college football",
-            "NCAAB": "college basketball",
-            "MLB": "MLB baseball",
-            "NHL": "NHL hockey",
-            "WNBA": "WNBA basketball",
-        }.get(sport_norm, sport or "")
-        query = f'"{team_name}" {league_label}'.strip()
+        league_fragment = league_label(sport_norm)
+        query = f'"{team_name}" {league_fragment}'.strip()
 
         fetch_info: Dict[str, Optional[str]] = {
             "q": query,
-            "league_query": league_label,
+            "league_query": league_fragment,
+            "rate_limited": False,
+            "auth_error": False,
         }
 
         try:
@@ -143,17 +138,29 @@ class RealSentimentAnalyzer:
             )
             fetch_info["status"] = response.status_code
             fetch_info["status_code"] = response.status_code
+            fetch_info["rate_limited"] = response.status_code == 429
+            fetch_info["auth_error"] = response.status_code in {401, 403}
             if response.status_code != 200:
-                error_key = "rate_limited" if response.status_code == 429 else ("bad_key" if response.status_code in {401, 403} else "http_error")
+                error_key = "rate_limited" if fetch_info["rate_limited"] else ("bad_key" if fetch_info["auth_error"] else "http_error")
                 fetch_info["error"] = error_key
                 fetch_info["response_text_snippet"] = (response.text or "")[:200]
-                return {
-                    **self._fallback_neutral(),
-                    "method": "newsapi_error",
-                    "fetch_info": fetch_info,
-                }
+                try:
+                    data_err = response.json() if response is not None else {}
+                except Exception:
+                    data_err = {}
+                articles = data_err.get("articles", []) if isinstance(data_err, dict) else []
+                fetch_info["totalResults"] = data_err.get("totalResults") if isinstance(data_err, dict) else None
+                if fetch_info["rate_limited"] and articles:
+                    # Partial success even while rate limited
+                    response = None  # skip additional parsing
+                else:
+                    return {
+                        **self._fallback_neutral(),
+                        "method": "newsapi_error",
+                        "fetch_info": fetch_info,
+                    }
 
-            data = response.json() if response is not None else {}
+            data = response.json() if response is not None else data_err if "data_err" in locals() else {}
             articles = data.get("articles", []) if isinstance(data, dict) else []
             fetch_info["totalResults"] = data.get("totalResults") if isinstance(data, dict) else None
             if not articles:
