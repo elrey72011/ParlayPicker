@@ -153,40 +153,39 @@ def parse_spread_pick(raw_val: Any, home: Optional[str], away: Optional[str]) ->
 
 
 def reorder_master_columns(df: pd.DataFrame) -> pd.DataFrame:
-    """Move pick columns directly after Local Date (if present). Null-safe."""
+    """
+    Move moneyline/spread/total pick columns immediately after Local Date while preserving other order.
+    """
     if df is None or df.empty:
         return df
 
-    local_date_col_candidates = ["Local_Date", "Local Date", "Local_Date_Str", "LocalDate", "Local date", "local_date"]
-    ml_pick_candidates = ["ML Pick", "Moneyline Pick", "Favorite", "Pick", "Best_Pick_ML", "Best Moneyline Pick"]
-    spread_pick_candidates = ["Spread & Pick", "Spread Pick", "Best_Spread_Pick"]
-    total_pick_candidates = ["Total & Pick", "Total Pick", "O/U Pick", "Best_Total_Pick"]
+    cols = list(df.columns)
+    local_date = "Local Date" if "Local Date" in cols else None
+    pick_cols = [c for c in ["Pick", "Spread & Pick", "Total & Pick"] if c in cols]
 
-    def first_present(cands: List[str]) -> Optional[str]:
-        for c in cands:
-            if c in df.columns:
-                return c
-        return None
+    remaining = cols.copy()
+    ordered: List[str] = []
 
-    local_date_col = first_present(local_date_col_candidates)
-    ml_col = first_present(ml_pick_candidates)
-    spread_col = first_present(spread_pick_candidates)
-    total_col = first_present(total_pick_candidates)
+    if local_date:
+        for c in cols:
+            if c not in remaining:
+                continue
+            ordered.append(c)
+            remaining.remove(c)
+            if c == local_date:
+                for p in pick_cols:
+                    if p in remaining:
+                        ordered.append(p)
+                        remaining.remove(p)
+    else:
+        for p in pick_cols:
+            if p in remaining:
+                ordered.append(p)
+                remaining.remove(p)
 
-    prefix: List[str] = []
-    if local_date_col:
-        prefix.append(local_date_col)
-
-    for c in [ml_col, spread_col, total_col]:
-        if c and c not in prefix:
-            prefix.append(c)
-
-    if not local_date_col:
-        prefix = [c for c in [ml_col, spread_col, total_col] if c]
-
-    remaining = [c for c in df.columns if c not in prefix]
+    ordered.extend([c for c in remaining if c not in ordered])
     try:
-        return df[prefix + remaining]
+        return df[ordered]
     except Exception:
         return df
 
@@ -3859,6 +3858,8 @@ with tab_master:
         if st.session_state.get("kalshi_match_only"):
             deduped_list = [r for r in deduped_list if r.get("kalshi_matched")]
         df = pd.DataFrame(deduped_list)
+        if "Unnamed: 0" in df.columns:
+            df = df.drop(columns=["Unnamed: 0"])
 
         required_display_cols = [
             "Home_Sentiment",
@@ -4043,6 +4044,8 @@ with tab_master:
             "best_total_mode_point",
         ]
         export_df = df.copy()
+        if "Unnamed: 0" in export_df.columns:
+            export_df = export_df.drop(columns=["Unnamed: 0"])
         export_df = reorder_master_columns(export_df)
         for col in export_cols:
             if col not in export_df.columns:
