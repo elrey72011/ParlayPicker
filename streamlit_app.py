@@ -522,10 +522,12 @@ def apply_confidence_filter(df: pd.DataFrame, confidence_mode: str, show_low: bo
         return pd.DataFrame(), {"counts": {}, "low_removed": 0}
     filtered = df.copy()
     base_low = int((filtered["Pick_Confidence"] == "LOW").sum())
-    if confidence_mode == "High only":
+    mode_norm = (confidence_mode or "").lower()
+    if mode_norm.startswith("high only"):
         filtered = filtered[filtered["Pick_Confidence"] == "HIGH"]
-    elif confidence_mode == "High+Medium (recommended)":
+    elif mode_norm.startswith("high+medium"):
         filtered = filtered[filtered["Pick_Confidence"].isin(["HIGH", "MEDIUM"])]
+    # "All" or anything else -> no filter on confidence tier
     if not show_low:
         filtered = filtered[filtered["Pick_Confidence"] != "LOW"]
     low_after = int((filtered["Pick_Confidence"] == "LOW").sum())
@@ -3952,31 +3954,31 @@ with tab_master:
 
         confidence_mode = st.selectbox(
             "Confidence filter",
-            ["High+Medium (recommended)", "High only", "All"],
+            ["All", "High+Medium (recommended)", "High only"],
             index=0,
             key="confidence_filter_mode",
         )
         show_low = st.checkbox(
             "Show low-confidence picks (proxy/fallback)",
-            value=False,
+            value=True,
             key="show_low_confidence",
         )
-        df, confidence_stats = apply_confidence_filter(df, confidence_mode, show_low)
+        df_master_view, confidence_stats = apply_confidence_filter(df, confidence_mode, show_low)
         counts = confidence_stats.get("counts") or {}
         st.caption(
             f"Confidence counts (post-filter): HIGH={counts.get('HIGH', 0)}, "
             f"MEDIUM={counts.get('MEDIUM', 0)}, LOW={counts.get('LOW', 0)}; "
             f"LOW removed by filter: {confidence_stats.get('low_removed', 0)}"
         )
-        df = reorder_master_columns(df)
-        st.caption(f"Column order (first 8): {', '.join(list(df.columns[:8]))} ...")
-        df["Spread_Range"] = df.apply(
+        df_master_view = reorder_master_columns(df_master_view)
+        st.caption(f"Column order (first 8): {', '.join(list(df_master_view.columns[:8]))} ...")
+        df_master_view["Spread_Range"] = df_master_view.apply(
             lambda r: f"{r['spread_min']} to {r['spread_max']} (med {r['spread_med']})"
             if pd.notnull(r.get("spread_min")) and pd.notnull(r.get("spread_max"))
             else "N/A",
             axis=1,
         )
-        df["Total_Range"] = df.apply(
+        df_master_view["Total_Range"] = df_master_view.apply(
             lambda r: f"{r['total_min']} to {r['total_max']} (med {r['total_med']})"
             if pd.notnull(r.get("total_min")) and pd.notnull(r.get("total_max"))
             else "N/A",
@@ -3991,7 +3993,21 @@ with tab_master:
             if (r.get("spread_books_count") == 1) or (r.get("total_books_count") == 1):
                 badges_local.append("THIN MARKET")
             return ";".join(sorted(set(badges_local))) if badges_local else None
-        df["Market_Badge"] = df.apply(_market_badge, axis=1)
+        df_master_view["Market_Badge"] = df_master_view.apply(_market_badge, axis=1)
+
+        st.subheader("Top Picks / Best Bets")
+        include_low_in_top = st.checkbox("Include LOW confidence in Top Picks", value=False, key="include_low_top_picks")
+        top_df = df.copy()
+        if "Unnamed: 0" in top_df.columns:
+            top_df = top_df.drop(columns=["Unnamed: 0"])
+        for col in required_display_cols:
+            if col not in top_df.columns:
+                top_df[col] = None
+        top_df = top_df[top_df["Eligible_Top_Picks"] == True]
+        if not include_low_in_top:
+            top_df = top_df[top_df["Pick_Confidence"].isin(["HIGH", "MEDIUM"])]
+        top_df = reorder_master_columns(top_df)
+        st.dataframe(top_df)
 
         export_cols = [
             "AI_Prob",
@@ -4061,7 +4077,7 @@ with tab_master:
             "best_total_median_point",
             "best_total_mode_point",
         ]
-        export_df = df.copy()
+        export_df = df_master_view.copy()
         if "Unnamed: 0" in export_df.columns:
             export_df = export_df.drop(columns=["Unnamed: 0"])
         export_df = reorder_master_columns(export_df)
@@ -4083,15 +4099,15 @@ with tab_master:
 
         # Market range visualizer
         with st.expander("Market Range Visuals (Spread/Total)", expanded=False):
-            if df.empty:
+            if df_master_view.empty:
                 st.info("Run Master Analysis to view market ranges.")
             else:
                 game_options = [
                     f"{row.get('League')} | {row.get('Home')} vs {row.get('Away')} | {row.get('Commence (UTC)')}"
-                    for _, row in df.iterrows()
+                    for _, row in df_master_view.iterrows()
                 ]
                 selected = st.selectbox("Select game", options=game_options, index=0)
-                selected_row = df.iloc[game_options.index(selected)] if game_options else None
+                selected_row = df_master_view.iloc[game_options.index(selected)] if game_options else None
                 if selected_row is not None:
                     def render_range(kind: str, lo: Any, mid: Any, hi: Any, pick_line: Any, warnings_text: str):
                         if pd.isna(lo) or pd.isna(hi):
@@ -4198,8 +4214,8 @@ with tab_master:
         elif not games:
             st.warning("No games loaded. Use the sidebar to load games first.")
         else:
-            st.success(f"Produced {len(df)} rows from {len(games)} games")
-            st.dataframe(df)
+            st.success(f"Produced {len(df_master_view)} rows from {len(games)} games")
+            st.dataframe(df_master_view)
             st.caption(
                 f"rows_out/games_in = {master_stats['rows_out']} / {master_stats['games_in']}"
             )
