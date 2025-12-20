@@ -3216,6 +3216,16 @@ with tab_master:
                 or away_meta.get("sentiment_source")
                 or "none"
             )
+            sentiment_auth_error = bool(
+                sentiment_meta_global.get("auth_error")
+                or sentiment_debug_global.get("auth_error")
+                or league_debug.get("auth_error")
+            )
+            sentiment_rate_limited = bool(
+                sentiment_meta_global.get("rate_limited")
+                or sentiment_debug_global.get("rate_limited")
+                or league_debug.get("rate_limited")
+            )
             sentiment_adj_reason = "disabled"
             sentiment_adj = 0.0
             eligible_sentiment = bool(articles_total >= 3 and not sentiment_auth_error)
@@ -3264,16 +3274,6 @@ with tab_master:
             sentiment_sample_query = sentiment_meta_global.get("sample_query") or (sample_calls[0].get("q") if sample_calls else None)
             sentiment_sample_status = sentiment_meta_global.get("sample_status") or (sample_calls[0].get("status") if sample_calls else None)
             sentiment_sample_totalResults = sentiment_meta_global.get("sample_totalResults") or (sample_calls[0].get("totalResults") if sample_calls else None)
-            sentiment_auth_error = bool(
-                sentiment_meta_global.get("auth_error")
-                or sentiment_debug_global.get("auth_error")
-                or league_debug.get("auth_error")
-            )
-            sentiment_rate_limited = bool(
-                sentiment_meta_global.get("rate_limited")
-                or sentiment_debug_global.get("rate_limited")
-                or league_debug.get("rate_limited")
-            )
 
             vertex_prob_home, vertex_warn = get_vertex_prob(g, sentiment_diff)
             if vertex_warn and vertex_warn not in warnings:
