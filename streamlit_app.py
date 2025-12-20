@@ -152,6 +152,21 @@ def parse_spread_pick(raw_val: Any, home: Optional[str], away: Optional[str]) ->
     return None, None
 
 
+def parse_total_pick(raw_val: Any) -> Tuple[Optional[str], Optional[float]]:
+    """
+    Parse a "Total & Pick" style string like 'Under 44.5' into (side, line).
+    """
+    if not raw_val:
+        return None, None
+    text = str(raw_val).strip()
+    match = re.match(r"(Over|Under)\s+(-?\d+(?:\.\d+)?)", text, flags=re.IGNORECASE)
+    if not match:
+        return None, None
+    side = match.group(1).title()
+    line = safe_float(match.group(2))
+    return side, line
+
+
 def reorder_master_columns(df: pd.DataFrame) -> pd.DataFrame:
     """
     Ensure fixed front columns then pick columns; preserve remaining order.
@@ -198,15 +213,30 @@ def reorder_for_spread_total_focus(df: pd.DataFrame) -> pd.DataFrame:
 
     focus_cols = [
         "Spread & Pick",
+        "spread_prob",
+        "spread_confidence",
         "Total & Pick",
+        "total_prob",
+        "total_confidence",
+        "At_a_Glance_Confidence",
+        "At_a_Glance_Score",
+        "At_a_Glance_Reason",
         "spread_min",
         "spread_med",
         "spread_max",
         "spread_books_count",
+        "spread_confidence_reason",
+        "spread_prob_market_based",
+        "spread_prob_reason",
         "total_min",
         "total_med",
         "total_max",
         "total_books_count",
+        "total_confidence_reason",
+        "total_prob_market_based",
+        "total_prob_reason",
+        "spread_width",
+        "total_width",
         "spread_best_book",
         "total_best_book",
     ]
@@ -234,6 +264,130 @@ def reorder_for_spread_total_focus(df: pd.DataFrame) -> pd.DataFrame:
         return df[fixed_front + focus_cols + remaining + ml_cols]
     except Exception:
         return df
+
+
+def confidence_from_market(
+    books_count: Any,
+    width: Any,
+    odds_valid: bool,
+    mixed_side_flag: bool,
+    has_proxy_warning: bool,
+    *,
+    market_kind: str = "spread",
+) -> Tuple[str, str]:
+    conf = "HIGH"
+    reasons: List[str] = []
+
+    if has_proxy_warning:
+        conf = "LOW"
+        reasons.append("proxy_warning")
+    if mixed_side_flag:
+        conf = "LOW"
+        reasons.append("mixed_side_range")
+    if not odds_valid:
+        conf = "LOW"
+        reasons.append("missing_odds")
+    try:
+        bc = int(books_count) if books_count is not None else 0
+    except Exception:
+        bc = 0
+    if bc <= 1:
+        conf = "LOW"
+        reasons.append("thin_market")
+    w_val = safe_float(width)
+    if w_val is not None:
+        threshold = 2.0 if market_kind == "spread" else 3.0
+        if w_val >= threshold and conf == "HIGH":
+            conf = "MEDIUM"
+        if w_val >= threshold:
+            reasons.append(f"wide_market({w_val:.1f})")
+    return conf, ";".join(reasons)
+
+
+def compute_at_a_glance(spread_conf: str, spread_reason: str, total_conf: str, total_reason: str) -> Tuple[str, int, str]:
+    rank = {"LOW": 1, "MEDIUM": 2, "HIGH": 3}
+    sc = spread_conf or "LOW"
+    tc = total_conf or "LOW"
+    sc_rank = rank.get(sc, 1)
+    tc_rank = rank.get(tc, 1)
+    overall = sc if sc_rank <= tc_rank else tc
+    score = rank.get(overall, 1)
+
+    if overall == "HIGH":
+        reason = "spread+total strong"
+    else:
+        parts: List[str] = []
+        for part in [spread_reason, total_reason]:
+            if part:
+                parts.extend([p for p in str(part).split(";") if p])
+        if overall == "LOW":
+            priority_tokens = {"missing_odds", "thin_market", "mixed_side_range", "proxy_warning"}
+            priority = [p for p in parts if any(tok in p for tok in priority_tokens)]
+            remainder = [p for p in parts if p not in priority]
+            ordered = priority + remainder
+            reason = ";".join(ordered)
+        else:
+            reason = ";".join(parts)
+        reason = reason[:120] if reason else None
+    return overall, score, reason or None
+
+
+def add_spread_total_confidence(df: pd.DataFrame) -> pd.DataFrame:
+    if df is None or df.empty:
+        return df
+    df = df.copy()
+
+    def _apply(row: pd.Series) -> pd.Series:
+        warnings_text = str(row.get("Warnings") or "")
+        spread_odds_valid = safe_float(row.get("spread_implied_prob")) is not None
+        total_odds_valid = safe_float(row.get("total_implied_prob")) is not None
+        spread_width_val = safe_float(row.get("spread_width"))
+        total_width_val = safe_float(row.get("total_width"))
+        spread_books_count = row.get("spread_books_count")
+        total_books_count = row.get("total_books_count")
+        mixed_side_flag = "spread_range_mixed_sides_detected" in warnings_text
+        proxy_flag = "vertex_proxy_for_spread_total" in warnings_text
+
+        spread_conf, spread_reason = confidence_from_market(
+            spread_books_count, spread_width_val, spread_odds_valid, mixed_side_flag, proxy_flag, market_kind="spread"
+        )
+        total_conf, total_reason = confidence_from_market(
+            total_books_count, total_width_val, total_odds_valid, False, proxy_flag, market_kind="total"
+        )
+
+        spread_prob_val = row.get("spread_prob_market_based")
+        if spread_prob_val is None:
+            penalty = 0.0
+            if spread_width_val is not None:
+                penalty = min(0.05, spread_width_val * 0.02)
+            spread_prob_val = clamp(0.5 - (penalty or 0.0))
+            spread_reason = ";".join(filter(None, [spread_reason, "missing_implied_prob"]))
+        total_prob_val = row.get("total_prob_market_based")
+        if total_prob_val is None:
+            penalty = 0.0
+            if total_width_val is not None:
+                penalty = min(0.05, total_width_val * 0.02)
+            total_prob_val = clamp(0.5 - (penalty or 0.0))
+            total_reason = ";".join(filter(None, [total_reason, "missing_implied_prob"]))
+
+        overall_conf, overall_score, overall_reason = compute_at_a_glance(
+            spread_conf, spread_reason, total_conf, total_reason
+        )
+
+        row["spread_prob"] = spread_prob_val
+        row["spread_confidence"] = spread_conf
+        row["spread_confidence_reason"] = spread_reason
+        row["spread_odds_valid"] = spread_odds_valid
+        row["total_prob"] = total_prob_val
+        row["total_confidence"] = total_conf
+        row["total_confidence_reason"] = total_reason
+        row["total_odds_valid"] = total_odds_valid
+        row["At_a_Glance_Confidence"] = overall_conf
+        row["At_a_Glance_Score"] = overall_score
+        row["At_a_Glance_Reason"] = overall_reason
+        return row
+
+    return df.apply(_apply, axis=1)
 
 
 def compute_sentiment_adj_row(row: Dict[str, Any]) -> Tuple[float, str]:
@@ -285,8 +439,7 @@ def market_based_prob(
             return None
 
     imp = _clamp_prob(implied_prob_value if implied_prob_value is not None else row.get("Implied_Prob"))
-    if imp is None:
-        return None, "missing_implied_prob"
+    base_prob = imp if imp is not None else 0.5
     market = str(market_override or row.get("Market") or "").lower()
     warnings_local: List[str] = []
     width = None
@@ -339,8 +492,9 @@ def market_based_prob(
                 weather_adj = 0.02
             elif "over" in pick_text:
                 weather_adj = -0.02
-    prob = _clamp_prob(imp + inj_adj + weather_adj - penalty)
-    reason = f"market_based (imp={imp:.3f}, inj={inj_adj:.3f}, weather={weather_adj:.3f}, penalty={penalty:.3f})"
+    prob = _clamp_prob(base_prob + inj_adj + weather_adj - penalty)
+    reason_base = f"imp={imp:.3f}" if imp is not None else "imp=missing->0.500"
+    reason = f"market_based ({reason_base}, inj={inj_adj:.3f}, weather={weather_adj:.3f}, penalty={penalty:.3f})"
     if warnings_local:
         reason = f"{reason} | {','.join(warnings_local)}"
     return prob, reason
@@ -3187,6 +3341,7 @@ with tab_master:
 
             # --- Pre-compute pick context (used for market normalization) ---
             spread_pick_team, spread_pick_line = parse_spread_pick(g.get("Spread & Pick"), home, away)
+            spread_pick_odds = None
             spread_implied = None
             if g.get("home_spread_point") is not None:
                 home_spread_prob = american_to_implied_prob(g.get("home_spread_price"))
@@ -3208,9 +3363,11 @@ with tab_master:
                 if spread_pick_team == home:
                     spread_implied = home_spread_prob
                     spread_pick_line = spread_pick_line if spread_pick_line is not None else home_spread_point
+                    spread_pick_odds = g.get("home_spread_price")
                 elif spread_pick_team == away:
                     spread_implied = away_spread_prob
                     spread_pick_line = spread_pick_line if spread_pick_line is not None else away_spread_point
+                    spread_pick_odds = g.get("away_spread_price")
             target_spread_team = spread_pick_team if spread_pick_team in {home, away} else home
 
             # Market range aggregates
@@ -3463,6 +3620,21 @@ with tab_master:
                     "sentiment_rate_limited": sentiment_rate_limited,
                     "sentiment_adj_value": sentiment_adj,
                     "sentiment_adj_reason": sentiment_adj_reason,
+                    "spread_pick_team": spread_pick_team,
+                    "spread_pick_line": spread_pick_line,
+                    "spread_pick_odds": spread_pick_odds,
+                    "spread_prob": spread_prob_market_based,
+                    "spread_confidence": None,
+                    "spread_confidence_reason": None,
+                    "total_pick_side": total_pick_side,
+                    "total_pick_line": total_line,
+                    "total_pick_odds": total_pick_odds,
+                    "total_prob": total_prob_market_based,
+                    "total_confidence": None,
+                    "total_confidence_reason": None,
+                    "At_a_Glance_Confidence": None,
+                    "At_a_Glance_Score": None,
+                    "At_a_Glance_Reason": None,
                     "best_spread_book": g.get("best_spread_book"),
                     "best_spread_last_update": g.get("best_spread_last_update"),
                     "best_spread_price_score": g.get("best_spread_price_score"),
@@ -3500,6 +3672,8 @@ with tab_master:
             total_pick = None
             total_implied = None
             total_line = g.get("total_point")
+            total_pick_side = None
+            total_pick_odds = None
             vertex_spread_prob = None
             vertex_total_prob = None
             if g.get("total_point") is not None:
@@ -3508,16 +3682,24 @@ with tab_master:
                 if over_prob is not None or under_prob is not None:
                     if over_prob is None:
                         total_pick = "Under"
+                        total_pick_side = "Under"
                         total_implied = under_prob
+                        total_pick_odds = g.get("under_price")
                     elif under_prob is None:
                         total_pick = "Over"
+                        total_pick_side = "Over"
                         total_implied = over_prob
+                        total_pick_odds = g.get("over_price")
                     elif under_prob >= over_prob:
                         total_pick = "Under"
+                        total_pick_side = "Under"
                         total_implied = under_prob
+                        total_pick_odds = g.get("under_price")
                     else:
                         total_pick = "Over"
+                        total_pick_side = "Over"
                         total_implied = over_prob
+                        total_pick_odds = g.get("over_price")
 
             spread_prob_market_based = None
             spread_prob_reason = None
@@ -3697,7 +3879,19 @@ with tab_master:
                         "kalshi_game_prefix_used": (candidate_debug.get("winner_meta") or {}).get("winner_prefix"),
                         "kalshi_wanted_tokens": (candidate_debug.get("winner_meta") or {}).get("allowed_date_tokens"),
                         "Spread & Pick": f"{spread_pick} {spread_line}" if spread_pick is not None else None,
+                        "spread_pick_team": spread_pick_team,
+                        "spread_pick_line": spread_pick_line,
+                        "spread_pick_odds": spread_pick_odds,
+                        "spread_prob": spread_prob_market_based,
+                        "spread_confidence": None,
+                        "spread_confidence_reason": None,
                         "Total & Pick": f"{total_pick} {total_line}" if total_pick is not None else None,
+                        "total_pick_side": total_pick_side,
+                        "total_pick_line": total_line,
+                        "total_pick_odds": total_pick_odds,
+                        "total_prob": total_prob_market_based,
+                        "total_confidence": None,
+                        "total_confidence_reason": None,
                         "Vertex Spread Prob": vertex_spread_prob,
                         "Vertex Total Prob": vertex_total_prob,
                         "spread_implied_prob": spread_implied,
@@ -3738,6 +3932,9 @@ with tab_master:
                         "total_max": total_max,
                         "spread_books_count": len(spread_books_map),
                         "total_books_count": len(total_books_map),
+                        "At_a_Glance_Confidence": None,
+                        "At_a_Glance_Score": None,
+                        "At_a_Glance_Reason": None,
                     }
                     adj_val, adj_reason = compute_sentiment_adj_row(ml_row)
                     ml_row["sentiment_adj"] = adj_val
@@ -3790,7 +3987,19 @@ with tab_master:
                     "kalshi_wanted_tokens": (candidate_debug.get("winner_meta") or {}).get("allowed_date_tokens"),
                     "Sentiment_Diff": sentiment_diff,
                     "Spread & Pick": f"{spread_pick} {spread_line}" if spread_pick is not None else None,
+                    "spread_pick_team": spread_pick_team,
+                    "spread_pick_line": spread_pick_line,
+                    "spread_pick_odds": spread_pick_odds,
+                    "spread_prob": spread_prob_market_based,
+                    "spread_confidence": None,
+                    "spread_confidence_reason": None,
                     "Total & Pick": f"{total_pick} {total_line}" if total_pick is not None else None,
+                    "total_pick_side": total_pick_side,
+                    "total_pick_line": total_line,
+                    "total_pick_odds": total_pick_odds,
+                    "total_prob": total_prob_market_based,
+                    "total_confidence": None,
+                    "total_confidence_reason": None,
                     "Home_Sentiment": home_sent,
                     "Away_Sentiment": away_sent,
                     "best_spread_book": g.get("best_spread_book"),
@@ -3831,6 +4040,9 @@ with tab_master:
                     "sentiment_adj_value": sentiment_adj,
                     "sentiment_adj_reason": sentiment_adj_reason,
                     "prob_reason": None,
+                    "At_a_Glance_Confidence": None,
+                    "At_a_Glance_Score": None,
+                    "At_a_Glance_Reason": None,
                 }
                 spread_row["consensus_prob"] = spread_prob_market_based
                 spread_row["consensus_prob_adj"] = spread_prob_market_based
@@ -3872,7 +4084,19 @@ with tab_master:
                     "kalshi_wanted_tokens": (candidate_debug.get("winner_meta") or {}).get("allowed_date_tokens"),
                     "Sentiment_Diff": sentiment_diff,
                     "Spread & Pick": f"{spread_pick} {spread_line}" if spread_pick is not None else None,
+                    "spread_pick_team": spread_pick_team,
+                    "spread_pick_line": spread_pick_line,
+                    "spread_pick_odds": spread_pick_odds,
+                    "spread_prob": spread_prob_market_based,
+                    "spread_confidence": None,
+                    "spread_confidence_reason": None,
                     "Total & Pick": f"{total_pick} {total_line}" if total_pick is not None else None,
+                    "total_pick_side": total_pick_side,
+                    "total_pick_line": total_line,
+                    "total_pick_odds": total_pick_odds,
+                    "total_prob": total_prob_market_based,
+                    "total_confidence": None,
+                    "total_confidence_reason": None,
                     "Home_Sentiment": home_sent,
                     "Away_Sentiment": away_sent,
                     "sentiment_adj": sentiment_adj, "sentiment_source": sentiment_source, "reddit_used": reddit_used, "sentiment_valid": sentiment_valid,
@@ -3923,6 +4147,9 @@ with tab_master:
                     "sentiment_adj_value": sentiment_adj,
                     "sentiment_adj_reason": sentiment_adj_reason,
                     "prob_reason": None,
+                    "At_a_Glance_Confidence": None,
+                    "At_a_Glance_Score": None,
+                    "At_a_Glance_Reason": None,
                 }
                 total_row["consensus_prob"] = total_prob_market_based
                 total_row["consensus_prob_adj"] = total_prob_market_based
@@ -4010,12 +4237,26 @@ with tab_master:
             "odds_valid",
             "odds_placeholder_detected",
             "implied_prob_reason",
+            "spread_pick_team",
+            "spread_pick_line",
+            "spread_pick_odds",
             "spread_implied_prob",
+            "spread_prob",
             "spread_prob_market_based",
             "spread_prob_reason",
+            "spread_confidence",
+            "spread_confidence_reason",
+            "spread_odds_valid",
+            "total_pick_side",
+            "total_pick_line",
+            "total_pick_odds",
             "total_implied_prob",
+            "total_prob",
             "total_prob_market_based",
             "total_prob_reason",
+            "total_confidence",
+            "total_confidence_reason",
+            "total_odds_valid",
             "spread_min",
             "spread_med",
             "spread_max",
@@ -4026,12 +4267,16 @@ with tab_master:
             "total_books_count",
             "spread_width",
             "total_width",
+            "At_a_Glance_Confidence",
+            "At_a_Glance_Score",
+            "At_a_Glance_Reason",
         ]
         for col in required_display_cols:
             if col not in df.columns:
                 df[col] = None
         if "reddit_used" in df.columns:
             df["reddit_used"] = df["reddit_used"].fillna(False)
+        df = add_spread_total_confidence(df)
 
         confidence_mode = st.selectbox(
             "Confidence filter",
@@ -4143,12 +4388,26 @@ with tab_master:
             "odds_valid",
             "odds_placeholder_detected",
             "implied_prob_reason",
+            "spread_pick_team",
+            "spread_pick_line",
+            "spread_pick_odds",
             "spread_implied_prob",
+            "spread_prob",
             "spread_prob_market_based",
             "spread_prob_reason",
+            "spread_confidence",
+            "spread_confidence_reason",
+            "spread_odds_valid",
+            "total_pick_side",
+            "total_pick_line",
+            "total_pick_odds",
             "total_implied_prob",
+            "total_prob",
             "total_prob_market_based",
             "total_prob_reason",
+            "total_confidence",
+            "total_confidence_reason",
+            "total_odds_valid",
             "spread_min",
             "spread_med",
             "spread_max",
@@ -4159,6 +4418,9 @@ with tab_master:
             "total_books_count",
             "spread_width",
             "total_width",
+            "At_a_Glance_Confidence",
+            "At_a_Glance_Score",
+            "At_a_Glance_Reason",
             "best_spread_book",
             "best_spread_last_update",
             "best_spread_price_score",
