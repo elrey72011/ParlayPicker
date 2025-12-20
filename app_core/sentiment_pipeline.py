@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import re
 from datetime import datetime, timedelta
+import time
 from typing import Any, Dict, List, Optional, Tuple
 
 import requests
@@ -96,17 +97,27 @@ def league_label(league: str) -> str:
     return mapping.get((league or "").upper(), league or "")
 
 
+def _newsapi_query(team: str, league: str, league_query: Optional[str] = None) -> str:
+    league_norm = (league or "").upper()
+    league_fragment = league_query or league_label(league)
+    if league_norm in {"NCAAF", "NCAAB"}:
+        extras = "NCAA football" if league_norm == "NCAAF" else "NCAA basketball"
+        league_fragment = f"{league_fragment} {extras}".strip()
+    return f'"{team}" {league_fragment}'.strip()
+
+
 @st.cache_data(ttl=300)
-def fetch_team_news(news_api_key: str, team: str, league: str, league_query: Optional[str] = None) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+def fetch_team_news(news_api_key: str, team: str, league: str, league_query: Optional[str] = None, *, max_retries: int = 2, retry_delay: float = 0.75) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
     """Fetch recent articles for a team; returns (articles, info) where info contains status/error."""
     if not news_api_key:
-        return [], {"error": "missing_key", "status_code": None, "league_query": league_query or league}
+        return [], {"error": "missing_key", "status_code": None, "league_query": league_query or league, "totalResults": None, "q": None}
     league_query = league_query or league_label(league)
     to_date = datetime.utcnow().date()
     from_date = to_date - timedelta(days=3)
     url = "https://newsapi.org/v2/everything"
+    q = _newsapi_query(team, league, league_query)
     params = {
-        "q": f'"{team}" {league_query}',
+        "q": q,
         "sortBy": "relevancy",
         "pageSize": 20,
         "language": "en",
@@ -114,17 +125,32 @@ def fetch_team_news(news_api_key: str, team: str, league: str, league_query: Opt
         "to": to_date.isoformat(),
         "apiKey": news_api_key,
     }
-    try:
-        resp = requests.get(url, params=params, timeout=8)
-        status = resp.status_code
-        if status != 200:
-            error_key = "rate_limited" if status == 429 else ("bad_key" if status in {401, 403} else "http_error")
-            return [], {"error": error_key, "status_code": status, "league_query": league_query}
-        data = resp.json()
-        articles = data.get("articles", []) if isinstance(data, dict) else []
-        return articles, {"error": None, "status_code": status, "league_query": league_query}
-    except Exception as exc:
-        return [], {"error": str(exc), "status_code": None, "league_query": league_query}
+    attempts = 0
+    last_error: Optional[str] = None
+    while attempts <= max_retries:
+        attempts += 1
+        try:
+            resp = requests.get(url, params=params, timeout=8)
+            status = resp.status_code
+            if status != 200:
+                error_key = "rate_limited" if status == 429 else ("bad_key" if status in {401, 403} else "http_error")
+                if status == 429 and attempts <= max_retries:
+                    time.sleep(retry_delay * attempts)
+                    last_error = error_key
+                    continue
+                return [], {"error": error_key, "status_code": status, "league_query": league_query, "totalResults": None, "q": q, "attempts": attempts}
+            data = resp.json()
+            articles = data.get("articles", []) if isinstance(data, dict) else []
+            total_results = data.get("totalResults") if isinstance(data, dict) else None
+            return articles, {"error": None, "status_code": status, "league_query": league_query, "totalResults": total_results, "q": q, "attempts": attempts}
+        except Exception as exc:
+            last_error = str(exc)
+            if attempts <= max_retries:
+                time.sleep(retry_delay * attempts)
+                continue
+            return [], {"error": last_error, "status_code": None, "league_query": league_query, "totalResults": None, "q": q, "attempts": attempts}
+
+    return [], {"error": last_error or "unknown_error", "status_code": None, "league_query": league_query, "totalResults": None, "q": q, "attempts": attempts}
 
 
 def team_sentiment_from_articles(articles: List[Dict[str, Any]]) -> float:

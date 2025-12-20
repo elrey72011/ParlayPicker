@@ -18,11 +18,7 @@ from app_core.kalshi_integrator import (
     league_series_ticker,
     team_code_for_league,
 )
-from app_core.sentiment_pipeline import (
-    build_team_sentiment_map,
-    fetch_team_news,
-    team_sentiment_from_articles,
-)
+from app_core.sentiment_pipeline import fetch_team_news, team_sentiment_from_articles
 from app_core.vertex_ai_endpoint import (
     VERTEX_FEATURE_COLUMNS,
     is_vertex_prediction_configured,
