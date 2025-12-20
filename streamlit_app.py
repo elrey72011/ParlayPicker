@@ -3405,7 +3405,7 @@ with tab_master:
 
                 if pick is not None:
                     ai_prob_base = ai_prob_for_selection(pick, adjusted=False)
-                    ai_prob_row = ai_prob_for_selection(pick, adjusted=True)
+                    ai_prob_row = clamp((ai_prob_base or 0.0) + (sentiment_adj or 0.0), 0.01, 0.99) if ai_prob_base is not None else None
 
                     consensus_prob, consensus_prob_adj, consensus_notes = consensus_for_selection(
                         pick,
