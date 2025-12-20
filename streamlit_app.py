@@ -3127,14 +3127,16 @@ with tab_master:
                                     total_books_map[book_name] = pt
             spread_min, spread_med, spread_max = _market_range(spread_points)
             total_min, total_med, total_max = _market_range(total_points)
+            width_spread = (spread_max - spread_min) if (spread_max is not None and spread_min is not None) else None
+            width_total = (total_max - total_min) if (total_max is not None and total_min is not None) else None
             non_pickem_line = spread_pick_line if spread_pick_line is not None else spread_med
             spread_cross_zero = (
                 spread_min is not None
                 and spread_max is not None
                 and spread_min < 0 < spread_max
             )
-            spread_median_zero = spread_med == 0 if spread_med is not None else False
-            if (spread_cross_zero or spread_median_zero) and (non_pickem_line is None or abs(non_pickem_line) > 0.25):
+            spread_median_zero = (abs(spread_med or 0) < 0.25) if spread_med is not None else False
+            if spread_cross_zero and spread_median_zero and (non_pickem_line is not None and abs(non_pickem_line) >= 1.0):
                 warnings.append("spread_range_mixed_sides_detected")
 
             sentiment_map_all = st.session_state.get("sentiment_map") or {}
@@ -3204,6 +3206,8 @@ with tab_master:
             sentiment_status_counts_field = sentiment_status_counts if sentiment_status_counts else None
             sample_calls = sentiment_debug_global.get("sample_calls") or league_debug.get("sample_calls") or []
             sentiment_sample_query = (sample_calls[0].get("q") if sample_calls else None)
+            sentiment_sample_status = sample_calls[0].get("status") if sample_calls else None
+            sentiment_sample_totalResults = sample_calls[0].get("totalResults") if sample_calls else None
             sentiment_auth_error = bool(
                 sentiment_meta_global.get("auth_error")
                 or sentiment_debug_global.get("auth_error")
@@ -3327,6 +3331,8 @@ with tab_master:
                     "sentiment_articles_total": sentiment_articles_total,
                     "sentiment_status_counts": sentiment_status_counts_field,
                     "sentiment_sample_query": sentiment_sample_query,
+                    "sentiment_sample_status": sentiment_sample_status,
+                    "sentiment_sample_totalResults": sentiment_sample_totalResults,
                     "sentiment_auth_error": sentiment_auth_error,
                     "sentiment_rate_limited": sentiment_rate_limited,
                     "sentiment_adj_value": sentiment_adj,
@@ -3514,28 +3520,47 @@ with tab_master:
 
                     warnings_field = ";".join(warnings) if warnings else None
                     ml_row = {
-                        "League": league_name, "Home": home, "Away": away,
-                        "Commence (UTC)": commence_iso, "Commence (Local)": commence_local,
-                        "Local Date": commence_date_local, "Market": "Moneyline",
-                        "Book": g.get("best_ml_book"), "Home_ML": home_ml, "Away_ML": away_ml,
-                    "Pick": pick, "Implied_Prob": implied_pick, "AI_Prob": ai_prob_base, "ai_prob_adj": ai_prob_row,
-                    "consensus_prob": consensus_prob, "consensus_prob_adj": consensus_prob_adj,
-                    "Home_Sentiment": home_sent, "Away_Sentiment": away_sent, "Sentiment_Diff": sentiment_diff,
-                    "sentiment_adj": sentiment_adj, "sentiment_source": sentiment_source, "reddit_used": reddit_used, "sentiment_valid": sentiment_valid,
-                    "sentiment_error_count": sentiment_error_count,
-                    "sentiment_errors_sample": sentiment_errors_sample,
-                    "sentiment_articles_total": sentiment_articles_total,
-                    "sentiment_status_counts": sentiment_status_counts_field,
-                    "sentiment_sample_query": sentiment_sample_query,
-                    "sentiment_auth_error": sentiment_auth_error,
-                    "sentiment_rate_limited": sentiment_rate_limited,
-                    "kalshi_available": kalshi_winner.get("kalshi_available"),
-                    "kalshi_matched": kalshi_winner.get("kalshi_matched"),
-                    "kalshi_prob": kalshi_prob_used, "kalshi_prob_used": kalshi_prob_used,
-                    "kalshi_event_ticker": kalshi_event_used, "kalshi_event_ticker_used": kalshi_event_used,
-                    "kalshi_candidate_count": candidate_debug.get("candidate_count"),
-                    "kalshi_best_score": candidate_debug.get("best_score"),
-                    "kalshi_match_reason": kalshi_winner.get("kalshi_reason"),
+                        "League": league_name,
+                        "Home": home,
+                        "Away": away,
+                        "Commence (UTC)": commence_iso,
+                        "Commence (Local)": commence_local,
+                        "Local Date": commence_date_local,
+                        "Market": "Moneyline",
+                        "Book": g.get("best_ml_book"),
+                        "Home_ML": home_ml,
+                        "Away_ML": away_ml,
+                        "Pick": pick,
+                        "Implied_Prob": implied_pick,
+                        "AI_Prob": ai_prob_base,
+                        "ai_prob_adj": ai_prob_row,
+                        "consensus_prob": consensus_prob,
+                        "consensus_prob_adj": consensus_prob_adj,
+                        "Home_Sentiment": home_sent,
+                        "Away_Sentiment": away_sent,
+                        "Sentiment_Diff": sentiment_diff,
+                        "sentiment_adj": sentiment_adj,
+                        "sentiment_source": sentiment_source,
+                        "reddit_used": reddit_used,
+                        "sentiment_valid": sentiment_valid,
+                        "sentiment_error_count": sentiment_error_count,
+                        "sentiment_errors_sample": sentiment_errors_sample,
+                        "sentiment_articles_total": sentiment_articles_total,
+                        "sentiment_status_counts": sentiment_status_counts_field,
+                        "sentiment_sample_query": sentiment_sample_query,
+                        "sentiment_sample_status": sentiment_sample_status,
+                        "sentiment_sample_totalResults": sentiment_sample_totalResults,
+                        "sentiment_auth_error": sentiment_auth_error,
+                        "sentiment_rate_limited": sentiment_rate_limited,
+                        "kalshi_available": kalshi_winner.get("kalshi_available"),
+                        "kalshi_matched": kalshi_winner.get("kalshi_matched"),
+                        "kalshi_prob": kalshi_prob_used,
+                        "kalshi_prob_used": kalshi_prob_used,
+                        "kalshi_event_ticker": kalshi_event_used,
+                        "kalshi_event_ticker_used": kalshi_event_used,
+                        "kalshi_candidate_count": candidate_debug.get("candidate_count"),
+                        "kalshi_best_score": candidate_debug.get("best_score"),
+                        "kalshi_match_reason": kalshi_winner.get("kalshi_reason"),
                         "kalshi_game_prefix_used": (candidate_debug.get("winner_meta") or {}).get("winner_prefix"),
                         "kalshi_wanted_tokens": (candidate_debug.get("winner_meta") or {}).get("allowed_date_tokens"),
                         "Spread & Pick": f"{spread_pick} {spread_line}" if spread_pick is not None else None,
@@ -3554,28 +3579,30 @@ with tab_master:
                         "best_spread_price_score": g.get("best_spread_price_score"),
                         "best_spread_median_point": g.get("best_spread_median_point"),
                         "best_spread_mode_point": g.get("best_spread_mode_point"),
-                    "best_total_book": g.get("best_total_book"),
-                    "best_total_last_update": g.get("best_total_last_update"),
-                    "best_total_price_score": g.get("best_total_price_score"),
-                    "best_total_median_point": g.get("best_total_median_point"),
-                    "best_total_mode_point": g.get("best_total_mode_point"),
-                    "Kalshi_Required": st.session_state.get("kalshi_required", True),
-                    "api_sports_used": api_sports_used,
-                    "sportsdata_used": sportsdata_used,
-                    "injuries_home_count": injuries_home_count,
-                    "injuries_away_count": injuries_away_count,
-                    "weather_summary": weather_summary,
-                    "key_injuries_home": ",".join(key_injuries_home),
-                    "key_injuries_away": ",".join(key_injuries_away),
-                    "spread_min": spread_min,
-                    "spread_med": spread_med,
-                    "spread_max": spread_max,
-                    "total_min": total_min,
-                    "total_med": total_med,
-                    "total_max": total_max,
-                    "spread_books_count": len(spread_books_map),
-                    "total_books_count": len(total_books_map),
-                }
+                        "best_total_book": g.get("best_total_book"),
+                        "best_total_last_update": g.get("best_total_last_update"),
+                        "best_total_price_score": g.get("best_total_price_score"),
+                        "best_total_median_point": g.get("best_total_median_point"),
+                        "best_total_mode_point": g.get("best_total_mode_point"),
+                        "spread_width": width_spread,
+                        "total_width": width_total,
+                        "Kalshi_Required": st.session_state.get("kalshi_required", True),
+                        "api_sports_used": api_sports_used,
+                        "sportsdata_used": sportsdata_used,
+                        "injuries_home_count": injuries_home_count,
+                        "injuries_away_count": injuries_away_count,
+                        "weather_summary": weather_summary,
+                        "key_injuries_home": ",".join(key_injuries_home),
+                        "key_injuries_away": ",".join(key_injuries_away),
+                        "spread_min": spread_min,
+                        "spread_med": spread_med,
+                        "spread_max": spread_max,
+                        "total_min": total_min,
+                        "total_med": total_med,
+                        "total_max": total_max,
+                        "spread_books_count": len(spread_books_map),
+                        "total_books_count": len(total_books_map),
+                    }
                     adj_val, adj_reason = compute_sentiment_adj_row(ml_row)
                     ml_row["sentiment_adj"] = adj_val
                     ml_row["sentiment_adj_value"] = adj_val
@@ -3611,6 +3638,8 @@ with tab_master:
                     "sentiment_articles_total": sentiment_articles_total,
                     "sentiment_status_counts": sentiment_status_counts_field,
                     "sentiment_sample_query": sentiment_sample_query,
+                    "sentiment_sample_status": sentiment_sample_status,
+                    "sentiment_sample_totalResults": sentiment_sample_totalResults,
                     "sentiment_auth_error": sentiment_auth_error,
                     "sentiment_rate_limited": sentiment_rate_limited,
                     "Vertex Spread Prob": vertex_spread_prob,
@@ -3661,6 +3690,8 @@ with tab_master:
                     "total_max": total_max,
                     "spread_books_count": len(spread_books_map),
                     "total_books_count": len(total_books_map),
+                    "spread_width": width_spread,
+                    "total_width": width_total,
                     "sentiment_adj_value": sentiment_adj,
                     "sentiment_adj_reason": sentiment_adj_reason,
                     "prob_reason": None,
@@ -3714,6 +3745,8 @@ with tab_master:
                     "sentiment_articles_total": sentiment_articles_total,
                     "sentiment_status_counts": sentiment_status_counts_field,
                     "sentiment_sample_query": sentiment_sample_query,
+                    "sentiment_sample_status": sentiment_sample_status,
+                    "sentiment_sample_totalResults": sentiment_sample_totalResults,
                     "sentiment_auth_error": sentiment_auth_error,
                     "sentiment_rate_limited": sentiment_rate_limited,
                     "best_spread_book": g.get("best_spread_book"),
@@ -3749,6 +3782,8 @@ with tab_master:
                     "total_max": total_max,
                     "spread_books_count": len(spread_books_map),
                     "total_books_count": len(total_books_map),
+                    "spread_width": width_spread,
+                    "total_width": width_total,
                     "sentiment_adj_value": sentiment_adj,
                     "sentiment_adj_reason": sentiment_adj_reason,
                     "prob_reason": None,
@@ -3816,6 +3851,8 @@ with tab_master:
             "sentiment_articles_total",
             "sentiment_status_counts",
             "sentiment_sample_query",
+            "sentiment_sample_status",
+            "sentiment_sample_totalResults",
             "sentiment_auth_error",
             "sentiment_rate_limited",
             "Pick_Confidence",
@@ -3846,6 +3883,8 @@ with tab_master:
             "total_max",
             "spread_books_count",
             "total_books_count",
+            "spread_width",
+            "total_width",
         ]
         for col in required_display_cols:
             if col not in df.columns:
@@ -3916,6 +3955,8 @@ with tab_master:
             "sentiment_articles_total",
             "sentiment_status_counts",
             "sentiment_sample_query",
+            "sentiment_sample_status",
+            "sentiment_sample_totalResults",
             "sentiment_auth_error",
             "sentiment_rate_limited",
             "Pick_Confidence",
@@ -3947,6 +3988,8 @@ with tab_master:
             "total_max",
             "spread_books_count",
             "total_books_count",
+            "spread_width",
+            "total_width",
             "best_spread_book",
             "best_spread_last_update",
             "best_spread_price_score",
