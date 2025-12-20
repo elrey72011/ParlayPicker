@@ -4,6 +4,7 @@ import re
 import time
 import traceback
 from datetime import datetime, timedelta, timezone
+import statistics
 from typing import Any, Dict, List, Optional, Tuple, Union
 from zoneinfo import ZoneInfo
 
@@ -21,6 +22,11 @@ from app_core.sentiment_pipeline import (
     build_team_sentiment_map,
     fetch_team_news,
     team_sentiment_from_articles,
+)
+from app_core.vertex_ai_endpoint import (
+    VERTEX_FEATURE_COLUMNS,
+    is_vertex_prediction_configured,
+    predict_win_probabilities,
 )
 from vertex_master_analyzer import blended_win_prob
 
@@ -510,9 +516,11 @@ def extract_best_market(game: Dict[str, Any]) -> Dict[str, Any]:
     if not bookmakers:
         warnings.append("missing_bookmakers")
 
-    best_ml = None
-    best_spread = None
-    best_total = None
+    preferred_books = ["FanDuel", "DraftKings", "BetMGM", "Caesars"]
+
+    h2h_candidates: List[Dict[str, Any]] = []
+    spread_candidates: List[Dict[str, Any]] = []
+    total_candidates: List[Dict[str, Any]] = []
 
     for bm in bookmakers:
         bm_name = bm.get("title") or bm.get("key")
@@ -526,20 +534,18 @@ def extract_best_market(game: Dict[str, Any]) -> Dict[str, Any]:
                 away_price = prices.get(away)
                 if home_price is None or away_price is None:
                     continue
-                quality = max(abs(float(home_price)), abs(float(away_price))) if home_price and away_price else 0
-                candidate = {
-                    "book": bm_name,
-                    "home_price": home_price,
-                    "away_price": away_price,
-                    "quality": quality,
-                    "last_update": last_update,
-                }
-                if not best_ml or quality > best_ml["quality"]:
-                    best_ml = candidate
-                elif best_ml and quality == best_ml.get("quality"):
-                    if last_update and best_ml.get("last_update"):
-                        if last_update > best_ml["last_update"]:
-                            best_ml = candidate
+                price_scores = [
+                    abs(abs(float(p)) - 110) for p in [home_price, away_price] if p is not None
+                ]
+                h2h_candidates.append(
+                    {
+                        "book": bm_name,
+                        "home_price": home_price,
+                        "away_price": away_price,
+                        "price_score": min(price_scores) if price_scores else None,
+                        "last_update": last_update,
+                    }
+                )
             elif key == "spreads":
                 price_map = {o.get("name"): (o.get("point"), o.get("price")) for o in outcomes if o.get("name")}
                 if home in price_map and away in price_map:
@@ -547,25 +553,20 @@ def extract_best_market(game: Dict[str, Any]) -> Dict[str, Any]:
                     away_point, away_price = price_map.get(away)
                     if home_point is None or away_point is None:
                         continue
-                    quality = max(
-                        abs(float(home_price)) if home_price is not None else 0,
-                        abs(float(away_price)) if away_price is not None else 0,
+                    price_scores = [
+                        abs(abs(float(p)) - 110) for p in [home_price, away_price] if p is not None
+                    ]
+                    spread_candidates.append(
+                        {
+                            "book": bm_name,
+                            "home_point": home_point,
+                            "home_price": home_price,
+                            "away_point": away_point,
+                            "away_price": away_price,
+                            "price_score": min(price_scores) if price_scores else None,
+                            "last_update": last_update,
+                        }
                     )
-                    candidate = {
-                        "book": bm_name,
-                        "home_point": home_point,
-                        "home_price": home_price,
-                        "away_point": away_point,
-                        "away_price": away_price,
-                        "quality": quality,
-                        "last_update": last_update,
-                    }
-                    if not best_spread or quality > best_spread["quality"]:
-                        best_spread = candidate
-                    elif best_spread and quality == best_spread.get("quality"):
-                        if last_update and best_spread.get("last_update"):
-                            if last_update > best_spread["last_update"]:
-                                best_spread = candidate
             elif key == "totals":
                 over = next((o for o in outcomes if o.get("name") == "Over"), None)
                 under = next((o for o in outcomes if o.get("name") == "Under"), None)
@@ -576,30 +577,82 @@ def extract_best_market(game: Dict[str, Any]) -> Dict[str, Any]:
                         continue
                     over_price = over.get("price")
                     under_price = under.get("price")
-                    quality = max(
-                        abs(float(over_price)) if over_price is not None else 0,
-                        abs(float(under_price)) if under_price is not None else 0,
+                    price_scores = [
+                        abs(abs(float(p)) - 110) for p in [over_price, under_price] if p is not None
+                    ]
+                    total_candidates.append(
+                        {
+                            "book": bm_name,
+                            "point": over_point,
+                            "over_price": over_price,
+                            "under_price": under_price,
+                            "price_score": min(price_scores) if price_scores else None,
+                            "last_update": last_update,
+                        }
                     )
-                    candidate = {
-                        "book": bm_name,
-                        "point": over_point,
-                        "over_price": over_price,
-                        "under_price": under_price,
-                        "quality": quality,
-                        "last_update": last_update,
-                    }
-                    if not best_total or quality > best_total["quality"]:
-                        best_total = candidate
-                    elif best_total and quality == best_total.get("quality"):
-                        if last_update and best_total.get("last_update"):
-                            if last_update > best_total["last_update"]:
-                                best_total = candidate
 
-    if not best_ml:
+    def _book_priority(name: Optional[str]) -> int:
+        if not name:
+            return len(preferred_books) + 1
+        for idx, b in enumerate(preferred_books):
+            if b.lower() in name.lower():
+                return idx
+        return len(preferred_books) + 1
+
+    def _recency_score(dt_val: Optional[datetime]) -> float:
+        if not dt_val:
+            return float("inf")
+        return -dt_val.timestamp()
+
+    best_ml = None
+    if h2h_candidates:
+        best_ml = sorted(
+            h2h_candidates,
+            key=lambda c: (
+                c.get("price_score") if c.get("price_score") is not None else 999,
+                _recency_score(c.get("last_update")),
+                _book_priority(c.get("book")),
+            ),
+        )[0]
+    else:
         warnings.append("missing_h2h")
-    if not best_spread:
+
+    best_spread = None
+    median_spread = None
+    if spread_candidates:
+        try:
+            median_spread = statistics.median([c["home_point"] for c in spread_candidates if c.get("home_point") is not None])
+        except Exception:
+            median_spread = None
+        best_spread = sorted(
+            spread_candidates,
+            key=lambda c: (
+                abs(float(c.get("home_point") or 0) - float(median_spread or 0)),
+                c.get("price_score") if c.get("price_score") is not None else 999,
+                _recency_score(c.get("last_update")),
+                _book_priority(c.get("book")),
+            ),
+        )[0]
+    else:
         warnings.append("missing_spreads")
-    if not best_total:
+
+    best_total = None
+    median_total = None
+    if total_candidates:
+        try:
+            median_total = statistics.median([c["point"] for c in total_candidates if c.get("point") is not None])
+        except Exception:
+            median_total = None
+        best_total = sorted(
+            total_candidates,
+            key=lambda c: (
+                abs(float(c.get("point") or 0) - float(median_total or 0)),
+                c.get("price_score") if c.get("price_score") is not None else 999,
+                _recency_score(c.get("last_update")),
+                _book_priority(c.get("book")),
+            ),
+        )[0]
+    else:
         warnings.append("missing_totals")
 
     return {
@@ -613,10 +666,16 @@ def extract_best_market(game: Dict[str, Any]) -> Dict[str, Any]:
         "home_spread_price": best_spread.get("home_price") if best_spread else None,
         "away_spread_point": best_spread.get("away_point") if best_spread else None,
         "away_spread_price": best_spread.get("away_price") if best_spread else None,
+        "best_spread_last_update": best_spread.get("last_update") if best_spread else None,
+        "best_spread_price_score": best_spread.get("price_score") if best_spread else None,
+        "best_spread_median_point": median_spread,
         "best_total_book": best_total.get("book") if best_total else None,
         "total_point": best_total.get("point") if best_total else None,
         "over_price": best_total.get("over_price") if best_total else None,
         "under_price": best_total.get("under_price") if best_total else None,
+        "best_total_last_update": best_total.get("last_update") if best_total else None,
+        "best_total_price_score": best_total.get("price_score") if best_total else None,
+        "best_total_median_point": median_total,
         "warnings": warnings,
     }
 
@@ -744,18 +803,50 @@ def fetch_news() -> List[Dict[str, Any]]:
     return data.get("articles", [])
 
 # -----------------
-# Vertex stub
+# Vertex prediction
 # -----------------
 
-def get_vertex_prob(game: Dict[str, Any]) -> Optional[float]:
-    """Stubbed Vertex call: return None if not configured or on error."""
-    if not vertex_endpoint_id:
-        return None
+def _build_vertex_feature_row(game: Dict[str, Any], sentiment_diff: Optional[float]) -> pd.DataFrame:
+    implied_home = american_to_implied_prob(game.get("home_ml_price")) or game.get("implied_prob_home")
+    kalshi_prob = None
     try:
-        return None
+        # Pull any cached matched Kalshi prob for this game if present
+        for entry in st.session_state.get("kalshi_match_results") or []:
+            g = entry.get("game") or {}
+            if (
+                g.get("home_team") == game.get("home_team")
+                and g.get("away_team") == game.get("away_team")
+                and (g.get("commence_time_iso_utc") or g.get("commence_time")) == (game.get("commence_time_iso_utc") or game.get("commence_time"))
+            ):
+                winner = (entry.get("matches") or {}).get("winner", {})
+                if winner.get("kalshi_matched"):
+                    kalshi_prob = winner.get("kalshi_prob")
+                break
+    except Exception:
+        kalshi_prob = None
+    row = {
+        "implied_home_prob": safe_float(implied_home),
+        "sentiment_diff": safe_float(sentiment_diff),
+        "kalshi_prob": safe_float(kalshi_prob),
+    }
+    return pd.DataFrame([row])
+
+def get_vertex_prob(game: Dict[str, Any], sentiment_diff: Optional[float]) -> Tuple[Optional[float], Optional[str]]:
+    """Return Vertex home win prob (0-1) and an optional warning code."""
+    if not is_vertex_prediction_configured():
+        return None, "vertex_missing_prob"
+    try:
+        features_df = _build_vertex_feature_row(game, sentiment_diff)
+        preds = predict_win_probabilities(features_df, feature_columns=VERTEX_FEATURE_COLUMNS)
+        if not preds:
+            return None, "vertex_predict_failed"
+        prob = safe_float(preds[0])
+        if prob is None:
+            return None, "vertex_invalid_response"
+        return clamp(prob, 0.01, 0.99), None
     except Exception:
         st.session_state["last_exception"] = traceback.format_exc()
-        return None
+        return None, "vertex_predict_failed"
 
 # -----------------
 # Kalshi integration
@@ -2370,7 +2461,9 @@ with tab_master:
             sentiment_source = "newsapi" if any_sources else "none"
             reddit_used = False
 
-            vertex_prob_home = safe_float(get_vertex_prob(g))
+            vertex_prob_home, vertex_warn = get_vertex_prob(g, sentiment_diff)
+            if vertex_warn and vertex_warn not in warnings:
+                warnings.append(vertex_warn)
 
             home_code: Optional[str] = None
             away_code: Optional[str] = None
@@ -2464,11 +2557,19 @@ with tab_master:
                     "kalshi_match_reason": kalshi_winner.get("kalshi_reason"),
                     "kalshi_game_prefix_used": (candidate_debug.get("winner_meta") or {}).get("winner_prefix"),
                     "kalshi_wanted_tokens": (candidate_debug.get("winner_meta") or {}).get("allowed_date_tokens"),
-                    "Home_Sentiment": home_sent,
-                    "Away_Sentiment": away_sent,
-                    "Sentiment_Diff": sentiment_diff,
-                }
-            )
+                        "Home_Sentiment": home_sent,
+                        "Away_Sentiment": away_sent,
+                        "Sentiment_Diff": sentiment_diff,
+                        "best_spread_book": g.get("best_spread_book"),
+                        "best_spread_last_update": g.get("best_spread_last_update"),
+                        "best_spread_price_score": g.get("best_spread_price_score"),
+                        "best_spread_median_point": g.get("best_spread_median_point"),
+                        "best_total_book": g.get("best_total_book"),
+                        "best_total_last_update": g.get("best_total_last_update"),
+                        "best_total_price_score": g.get("best_total_price_score"),
+                        "best_total_median_point": g.get("best_total_median_point"),
+                    }
+                )
                 master_stats["market_rows_out"] += 1
 
             # --- 3. AI & Market Probability Calculations ---
@@ -2620,6 +2721,14 @@ with tab_master:
                         "Vertex Spread Prob": vertex_spread_prob,
                         "Vertex Total Prob": vertex_total_prob,
                         "Warnings": ";".join(warnings),
+                        "best_spread_book": g.get("best_spread_book"),
+                        "best_spread_last_update": g.get("best_spread_last_update"),
+                        "best_spread_price_score": g.get("best_spread_price_score"),
+                        "best_spread_median_point": g.get("best_spread_median_point"),
+                        "best_total_book": g.get("best_total_book"),
+                        "best_total_last_update": g.get("best_total_last_update"),
+                        "best_total_price_score": g.get("best_total_price_score"),
+                        "best_total_median_point": g.get("best_total_median_point"),
                     })
                     master_stats["h2h_found"] += 1
                     master_stats["market_rows_out"] += 1
@@ -2633,6 +2742,8 @@ with tab_master:
                 consensus_prob, consensus_notes = consensus_for_selection(spread_pick, kalshi_prob_used if kalshi_spread.get("kalshi_matched") else None)
                 if consensus_notes:
                     warnings = list(dict.fromkeys(warnings + consensus_notes))
+                if vertex_prob_home is not None and "vertex_proxy_for_spread_total" not in warnings:
+                    warnings.append("vertex_proxy_for_spread_total")
                 base_vertex = vertex_prob_home if vertex_prob_home is not None else None
                 vertex_spread_prob = base_vertex if base_vertex is not None and spread_pick == home else (
                     1.0 - base_vertex if base_vertex is not None else None
@@ -2660,6 +2771,14 @@ with tab_master:
                     "Total & Pick": f"{total_pick} {total_line}" if total_pick is not None else None,
                     "Home_Sentiment": home_sent,
                     "Away_Sentiment": away_sent,
+                    "best_spread_book": g.get("best_spread_book"),
+                    "best_spread_last_update": g.get("best_spread_last_update"),
+                    "best_spread_price_score": g.get("best_spread_price_score"),
+                    "best_spread_median_point": g.get("best_spread_median_point"),
+                    "best_total_book": g.get("best_total_book"),
+                    "best_total_last_update": g.get("best_total_last_update"),
+                    "best_total_price_score": g.get("best_total_price_score"),
+                    "best_total_median_point": g.get("best_total_median_point"),
                 })
                 master_stats["market_rows_out"] += 1
 
@@ -2670,6 +2789,8 @@ with tab_master:
                 consensus_prob, consensus_notes = consensus_for_selection(home, kalshi_prob_used if kalshi_total.get("kalshi_matched") else None)
                 if consensus_notes:
                     warnings = list(dict.fromkeys(warnings + consensus_notes))
+                if vertex_prob_home is not None and "vertex_proxy_for_spread_total" not in warnings:
+                    warnings.append("vertex_proxy_for_spread_total")
 
                 rows_out.append({
                     "League": league_name, "Home": home, "Away": away,
@@ -2693,6 +2814,14 @@ with tab_master:
                     "Home_Sentiment": home_sent,
                     "Away_Sentiment": away_sent,
                     "sentiment_adj": sentiment_adj, "sentiment_source": sentiment_source, "reddit_used": reddit_used, "sentiment_valid": sentiment_valid,
+                    "best_spread_book": g.get("best_spread_book"),
+                    "best_spread_last_update": g.get("best_spread_last_update"),
+                    "best_spread_price_score": g.get("best_spread_price_score"),
+                    "best_spread_median_point": g.get("best_spread_median_point"),
+                    "best_total_book": g.get("best_total_book"),
+                    "best_total_last_update": g.get("best_total_last_update"),
+                    "best_total_price_score": g.get("best_total_price_score"),
+                    "best_total_median_point": g.get("best_total_median_point"),
                 })
                 master_stats["market_rows_out"] += 1
                     
@@ -2727,6 +2856,14 @@ with tab_master:
             "kalshi_match_reason",
             "kalshi_game_prefix_used",
             "kalshi_wanted_tokens",
+            "best_spread_book",
+            "best_spread_last_update",
+            "best_spread_price_score",
+            "best_spread_median_point",
+            "best_total_book",
+            "best_total_last_update",
+            "best_total_price_score",
+            "best_total_median_point",
         ]
         for col in required_display_cols:
             if col not in df.columns:
@@ -2751,6 +2888,14 @@ with tab_master:
             "reddit_used",
             "sentiment_valid",
             "sentiment_adj",
+            "best_spread_book",
+            "best_spread_last_update",
+            "best_spread_price_score",
+            "best_spread_median_point",
+            "best_total_book",
+            "best_total_last_update",
+            "best_total_price_score",
+            "best_total_median_point",
         ]
         export_df = df.copy()
         for col in export_cols:
