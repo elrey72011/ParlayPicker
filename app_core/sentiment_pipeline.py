@@ -88,21 +88,21 @@ def fetch_team_news(news_api_key: str, team: str, league: str) -> List[Dict[str,
     """Fetch recent articles for a team; returns empty list on failure."""
     if not news_api_key:
         return []
-    league_query = {
+    league_label = {
         "NBA": "NBA basketball",
         "NFL": "NFL football",
         "NCAAF": "college football",
         "NCAAB": "college basketball",
         "NHL": "NHL hockey",
         "MLB": "MLB baseball",
-    }.get((league or "").upper(), league)
+    }.get((league or "").upper(), league or "")
     to_date = datetime.utcnow().date()
     from_date = to_date - timedelta(days=3)
     url = "https://newsapi.org/v2/everything"
     params = {
-        "q": f'"{team}" AND {league_query}',
-        "sortBy": "publishedAt",
-        "pageSize": 10,
+        "q": f'"{team}" {league_label}',
+        "sortBy": "relevancy",
+        "pageSize": 20,
         "language": "en",
         "from": from_date.isoformat(),
         "to": to_date.isoformat(),
@@ -153,12 +153,14 @@ def build_team_sentiment_map(
 
     for team in sorted(teams):
         articles = fetch_team_news(news_api_key, team, league)
-        score = team_sentiment_from_articles(articles)
-        sentiment_map[team] = score
         debug["article_counts"][team] = len(articles)
         debug["articles_total"] += len(articles)
         if not articles:
+            sentiment_map[team] = None
             debug["missing_teams"].append(team)
+            continue
+        score = team_sentiment_from_articles(articles)
+        sentiment_map[team] = score
 
     if sentiment_map:
         sorted_scores = sorted(sentiment_map.items(), key=lambda kv: kv[1])

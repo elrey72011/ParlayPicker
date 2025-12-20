@@ -2545,8 +2545,9 @@ with tab_master:
             if (idx == 0 and first_game_full_search and not first_game_full_search.get("found_any_winner_market_for_game")):
                 winner_reason_override = "winner_not_in_fetched_markets"
 
+            # NOTE: Previously league_markets was passed here, which bypassed per-game filtering and broke matching (especially NCAA).
             kalshi_matches, candidate_debug = match_kalshi_market(
-                g, filtered_markets or league_markets, winner_reason_override
+                g, filtered_markets, winner_reason_override
             )
 
             # Extract specific Kalshi market results for the append logic
