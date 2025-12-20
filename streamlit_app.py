@@ -332,6 +332,55 @@ def compute_at_a_glance(spread_conf: str, spread_reason: str, total_conf: str, t
     return overall, score, reason or None
 
 
+def fmt_prob(p: Any) -> str:
+    try:
+        if p is None:
+            return "—"
+        return f"{float(p) * 100:.0f}%"
+    except Exception:
+        return "—"
+
+
+def depth_label(books_count: Any) -> str:
+    try:
+        if books_count is None:
+            return "—"
+        n = int(books_count)
+        if n <= 1:
+            return "Thin"
+        if n <= 3:
+            return "OK"
+        return "Deep"
+    except Exception:
+        return "—"
+
+
+def market_width_label(width: Any, market_type: str) -> str:
+    if width is None:
+        return "—"
+    try:
+        w = abs(float(width))
+    except Exception:
+        return "—"
+    if market_type == "spread":
+        if w <= 0.5:
+            return "Tight"
+        if w <= 1.5:
+            return "Normal"
+        return "Wide"
+    else:
+        if w <= 1.0:
+            return "Tight"
+        if w <= 3.0:
+            return "Normal"
+        return "Wide"
+
+
+def build_clean_glance(conf: Any, prob: Any, books: Any, width: Any, market_type: str) -> str:
+    conf_norm = str(conf or "LOW").upper()
+    return f"{conf_norm} | {fmt_prob(prob)} | {depth_label(books)} | {market_width_label(width, market_type)}"
+
+
 def add_spread_total_confidence(df: pd.DataFrame) -> pd.DataFrame:
     if df is None or df.empty:
         return df
@@ -385,6 +434,14 @@ def add_spread_total_confidence(df: pd.DataFrame) -> pd.DataFrame:
         row["At_a_Glance_Confidence"] = overall_conf
         row["At_a_Glance_Score"] = overall_score
         row["At_a_Glance_Reason"] = overall_reason
+        row["Spread_Glance"] = build_clean_glance(
+            spread_conf, spread_prob_val, spread_books_count, spread_width_val, "spread"
+        )
+        row["Total_Glance"] = build_clean_glance(
+            total_conf, total_prob_val, total_books_count, total_width_val, "total"
+        )
+        row["Spread_Glance_Reason"] = spread_reason
+        row["Total_Glance_Reason"] = total_reason
         return row
 
     return df.apply(_apply, axis=1)
