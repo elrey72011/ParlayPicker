@@ -277,14 +277,23 @@ def ensure_sentiment_loaded(games: List[Dict[str, Any]]) -> None:
         return
 
     slate_key = slate_key_from_games(games)
-    if st.session_state.get("sentiment_slate_key") == slate_key and st.session_state.get("sentiment_map") is not None:
+    cached_map = st.session_state.get("sentiment_map")
+    cached_meta_map = st.session_state.get("sentiment_meta_map")
+    if st.session_state.get("sentiment_slate_key") == slate_key and cached_map and cached_meta_map:
         return
 
     try:
         per_league_debug: Dict[str, Any] = {}
         total_articles = 0
+        total_errors = 0
         last_error: Optional[str] = None
-        global_meta = {"sentiment_source": "none", "reddit_used": False, "articles_total": 0, "last_error": None}
+        global_meta = {
+            "sentiment_source": "none",
+            "reddit_used": False,
+            "articles_total": 0,
+            "last_error": None,
+            "error_count": 0,
+        }
         aggregate_sentiment_map: Dict[str, Optional[float]] = {}
         aggregate_sentiment_meta: Dict[str, Dict[str, Any]] = {}
 
@@ -320,15 +329,18 @@ def ensure_sentiment_loaded(games: List[Dict[str, Any]]) -> None:
                 lg_map, lg_meta_map, lg_debug = {}, {}, {"error": str(exc)}
                 last_error = str(exc)
             per_league_debug[lg_key] = lg_debug
-            total_articles += int((lg_debug or {}).get("articles_total") or 0)
+            lg_articles = int((lg_debug or {}).get("articles_total") or 0)
+            lg_errors = int((lg_debug or {}).get("error_count") or 0)
+            total_articles += lg_articles
+            total_errors += lg_errors
             st.session_state[f"sentiment_map_{lg_key}"] = lg_map or {}
             st.session_state[f"sentiment_meta_map_{lg_key}"] = lg_meta_map or {}
             st.session_state[f"sentiment_debug_{lg_key}"] = lg_debug
-            if (lg_debug or {}).get("articles_total", 0) > 0 and (lg_debug or {}).get("error_count", 0) == 0:
+            if lg_articles > 0 and lg_errors == 0:
                 lg_source = "newsapi"
-            elif (lg_debug or {}).get("articles_total", 0) > 0 and (lg_debug or {}).get("error_count", 0) > 0:
+            elif lg_articles > 0 and lg_errors > 0:
                 lg_source = "partial_error"
-            elif (lg_debug or {}).get("articles_total", 0) == 0 and (lg_debug or {}).get("error_count", 0) == 0:
+            elif lg_articles == 0 and lg_errors == 0:
                 lg_source = "none"
             else:
                 lg_source = "error"
@@ -337,7 +349,6 @@ def ensure_sentiment_loaded(games: List[Dict[str, Any]]) -> None:
             aggregate_sentiment_map.update(st.session_state.get(f"sentiment_map_{lg_key}") or {})
             aggregate_sentiment_meta.update(st.session_state.get(f"sentiment_meta_map_{lg_key}") or {})
 
-        total_errors = sum((d.get("error_count", 0) or 0) for d in per_league_debug.values())
         if total_articles > 0 and total_errors == 0:
             sentiment_source = "newsapi"
         elif total_articles > 0 and total_errors > 0:
@@ -346,7 +357,12 @@ def ensure_sentiment_loaded(games: List[Dict[str, Any]]) -> None:
             sentiment_source = "none"
         else:
             sentiment_source = "error"
-        global_meta.update({"sentiment_source": sentiment_source, "articles_total": total_articles, "last_error": last_error, "error_count": total_errors})
+        global_meta.update({
+            "sentiment_source": sentiment_source,
+            "articles_total": total_articles,
+            "last_error": last_error,
+            "error_count": total_errors,
+        })
         st.session_state["sentiment_meta"] = global_meta
         st.session_state["sentiment_source"] = sentiment_source
         st.session_state["reddit_used"] = False
@@ -357,6 +373,7 @@ def ensure_sentiment_loaded(games: List[Dict[str, Any]]) -> None:
             "last_error": last_error,
             "missing_news_api_key": not bool(news_api_key),
             "reddit_used": False,
+            "error_count": total_errors,
         }
         st.session_state["sentiment_map"] = aggregate_sentiment_map
         st.session_state["sentiment_meta_map"] = aggregate_sentiment_meta
@@ -2564,25 +2581,34 @@ with tab_master:
             commence_local = fmt_local_time(g.get("commence_time_local"))
             commence_date_local = g.get("commence_date_local") or ""
 
-            sentiment_map = st.session_state.get(f"sentiment_map_{league_key}") or {}
-            sentiment_meta_map = st.session_state.get(f"sentiment_meta_map_{league_key}") or {}
+            sentiment_map_all = st.session_state.get("sentiment_map") or {}
+            sentiment_map = sentiment_map_all or (st.session_state.get(f"sentiment_map_{league_key}") or {})
+            sentiment_meta_map_all = st.session_state.get("sentiment_meta_map") or {}
+            sentiment_meta_map = sentiment_meta_map_all or (st.session_state.get(f"sentiment_meta_map_{league_key}") or {})
             home_meta = sentiment_meta_map.get(home, {})
             away_meta = sentiment_meta_map.get(away, {})
             home_sent = sentiment_map.get(home)
             away_sent = sentiment_map.get(away)
             sentiment_meta_global = st.session_state.get("sentiment_meta") or {}
-            articles_total = sentiment_meta_global.get("articles_total") or 0
+            sentiment_debug_global = st.session_state.get("sentiment_debug") or {}
+            league_debug = st.session_state.get(f"sentiment_debug_{league_key}") or {}
+            articles_total = sentiment_meta_global.get("articles_total") or league_debug.get("articles_total") or 0
             sentiment_diff = home_sent - away_sent if (home_sent is not None and away_sent is not None) else None
             sentiment_adj = compute_sentiment_adj(sentiment_diff) if (sentiment_diff is not None and articles_total > 0) else None
-            any_sources = (home_meta.get("sentiment_source") == "newsapi") or (
-                away_meta.get("sentiment_source") == "newsapi"
-            ) or ((st.session_state.get("sentiment_meta") or {}).get("sentiment_source") == "newsapi")
-            sentiment_valid = bool(sentiment_adj is not None and any_sources)
-            sentiment_source = st.session_state.get(f"sentiment_source_{league_key}") or (st.session_state.get("sentiment_meta") or {}).get("sentiment_source") or ("newsapi" if any_sources else "none")
+            any_valid_sources = bool(home_meta.get("sentiment_valid") or away_meta.get("sentiment_valid"))
+            sentiment_valid = bool(sentiment_adj is not None and any_valid_sources)
+            sentiment_source = (
+                st.session_state.get(f"sentiment_source_{league_key}")
+                or sentiment_meta_global.get("sentiment_source")
+                or home_meta.get("sentiment_source")
+                or away_meta.get("sentiment_source")
+                or "none"
+            )
             reddit_used = False
-            league_debug = st.session_state.get(f"sentiment_debug_{league_key}") or {}
             sentiment_error_count = league_debug.get("error_count")
-            errors_sample = league_debug.get("errors_sample") or []
+            if sentiment_error_count is None:
+                sentiment_error_count = sentiment_meta_global.get("error_count")
+            errors_sample = league_debug.get("errors_sample") or sentiment_debug_global.get("errors_sample") or []
             sentiment_errors_sample = ";".join([f"{e.get('team')}: {e.get('error')}" for e in errors_sample]) if errors_sample else None
 
             vertex_prob_home, vertex_warn = get_vertex_prob(g, sentiment_diff)
