@@ -152,6 +152,45 @@ def parse_spread_pick(raw_val: Any, home: Optional[str], away: Optional[str]) ->
     return None, None
 
 
+def reorder_master_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """Move pick columns directly after Local Date (if present). Null-safe."""
+    if df is None or df.empty:
+        return df
+
+    local_date_col_candidates = ["Local_Date", "Local Date", "Local_Date_Str", "LocalDate", "Local date", "local_date"]
+    ml_pick_candidates = ["ML Pick", "Moneyline Pick", "Favorite", "Pick", "Best_Pick_ML", "Best Moneyline Pick"]
+    spread_pick_candidates = ["Spread & Pick", "Spread Pick", "Best_Spread_Pick"]
+    total_pick_candidates = ["Total & Pick", "Total Pick", "O/U Pick", "Best_Total_Pick"]
+
+    def first_present(cands: List[str]) -> Optional[str]:
+        for c in cands:
+            if c in df.columns:
+                return c
+        return None
+
+    local_date_col = first_present(local_date_col_candidates)
+    ml_col = first_present(ml_pick_candidates)
+    spread_col = first_present(spread_pick_candidates)
+    total_col = first_present(total_pick_candidates)
+
+    prefix: List[str] = []
+    if local_date_col:
+        prefix.append(local_date_col)
+
+    for c in [ml_col, spread_col, total_col]:
+        if c and c not in prefix:
+            prefix.append(c)
+
+    if not local_date_col:
+        prefix = [c for c in [ml_col, spread_col, total_col] if c]
+
+    remaining = [c for c in df.columns if c not in prefix]
+    try:
+        return df[prefix + remaining]
+    except Exception:
+        return df
+
+
 def compute_sentiment_adj_row(row: Dict[str, Any]) -> Tuple[float, str]:
     """
     Compute bounded sentiment adjustment for moneyline rows only.
@@ -3910,6 +3949,8 @@ with tab_master:
             f"MEDIUM={counts.get('MEDIUM', 0)}, LOW={counts.get('LOW', 0)}; "
             f"LOW removed by filter: {confidence_stats.get('low_removed', 0)}"
         )
+        df = reorder_master_columns(df)
+        st.caption(f"Column order (first 8): {', '.join(list(df.columns[:8]))} ...")
         df["Spread_Range"] = df.apply(
             lambda r: f"{r['spread_min']} to {r['spread_max']} (med {r['spread_med']})"
             if pd.notnull(r.get("spread_min")) and pd.notnull(r.get("spread_max"))
@@ -4002,6 +4043,7 @@ with tab_master:
             "best_total_mode_point",
         ]
         export_df = df.copy()
+        export_df = reorder_master_columns(export_df)
         for col in export_cols:
             if col not in export_df.columns:
                 export_df[col] = None
