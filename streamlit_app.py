@@ -179,6 +179,63 @@ def reorder_master_columns(df: pd.DataFrame) -> pd.DataFrame:
         return df
 
 
+def reorder_for_spread_total_focus(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Emphasize spread/total columns immediately after fixed front columns; push ML fields later.
+    """
+    if df is None or df.empty:
+        return df
+
+    fixed_front = [
+        "League",
+        "Home",
+        "Away",
+        "Commence (UTC)",
+        "Commence (Local)",
+        "Local Date",
+    ]
+    fixed_front = [c for c in fixed_front if c in df.columns]
+
+    focus_cols = [
+        "Spread & Pick",
+        "Total & Pick",
+        "spread_min",
+        "spread_med",
+        "spread_max",
+        "spread_books_count",
+        "total_min",
+        "total_med",
+        "total_max",
+        "total_books_count",
+        "spread_best_book",
+        "total_best_book",
+    ]
+    focus_cols = [c for c in focus_cols if c in df.columns]
+
+    ml_cols = [
+        "Pick",
+        "Book",
+        "Home_ML",
+        "Away_ML",
+        "Implied_Prob",
+        "AI_Prob",
+        "ai_prob_adj",
+        "consensus_prob",
+        "consensus_prob_adj",
+        "edge_vs_odds",
+        "model_minus_market",
+    ]
+    ml_cols = [c for c in ml_cols if c in df.columns]
+
+    used = set(fixed_front + focus_cols + ml_cols)
+    remaining = [c for c in df.columns if c not in used]
+
+    try:
+        return df[fixed_front + focus_cols + remaining + ml_cols]
+    except Exception:
+        return df
+
+
 def compute_sentiment_adj_row(row: Dict[str, Any]) -> Tuple[float, str]:
     """
     Compute bounded sentiment adjustment for moneyline rows only.
@@ -3970,7 +4027,13 @@ with tab_master:
             f"MEDIUM={counts.get('MEDIUM', 0)}, LOW={counts.get('LOW', 0)}; "
             f"LOW removed by filter: {confidence_stats.get('low_removed', 0)}"
         )
-        df_master_view = reorder_master_columns(df_master_view)
+        show_moneyline_rows = False
+        if "Market" in df_master_view.columns:
+            show_moneyline_rows = st.checkbox("Show Moneyline rows", value=False, key="show_moneyline_rows")
+            if not show_moneyline_rows:
+                df_master_view = df_master_view[df_master_view["Market"].isin(["Spread", "Total"])]
+
+        df_master_view = reorder_for_spread_total_focus(df_master_view)
         st.caption(f"Column order (first 8): {', '.join(list(df_master_view.columns[:8]))} ...")
         df_master_view["Spread_Range"] = df_master_view.apply(
             lambda r: f"{r['spread_min']} to {r['spread_max']} (med {r['spread_med']})"
@@ -4006,7 +4069,7 @@ with tab_master:
         top_df = top_df[top_df["Eligible_Top_Picks"] == True]
         if not include_low_in_top:
             top_df = top_df[top_df["Pick_Confidence"].isin(["HIGH", "MEDIUM"])]
-        top_df = reorder_master_columns(top_df)
+        top_df = reorder_for_spread_total_focus(top_df)
         st.dataframe(top_df)
 
         export_cols = [
@@ -4080,7 +4143,7 @@ with tab_master:
         export_df = df_master_view.copy()
         if "Unnamed: 0" in export_df.columns:
             export_df = export_df.drop(columns=["Unnamed: 0"])
-        export_df = reorder_master_columns(export_df)
+        export_df = reorder_for_spread_total_focus(export_df)
         for col in export_cols:
             if col not in export_df.columns:
                 export_df[col] = None
