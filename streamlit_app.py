@@ -1055,6 +1055,17 @@ def american_to_implied_prob(odds: Any) -> Optional[float]:
         return (-o) / ((-o) + 100.0)
     return None
 
+
+def is_placeholder_odds(home_ml: Any, away_ml: Any) -> bool:
+    try:
+        if home_ml is None or away_ml is None:
+            return True
+        h = float(home_ml)
+        a = float(away_ml)
+        return h == -110.0 and a == -110.0
+    except Exception:
+        return True
+
 def safe_iso(value: Any) -> Optional[str]:
     if value is None:
         return None
@@ -3607,6 +3618,12 @@ with tab_master:
             extreme_ml = _ml_extreme(home_ml) or _ml_extreme(away_ml)
 
             if (home_ml is not None or away_ml is not None) and not extreme_ml:
+                odds_placeholder = is_placeholder_odds(home_ml, away_ml)
+                odds_valid = not odds_placeholder
+                if odds_placeholder:
+                    implied_home = None
+                    implied_away = None
+                    warnings = list(dict.fromkeys(warnings + ["placeholder_odds_detected"]))
                 pick = None
                 implied_pick = None
                 if implied_home is not None and implied_away is not None:
@@ -3634,6 +3651,7 @@ with tab_master:
                         warnings = list(dict.fromkeys(warnings + consensus_notes))
 
                     warnings_field = ";".join(warnings) if warnings else None
+                    implied_prob_reason = "missing_or_placeholder_odds" if odds_placeholder or implied_pick is None else f"from_odds_home_{home_ml}_away_{away_ml}"
                     ml_row = {
                         "League": league_name,
                         "Home": home,
@@ -3688,6 +3706,9 @@ with tab_master:
                         "total_implied_prob": total_implied,
                         "total_prob_market_based": total_prob_market_based,
                         "total_prob_reason": total_prob_reason,
+                        "odds_valid": odds_valid,
+                        "odds_placeholder_detected": odds_placeholder,
+                        "implied_prob_reason": implied_prob_reason,
                         "Warnings": warnings_field,
                         "best_spread_book": g.get("best_spread_book"),
                         "best_spread_last_update": g.get("best_spread_last_update"),
@@ -3986,6 +4007,9 @@ with tab_master:
             "sentiment_adj_value",
             "sentiment_adj_reason",
             "prob_reason",
+            "odds_valid",
+            "odds_placeholder_detected",
+            "implied_prob_reason",
             "spread_implied_prob",
             "spread_prob_market_based",
             "spread_prob_reason",
@@ -4027,9 +4051,9 @@ with tab_master:
             f"MEDIUM={counts.get('MEDIUM', 0)}, LOW={counts.get('LOW', 0)}; "
             f"LOW removed by filter: {confidence_stats.get('low_removed', 0)}"
         )
-        show_moneyline_rows = False
+        show_moneyline_rows = True
         if "Market" in df_master_view.columns:
-            show_moneyline_rows = st.checkbox("Show Moneyline rows", value=False, key="show_moneyline_rows")
+            show_moneyline_rows = st.checkbox("Show Moneyline rows", value=True, key="show_moneyline_rows")
             if not show_moneyline_rows:
                 df_master_view = df_master_view[df_master_view["Market"].isin(["Spread", "Total"])]
 
@@ -4057,6 +4081,9 @@ with tab_master:
                 badges_local.append("THIN MARKET")
             return ";".join(sorted(set(badges_local))) if badges_local else None
         df_master_view["Market_Badge"] = df_master_view.apply(_market_badge, axis=1)
+        placeholder_count = int((df_master_view.get("odds_placeholder_detected") == True).sum()) if "odds_placeholder_detected" in df_master_view.columns else 0
+        implied_null_count = int(df_master_view["Implied_Prob"].isna().sum()) if "Implied_Prob" in df_master_view.columns else 0
+        st.caption(f"Debug: placeholder odds rows={placeholder_count}; Implied_Prob null rows={implied_null_count}")
 
         st.subheader("Top Picks / Best Bets")
         include_low_in_top = st.checkbox("Include LOW confidence in Top Picks", value=False, key="include_low_top_picks")
@@ -4113,6 +4140,9 @@ with tab_master:
             "sentiment_adj_value",
             "sentiment_adj_reason",
             "prob_reason",
+            "odds_valid",
+            "odds_placeholder_detected",
+            "implied_prob_reason",
             "spread_implied_prob",
             "spread_prob_market_based",
             "spread_prob_reason",
