@@ -83,25 +83,30 @@ def score_text_simple(text: str) -> float:
     return _clamp(norm)
 
 
-@st.cache_data(ttl=300)
-def fetch_team_news(news_api_key: str, team: str, league: str) -> List[Dict[str, Any]]:
-    """Fetch recent articles for a team; returns empty list on failure."""
-    if not news_api_key:
-        return []
-    league_label = {
+def league_label(league: str) -> str:
+    mapping = {
         "NBA": "NBA basketball",
         "NFL": "NFL football",
         "NCAAF": "college football",
         "NCAAB": "college basketball",
-        "NHL": "NHL hockey",
         "MLB": "MLB baseball",
+        "NHL": "NHL hockey",
         "WNBA": "WNBA basketball",
-    }.get((league or "").upper(), league or "")
+    }
+    return mapping.get((league or "").upper(), league or "")
+
+
+@st.cache_data(ttl=300)
+def fetch_team_news(news_api_key: str, team: str, league: str, league_query: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Fetch recent articles for a team; returns empty list on failure."""
+    if not news_api_key:
+        return []
+    league_query = league_query or league_label(league)
     to_date = datetime.utcnow().date()
     from_date = to_date - timedelta(days=3)
     url = "https://newsapi.org/v2/everything"
     params = {
-        "q": f'"{team}" {league_label}',
+        "q": f'"{team}" {league_query}',
         "sortBy": "relevancy",
         "pageSize": 20,
         "language": "en",
@@ -158,7 +163,8 @@ def build_team_sentiment_map(
 
     for team in sorted(teams):
         try:
-            articles = fetch_team_news(news_api_key, team, league)
+            query_label = league_label(league)
+            articles = fetch_team_news(news_api_key, team, league, query_label)
             debug["article_counts"][team] = len(articles)
             debug["articles_total"] += len(articles)
             if not articles:

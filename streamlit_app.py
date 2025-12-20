@@ -269,6 +269,8 @@ def ensure_sentiment_loaded(games: List[Dict[str, Any]]) -> None:
         total_articles = 0
         last_error: Optional[str] = None
         global_meta = {"sentiment_source": "none", "reddit_used": False, "articles_total": 0, "last_error": None}
+        aggregate_sentiment_map: Dict[str, Optional[float]] = {}
+        aggregate_sentiment_meta: Dict[str, Dict[str, Any]] = {}
 
         for raw_lg in sorted({g.get("league") for g in games if g.get("league")}):
             lg_key = canonical_league_key(raw_lg)
@@ -276,7 +278,7 @@ def ensure_sentiment_loaded(games: List[Dict[str, Any]]) -> None:
             lg_map: Dict[str, Optional[float]] = {}
             lg_meta_map: Dict[str, Dict[str, Any]] = {}
             try:
-                result = build_team_sentiment_map(news_api_key=news_api_key, games=lg_games, league=lg_key)
+                result = compute_team_sentiment_map(news_api_key, lg_games, lg_key)
                 lg_map, lg_meta_map, lg_debug = {}, {}, {}
                 if isinstance(result, tuple):
                     if len(result) == 3:
@@ -326,6 +328,8 @@ def ensure_sentiment_loaded(games: List[Dict[str, Any]]) -> None:
                 lg_source = "error"
             st.session_state[f"sentiment_source_{lg_key}"] = lg_source
             st.session_state[f"reddit_used_{lg_key}"] = False
+            aggregate_sentiment_map.update(st.session_state.get(f"sentiment_map_{lg_key}") or {})
+            aggregate_sentiment_meta.update(st.session_state.get(f"sentiment_meta_map_{lg_key}") or {})
 
         total_errors = sum((d.get("error_count", 0) or 0) for d in per_league_debug.values())
         if total_articles > 0 and total_errors == 0:
@@ -346,6 +350,8 @@ def ensure_sentiment_loaded(games: List[Dict[str, Any]]) -> None:
             "articles_total": total_articles,
             "last_error": last_error,
         }
+        st.session_state["sentiment_map"] = aggregate_sentiment_map
+        st.session_state["sentiment_meta_map"] = aggregate_sentiment_meta
         st.session_state["sentiment_slate_key"] = slate_key
     except Exception as exc:  # pragma: no cover - defensive UI behavior
         st.session_state["sentiment_map"] = {}
@@ -3174,6 +3180,11 @@ with tab_sentiment:
         st.warning(
             "Sentiment enabled but NewsAPI returned 0 articles. Check NEWS_API_KEY, request limits, or query format."
         )
+    if st.button("Clear sentiment cache", key="clear_sent_cache"):
+        try:
+            st.cache_data.clear()
+        except Exception:
+            st.warning("Unable to clear cache.")
     if sent_map:
         scores_df = pd.DataFrame(
             sorted(sent_map.items(), key=lambda kv: kv[0]),
