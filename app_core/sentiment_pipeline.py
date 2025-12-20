@@ -102,7 +102,7 @@ def _newsapi_query(team: str, league: str, league_query: Optional[str] = None) -
     return f'"{team}" {league_fragment}'.strip()
 
 
-@st.cache_data(ttl=1800)
+@st.cache_data(ttl=3600)
 def fetch_team_news(news_api_key: str, team: str, league: str, league_query: Optional[str] = None, *, max_retries: int = 2, retry_delay: float = 0.75, date_bucket: Optional[str] = None) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
     """Fetch recent articles for a team; returns (articles, info) where info contains status/error."""
     date_bucket = date_bucket or datetime.now(timezone.utc).date().isoformat()
@@ -204,6 +204,50 @@ def fetch_team_news(news_api_key: str, team: str, league: str, league_query: Opt
         "attempts": attempts,
         "rate_limited": False,
         "auth_error": False,
+        "date_bucket": date_bucket,
+    }
+
+
+@st.cache_data(ttl=3600)
+def fetch_team_sentiment_cached(
+    news_api_key: str,
+    team: str,
+    league: str,
+    *,
+    league_query: Optional[str] = None,
+    date_bucket: Optional[str] = None,
+    max_retries: int = 2,
+    retry_delay: float = 0.75,
+) -> Dict[str, Any]:
+    """Cached wrapper around NewsAPI fetch + simple scoring."""
+    date_bucket = date_bucket or datetime.now(timezone.utc).date().isoformat()
+    articles, info = fetch_team_news(
+        news_api_key,
+        team,
+        league,
+        league_query,
+        max_retries=max_retries,
+        retry_delay=retry_delay,
+        date_bucket=date_bucket,
+    )
+    score = team_sentiment_from_articles(articles)
+    sources = len(articles)
+    status_val = info.get("status") or info.get("status_code")
+    try:
+        status_int = int(status_val) if status_val is not None else None
+    except Exception:
+        status_int = None
+    return {
+        "team": team,
+        "league": league,
+        "q": info.get("q"),
+        "sentiment": score if sources > 0 else None,
+        "articles_count": sources,
+        "status": status_int,
+        "totalResults": info.get("totalResults"),
+        "error": info.get("error"),
+        "rate_limited": bool(info.get("rate_limited")),
+        "auth_error": bool(info.get("auth_error")),
         "date_bucket": date_bucket,
     }
 
@@ -317,52 +361,66 @@ def build_team_sentiment_map(
 
     date_bucket = now_utc.date().isoformat()
     analyzer = RealSentimentAnalyzer(news_api_key) if RealSentimentAnalyzer and news_api_key else None
+    stop_fetching = cooldown_active or False
 
     for team in ordered_teams:
         norm_key = _normalize_team_key(team)
         prev_meta = existing_meta_norm.get(norm_key) or {}
         prev_score = existing_map_norm.get(norm_key)
-        fetch_info: Dict[str, Any] = {}
-        raw_payload: Dict[str, Any] = {}
 
-        if cooldown_active or debug["calls_made"] >= max_calls or not news_api_key:
-            debug["calls_capped"] = debug["calls_capped"] or debug["calls_made"] >= max_calls
+        if stop_fetching or debug["calls_made"] >= max_calls or not news_api_key:
+            debug["calls_capped"] = debug["calls_capped"] or debug["calls_made"] >= max_calls or stop_fetching
             if prev_meta:
                 used_score = prev_score if prev_meta.get("sentiment_valid") else None
                 sentiment_map[team] = used_score
                 meta_map[team] = {**prev_meta, "cached": True}
-                debug["article_counts"][team] = int(prev_meta.get("sources") or prev_meta.get("articles") or 0)
-                debug["articles_total"] += debug["article_counts"][team]
-                debug["cached_teams"] += 1
-                debug["used_cached"] = True
+                sources_prev = int(prev_meta.get("sources") or prev_meta.get("articles") or 0)
+                debug["article_counts"][team] = sources_prev
+                debug["articles_total"] += sources_prev
+                if prev_meta.get("sentiment_valid"):
+                    debug["cached_teams"] += 1
+                    debug["used_cached"] = True
+                else:
+                    debug["missing_teams"].append(team)
             else:
                 sentiment_map[team] = None
                 meta_map[team] = {
                     "sentiment_valid": False,
                     "articles": 0,
                     "sentiment_source": "none",
-                    "error": "cooldown_active" if cooldown_active else "calls_capped" if debug["calls_capped"] else "missing_key",
+                    "error": "cooldown_active" if stop_fetching else "calls_capped" if debug["calls_capped"] else "missing_key",
+                    "cached": False,
                 }
                 debug["missing_teams"].append(team)
             continue
 
         try:
             query_label = league_label(league)
+            result_payload: Dict[str, Any] = {}
+            fetch_info: Dict[str, Any] = {}
             if analyzer:
-                raw_payload = analyzer.get_team_sentiment(team, league) or {}
-                fetch_info = raw_payload.get("fetch_info") or {}
+                result_payload = analyzer.get_team_sentiment(team, league) or {}
+                fetch_info = result_payload.get("fetch_info") or {}
                 debug["calls_made"] += 1
-            if not raw_payload:
-                articles, fetch_info = fetch_team_news(
-                    news_api_key, team, league, query_label, date_bucket=date_bucket
+            if not result_payload:
+                debug["calls_made"] += 1
+                result_payload = fetch_team_sentiment_cached(
+                    news_api_key,
+                    team,
+                    league,
+                    league_query=query_label,
+                    date_bucket=date_bucket,
+                    max_retries=2,
+                    retry_delay=0.75,
                 )
-                debug["calls_made"] += 1
-                score = team_sentiment_from_articles(articles)
-                raw_payload = {
-                    "score": score,
-                    "confidence": 0.6 if articles else 0.0,
-                    "sources": len(articles),
-                    "method": "newsapi_simple" if articles else "none",
+                fetch_info = {
+                    "status": result_payload.get("status"),
+                    "status_code": result_payload.get("status"),
+                    "q": result_payload.get("q"),
+                    "totalResults": result_payload.get("totalResults"),
+                    "rate_limited": result_payload.get("rate_limited"),
+                    "auth_error": result_payload.get("auth_error"),
+                    "error": result_payload.get("error"),
                 }
             status_int = _record_status(fetch_info or {})
             if len(debug["sample_calls"]) < 10:
@@ -377,22 +435,34 @@ def build_team_sentiment_map(
                     }
                 )
 
-            meta = sentiment_payload_to_meta(raw_payload)
+            sources = int(result_payload.get("articles_count") or 0)
+            score_val = result_payload.get("sentiment")
+            meta = {
+                "score": score_val if sources > 0 else None,
+                "confidence": 0.6 if sources > 0 else 0.0,
+                "sources": sources,
+                "sentiment_valid": bool(sources > 0 and score_val is not None),
+                "sentiment_source": "newsapi" if sources > 0 else "none",
+                "method": "newsapi_simple" if sources > 0 else "none",
+                "reddit_used": False,
+                "rate_limited": bool((fetch_info or {}).get("rate_limited")),
+                "auth_error": bool((fetch_info or {}).get("auth_error")),
+            }
             meta_map[team] = {**meta, "error": (fetch_info or {}).get("error"), "cached": False}
-            debug["article_counts"][team] = meta.get("sources") or 0
-            debug["articles_total"] += meta.get("sources") or 0
+            debug["article_counts"][team] = sources
+            debug["articles_total"] += sources
             if (fetch_info or {}).get("rate_limited"):
                 debug["rate_limited"] = True
                 cooldown_until_dt = now_utc + timedelta(minutes=20)
                 debug["cooldown_until"] = cooldown_until_dt.isoformat()
-                cooldown_active = True
+                stop_fetching = True
             if (fetch_info or {}).get("auth_error"):
                 debug["auth_error"] = True
             if (fetch_info or {}).get("error"):
                 debug["error_count"] += 1
                 if len(debug["errors_sample"]) < 5:
                     debug["errors_sample"].append(
-                        {"team": team, "error": (fetch_info or {}).get("error"), "status_code": (fetch_info or {}).get("status_code")}
+                        {"team": team, "error": (fetch_info or {}).get("error"), "status_code": (fetch_info or {}).get("status_code") or status_int}
                     )
             if meta["sentiment_valid"]:
                 sentiment_map[team] = meta["score"]
@@ -406,10 +476,6 @@ def build_team_sentiment_map(
             else:
                 sentiment_map[team] = None
                 debug["missing_teams"].append(team)
-
-            if debug["rate_limited"]:
-                # Stop additional fetches; remaining teams can only use cached values.
-                continue
         except Exception as exc:  # pragma: no cover - defensive
             sentiment_map[team] = prev_score if prev_meta.get("sentiment_valid") else None
             meta_map[team] = {

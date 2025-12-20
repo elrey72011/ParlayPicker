@@ -477,7 +477,7 @@ def compute_sentiment_adj_row(row: Dict[str, Any]) -> Tuple[float, str]:
         return adj, "applied_cached_rate_limited"
     if rate_limited:
         return adj, "applied_rate_limited"
-    if src in {"error", "error_rate_limited"}:
+    if src in {"error", "error_rate_limited", "error_auth"}:
         return 0.0, "source_error"
     return adj, "applied"
 
@@ -1095,7 +1095,7 @@ def ensure_sentiment_loaded(games: List[Dict[str, Any]]) -> None:
             st.session_state[f"sentiment_meta_map_{lg_key}"] = lg_meta_map or {}
             st.session_state[f"sentiment_debug_{lg_key}"] = lg_debug
             if lg_auth_error:
-                lg_source = "error"
+                lg_source = "error_auth"
             elif lg_rate_limited and (lg_articles > 0 or bool((lg_debug or {}).get("used_cached"))):
                 lg_source = "partial_cached"
             elif lg_rate_limited:
@@ -1119,7 +1119,7 @@ def ensure_sentiment_loaded(games: List[Dict[str, Any]]) -> None:
         if cooldown_until_value:
             st.session_state["sentiment_cooldown_until"] = cooldown_until_value.isoformat()
         if auth_error:
-            sentiment_source = "error"
+            sentiment_source = "error_auth"
         elif rate_limited and cached_used_any:
             sentiment_source = "partial_cached"
         elif rate_limited:
@@ -3621,8 +3621,10 @@ with tab_master:
             )
             if rate_limited_flag and sentiment_used_cached:
                 sentiment_source = "partial_cached"
-            elif rate_limited_flag and sentiment_source == "none":
+            elif rate_limited_flag and sentiment_source in ("none", "error"):
                 sentiment_source = "error_rate_limited"
+            elif sentiment_auth_error:
+                sentiment_source = "error_auth"
             elif articles_total >= 3 and sentiment_source in ("none", "error", "error_rate_limited"):
                 sentiment_source = "newsapi"
             reddit_used = False
