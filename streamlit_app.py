@@ -138,19 +138,27 @@ def compute_team_sentiment_map(news_api_key: Optional[str], games: List[Dict[str
         "missing_teams": [],
         "articles_total": 0,
         "raw": {},
+        "fetch_info": {},
+        "error_count": 0,
+        "errors_sample": [],
     }
 
     analyzer = RealSentimentAnalyzer(news_api_key) if RealSentimentAnalyzer and news_api_key else None
 
     for team in sorted(teams):
         raw_payload: Dict[str, Any] = {}
+        fetch_info: Dict[str, Any] = {}
         if analyzer:
             try:
                 raw_payload = analyzer.get_team_sentiment(team, league) or {}
             except Exception:
                 raw_payload = {}
         if not raw_payload:
-            articles = fetch_team_news(news_api_key or "", team, league) if news_api_key else []
+            articles: List[Dict[str, Any]] = []
+            if news_api_key:
+                articles, fetch_info = fetch_team_news(news_api_key or "", team, league)
+            else:
+                fetch_info = {"error": "missing_key", "status_code": None, "league_query": league}
             score = team_sentiment_from_articles(articles)
             raw_payload = {
                 "score": score,
@@ -160,10 +168,15 @@ def compute_team_sentiment_map(news_api_key: Optional[str], games: List[Dict[str
             }
 
         meta = sentiment_payload_to_meta(raw_payload)
-        sentiment_meta[team] = meta
-        debug["raw"][team] = raw_payload
+        sentiment_meta[team] = {**meta, "error": fetch_info.get("error")}
+        debug["raw"][team] = {**raw_payload, "fetch_info": fetch_info}
+        debug["fetch_info"][team] = fetch_info
         debug["article_counts"][team] = meta.get("sources") or 0
         debug["articles_total"] += meta.get("sources") or 0
+        if fetch_info.get("error"):
+            debug["error_count"] += 1
+            if len(debug["errors_sample"]) < 5:
+                debug["errors_sample"].append({"team": team, **fetch_info})
         if meta["sentiment_valid"]:
             sentiment_map[team] = meta["score"]
         else:
@@ -184,6 +197,9 @@ def compute_team_sentiment_map(news_api_key: Optional[str], games: List[Dict[str
         "articles_total": debug.get("articles_total"),
         "missing_teams": debug.get("missing_teams"),
         "raw": debug.get("raw"),
+        "fetch_info": debug.get("fetch_info"),
+        "error_count": debug.get("error_count"),
+        "errors_sample": debug.get("errors_sample"),
     }
 
 

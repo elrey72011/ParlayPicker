@@ -97,10 +97,10 @@ def league_label(league: str) -> str:
 
 
 @st.cache_data(ttl=300)
-def fetch_team_news(news_api_key: str, team: str, league: str, league_query: Optional[str] = None) -> List[Dict[str, Any]]:
-    """Fetch recent articles for a team; returns empty list on failure."""
+def fetch_team_news(news_api_key: str, team: str, league: str, league_query: Optional[str] = None) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    """Fetch recent articles for a team; returns (articles, info) where info contains status/error."""
     if not news_api_key:
-        return []
+        return [], {"error": "missing_key", "status_code": None, "league_query": league_query or league}
     league_query = league_query or league_label(league)
     to_date = datetime.utcnow().date()
     from_date = to_date - timedelta(days=3)
@@ -116,12 +116,15 @@ def fetch_team_news(news_api_key: str, team: str, league: str, league_query: Opt
     }
     try:
         resp = requests.get(url, params=params, timeout=8)
-        if resp.status_code != 200:
-            return []
+        status = resp.status_code
+        if status != 200:
+            error_key = "rate_limited" if status == 429 else ("bad_key" if status in {401, 403} else "http_error")
+            return [], {"error": error_key, "status_code": status, "league_query": league_query}
         data = resp.json()
-        return data.get("articles", []) if isinstance(data, dict) else []
-    except Exception:
-        return []
+        articles = data.get("articles", []) if isinstance(data, dict) else []
+        return articles, {"error": None, "status_code": status, "league_query": league_query}
+    except Exception as exc:
+        return [], {"error": str(exc), "status_code": None, "league_query": league_query}
 
 
 def team_sentiment_from_articles(articles: List[Dict[str, Any]]) -> float:
@@ -164,7 +167,15 @@ def build_team_sentiment_map(
     for team in sorted(teams):
         try:
             query_label = league_label(league)
-            articles = fetch_team_news(news_api_key, team, league, query_label)
+            articles, info = fetch_team_news(news_api_key, team, league, query_label)
+            debug.setdefault("fetch_info", {})[team] = info
+            error_reason = (info or {}).get("error")
+            if error_reason:
+                debug["error_count"] += 1
+                if len(debug["errors_sample"]) < 5:
+                    debug["errors_sample"].append(
+                        {"team": team, "error": error_reason, "status_code": (info or {}).get("status_code")}
+                    )
             debug["article_counts"][team] = len(articles)
             debug["articles_total"] += len(articles)
             if not articles:
@@ -173,7 +184,7 @@ def build_team_sentiment_map(
                     "sentiment_valid": False,
                     "articles": 0,
                     "sentiment_source": "newsapi",
-                    "error": None,
+                    "error": error_reason,
                 }
                 debug["missing_teams"].append(team)
                 continue
@@ -183,7 +194,7 @@ def build_team_sentiment_map(
                 "sentiment_valid": True,
                 "articles": len(articles),
                 "sentiment_source": "newsapi",
-                "error": None,
+                "error": error_reason,
             }
         except Exception as exc:  # pragma: no cover - defensive
             sentiment_map[team] = None
