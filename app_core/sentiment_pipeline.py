@@ -113,6 +113,8 @@ def fetch_team_news(news_api_key: str, team: str, league: str, league_query: Opt
             "league_query": league_query or league,
             "totalResults": None,
             "q": None,
+            "rate_limited": False,
+            "auth_error": False,
         }
     league_query = league_query or league_label(league)
     to_date = datetime.utcnow().date()
@@ -135,25 +137,33 @@ def fetch_team_news(news_api_key: str, team: str, league: str, league_query: Opt
         try:
             resp = requests.get(url, params=params, timeout=8)
             status = resp.status_code
+            data: Dict[str, Any] = {}
+            try:
+                data = resp.json() if hasattr(resp, "json") else {}
+            except Exception:
+                data = {}
+            articles = data.get("articles", []) if isinstance(data, dict) else []
+            total_results = data.get("totalResults") if isinstance(data, dict) else None
+            rate_limited = status == 429
+            auth_error = status in {401, 403}
             if status != 200:
-                error_key = "rate_limited" if status == 429 else ("bad_key" if status in {401, 403} else "http_error")
-                if status == 429 and attempts <= max_retries:
+                error_key = "rate_limited" if rate_limited else ("bad_key" if auth_error else "http_error")
+                if rate_limited and attempts <= max_retries and not articles:
                     time.sleep(retry_delay * attempts)
                     last_error = error_key
                     continue
-                return [], {
+                return articles, {
                     "error": error_key,
                     "status": status,
                     "status_code": status,
                     "league_query": league_query,
-                    "totalResults": None,
+                    "totalResults": total_results,
                     "q": q,
                     "attempts": attempts,
+                    "rate_limited": rate_limited,
+                    "auth_error": auth_error,
                     "response_text_snippet": (resp.text or "")[:200] if hasattr(resp, "text") else None,
                 }
-            data = resp.json()
-            articles = data.get("articles", []) if isinstance(data, dict) else []
-            total_results = data.get("totalResults") if isinstance(data, dict) else None
             return articles, {
                 "error": None,
                 "status": status,
@@ -162,6 +172,8 @@ def fetch_team_news(news_api_key: str, team: str, league: str, league_query: Opt
                 "totalResults": total_results,
                 "q": q,
                 "attempts": attempts,
+                "rate_limited": rate_limited,
+                "auth_error": auth_error,
             }
         except Exception as exc:
             last_error = str(exc)
@@ -176,6 +188,8 @@ def fetch_team_news(news_api_key: str, team: str, league: str, league_query: Opt
                 "totalResults": None,
                 "q": q,
                 "attempts": attempts,
+                "rate_limited": False,
+                "auth_error": False,
             }
 
     return [], {
@@ -186,6 +200,8 @@ def fetch_team_news(news_api_key: str, team: str, league: str, league_query: Opt
         "totalResults": None,
         "q": q,
         "attempts": attempts,
+        "rate_limited": False,
+        "auth_error": False,
     }
 
 
@@ -227,6 +243,8 @@ def build_team_sentiment_map(
         "status_counts": {},
         "sample_calls": [],
         "league_label_used": league_label(league),
+        "rate_limited": False,
+        "auth_error": False,
     }
 
     def _record_status(fetch_info: Dict[str, Any]) -> Optional[int]:
@@ -283,6 +301,8 @@ def build_team_sentiment_map(
                 "articles": len(articles),
                 "sentiment_source": "newsapi",
                 "error": error_reason,
+                "rate_limited": bool((info or {}).get("rate_limited")),
+                "auth_error": bool((info or {}).get("auth_error")),
             }
         except Exception as exc:  # pragma: no cover - defensive
             sentiment_map[team] = None
@@ -304,5 +324,7 @@ def build_team_sentiment_map(
     else:
         debug["bottom_5"] = []
         debug["top_5"] = []
+    debug["rate_limited"] = bool(debug["status_counts"].get(429))
+    debug["auth_error"] = bool(debug["status_counts"].get(401) or debug["status_counts"].get(403))
 
     return sentiment_map, meta_map, debug
