@@ -65,6 +65,9 @@ VERTEX_FEATURE_COLUMNS: List[str] = [
     "implied_home_prob",
     "sentiment_diff",
     "kalshi_prob",
+    "injuries_home_count",
+    "injuries_away_count",
+    "weather_flag",
 ]
 
 # -------------------------------------------------------------------
