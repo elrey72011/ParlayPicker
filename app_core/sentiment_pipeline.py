@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
 import requests
@@ -87,12 +88,24 @@ def fetch_team_news(news_api_key: str, team: str, league: str) -> List[Dict[str,
     """Fetch recent articles for a team; returns empty list on failure."""
     if not news_api_key:
         return []
+    league_query = {
+        "NBA": "NBA basketball",
+        "NFL": "NFL football",
+        "NCAAF": "college football",
+        "NCAAB": "college basketball",
+        "NHL": "NHL hockey",
+        "MLB": "MLB baseball",
+    }.get((league or "").upper(), league)
+    to_date = datetime.utcnow().date()
+    from_date = to_date - timedelta(days=3)
     url = "https://newsapi.org/v2/everything"
     params = {
-        "q": f'"{team}" AND {league}',
+        "q": f'"{team}" AND {league_query}',
         "sortBy": "publishedAt",
         "pageSize": 10,
         "language": "en",
+        "from": from_date.isoformat(),
+        "to": to_date.isoformat(),
         "apiKey": news_api_key,
     }
     try:
