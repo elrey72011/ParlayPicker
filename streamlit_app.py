@@ -634,6 +634,20 @@ def enrich_game_context(game: Dict[str, Any], league_key: str, api_key: Optional
 
 def ensure_sentiment_loaded(games: List[Dict[str, Any]]) -> None:
     """Compute sentiment for the current slate when enabled and cache in session state."""
+    if st.button("🧹 Clear Sentiment Cache", key="clear_sentiment_cache"):
+        st.cache_data.clear()
+        for k in list(st.session_state.keys()):
+            if k.startswith("sentiment_"):
+                st.session_state.pop(k, None)
+        st.session_state.pop("reddit_used", None)
+        st.session_state.pop("sentiment_slate_key", None)
+        st.session_state.pop("sentiment_source", None)
+        st.session_state.pop("sentiment_map", None)
+        st.session_state.pop("sentiment_meta_map", None)
+        st.session_state.pop("sentiment_meta", None)
+        st.session_state.pop("sentiment_debug", None)
+        st.info("Sentiment cache cleared. Re-run analysis to refresh.")
+
     enabled = st.session_state.get("enable_sentiment", True)
     sentiment_debug: Dict[str, Any] = {"enabled": enabled, "per_league": {}, "reddit_used": False}
     if not enabled:
@@ -760,11 +774,13 @@ def ensure_sentiment_loaded(games: List[Dict[str, Any]]) -> None:
             st.session_state[f"sentiment_debug_{lg_key}"] = lg_debug
             lg_rate_limited = bool((lg_status_counts.get(429) or 0) > 0)
             lg_auth_error = bool((lg_status_counts.get(401) or 0) > 0 or (lg_status_counts.get(403) or 0) > 0)
-            if lg_articles > 0 and (lg_errors > 0 or lg_rate_limited or lg_auth_error):
-                lg_source = "partial_error"
+            if lg_auth_error:
+                lg_source = "error"
+            elif lg_articles > 0 and lg_rate_limited:
+                lg_source = "partial"
             elif lg_articles > 0:
                 lg_source = "newsapi"
-            elif lg_errors > 0 or lg_rate_limited or lg_auth_error:
+            elif lg_rate_limited:
                 lg_source = "error"
             else:
                 lg_source = "none"
@@ -775,14 +791,17 @@ def ensure_sentiment_loaded(games: List[Dict[str, Any]]) -> None:
 
         auth_error = bool((status_counts_all.get(401) or 0) > 0 or (status_counts_all.get(403) or 0) > 0)
         rate_limited = bool((status_counts_all.get(429) or 0) > 0)
-        if total_articles > 0 and (total_errors > 0 or rate_limited or auth_error):
-            sentiment_source = "partial_error"
+        if auth_error:
+            sentiment_source = "error"
+        elif total_articles > 0 and rate_limited:
+            sentiment_source = "partial"
         elif total_articles > 0:
             sentiment_source = "newsapi"
-        elif total_errors > 0 or rate_limited or auth_error:
+        elif rate_limited:
             sentiment_source = "error"
         else:
             sentiment_source = "none"
+        first_sample = sample_calls_all[0] if sample_calls_all else {}
         global_meta.update({
             "sentiment_source": sentiment_source,
             "articles_total": total_articles,
@@ -791,6 +810,9 @@ def ensure_sentiment_loaded(games: List[Dict[str, Any]]) -> None:
             "status_counts": status_counts_all,
             "auth_error": auth_error,
             "rate_limited": rate_limited,
+            "sample_query": first_sample.get("q"),
+            "sample_status": first_sample.get("status"),
+            "sample_totalResults": first_sample.get("totalResults"),
         })
         st.session_state["sentiment_meta"] = global_meta
         st.session_state["sentiment_source"] = sentiment_source
@@ -811,6 +833,9 @@ def ensure_sentiment_loaded(games: List[Dict[str, Any]]) -> None:
             "missing_teams": missing_teams_all,
             "teams_total": len(aggregate_sentiment_map),
             "sentiment_source": sentiment_source,
+            "sample_query": first_sample.get("q"),
+            "sample_status": first_sample.get("status"),
+            "sample_totalResults": first_sample.get("totalResults"),
         }
         st.session_state["sentiment_map"] = aggregate_sentiment_map
         st.session_state["sentiment_meta_map"] = aggregate_sentiment_meta
@@ -3193,16 +3218,20 @@ with tab_master:
             )
             sentiment_adj_reason = "disabled"
             sentiment_adj = 0.0
-            participates = bool(articles_total >= 3 and sentiment_source_current != "error")
-            if participates:
+            eligible_sentiment = bool(articles_total >= 3 and not sentiment_auth_error)
+            if eligible_sentiment:
                 raw_adj = (sentiment_diff or 0.0) * 0.02
                 sentiment_adj = clamp(raw_adj, -0.03, 0.03) or 0.0
-                sentiment_adj_reason = "applied" if not rate_limited_flag else "rate_limited"
+                sentiment_adj_reason = "applied_rate_limited" if rate_limited_flag else "applied"
             else:
-                sentiment_adj_reason = "insufficient_articles" if articles_total < 3 else "disabled"
+                if sentiment_auth_error:
+                    sentiment_adj_reason = "auth_error"
+                elif articles_total < 3:
+                    sentiment_adj_reason = "insufficient_articles"
+                else:
+                    sentiment_adj_reason = "disabled"
                 sentiment_adj = 0.0
-            any_valid_sources = bool(articles_total >= 3)
-            sentiment_valid = any_valid_sources
+            sentiment_valid = bool(articles_total >= 3)
             sentiment_source = (
                 st.session_state.get(f"sentiment_source_{league_key}")
                 or sentiment_meta_global.get("sentiment_source")
@@ -3232,9 +3261,9 @@ with tab_master:
             sentiment_status_counts = sentiment_debug_global.get("status_counts") or league_debug.get("status_counts") or {}
             sentiment_status_counts_field = sentiment_status_counts if sentiment_status_counts else None
             sample_calls = sentiment_debug_global.get("sample_calls") or league_debug.get("sample_calls") or []
-            sentiment_sample_query = (sample_calls[0].get("q") if sample_calls else None)
-            sentiment_sample_status = sample_calls[0].get("status") if sample_calls else None
-            sentiment_sample_totalResults = sample_calls[0].get("totalResults") if sample_calls else None
+            sentiment_sample_query = sentiment_meta_global.get("sample_query") or (sample_calls[0].get("q") if sample_calls else None)
+            sentiment_sample_status = sentiment_meta_global.get("sample_status") or (sample_calls[0].get("status") if sample_calls else None)
+            sentiment_sample_totalResults = sentiment_meta_global.get("sample_totalResults") or (sample_calls[0].get("totalResults") if sample_calls else None)
             sentiment_auth_error = bool(
                 sentiment_meta_global.get("auth_error")
                 or sentiment_debug_global.get("auth_error")
@@ -4047,6 +4076,10 @@ with tab_master:
             mime="text/csv",
             key="master_analysis_csv",
         )
+
+        with st.expander("Sentiment Debug", expanded=False):
+            st.json(st.session_state.get("sentiment_meta", {}))
+            st.json(st.session_state.get("sentiment_debug", {}))
 
         # Market range visualizer
         with st.expander("Market Range Visuals (Spread/Total)", expanded=False):
