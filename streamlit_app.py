@@ -43,6 +43,10 @@ try:
 except Exception:  # pragma: no cover - optional import
     RealSentimentAnalyzer = None
 
+try:
+    import altair as alt  # type: ignore
+except Exception:  # pragma: no cover - optional import
+    alt = None
 # -----------------
 # Utility helpers (null-safe probability handling)
 # -----------------
@@ -115,6 +119,20 @@ def canonical_team_name(name: Any) -> str:
     cleaned = re.sub(r"[^a-z0-9 ]", "", cleaned.lower())
     tokens = [t for t in cleaned.split() if t]
     return " ".join(tokens)
+
+
+def _market_range(values: List[Optional[float]]) -> Tuple[Optional[float], Optional[float], Optional[float]]:
+    vals = [safe_float(v) for v in values if safe_float(v) is not None]
+    if not vals:
+        return None, None, None
+    vals_sorted = sorted(vals)
+    lo = vals_sorted[0]
+    hi = vals_sorted[-1]
+    try:
+        med = statistics.median(vals_sorted)
+    except Exception:
+        med = None
+    return lo, med, hi
 
 
 def sentiment_payload_to_meta(payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -2915,6 +2933,32 @@ with tab_master:
             g["injuries_away_count"] = injuries_away_count
             g["weather_summary"] = weather_summary
 
+            # Market range aggregates
+            spread_points: List[Optional[float]] = []
+            total_points: List[Optional[float]] = []
+            spread_books_map: Dict[str, float] = {}
+            total_books_map: Dict[str, float] = {}
+            for bm in g.get("bookmakers") or []:
+                book_name = bm.get("title") or bm.get("key")
+                for market in bm.get("markets") or []:
+                    if market.get("key") == "spreads":
+                        outcomes = market.get("outcomes") or []
+                        for o in outcomes:
+                            if o.get("point") is not None:
+                                pt = safe_float(o.get("point"))
+                                if pt is not None:
+                                    spread_points.append(pt)
+                                    spread_books_map[book_name] = pt
+                    elif market.get("key") == "totals":
+                        for o in market.get("outcomes") or []:
+                            if o.get("point") is not None:
+                                pt = safe_float(o.get("point"))
+                                if pt is not None:
+                                    total_points.append(pt)
+                                    total_books_map[book_name] = pt
+            spread_min, spread_med, spread_max = _market_range(spread_points)
+            total_min, total_med, total_max = _market_range(total_points)
+
             sentiment_map_all = st.session_state.get("sentiment_map") or {}
             sentiment_map = sentiment_map_all or (st.session_state.get(f"sentiment_map_{league_key}") or {})
             sentiment_meta_map_all = st.session_state.get("sentiment_meta_map") or {}
@@ -3291,6 +3335,14 @@ with tab_master:
                         "weather_summary": weather_summary,
                         "key_injuries_home": ",".join(key_injuries_home),
                         "key_injuries_away": ",".join(key_injuries_away),
+                        "spread_min": spread_min,
+                        "spread_med": spread_med,
+                        "spread_max": spread_max,
+                        "total_min": total_min,
+                        "total_med": total_med,
+                        "total_max": total_max,
+                        "spread_books_count": len(spread_books_map),
+                        "total_books_count": len(total_books_map),
                     }
                     conf, reason_short, eligible = score_pick_confidence(ml_row)
                     ml_row["Pick_Confidence"] = conf
@@ -3366,6 +3418,14 @@ with tab_master:
                     "weather_summary": weather_summary,
                     "key_injuries_home": ",".join(key_injuries_home),
                     "key_injuries_away": ",".join(key_injuries_away),
+                    "spread_min": spread_min,
+                    "spread_med": spread_med,
+                    "spread_max": spread_max,
+                    "total_min": total_min,
+                    "total_med": total_med,
+                    "total_max": total_max,
+                    "spread_books_count": len(spread_books_map),
+                    "total_books_count": len(total_books_map),
                 }
                 conf, reason_short, eligible = score_pick_confidence(spread_row)
                 spread_row["Pick_Confidence"] = conf
@@ -3437,6 +3497,14 @@ with tab_master:
                     "weather_summary": weather_summary,
                     "key_injuries_home": ",".join(key_injuries_home),
                     "key_injuries_away": ",".join(key_injuries_away),
+                    "spread_min": spread_min,
+                    "spread_med": spread_med,
+                    "spread_max": spread_max,
+                    "total_min": total_min,
+                    "total_med": total_med,
+                    "total_max": total_max,
+                    "spread_books_count": len(spread_books_map),
+                    "total_books_count": len(total_books_map),
                 }
                 conf, reason_short, eligible = score_pick_confidence(total_row)
                 total_row["Pick_Confidence"] = conf
@@ -3505,6 +3573,14 @@ with tab_master:
             "weather_summary",
             "key_injuries_home",
             "key_injuries_away",
+            "spread_min",
+            "spread_med",
+            "spread_max",
+            "total_min",
+            "total_med",
+            "total_max",
+            "spread_books_count",
+            "total_books_count",
         ]
         for col in required_display_cols:
             if col not in df.columns:
@@ -3530,6 +3606,28 @@ with tab_master:
             f"MEDIUM={counts.get('MEDIUM', 0)}, LOW={counts.get('LOW', 0)}; "
             f"LOW removed by filter: {confidence_stats.get('low_removed', 0)}"
         )
+        df["Spread_Range"] = df.apply(
+            lambda r: f"{r['spread_min']} to {r['spread_max']} (med {r['spread_med']})"
+            if pd.notnull(r.get("spread_min")) and pd.notnull(r.get("spread_max"))
+            else "N/A",
+            axis=1,
+        )
+        df["Total_Range"] = df.apply(
+            lambda r: f"{r['total_min']} to {r['total_max']} (med {r['total_med']})"
+            if pd.notnull(r.get("total_min")) and pd.notnull(r.get("total_max"))
+            else "N/A",
+            axis=1,
+        )
+        def _market_badge(r):
+            badges_local = []
+            if (pd.notnull(r.get("spread_min")) and pd.notnull(r.get("spread_max")) and abs((r.get("spread_max") or 0) - (r.get("spread_min") or 0)) >= 2):
+                badges_local.append("WIDE MARKET")
+            if (pd.notnull(r.get("total_min")) and pd.notnull(r.get("total_max")) and abs((r.get("total_max") or 0) - (r.get("total_min") or 0)) >= 3):
+                badges_local.append("WIDE MARKET")
+            if (r.get("spread_books_count") == 1) or (r.get("total_books_count") == 1):
+                badges_local.append("THIN MARKET")
+            return ";".join(sorted(set(badges_local))) if badges_local else None
+        df["Market_Badge"] = df.apply(_market_badge, axis=1)
 
         export_cols = [
             "AI_Prob",
@@ -3567,6 +3665,14 @@ with tab_master:
             "weather_summary",
             "key_injuries_home",
             "key_injuries_away",
+            "spread_min",
+            "spread_med",
+            "spread_max",
+            "total_min",
+            "total_med",
+            "total_max",
+            "spread_books_count",
+            "total_books_count",
             "best_spread_book",
             "best_spread_last_update",
             "best_spread_price_score",
@@ -3590,6 +3696,77 @@ with tab_master:
             mime="text/csv",
             key="master_analysis_csv",
         )
+
+        # Market range visualizer
+        with st.expander("Market Range Visuals (Spread/Total)", expanded=False):
+            if df.empty:
+                st.info("Run Master Analysis to view market ranges.")
+            else:
+                game_options = [
+                    f"{row.get('League')} | {row.get('Home')} vs {row.get('Away')} | {row.get('Commence (UTC)')}"
+                    for _, row in df.iterrows()
+                ]
+                selected = st.selectbox("Select game", options=game_options, index=0)
+                selected_row = df.iloc[game_options.index(selected)] if game_options else None
+                if selected_row is not None:
+                    def render_range(kind: str, lo: Any, mid: Any, hi: Any, pick_line: Any, warnings_text: str):
+                        if pd.isna(lo) or pd.isna(hi):
+                            st.warning(f"No {kind.lower()} market found.")
+                            if warnings_text:
+                                st.error(warnings_text)
+                            return
+                        if alt:
+                            data = pd.DataFrame(
+                                [
+                                    {"kind": kind, "low": lo, "mid": mid, "high": hi, "pick": pick_line},
+                                ]
+                            )
+                            rule = alt.Chart(data).mark_rule(color="gray").encode(
+                                x="low:Q",
+                                x2="high:Q",
+                            )
+                            pts = alt.Chart(data).mark_point(color="black", size=60).encode(x="mid:Q")
+                            pick_pt = alt.Chart(data).mark_point(color="orange", size=80).encode(x="pick:Q")
+                            st.altair_chart((rule + pts + pick_pt).properties(width=400, height=80))
+                        else:
+                            rng_text = f"{kind} range: {lo} .. {hi} (median {mid}) | pick: {pick_line}"
+                            st.text(rng_text)
+                        if warnings_text:
+                            st.error(warnings_text)
+
+                    proxy_badge = None
+                    warnings_text = selected_row.get("Warnings") or ""
+                    if "vertex_proxy_for_spread_total" in str(warnings_text):
+                        proxy_badge = "Proxy (low confidence)"
+                    render_range(
+                        "Spread",
+                        selected_row.get("spread_min"),
+                        selected_row.get("spread_med"),
+                        selected_row.get("spread_max"),
+                        selected_row.get("Line") if selected_row.get("Market") == "Spread" else selected_row.get("Spread & Pick"),
+                        proxy_badge or "",
+                    )
+                    render_range(
+                        "Total",
+                        selected_row.get("total_min"),
+                        selected_row.get("total_med"),
+                        selected_row.get("total_max"),
+                        selected_row.get("Line") if selected_row.get("Market") == "Total" else selected_row.get("Total & Pick"),
+                        proxy_badge or "",
+                    )
+
+        # Line movement scaffold
+        with st.expander("Line Movement (optional)", expanded=False):
+            history_path = os.path.join("data", "line_history.csv")
+            if os.path.exists(history_path):
+                try:
+                    hist_df = pd.read_csv(history_path)
+                    st.caption("Showing line history (sample).")
+                    st.dataframe(hist_df.head(50))
+                except Exception as exc:
+                    st.warning(f"Failed to load line history: {exc}")
+            else:
+                st.info("Enable line movement by saving periodic snapshots to data/line_history.csv")
 
         master_stats["rows_out"] = len(deduped_list)
         st.session_state["last_rows_out"] = len(deduped_list)
