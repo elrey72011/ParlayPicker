@@ -135,6 +135,107 @@ def _market_range(values: List[Optional[float]]) -> Tuple[Optional[float], Optio
     return lo, med, hi
 
 
+def compute_sentiment_adj_row(row: Dict[str, Any]) -> Tuple[float, str]:
+    """
+    Compute bounded sentiment adjustment for moneyline rows only.
+    Returns (adj_value, reason).
+    """
+    src = str(row.get("sentiment_source") or "none").lower()
+    articles_total = int(row.get("sentiment_articles_total") or 0)
+    rate_limited = bool(row.get("sentiment_rate_limited") or False)
+    auth_error = bool(row.get("sentiment_auth_error") or False)
+    home_sent = row.get("Home_Sentiment")
+    away_sent = row.get("Away_Sentiment")
+    if auth_error:
+        return 0.0, "auth_error"
+    if articles_total < 3:
+        return 0.0, "insufficient_articles"
+    try:
+        h = float(home_sent) if home_sent is not None else 0.0
+        a = float(away_sent) if away_sent is not None else 0.0
+    except Exception:
+        return 0.0, "bad_sentiment_values"
+    diff = h - a
+    raw = diff * 0.02
+    adj = max(-0.03, min(0.03, raw))
+    if rate_limited:
+        return adj, "applied_rate_limited"
+    if src == "error":
+        return 0.0, "source_error"
+    return adj, "applied"
+
+
+def market_based_prob(row: Dict[str, Any]) -> Tuple[Optional[float], str]:
+    """
+    Compute a market-based probability for spread/total rows without Vertex.
+    """
+    def _clamp_prob(x: Optional[float]) -> Optional[float]:
+        try:
+            if x is None:
+                return None
+            return max(0.01, min(0.99, float(x)))
+        except Exception:
+            return None
+
+    imp = _clamp_prob(row.get("Implied_Prob"))
+    if imp is None:
+        return None, "missing_implied_prob"
+    market = str(row.get("Market") or "").lower()
+    warnings_local: List[str] = []
+    width = None
+    if market == "spread":
+        try:
+            lo = row.get("spread_min")
+            hi = row.get("spread_max")
+            if lo is not None and hi is not None:
+                width = abs(float(hi) - float(lo))
+        except Exception:
+            width = None
+    elif market == "total":
+        try:
+            lo = row.get("total_min")
+            hi = row.get("total_max")
+            if lo is not None and hi is not None:
+                width = abs(float(hi) - float(lo))
+        except Exception:
+            width = None
+    penalty = 0.0
+    if width is not None:
+        penalty = min(0.05, width * 0.02)
+        if width >= 2.0 and market == "spread":
+            warnings_local.append("wide_spread_market")
+        if width >= 4.0 and market == "total":
+            warnings_local.append("wide_total_market")
+    inj_adj = 0.0
+    try:
+        ih = int(row.get("injuries_home_count") or 0)
+        ia = int(row.get("injuries_away_count") or 0)
+        diff = ih - ia
+        pick = str(row.get("Pick") or "")
+        home = str(row.get("Home") or "")
+        away = str(row.get("Away") or "")
+        if pick == home:
+            inj_adj = min(0.02, max(-0.02, (-diff) * 0.005))
+        elif pick == away:
+            inj_adj = min(0.02, max(-0.02, (diff) * 0.005))
+    except Exception:
+        inj_adj = 0.0
+    weather_adj = 0.0
+    if market == "total":
+        ws = str(row.get("weather_summary") or "").lower()
+        if any(k in ws for k in ["wind", "rain", "snow"]):
+            pick_text = str(row.get("Pick") or "").lower()
+            if "under" in pick_text:
+                weather_adj = 0.02
+            elif "over" in pick_text:
+                weather_adj = -0.02
+    prob = _clamp_prob(imp + inj_adj + weather_adj - penalty)
+    reason = f"market_based (imp={imp:.3f}, inj={inj_adj:.3f}, weather={weather_adj:.3f}, penalty={penalty:.3f})"
+    if warnings_local:
+        reason = f"{reason} | {','.join(warnings_local)}"
+    return prob, reason
+
+
 def sentiment_payload_to_meta(payload: Dict[str, Any]) -> Dict[str, Any]:
     score = safe_float(payload.get("score"))
     confidence = safe_float(payload.get("confidence"))
@@ -3331,8 +3432,6 @@ with tab_master:
                     "sentiment_sample_query": sentiment_sample_query,
                     "sentiment_auth_error": sentiment_auth_error,
                     "sentiment_rate_limited": sentiment_rate_limited,
-                    "sentiment_adj_value": sentiment_adj,
-                    "sentiment_adj_reason": sentiment_adj_reason,
                     "kalshi_available": kalshi_winner.get("kalshi_available"),
                     "kalshi_matched": kalshi_winner.get("kalshi_matched"),
                     "kalshi_prob": kalshi_prob_used, "kalshi_prob_used": kalshi_prob_used,
@@ -3352,28 +3451,34 @@ with tab_master:
                         "best_spread_price_score": g.get("best_spread_price_score"),
                         "best_spread_median_point": g.get("best_spread_median_point"),
                         "best_spread_mode_point": g.get("best_spread_mode_point"),
-                        "best_total_book": g.get("best_total_book"),
-                        "best_total_last_update": g.get("best_total_last_update"),
-                        "best_total_price_score": g.get("best_total_price_score"),
-                        "best_total_median_point": g.get("best_total_median_point"),
-                        "best_total_mode_point": g.get("best_total_mode_point"),
-                        "Kalshi_Required": st.session_state.get("kalshi_required", True),
-                        "api_sports_used": api_sports_used,
-                        "sportsdata_used": sportsdata_used,
-                        "injuries_home_count": injuries_home_count,
-                        "injuries_away_count": injuries_away_count,
-                        "weather_summary": weather_summary,
-                        "key_injuries_home": ",".join(key_injuries_home),
-                        "key_injuries_away": ",".join(key_injuries_away),
-                        "spread_min": spread_min,
-                        "spread_med": spread_med,
-                        "spread_max": spread_max,
-                        "total_min": total_min,
-                        "total_med": total_med,
-                        "total_max": total_max,
-                        "spread_books_count": len(spread_books_map),
-                        "total_books_count": len(total_books_map),
-                    }
+                    "best_total_book": g.get("best_total_book"),
+                    "best_total_last_update": g.get("best_total_last_update"),
+                    "best_total_price_score": g.get("best_total_price_score"),
+                    "best_total_median_point": g.get("best_total_median_point"),
+                    "best_total_mode_point": g.get("best_total_mode_point"),
+                    "Kalshi_Required": st.session_state.get("kalshi_required", True),
+                    "api_sports_used": api_sports_used,
+                    "sportsdata_used": sportsdata_used,
+                    "injuries_home_count": injuries_home_count,
+                    "injuries_away_count": injuries_away_count,
+                    "weather_summary": weather_summary,
+                    "key_injuries_home": ",".join(key_injuries_home),
+                    "key_injuries_away": ",".join(key_injuries_away),
+                    "spread_min": spread_min,
+                    "spread_med": spread_med,
+                    "spread_max": spread_max,
+                    "total_min": total_min,
+                    "total_med": total_med,
+                    "total_max": total_max,
+                    "spread_books_count": len(spread_books_map),
+                    "total_books_count": len(total_books_map),
+                }
+                    adj_val, adj_reason = compute_sentiment_adj_row(ml_row)
+                    ml_row["sentiment_adj"] = adj_val
+                    ml_row["sentiment_adj_value"] = adj_val
+                    ml_row["sentiment_adj_reason"] = adj_reason
+                    base_prob = clamp(ml_row.get("AI_Prob"))
+                    ml_row["ai_prob_adj"] = clamp((base_prob or 0.0) + adj_val) if base_prob is not None else None
                     conf, reason_short, eligible = score_pick_confidence(ml_row)
                     ml_row["Pick_Confidence"] = conf
                     ml_row["Pick_Reason_Short"] = reason_short
@@ -3388,19 +3493,6 @@ with tab_master:
             if g.get("home_spread_point") is not None and spread_pick is not None:
                 ai_prob_base = None
                 ai_prob_row = None
-                width_spread = (spread_max - spread_min) if (spread_max is not None and spread_min is not None) else 0.0
-                injury_diff = (safe_float(injuries_home_count) or 0.0) - (safe_float(injuries_away_count) or 0.0)
-                injury_adj = 0.0
-                if injury_diff >= 2:
-                    injury_adj = -0.02 if spread_pick == home else 0.02
-                elif injury_diff <= -2:
-                    injury_adj = 0.02 if spread_pick == home else -0.02
-                market_width_penalty = min(0.05, abs(width_spread) * 0.02) if width_spread else 0.0
-                market_prob_adj = None
-                if spread_implied is not None:
-                    market_prob_adj = clamp((spread_implied or 0.0) + injury_adj - market_width_penalty, 0.01, 0.99)
-                consensus_prob = market_prob_adj
-                consensus_prob_adj = market_prob_adj
                 vertex_spread_prob = None
                 warnings.append("market_based_spread_prob")
                 warnings_field = ";".join(warnings) if warnings else None
@@ -3409,7 +3501,7 @@ with tab_master:
                     "Commence (UTC)": commence_iso, "Commence (Local)": commence_local,
                     "Market": "Spread", "Book": g.get("best_spread_book"),
                     "Pick": spread_pick, "Implied_Prob": spread_implied, "Line": spread_line, "AI_Prob": ai_prob_base,
-                    "ai_prob_adj": ai_prob_row, "consensus_prob": consensus_prob, "consensus_prob_adj": consensus_prob_adj,
+                    "ai_prob_adj": ai_prob_row, "consensus_prob": None, "consensus_prob_adj": None,
                     "sentiment_adj": sentiment_adj, "sentiment_source": sentiment_source, "reddit_used": reddit_used, "sentiment_valid": sentiment_valid,
                     "sentiment_error_count": sentiment_error_count,
                     "sentiment_errors_sample": sentiment_errors_sample,
@@ -3462,10 +3554,19 @@ with tab_master:
                     "total_books_count": len(total_books_map),
                     "sentiment_adj_value": sentiment_adj,
                     "sentiment_adj_reason": sentiment_adj_reason,
+                    "prob_reason": None,
                 }
+                prob_val, prob_reason = market_based_prob(spread_row)
+                spread_row["consensus_prob"] = prob_val
+                spread_row["consensus_prob_adj"] = prob_val
+                spread_row["prob_reason"] = prob_reason
                 conf, reason_short, eligible = score_pick_confidence(spread_row)
+                width_spread = (spread_max - spread_min) if (spread_max is not None and spread_min is not None) else 0.0
                 if conf == "HIGH":
                     conf = "MEDIUM"
+                if (width_spread and width_spread >= 2.0) or len(spread_books_map) <= 1:
+                    conf = "LOW"
+                    eligible = False
                 spread_row["Pick_Confidence"] = conf
                 spread_row["Pick_Reason_Short"] = reason_short
                 spread_row["Eligible_Top_Picks"] = eligible
@@ -3476,26 +3577,6 @@ with tab_master:
             if g.get("total_point") is not None and total_pick is not None:
                 ai_prob_base = None
                 ai_prob_row = None
-                width_total = (total_max - total_min) if (total_max is not None and total_min is not None) else 0.0
-                injury_diff = (safe_float(injuries_home_count) or 0.0) - (safe_float(injuries_away_count) or 0.0)
-                injury_adj = 0.0
-                if injury_diff >= 2:
-                    injury_adj = -0.02 if total_pick == home else 0.02
-                elif injury_diff <= -2:
-                    injury_adj = 0.02 if total_pick == home else -0.02
-                weather_adj = 0.0
-                weather_lower = str(weather_summary or "").lower()
-                if "wind" in weather_lower or "rain" in weather_lower or "snow" in weather_lower:
-                    if total_pick and str(total_pick).lower().startswith("under"):
-                        weather_adj = 0.02
-                    elif total_pick and str(total_pick).lower().startswith("over"):
-                        weather_adj = -0.02
-                market_width_penalty = min(0.05, abs(width_total) * 0.02) if width_total else 0.0
-                market_prob_adj = None
-                if total_implied is not None:
-                    market_prob_adj = clamp((total_implied or 0.0) + injury_adj + weather_adj - market_width_penalty, 0.01, 0.99)
-                consensus_prob = market_prob_adj
-                consensus_prob_adj = market_prob_adj
                 warnings.append("market_based_total_prob")
                 warnings_field = ";".join(warnings) if warnings else None
                 total_row = {
@@ -3503,7 +3584,7 @@ with tab_master:
                     "Commence (UTC)": commence_iso, "Commence (Local)": commence_local,
                     "Market": "Total", "Book": g.get("best_total_book"),
                     "Pick": total_pick, "Implied_Prob": total_implied, "Line": total_line, "AI_Prob": ai_prob_base,
-                    "ai_prob_adj": ai_prob_row, "consensus_prob": consensus_prob, "consensus_prob_adj": consensus_prob_adj,
+                    "ai_prob_adj": ai_prob_row, "consensus_prob": None, "consensus_prob_adj": None,
                     "Vertex Total Prob": None,
                     "kalshi_matched": kalshi_total.get("kalshi_matched"),
                     "kalshi_prob": kalshi_prob_used if kalshi_total.get("kalshi_matched") else None,
@@ -3556,10 +3637,19 @@ with tab_master:
                     "total_books_count": len(total_books_map),
                     "sentiment_adj_value": sentiment_adj,
                     "sentiment_adj_reason": sentiment_adj_reason,
+                    "prob_reason": None,
                 }
+                prob_val, prob_reason = market_based_prob(total_row)
+                total_row["consensus_prob"] = prob_val
+                total_row["consensus_prob_adj"] = prob_val
+                total_row["prob_reason"] = prob_reason
                 conf, reason_short, eligible = score_pick_confidence(total_row)
+                width_total = (total_max - total_min) if (total_max is not None and total_min is not None) else 0.0
                 if conf == "HIGH":
                     conf = "MEDIUM"
+                if (width_total and width_total >= 4.0) or len(total_books_map) <= 1:
+                    conf = "LOW"
+                    eligible = False
                 total_row["Pick_Confidence"] = conf
                 total_row["Pick_Reason_Short"] = reason_short
                 total_row["Eligible_Top_Picks"] = eligible
@@ -3628,6 +3718,7 @@ with tab_master:
             "key_injuries_away",
             "sentiment_adj_value",
             "sentiment_adj_reason",
+            "prob_reason",
             "spread_min",
             "spread_med",
             "spread_max",
@@ -3722,6 +3813,7 @@ with tab_master:
             "key_injuries_away",
             "sentiment_adj_value",
             "sentiment_adj_reason",
+            "prob_reason",
             "spread_min",
             "spread_med",
             "spread_max",
