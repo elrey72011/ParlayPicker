@@ -18,7 +18,7 @@ from app_core.kalshi_integrator import (
     league_series_ticker,
     team_code_for_league,
 )
-from app_core.sentiment_pipeline import fetch_team_news, league_label, team_sentiment_from_articles
+from app_core.sentiment_pipeline import MAX_SENTIMENT_CALLS, fetch_team_news, league_label, team_sentiment_from_articles
 from app_core.vertex_ai_endpoint import (
     VERTEX_FEATURE_COLUMNS,
     is_vertex_prediction_configured,
@@ -456,11 +456,14 @@ def compute_sentiment_adj_row(row: Dict[str, Any]) -> Tuple[float, str]:
     articles_total = int(row.get("sentiment_articles_total") or 0)
     rate_limited = bool(row.get("sentiment_rate_limited") or False)
     auth_error = bool(row.get("sentiment_auth_error") or False)
+    cached_used = bool(row.get("sentiment_used_cached") or False)
     home_sent = row.get("Home_Sentiment")
     away_sent = row.get("Away_Sentiment")
     if auth_error:
         return 0.0, "auth_error"
-    if articles_total < 3:
+    if home_sent is None or away_sent is None:
+        return 0.0, "missing_sentiment_values"
+    if articles_total < 3 and not cached_used:
         return 0.0, "insufficient_articles"
     try:
         h = float(home_sent) if home_sent is not None else 0.0
@@ -470,9 +473,11 @@ def compute_sentiment_adj_row(row: Dict[str, Any]) -> Tuple[float, str]:
     diff = h - a
     raw = diff * 0.02
     adj = max(-0.03, min(0.03, raw))
+    if rate_limited and cached_used:
+        return adj, "applied_cached_rate_limited"
     if rate_limited:
         return adj, "applied_rate_limited"
-    if src == "error":
+    if src in {"error", "error_rate_limited", "error_auth"}:
         return 0.0, "source_error"
     return adj, "applied"
 
@@ -909,6 +914,7 @@ def ensure_sentiment_loaded(games: List[Dict[str, Any]]) -> None:
         for k in list(st.session_state.keys()):
             if k.startswith("sentiment_"):
                 st.session_state.pop(k, None)
+        st.session_state.pop("sentiment_cooldown_until", None)
         st.session_state.pop("reddit_used", None)
         st.session_state.pop("sentiment_slate_key", None)
         st.session_state.pop("sentiment_source", None)
@@ -919,7 +925,24 @@ def ensure_sentiment_loaded(games: List[Dict[str, Any]]) -> None:
         st.info("Sentiment cache cleared. Re-run analysis to refresh.")
 
     enabled = st.session_state.get("enable_sentiment", True)
-    sentiment_debug: Dict[str, Any] = {"enabled": enabled, "per_league": {}, "reddit_used": False}
+    now_utc = datetime.now(timezone.utc)
+    cooldown_raw = st.session_state.get("sentiment_cooldown_until")
+    cooldown_until: Optional[datetime] = None
+    if cooldown_raw:
+        try:
+            cooldown_until = datetime.fromisoformat(cooldown_raw) if isinstance(cooldown_raw, str) else cooldown_raw
+            if cooldown_until and cooldown_until.tzinfo is None:
+                cooldown_until = cooldown_until.replace(tzinfo=timezone.utc)
+        except Exception:
+            cooldown_until = None
+    cooldown_active = bool(cooldown_until and now_utc < cooldown_until)
+    sentiment_debug: Dict[str, Any] = {
+        "enabled": enabled,
+        "per_league": {},
+        "reddit_used": False,
+        "cooldown_until": cooldown_until.isoformat() if cooldown_until else None,
+        "cooldown_active": cooldown_active,
+    }
     if not enabled:
         st.session_state["sentiment_map"] = {}
         st.session_state["sentiment_meta_map"] = {}
@@ -982,12 +1005,17 @@ def ensure_sentiment_loaded(games: List[Dict[str, Any]]) -> None:
         total_articles = 0
         total_errors = 0
         last_error: Optional[str] = None
+        cached_used_any = False
+        cached_teams_total = 0
+        cooldown_until_value = cooldown_until
         global_meta = {
             "sentiment_source": "none",
             "reddit_used": False,
             "articles_total": 0,
             "last_error": None,
             "error_count": 0,
+            "cooldown_until": cooldown_until.isoformat() if cooldown_until else None,
+            "cooldown_active": cooldown_active,
         }
         aggregate_sentiment_map: Dict[str, Optional[float]] = {}
         aggregate_sentiment_meta: Dict[str, Dict[str, Any]] = {}
@@ -1002,7 +1030,17 @@ def ensure_sentiment_loaded(games: List[Dict[str, Any]]) -> None:
             lg_map: Dict[str, Optional[float]] = {}
             lg_meta_map: Dict[str, Dict[str, Any]] = {}
             try:
-                result = compute_team_sentiment_map(news_api_key, lg_games, league=lg_key)
+                existing_lg_map = st.session_state.get(f"sentiment_map_{lg_key}") or {}
+                existing_lg_meta = st.session_state.get(f"sentiment_meta_map_{lg_key}") or {}
+                result = compute_team_sentiment_map(
+                    news_api_key,
+                    lg_games,
+                    league=lg_key,
+                    existing_map=existing_lg_map,
+                    existing_meta_map=existing_lg_meta,
+                    cooldown_until=cooldown_until_value,
+                    max_calls=MAX_SENTIMENT_CALLS,
+                )
                 lg_map, lg_meta_map, lg_debug = {}, {}, {}
                 if isinstance(result, tuple):
                     if len(result) == 3:
@@ -1030,9 +1068,23 @@ def ensure_sentiment_loaded(games: List[Dict[str, Any]]) -> None:
             per_league_debug[lg_key] = lg_debug
             league_labels_used[lg_key] = (lg_debug or {}).get("league_label_used")
             lg_articles = int((lg_debug or {}).get("articles_total") or 0)
+            lg_cached = int((lg_debug or {}).get("cached_teams") or 0)
             lg_errors = int((lg_debug or {}).get("error_count") or 0)
             lg_status_counts = (lg_debug or {}).get("status_counts") or {}
             lg_sample_calls = (lg_debug or {}).get("sample_calls") or []
+            lg_rate_limited = bool((lg_debug or {}).get("rate_limited") or (lg_status_counts.get(429) or 0) > 0)
+            lg_auth_error = bool((lg_debug or {}).get("auth_error") or (lg_status_counts.get(401) or 0) > 0 or (lg_status_counts.get(403) or 0) > 0)
+            cached_used_any = cached_used_any or bool((lg_debug or {}).get("used_cached"))
+            cached_teams_total += lg_cached
+            if (lg_debug or {}).get("cooldown_until"):
+                st.session_state["sentiment_cooldown_until"] = (lg_debug or {}).get("cooldown_until")
+                try:
+                    cooldown_until_value = datetime.fromisoformat(st.session_state["sentiment_cooldown_until"])
+                    if cooldown_until_value and cooldown_until_value.tzinfo is None:
+                        cooldown_until_value = cooldown_until_value.replace(tzinfo=timezone.utc)
+                except Exception:
+                    cooldown_until_value = cooldown_until_value or cooldown_until
+            cooldown_active = bool(cooldown_until_value and now_utc < cooldown_until_value)
             for status_code, count in lg_status_counts.items():
                 status_counts_all[status_code] = status_counts_all.get(status_code, 0) + count
             sample_calls_all.extend(lg_sample_calls)
@@ -1042,16 +1094,16 @@ def ensure_sentiment_loaded(games: List[Dict[str, Any]]) -> None:
             st.session_state[f"sentiment_map_{lg_key}"] = lg_map or {}
             st.session_state[f"sentiment_meta_map_{lg_key}"] = lg_meta_map or {}
             st.session_state[f"sentiment_debug_{lg_key}"] = lg_debug
-            lg_rate_limited = bool((lg_status_counts.get(429) or 0) > 0)
-            lg_auth_error = bool((lg_status_counts.get(401) or 0) > 0 or (lg_status_counts.get(403) or 0) > 0)
             if lg_auth_error:
-                lg_source = "error"
-            elif lg_articles > 0 and lg_rate_limited:
-                lg_source = "partial"
+                lg_source = "error_auth"
+            elif lg_rate_limited and (lg_articles > 0 or bool((lg_debug or {}).get("used_cached"))):
+                lg_source = "partial_cached"
+            elif lg_rate_limited:
+                lg_source = "error_rate_limited"
             elif lg_articles > 0:
                 lg_source = "newsapi"
-            elif lg_rate_limited:
-                lg_source = "error"
+            elif bool((lg_debug or {}).get("used_cached")):
+                lg_source = "partial_cached"
             else:
                 lg_source = "none"
             st.session_state[f"sentiment_source_{lg_key}"] = lg_source
@@ -1059,19 +1111,29 @@ def ensure_sentiment_loaded(games: List[Dict[str, Any]]) -> None:
             aggregate_sentiment_map.update(st.session_state.get(f"sentiment_map_{lg_key}") or {})
             aggregate_sentiment_meta.update(st.session_state.get(f"sentiment_meta_map_{lg_key}") or {})
 
+        sentiment_available_count = len([v for v in aggregate_sentiment_map.values() if v is not None])
         auth_error = bool((status_counts_all.get(401) or 0) > 0 or (status_counts_all.get(403) or 0) > 0)
-        rate_limited = bool((status_counts_all.get(429) or 0) > 0)
+        rate_limited = bool((status_counts_all.get(429) or 0) > 0 or any((d or {}).get("rate_limited") for d in per_league_debug.values()))
+        if rate_limited and not cooldown_until_value:
+            cooldown_until_value = now_utc + timedelta(minutes=20)
+        if cooldown_until_value:
+            st.session_state["sentiment_cooldown_until"] = cooldown_until_value.isoformat()
         if auth_error:
-            sentiment_source = "error"
-        elif total_articles > 0 and rate_limited:
-            sentiment_source = "partial"
+            sentiment_source = "error_auth"
+        elif rate_limited and cached_used_any:
+            sentiment_source = "partial_cached"
+        elif rate_limited:
+            sentiment_source = "error_rate_limited"
         elif total_articles > 0:
             sentiment_source = "newsapi"
-        elif rate_limited:
-            sentiment_source = "error"
+        elif cached_used_any:
+            sentiment_source = "partial_cached"
         else:
             sentiment_source = "none"
         first_sample = sample_calls_all[0] if sample_calls_all else {}
+        sample_status = first_sample.get("status") if isinstance(first_sample, dict) else None
+        if not sample_status and rate_limited:
+            sample_status = 429
         global_meta.update({
             "sentiment_source": sentiment_source,
             "articles_total": total_articles,
@@ -1080,9 +1142,14 @@ def ensure_sentiment_loaded(games: List[Dict[str, Any]]) -> None:
             "status_counts": status_counts_all,
             "auth_error": auth_error,
             "rate_limited": rate_limited,
-            "sample_query": first_sample.get("q"),
-            "sample_status": first_sample.get("status"),
-            "sample_totalResults": first_sample.get("totalResults"),
+            "sample_query": first_sample.get("q") if isinstance(first_sample, dict) else None,
+            "sample_status": sample_status,
+            "sample_totalResults": first_sample.get("totalResults") if isinstance(first_sample, dict) else None,
+            "cached_teams": cached_teams_total,
+            "used_cached": cached_used_any,
+            "cooldown_until": cooldown_until_value.isoformat() if cooldown_until_value else None,
+            "cooldown_active": bool(cooldown_until_value and now_utc < cooldown_until_value),
+            "available_count": sentiment_available_count,
         })
         st.session_state["sentiment_meta"] = global_meta
         st.session_state["sentiment_source"] = sentiment_source
@@ -1103,9 +1170,14 @@ def ensure_sentiment_loaded(games: List[Dict[str, Any]]) -> None:
             "missing_teams": missing_teams_all,
             "teams_total": len(aggregate_sentiment_map),
             "sentiment_source": sentiment_source,
-            "sample_query": first_sample.get("q"),
-            "sample_status": first_sample.get("status"),
-            "sample_totalResults": first_sample.get("totalResults"),
+            "sample_query": first_sample.get("q") if isinstance(first_sample, dict) else None,
+            "sample_status": sample_status,
+            "sample_totalResults": first_sample.get("totalResults") if isinstance(first_sample, dict) else None,
+            "cached_teams": cached_teams_total,
+            "used_cached": cached_used_any,
+            "cooldown_until": cooldown_until_value.isoformat() if cooldown_until_value else None,
+            "cooldown_active": bool(cooldown_until_value and now_utc < cooldown_until_value),
+            "available_count": sentiment_available_count,
         }
         st.session_state["sentiment_map"] = aggregate_sentiment_map
         st.session_state["sentiment_meta_map"] = aggregate_sentiment_meta
@@ -3500,6 +3572,13 @@ with tab_master:
                 or away_meta.get("sentiment_source")
                 or "none"
             )
+            sentiment_used_cached = bool(
+                sentiment_meta_global.get("used_cached")
+                or sentiment_debug_global.get("used_cached")
+                or league_debug.get("used_cached")
+                or home_meta.get("cached")
+                or away_meta.get("cached")
+            )
             sentiment_auth_error = bool(
                 sentiment_meta_global.get("auth_error")
                 or sentiment_debug_global.get("auth_error")
@@ -3512,20 +3591,27 @@ with tab_master:
             )
             sentiment_adj_reason = "disabled"
             sentiment_adj = 0.0
-            eligible_sentiment = bool(articles_total >= 3 and not sentiment_auth_error)
+            eligible_sentiment = bool((articles_total >= 3 or sentiment_used_cached) and not sentiment_auth_error)
             if eligible_sentiment:
                 raw_adj = (sentiment_diff or 0.0) * 0.02
                 sentiment_adj = clamp(raw_adj, -0.03, 0.03) or 0.0
-                sentiment_adj_reason = "applied_rate_limited" if rate_limited_flag else "applied"
+                if rate_limited_flag and sentiment_used_cached:
+                    sentiment_adj_reason = "applied_cached_rate_limited"
+                elif rate_limited_flag:
+                    sentiment_adj_reason = "applied_rate_limited"
+                elif sentiment_used_cached:
+                    sentiment_adj_reason = "applied_cached"
+                else:
+                    sentiment_adj_reason = "applied"
             else:
                 if sentiment_auth_error:
                     sentiment_adj_reason = "auth_error"
-                elif articles_total < 3:
+                elif articles_total < 3 and not sentiment_used_cached:
                     sentiment_adj_reason = "insufficient_articles"
                 else:
                     sentiment_adj_reason = "disabled"
                 sentiment_adj = 0.0
-            sentiment_valid = bool(articles_total >= 3)
+            sentiment_valid = bool((articles_total >= 3 or sentiment_used_cached) and not sentiment_auth_error)
             sentiment_source = (
                 st.session_state.get(f"sentiment_source_{league_key}")
                 or sentiment_meta_global.get("sentiment_source")
@@ -3533,13 +3619,14 @@ with tab_master:
                 or away_meta.get("sentiment_source")
                 or "none"
             )
-            if articles_total >= 3:
-                if rate_limited_flag:
-                    sentiment_source = "partial"
-                elif sentiment_source in ("none", "error"):
-                    sentiment_source = "newsapi"
-            elif articles_total == 0:
-                sentiment_source = "none"
+            if rate_limited_flag and sentiment_used_cached:
+                sentiment_source = "partial_cached"
+            elif rate_limited_flag and sentiment_source in ("none", "error"):
+                sentiment_source = "error_rate_limited"
+            elif sentiment_auth_error:
+                sentiment_source = "error_auth"
+            elif articles_total >= 3 and sentiment_source in ("none", "error", "error_rate_limited"):
+                sentiment_source = "newsapi"
             reddit_used = False
             sentiment_error_count = league_debug.get("error_count")
             if sentiment_error_count is None:
@@ -3552,12 +3639,31 @@ with tab_master:
                 or league_debug.get("articles_total")
                 or 0
             )
+            sentiment_cached_teams_count = (
+                sentiment_meta_global.get("cached_teams")
+                or sentiment_debug_global.get("cached_teams")
+                or league_debug.get("cached_teams")
+                or 0
+            )
+            sentiment_available_count = (
+                sentiment_meta_global.get("available_count")
+                or sentiment_debug_global.get("available_count")
+                or league_debug.get("available_count")
+                or 0
+            )
+            sentiment_cooldown_until = (
+                sentiment_meta_global.get("cooldown_until")
+                or sentiment_debug_global.get("cooldown_until")
+                or None
+            )
             sentiment_status_counts = sentiment_debug_global.get("status_counts") or league_debug.get("status_counts") or {}
             sentiment_status_counts_field = sentiment_status_counts if sentiment_status_counts else None
             sample_calls = sentiment_debug_global.get("sample_calls") or league_debug.get("sample_calls") or []
             sentiment_sample_query = sentiment_meta_global.get("sample_query") or (sample_calls[0].get("q") if sample_calls else None)
             sentiment_sample_status = sentiment_meta_global.get("sample_status") or (sample_calls[0].get("status") if sample_calls else None)
             sentiment_sample_totalResults = sentiment_meta_global.get("sample_totalResults") or (sample_calls[0].get("totalResults") if sample_calls else None)
+            if not sentiment_sample_status and sentiment_rate_limited:
+                sentiment_sample_status = 429
 
             vertex_prob_home, vertex_warn = get_vertex_prob(g, sentiment_diff)
             if vertex_warn and vertex_warn not in warnings:
@@ -3675,6 +3781,10 @@ with tab_master:
                     "sentiment_sample_totalResults": sentiment_sample_totalResults,
                     "sentiment_auth_error": sentiment_auth_error,
                     "sentiment_rate_limited": sentiment_rate_limited,
+                    "sentiment_cooldown_until": sentiment_cooldown_until,
+                    "sentiment_cached_teams_count": sentiment_cached_teams_count,
+                    "sentiment_available_count": sentiment_available_count,
+                    "sentiment_used_cached": sentiment_used_cached,
                     "sentiment_adj_value": sentiment_adj,
                     "sentiment_adj_reason": sentiment_adj_reason,
                     "spread_pick_team": spread_pick_team,
@@ -3924,6 +4034,10 @@ with tab_master:
                         "sentiment_sample_totalResults": sentiment_sample_totalResults,
                         "sentiment_auth_error": sentiment_auth_error,
                         "sentiment_rate_limited": sentiment_rate_limited,
+                        "sentiment_cooldown_until": sentiment_cooldown_until,
+                        "sentiment_cached_teams_count": sentiment_cached_teams_count,
+                        "sentiment_available_count": sentiment_available_count,
+                        "sentiment_used_cached": sentiment_used_cached,
                         "kalshi_available": kalshi_winner.get("kalshi_available"),
                         "kalshi_matched": kalshi_winner.get("kalshi_matched"),
                         "kalshi_prob": kalshi_prob_used,
@@ -4032,6 +4146,10 @@ with tab_master:
                     "sentiment_sample_totalResults": sentiment_sample_totalResults,
                     "sentiment_auth_error": sentiment_auth_error,
                     "sentiment_rate_limited": sentiment_rate_limited,
+                    "sentiment_cooldown_until": sentiment_cooldown_until,
+                    "sentiment_cached_teams_count": sentiment_cached_teams_count,
+                    "sentiment_available_count": sentiment_available_count,
+                    "sentiment_used_cached": sentiment_used_cached,
                     "Vertex Spread Prob": vertex_spread_prob,
                     "kalshi_matched": kalshi_spread.get("kalshi_matched"),
                     "kalshi_prob": kalshi_prob_used if kalshi_spread.get("kalshi_matched") else None,
@@ -4166,6 +4284,9 @@ with tab_master:
                     "sentiment_sample_totalResults": sentiment_sample_totalResults,
                     "sentiment_auth_error": sentiment_auth_error,
                     "sentiment_rate_limited": sentiment_rate_limited,
+                    "sentiment_cooldown_until": sentiment_cooldown_until,
+                    "sentiment_cached_teams_count": sentiment_cached_teams_count,
+                    "sentiment_used_cached": sentiment_used_cached,
                     "best_spread_book": g.get("best_spread_book"),
                     "best_spread_last_update": g.get("best_spread_last_update"),
                     "best_spread_price_score": g.get("best_spread_price_score"),
@@ -4277,6 +4398,10 @@ with tab_master:
             "sentiment_sample_totalResults",
             "sentiment_auth_error",
             "sentiment_rate_limited",
+            "sentiment_cooldown_until",
+            "sentiment_cached_teams_count",
+            "sentiment_available_count",
+            "sentiment_used_cached",
             "Pick_Confidence",
             "Pick_Reason_Short",
             "Eligible_Top_Picks",
@@ -4427,6 +4552,10 @@ with tab_master:
             "sentiment_sample_totalResults",
             "sentiment_auth_error",
             "sentiment_rate_limited",
+            "sentiment_cooldown_until",
+            "sentiment_cached_teams_count",
+            "sentiment_available_count",
+            "sentiment_used_cached",
             "Pick_Confidence",
             "Pick_Reason_Short",
             "Eligible_Top_Picks",
