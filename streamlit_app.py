@@ -244,6 +244,82 @@ def slate_key_from_games(games: List[Dict[str, Any]]) -> str:
     return ";".join(sorted(parts))
 
 
+def score_pick_confidence(row: Dict[str, Any]) -> Tuple[str, str, bool]:
+    """
+    Returns (confidence, reason_short, eligible_for_top_picks).
+    confidence in {"HIGH", "MEDIUM", "LOW"}.
+    """
+    warnings_raw = (row.get("Warnings") or "").strip()
+    warnings_lower = warnings_raw.lower()
+    market = (row.get("Market") or "").lower()
+    ai_prob = safe_float(row.get("AI_Prob"))
+    implied_prob = safe_float(row.get("Implied_Prob"))
+    kalshi_required = bool(row.get("Kalshi_Required"))
+    kalshi_matched = bool(row.get("kalshi_matched"))
+
+    low_reason: Optional[str] = None
+    if "vertex_proxy_for_spread_total" in warnings_lower:
+        low_reason = "LOW: spread/total uses Vertex proxy"
+    elif "no_spread_market" in warnings_lower or "no_total_market" in warnings_lower or "no_markets" in warnings_lower:
+        low_reason = "LOW: missing market data"
+    elif "moneyline_extreme_skipped" in warnings_lower:
+        low_reason = "LOW: Moneyline extreme skipped"
+    elif market in {"spread", "total"} and (ai_prob is None or "proxy" in warnings_lower):
+        low_reason = "LOW: spread/total uses Vertex proxy" if "proxy" in warnings_lower else "LOW: Missing AI_Prob"
+    elif implied_prob is None:
+        low_reason = "LOW: Missing Implied_Prob"
+    elif kalshi_required and not kalshi_matched:
+        low_reason = "LOW: Kalshi required but unmatched"
+
+    if low_reason:
+        return "LOW", low_reason, False
+
+    if (
+        market == "moneyline"
+        and ai_prob is not None
+        and implied_prob is not None
+        and not warnings_lower
+    ):
+        return (
+            "HIGH",
+            f"ML | AI {ai_prob:.2f} vs Implied {implied_prob:.2f} | Kalshi {'yes' if kalshi_matched else 'no'}",
+            True,
+        )
+
+    # MEDIUM fallback
+    if ai_prob is not None and implied_prob is not None:
+        delta = ai_prob - implied_prob
+        reason = f"MED: ML model/market conflict (AI-Imp={delta:+.2f})" if market == "moneyline" else f"MED: {market or 'pick'} signals (AI-Imp={delta:+.2f})"
+    else:
+        reason = f"MED: {market or 'pick'} with partial signals"
+
+    eligible = bool(
+        ai_prob is not None
+        and implied_prob is not None
+        and "proxy" not in warnings_lower
+        and "no_spread_market" not in warnings_lower
+        and "no_total_market" not in warnings_lower
+        and "no_markets" not in warnings_lower
+    )
+    return "MEDIUM", reason, eligible
+
+
+def apply_confidence_filter(df: pd.DataFrame, confidence_mode: str, show_low: bool) -> Tuple[pd.DataFrame, Dict[str, Any]]:
+    if df is None or df.empty:
+        return pd.DataFrame(), {"counts": {}, "low_removed": 0}
+    filtered = df.copy()
+    base_low = int((filtered["Pick_Confidence"] == "LOW").sum())
+    if confidence_mode == "High only":
+        filtered = filtered[filtered["Pick_Confidence"] == "HIGH"]
+    elif confidence_mode == "High+Medium (recommended)":
+        filtered = filtered[filtered["Pick_Confidence"].isin(["HIGH", "MEDIUM"])]
+    if not show_low:
+        filtered = filtered[filtered["Pick_Confidence"] != "LOW"]
+    low_after = int((filtered["Pick_Confidence"] == "LOW").sum())
+    counts = filtered["Pick_Confidence"].value_counts(dropna=False).to_dict()
+    return filtered, {"counts": counts, "low_removed": max(base_low - low_after, 0)}
+
+
 def ensure_sentiment_loaded(games: List[Dict[str, Any]]) -> None:
     """Compute sentiment for the current slate when enabled and cache in session state."""
     enabled = st.session_state.get("enable_sentiment", True)
@@ -2762,52 +2838,56 @@ with tab_master:
             # --- 5. FALLBACK: "NONE" MARKET ROW ---
             if not (g.get("home_ml_price") or g.get("home_spread_point") or g.get("total_point")):
                 warnings = list(dict.fromkeys(warnings + ["no_markets"]))
-                rows_out.append(
-                    {
-                        "League": league_name,
-                        "Home": home,
-                        "Away": away,
-                        "Commence (UTC)": commence_iso,
-                        "Commence (Local)": commence_local,
-                        "Local Date": commence_date_local,
-                        "Market": "None",
-                        "Book": None,
-                        "Pick": None,
-                        "Implied_Prob": None,
-                        "AI_Prob": vertex_prob_home,  # Raw AI score with no market blending
-                        "Warnings": ";".join(warnings),
-                        "kalshi_available": kalshi_winner.get("kalshi_available"),
-                        "kalshi_matched": kalshi_winner.get("kalshi_matched"),
-                        "kalshi_prob": kalshi_winner.get("kalshi_prob"),
-                        "kalshi_candidate_count": candidate_debug.get("candidate_count"),
-                        "kalshi_best_score": candidate_debug.get("best_score"),
-                        "kalshi_match_reason": kalshi_winner.get("kalshi_reason"),
-                        "kalshi_game_prefix_used": (candidate_debug.get("winner_meta") or {}).get("winner_prefix"),
-                        "kalshi_wanted_tokens": (candidate_debug.get("winner_meta") or {}).get("allowed_date_tokens"),
-                        "Home_Sentiment": home_sent,
-                        "Away_Sentiment": away_sent,
-                        "Sentiment_Diff": sentiment_diff,
-                        "sentiment_adj": sentiment_adj,
-                        "sentiment_source": sentiment_source,
-                        "reddit_used": reddit_used,
-                        "sentiment_valid": sentiment_valid,
-                        "sentiment_error_count": sentiment_error_count,
-                        "sentiment_errors_sample": sentiment_errors_sample,
-                        "sentiment_articles_total": sentiment_articles_total,
-                        "sentiment_status_counts": sentiment_status_counts_str,
-                        "sentiment_sample_query": sentiment_sample_query,
-                        "sentiment_auth_error": sentiment_auth_error,
-                        "sentiment_rate_limited": sentiment_rate_limited,
-                        "best_spread_book": g.get("best_spread_book"),
-                        "best_spread_last_update": g.get("best_spread_last_update"),
-                        "best_spread_price_score": g.get("best_spread_price_score"),
-                        "best_spread_median_point": g.get("best_spread_median_point"),
-                        "best_total_book": g.get("best_total_book"),
-                        "best_total_last_update": g.get("best_total_last_update"),
-                        "best_total_price_score": g.get("best_total_price_score"),
-                        "best_total_median_point": g.get("best_total_median_point"),
-                    }
-                )
+                fallback_row = {
+                    "League": league_name,
+                    "Home": home,
+                    "Away": away,
+                    "Commence (UTC)": commence_iso,
+                    "Commence (Local)": commence_local,
+                    "Local Date": commence_date_local,
+                    "Market": "None",
+                    "Book": None,
+                    "Pick": None,
+                    "Implied_Prob": None,
+                    "AI_Prob": vertex_prob_home,  # Raw AI score with no market blending
+                    "Warnings": ";".join(warnings),
+                    "kalshi_available": kalshi_winner.get("kalshi_available"),
+                    "kalshi_matched": kalshi_winner.get("kalshi_matched"),
+                    "kalshi_prob": kalshi_winner.get("kalshi_prob"),
+                    "kalshi_candidate_count": candidate_debug.get("candidate_count"),
+                    "kalshi_best_score": candidate_debug.get("best_score"),
+                    "kalshi_match_reason": kalshi_winner.get("kalshi_reason"),
+                    "kalshi_game_prefix_used": (candidate_debug.get("winner_meta") or {}).get("winner_prefix"),
+                    "kalshi_wanted_tokens": (candidate_debug.get("winner_meta") or {}).get("allowed_date_tokens"),
+                    "Home_Sentiment": home_sent,
+                    "Away_Sentiment": away_sent,
+                    "Sentiment_Diff": sentiment_diff,
+                    "sentiment_adj": sentiment_adj,
+                    "sentiment_source": sentiment_source,
+                    "reddit_used": reddit_used,
+                    "sentiment_valid": sentiment_valid,
+                    "sentiment_error_count": sentiment_error_count,
+                    "sentiment_errors_sample": sentiment_errors_sample,
+                    "sentiment_articles_total": sentiment_articles_total,
+                    "sentiment_status_counts": sentiment_status_counts_str,
+                    "sentiment_sample_query": sentiment_sample_query,
+                    "sentiment_auth_error": sentiment_auth_error,
+                    "sentiment_rate_limited": sentiment_rate_limited,
+                    "best_spread_book": g.get("best_spread_book"),
+                    "best_spread_last_update": g.get("best_spread_last_update"),
+                    "best_spread_price_score": g.get("best_spread_price_score"),
+                    "best_spread_median_point": g.get("best_spread_median_point"),
+                    "best_total_book": g.get("best_total_book"),
+                    "best_total_last_update": g.get("best_total_last_update"),
+                    "best_total_price_score": g.get("best_total_price_score"),
+                    "best_total_median_point": g.get("best_total_median_point"),
+                    "Kalshi_Required": st.session_state.get("kalshi_required", True),
+                }
+                conf, reason_short, eligible = score_pick_confidence(fallback_row)
+                fallback_row["Pick_Confidence"] = conf
+                fallback_row["Pick_Reason_Short"] = reason_short
+                fallback_row["Eligible_Top_Picks"] = eligible
+                rows_out.append(fallback_row)
                 master_stats["market_rows_out"] += 1
 
             # --- 3. AI & Market Probability Calculations ---
@@ -2947,7 +3027,7 @@ with tab_master:
                         warnings = list(dict.fromkeys(warnings + consensus_notes))
 
                     warnings_field = ";".join(warnings) if warnings else None
-                    rows_out.append({
+                    ml_row = {
                         "League": league_name, "Home": home, "Away": away,
                         "Commence (UTC)": commence_iso, "Commence (Local)": commence_local,
                         "Local Date": commence_date_local, "Market": "Moneyline",
@@ -2987,7 +3067,13 @@ with tab_master:
                         "best_total_price_score": g.get("best_total_price_score"),
                         "best_total_median_point": g.get("best_total_median_point"),
                         "best_total_mode_point": g.get("best_total_mode_point"),
-                    })
+                        "Kalshi_Required": st.session_state.get("kalshi_required", True),
+                    }
+                    conf, reason_short, eligible = score_pick_confidence(ml_row)
+                    ml_row["Pick_Confidence"] = conf
+                    ml_row["Pick_Reason_Short"] = reason_short
+                    ml_row["Eligible_Top_Picks"] = eligible
+                    rows_out.append(ml_row)
                     master_stats["h2h_found"] += 1
                     master_stats["market_rows_out"] += 1
             elif extreme_ml:
@@ -3009,7 +3095,7 @@ with tab_master:
                 vertex_spread_prob = None
                 
                 warnings_field = ";".join(warnings) if warnings else None
-                rows_out.append({
+                spread_row = {
                     "League": league_name, "Home": home, "Away": away,
                     "Commence (UTC)": commence_iso, "Commence (Local)": commence_local,
                     "Market": "Spread", "Book": g.get("best_spread_book"),
@@ -3049,7 +3135,13 @@ with tab_master:
                     "best_total_median_point": g.get("best_total_median_point"),
                     "best_total_mode_point": g.get("best_total_mode_point"),
                     "Warnings": warnings_field,
-                })
+                    "Kalshi_Required": st.session_state.get("kalshi_required", True),
+                }
+                conf, reason_short, eligible = score_pick_confidence(spread_row)
+                spread_row["Pick_Confidence"] = conf
+                spread_row["Pick_Reason_Short"] = reason_short
+                spread_row["Eligible_Top_Picks"] = eligible
+                rows_out.append(spread_row)
                 master_stats["market_rows_out"] += 1
 
             # TOTAL ROW
@@ -3067,7 +3159,7 @@ with tab_master:
                     warnings.append("vertex_proxy_for_spread_total")
 
                 warnings_field = ";".join(warnings) if warnings else None
-                rows_out.append({
+                total_row = {
                     "League": league_name, "Home": home, "Away": away,
                     "Commence (UTC)": commence_iso, "Commence (Local)": commence_local,
                     "Market": "Total", "Book": g.get("best_total_book"),
@@ -3107,7 +3199,13 @@ with tab_master:
                     "best_total_median_point": g.get("best_total_median_point"),
                     "best_total_mode_point": g.get("best_total_mode_point"),
                     "Warnings": warnings_field,
-                })
+                    "Kalshi_Required": st.session_state.get("kalshi_required", True),
+                }
+                conf, reason_short, eligible = score_pick_confidence(total_row)
+                total_row["Pick_Confidence"] = conf
+                total_row["Pick_Reason_Short"] = reason_short
+                total_row["Eligible_Top_Picks"] = eligible
+                rows_out.append(total_row)
                 master_stats["market_rows_out"] += 1
                     
         df = pd.DataFrame(rows_out)
@@ -3159,12 +3257,35 @@ with tab_master:
             "sentiment_sample_query",
             "sentiment_auth_error",
             "sentiment_rate_limited",
+            "Pick_Confidence",
+            "Pick_Reason_Short",
+            "Eligible_Top_Picks",
+            "Kalshi_Required",
         ]
         for col in required_display_cols:
             if col not in df.columns:
                 df[col] = None
         if "reddit_used" in df.columns:
             df["reddit_used"] = df["reddit_used"].fillna(False)
+
+        confidence_mode = st.selectbox(
+            "Confidence filter",
+            ["High+Medium (recommended)", "High only", "All"],
+            index=0,
+            key="confidence_filter_mode",
+        )
+        show_low = st.checkbox(
+            "Show low-confidence picks (proxy/fallback)",
+            value=False,
+            key="show_low_confidence",
+        )
+        df, confidence_stats = apply_confidence_filter(df, confidence_mode, show_low)
+        counts = confidence_stats.get("counts") or {}
+        st.caption(
+            f"Confidence counts (post-filter): HIGH={counts.get('HIGH', 0)}, "
+            f"MEDIUM={counts.get('MEDIUM', 0)}, LOW={counts.get('LOW', 0)}; "
+            f"LOW removed by filter: {confidence_stats.get('low_removed', 0)}"
+        )
 
         export_cols = [
             "AI_Prob",
@@ -3190,6 +3311,10 @@ with tab_master:
             "sentiment_sample_query",
             "sentiment_auth_error",
             "sentiment_rate_limited",
+            "Pick_Confidence",
+            "Pick_Reason_Short",
+            "Eligible_Top_Picks",
+            "Kalshi_Required",
             "consensus_prob_adj",
             "best_spread_book",
             "best_spread_last_update",
