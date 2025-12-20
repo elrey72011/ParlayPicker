@@ -105,23 +105,29 @@ class RealSentimentAnalyzer:
         return result
 
     def _analyze_with_newsapi(self, team_name: str, sport: str) -> Dict:
-        """Analyze sentiment using NewsAPI.org articles."""
+        """Analyze sentiment using NewsAPI.org articles and capture HTTP details."""
+
+        from_date = (datetime.now() - timedelta(days=3)).strftime("%Y-%m-%d")
+        to_date = datetime.now().strftime("%Y-%m-%d")
+
+        sport_norm = (sport or "").upper()
+        league_label = {
+            "NBA": "NBA basketball",
+            "NFL": "NFL football",
+            "NCAAF": "college football",
+            "NCAAB": "college basketball",
+            "MLB": "MLB baseball",
+            "NHL": "NHL hockey",
+            "WNBA": "WNBA basketball",
+        }.get(sport_norm, sport or "")
+        query = f'"{team_name}" {league_label}'.strip()
+
+        fetch_info: Dict[str, Optional[str]] = {
+            "q": query,
+            "league_query": league_label,
+        }
 
         try:
-            from_date = (datetime.now() - timedelta(days=3)).strftime("%Y-%m-%d")
-            to_date = datetime.now().strftime("%Y-%m-%d")
-
-            query = f'"{team_name}"'
-            sport_lower = sport.lower()
-            if "nba" in sport_lower:
-                query += " NBA basketball"
-            elif "nfl" in sport_lower:
-                query += " NFL football"
-            elif "mlb" in sport_lower:
-                query += " MLB baseball"
-            elif "nhl" in sport_lower:
-                query += " NHL hockey"
-
             response = requests.get(
                 "https://newsapi.org/v2/everything",
                 params={
@@ -135,13 +141,28 @@ class RealSentimentAnalyzer:
                 },
                 timeout=10,
             )
-
+            fetch_info["status"] = response.status_code
+            fetch_info["status_code"] = response.status_code
             if response.status_code != 200:
-                return self._fallback_neutral()
+                error_key = "rate_limited" if response.status_code == 429 else ("bad_key" if response.status_code in {401, 403} else "http_error")
+                fetch_info["error"] = error_key
+                fetch_info["response_text_snippet"] = (response.text or "")[:200]
+                return {
+                    **self._fallback_neutral(),
+                    "method": "newsapi_error",
+                    "fetch_info": fetch_info,
+                }
 
-            articles = response.json().get("articles", [])
+            data = response.json() if response is not None else {}
+            articles = data.get("articles", []) if isinstance(data, dict) else []
+            fetch_info["totalResults"] = data.get("totalResults") if isinstance(data, dict) else None
             if not articles:
-                return self._fallback_neutral()
+                fetch_info["error"] = fetch_info.get("error") or "no_articles"
+                return {
+                    **self._fallback_neutral(),
+                    "method": "newsapi_empty",
+                    "fetch_info": fetch_info,
+                }
 
             sentiment_scores = []
             for article in articles[:20]:
@@ -164,11 +185,22 @@ class RealSentimentAnalyzer:
                     "sources": len(sentiment_scores),
                     "trend": trend,
                     "method": "NewsAPI + NLP",
+                    "fetch_info": fetch_info,
                 }
 
-            return self._fallback_neutral()
-        except Exception:
-            return self._fallback_neutral()
+            fetch_info["error"] = fetch_info.get("error") or "no_articles"
+            return {
+                **self._fallback_neutral(),
+                "method": "newsapi_empty",
+                "fetch_info": fetch_info,
+            }
+        except Exception as exc:
+            fetch_info["error"] = str(exc)
+            return {
+                **self._fallback_neutral(),
+                "method": "newsapi_exception",
+                "fetch_info": fetch_info,
+            }
 
     def _calculate_text_sentiment(self, text: str) -> float:
         """Calculate a normalized sentiment score using keyword counts."""
