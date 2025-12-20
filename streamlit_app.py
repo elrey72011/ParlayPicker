@@ -154,38 +154,27 @@ def parse_spread_pick(raw_val: Any, home: Optional[str], away: Optional[str]) ->
 
 def reorder_master_columns(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Move moneyline/spread/total pick columns immediately after Local Date while preserving other order.
+    Ensure fixed front columns then pick columns; preserve remaining order.
     """
     if df is None or df.empty:
         return df
 
-    cols = list(df.columns)
-    local_date = "Local Date" if "Local Date" in cols else None
-    pick_cols = [c for c in ["Pick", "Spread & Pick", "Total & Pick"] if c in cols]
+    fixed_front = [
+        "League",
+        "Home",
+        "Away",
+        "Commence (UTC)",
+        "Commence (Local)",
+        "Local Date",
+    ]
+    fixed_front = [c for c in fixed_front if c in df.columns]
 
-    remaining = cols.copy()
-    ordered: List[str] = []
+    pick_cols = [c for c in ["Pick", "Spread & Pick", "Total & Pick"] if c in df.columns]
 
-    if local_date:
-        for c in cols:
-            if c not in remaining:
-                continue
-            ordered.append(c)
-            remaining.remove(c)
-            if c == local_date:
-                for p in pick_cols:
-                    if p in remaining:
-                        ordered.append(p)
-                        remaining.remove(p)
-    else:
-        for p in pick_cols:
-            if p in remaining:
-                ordered.append(p)
-                remaining.remove(p)
+    remaining = [c for c in df.columns if c not in fixed_front and c not in pick_cols]
 
-    ordered.extend([c for c in remaining if c not in ordered])
     try:
-        return df[ordered]
+        return df[fixed_front + pick_cols + remaining]
     except Exception:
         return df
 
