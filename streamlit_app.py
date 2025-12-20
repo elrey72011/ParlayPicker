@@ -24,6 +24,18 @@ from app_core.vertex_ai_endpoint import (
     is_vertex_prediction_configured,
     predict_win_probabilities,
 )
+from app_core.apisports import (
+    APISportsBasketballClient,
+    APISportsFootballClient,
+    APISportsHockeyClient,
+)
+from app_core.sportsdata import (
+    SportsDataNBAClient,
+    SportsDataNFLClient,
+    SportsDataNHLClient,
+    SportsDataNCAABClient,
+    SportsDataNCAAFClient,
+)
 from vertex_master_analyzer import blended_win_prob
 
 try:
@@ -93,6 +105,14 @@ def is_missing_prob(val: Optional[float]) -> bool:
 
 def normalize_team_name(name: Any) -> str:
     cleaned = re.sub(r"[^a-z0-9 ]", " ", str(name or "").lower())
+    tokens = [t for t in cleaned.split() if t]
+    return " ".join(tokens)
+
+def canonical_team_name(name: Any) -> str:
+    cleaned = re.sub(r"[#.,]", " ", str(name or ""))
+    cleaned = re.sub(r"\b(st)\b", "state", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\s+", " ", cleaned)
+    cleaned = re.sub(r"[^a-z0-9 ]", "", cleaned.lower())
     tokens = [t for t in cleaned.split() if t]
     return " ".join(tokens)
 
@@ -271,8 +291,18 @@ def score_pick_confidence(row: Dict[str, Any]) -> Tuple[str, str, bool]:
     elif kalshi_required and not kalshi_matched:
         low_reason = "LOW: Kalshi required but unmatched"
 
+    injuries_home = row.get("injuries_home_count") or 0
+    injuries_away = row.get("injuries_away_count") or 0
+    weather_summary = (row.get("weather_summary") or "").strip()
+
     if low_reason:
-        return "LOW", low_reason, False
+        extras: List[str] = []
+        if injuries_home or injuries_away:
+            extras.append(f"Injuries H:{injuries_home} A:{injuries_away}")
+        if weather_summary:
+            extras.append(weather_summary)
+        reason_low = low_reason if not extras else f"{low_reason} | {'; '.join(extras)}"
+        return "LOW", reason_low, False
 
     if (
         market == "moneyline"
@@ -292,6 +322,14 @@ def score_pick_confidence(row: Dict[str, Any]) -> Tuple[str, str, bool]:
         reason = f"MED: ML model/market conflict (AI-Imp={delta:+.2f})" if market == "moneyline" else f"MED: {market or 'pick'} signals (AI-Imp={delta:+.2f})"
     else:
         reason = f"MED: {market or 'pick'} with partial signals"
+
+    reason_extras: List[str] = []
+    if injuries_home or injuries_away:
+        reason_extras.append(f"Injuries H:{int(injuries_home)} A:{int(injuries_away)}")
+    if weather_summary:
+        reason_extras.append(weather_summary)
+    if reason_extras:
+        reason = f"{reason} | {'; '.join(reason_extras)}"
 
     eligible = bool(
         ai_prob is not None
@@ -319,6 +357,105 @@ def apply_confidence_filter(df: pd.DataFrame, confidence_mode: str, show_low: bo
     counts = filtered["Pick_Confidence"].value_counts(dropna=False).to_dict()
     return filtered, {"counts": counts, "low_removed": max(base_low - low_after, 0)}
 
+
+@st.cache_data(ttl=900)
+def enrich_game_context(game: Dict[str, Any], league_key: str, api_key: Optional[str], sd_key: Optional[str]) -> Dict[str, Any]:
+    """Return lightweight context from API-Sports/SportsData; safe to fail silently."""
+    enrichment: Dict[str, Any] = {
+        "injuries_home_count": 0,
+        "injuries_away_count": 0,
+        "key_injuries_home": [],
+        "key_injuries_away": [],
+        "weather_summary": None,
+        "api_sports_used": False,
+        "sportsdata_used": False,
+        "schedule_warnings": [],
+        "last_5_form_home": None,
+        "last_5_form_away": None,
+        "pace_signal": None,
+        "efficiency_signal": None,
+    }
+    try:
+        commence_iso = game.get("commence_time_iso_utc") or game.get("commence_time") or game.get("commence_time_iso")
+        commence_dt = parse_commence_to_utc(commence_iso)
+        commence_date = commence_dt.date() if commence_dt else None
+    except Exception:
+        commence_date = None
+
+    if not commence_date:
+        return enrichment
+
+    try:
+        # API-Sports attempt
+        api_client = None
+        if api_key:
+            api_client_map = {
+                "NBA": APISportsBasketballClient,
+                "NCAAB": APISportsBasketballClient,
+                "NFL": APISportsFootballClient,
+                "NCAAF": APISportsFootballClient,
+                "NHL": APISportsHockeyClient,
+            }
+            client_cls = api_client_map.get(league_key)
+            api_client = client_cls(api_key, key_source="secrets/env") if client_cls else None
+        if api_client:
+            games_api = api_client.get_games_by_date(commence_date)
+            home_norm = canonical_team_name(game.get("home_team"))
+            away_norm = canonical_team_name(game.get("away_team"))
+            matched = None
+            for g_api in games_api:
+                home_api = canonical_team_name(((g_api.get("teams") or {}).get("home") or {}).get("name"))
+                away_api = canonical_team_name(((g_api.get("teams") or {}).get("away") or {}).get("name"))
+                if home_api == home_norm and away_api == away_norm:
+                    matched = g_api
+                    break
+            if matched:
+                enrichment["api_sports_used"] = True
+                fixture_date = (matched.get("fixture") or {}).get("date")
+                if fixture_date and commence_iso and fixture_date != commence_iso:
+                    enrichment["schedule_warnings"].append("schedule_mismatch_api_sports")
+                # Placeholder: API-Sports payload often lacks injuries in base tier; keep counts at 0.
+    except Exception:
+        enrichment.setdefault("schedule_warnings", []).append("api_sports_error")
+
+    try:
+        # SportsData attempt
+        sd_client = None
+        if sd_key:
+            sd_map = {
+                "NBA": SportsDataNBAClient,
+                "NCAAB": SportsDataNCAABClient,
+                "NFL": SportsDataNFLClient,
+                "NCAAF": SportsDataNCAAFClient,
+                "NHL": SportsDataNHLClient,
+            }
+            sd_cls = sd_map.get(league_key)
+            sd_client = sd_cls(sd_key, key_source="secrets/env") if sd_cls else None
+        if sd_client:
+            scores = sd_client.get_scores_by_date(commence_date)
+            match = sd_client.match_game(scores, game.get("home_team", ""), game.get("away_team", ""))
+            if match:
+                enrichment["sportsdata_used"] = True
+                if match.get("Date") and commence_iso and str(match.get("Date")) != commence_iso:
+                    enrichment["schedule_warnings"].append("schedule_mismatch_sportsdata")
+                weather = match.get("Weather") or match.get("WeatherDescription")
+                if weather:
+                    enrichment["weather_summary"] = str(weather)
+                venue = match.get("StadiumDetails") or {}
+                if isinstance(venue, dict) and venue.get("PlayingSurface"):
+                    enrichment["weather_summary"] = (
+                        enrichment["weather_summary"] or f"Surface: {venue.get('PlayingSurface')}"
+                    )
+                insight = sd_client.build_game_insight(match)
+                if insight:
+                    enrichment["last_5_form_home"] = insight.home.trend
+                    enrichment["last_5_form_away"] = insight.away.trend
+                    enrichment["pace_signal"] = insight.home.power_index or insight.away.power_index
+                # Injuries info not available via current helper; counts remain 0.
+    except Exception:
+        enrichment.setdefault("schedule_warnings", []).append("sportsdata_error")
+
+    return enrichment
 
 def ensure_sentiment_loaded(games: List[Dict[str, Any]]) -> None:
     """Compute sentiment for the current slate when enabled and cache in session state."""
@@ -526,6 +663,8 @@ st.set_page_config(page_title="ParlayDesk", layout="wide")
 # Kalshi globals / shims (must exist before any call sites)
 # ------------------------------------------------------------
 kalshi_integrator: Optional[KalshiIntegrator] = None
+api_sports_clients: Dict[str, Any] = {}
+sportsdata_clients: Dict[str, Any] = {}
 
 def kalshi_health_check(selected_league: str = "NBA") -> Dict[str, Any]:
     """
@@ -570,12 +709,47 @@ def read_secret(name: str, default: Optional[str] = None) -> Optional[str]:
         pass
     return os.getenv(name, default)
 
+def get_api_keys() -> Dict[str, Optional[str]]:
+    return {
+        "api_sports_key": read_secret("API_SPORTS_KEY")
+        or read_secret("APISPORTS_API_KEY")
+        or read_secret("NBA_APISPORTS_API_KEY")
+        or read_secret("NFL_APISPORTS_API_KEY"),
+        "sportsdata_key": read_secret("SPORTSDATA_API_KEY")
+        or read_secret("SPORTSDATA_KEY")
+        or read_secret("NBA_SPORTSDATA_API_KEY")
+        or read_secret("NFL_SPORTSDATA_API_KEY"),
+    }
+
 def get_secret_any(candidates: List[str]) -> Optional[str]:
     for key in candidates:
         val = read_secret(key)
         if val:
             return val
     return None
+
+def init_data_clients() -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    global api_sports_clients, sportsdata_clients
+    if api_sports_clients and sportsdata_clients:
+        return api_sports_clients, sportsdata_clients
+    keys = get_api_keys()
+    api_key = keys.get("api_sports_key")
+    sd_key = keys.get("sportsdata_key")
+    api_sports_clients = {
+        "NBA": APISportsBasketballClient(api_key, key_source="secrets/env") if api_key else None,
+        "NCAAB": APISportsBasketballClient(api_key, key_source="secrets/env") if api_key else None,
+        "NFL": APISportsFootballClient(api_key, key_source="secrets/env") if api_key else None,
+        "NCAAF": APISportsFootballClient(api_key, key_source="secrets/env") if api_key else None,
+        "NHL": APISportsHockeyClient(api_key, key_source="secrets/env") if api_key else None,
+    }
+    sportsdata_clients = {
+        "NBA": SportsDataNBAClient(sd_key, key_source="secrets/env") if sd_key else None,
+        "NCAAB": SportsDataNCAABClient(sd_key, key_source="secrets/env") if sd_key else None,
+        "NFL": SportsDataNFLClient(sd_key, key_source="secrets/env") if sd_key else None,
+        "NCAAF": SportsDataNCAAFClient(sd_key, key_source="secrets/env") if sd_key else None,
+        "NHL": SportsDataNHLClient(sd_key, key_source="secrets/env") if sd_key else None,
+    }
+    return api_sports_clients, sportsdata_clients
 
 def canonical_league_key(raw: Optional[str]) -> str:
     """Normalize league identifiers to canonical keys used across odds/sentiment/Kalshi."""
@@ -1004,8 +1178,9 @@ location = read_secret("GCP_LOCATION", "us-central1")
 vertex_endpoint_id = read_secret("VERTEX_ENDPOINT_ID")
 kalshi_api_key = read_secret("KALSHI_API_KEY") or read_secret("kalshi_api_key")
 kalshi_api_secret = read_secret("KALSHI_API_SECRET") or read_secret("kalshi_api_secret")
-api_sports_key = get_secret_any(["API_SPORTS_KEY", "APISPORTS_KEY", "API_SPORTS_API_KEY"])
-sportsdata_key = get_secret_any(["SPORTSDATA_API_KEY", "SPORTSDATA_KEY"])
+keys_resolved = get_api_keys()
+api_sports_key = keys_resolved.get("api_sports_key")
+sportsdata_key = keys_resolved.get("sportsdata_key")
 st.session_state.setdefault("kalshi_required", False)
 kalshi_integrator: Optional[KalshiIntegrator] = None
 try:
@@ -1024,6 +1199,7 @@ except Exception:
     kalshi_integrator = None
 if kalshi_integrator:
     kalshi_integrator.required = st.session_state.get("kalshi_required", True)
+api_sports_clients, sportsdata_clients = init_data_clients()
 
 @st.cache_data(ttl=60)
 def fetch_odds_games(sport_key: str) -> List[Dict[str, Any]]:
@@ -1083,6 +1259,9 @@ def _build_vertex_feature_row(game: Dict[str, Any], sentiment_diff: Optional[flo
         "implied_home_prob": safe_float(implied_home),
         "sentiment_diff": safe_float(sentiment_diff),
         "kalshi_prob": safe_float(kalshi_prob),
+        "injuries_home_count": safe_float(game.get("injuries_home_count")),
+        "injuries_away_count": safe_float(game.get("injuries_away_count")),
+        "weather_flag": 1.0 if game.get("weather_summary") else 0.0,
     }
     return pd.DataFrame([row])
 
@@ -2408,13 +2587,15 @@ badges = {
     "OddsAPI": bool(odds_api_key),
     "Vertex": bool(vertex_endpoint_id),
     "News": bool(news_api_key),
-    "API-Sports": bool(api_sports_key),
-    "SportsData": bool(sportsdata_key),
+    "API-Sports": any(v for v in api_sports_clients.values() if v),
+    "SportsData": any(v for v in sportsdata_clients.values() if v),
     "Kalshi": bool(kalshi_api_key and kalshi_api_secret),
 }
 for name, ok in badges.items():
     color = "green" if ok else "red"
     st.sidebar.markdown(f"**{name}:** :{color}[{'OK' if ok else 'Missing'}]")
+with st.sidebar.expander("Key sources (API-Sports/SportsData)"):
+    st.caption("Lookups: API_SPORTS_KEY, APISPORTS_API_KEY, NBA/NFL specific; SPORTSData: SPORTSDATA_API_KEY/KEY variants")
 
 
 # -----------------
@@ -2688,6 +2869,13 @@ with tab_master:
             "kalshi_matches": 0,
             "kalshi_total": len(games),
         }
+        data_source_stats = {
+            "api_sports_games": 0,
+            "sportsdata_games": 0,
+            "injury_pulls": 0,
+            "weather_pulls": 0,
+            "errors": [],
+        }
         kalshi_match_results: List[Dict[str, Any]] = []
         # --- CLEANED MASTER ANALYSIS LOOP ---
         # --- FIX: Define variables at the start of the loop ---
@@ -2705,6 +2893,27 @@ with tab_master:
             commence_iso = g.get("commence_time_iso_utc") or safe_iso(g.get("commence_time_iso"))
             commence_local = fmt_local_time(g.get("commence_time_local"))
             commence_date_local = g.get("commence_date_local") or ""
+
+            enrichment = enrich_game_context(g, league_key, api_sports_key, sportsdata_key)
+            if enrichment.get("api_sports_used"):
+                data_source_stats["api_sports_games"] += 1
+            if enrichment.get("sportsdata_used"):
+                data_source_stats["sportsdata_games"] += 1
+            data_source_stats["injury_pulls"] += int(enrichment.get("injuries_home_count") or 0) + int(enrichment.get("injuries_away_count") or 0)
+            if enrichment.get("weather_summary"):
+                data_source_stats["weather_pulls"] += 1
+            if enrichment.get("schedule_warnings"):
+                warnings.extend(enrichment.get("schedule_warnings") or [])
+            injuries_home_count = enrichment.get("injuries_home_count")
+            injuries_away_count = enrichment.get("injuries_away_count")
+            weather_summary = enrichment.get("weather_summary")
+            key_injuries_home = enrichment.get("key_injuries_home") or []
+            key_injuries_away = enrichment.get("key_injuries_away") or []
+            api_sports_used = enrichment.get("api_sports_used")
+            sportsdata_used = enrichment.get("sportsdata_used")
+            g["injuries_home_count"] = injuries_home_count
+            g["injuries_away_count"] = injuries_away_count
+            g["weather_summary"] = weather_summary
 
             sentiment_map_all = st.session_state.get("sentiment_map") or {}
             sentiment_map = sentiment_map_all or (st.session_state.get(f"sentiment_map_{league_key}") or {})
@@ -2882,6 +3091,13 @@ with tab_master:
                     "best_total_price_score": g.get("best_total_price_score"),
                     "best_total_median_point": g.get("best_total_median_point"),
                     "Kalshi_Required": st.session_state.get("kalshi_required", True),
+                    "api_sports_used": api_sports_used,
+                    "sportsdata_used": sportsdata_used,
+                    "injuries_home_count": injuries_home_count,
+                    "injuries_away_count": injuries_away_count,
+                    "weather_summary": weather_summary,
+                    "key_injuries_home": ",".join(key_injuries_home),
+                    "key_injuries_away": ",".join(key_injuries_away),
                 }
                 conf, reason_short, eligible = score_pick_confidence(fallback_row)
                 fallback_row["Pick_Confidence"] = conf
@@ -3068,6 +3284,13 @@ with tab_master:
                         "best_total_median_point": g.get("best_total_median_point"),
                         "best_total_mode_point": g.get("best_total_mode_point"),
                         "Kalshi_Required": st.session_state.get("kalshi_required", True),
+                        "api_sports_used": api_sports_used,
+                        "sportsdata_used": sportsdata_used,
+                        "injuries_home_count": injuries_home_count,
+                        "injuries_away_count": injuries_away_count,
+                        "weather_summary": weather_summary,
+                        "key_injuries_home": ",".join(key_injuries_home),
+                        "key_injuries_away": ",".join(key_injuries_away),
                     }
                     conf, reason_short, eligible = score_pick_confidence(ml_row)
                     ml_row["Pick_Confidence"] = conf
@@ -3136,6 +3359,13 @@ with tab_master:
                     "best_total_mode_point": g.get("best_total_mode_point"),
                     "Warnings": warnings_field,
                     "Kalshi_Required": st.session_state.get("kalshi_required", True),
+                    "api_sports_used": api_sports_used,
+                    "sportsdata_used": sportsdata_used,
+                    "injuries_home_count": injuries_home_count,
+                    "injuries_away_count": injuries_away_count,
+                    "weather_summary": weather_summary,
+                    "key_injuries_home": ",".join(key_injuries_home),
+                    "key_injuries_away": ",".join(key_injuries_away),
                 }
                 conf, reason_short, eligible = score_pick_confidence(spread_row)
                 spread_row["Pick_Confidence"] = conf
@@ -3200,6 +3430,13 @@ with tab_master:
                     "best_total_mode_point": g.get("best_total_mode_point"),
                     "Warnings": warnings_field,
                     "Kalshi_Required": st.session_state.get("kalshi_required", True),
+                    "api_sports_used": api_sports_used,
+                    "sportsdata_used": sportsdata_used,
+                    "injuries_home_count": injuries_home_count,
+                    "injuries_away_count": injuries_away_count,
+                    "weather_summary": weather_summary,
+                    "key_injuries_home": ",".join(key_injuries_home),
+                    "key_injuries_away": ",".join(key_injuries_away),
                 }
                 conf, reason_short, eligible = score_pick_confidence(total_row)
                 total_row["Pick_Confidence"] = conf
@@ -3261,6 +3498,13 @@ with tab_master:
             "Pick_Reason_Short",
             "Eligible_Top_Picks",
             "Kalshi_Required",
+            "api_sports_used",
+            "sportsdata_used",
+            "injuries_home_count",
+            "injuries_away_count",
+            "weather_summary",
+            "key_injuries_home",
+            "key_injuries_away",
         ]
         for col in required_display_cols:
             if col not in df.columns:
@@ -3316,6 +3560,13 @@ with tab_master:
             "Eligible_Top_Picks",
             "Kalshi_Required",
             "consensus_prob_adj",
+            "api_sports_used",
+            "sportsdata_used",
+            "injuries_home_count",
+            "injuries_away_count",
+            "weather_summary",
+            "key_injuries_home",
+            "key_injuries_away",
             "best_spread_book",
             "best_spread_last_update",
             "best_spread_price_score",
@@ -3344,6 +3595,7 @@ with tab_master:
         st.session_state["last_rows_out"] = len(deduped_list)
         st.session_state["master_stats"] = master_stats
         st.session_state["kalshi_match_results"] = kalshi_match_results
+        st.session_state["data_source_debug"] = data_source_stats
         total_game_markets = len(
             [
                 m
@@ -3503,6 +3755,21 @@ with tab_debug:
             ),
         }
     )
+
+    with st.expander("Data Sources Debug", expanded=False):
+        ds_debug = st.session_state.get("data_source_debug") or {}
+        key_sources = {
+            "api_sports_key_present": bool(api_sports_key),
+            "sportsdata_key_present": bool(sportsdata_key),
+            "api_sports_lookup": ["API_SPORTS_KEY", "APISPORTS_API_KEY", "NBA_APISPORTS_API_KEY", "NFL_APISPORTS_API_KEY"],
+            "sportsdata_lookup": ["SPORTSDATA_API_KEY", "SPORTSDATA_KEY", "NBA_SPORTSDATA_API_KEY", "NFL_SPORTSDATA_API_KEY"],
+        }
+        st.json(
+            {
+                **ds_debug,
+                "key_sources": key_sources,
+            }
+        )
 
     st.subheader("Timezones")
     commence_stats = st.session_state.get("commence_stats", {})
