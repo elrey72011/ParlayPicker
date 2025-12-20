@@ -278,7 +278,7 @@ def ensure_sentiment_loaded(games: List[Dict[str, Any]]) -> None:
             lg_map: Dict[str, Optional[float]] = {}
             lg_meta_map: Dict[str, Dict[str, Any]] = {}
             try:
-                result = compute_team_sentiment_map(news_api_key, lg_games, lg_key)
+                result = compute_team_sentiment_map(news_api_key, lg_games, league=lg_key)
                 lg_map, lg_meta_map, lg_debug = {}, {}, {}
                 if isinstance(result, tuple):
                     if len(result) == 3:
@@ -304,25 +304,15 @@ def ensure_sentiment_loaded(games: List[Dict[str, Any]]) -> None:
                 lg_map, lg_meta_map, lg_debug = {}, {}, {"error": str(exc)}
                 last_error = str(exc)
             per_league_debug[lg_key] = lg_debug
-            article_counts = lg_debug.get("article_counts") or {}
-            total_articles += lg_debug.get("articles_total", 0) or 0
-            st.session_state[f"sentiment_map_{lg_key}"] = {k: (v if (lg_meta_map.get(k, {}) or {}).get("sentiment_valid") else None) for k, v in (lg_map or {}).items()}
-            st.session_state[f"sentiment_meta_map_{lg_key}"] = lg_meta_map or {
-                team: {
-                    "sources": article_counts.get(team, 0),
-                    "sentiment_valid": (article_counts.get(team, 0) or 0) > 0 and (score is not None),
-                    "sentiment_source": "newsapi" if (article_counts.get(team, 0) or 0) > 0 else "none",
-                    "reddit_used": False,
-                    "score": score if (article_counts.get(team, 0) or 0) > 0 else None,
-                }
-                for team, score in (lg_map or {}).items()
-            }
+            total_articles += int((lg_debug or {}).get("articles_total") or 0)
+            st.session_state[f"sentiment_map_{lg_key}"] = lg_map or {}
+            st.session_state[f"sentiment_meta_map_{lg_key}"] = lg_meta_map or {}
             st.session_state[f"sentiment_debug_{lg_key}"] = lg_debug
-            if lg_debug.get("articles_total", 0) > 0 and (lg_debug.get("error_count", 0) or 0) == 0:
+            if (lg_debug or {}).get("articles_total", 0) > 0 and (lg_debug or {}).get("error_count", 0) == 0:
                 lg_source = "newsapi"
-            elif lg_debug.get("articles_total", 0) > 0 and (lg_debug.get("error_count", 0) or 0) > 0:
+            elif (lg_debug or {}).get("articles_total", 0) > 0 and (lg_debug or {}).get("error_count", 0) > 0:
                 lg_source = "partial_error"
-            elif lg_debug.get("articles_total", 0) == 0 and (lg_debug.get("error_count", 0) or 0) == 0:
+            elif (lg_debug or {}).get("articles_total", 0) == 0 and (lg_debug or {}).get("error_count", 0) == 0:
                 lg_source = "none"
             else:
                 lg_source = "error"
@@ -349,6 +339,8 @@ def ensure_sentiment_loaded(games: List[Dict[str, Any]]) -> None:
             "per_league": per_league_debug,
             "articles_total": total_articles,
             "last_error": last_error,
+            "missing_news_api_key": not bool(news_api_key),
+            "reddit_used": False,
         }
         st.session_state["sentiment_map"] = aggregate_sentiment_map
         st.session_state["sentiment_meta_map"] = aggregate_sentiment_meta
