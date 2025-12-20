@@ -275,8 +275,10 @@ def ensure_sentiment_loaded(games: List[Dict[str, Any]]) -> None:
     slate_key = slate_key_from_games(games)
     cached_map = st.session_state.get("sentiment_map")
     cached_meta_map = st.session_state.get("sentiment_meta_map")
-    if st.session_state.get("sentiment_slate_key") == slate_key and cached_map and cached_meta_map:
-        return
+    if st.session_state.get("sentiment_slate_key") == slate_key:
+        meta_cached = st.session_state.get("sentiment_meta") or {}
+        if meta_cached.get("sentiment_source") in ("newsapi", "partial_error") and (meta_cached.get("articles_total") or 0) > 0 and cached_map and cached_meta_map:
+            return
 
     try:
         per_league_debug: Dict[str, Any] = {}
