@@ -98,11 +98,7 @@ def league_label(league: str) -> str:
 
 
 def _newsapi_query(team: str, league: str, league_query: Optional[str] = None) -> str:
-    league_norm = (league or "").upper()
-    league_fragment = league_query or league_label(league)
-    if league_norm in {"NCAAF", "NCAAB"}:
-        extras = "NCAA football" if league_norm == "NCAAF" else "NCAA basketball"
-        league_fragment = f"{league_fragment} {extras}".strip()
+    league_fragment = (league_query or league_label(league)).strip()
     return f'"{team}" {league_fragment}'.strip()
 
 
@@ -110,7 +106,14 @@ def _newsapi_query(team: str, league: str, league_query: Optional[str] = None) -
 def fetch_team_news(news_api_key: str, team: str, league: str, league_query: Optional[str] = None, *, max_retries: int = 2, retry_delay: float = 0.75) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
     """Fetch recent articles for a team; returns (articles, info) where info contains status/error."""
     if not news_api_key:
-        return [], {"error": "missing_key", "status_code": None, "league_query": league_query or league, "totalResults": None, "q": None}
+        return [], {
+            "error": "missing_key",
+            "status": None,
+            "status_code": None,
+            "league_query": league_query or league,
+            "totalResults": None,
+            "q": None,
+        }
     league_query = league_query or league_label(league)
     to_date = datetime.utcnow().date()
     from_date = to_date - timedelta(days=3)
@@ -138,19 +141,52 @@ def fetch_team_news(news_api_key: str, team: str, league: str, league_query: Opt
                     time.sleep(retry_delay * attempts)
                     last_error = error_key
                     continue
-                return [], {"error": error_key, "status_code": status, "league_query": league_query, "totalResults": None, "q": q, "attempts": attempts}
+                return [], {
+                    "error": error_key,
+                    "status": status,
+                    "status_code": status,
+                    "league_query": league_query,
+                    "totalResults": None,
+                    "q": q,
+                    "attempts": attempts,
+                    "response_text_snippet": (resp.text or "")[:200] if hasattr(resp, "text") else None,
+                }
             data = resp.json()
             articles = data.get("articles", []) if isinstance(data, dict) else []
             total_results = data.get("totalResults") if isinstance(data, dict) else None
-            return articles, {"error": None, "status_code": status, "league_query": league_query, "totalResults": total_results, "q": q, "attempts": attempts}
+            return articles, {
+                "error": None,
+                "status": status,
+                "status_code": status,
+                "league_query": league_query,
+                "totalResults": total_results,
+                "q": q,
+                "attempts": attempts,
+            }
         except Exception as exc:
             last_error = str(exc)
             if attempts <= max_retries:
                 time.sleep(retry_delay * attempts)
                 continue
-            return [], {"error": last_error, "status_code": None, "league_query": league_query, "totalResults": None, "q": q, "attempts": attempts}
+            return [], {
+                "error": last_error,
+                "status": None,
+                "status_code": None,
+                "league_query": league_query,
+                "totalResults": None,
+                "q": q,
+                "attempts": attempts,
+            }
 
-    return [], {"error": last_error or "unknown_error", "status_code": None, "league_query": league_query, "totalResults": None, "q": q, "attempts": attempts}
+    return [], {
+        "error": last_error or "unknown_error",
+        "status": None,
+        "status_code": None,
+        "league_query": league_query,
+        "totalResults": None,
+        "q": q,
+        "attempts": attempts,
+    }
 
 
 def team_sentiment_from_articles(articles: List[Dict[str, Any]]) -> float:
@@ -188,7 +224,21 @@ def build_team_sentiment_map(
         "error_count": 0,
         "errors_sample": [],
         "query_label_used": (league or "").upper(),
+        "status_counts": {},
+        "sample_calls": [],
+        "league_label_used": league_label(league),
     }
+
+    def _record_status(fetch_info: Dict[str, Any]) -> Optional[int]:
+        status_val = fetch_info.get("status")
+        if status_val is None:
+            status_val = fetch_info.get("status_code")
+        try:
+            status_int = int(status_val)
+        except Exception:
+            return None
+        debug["status_counts"][status_int] = debug["status_counts"].get(status_int, 0) + 1
+        return status_int
 
     for team in sorted(teams):
         try:
@@ -196,6 +246,18 @@ def build_team_sentiment_map(
             articles, info = fetch_team_news(news_api_key, team, league, query_label)
             debug.setdefault("fetch_info", {})[team] = info
             error_reason = (info or {}).get("error")
+            status_int = _record_status(info or {})
+            if len(debug["sample_calls"]) < 10:
+                debug["sample_calls"].append(
+                    {
+                        "team": team,
+                        "league": league,
+                        "q": (info or {}).get("q"),
+                        "status": status_int,
+                        "totalResults": (info or {}).get("totalResults"),
+                        "error": error_reason,
+                    }
+                )
             if error_reason:
                 debug["error_count"] += 1
                 if len(debug["errors_sample"]) < 5:

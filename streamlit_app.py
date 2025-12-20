@@ -18,7 +18,7 @@ from app_core.kalshi_integrator import (
     league_series_ticker,
     team_code_for_league,
 )
-from app_core.sentiment_pipeline import fetch_team_news, team_sentiment_from_articles
+from app_core.sentiment_pipeline import fetch_team_news, league_label, team_sentiment_from_articles
 from app_core.vertex_ai_endpoint import (
     VERTEX_FEATURE_COLUMNS,
     is_vertex_prediction_configured,
@@ -137,6 +137,9 @@ def compute_team_sentiment_map(news_api_key: Optional[str], games: List[Dict[str
         "fetch_info": {},
         "error_count": 0,
         "errors_sample": [],
+        "status_counts": {},
+        "sample_calls": [],
+        "league_label_used": league_label(league),
     }
 
     analyzer = RealSentimentAnalyzer(news_api_key) if RealSentimentAnalyzer and news_api_key else None
@@ -147,8 +150,10 @@ def compute_team_sentiment_map(news_api_key: Optional[str], games: List[Dict[str
         if analyzer:
             try:
                 raw_payload = analyzer.get_team_sentiment(team, league) or {}
+                fetch_info = raw_payload.get("fetch_info") or {}
             except Exception:
                 raw_payload = {}
+                fetch_info = {"error": "analyzer_exception"}
         if not raw_payload:
             articles: List[Dict[str, Any]] = []
             if news_api_key:
@@ -162,6 +167,25 @@ def compute_team_sentiment_map(news_api_key: Optional[str], games: List[Dict[str
                 "sources": len(articles),
                 "method": "newsapi_simple" if articles else "none",
             }
+
+        status_val = fetch_info.get("status") or fetch_info.get("status_code")
+        try:
+            status_int = int(status_val) if status_val is not None else None
+        except Exception:
+            status_int = None
+        if status_int is not None:
+            debug["status_counts"][status_int] = debug["status_counts"].get(status_int, 0) + 1
+        if len(debug["sample_calls"]) < 10:
+            debug["sample_calls"].append(
+                {
+                    "team": team,
+                    "league": league,
+                    "q": fetch_info.get("q"),
+                    "status": status_int,
+                    "totalResults": fetch_info.get("totalResults"),
+                    "error": fetch_info.get("error"),
+                }
+            )
 
         meta = sentiment_payload_to_meta(raw_payload)
         sentiment_meta[team] = {**meta, "error": fetch_info.get("error")}
@@ -277,7 +301,8 @@ def ensure_sentiment_loaded(games: List[Dict[str, Any]]) -> None:
     cached_meta_map = st.session_state.get("sentiment_meta_map")
     if st.session_state.get("sentiment_slate_key") == slate_key:
         meta_cached = st.session_state.get("sentiment_meta") or {}
-        if meta_cached.get("sentiment_source") in ("newsapi", "partial_error") and (meta_cached.get("articles_total") or 0) > 0 and cached_map and cached_meta_map:
+        cached_articles = int(meta_cached.get("articles_total") or 0)
+        if cached_articles > 0 and cached_map and cached_meta_map:
             return
 
     try:
@@ -294,6 +319,10 @@ def ensure_sentiment_loaded(games: List[Dict[str, Any]]) -> None:
         }
         aggregate_sentiment_map: Dict[str, Optional[float]] = {}
         aggregate_sentiment_meta: Dict[str, Dict[str, Any]] = {}
+        status_counts_all: Dict[Any, int] = {}
+        sample_calls_all: List[Dict[str, Any]] = []
+        league_labels_used: Dict[str, Any] = {}
+        missing_teams_all: List[str] = []
 
         for raw_lg in sorted({g.get("league") for g in games if g.get("league")}):
             lg_key = canonical_league_key(raw_lg)
@@ -327,39 +356,53 @@ def ensure_sentiment_loaded(games: List[Dict[str, Any]]) -> None:
                 lg_map, lg_meta_map, lg_debug = {}, {}, {"error": str(exc)}
                 last_error = str(exc)
             per_league_debug[lg_key] = lg_debug
+            league_labels_used[lg_key] = (lg_debug or {}).get("league_label_used")
             lg_articles = int((lg_debug or {}).get("articles_total") or 0)
             lg_errors = int((lg_debug or {}).get("error_count") or 0)
+            lg_status_counts = (lg_debug or {}).get("status_counts") or {}
+            lg_sample_calls = (lg_debug or {}).get("sample_calls") or []
+            for status_code, count in lg_status_counts.items():
+                status_counts_all[status_code] = status_counts_all.get(status_code, 0) + count
+            sample_calls_all.extend(lg_sample_calls)
+            missing_teams_all.extend((lg_debug or {}).get("missing_teams") or [])
             total_articles += lg_articles
             total_errors += lg_errors
             st.session_state[f"sentiment_map_{lg_key}"] = lg_map or {}
             st.session_state[f"sentiment_meta_map_{lg_key}"] = lg_meta_map or {}
             st.session_state[f"sentiment_debug_{lg_key}"] = lg_debug
-            if lg_articles > 0 and lg_errors == 0:
-                lg_source = "newsapi"
-            elif lg_articles > 0 and lg_errors > 0:
+            lg_rate_limited = bool((lg_status_counts.get(429) or 0) > 0)
+            lg_auth_error = bool((lg_status_counts.get(401) or 0) > 0 or (lg_status_counts.get(403) or 0) > 0)
+            if lg_articles > 0 and (lg_errors > 0 or lg_rate_limited or lg_auth_error):
                 lg_source = "partial_error"
-            elif lg_articles == 0 and lg_errors == 0:
-                lg_source = "none"
-            else:
+            elif lg_articles > 0:
+                lg_source = "newsapi"
+            elif lg_errors > 0 or lg_rate_limited or lg_auth_error:
                 lg_source = "error"
+            else:
+                lg_source = "none"
             st.session_state[f"sentiment_source_{lg_key}"] = lg_source
             st.session_state[f"reddit_used_{lg_key}"] = False
             aggregate_sentiment_map.update(st.session_state.get(f"sentiment_map_{lg_key}") or {})
             aggregate_sentiment_meta.update(st.session_state.get(f"sentiment_meta_map_{lg_key}") or {})
 
-        if total_articles > 0 and total_errors == 0:
-            sentiment_source = "newsapi"
-        elif total_articles > 0 and total_errors > 0:
+        auth_error = bool((status_counts_all.get(401) or 0) > 0 or (status_counts_all.get(403) or 0) > 0)
+        rate_limited = bool((status_counts_all.get(429) or 0) > 0)
+        if total_articles > 0 and (total_errors > 0 or rate_limited or auth_error):
             sentiment_source = "partial_error"
-        elif total_articles == 0 and total_errors == 0:
-            sentiment_source = "none"
-        else:
+        elif total_articles > 0:
+            sentiment_source = "newsapi"
+        elif total_errors > 0 or rate_limited or auth_error:
             sentiment_source = "error"
+        else:
+            sentiment_source = "none"
         global_meta.update({
             "sentiment_source": sentiment_source,
             "articles_total": total_articles,
             "last_error": last_error,
             "error_count": total_errors,
+            "status_counts": status_counts_all,
+            "auth_error": auth_error,
+            "rate_limited": rate_limited,
         })
         st.session_state["sentiment_meta"] = global_meta
         st.session_state["sentiment_source"] = sentiment_source
@@ -372,6 +415,14 @@ def ensure_sentiment_loaded(games: List[Dict[str, Any]]) -> None:
             "missing_news_api_key": not bool(news_api_key),
             "reddit_used": False,
             "error_count": total_errors,
+            "status_counts": status_counts_all,
+            "sample_calls": sample_calls_all[:10],
+            "rate_limited": rate_limited,
+            "auth_error": auth_error,
+            "league_labels_used": league_labels_used,
+            "missing_teams": missing_teams_all,
+            "teams_total": len(aggregate_sentiment_map),
+            "sentiment_source": sentiment_source,
         }
         st.session_state["sentiment_map"] = aggregate_sentiment_map
         st.session_state["sentiment_meta_map"] = aggregate_sentiment_meta
@@ -2608,6 +2659,29 @@ with tab_master:
                 sentiment_error_count = sentiment_meta_global.get("error_count")
             errors_sample = league_debug.get("errors_sample") or sentiment_debug_global.get("errors_sample") or []
             sentiment_errors_sample = ";".join([f"{e.get('team')}: {e.get('error')}" for e in errors_sample]) if errors_sample else None
+            sentiment_articles_total = (
+                sentiment_meta_global.get("articles_total")
+                or sentiment_debug_global.get("articles_total")
+                or league_debug.get("articles_total")
+                or 0
+            )
+            sentiment_status_counts = sentiment_debug_global.get("status_counts") or league_debug.get("status_counts") or {}
+            try:
+                sentiment_status_counts_str = json.dumps(sentiment_status_counts) if sentiment_status_counts else None
+            except Exception:
+                sentiment_status_counts_str = str(sentiment_status_counts)
+            sample_calls = sentiment_debug_global.get("sample_calls") or league_debug.get("sample_calls") or []
+            sentiment_sample_query = (sample_calls[0].get("q") if sample_calls else None)
+            sentiment_auth_error = bool(
+                sentiment_meta_global.get("auth_error")
+                or sentiment_debug_global.get("auth_error")
+                or league_debug.get("auth_error")
+            )
+            sentiment_rate_limited = bool(
+                sentiment_meta_global.get("rate_limited")
+                or sentiment_debug_global.get("rate_limited")
+                or league_debug.get("rate_limited")
+            )
 
             vertex_prob_home, vertex_warn = get_vertex_prob(g, sentiment_diff)
             if vertex_warn and vertex_warn not in warnings:
@@ -2701,18 +2775,29 @@ with tab_master:
                         "Pick": None,
                         "Implied_Prob": None,
                         "AI_Prob": vertex_prob_home,  # Raw AI score with no market blending
-                    "Warnings": ";".join(warnings),
-                    "kalshi_available": kalshi_winner.get("kalshi_available"),
-                    "kalshi_matched": kalshi_winner.get("kalshi_matched"),
-                    "kalshi_prob": kalshi_winner.get("kalshi_prob"),
-                    "kalshi_candidate_count": candidate_debug.get("candidate_count"),
-                    "kalshi_best_score": candidate_debug.get("best_score"),
-                    "kalshi_match_reason": kalshi_winner.get("kalshi_reason"),
-                    "kalshi_game_prefix_used": (candidate_debug.get("winner_meta") or {}).get("winner_prefix"),
-                    "kalshi_wanted_tokens": (candidate_debug.get("winner_meta") or {}).get("allowed_date_tokens"),
+                        "Warnings": ";".join(warnings),
+                        "kalshi_available": kalshi_winner.get("kalshi_available"),
+                        "kalshi_matched": kalshi_winner.get("kalshi_matched"),
+                        "kalshi_prob": kalshi_winner.get("kalshi_prob"),
+                        "kalshi_candidate_count": candidate_debug.get("candidate_count"),
+                        "kalshi_best_score": candidate_debug.get("best_score"),
+                        "kalshi_match_reason": kalshi_winner.get("kalshi_reason"),
+                        "kalshi_game_prefix_used": (candidate_debug.get("winner_meta") or {}).get("winner_prefix"),
+                        "kalshi_wanted_tokens": (candidate_debug.get("winner_meta") or {}).get("allowed_date_tokens"),
                         "Home_Sentiment": home_sent,
                         "Away_Sentiment": away_sent,
                         "Sentiment_Diff": sentiment_diff,
+                        "sentiment_adj": sentiment_adj,
+                        "sentiment_source": sentiment_source,
+                        "reddit_used": reddit_used,
+                        "sentiment_valid": sentiment_valid,
+                        "sentiment_error_count": sentiment_error_count,
+                        "sentiment_errors_sample": sentiment_errors_sample,
+                        "sentiment_articles_total": sentiment_articles_total,
+                        "sentiment_status_counts": sentiment_status_counts_str,
+                        "sentiment_sample_query": sentiment_sample_query,
+                        "sentiment_auth_error": sentiment_auth_error,
+                        "sentiment_rate_limited": sentiment_rate_limited,
                         "best_spread_book": g.get("best_spread_book"),
                         "best_spread_last_update": g.get("best_spread_last_update"),
                         "best_spread_price_score": g.get("best_spread_price_score"),
@@ -2873,6 +2958,11 @@ with tab_master:
                     "sentiment_adj": sentiment_adj, "sentiment_source": sentiment_source, "reddit_used": reddit_used, "sentiment_valid": sentiment_valid,
                     "sentiment_error_count": sentiment_error_count,
                     "sentiment_errors_sample": sentiment_errors_sample,
+                    "sentiment_articles_total": sentiment_articles_total,
+                    "sentiment_status_counts": sentiment_status_counts_str,
+                    "sentiment_sample_query": sentiment_sample_query,
+                    "sentiment_auth_error": sentiment_auth_error,
+                    "sentiment_rate_limited": sentiment_rate_limited,
                     "kalshi_available": kalshi_winner.get("kalshi_available"),
                     "kalshi_matched": kalshi_winner.get("kalshi_matched"),
                     "kalshi_prob": kalshi_prob_used, "kalshi_prob_used": kalshi_prob_used,
@@ -2928,6 +3018,11 @@ with tab_master:
                     "sentiment_adj": sentiment_adj, "sentiment_source": sentiment_source, "reddit_used": reddit_used, "sentiment_valid": sentiment_valid,
                     "sentiment_error_count": sentiment_error_count,
                     "sentiment_errors_sample": sentiment_errors_sample,
+                    "sentiment_articles_total": sentiment_articles_total,
+                    "sentiment_status_counts": sentiment_status_counts_str,
+                    "sentiment_sample_query": sentiment_sample_query,
+                    "sentiment_auth_error": sentiment_auth_error,
+                    "sentiment_rate_limited": sentiment_rate_limited,
                     "Vertex Spread Prob": vertex_spread_prob,
                     "kalshi_matched": kalshi_spread.get("kalshi_matched"),
                     "kalshi_prob": kalshi_prob_used if kalshi_spread.get("kalshi_matched") else None,
@@ -2996,6 +3091,11 @@ with tab_master:
                     "sentiment_adj": sentiment_adj, "sentiment_source": sentiment_source, "reddit_used": reddit_used, "sentiment_valid": sentiment_valid,
                     "sentiment_error_count": sentiment_error_count,
                     "sentiment_errors_sample": sentiment_errors_sample,
+                    "sentiment_articles_total": sentiment_articles_total,
+                    "sentiment_status_counts": sentiment_status_counts_str,
+                    "sentiment_sample_query": sentiment_sample_query,
+                    "sentiment_auth_error": sentiment_auth_error,
+                    "sentiment_rate_limited": sentiment_rate_limited,
                     "best_spread_book": g.get("best_spread_book"),
                     "best_spread_last_update": g.get("best_spread_last_update"),
                     "best_spread_price_score": g.get("best_spread_price_score"),
@@ -3054,6 +3154,11 @@ with tab_master:
             "best_total_mode_point",
             "sentiment_error_count",
             "sentiment_errors_sample",
+            "sentiment_articles_total",
+            "sentiment_status_counts",
+            "sentiment_sample_query",
+            "sentiment_auth_error",
+            "sentiment_rate_limited",
         ]
         for col in required_display_cols:
             if col not in df.columns:
@@ -3080,6 +3185,11 @@ with tab_master:
             "sentiment_adj",
             "sentiment_error_count",
             "sentiment_errors_sample",
+            "sentiment_articles_total",
+            "sentiment_status_counts",
+            "sentiment_sample_query",
+            "sentiment_auth_error",
+            "sentiment_rate_limited",
             "consensus_prob_adj",
             "best_spread_book",
             "best_spread_last_update",
@@ -3212,11 +3322,17 @@ with tab_sentiment:
         st.warning(
             "Sentiment enabled but NewsAPI returned 0 articles. Check NEWS_API_KEY, request limits, or query format."
         )
-    if st.button("Clear sentiment cache", key="clear_sent_cache"):
+    if st.button("🧹 Clear Sentiment Cache", key="clear_sent_cache"):
         try:
             st.cache_data.clear()
         except Exception:
             st.warning("Unable to clear cache.")
+        for k in ["sentiment_map", "sentiment_meta_map", "sentiment_meta", "sentiment_debug", "sentiment_slate_key", "sentiment_source", "reddit_used"]:
+            st.session_state.pop(k, None)
+        for k in list(st.session_state.keys()):
+            if str(k).startswith("sentiment_"):
+                st.session_state.pop(k, None)
+        st.success("Cleared sentiment cache/state. Run analysis again.")
     if sent_map:
         scores_df = pd.DataFrame(
             sorted(sent_map.items(), key=lambda kv: kv[0]),
@@ -3225,21 +3341,9 @@ with tab_sentiment:
         st.dataframe(scores_df)
     else:
         st.info("No sentiment scores available yet (missing NewsAPI key or disabled).")
-    with st.expander("Sentiment Debug", expanded=False):
-        st.json(
-            {
-                "meta": sent_meta,
-                "articles_total": articles_total,
-                "error_count": error_count,
-                "per_league": sent_debug.get("per_league"),
-                "top_5": sent_debug.get("top_5") or sent_map,
-                "bottom_5": sent_debug.get("bottom_5") or sent_map,
-                "missing_teams": sent_debug.get("missing_teams")
-                or sent_debug.get("raw", {}).get("missing_teams"),
-                "last_error": sent_meta.get("last_error") or sent_debug.get("error"),
-                "query_label_used": (sent_debug.get("per_league") or {}).get(canonical_league_key(st.session_state.get("league")), {}).get("query_label_used"),
-            }
-        )
+    with st.expander("Sentiment Debug", expanded=True):
+        st.json(st.session_state.get("sentiment_debug", {}))
+        st.json({"meta": sent_meta, "error_count": error_count})
 
 
 with tab_debug:
