@@ -302,8 +302,6 @@ def score_pick_confidence(row: Dict[str, Any]) -> Tuple[str, str, bool]:
         low_reason = "LOW: missing market data"
     elif "moneyline_extreme_skipped" in warnings_lower:
         low_reason = "LOW: Moneyline extreme skipped"
-    elif market in {"spread", "total"} and (ai_prob is None or "proxy" in warnings_lower):
-        low_reason = "LOW: spread/total uses Vertex proxy" if "proxy" in warnings_lower else "LOW: Missing AI_Prob"
     elif implied_prob is None:
         low_reason = "LOW: Missing Implied_Prob"
     elif kalshi_required and not kalshi_matched:
@@ -2971,10 +2969,31 @@ with tab_master:
             sentiment_debug_global = st.session_state.get("sentiment_debug") or {}
             league_debug = st.session_state.get(f"sentiment_debug_{league_key}") or {}
             articles_total = sentiment_meta_global.get("articles_total") or league_debug.get("articles_total") or 0
-            sentiment_diff = home_sent - away_sent if (home_sent is not None and away_sent is not None) else None
-            sentiment_adj = compute_sentiment_adj(sentiment_diff) if (sentiment_diff is not None and articles_total > 0) else None
-            any_valid_sources = bool(home_meta.get("sentiment_valid") or away_meta.get("sentiment_valid"))
-            sentiment_valid = bool(sentiment_adj is not None and any_valid_sources)
+            sentiment_diff = (safe_float(home_sent) or 0.0) - (safe_float(away_sent) or 0.0)
+            rate_limited_flag = bool(
+                sentiment_meta_global.get("rate_limited")
+                or sentiment_debug_global.get("rate_limited")
+                or league_debug.get("rate_limited")
+            )
+            sentiment_source_current = (
+                st.session_state.get(f"sentiment_source_{league_key}")
+                or sentiment_meta_global.get("sentiment_source")
+                or home_meta.get("sentiment_source")
+                or away_meta.get("sentiment_source")
+                or "none"
+            )
+            sentiment_adj_reason = "disabled"
+            sentiment_adj = 0.0
+            participates = bool(articles_total >= 3 and sentiment_source_current != "error")
+            if participates:
+                raw_adj = (sentiment_diff or 0.0) * 0.02
+                sentiment_adj = clamp(raw_adj, -0.03, 0.03) or 0.0
+                sentiment_adj_reason = "applied" if not rate_limited_flag else "rate_limited"
+            else:
+                sentiment_adj_reason = "insufficient_articles" if articles_total < 3 else "disabled"
+                sentiment_adj = 0.0
+            any_valid_sources = bool(articles_total >= 3)
+            sentiment_valid = any_valid_sources
             sentiment_source = (
                 st.session_state.get(f"sentiment_source_{league_key}")
                 or sentiment_meta_global.get("sentiment_source")
@@ -2982,6 +3001,13 @@ with tab_master:
                 or away_meta.get("sentiment_source")
                 or "none"
             )
+            if articles_total >= 3:
+                if rate_limited_flag:
+                    sentiment_source = "partial"
+                elif sentiment_source in ("none", "error"):
+                    sentiment_source = "newsapi"
+            elif articles_total == 0:
+                sentiment_source = "none"
             reddit_used = False
             sentiment_error_count = league_debug.get("error_count")
             if sentiment_error_count is None:
@@ -3126,6 +3152,8 @@ with tab_master:
                     "sentiment_sample_query": sentiment_sample_query,
                     "sentiment_auth_error": sentiment_auth_error,
                     "sentiment_rate_limited": sentiment_rate_limited,
+                    "sentiment_adj_value": sentiment_adj,
+                    "sentiment_adj_reason": sentiment_adj_reason,
                     "best_spread_book": g.get("best_spread_book"),
                     "best_spread_last_update": g.get("best_spread_last_update"),
                     "best_spread_price_score": g.get("best_spread_price_score"),
@@ -3276,7 +3304,7 @@ with tab_master:
 
                 if pick is not None:
                     ai_prob_base = ai_prob_for_selection(pick, adjusted=False)
-                    ai_prob_row = ai_prob_for_selection(pick, adjusted=True)
+                    ai_prob_row = clamp((ai_prob_base or 0.0) + (sentiment_adj or 0.0), 0.01, 0.99) if ai_prob_base is not None else None
 
                     consensus_prob, consensus_prob_adj, consensus_notes = consensus_for_selection(
                         pick,
@@ -3303,6 +3331,8 @@ with tab_master:
                     "sentiment_sample_query": sentiment_sample_query,
                     "sentiment_auth_error": sentiment_auth_error,
                     "sentiment_rate_limited": sentiment_rate_limited,
+                    "sentiment_adj_value": sentiment_adj,
+                    "sentiment_adj_reason": sentiment_adj_reason,
                     "kalshi_available": kalshi_winner.get("kalshi_available"),
                     "kalshi_matched": kalshi_winner.get("kalshi_matched"),
                     "kalshi_prob": kalshi_prob_used, "kalshi_prob_used": kalshi_prob_used,
@@ -3356,19 +3386,23 @@ with tab_master:
 
             # SPREAD ROW
             if g.get("home_spread_point") is not None and spread_pick is not None:
-                ai_prob_base = ai_prob_for_selection(spread_pick, adjusted=False)
-                ai_prob_row = ai_prob_for_selection(spread_pick, adjusted=True)
-                consensus_prob, consensus_prob_adj, consensus_notes = consensus_for_selection(
-                    spread_pick,
-                    kalshi_prob_used if kalshi_spread.get("kalshi_matched") else None,
-                    spread_implied,
-                )
-                if consensus_notes:
-                    warnings = list(dict.fromkeys(warnings + consensus_notes))
-                if vertex_prob_home is not None and "vertex_proxy_for_spread_total" not in warnings:
-                    warnings.append("vertex_proxy_for_spread_total")
+                ai_prob_base = None
+                ai_prob_row = None
+                width_spread = (spread_max - spread_min) if (spread_max is not None and spread_min is not None) else 0.0
+                injury_diff = (safe_float(injuries_home_count) or 0.0) - (safe_float(injuries_away_count) or 0.0)
+                injury_adj = 0.0
+                if injury_diff >= 2:
+                    injury_adj = -0.02 if spread_pick == home else 0.02
+                elif injury_diff <= -2:
+                    injury_adj = 0.02 if spread_pick == home else -0.02
+                market_width_penalty = min(0.05, abs(width_spread) * 0.02) if width_spread else 0.0
+                market_prob_adj = None
+                if spread_implied is not None:
+                    market_prob_adj = clamp((spread_implied or 0.0) + injury_adj - market_width_penalty, 0.01, 0.99)
+                consensus_prob = market_prob_adj
+                consensus_prob_adj = market_prob_adj
                 vertex_spread_prob = None
-                
+                warnings.append("market_based_spread_prob")
                 warnings_field = ";".join(warnings) if warnings else None
                 spread_row = {
                     "League": league_name, "Home": home, "Away": away,
@@ -3426,8 +3460,12 @@ with tab_master:
                     "total_max": total_max,
                     "spread_books_count": len(spread_books_map),
                     "total_books_count": len(total_books_map),
+                    "sentiment_adj_value": sentiment_adj,
+                    "sentiment_adj_reason": sentiment_adj_reason,
                 }
                 conf, reason_short, eligible = score_pick_confidence(spread_row)
+                if conf == "HIGH":
+                    conf = "MEDIUM"
                 spread_row["Pick_Confidence"] = conf
                 spread_row["Pick_Reason_Short"] = reason_short
                 spread_row["Eligible_Top_Picks"] = eligible
@@ -3436,18 +3474,29 @@ with tab_master:
 
             # TOTAL ROW
             if g.get("total_point") is not None and total_pick is not None:
-                ai_prob_base = ai_prob_for_selection(home, adjusted=False)
-                ai_prob_row = ai_prob_for_selection(home, adjusted=True)
-                consensus_prob, consensus_prob_adj, consensus_notes = consensus_for_selection(
-                    home,
-                    kalshi_prob_used if kalshi_total.get("kalshi_matched") else None,
-                    total_implied,
-                )
-                if consensus_notes:
-                    warnings = list(dict.fromkeys(warnings + consensus_notes))
-                if vertex_prob_home is not None and "vertex_proxy_for_spread_total" not in warnings:
-                    warnings.append("vertex_proxy_for_spread_total")
-
+                ai_prob_base = None
+                ai_prob_row = None
+                width_total = (total_max - total_min) if (total_max is not None and total_min is not None) else 0.0
+                injury_diff = (safe_float(injuries_home_count) or 0.0) - (safe_float(injuries_away_count) or 0.0)
+                injury_adj = 0.0
+                if injury_diff >= 2:
+                    injury_adj = -0.02 if total_pick == home else 0.02
+                elif injury_diff <= -2:
+                    injury_adj = 0.02 if total_pick == home else -0.02
+                weather_adj = 0.0
+                weather_lower = str(weather_summary or "").lower()
+                if "wind" in weather_lower or "rain" in weather_lower or "snow" in weather_lower:
+                    if total_pick and str(total_pick).lower().startswith("under"):
+                        weather_adj = 0.02
+                    elif total_pick and str(total_pick).lower().startswith("over"):
+                        weather_adj = -0.02
+                market_width_penalty = min(0.05, abs(width_total) * 0.02) if width_total else 0.0
+                market_prob_adj = None
+                if total_implied is not None:
+                    market_prob_adj = clamp((total_implied or 0.0) + injury_adj + weather_adj - market_width_penalty, 0.01, 0.99)
+                consensus_prob = market_prob_adj
+                consensus_prob_adj = market_prob_adj
+                warnings.append("market_based_total_prob")
                 warnings_field = ";".join(warnings) if warnings else None
                 total_row = {
                     "League": league_name, "Home": home, "Away": away,
@@ -3505,8 +3554,12 @@ with tab_master:
                     "total_max": total_max,
                     "spread_books_count": len(spread_books_map),
                     "total_books_count": len(total_books_map),
+                    "sentiment_adj_value": sentiment_adj,
+                    "sentiment_adj_reason": sentiment_adj_reason,
                 }
                 conf, reason_short, eligible = score_pick_confidence(total_row)
+                if conf == "HIGH":
+                    conf = "MEDIUM"
                 total_row["Pick_Confidence"] = conf
                 total_row["Pick_Reason_Short"] = reason_short
                 total_row["Eligible_Top_Picks"] = eligible
@@ -3573,6 +3626,8 @@ with tab_master:
             "weather_summary",
             "key_injuries_home",
             "key_injuries_away",
+            "sentiment_adj_value",
+            "sentiment_adj_reason",
             "spread_min",
             "spread_med",
             "spread_max",
@@ -3665,6 +3720,8 @@ with tab_master:
             "weather_summary",
             "key_injuries_home",
             "key_injuries_away",
+            "sentiment_adj_value",
+            "sentiment_adj_reason",
             "spread_min",
             "spread_med",
             "spread_max",
