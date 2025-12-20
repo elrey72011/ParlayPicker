@@ -277,13 +277,27 @@ def ensure_sentiment_loaded(games: List[Dict[str, Any]]) -> None:
             lg_meta_map: Dict[str, Dict[str, Any]] = {}
             try:
                 result = build_team_sentiment_map(news_api_key=news_api_key, games=lg_games, league=lg_key)
-                if isinstance(result, tuple) and len(result) == 2:
-                    lg_map, lg_debug = result
-                    lg_meta_map = {}
-                elif isinstance(result, tuple) and len(result) >= 3:
-                    lg_map, lg_meta_map, lg_debug = result[0], result[1], result[2]
+                lg_map, lg_meta_map, lg_debug = {}, {}, {}
+                if isinstance(result, tuple):
+                    if len(result) == 3:
+                        lg_map, lg_meta_map, lg_debug = result
+                    elif len(result) == 2:
+                        lg_map, lg_debug = result
+                        article_counts_tmp = (lg_debug or {}).get("article_counts") or {}
+                        for team, score in (lg_map or {}).items():
+                            sources = int(article_counts_tmp.get(team, 0) or 0)
+                            valid = sources > 0 and score is not None
+                            lg_meta_map[team] = {
+                                "sources": sources,
+                                "sentiment_valid": valid,
+                                "sentiment_source": "newsapi" if valid else "none",
+                                "reddit_used": False,
+                                "score": score if valid else None,
+                            }
+                    else:
+                        lg_debug = {"error": "unexpected_return_length", "len": len(result)}
                 else:
-                    lg_map, lg_meta_map, lg_debug = {}, {}, {"error": "unexpected_return"}
+                    lg_debug = {"error": "unexpected_return_type"}
             except Exception as exc:
                 lg_map, lg_meta_map, lg_debug = {}, {}, {"error": str(exc)}
                 last_error = str(exc)
