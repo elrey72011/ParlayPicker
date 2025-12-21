@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import tempfile
 import time
 import traceback
 from datetime import datetime, timedelta, timezone
@@ -1145,6 +1146,17 @@ def gemini_confidence_explain(row_dict: Dict[str, Any]) -> Dict[str, Any]:
     """
     Call Gemini for qualitative confidence/explanation metadata (no numeric probabilities).
     """
+    base = {
+        "overall_confidence": None,
+        "spread_confidence": None,
+        "total_confidence": None,
+        "alignment": None,
+        "risk_flags": [],
+        "rationale": None,
+    }
+    vertex_ok = (st.session_state.get("vertex_info") or {}).get("ok")
+    if vertex_ok is False:
+        return base
     context_json = json.dumps(row_dict, ensure_ascii=False, default=str)
     prompt = f"""
 You are a qualitative risk and confidence reviewer for sports projections. Provide concise alignment and risk notes only.
@@ -1168,14 +1180,6 @@ Context (read-only, do not invent new probabilities):
 {context_json}
 """
     raw = generate_confidence_explanation(prompt)
-    base = {
-        "overall_confidence": None,
-        "spread_confidence": None,
-        "total_confidence": None,
-        "alignment": None,
-        "risk_flags": [],
-        "rationale": None,
-    }
     if not isinstance(raw, dict):
         return base
     result = {**base, **{k: raw.get(k) for k in base.keys()}}
@@ -1787,6 +1791,8 @@ def ensure_sentiment_loaded(games: List[Dict[str, Any]]) -> None:
 
 # Must be the first Streamlit call
 st.set_page_config(page_title="ParlayDesk", layout="wide")
+vertex_info = init_vertex_once()
+st.session_state["vertex_info"] = vertex_info
 
 # ------------------------------------------------------------
 # Kalshi globals / shims (must exist before any call sites)
@@ -1837,6 +1843,61 @@ def read_secret(name: str, default: Optional[str] = None) -> Optional[str]:
     except Exception:
         pass
     return os.getenv(name, default)
+
+def _get_gcp_sa_from_secrets() -> Optional[Dict[str, Any]]:
+    try:
+        if "gcp_service_account" in st.secrets:
+            return dict(st.secrets["gcp_service_account"])
+    except Exception:
+        pass
+    return None
+
+@st.cache_resource
+def init_vertex_once() -> Dict[str, Any]:
+    info: Dict[str, Any] = {"ok": False, "project": None, "location": None, "auth": "missing", "error": None}
+    project = read_secret("GCP_PROJECT_ID") or read_secret("gcp_project_id")
+    location = (
+        read_secret("GCP_REGION")
+        or read_secret("GCP_LOCATION")
+        or read_secret("gcp_region")
+        or "us-central1"
+    )
+    info["project"] = project
+    info["location"] = location
+    if project:
+        os.environ.setdefault("GCP_PROJECT_ID", project)
+        os.environ.setdefault("GOOGLE_CLOUD_PROJECT", project)
+    if location:
+        os.environ.setdefault("GCP_REGION", location)
+        os.environ.setdefault("GCP_LOCATION", location)
+    if not project:
+        info["error"] = "Missing GCP_PROJECT_ID"
+        return info
+
+    sa = _get_gcp_sa_from_secrets()
+    if not sa:
+        info["auth"] = "adc_or_missing"
+    else:
+        try:
+            tmp = tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".json")
+            json.dump(sa, tmp)
+            tmp.flush()
+            tmp.close()
+            os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = tmp.name
+            info["auth"] = "service_account"
+        except Exception as e:  # pragma: no cover - IO guard
+            info["error"] = f"Failed to write service account json: {e}"
+            return info
+
+    try:
+        import vertexai  # type: ignore
+
+        vertexai.init(project=project, location=location)
+        info["ok"] = True
+        return info
+    except Exception as e:  # pragma: no cover - defensive
+        info["error"] = str(e)
+        return info
 
 def get_api_keys() -> Dict[str, Optional[str]]:
     return {
@@ -3879,6 +3940,8 @@ for name, ok in badges.items():
     st.sidebar.markdown(f"**{name}:** :{color}[{'OK' if ok else 'Missing'}]")
 with st.sidebar.expander("Key sources (API-Sports/SportsData)"):
     st.caption("Lookups: API_SPORTS_KEY, APISPORTS_API_KEY, NBA/NFL specific; SPORTSData: SPORTSDATA_API_KEY/KEY variants")
+with st.sidebar.expander("Vertex / Gemini Status", expanded=False):
+    st.json(vertex_info)
 
 
 # -----------------

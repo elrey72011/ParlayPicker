@@ -22,6 +22,22 @@ except Exception as e:
 GEMINI_MODEL_NAME = os.getenv("GEMINI_MODEL_NAME", "gemini-1.5-flash")
 
 
+def _ensure_vertex_init() -> None:
+    """
+    Initialize Vertex AI with env-provided project/location if available.
+    Safe to call multiple times; silently no-ops on error.
+    """
+    try:
+        import vertexai  # type: ignore
+
+        project = os.getenv("GCP_PROJECT_ID") or os.getenv("GOOGLE_CLOUD_PROJECT")
+        location = os.getenv("GCP_REGION") or os.getenv("GCP_LOCATION") or "us-central1"
+        if project:
+            vertexai.init(project=project, location=location)
+    except Exception:
+        return
+
+
 def _safe_json_extract(text: str) -> Dict[str, Any]:
     text = (text or "").strip()
     if not text:
@@ -53,6 +69,7 @@ def analyze_kalshi_context_with_llm(context_markdown: str) -> List[Dict[str, Any
     if not context_markdown or not context_markdown.strip():
         return []
 
+    _ensure_vertex_init()
     system_instructions = """You are a prediction market assistant that evaluates current prices for event contracts on Kalshi.
 
 You will receive a description of a single game, including:
@@ -129,6 +146,7 @@ def generate_confidence_explanation(prompt: str) -> Dict[str, Any]:
     if not prompt:
         return {}
     try:
+        _ensure_vertex_init()
         model = GenerativeModel(GEMINI_MODEL_NAME)
         resp = model.generate_content(prompt)
         text = getattr(resp, "text", "") or ""
