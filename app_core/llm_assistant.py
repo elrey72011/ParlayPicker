@@ -117,3 +117,22 @@ CONTEXT:
     except Exception as e:
         logger.warning(f"LLM assistant call failed: {e}")
         return []
+
+
+def generate_confidence_explanation(prompt: str) -> Dict[str, Any]:
+    """
+    Lightweight Gemini call for qualitative confidence/explanation metadata.
+    Returns an empty dict if Gemini is unavailable or any error occurs.
+    """
+    if not _GEMINI_AVAILABLE or GenerativeModel is None:
+        return {}
+    if not prompt:
+        return {}
+    try:
+        model = GenerativeModel(GEMINI_MODEL_NAME)
+        resp = model.generate_content(prompt)
+        text = getattr(resp, "text", "") or ""
+        return _safe_json_extract(text)
+    except Exception as exc:
+        logger.warning(f"Gemini confidence call failed: {exc}")
+        return {}
