@@ -571,13 +571,60 @@ def add_spread_total_confidence(df: pd.DataFrame) -> pd.DataFrame:
         row["sentiment_articles_used"] = articles_used
         row["spread_sentiment_adj"] = spread_adj_val
         row["total_sentiment_adj"] = total_adj_val
-        row["spread_prob_adj"] = clamp((spread_prob_val or 0.0) + spread_adj_val, 0.01, 0.99) if spread_prob_val is not None else None
-        row["total_prob_adj"] = clamp((total_prob_val or 0.0) + total_adj_val, 0.01, 0.99) if total_prob_val is not None else None
+        if sentiment_level == "league":
+            spread_adj_val = 0.0
+            total_adj_val = 0.0
+            row["spread_sentiment_adj"] = 0.0
+            row["total_sentiment_adj"] = 0.0
+            row["spread_prob_adj"] = spread_prob_val
+            row["total_prob_adj"] = total_prob_val
+        else:
+            row["spread_prob_adj"] = clamp((spread_prob_val or 0.0) + spread_adj_val, 0.01, 0.99) if spread_prob_val is not None else None
+            row["total_prob_adj"] = clamp((total_prob_val or 0.0) + total_adj_val, 0.01, 0.99) if total_prob_val is not None else None
         market_kind = str(row.get("Market") or "").lower()
         if market_kind == "spread" and row.get("spread_prob_adj") is not None:
             row["consensus_prob_adj"] = row.get("spread_prob_adj")
         if market_kind == "total" and row.get("total_prob_adj") is not None:
             row["consensus_prob_adj"] = row.get("total_prob_adj")
+        spread_prob_adj = row.get("spread_prob_adj")
+        total_prob_adj = row.get("total_prob_adj")
+        spread_prob_display = round(spread_prob_adj * 100) if spread_prob_adj is not None else None
+        total_prob_display = round(total_prob_adj * 100) if total_prob_adj is not None else None
+        row["spread_prob_display"] = spread_prob_display
+        row["total_prob_display"] = total_prob_display
+        spread_arrow = ""
+        total_arrow = ""
+        spread_note = None
+        total_note = None
+        if sentiment_level == "league":
+            direction = "↗" if (sentiment_signal or 0) > 0 else "↘"
+            spread_note = f"LEAGUE {direction}"
+            total_note = f"LEAGUE {direction}"
+        else:
+            if spread_prob_adj is not None and row.get("spread_prob") is not None:
+                if abs(spread_prob_adj - (row.get("spread_prob") or 0.0)) >= 0.0075:
+                    spread_arrow = "▲" if spread_prob_adj > (row.get("spread_prob") or 0.0) else "▼"
+            if total_prob_adj is not None and row.get("total_prob") is not None:
+                if abs(total_prob_adj - (row.get("total_prob") or 0.0)) >= 0.0075:
+                    total_arrow = "▲" if total_prob_adj > (row.get("total_prob") or 0.0) else "▼"
+        row["spread_sentiment_arrow"] = spread_arrow
+        row["total_sentiment_arrow"] = total_arrow
+        row["spread_sentiment_note"] = spread_note
+        row["total_sentiment_note"] = total_note
+        def _glance_with_signal(conf_val: Any, prob_display: Optional[int], books: Any, width_val: Any, market_type: str, arrow_val: str, note_val: Optional[str]) -> str:
+            prob_text = "—" if prob_display is None else f"{prob_display}%"
+            signal = ""
+            if note_val:
+                signal = f" {note_val}"
+            elif arrow_val:
+                signal = f" {arrow_val}"
+            return f"{conf_val or 'LOW'} | {prob_text}{signal} | {depth_label(books)} | {market_width_label(width_val, market_type)}"
+        row["Spread_Glance"] = _glance_with_signal(
+            spread_conf, spread_prob_display, spread_books_count, spread_width_val, "spread", spread_arrow, spread_note
+        )
+        row["Total_Glance"] = _glance_with_signal(
+            total_conf, total_prob_display, total_books_count, total_width_val, "total", total_arrow, total_note
+        )
         return row
 
     return df.apply(_apply, axis=1)
@@ -594,6 +641,8 @@ def compute_sentiment_adj_row(row: Dict[str, Any]) -> Tuple[float, str]:
     auth_error = bool(row.get("sentiment_auth_error") or False)
     cached_used = bool(row.get("sentiment_used_cached") or False)
     level = _normalize_sentiment_level(row.get("sentiment_level"))
+    if level == "league":
+        return 0.0, "league_directional"
     strength = str(row.get("sentiment_strength") or "").upper() or sentiment_strength_from_articles(level, articles_used)
     if not strength or strength == "NONE":
         strength = sentiment_strength_from_articles(level, articles_used)
@@ -4711,6 +4760,12 @@ with tab_master:
             "consensus_prob_adj",
             "Spread_Glance",
             "Total_Glance",
+            "spread_prob_display",
+            "total_prob_display",
+            "spread_sentiment_arrow",
+            "total_sentiment_arrow",
+            "spread_sentiment_note",
+            "total_sentiment_note",
             "best_spread_book",
             "best_spread_last_update",
             "best_spread_price_score",
@@ -4883,8 +4938,14 @@ with tab_master:
             "sentiment_query_used",
             "spread_sentiment_adj",
             "spread_prob_adj",
+            "spread_prob_display",
             "total_sentiment_adj",
             "total_prob_adj",
+            "total_prob_display",
+            "spread_sentiment_arrow",
+            "total_sentiment_arrow",
+            "spread_sentiment_note",
+            "total_sentiment_note",
             "sentiment_error_count",
             "sentiment_errors_sample",
             "sentiment_articles_total",
