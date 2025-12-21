@@ -1791,6 +1791,8 @@ def ensure_sentiment_loaded(games: List[Dict[str, Any]]) -> None:
 
 # Must be the first Streamlit call
 st.set_page_config(page_title="ParlayDesk", layout="wide")
+vertex_info = init_vertex_once()
+st.session_state["vertex_info"] = vertex_info
 
 # ------------------------------------------------------------
 # Kalshi globals / shims (must exist before any call sites)
