@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import tempfile
 import time
 import traceback
 from datetime import datetime, timedelta, timezone
@@ -18,6 +19,7 @@ from app_core.kalshi_integrator import (
     league_series_ticker,
     team_code_for_league,
 )
+from app_core.llm_assistant import generate_confidence_explanation
 from app_core.sentiment_pipeline import MAX_SENTIMENT_CALLS, fetch_team_news, league_label, team_sentiment_from_articles
 from app_core.vertex_ai_endpoint import (
     VERTEX_FEATURE_COLUMNS,
@@ -223,6 +225,56 @@ def blend_probs(weighted_probs: List[Tuple[Optional[float], float]]) -> Optional
     return clamp(blended, 0.0, 1.0)
 
 
+def safe_str(x: Any) -> str:
+    return "" if x is None else str(x)
+
+
+def compute_margin(p_pick: Optional[float], p_alt: Optional[float]) -> Optional[float]:
+    if p_pick is None or p_alt is None:
+        return None
+    try:
+        return float(p_pick) - float(p_alt)
+    except Exception:
+        return None
+
+
+def engine_label(kalshi_used: bool, market_used: bool) -> str:
+    if kalshi_used and market_used:
+        return "kalshi+market"
+    if kalshi_used and not market_used:
+        return "kalshi_only"
+    if (not kalshi_used) and market_used:
+        return "market_only"
+    return "missing"
+
+
+def blend_kalshi_market(kalshi_p: Optional[float], market_p: Optional[float]) -> Optional[float]:
+    """
+    Blend Kalshi and market probabilities with a strong Kalshi weight.
+    """
+    kp = safe_float(kalshi_p)
+    mp = safe_float(market_p)
+    if kp is None and mp is None:
+        return None
+    if kp is None:
+        return mp
+    if mp is None:
+        return kp
+    return clamp(0.65 * kp + 0.35 * mp, 0.0, 1.0)
+
+
+def prob_engine_label(kalshi_matched: bool, market_prob: Optional[float], *, vertex_used: bool = False) -> str:
+    if vertex_used:
+        return "vertex_enabled"
+    if kalshi_matched and market_prob is not None:
+        return "kalshi+market"
+    if kalshi_matched and market_prob is None:
+        return "kalshi_only"
+    if market_prob is not None:
+        return "market_only"
+    return "missing"
+
+
 def is_missing_prob(val: Optional[float]) -> bool:
     return val is None or (isinstance(val, float) and val != val)
 
@@ -332,6 +384,13 @@ def reorder_for_spread_total_focus(df: pd.DataFrame) -> pd.DataFrame:
     fixed_front = [c for c in fixed_front if c in df.columns]
 
     focus_cols = [
+        "overall_confidence",
+        "gemini_alignment",
+        "gemini_rationale",
+        "gemini_flags_short",
+        "prob_engine",
+        "gemini_mode",
+        "vertex_mode",
         "Spread & Pick",
         "Spread_Glance_Clean",
         "spread_prob_adj",
@@ -876,6 +935,7 @@ def compute_team_sentiment_map(news_api_key: Optional[str], games: List[Dict[str
 
     calls_made = 0
     stop_fetching = cooldown_active
+    rate_limit_triggered = False
 
     for team in ordered_teams:
         if stop_fetching or calls_made >= MAX_SENTIMENT_CALLS:
@@ -889,7 +949,7 @@ def compute_team_sentiment_map(news_api_key: Optional[str], games: List[Dict[str
                 "sentiment_articles_used": 0,
                 "sentiment_query_used": None,
                 "cached": True,
-                "error": "cooldown_active" if cooldown_active else "calls_capped",
+                "error": "cooldown_active" if cooldown_active else ("rate_limited" if rate_limit_triggered else "calls_capped"),
             }
             debug["missing_teams"].append(team)
             continue
@@ -945,6 +1005,22 @@ def compute_team_sentiment_map(news_api_key: Optional[str], games: List[Dict[str
                 pass
             debug["rate_limited"] = True
             stop_fetching = True
+            rate_limit_triggered = True
+            sentiment_map[team] = None
+            sentiment_meta[team] = {
+                "sentiment_valid": False,
+                "sentiment_source": "none",
+                "sentiment_level": "none",
+                "sentiment_strength": "NONE",
+                "sentiment_badge": "NONE",
+                "sentiment_articles_used": 0,
+                "sentiment_query_used": fetch_info.get("q") or fetch_info.get("query"),
+                "cached": True,
+                "error": "rate_limited",
+                "status": status_int,
+            }
+            debug["missing_teams"].append(team)
+            continue
 
         meta = sentiment_payload_to_meta(raw_payload)
         meta["sentiment_query_used"] = fetch_info.get("q") or fetch_info.get("query")
@@ -1074,6 +1150,70 @@ def get_slate_sentiment(enable_sentiment: bool, teams: List[str], league: str, n
         meta["sentiment_errors_sample"] = str(exc)
         meta["sentiment_status_counts"] = {"EXCEPTION": 1}
         return {"map": {}, "meta_map": {}, "meta": meta, "debug": {"error": str(exc)}}
+
+
+def _gemini_payload_signature(payload: Dict[str, Any]) -> str:
+    try:
+        return json.dumps(payload, sort_keys=True, default=str)
+    except Exception:
+        return str(payload)
+
+
+def gemini_confidence_explain(row_dict: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Call Gemini for qualitative confidence/explanation metadata (no numeric probabilities).
+    """
+    base = {
+        "overall_confidence": None,
+        "spread_confidence": None,
+        "total_confidence": None,
+        "alignment": None,
+        "risk_flags": [],
+        "rationale": None,
+    }
+    vertex_ok = (st.session_state.get("vertex_info") or {}).get("ok")
+    if vertex_ok is False:
+        return base
+    context_json = json.dumps(row_dict, ensure_ascii=False, default=str)
+    prompt = f"""
+You are a qualitative risk and confidence reviewer for sports projections. Provide concise alignment and risk notes only.
+
+Constraints:
+- Do NOT provide betting advice or call-to-action.
+- Do NOT generate or override numeric probabilities or percentages.
+- Keep responses terse and professional.
+
+Return JSON ONLY with this exact schema:
+{{
+  "overall_confidence": "HIGH|MED|LOW",
+  "spread_confidence": "HIGH|MED|LOW",
+  "total_confidence": "HIGH|MED|LOW",
+  "alignment": "kalshi_agrees|kalshi_disagrees|no_kalshi",
+  "risk_flags": ["short flag strings"],
+  "rationale": "one short paragraph"
+}}
+
+Context (read-only, do not invent new probabilities):
+{context_json}
+"""
+    raw = generate_confidence_explanation(prompt)
+    if not isinstance(raw, dict):
+        return base
+    result = {**base, **{k: raw.get(k) for k in base.keys()}}
+    flags = raw.get("risk_flags")
+    if isinstance(flags, list):
+        result["risk_flags"] = [str(f) for f in flags[:10]]
+    else:
+        result["risk_flags"] = []
+    for key in ["overall_confidence", "spread_confidence", "total_confidence", "alignment", "rationale"]:
+        val = result.get(key)
+        result[key] = str(val) if val is not None else None
+    return result
+
+
+@st.cache_data(ttl=3600)
+def cached_gemini_confidence(signature: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    return gemini_confidence_explain(payload)
 
 
 def slate_key_from_games(games: List[Dict[str, Any]]) -> str:
@@ -1666,16 +1806,6 @@ def ensure_sentiment_loaded(games: List[Dict[str, Any]]) -> None:
         st.session_state["reddit_used"] = False
 
 
-# Must be the first Streamlit call
-st.set_page_config(page_title="ParlayDesk", layout="wide")
-
-# ------------------------------------------------------------
-# Kalshi globals / shims (must exist before any call sites)
-# ------------------------------------------------------------
-kalshi_integrator: Optional[KalshiIntegrator] = None
-api_sports_clients: Dict[str, Any] = {}
-sportsdata_clients: Dict[str, Any] = {}
-
 def kalshi_health_check(selected_league: str = "NBA") -> Dict[str, Any]:
     """
     MUST NOT crash. Used for UI gating + debug.
@@ -1719,16 +1849,132 @@ def read_secret(name: str, default: Optional[str] = None) -> Optional[str]:
         pass
     return os.getenv(name, default)
 
+def _get_gcp_sa_from_secrets() -> Optional[Dict[str, Any]]:
+    try:
+        if "gcp_service_account" in st.secrets:
+            return dict(st.secrets["gcp_service_account"])
+    except Exception:
+        pass
+    return None
+
+@st.cache_resource
+def init_vertex_once() -> Dict[str, Any]:
+    info: Dict[str, Any] = {"ok": False, "project": None, "location": None, "auth": "missing", "error": None}
+    project = read_secret("GCP_PROJECT_ID") or read_secret("gcp_project_id")
+    location = (
+        read_secret("GCP_REGION")
+        or read_secret("GCP_LOCATION")
+        or read_secret("gcp_region")
+        or "us-central1"
+    )
+    info["project"] = project
+    info["location"] = location
+    if project:
+        os.environ.setdefault("GCP_PROJECT_ID", project)
+        os.environ.setdefault("GOOGLE_CLOUD_PROJECT", project)
+    if location:
+        os.environ.setdefault("GCP_REGION", location)
+        os.environ.setdefault("GCP_LOCATION", location)
+    if not project:
+        info["error"] = "Missing GCP_PROJECT_ID"
+        return info
+
+    sa = _get_gcp_sa_from_secrets()
+    if not sa:
+        info["auth"] = "adc_or_missing"
+    else:
+        try:
+            tmp = tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".json")
+            json.dump(sa, tmp)
+            tmp.flush()
+            tmp.close()
+            os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = tmp.name
+            info["auth"] = "service_account"
+        except Exception as e:  # pragma: no cover - IO guard
+            info["error"] = f"Failed to write service account json: {e}"
+            return info
+
+    try:
+        import vertexai  # type: ignore
+
+        vertexai.init(project=project, location=location)
+        info["ok"] = True
+        return info
+    except Exception as e:  # pragma: no cover - defensive
+        info["error"] = str(e)
+        return info
+
+
+def ensure_vertex_info_cached() -> Dict[str, Any]:
+    """
+    Wrapper to guard against NameError or other runtime issues when fetching Vertex init status.
+    Ensures a dict is always returned and session state updated.
+    """
+    try:
+        info = st.session_state.get("vertex_info")
+    except Exception:
+        info = None
+    if info:
+        return info
+    try:
+        info = init_vertex_once()
+    except NameError:
+        info = {"ok": False, "project": None, "location": None, "auth": "missing", "error": "init_vertex_once not defined"}
+    except Exception as exc:  # pragma: no cover - defensive guard
+        info = {"ok": False, "project": None, "location": None, "auth": "error", "error": str(exc)}
+    try:
+        st.session_state["vertex_info"] = info
+    except Exception:
+        pass
+    return info
+
 def get_api_keys() -> Dict[str, Optional[str]]:
+    def first(candidates: List[str]) -> Optional[str]:
+        for key in candidates:
+            val = read_secret(key)
+            if val:
+                return val
+        return None
+
+    api_sports_key = first(
+        [
+            "API_SPORTS_KEY",
+            "APISPORTS_API_KEY",
+            "APISPORTS_NFL_KEY",
+            "APISPORTS_NBA_KEY",
+            "APISPORTS_NHL_KEY",
+        ]
+    )
+    sportsdata_key = first(
+        [
+            "SPORTSDATA_API_KEY",
+            "SPORTSDATA_KEY",
+            "SPORTSDATA_NFL_KEY",
+            "SPORTSDATA_NBA_KEY",
+            "SPORTSDATA_NHL_KEY",
+            "SPORTSDATA_NCAAB_KEY",
+            "SPORTSDATA_NCAAF_KEY",
+        ]
+    )
+    api_sports_keys = {
+        "NFL": first(["APISPORTS_NFL_KEY", "NFL_APISPORTS_API_KEY"]) or api_sports_key,
+        "NBA": first(["APISPORTS_NBA_KEY", "NBA_APISPORTS_API_KEY"]) or api_sports_key,
+        "NHL": first(["APISPORTS_NHL_KEY"]) or api_sports_key,
+        "NCAAB": api_sports_key,
+        "NCAAF": api_sports_key,
+    }
+    sportsdata_keys = {
+        "NFL": first(["SPORTSDATA_NFL_KEY"]) or sportsdata_key,
+        "NBA": first(["SPORTSDATA_NBA_KEY"]) or sportsdata_key,
+        "NHL": first(["SPORTSDATA_NHL_KEY"]) or sportsdata_key,
+        "NCAAB": first(["SPORTSDATA_NCAAB_KEY"]) or sportsdata_key,
+        "NCAAF": first(["SPORTSDATA_NCAAF_KEY"]) or sportsdata_key,
+    }
     return {
-        "api_sports_key": read_secret("API_SPORTS_KEY")
-        or read_secret("APISPORTS_API_KEY")
-        or read_secret("NBA_APISPORTS_API_KEY")
-        or read_secret("NFL_APISPORTS_API_KEY"),
-        "sportsdata_key": read_secret("SPORTSDATA_API_KEY")
-        or read_secret("SPORTSDATA_KEY")
-        or read_secret("NBA_SPORTSDATA_API_KEY")
-        or read_secret("NFL_SPORTSDATA_API_KEY"),
+        "api_sports_key": api_sports_key,
+        "sportsdata_key": sportsdata_key,
+        "api_sports_keys": api_sports_keys,
+        "sportsdata_keys": sportsdata_keys,
     }
 
 def get_secret_any(candidates: List[str]) -> Optional[str]:
@@ -1745,21 +1991,70 @@ def init_data_clients() -> Tuple[Dict[str, Any], Dict[str, Any]]:
     keys = get_api_keys()
     api_key = keys.get("api_sports_key")
     sd_key = keys.get("sportsdata_key")
+    api_keys_by_league = keys.get("api_sports_keys") or {}
+    sd_keys_by_league = keys.get("sportsdata_keys") or {}
+    def _league_key(league: str, league_map: Dict[str, Optional[str]], fallback: Optional[str], *, secondary: Optional[str] = None) -> Optional[str]:
+        """Prefer league-specific key; fallback to optional secondary then global."""
+        if league_map.get(league):
+            return league_map.get(league)
+        if secondary and league_map.get(secondary):
+            return league_map.get(secondary)
+        return fallback
+
+    api_key_for = {
+        "NBA": _league_key("NBA", api_keys_by_league, api_key),
+        "NCAAB": _league_key("NCAAB", api_keys_by_league, api_key, secondary="NBA"),
+        "NFL": _league_key("NFL", api_keys_by_league, api_key),
+        "NCAAF": _league_key("NCAAF", api_keys_by_league, api_key, secondary="NFL"),
+        "NHL": _league_key("NHL", api_keys_by_league, api_key),
+    }
+    sd_key_for = {
+        "NBA": _league_key("NBA", sd_keys_by_league, sd_key),
+        "NCAAB": _league_key("NCAAB", sd_keys_by_league, sd_key, secondary="NBA"),
+        "NFL": _league_key("NFL", sd_keys_by_league, sd_key),
+        "NCAAF": _league_key("NCAAF", sd_keys_by_league, sd_key, secondary="NFL"),
+        "NHL": _league_key("NHL", sd_keys_by_league, sd_key),
+    }
     api_sports_clients = {
-        "NBA": APISportsBasketballClient(api_key, key_source="secrets/env") if api_key else None,
-        "NCAAB": APISportsBasketballClient(api_key, key_source="secrets/env") if api_key else None,
-        "NFL": APISportsFootballClient(api_key, key_source="secrets/env") if api_key else None,
-        "NCAAF": APISportsFootballClient(api_key, key_source="secrets/env") if api_key else None,
-        "NHL": APISportsHockeyClient(api_key, key_source="secrets/env") if api_key else None,
+        "NBA": APISportsBasketballClient(api_key_for["NBA"], key_source="secrets/env") if api_key_for.get("NBA") else None,
+        "NCAAB": APISportsBasketballClient(api_key_for["NCAAB"], key_source="secrets/env") if api_key_for.get("NCAAB") else None,
+        "NFL": APISportsFootballClient(api_key_for["NFL"], key_source="secrets/env") if api_key_for.get("NFL") else None,
+        "NCAAF": APISportsFootballClient(api_key_for["NCAAF"], key_source="secrets/env") if api_key_for.get("NCAAF") else None,
+        "NHL": APISportsHockeyClient(api_key_for["NHL"], key_source="secrets/env") if api_key_for.get("NHL") else None,
     }
     sportsdata_clients = {
-        "NBA": SportsDataNBAClient(sd_key, key_source="secrets/env") if sd_key else None,
-        "NCAAB": SportsDataNCAABClient(sd_key, key_source="secrets/env") if sd_key else None,
-        "NFL": SportsDataNFLClient(sd_key, key_source="secrets/env") if sd_key else None,
-        "NCAAF": SportsDataNCAAFClient(sd_key, key_source="secrets/env") if sd_key else None,
-        "NHL": SportsDataNHLClient(sd_key, key_source="secrets/env") if sd_key else None,
+        "NBA": SportsDataNBAClient(sd_key_for["NBA"], key_source="secrets/env") if sd_key_for.get("NBA") else None,
+        "NCAAB": SportsDataNCAABClient(sd_key_for["NCAAB"], key_source="secrets/env") if sd_key_for.get("NCAAB") else None,
+        "NFL": SportsDataNFLClient(sd_key_for["NFL"], key_source="secrets/env") if sd_key_for.get("NFL") else None,
+        "NCAAF": SportsDataNCAAFClient(sd_key_for["NCAAF"], key_source="secrets/env") if sd_key_for.get("NCAAF") else None,
+        "NHL": SportsDataNHLClient(sd_key_for["NHL"], key_source="secrets/env") if sd_key_for.get("NHL") else None,
     }
+    try:
+        st.session_state["data_clients_debug"] = {
+            "api_sports": {lg: bool(cli) for lg, cli in api_sports_clients.items()},
+            "sportsdata": {lg: bool(cli) for lg, cli in sportsdata_clients.items()},
+            "api_sports_keys": {lg: bool(api_key_for.get(lg)) for lg in api_key_for},
+            "sportsdata_keys": {lg: bool(sd_key_for.get(lg)) for lg in sd_key_for},
+        }
+    except Exception:
+        pass
     return api_sports_clients, sportsdata_clients
+
+# Must be the first Streamlit call
+st.set_page_config(page_title="ParlayDesk", layout="wide")
+vertex_info_raw = ensure_vertex_info_cached()
+vertex_info = vertex_info_raw if isinstance(vertex_info_raw, dict) else {"ok": False, "error": "invalid_vertex_info"}
+try:
+    st.session_state["vertex_info"] = vertex_info
+except Exception:
+    pass
+
+# ------------------------------------------------------------
+# Kalshi globals / shims (must exist before any call sites)
+# ------------------------------------------------------------
+kalshi_integrator: Optional[KalshiIntegrator] = None
+api_sports_clients: Dict[str, Any] = {}
+sportsdata_clients: Dict[str, Any] = {}
 
 def canonical_league_key(raw: Optional[str]) -> str:
     """Normalize league identifiers to canonical keys used across odds/sentiment/Kalshi."""
@@ -3745,11 +4040,13 @@ if st.sidebar.button("Load Games", use_container_width=True):
 
 api_sports_status = "OK" if any(v for v in api_sports_clients.values() if v) else "MISSING"
 sportsdata_status = "OK" if any(v for v in sportsdata_clients.values() if v) else "MISSING"
+vertex_ready = bool(vertex_endpoint_id) and bool(vertex_info.get("ok"))
 st.sidebar.markdown("---")
 st.sidebar.subheader("Status")
 badges = {
     "OddsAPI": bool(odds_api_key),
-    "Vertex": bool(vertex_endpoint_id),
+    "Vertex": vertex_ready,
+    "Gemini": vertex_ready,
     "News": bool(news_api_key),
     "API-Sports": api_sports_status == "OK",
     "SportsData": sportsdata_status == "OK",
@@ -3760,6 +4057,10 @@ for name, ok in badges.items():
     st.sidebar.markdown(f"**{name}:** :{color}[{'OK' if ok else 'Missing'}]")
 with st.sidebar.expander("Key sources (API-Sports/SportsData)"):
     st.caption("Lookups: API_SPORTS_KEY, APISPORTS_API_KEY, NBA/NFL specific; SPORTSData: SPORTSDATA_API_KEY/KEY variants")
+if not vertex_ready:
+    st.sidebar.warning(f"Vertex not ready: {vertex_info.get('error') or 'not configured'}")
+with st.sidebar.expander("Vertex / Gemini Status", expanded=False):
+    st.json(vertex_info)
 
 
 # -----------------
@@ -3914,6 +4215,16 @@ with tab_master:
         value=st.session_state.get("kalshi_match_only", False),
     )
     st.session_state["kalshi_match_only"] = kalshi_match_only
+    use_gemini_explanations = st.checkbox(
+        "Use Gemini Confidence + Explanation",
+        value=st.session_state.get("use_gemini_explanations", True),
+        key="use_gemini_explanations",
+    )
+    use_vertex_numeric_probs = st.checkbox(
+        "Use Vertex Numeric Probabilities (debug/optional)",
+        value=st.session_state.get("use_vertex_numeric_probs", False),
+        key="use_vertex_numeric_probs",
+    )
     run_master = st.button(
         "Run Master Analysis",
         key="run_master",
@@ -4376,7 +4687,19 @@ with tab_master:
                 "total_sentiment_note": "",
             }
 
-            vertex_prob_home, vertex_warn = get_vertex_prob(g, sentiment_diff)
+            vertex_prob_home = None
+            vertex_warn = None
+            vertex_mode = "disabled"
+            vertex_spread_prob = None
+            vertex_total_prob = None
+            vertex_available = is_vertex_prediction_configured()
+            if use_vertex_numeric_probs:
+                if vertex_available:
+                    vertex_prob_home, vertex_warn = get_vertex_prob(g, sentiment_diff)
+                    vertex_mode = "enabled" if vertex_prob_home is not None else "error"
+                else:
+                    vertex_warn = "vertex_missing_prob"
+                    vertex_mode = "missing"
             if vertex_warn and vertex_warn not in warnings:
                 warnings.append(vertex_warn)
 
@@ -4550,10 +4873,60 @@ with tab_master:
                     "spread_prob_market_based": spread_prob_market_based,
                     "spread_prob_reason": spread_prob_reason,
                     "spread_prob_method": spread_prob_method,
+                    "spread_prob_market": spread_prob_market,
+                    "total_prob_market": total_prob_market,
                     "total_implied_prob": total_implied,
                     "total_prob_market_based": total_prob_market_based,
                     "total_prob_reason": total_prob_reason,
                     "total_prob_method": total_prob_method,
+                    "kalshi_prob_spread": kalshi_prob_spread,
+                    "kalshi_prob_total": kalshi_prob_total,
+                    "vertex_spread_prob": vertex_spread_prob,
+                    "vertex_total_prob": vertex_total_prob,
+                    "prob_engine": prob_engine_label(bool(kalshi_winner.get("kalshi_matched")), None, vertex_used=False),
+                    "vertex_mode": vertex_mode,
+                    "gemini_mode": "pending" if use_gemini_explanations else "disabled",
+                    "overall_confidence": None,
+                    "spread_confidence_gemini": None,
+                    "total_confidence_gemini": None,
+                    "gemini_alignment": None,
+                    "gemini_rationale": None,
+                    "gemini_risk_flags": None,
+                    "gemini_error": None,
+                    "gemini_flags_short": None,
+                    "spread_engine_used": spread_engine_used,
+                    "spread_pick_label": safe_str(spread_pick_label),
+                    "spread_alt_label": safe_str(spread_alt_label),
+                    "spread_prob_pick_final": spread_prob_final,
+                    "spread_prob_alt_final": spread_alt_prob_final,
+                    "spread_prob_margin": spread_prob_margin,
+                    "spread_prob_pick_market": spread_prob_pick_market,
+                    "spread_prob_alt_market": spread_prob_alt_market,
+                    "spread_prob_pick_kalshi": spread_prob_pick_kalshi,
+                    "spread_prob_alt_kalshi": spread_prob_alt_kalshi,
+                    "spread_decision_metric_used": spread_decision_metric_used,
+                    "spread_decision_score_pick": spread_decision_score_pick,
+                    "spread_decision_score_alt": spread_decision_score_alt,
+                    "spread_decision_score_margin": spread_decision_score_margin,
+                    "spread_trace_json": spread_trace_json,
+                    "total_engine_used": total_engine_used,
+                    "total_pick_label": safe_str(total_pick_label),
+                    "total_alt_label": safe_str(total_alt_label),
+                    "total_prob_pick_final": total_prob_final,
+                    "total_prob_alt_final": total_alt_prob_final,
+                    "total_prob_margin": total_prob_margin,
+                    "total_prob_pick_market": total_prob_pick_market,
+                    "total_prob_alt_market": total_prob_alt_market,
+                    "total_prob_pick_kalshi": total_prob_pick_kalshi,
+                    "total_prob_alt_kalshi": total_prob_alt_kalshi,
+                    "total_decision_metric_used": total_decision_metric_used,
+                    "total_decision_score_pick": total_decision_score_pick,
+                    "total_decision_score_alt": total_decision_score_alt,
+                    "total_decision_score_margin": total_decision_score_margin,
+                    "total_trace_json": total_trace_json,
+                    "decision_trace_version": decision_trace_version,
+                    "overall_engine_used": overall_engine_used,
+                    "decision_trace_notes": decision_trace_notes,
                     "spread_market_pairs_count": spread_market_pairs_count,
                     "total_market_pairs_count": total_market_pairs_count,
                     "spread_odds_valid": spread_odds_valid,
@@ -4739,11 +5112,160 @@ with tab_master:
                     and abs(total_implied - PLACEHOLDER_IMPLIED_PROB) < 1e-4
                 )
             overall_odds_placeholder = bool(spread_odds_placeholder_detected or total_odds_placeholder_detected)
-            spread_prob = spread_prob_market_based if spread_prob_market_based is not None else spread_implied
-            total_prob = total_prob_market_based if total_prob_market_based is not None else total_implied
+            spread_prob_market = spread_prob_market_based if spread_prob_market_based is not None else spread_implied
+            total_prob_market = total_prob_market_based if total_prob_market_based is not None else total_implied
+            kalshi_prob_spread = safe_float(kalshi_spread.get("kalshi_prob"))
+            kalshi_prob_total = safe_float(kalshi_total.get("kalshi_prob"))
+            vertex_used_for_spread = bool(use_vertex_numeric_probs and vertex_spread_prob is not None)
+            vertex_used_for_total = bool(use_vertex_numeric_probs and vertex_total_prob is not None)
+            spread_prob_final = blend_kalshi_market(kalshi_prob_spread, spread_prob_market) if kalshi_spread.get("kalshi_matched") else spread_prob_market
+            total_prob_final = blend_kalshi_market(kalshi_prob_total, total_prob_market) if kalshi_total.get("kalshi_matched") else total_prob_market
+            if vertex_used_for_spread:
+                spread_prob_final = clamp(vertex_spread_prob)
+            if vertex_used_for_total:
+                total_prob_final = clamp(vertex_total_prob)
+            spread_prob = spread_prob_final
+            total_prob = total_prob_final
             spread_odds_valid = bool(spread_odds_method == "book_price")
             total_odds_valid = bool(total_odds_method == "book_price")
             odds_placeholder_overall = bool(overall_odds_placeholder)
+            spread_prob_engine = prob_engine_label(bool(kalshi_spread.get("kalshi_matched")), spread_prob_market, vertex_used=vertex_used_for_spread)
+            total_prob_engine = prob_engine_label(bool(kalshi_total.get("kalshi_matched")), total_prob_market, vertex_used=vertex_used_for_total)
+
+            # --- Decision trace (Spread) ---
+            spread_alt_team = None
+            spread_alt_line = None
+            spread_alt_odds = None
+            spread_alt_market_prob = None
+            spread_alt_prob_final = None
+            spread_pick_label = f"{spread_pick} {spread_line}" if spread_pick is not None else ""
+            spread_alt_label = ""
+            spread_decision_metric_used = "final_prob"
+            spread_decision_score_pick = spread_prob_final
+            spread_decision_score_alt = None
+            spread_decision_score_margin = None
+            spread_prob_margin = None
+            spread_prob_pick_market = spread_prob_market
+            spread_prob_alt_market = None
+            spread_prob_pick_kalshi = kalshi_prob_spread if kalshi_spread.get("kalshi_matched") else None
+            spread_prob_alt_kalshi = None
+            if spread_pick_team in {home, away}:
+                spread_alt_team = away if spread_pick_team == home else home
+                spread_alt_line = home_spread_point if spread_pick_team == away else away_spread_point
+                spread_alt_label = f"{spread_alt_team} {spread_alt_line}" if spread_alt_team else ""
+                alt_side_key = "home" if spread_alt_team == home else "away"
+                alt_offer = select_best_offer_for_pick(
+                    spread_offers, alt_side_key, pick_line=spread_alt_line, preferred_book=g.get("best_spread_book")
+                )
+                if alt_offer:
+                    spread_alt_odds = alt_offer.get("price")
+                spread_alt_market_prob, _, _, _ = compute_market_prob_from_offers(
+                    spread_offers, alt_side_key, market_type="spread"
+                )
+                spread_prob_alt_market = spread_alt_market_prob
+                spread_alt_prob_final = blend_kalshi_market(spread_prob_alt_kalshi, spread_alt_market_prob)
+                spread_decision_score_alt = spread_alt_prob_final
+                spread_prob_margin = compute_margin(spread_prob_final, spread_alt_prob_final)
+                spread_decision_score_margin = compute_margin(spread_decision_score_pick, spread_decision_score_alt)
+            spread_engine_used = engine_label(bool(spread_prob_pick_kalshi), bool(spread_prob_pick_market is not None or spread_prob_alt_market is not None))
+            spread_trace = {
+                "pick": {
+                    "team": spread_pick_team,
+                    "label": safe_str(spread_pick_label),
+                    "line": spread_line,
+                    "odds": spread_pick_odds,
+                    "market_prob": spread_prob_pick_market,
+                    "kalshi_prob": spread_prob_pick_kalshi,
+                    "final_prob": spread_prob_final,
+                    "score": spread_decision_score_pick,
+                },
+                "alt": {
+                    "team": spread_alt_team,
+                    "label": safe_str(spread_alt_label),
+                    "line": spread_alt_line,
+                    "odds": spread_alt_odds,
+                    "market_prob": spread_prob_alt_market,
+                    "kalshi_prob": spread_prob_alt_kalshi,
+                    "final_prob": spread_alt_prob_final,
+                    "score": spread_decision_score_alt,
+                },
+                "engine_used": spread_engine_used,
+                "metric": spread_decision_metric_used,
+                "notes": "",
+            }
+            try:
+                spread_trace_json = json.dumps(spread_trace, default=safe_str)
+            except Exception:
+                spread_trace_json = "{}"
+
+            # --- Decision trace (Total) ---
+            total_alt_side = None
+            total_alt_line = total_line
+            total_alt_odds = None
+            total_alt_market_prob = None
+            total_alt_prob_final = None
+            total_pick_label = f"{total_pick} {total_line}" if total_pick is not None else ""
+            total_alt_label = ""
+            total_decision_metric_used = "final_prob"
+            total_decision_score_pick = total_prob_final
+            total_decision_score_alt = None
+            total_decision_score_margin = None
+            total_prob_margin = None
+            total_prob_pick_market = total_prob_market
+            total_prob_alt_market = None
+            total_prob_pick_kalshi = kalshi_prob_total if kalshi_total.get("kalshi_matched") else None
+            total_prob_alt_kalshi = None
+            if total_pick_side in {"Over", "Under"}:
+                total_alt_side = "Under" if total_pick_side == "Over" else "Over"
+                total_alt_label = f"{total_alt_side} {total_line}" if total_line is not None else total_alt_side
+                alt_side_key_total = total_alt_side.lower()
+                alt_total_offer = select_best_offer_for_pick(
+                    total_offers, alt_side_key_total, pick_line=total_line, preferred_book=g.get("best_total_book")
+                )
+                if alt_total_offer:
+                    total_alt_odds = alt_total_offer.get("price")
+                total_alt_market_prob, _, _, _ = compute_market_prob_from_offers(
+                    total_offers, alt_side_key_total, market_type="total"
+                )
+                total_prob_alt_market = total_alt_market_prob
+                total_alt_prob_final = blend_kalshi_market(total_prob_alt_kalshi, total_alt_market_prob)
+                total_decision_score_alt = total_alt_prob_final
+                total_prob_margin = compute_margin(total_prob_final, total_alt_prob_final)
+                total_decision_score_margin = compute_margin(total_decision_score_pick, total_decision_score_alt)
+            total_engine_used = engine_label(bool(total_prob_pick_kalshi), bool(total_prob_pick_market is not None or total_prob_alt_market is not None))
+            total_trace = {
+                "pick": {
+                    "side": total_pick_side,
+                    "label": safe_str(total_pick_label),
+                    "line": total_line,
+                    "odds": total_pick_odds,
+                    "market_prob": total_prob_pick_market,
+                    "kalshi_prob": total_prob_pick_kalshi,
+                    "final_prob": total_prob_final,
+                    "score": total_decision_score_pick,
+                },
+                "alt": {
+                    "side": total_alt_side,
+                    "label": safe_str(total_alt_label),
+                    "line": total_alt_line,
+                    "odds": total_alt_odds,
+                    "market_prob": total_prob_alt_market,
+                    "kalshi_prob": total_prob_alt_kalshi,
+                    "final_prob": total_alt_prob_final,
+                    "score": total_decision_score_alt,
+                },
+                "engine_used": total_engine_used,
+                "metric": total_decision_metric_used,
+                "notes": "",
+            }
+            try:
+                total_trace_json = json.dumps(total_trace, default=safe_str)
+            except Exception:
+                total_trace_json = "{}"
+
+            decision_trace_version = "v1"
+            overall_engine_used = f"spread:{spread_engine_used}|total:{total_engine_used}"
+            decision_trace_notes = ""
 
             # Baseline probability (Home Win)
             if implied_home is not None:
@@ -4823,6 +5345,7 @@ with tab_master:
                     warnings = list(dict.fromkeys(warnings + ["no_implied_prob"]))
 
                 if pick is not None:
+                    prob_engine_moneyline = prob_engine_label(bool(kalshi_winner.get("kalshi_matched")), implied_pick, vertex_used=bool(use_vertex_numeric_probs and vertex_prob_home is not None))
                     ai_prob_base = ai_prob_for_selection(pick, adjusted=False)
                     ai_prob_row = clamp((ai_prob_base or 0.0) + (sentiment_adj or 0.0), 0.01, 0.99) if ai_prob_base is not None else None
 
@@ -4881,6 +5404,56 @@ with tab_master:
                         "sentiment_available_count": sentiment_available_count,
                         "sentiment_used_cached": sentiment_used_cached,
                         "sentiment_disabled_reason": sentiment_disabled_reason,
+                        "prob_engine": prob_engine_moneyline,
+                        "vertex_mode": vertex_mode,
+                        "gemini_mode": "pending" if use_gemini_explanations else "disabled",
+                        "vertex_spread_prob": vertex_spread_prob,
+                        "vertex_total_prob": vertex_total_prob,
+                        "kalshi_prob_spread": kalshi_prob_spread,
+                        "kalshi_prob_total": kalshi_prob_total,
+                        "spread_prob_market": spread_prob_market,
+                        "total_prob_market": total_prob_market,
+                        "spread_engine_used": spread_engine_used,
+                        "spread_pick_label": safe_str(spread_pick_label),
+                        "spread_alt_label": safe_str(spread_alt_label),
+                        "spread_prob_pick_final": spread_prob_final,
+                        "spread_prob_alt_final": spread_alt_prob_final,
+                        "spread_prob_margin": spread_prob_margin,
+                        "spread_prob_pick_market": spread_prob_pick_market,
+                        "spread_prob_alt_market": spread_prob_alt_market,
+                        "spread_prob_pick_kalshi": spread_prob_pick_kalshi,
+                        "spread_prob_alt_kalshi": spread_prob_alt_kalshi,
+                        "spread_decision_metric_used": spread_decision_metric_used,
+                        "spread_decision_score_pick": spread_decision_score_pick,
+                        "spread_decision_score_alt": spread_decision_score_alt,
+                        "spread_decision_score_margin": spread_decision_score_margin,
+                        "spread_trace_json": spread_trace_json,
+                        "total_engine_used": total_engine_used,
+                        "total_pick_label": safe_str(total_pick_label),
+                        "total_alt_label": safe_str(total_alt_label),
+                        "total_prob_pick_final": total_prob_final,
+                        "total_prob_alt_final": total_alt_prob_final,
+                        "total_prob_margin": total_prob_margin,
+                        "total_prob_pick_market": total_prob_pick_market,
+                        "total_prob_alt_market": total_prob_alt_market,
+                        "total_prob_pick_kalshi": total_prob_pick_kalshi,
+                        "total_prob_alt_kalshi": total_prob_alt_kalshi,
+                        "total_decision_metric_used": total_decision_metric_used,
+                        "total_decision_score_pick": total_decision_score_pick,
+                        "total_decision_score_alt": total_decision_score_alt,
+                        "total_decision_score_margin": total_decision_score_margin,
+                        "total_trace_json": total_trace_json,
+                        "decision_trace_version": decision_trace_version,
+                        "overall_engine_used": overall_engine_used,
+                        "decision_trace_notes": decision_trace_notes,
+                        "overall_confidence": None,
+                        "spread_confidence_gemini": None,
+                        "total_confidence_gemini": None,
+                        "gemini_alignment": None,
+                        "gemini_rationale": None,
+                        "gemini_risk_flags": None,
+                        "gemini_error": None,
+                        "gemini_flags_short": None,
                         "kalshi_available": kalshi_winner.get("kalshi_available"),
                         "kalshi_matched": kalshi_winner.get("kalshi_matched"),
                         "kalshi_prob": kalshi_prob_used,
@@ -4906,6 +5479,39 @@ with tab_master:
                         "total_prob": total_prob,
                         "total_confidence": None,
                         "total_confidence_reason": None,
+                        "spread_engine_used": spread_engine_used,
+                        "spread_pick_label": safe_str(spread_pick_label),
+                        "spread_alt_label": safe_str(spread_alt_label),
+                        "spread_prob_pick_final": spread_prob_final,
+                        "spread_prob_alt_final": spread_alt_prob_final,
+                        "spread_prob_margin": spread_prob_margin,
+                        "spread_prob_pick_market": spread_prob_pick_market,
+                        "spread_prob_alt_market": spread_prob_alt_market,
+                        "spread_prob_pick_kalshi": spread_prob_pick_kalshi,
+                        "spread_prob_alt_kalshi": spread_prob_alt_kalshi,
+                        "spread_decision_metric_used": spread_decision_metric_used,
+                        "spread_decision_score_pick": spread_decision_score_pick,
+                        "spread_decision_score_alt": spread_decision_score_alt,
+                        "spread_decision_score_margin": spread_decision_score_margin,
+                        "spread_trace_json": spread_trace_json,
+                        "total_engine_used": total_engine_used,
+                        "total_pick_label": safe_str(total_pick_label),
+                        "total_alt_label": safe_str(total_alt_label),
+                        "total_prob_pick_final": total_prob_final,
+                        "total_prob_alt_final": total_alt_prob_final,
+                        "total_prob_margin": total_prob_margin,
+                        "total_prob_pick_market": total_prob_pick_market,
+                        "total_prob_alt_market": total_prob_alt_market,
+                        "total_prob_pick_kalshi": total_prob_pick_kalshi,
+                        "total_prob_alt_kalshi": total_prob_alt_kalshi,
+                        "total_decision_metric_used": total_decision_metric_used,
+                        "total_decision_score_pick": total_decision_score_pick,
+                        "total_decision_score_alt": total_decision_score_alt,
+                        "total_decision_score_margin": total_decision_score_margin,
+                        "total_trace_json": total_trace_json,
+                        "decision_trace_version": decision_trace_version,
+                        "overall_engine_used": overall_engine_used,
+                        "decision_trace_notes": decision_trace_notes,
                         "Vertex Spread Prob": vertex_spread_prob,
                         "Vertex Total Prob": vertex_total_prob,
                         "spread_implied_prob": spread_implied,
@@ -5014,10 +5620,60 @@ with tab_master:
                     "sentiment_used_cached": sentiment_used_cached,
                     "sentiment_disabled_reason": sentiment_disabled_reason,
                     "Vertex Spread Prob": vertex_spread_prob,
+                    "vertex_spread_prob": vertex_spread_prob,
+                    "vertex_total_prob": vertex_total_prob,
+                    "prob_engine": spread_prob_engine,
+                    "vertex_mode": vertex_mode,
+                    "gemini_mode": "pending" if use_gemini_explanations else "disabled",
+                    "overall_confidence": None,
+                    "spread_confidence_gemini": None,
+                    "total_confidence_gemini": None,
+                    "gemini_alignment": None,
+                    "gemini_rationale": None,
+                    "gemini_risk_flags": None,
+                    "gemini_error": None,
+                    "gemini_flags_short": None,
+                    "kalshi_prob_spread": kalshi_prob_spread,
+                    "kalshi_prob_total": kalshi_prob_total,
+                    "spread_prob_market": spread_prob_market,
+                    "total_prob_market": total_prob_market,
+                    "spread_engine_used": spread_engine_used,
+                    "spread_pick_label": safe_str(spread_pick_label),
+                    "spread_alt_label": safe_str(spread_alt_label),
+                    "spread_prob_pick_final": spread_prob_final,
+                    "spread_prob_alt_final": spread_alt_prob_final,
+                    "spread_prob_margin": spread_prob_margin,
+                    "spread_prob_pick_market": spread_prob_pick_market,
+                    "spread_prob_alt_market": spread_prob_alt_market,
+                    "spread_prob_pick_kalshi": spread_prob_pick_kalshi,
+                    "spread_prob_alt_kalshi": spread_prob_alt_kalshi,
+                    "spread_decision_metric_used": spread_decision_metric_used,
+                    "spread_decision_score_pick": spread_decision_score_pick,
+                    "spread_decision_score_alt": spread_decision_score_alt,
+                    "spread_decision_score_margin": spread_decision_score_margin,
+                    "spread_trace_json": spread_trace_json,
+                    "total_engine_used": total_engine_used,
+                    "total_pick_label": safe_str(total_pick_label),
+                    "total_alt_label": safe_str(total_alt_label),
+                    "total_prob_pick_final": total_prob_final,
+                    "total_prob_alt_final": total_alt_prob_final,
+                    "total_prob_margin": total_prob_margin,
+                    "total_prob_pick_market": total_prob_pick_market,
+                    "total_prob_alt_market": total_prob_alt_market,
+                    "total_prob_pick_kalshi": total_prob_pick_kalshi,
+                    "total_prob_alt_kalshi": total_prob_alt_kalshi,
+                    "total_decision_metric_used": total_decision_metric_used,
+                    "total_decision_score_pick": total_decision_score_pick,
+                    "total_decision_score_alt": total_decision_score_alt,
+                    "total_decision_score_margin": total_decision_score_margin,
+                    "total_trace_json": total_trace_json,
+                    "decision_trace_version": decision_trace_version,
+                    "overall_engine_used": overall_engine_used,
+                    "decision_trace_notes": decision_trace_notes,
                     "kalshi_matched": kalshi_spread.get("kalshi_matched"),
-                    "kalshi_prob": kalshi_prob_used if kalshi_spread.get("kalshi_matched") else None,
-                    "kalshi_prob_used": kalshi_prob_used if kalshi_spread.get("kalshi_matched") else None,
-                    "kalshi_event_ticker_used": kalshi_event_used if kalshi_spread.get("kalshi_matched") else None,
+                    "kalshi_prob": kalshi_prob_spread if kalshi_spread.get("kalshi_matched") else None,
+                    "kalshi_prob_used": kalshi_prob_spread if kalshi_spread.get("kalshi_matched") else None,
+                    "kalshi_event_ticker_used": kalshi_spread.get("kalshi_event_ticker") or (kalshi_event_used if kalshi_spread.get("kalshi_matched") else None),
                     "kalshi_candidate_count": candidate_debug.get("candidate_count"),
                     "kalshi_best_score": candidate_debug.get("best_score"),
                     "kalshi_match_reason": kalshi_spread.get("kalshi_reason") or kalshi_winner.get("kalshi_reason"),
@@ -5128,10 +5784,60 @@ with tab_master:
                     "Pick": total_pick, "Implied_Prob": total_implied, "Line": total_line, "AI_Prob": ai_prob_base,
                     "ai_prob_adj": ai_prob_row, "consensus_prob": None, "consensus_prob_adj": None,
                     "Vertex Total Prob": None,
+                    "vertex_spread_prob": vertex_spread_prob,
+                    "vertex_total_prob": vertex_total_prob,
+                    "prob_engine": total_prob_engine,
+                    "vertex_mode": vertex_mode,
+                    "gemini_mode": "pending" if use_gemini_explanations else "disabled",
+                    "overall_confidence": None,
+                    "spread_confidence_gemini": None,
+                    "total_confidence_gemini": None,
+                    "gemini_alignment": None,
+                    "gemini_rationale": None,
+                    "gemini_risk_flags": None,
+                    "gemini_error": None,
+                    "gemini_flags_short": None,
+                    "kalshi_prob_spread": kalshi_prob_spread,
+                    "kalshi_prob_total": kalshi_prob_total,
+                    "spread_prob_market": spread_prob_market,
+                    "total_prob_market": total_prob_market,
+                    "spread_engine_used": spread_engine_used,
+                    "spread_pick_label": safe_str(spread_pick_label),
+                    "spread_alt_label": safe_str(spread_alt_label),
+                    "spread_prob_pick_final": spread_prob_final,
+                    "spread_prob_alt_final": spread_alt_prob_final,
+                    "spread_prob_margin": spread_prob_margin,
+                    "spread_prob_pick_market": spread_prob_pick_market,
+                    "spread_prob_alt_market": spread_prob_alt_market,
+                    "spread_prob_pick_kalshi": spread_prob_pick_kalshi,
+                    "spread_prob_alt_kalshi": spread_prob_alt_kalshi,
+                    "spread_decision_metric_used": spread_decision_metric_used,
+                    "spread_decision_score_pick": spread_decision_score_pick,
+                    "spread_decision_score_alt": spread_decision_score_alt,
+                    "spread_decision_score_margin": spread_decision_score_margin,
+                    "spread_trace_json": spread_trace_json,
+                    "total_engine_used": total_engine_used,
+                    "total_pick_label": safe_str(total_pick_label),
+                    "total_alt_label": safe_str(total_alt_label),
+                    "total_prob_pick_final": total_prob_final,
+                    "total_prob_alt_final": total_alt_prob_final,
+                    "total_prob_margin": total_prob_margin,
+                    "total_prob_pick_market": total_prob_pick_market,
+                    "total_prob_alt_market": total_prob_alt_market,
+                    "total_prob_pick_kalshi": total_prob_pick_kalshi,
+                    "total_prob_alt_kalshi": total_prob_alt_kalshi,
+                    "total_decision_metric_used": total_decision_metric_used,
+                    "total_decision_score_pick": total_decision_score_pick,
+                    "total_decision_score_alt": total_decision_score_alt,
+                    "total_decision_score_margin": total_decision_score_margin,
+                    "total_trace_json": total_trace_json,
+                    "decision_trace_version": decision_trace_version,
+                    "overall_engine_used": overall_engine_used,
+                    "decision_trace_notes": decision_trace_notes,
                     "kalshi_matched": kalshi_total.get("kalshi_matched"),
-                    "kalshi_prob": kalshi_prob_used if kalshi_total.get("kalshi_matched") else None,
-                    "kalshi_prob_used": kalshi_prob_used if kalshi_total.get("kalshi_matched") else None,
-                    "kalshi_event_ticker_used": kalshi_event_used if kalshi_total.get("kalshi_matched") else None,
+                    "kalshi_prob": kalshi_prob_total if kalshi_total.get("kalshi_matched") else None,
+                    "kalshi_prob_used": kalshi_prob_total if kalshi_total.get("kalshi_matched") else None,
+                    "kalshi_event_ticker_used": kalshi_total.get("kalshi_event_ticker") or (kalshi_event_used if kalshi_total.get("kalshi_matched") else None),
                     "kalshi_candidate_count": candidate_debug.get("candidate_count"),
                     "kalshi_best_score": candidate_debug.get("best_score"),
                     "kalshi_match_reason": kalshi_total.get("kalshi_reason") or kalshi_winner.get("kalshi_reason"),
@@ -5299,6 +6005,58 @@ with tab_master:
             "total_prob_adj",
             "ai_prob_adj",
             "consensus_prob",
+            "overall_confidence",
+            "spread_confidence_gemini",
+            "total_confidence_gemini",
+            "spread_confidence_base",
+            "total_confidence_base",
+            "gemini_alignment",
+            "gemini_rationale",
+            "gemini_risk_flags",
+            "gemini_flags_short",
+            "gemini_mode",
+            "gemini_error",
+            "prob_engine",
+            "vertex_mode",
+            "vertex_spread_prob",
+            "vertex_total_prob",
+            "spread_engine_used",
+            "spread_pick_label",
+            "spread_alt_label",
+            "spread_prob_pick_final",
+            "spread_prob_alt_final",
+            "spread_prob_margin",
+            "spread_prob_pick_market",
+            "spread_prob_alt_market",
+            "spread_prob_pick_kalshi",
+            "spread_prob_alt_kalshi",
+            "spread_decision_metric_used",
+            "spread_decision_score_pick",
+            "spread_decision_score_alt",
+            "spread_decision_score_margin",
+            "spread_trace_json",
+            "total_engine_used",
+            "total_pick_label",
+            "total_alt_label",
+            "total_prob_pick_final",
+            "total_prob_alt_final",
+            "total_prob_margin",
+            "total_prob_pick_market",
+            "total_prob_alt_market",
+            "total_prob_pick_kalshi",
+            "total_prob_alt_kalshi",
+            "total_decision_metric_used",
+            "total_decision_score_pick",
+            "total_decision_score_alt",
+            "total_decision_score_margin",
+            "total_trace_json",
+            "decision_trace_version",
+            "overall_engine_used",
+            "decision_trace_notes",
+            "kalshi_prob_spread",
+            "kalshi_prob_total",
+            "spread_prob_market",
+            "total_prob_market",
             "kalshi_candidate_count",
             "kalshi_best_score",
             "kalshi_match_reason",
@@ -5412,6 +6170,67 @@ with tab_master:
         if "reddit_used" in df.columns:
             df["reddit_used"] = df["reddit_used"].fillna(False)
         df = add_spread_total_confidence(df)
+        use_gemini_explanations = st.session_state.get("use_gemini_explanations", True)
+        def _apply_gemini(row: pd.Series) -> pd.Series:
+            base_overall = row.get("At_a_Glance_Confidence") or row.get("Pick_Confidence")
+            base_spread_conf = row.get("spread_confidence")
+            base_total_conf = row.get("total_confidence")
+            row["spread_confidence_base"] = base_spread_conf
+            row["total_confidence_base"] = base_total_conf
+            if not use_gemini_explanations:
+                row["gemini_mode"] = row.get("gemini_mode") or "disabled"
+                row["overall_confidence"] = base_overall
+                row["spread_confidence"] = base_spread_conf
+                row["total_confidence"] = base_total_conf
+                row["gemini_alignment"] = row.get("gemini_alignment") or ("no_kalshi" if not row.get("kalshi_matched") else None)
+                return row
+            try:
+                payload = {
+                    "league": row.get("League"),
+                    "home": row.get("Home"),
+                    "away": row.get("Away"),
+                    "commence_local": row.get("Commence (Local)"),
+                    "spread_pick": row.get("Spread & Pick"),
+                    "spread_line": row.get("spread_pick_line") or (row.get("Line") if str(row.get("Market")).lower() == "spread" else None),
+                    "spread_odds": row.get("spread_pick_odds"),
+                    "spread_prob_final": row.get("spread_prob"),
+                    "spread_prob_market": row.get("spread_prob_market"),
+                    "total_pick": row.get("Total & Pick"),
+                    "total_line": row.get("total_pick_line") or (row.get("Line") if str(row.get("Market")).lower() == "total" else None),
+                    "total_odds": row.get("total_pick_odds"),
+                    "total_prob_final": row.get("total_prob"),
+                    "total_prob_market": row.get("total_prob_market"),
+                    "kalshi_spread_prob": row.get("kalshi_prob_spread"),
+                    "kalshi_total_prob": row.get("kalshi_prob_total"),
+                    "kalshi_matched": bool(row.get("kalshi_matched")),
+                    "prob_engine": row.get("prob_engine"),
+                    "sentiment_badge": row.get("sentiment_badge"),
+                    "sentiment_flags": [row.get("spread_sentiment_note"), row.get("total_sentiment_note")],
+                    "warnings": row.get("Warnings"),
+                }
+                sig = _gemini_payload_signature(payload)
+                gem_res = cached_gemini_confidence(sig, payload) or {}
+                flags = gem_res.get("risk_flags") if isinstance(gem_res, dict) else []
+                flags_list = [str(f) for f in flags] if isinstance(flags, list) else []
+                row["overall_confidence"] = gem_res.get("overall_confidence") or base_overall
+                row["spread_confidence"] = gem_res.get("spread_confidence") or base_spread_conf
+                row["total_confidence"] = gem_res.get("total_confidence") or base_total_conf
+                row["spread_confidence_gemini"] = gem_res.get("spread_confidence") or base_spread_conf
+                row["total_confidence_gemini"] = gem_res.get("total_confidence") or base_total_conf
+                row["gemini_alignment"] = gem_res.get("alignment") or ("no_kalshi" if not row.get("kalshi_matched") else None)
+                row["gemini_rationale"] = gem_res.get("rationale")
+                row["gemini_risk_flags"] = json.dumps(flags_list) if flags_list else None
+                row["gemini_flags_short"] = " | ".join(flags_list[:3]) if flags_list else None
+                row["gemini_mode"] = "enabled"
+                row["gemini_error"] = None
+            except Exception as exc:
+                row["gemini_mode"] = "error"
+                row["gemini_error"] = str(exc)[:240]
+                row["overall_confidence"] = base_overall
+                row["spread_confidence"] = base_spread_conf
+                row["total_confidence"] = base_total_conf
+            return row
+        df = df.apply(_apply_gemini, axis=1)
 
         confidence_mode = st.selectbox(
             "Confidence filter",
@@ -5419,11 +6238,13 @@ with tab_master:
             index=0,
             key="confidence_filter_mode",
         )
+        st.session_state.setdefault("show_low_confidence", False)
         hide_low = st.checkbox(
-            "Hide low-confidence picks (proxy/fallback)",
-            value=False,
+            "Hide low-confidence picks",
+            value=st.session_state.get("show_low_confidence", False),
             key="hide_low_confidence",
         )
+        st.session_state["show_low_confidence"] = hide_low
         df_master_view, confidence_stats = apply_confidence_filter(df, confidence_mode, not hide_low)
         counts = confidence_stats.get("counts") or {}
         st.caption(
@@ -5448,6 +6269,45 @@ with tab_master:
             pass
 
         df_master_view = reorder_for_spread_total_focus(df_master_view)
+        df_master_view_full = df_master_view.copy()
+        trace_cols = [
+            "spread_engine_used",
+            "spread_pick_label",
+            "spread_alt_label",
+            "spread_prob_pick_final",
+            "spread_prob_alt_final",
+            "spread_prob_margin",
+            "spread_prob_pick_market",
+            "spread_prob_alt_market",
+            "spread_prob_pick_kalshi",
+            "spread_prob_alt_kalshi",
+            "spread_decision_metric_used",
+            "spread_decision_score_pick",
+            "spread_decision_score_alt",
+            "spread_decision_score_margin",
+            "spread_trace_json",
+            "total_engine_used",
+            "total_pick_label",
+            "total_alt_label",
+            "total_prob_pick_final",
+            "total_prob_alt_final",
+            "total_prob_margin",
+            "total_prob_pick_market",
+            "total_prob_alt_market",
+            "total_prob_pick_kalshi",
+            "total_prob_alt_kalshi",
+            "total_decision_metric_used",
+            "total_decision_score_pick",
+            "total_decision_score_alt",
+            "total_decision_score_margin",
+            "total_trace_json",
+            "decision_trace_version",
+            "overall_engine_used",
+            "decision_trace_notes",
+        ]
+        show_decision_trace = st.checkbox("Show Decision Trace Columns", value=False, key="show_decision_trace")
+        if not show_decision_trace:
+            df_master_view = df_master_view.drop(columns=[c for c in trace_cols if c in df_master_view.columns], errors="ignore")
         show_moneyline_details = st.checkbox("Show Moneyline details", value=False, key="show_moneyline_details")
         if not show_moneyline_details:
             ml_detail_cols = [
@@ -5516,6 +6376,8 @@ with tab_master:
         except Exception:
             pass
         top_df = reorder_for_spread_total_focus(top_df)
+        if not show_decision_trace:
+            top_df = top_df.drop(columns=[c for c in trace_cols if c in top_df.columns], errors="ignore")
         if not show_moneyline_details:
             ml_detail_cols = [
                 "Pick",
@@ -5542,6 +6404,39 @@ with tab_master:
             "Implied_Prob",
             "ai_prob_adj",
             "consensus_prob",
+            "spread_engine_used",
+            "spread_pick_label",
+            "spread_alt_label",
+            "spread_prob_pick_final",
+            "spread_prob_alt_final",
+            "spread_prob_margin",
+            "spread_prob_pick_market",
+            "spread_prob_alt_market",
+            "spread_prob_pick_kalshi",
+            "spread_prob_alt_kalshi",
+            "spread_decision_metric_used",
+            "spread_decision_score_pick",
+            "spread_decision_score_alt",
+            "spread_decision_score_margin",
+            "spread_trace_json",
+            "total_engine_used",
+            "total_pick_label",
+            "total_alt_label",
+            "total_prob_pick_final",
+            "total_prob_alt_final",
+            "total_prob_margin",
+            "total_prob_pick_market",
+            "total_prob_alt_market",
+            "total_prob_pick_kalshi",
+            "total_prob_alt_kalshi",
+            "total_decision_metric_used",
+            "total_decision_score_pick",
+            "total_decision_score_alt",
+            "total_decision_score_margin",
+            "total_trace_json",
+            "decision_trace_version",
+            "overall_engine_used",
+            "decision_trace_notes",
             "kalshi_matched",
             "kalshi_prob_used",
             "kalshi_event_ticker_used",
@@ -5592,6 +6487,25 @@ with tab_master:
             "Eligible_Top_Picks",
             "Kalshi_Required",
             "consensus_prob_adj",
+            "overall_confidence",
+            "spread_confidence_gemini",
+            "total_confidence_gemini",
+            "spread_confidence_base",
+            "total_confidence_base",
+            "gemini_alignment",
+            "gemini_rationale",
+            "gemini_risk_flags",
+            "gemini_flags_short",
+            "gemini_mode",
+            "gemini_error",
+            "prob_engine",
+            "vertex_mode",
+            "vertex_spread_prob",
+            "vertex_total_prob",
+            "kalshi_prob_spread",
+            "kalshi_prob_total",
+            "spread_prob_market",
+            "total_prob_market",
             "api_sports_used",
             "sportsdata_used",
             "injuries_home_count",
@@ -5649,7 +6563,7 @@ with tab_master:
             "best_total_median_point",
             "best_total_mode_point",
         ]
-        export_df = df_master_view.copy()
+        export_df = df_master_view_full.copy()
         if "Unnamed: 0" in export_df.columns:
             export_df = export_df.drop(columns=["Unnamed: 0"])
         export_df = reorder_for_spread_total_focus(export_df)
