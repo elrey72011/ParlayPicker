@@ -936,9 +936,10 @@ def compute_team_sentiment_map(news_api_key: Optional[str], games: List[Dict[str
     calls_made = 0
     stop_fetching = cooldown_active
     rate_limit_triggered = False
+    REQUEST_BUDGET = min(MAX_SENTIMENT_CALLS, 10)
 
     for team in ordered_teams:
-        if stop_fetching or calls_made >= MAX_SENTIMENT_CALLS:
+        if stop_fetching or calls_made >= REQUEST_BUDGET:
             sentiment_map[team] = None
             sentiment_meta[team] = {
                 "sentiment_valid": False,
@@ -965,7 +966,7 @@ def compute_team_sentiment_map(news_api_key: Optional[str], games: List[Dict[str
                 fetch_info = {"error": "analyzer_exception"}
         if not raw_payload:
             articles: List[Dict[str, Any]] = []
-            if news_api_key:
+            if news_api_key and calls_made < REQUEST_BUDGET and not stop_fetching:
                 articles, fetch_info = fetch_team_news(news_api_key or "", team, league)
                 calls_made += 1
             else:
@@ -985,16 +986,16 @@ def compute_team_sentiment_map(news_api_key: Optional[str], games: List[Dict[str
             status_int = None
         if status_int is not None:
             debug["status_counts"][status_int] = debug["status_counts"].get(status_int, 0) + 1
-        if len(debug["sample_calls"]) < 10:
-            debug["sample_calls"].append(
-                {
-                    "team": team,
-                    "league": league,
-                    "q": fetch_info.get("q"),
-                    "status": status_int,
-                    "totalResults": fetch_info.get("totalResults"),
-                    "error": fetch_info.get("error"),
-                }
+            if len(debug["sample_calls"]) < 10:
+                debug["sample_calls"].append(
+                    {
+                        "team": team,
+                        "league": league,
+                        "q": fetch_info.get("q"),
+                        "status": status_int,
+                        "totalResults": fetch_info.get("totalResults"),
+                        "error": fetch_info.get("error"),
+                    }
             )
         if status_int == 429:
             try:
