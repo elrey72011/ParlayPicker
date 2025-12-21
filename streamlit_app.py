@@ -1789,18 +1789,6 @@ def ensure_sentiment_loaded(games: List[Dict[str, Any]]) -> None:
         st.session_state["reddit_used"] = False
 
 
-# Must be the first Streamlit call
-st.set_page_config(page_title="ParlayDesk", layout="wide")
-vertex_info = init_vertex_once()
-st.session_state["vertex_info"] = vertex_info
-
-# ------------------------------------------------------------
-# Kalshi globals / shims (must exist before any call sites)
-# ------------------------------------------------------------
-kalshi_integrator: Optional[KalshiIntegrator] = None
-api_sports_clients: Dict[str, Any] = {}
-sportsdata_clients: Dict[str, Any] = {}
-
 def kalshi_health_check(selected_league: str = "NBA") -> Dict[str, Any]:
     """
     MUST NOT crash. Used for UI gating + debug.
@@ -1964,6 +1952,22 @@ def init_data_clients() -> Tuple[Dict[str, Any], Dict[str, Any]]:
         "NHL": SportsDataNHLClient(sd_key, key_source="secrets/env") if sd_key else None,
     }
     return api_sports_clients, sportsdata_clients
+
+# Must be the first Streamlit call
+st.set_page_config(page_title="ParlayDesk", layout="wide")
+
+# ------------------------------------------------------------
+# Kalshi globals / shims (must exist before any call sites)
+# ------------------------------------------------------------
+kalshi_integrator: Optional[KalshiIntegrator] = None
+api_sports_clients: Dict[str, Any] = {}
+sportsdata_clients: Dict[str, Any] = {}
+
+vertex_info = ensure_vertex_info_cached()
+try:
+    st.session_state["vertex_info"] = vertex_info
+except Exception:
+    pass
 
 def canonical_league_key(raw: Optional[str]) -> str:
     """Normalize league identifiers to canonical keys used across odds/sentiment/Kalshi."""
@@ -3965,6 +3969,8 @@ for name, ok in badges.items():
     st.sidebar.markdown(f"**{name}:** :{color}[{'OK' if ok else 'Missing'}]")
 with st.sidebar.expander("Key sources (API-Sports/SportsData)"):
     st.caption("Lookups: API_SPORTS_KEY, APISPORTS_API_KEY, NBA/NFL specific; SPORTSData: SPORTSDATA_API_KEY/KEY variants")
+if not vertex_info.get("ok"):
+    st.sidebar.warning(f"Vertex not ready: {vertex_info.get('error') or 'not configured'}")
 with st.sidebar.expander("Vertex / Gemini Status", expanded=False):
     st.json(vertex_info)
 
