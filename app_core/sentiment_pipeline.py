@@ -103,8 +103,15 @@ def _newsapi_query(team: str, league: str, league_query: Optional[str] = None) -
 
 
 @st.cache_data(ttl=3600)
-def fetch_team_newsapi_cached(team: str, league: str, news_api_key: str, date_bucket: Optional[str] = None, league_query: Optional[str] = None) -> Dict[str, Any]:
-    """Fetch NewsAPI once for a team and return normalized debug payload without raising."""
+def fetch_team_newsapi_cached(
+    team: str,
+    league: str,
+    news_api_key: str,
+    date_bucket: Optional[str] = None,
+    league_query: Optional[str] = None,
+    query_override: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Fetch NewsAPI once for a team or custom query and return normalized debug payload without raising."""
     meta: Dict[str, Any] = {
         "status": "NO_CALL",
         "q_used": "",
@@ -116,15 +123,34 @@ def fetch_team_newsapi_cached(team: str, league: str, news_api_key: str, date_bu
     try:
         date_bucket = date_bucket or datetime.now(timezone.utc).date().isoformat()
         league_q = league_query or league_label(league)
-        articles, info = fetch_team_news(news_api_key, team, league, league_q, date_bucket=date_bucket)
-        status_val = info.get("status") or info.get("status_code") or "NO_STATUS"
+        q_text = query_override or _newsapi_query(team, league, league_q)
+        to_date = datetime.utcnow().date()
+        from_date = to_date - timedelta(days=3)
+        url = "https://newsapi.org/v2/everything"
+        params = {
+            "q": q_text,
+            "sortBy": "relevancy",
+            "pageSize": 20,
+            "language": "en",
+            "from": from_date.isoformat(),
+            "to": to_date.isoformat(),
+            "apiKey": news_api_key,
+        }
+        resp = requests.get(url, params=params, timeout=8)
+        status_val = resp.status_code
+        try:
+            data = resp.json() if hasattr(resp, "json") else {}
+        except Exception:
+            data = {}
+        articles = data.get("articles", []) if isinstance(data, dict) else []
+        total_results = data.get("totalResults") if isinstance(data, dict) else None
         meta["status"] = int(status_val) if str(status_val).isdigit() else str(status_val)
-        meta["q_used"] = info.get("q") or _newsapi_query(team, league, league_q)
-        meta["totalResults"] = int(info.get("totalResults") or 0)
+        meta["q_used"] = q_text
+        meta["totalResults"] = int(total_results or 0)
         meta["articles_count"] = len(articles or [])
         if meta["articles_count"] > 0:
             meta["sentiment"] = float(team_sentiment_from_articles(articles))
-        meta["error"] = info.get("error")
+        meta["error"] = None if status_val == 200 else data.get("message") if isinstance(data, dict) else None
     except Exception as exc:
         meta["status"] = "EXCEPTION"
         meta["error"] = str(exc)
