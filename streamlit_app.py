@@ -224,6 +224,29 @@ def blend_probs(weighted_probs: List[Tuple[Optional[float], float]]) -> Optional
     return clamp(blended, 0.0, 1.0)
 
 
+def safe_str(x: Any) -> str:
+    return "" if x is None else str(x)
+
+
+def compute_margin(p_pick: Optional[float], p_alt: Optional[float]) -> Optional[float]:
+    if p_pick is None or p_alt is None:
+        return None
+    try:
+        return float(p_pick) - float(p_alt)
+    except Exception:
+        return None
+
+
+def engine_label(kalshi_used: bool, market_used: bool) -> str:
+    if kalshi_used and market_used:
+        return "kalshi+market"
+    if kalshi_used and not market_used:
+        return "kalshi_only"
+    if (not kalshi_used) and market_used:
+        return "market_only"
+    return "missing"
+
+
 def blend_kalshi_market(kalshi_p: Optional[float], market_p: Optional[float]) -> Optional[float]:
     """
     Blend Kalshi and market probabilities with a strong Kalshi weight.
@@ -4691,6 +4714,39 @@ with tab_master:
                     "gemini_risk_flags": None,
                     "gemini_error": None,
                     "gemini_flags_short": None,
+                    "spread_engine_used": spread_engine_used,
+                    "spread_pick_label": safe_str(spread_pick_label),
+                    "spread_alt_label": safe_str(spread_alt_label),
+                    "spread_prob_pick_final": spread_prob_final,
+                    "spread_prob_alt_final": spread_alt_prob_final,
+                    "spread_prob_margin": spread_prob_margin,
+                    "spread_prob_pick_market": spread_prob_pick_market,
+                    "spread_prob_alt_market": spread_prob_alt_market,
+                    "spread_prob_pick_kalshi": spread_prob_pick_kalshi,
+                    "spread_prob_alt_kalshi": spread_prob_alt_kalshi,
+                    "spread_decision_metric_used": spread_decision_metric_used,
+                    "spread_decision_score_pick": spread_decision_score_pick,
+                    "spread_decision_score_alt": spread_decision_score_alt,
+                    "spread_decision_score_margin": spread_decision_score_margin,
+                    "spread_trace_json": spread_trace_json,
+                    "total_engine_used": total_engine_used,
+                    "total_pick_label": safe_str(total_pick_label),
+                    "total_alt_label": safe_str(total_alt_label),
+                    "total_prob_pick_final": total_prob_final,
+                    "total_prob_alt_final": total_alt_prob_final,
+                    "total_prob_margin": total_prob_margin,
+                    "total_prob_pick_market": total_prob_pick_market,
+                    "total_prob_alt_market": total_prob_alt_market,
+                    "total_prob_pick_kalshi": total_prob_pick_kalshi,
+                    "total_prob_alt_kalshi": total_prob_alt_kalshi,
+                    "total_decision_metric_used": total_decision_metric_used,
+                    "total_decision_score_pick": total_decision_score_pick,
+                    "total_decision_score_alt": total_decision_score_alt,
+                    "total_decision_score_margin": total_decision_score_margin,
+                    "total_trace_json": total_trace_json,
+                    "decision_trace_version": decision_trace_version,
+                    "overall_engine_used": overall_engine_used,
+                    "decision_trace_notes": decision_trace_notes,
                     "spread_market_pairs_count": spread_market_pairs_count,
                     "total_market_pairs_count": total_market_pairs_count,
                     "spread_odds_valid": spread_odds_valid,
@@ -4896,6 +4952,141 @@ with tab_master:
             spread_prob_engine = prob_engine_label(bool(kalshi_spread.get("kalshi_matched")), spread_prob_market, vertex_used=vertex_used_for_spread)
             total_prob_engine = prob_engine_label(bool(kalshi_total.get("kalshi_matched")), total_prob_market, vertex_used=vertex_used_for_total)
 
+            # --- Decision trace (Spread) ---
+            spread_alt_team = None
+            spread_alt_line = None
+            spread_alt_odds = None
+            spread_alt_market_prob = None
+            spread_alt_prob_final = None
+            spread_pick_label = f"{spread_pick} {spread_line}" if spread_pick is not None else ""
+            spread_alt_label = ""
+            spread_decision_metric_used = "final_prob"
+            spread_decision_score_pick = spread_prob_final
+            spread_decision_score_alt = None
+            spread_decision_score_margin = None
+            spread_prob_margin = None
+            spread_prob_pick_market = spread_prob_market
+            spread_prob_alt_market = None
+            spread_prob_pick_kalshi = kalshi_prob_spread if kalshi_spread.get("kalshi_matched") else None
+            spread_prob_alt_kalshi = None
+            if spread_pick_team in {home, away}:
+                spread_alt_team = away if spread_pick_team == home else home
+                spread_alt_line = home_spread_point if spread_pick_team == away else away_spread_point
+                spread_alt_label = f"{spread_alt_team} {spread_alt_line}" if spread_alt_team else ""
+                alt_side_key = "home" if spread_alt_team == home else "away"
+                alt_offer = select_best_offer_for_pick(
+                    spread_offers, alt_side_key, pick_line=spread_alt_line, preferred_book=g.get("best_spread_book")
+                )
+                if alt_offer:
+                    spread_alt_odds = alt_offer.get("price")
+                spread_alt_market_prob, _, _, _ = compute_market_prob_from_offers(
+                    spread_offers, alt_side_key, market_type="spread"
+                )
+                spread_prob_alt_market = spread_alt_market_prob
+                spread_alt_prob_final = blend_kalshi_market(spread_prob_alt_kalshi, spread_alt_market_prob)
+                spread_decision_score_alt = spread_alt_prob_final
+                spread_prob_margin = compute_margin(spread_prob_final, spread_alt_prob_final)
+                spread_decision_score_margin = compute_margin(spread_decision_score_pick, spread_decision_score_alt)
+            spread_engine_used = engine_label(bool(spread_prob_pick_kalshi), bool(spread_prob_pick_market is not None or spread_prob_alt_market is not None))
+            spread_trace = {
+                "pick": {
+                    "team": spread_pick_team,
+                    "label": safe_str(spread_pick_label),
+                    "line": spread_line,
+                    "odds": spread_pick_odds,
+                    "market_prob": spread_prob_pick_market,
+                    "kalshi_prob": spread_prob_pick_kalshi,
+                    "final_prob": spread_prob_final,
+                    "score": spread_decision_score_pick,
+                },
+                "alt": {
+                    "team": spread_alt_team,
+                    "label": safe_str(spread_alt_label),
+                    "line": spread_alt_line,
+                    "odds": spread_alt_odds,
+                    "market_prob": spread_prob_alt_market,
+                    "kalshi_prob": spread_prob_alt_kalshi,
+                    "final_prob": spread_alt_prob_final,
+                    "score": spread_decision_score_alt,
+                },
+                "engine_used": spread_engine_used,
+                "metric": spread_decision_metric_used,
+                "notes": "",
+            }
+            try:
+                spread_trace_json = json.dumps(spread_trace, default=safe_str)
+            except Exception:
+                spread_trace_json = "{}"
+
+            # --- Decision trace (Total) ---
+            total_alt_side = None
+            total_alt_line = total_line
+            total_alt_odds = None
+            total_alt_market_prob = None
+            total_alt_prob_final = None
+            total_pick_label = f"{total_pick} {total_line}" if total_pick is not None else ""
+            total_alt_label = ""
+            total_decision_metric_used = "final_prob"
+            total_decision_score_pick = total_prob_final
+            total_decision_score_alt = None
+            total_decision_score_margin = None
+            total_prob_margin = None
+            total_prob_pick_market = total_prob_market
+            total_prob_alt_market = None
+            total_prob_pick_kalshi = kalshi_prob_total if kalshi_total.get("kalshi_matched") else None
+            total_prob_alt_kalshi = None
+            if total_pick_side in {"Over", "Under"}:
+                total_alt_side = "Under" if total_pick_side == "Over" else "Over"
+                total_alt_label = f"{total_alt_side} {total_line}" if total_line is not None else total_alt_side
+                alt_side_key_total = total_alt_side.lower()
+                alt_total_offer = select_best_offer_for_pick(
+                    total_offers, alt_side_key_total, pick_line=total_line, preferred_book=g.get("best_total_book")
+                )
+                if alt_total_offer:
+                    total_alt_odds = alt_total_offer.get("price")
+                total_alt_market_prob, _, _, _ = compute_market_prob_from_offers(
+                    total_offers, alt_side_key_total, market_type="total"
+                )
+                total_prob_alt_market = total_alt_market_prob
+                total_alt_prob_final = blend_kalshi_market(total_prob_alt_kalshi, total_alt_market_prob)
+                total_decision_score_alt = total_alt_prob_final
+                total_prob_margin = compute_margin(total_prob_final, total_alt_prob_final)
+                total_decision_score_margin = compute_margin(total_decision_score_pick, total_decision_score_alt)
+            total_engine_used = engine_label(bool(total_prob_pick_kalshi), bool(total_prob_pick_market is not None or total_prob_alt_market is not None))
+            total_trace = {
+                "pick": {
+                    "side": total_pick_side,
+                    "label": safe_str(total_pick_label),
+                    "line": total_line,
+                    "odds": total_pick_odds,
+                    "market_prob": total_prob_pick_market,
+                    "kalshi_prob": total_prob_pick_kalshi,
+                    "final_prob": total_prob_final,
+                    "score": total_decision_score_pick,
+                },
+                "alt": {
+                    "side": total_alt_side,
+                    "label": safe_str(total_alt_label),
+                    "line": total_alt_line,
+                    "odds": total_alt_odds,
+                    "market_prob": total_prob_alt_market,
+                    "kalshi_prob": total_prob_alt_kalshi,
+                    "final_prob": total_alt_prob_final,
+                    "score": total_decision_score_alt,
+                },
+                "engine_used": total_engine_used,
+                "metric": total_decision_metric_used,
+                "notes": "",
+            }
+            try:
+                total_trace_json = json.dumps(total_trace, default=safe_str)
+            except Exception:
+                total_trace_json = "{}"
+
+            decision_trace_version = "v1"
+            overall_engine_used = f"spread:{spread_engine_used}|total:{total_engine_used}"
+            decision_trace_notes = ""
+
             # Baseline probability (Home Win)
             if implied_home is not None:
                 market_home_prob = implied_home
@@ -5042,6 +5233,39 @@ with tab_master:
                         "kalshi_prob_total": kalshi_prob_total,
                         "spread_prob_market": spread_prob_market,
                         "total_prob_market": total_prob_market,
+                        "spread_engine_used": spread_engine_used,
+                        "spread_pick_label": safe_str(spread_pick_label),
+                        "spread_alt_label": safe_str(spread_alt_label),
+                        "spread_prob_pick_final": spread_prob_final,
+                        "spread_prob_alt_final": spread_alt_prob_final,
+                        "spread_prob_margin": spread_prob_margin,
+                        "spread_prob_pick_market": spread_prob_pick_market,
+                        "spread_prob_alt_market": spread_prob_alt_market,
+                        "spread_prob_pick_kalshi": spread_prob_pick_kalshi,
+                        "spread_prob_alt_kalshi": spread_prob_alt_kalshi,
+                        "spread_decision_metric_used": spread_decision_metric_used,
+                        "spread_decision_score_pick": spread_decision_score_pick,
+                        "spread_decision_score_alt": spread_decision_score_alt,
+                        "spread_decision_score_margin": spread_decision_score_margin,
+                        "spread_trace_json": spread_trace_json,
+                        "total_engine_used": total_engine_used,
+                        "total_pick_label": safe_str(total_pick_label),
+                        "total_alt_label": safe_str(total_alt_label),
+                        "total_prob_pick_final": total_prob_final,
+                        "total_prob_alt_final": total_alt_prob_final,
+                        "total_prob_margin": total_prob_margin,
+                        "total_prob_pick_market": total_prob_pick_market,
+                        "total_prob_alt_market": total_prob_alt_market,
+                        "total_prob_pick_kalshi": total_prob_pick_kalshi,
+                        "total_prob_alt_kalshi": total_prob_alt_kalshi,
+                        "total_decision_metric_used": total_decision_metric_used,
+                        "total_decision_score_pick": total_decision_score_pick,
+                        "total_decision_score_alt": total_decision_score_alt,
+                        "total_decision_score_margin": total_decision_score_margin,
+                        "total_trace_json": total_trace_json,
+                        "decision_trace_version": decision_trace_version,
+                        "overall_engine_used": overall_engine_used,
+                        "decision_trace_notes": decision_trace_notes,
                         "overall_confidence": None,
                         "spread_confidence_gemini": None,
                         "total_confidence_gemini": None,
@@ -5075,6 +5299,39 @@ with tab_master:
                         "total_prob": total_prob,
                         "total_confidence": None,
                         "total_confidence_reason": None,
+                        "spread_engine_used": spread_engine_used,
+                        "spread_pick_label": safe_str(spread_pick_label),
+                        "spread_alt_label": safe_str(spread_alt_label),
+                        "spread_prob_pick_final": spread_prob_final,
+                        "spread_prob_alt_final": spread_alt_prob_final,
+                        "spread_prob_margin": spread_prob_margin,
+                        "spread_prob_pick_market": spread_prob_pick_market,
+                        "spread_prob_alt_market": spread_prob_alt_market,
+                        "spread_prob_pick_kalshi": spread_prob_pick_kalshi,
+                        "spread_prob_alt_kalshi": spread_prob_alt_kalshi,
+                        "spread_decision_metric_used": spread_decision_metric_used,
+                        "spread_decision_score_pick": spread_decision_score_pick,
+                        "spread_decision_score_alt": spread_decision_score_alt,
+                        "spread_decision_score_margin": spread_decision_score_margin,
+                        "spread_trace_json": spread_trace_json,
+                        "total_engine_used": total_engine_used,
+                        "total_pick_label": safe_str(total_pick_label),
+                        "total_alt_label": safe_str(total_alt_label),
+                        "total_prob_pick_final": total_prob_final,
+                        "total_prob_alt_final": total_alt_prob_final,
+                        "total_prob_margin": total_prob_margin,
+                        "total_prob_pick_market": total_prob_pick_market,
+                        "total_prob_alt_market": total_prob_alt_market,
+                        "total_prob_pick_kalshi": total_prob_pick_kalshi,
+                        "total_prob_alt_kalshi": total_prob_alt_kalshi,
+                        "total_decision_metric_used": total_decision_metric_used,
+                        "total_decision_score_pick": total_decision_score_pick,
+                        "total_decision_score_alt": total_decision_score_alt,
+                        "total_decision_score_margin": total_decision_score_margin,
+                        "total_trace_json": total_trace_json,
+                        "decision_trace_version": decision_trace_version,
+                        "overall_engine_used": overall_engine_used,
+                        "decision_trace_notes": decision_trace_notes,
                         "Vertex Spread Prob": vertex_spread_prob,
                         "Vertex Total Prob": vertex_total_prob,
                         "spread_implied_prob": spread_implied,
@@ -5200,6 +5457,39 @@ with tab_master:
                     "kalshi_prob_total": kalshi_prob_total,
                     "spread_prob_market": spread_prob_market,
                     "total_prob_market": total_prob_market,
+                    "spread_engine_used": spread_engine_used,
+                    "spread_pick_label": safe_str(spread_pick_label),
+                    "spread_alt_label": safe_str(spread_alt_label),
+                    "spread_prob_pick_final": spread_prob_final,
+                    "spread_prob_alt_final": spread_alt_prob_final,
+                    "spread_prob_margin": spread_prob_margin,
+                    "spread_prob_pick_market": spread_prob_pick_market,
+                    "spread_prob_alt_market": spread_prob_alt_market,
+                    "spread_prob_pick_kalshi": spread_prob_pick_kalshi,
+                    "spread_prob_alt_kalshi": spread_prob_alt_kalshi,
+                    "spread_decision_metric_used": spread_decision_metric_used,
+                    "spread_decision_score_pick": spread_decision_score_pick,
+                    "spread_decision_score_alt": spread_decision_score_alt,
+                    "spread_decision_score_margin": spread_decision_score_margin,
+                    "spread_trace_json": spread_trace_json,
+                    "total_engine_used": total_engine_used,
+                    "total_pick_label": safe_str(total_pick_label),
+                    "total_alt_label": safe_str(total_alt_label),
+                    "total_prob_pick_final": total_prob_final,
+                    "total_prob_alt_final": total_alt_prob_final,
+                    "total_prob_margin": total_prob_margin,
+                    "total_prob_pick_market": total_prob_pick_market,
+                    "total_prob_alt_market": total_prob_alt_market,
+                    "total_prob_pick_kalshi": total_prob_pick_kalshi,
+                    "total_prob_alt_kalshi": total_prob_alt_kalshi,
+                    "total_decision_metric_used": total_decision_metric_used,
+                    "total_decision_score_pick": total_decision_score_pick,
+                    "total_decision_score_alt": total_decision_score_alt,
+                    "total_decision_score_margin": total_decision_score_margin,
+                    "total_trace_json": total_trace_json,
+                    "decision_trace_version": decision_trace_version,
+                    "overall_engine_used": overall_engine_used,
+                    "decision_trace_notes": decision_trace_notes,
                     "kalshi_matched": kalshi_spread.get("kalshi_matched"),
                     "kalshi_prob": kalshi_prob_spread if kalshi_spread.get("kalshi_matched") else None,
                     "kalshi_prob_used": kalshi_prob_spread if kalshi_spread.get("kalshi_matched") else None,
@@ -5331,6 +5621,39 @@ with tab_master:
                     "kalshi_prob_total": kalshi_prob_total,
                     "spread_prob_market": spread_prob_market,
                     "total_prob_market": total_prob_market,
+                    "spread_engine_used": spread_engine_used,
+                    "spread_pick_label": safe_str(spread_pick_label),
+                    "spread_alt_label": safe_str(spread_alt_label),
+                    "spread_prob_pick_final": spread_prob_final,
+                    "spread_prob_alt_final": spread_alt_prob_final,
+                    "spread_prob_margin": spread_prob_margin,
+                    "spread_prob_pick_market": spread_prob_pick_market,
+                    "spread_prob_alt_market": spread_prob_alt_market,
+                    "spread_prob_pick_kalshi": spread_prob_pick_kalshi,
+                    "spread_prob_alt_kalshi": spread_prob_alt_kalshi,
+                    "spread_decision_metric_used": spread_decision_metric_used,
+                    "spread_decision_score_pick": spread_decision_score_pick,
+                    "spread_decision_score_alt": spread_decision_score_alt,
+                    "spread_decision_score_margin": spread_decision_score_margin,
+                    "spread_trace_json": spread_trace_json,
+                    "total_engine_used": total_engine_used,
+                    "total_pick_label": safe_str(total_pick_label),
+                    "total_alt_label": safe_str(total_alt_label),
+                    "total_prob_pick_final": total_prob_final,
+                    "total_prob_alt_final": total_alt_prob_final,
+                    "total_prob_margin": total_prob_margin,
+                    "total_prob_pick_market": total_prob_pick_market,
+                    "total_prob_alt_market": total_prob_alt_market,
+                    "total_prob_pick_kalshi": total_prob_pick_kalshi,
+                    "total_prob_alt_kalshi": total_prob_alt_kalshi,
+                    "total_decision_metric_used": total_decision_metric_used,
+                    "total_decision_score_pick": total_decision_score_pick,
+                    "total_decision_score_alt": total_decision_score_alt,
+                    "total_decision_score_margin": total_decision_score_margin,
+                    "total_trace_json": total_trace_json,
+                    "decision_trace_version": decision_trace_version,
+                    "overall_engine_used": overall_engine_used,
+                    "decision_trace_notes": decision_trace_notes,
                     "kalshi_matched": kalshi_total.get("kalshi_matched"),
                     "kalshi_prob": kalshi_prob_total if kalshi_total.get("kalshi_matched") else None,
                     "kalshi_prob_used": kalshi_prob_total if kalshi_total.get("kalshi_matched") else None,
@@ -5517,6 +5840,39 @@ with tab_master:
             "vertex_mode",
             "vertex_spread_prob",
             "vertex_total_prob",
+            "spread_engine_used",
+            "spread_pick_label",
+            "spread_alt_label",
+            "spread_prob_pick_final",
+            "spread_prob_alt_final",
+            "spread_prob_margin",
+            "spread_prob_pick_market",
+            "spread_prob_alt_market",
+            "spread_prob_pick_kalshi",
+            "spread_prob_alt_kalshi",
+            "spread_decision_metric_used",
+            "spread_decision_score_pick",
+            "spread_decision_score_alt",
+            "spread_decision_score_margin",
+            "spread_trace_json",
+            "total_engine_used",
+            "total_pick_label",
+            "total_alt_label",
+            "total_prob_pick_final",
+            "total_prob_alt_final",
+            "total_prob_margin",
+            "total_prob_pick_market",
+            "total_prob_alt_market",
+            "total_prob_pick_kalshi",
+            "total_prob_alt_kalshi",
+            "total_decision_metric_used",
+            "total_decision_score_pick",
+            "total_decision_score_alt",
+            "total_decision_score_margin",
+            "total_trace_json",
+            "decision_trace_version",
+            "overall_engine_used",
+            "decision_trace_notes",
             "kalshi_prob_spread",
             "kalshi_prob_total",
             "spread_prob_market",
@@ -5731,6 +6087,45 @@ with tab_master:
             pass
 
         df_master_view = reorder_for_spread_total_focus(df_master_view)
+        df_master_view_full = df_master_view.copy()
+        trace_cols = [
+            "spread_engine_used",
+            "spread_pick_label",
+            "spread_alt_label",
+            "spread_prob_pick_final",
+            "spread_prob_alt_final",
+            "spread_prob_margin",
+            "spread_prob_pick_market",
+            "spread_prob_alt_market",
+            "spread_prob_pick_kalshi",
+            "spread_prob_alt_kalshi",
+            "spread_decision_metric_used",
+            "spread_decision_score_pick",
+            "spread_decision_score_alt",
+            "spread_decision_score_margin",
+            "spread_trace_json",
+            "total_engine_used",
+            "total_pick_label",
+            "total_alt_label",
+            "total_prob_pick_final",
+            "total_prob_alt_final",
+            "total_prob_margin",
+            "total_prob_pick_market",
+            "total_prob_alt_market",
+            "total_prob_pick_kalshi",
+            "total_prob_alt_kalshi",
+            "total_decision_metric_used",
+            "total_decision_score_pick",
+            "total_decision_score_alt",
+            "total_decision_score_margin",
+            "total_trace_json",
+            "decision_trace_version",
+            "overall_engine_used",
+            "decision_trace_notes",
+        ]
+        show_decision_trace = st.checkbox("Show Decision Trace Columns", value=False, key="show_decision_trace")
+        if not show_decision_trace:
+            df_master_view = df_master_view.drop(columns=[c for c in trace_cols if c in df_master_view.columns], errors="ignore")
         show_moneyline_details = st.checkbox("Show Moneyline details", value=False, key="show_moneyline_details")
         if not show_moneyline_details:
             ml_detail_cols = [
@@ -5799,6 +6194,8 @@ with tab_master:
         except Exception:
             pass
         top_df = reorder_for_spread_total_focus(top_df)
+        if not show_decision_trace:
+            top_df = top_df.drop(columns=[c for c in trace_cols if c in top_df.columns], errors="ignore")
         if not show_moneyline_details:
             ml_detail_cols = [
                 "Pick",
@@ -5825,6 +6222,39 @@ with tab_master:
             "Implied_Prob",
             "ai_prob_adj",
             "consensus_prob",
+            "spread_engine_used",
+            "spread_pick_label",
+            "spread_alt_label",
+            "spread_prob_pick_final",
+            "spread_prob_alt_final",
+            "spread_prob_margin",
+            "spread_prob_pick_market",
+            "spread_prob_alt_market",
+            "spread_prob_pick_kalshi",
+            "spread_prob_alt_kalshi",
+            "spread_decision_metric_used",
+            "spread_decision_score_pick",
+            "spread_decision_score_alt",
+            "spread_decision_score_margin",
+            "spread_trace_json",
+            "total_engine_used",
+            "total_pick_label",
+            "total_alt_label",
+            "total_prob_pick_final",
+            "total_prob_alt_final",
+            "total_prob_margin",
+            "total_prob_pick_market",
+            "total_prob_alt_market",
+            "total_prob_pick_kalshi",
+            "total_prob_alt_kalshi",
+            "total_decision_metric_used",
+            "total_decision_score_pick",
+            "total_decision_score_alt",
+            "total_decision_score_margin",
+            "total_trace_json",
+            "decision_trace_version",
+            "overall_engine_used",
+            "decision_trace_notes",
             "kalshi_matched",
             "kalshi_prob_used",
             "kalshi_event_ticker_used",
@@ -5951,7 +6381,7 @@ with tab_master:
             "best_total_median_point",
             "best_total_mode_point",
         ]
-        export_df = df_master_view.copy()
+        export_df = df_master_view_full.copy()
         if "Unnamed: 0" in export_df.columns:
             export_df = export_df.drop(columns=["Unnamed: 0"])
         export_df = reorder_for_spread_total_focus(export_df)
