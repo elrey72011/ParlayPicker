@@ -518,8 +518,12 @@ def add_spread_total_confidence(df: pd.DataFrame) -> pd.DataFrame:
 
     def _apply(row: pd.Series) -> pd.Series:
         warnings_text = str(row.get("Warnings") or "")
-        spread_odds_valid = safe_float(row.get("spread_implied_prob")) is not None
-        total_odds_valid = safe_float(row.get("total_implied_prob")) is not None
+        spread_odds_valid = row.get("spread_odds_valid")
+        total_odds_valid = row.get("total_odds_valid")
+        if spread_odds_valid is None:
+            spread_odds_valid = safe_float(row.get("spread_implied_prob")) is not None and not bool(row.get("spread_odds_placeholder_detected"))
+        if total_odds_valid is None:
+            total_odds_valid = safe_float(row.get("total_implied_prob")) is not None and not bool(row.get("total_odds_placeholder_detected"))
         spread_width_val = safe_float(row.get("spread_width"))
         total_width_val = safe_float(row.get("total_width"))
         spread_books_count = row.get("spread_books_count")
@@ -534,14 +538,14 @@ def add_spread_total_confidence(df: pd.DataFrame) -> pd.DataFrame:
             total_books_count, total_width_val, total_odds_valid, False, proxy_flag, market_kind="total"
         )
 
-        spread_prob_val = row.get("spread_prob_market_based")
+        spread_prob_val = row.get("spread_prob") if row.get("spread_prob") is not None else row.get("spread_prob_market_based")
         if spread_prob_val is None:
             penalty = 0.0
             if spread_width_val is not None:
                 penalty = min(0.05, spread_width_val * 0.02)
             spread_prob_val = clamp(0.5 - (penalty or 0.0))
             spread_reason = ";".join(filter(None, [spread_reason, "missing_implied_prob"]))
-        total_prob_val = row.get("total_prob_market_based")
+        total_prob_val = row.get("total_prob") if row.get("total_prob") is not None else row.get("total_prob_market_based")
         if total_prob_val is None:
             penalty = 0.0
             if total_width_val is not None:
@@ -949,18 +953,38 @@ def get_slate_sentiment(enable_sentiment: bool, teams: List[str], league: str, n
     if not enable_sentiment:
         meta["sentiment_source"] = "disabled_by_user"
         meta["sentiment_sample_status"] = "DISABLED"
+        meta["sentiment_status_counts"] = {"DISABLED": 1}
         meta["sentiment_disabled_reason"] = "user_disabled"
         return {"map": {}, "meta_map": {}, "meta": meta, "debug": debug}
     if not news_api_key:
         meta["sentiment_source"] = "disabled_no_key"
         meta["sentiment_sample_status"] = "DISABLED"
+        meta["sentiment_status_counts"] = {"DISABLED": 1}
         meta["sentiment_disabled_reason"] = "missing_NEWS_API_KEY"
         return {"map": {}, "meta_map": {}, "meta": meta, "debug": debug}
     if not teams:
         meta["sentiment_source"] = "disabled_no_teams"
         meta["sentiment_sample_status"] = "DISABLED"
+        meta["sentiment_status_counts"] = {"DISABLED": 1}
         meta["sentiment_disabled_reason"] = "no_teams_found"
         return {"map": {}, "meta_map": {}, "meta": meta, "debug": debug}
+    cooldown_raw = st.session_state.get("sentiment_cooldown_until")
+    try:
+        cooldown_until = datetime.fromisoformat(cooldown_raw) if cooldown_raw else None
+        if cooldown_until and cooldown_until.tzinfo is None:
+            cooldown_until = cooldown_until.replace(tzinfo=timezone.utc)
+    except Exception:
+        cooldown_until = None
+    if cooldown_raw and cooldown_until and datetime.now(timezone.utc) < cooldown_until:
+        meta["sentiment_source"] = "cooldown_cached_only"
+        meta["sentiment_sample_status"] = "COOLDOWN"
+        meta["sentiment_status_counts"] = {"COOLDOWN": 1}
+        meta["sentiment_disabled_reason"] = "cooldown_active"
+        meta["sentiment_cooldown_until"] = cooldown_raw
+        return {"map": {}, "meta_map": {}, "meta": meta, "debug": debug}
+    meta["sentiment_sample_status"] = "PENDING"
+    meta["sentiment_status_counts"] = {"PENDING": 1}
+    meta["sentiment_disabled_reason"] = ""
     games_stub = [{"home_team": t, "away_team": None} for t in teams]
     try:
         sentiment_map, sentiment_meta_map, sentiment_debug = compute_team_sentiment_map(news_api_key, games_stub, league)
@@ -1207,23 +1231,22 @@ def enrich_game_context(game: Dict[str, Any], league_key: str, api_key: Optional
 def init_sentiment_meta() -> Dict[str, Any]:
     return {
         "sentiment_source": "none",
-        "sentiment_articles_total": 0,
-        "status_counts": {"NO_CALL": 1},
+        "sentiment_sample_status": "NO_CALL",
         "sentiment_status_counts": {"NO_CALL": 1},
         "sentiment_sample_query": "",
-        "sentiment_sample_status": "NO_CALL",
         "sentiment_sample_totalResults": 0,
-        "sentiment_auth_error": False,
-        "sentiment_rate_limited": False,
-        "sentiment_cooldown_until": "",
-        "sentiment_cached_teams": 0,
-        "sentiment_cached_teams_count": 0,
-        "sentiment_available_count": 0,
-        "sentiment_used_cached": False,
+        "sentiment_disabled_reason": "not_executed",
         "sentiment_error_count": 0,
         "sentiment_errors_sample": "",
-        "sentiment_disabled_reason": "not_executed",
-        "reddit_used": False,
+        "sentiment_articles_total": 0,
+        "sentiment_available_count": 0,
+        "sentiment_used_cached": False,
+        "sentiment_rate_limited": False,
+        "sentiment_auth_error": False,
+        "sentiment_cooldown_until": "",
+        "sentiment_cached_teams_count": 0,
+        "sentiment_articles_used": 0,
+        "status_counts": {"NO_CALL": 1},
         "articles_total": 0,
         "error_count": 0,
         "sample_query": "",
@@ -1237,6 +1260,7 @@ def init_sentiment_meta() -> Dict[str, Any]:
         "cooldown_active": False,
         "available_count": 0,
         "last_error": None,
+        "reddit_used": False,
     }
 
 
@@ -1710,15 +1734,16 @@ def canonical_league_key(raw: Optional[str]) -> str:
     return mapping.get(val, val)
 
 def american_to_implied(odds: Any) -> Optional[float]:
+    """Convert American odds to implied probability; returns None on invalid/missing."""
     try:
         o = float(odds)
+        if o == 0:
+            return None
+        if o > 0:  # +120
+            return 100.0 / (o + 100.0)
+        return (-o) / ((-o) + 100.0)
     except Exception:
         return None
-    if o == 0:
-        return None
-    if o < 0:
-        return (-o) / ((-o) + 100.0)
-    return 100.0 / (o + 100.0)
 
 def american_to_implied_prob(odds: Any) -> Optional[float]:
     if odds is None:
@@ -1733,6 +1758,102 @@ def american_to_implied_prob(odds: Any) -> Optional[float]:
         return (-o) / ((-o) + 100.0)
     return None
 
+def _normalize_point_for_market(point: Any, market: str) -> Optional[float]:
+    val = safe_float(point)
+    if val is None:
+        return None
+    if market == "spread":
+        return round(abs(val), 3)
+    return round(val, 3)
+
+def compute_market_prob_from_offers(
+    offers: List[Dict[str, Any]],
+    pick_side: Optional[str],
+    *,
+    market_type: str,
+) -> Tuple[Optional[float], int, str, bool]:
+    """
+    Compute a market probability using no-vig consensus when both sides are available.
+    Returns (probability, matched_pairs_count, method, placeholder_flag).
+    """
+    if not offers or not pick_side:
+        return None, 0, "missing", False
+    pick_side_norm = str(pick_side or "").lower()
+    side_keys = ("home", "away") if market_type == "spread" else ("over", "under")
+    grouped: Dict[Tuple[str, float], Dict[str, Dict[str, Any]]] = {}
+    for offer in offers:
+        side = str(offer.get("side") or "").lower()
+        if side not in side_keys:
+            continue
+        point_key = _normalize_point_for_market(offer.get("point"), market_type)
+        book = offer.get("book")
+        if point_key is None or not book:
+            continue
+        grouped.setdefault((book, point_key), {})
+        grouped[(book, point_key)][side] = offer
+
+    p_pick_nv: List[float] = []
+    for _, sides in grouped.items():
+        if not all(k in sides for k in side_keys):
+            continue
+        price_1 = sides[side_keys[0]].get("price")
+        price_2 = sides[side_keys[1]].get("price")
+        p1 = american_to_implied(price_1)
+        p2 = american_to_implied(price_2)
+        if p1 is None or p2 is None:
+            continue
+        denom = p1 + p2
+        if denom <= 0:
+            continue
+        p1_nv = p1 / denom
+        p2_nv = p2 / denom
+        selected = p1_nv if pick_side_norm == side_keys[0] else p2_nv
+        p_pick_nv.append(selected)
+
+    pairs_count = len(p_pick_nv)
+    if p_pick_nv:
+        return statistics.median(p_pick_nv), pairs_count, "no_vig_median", False
+
+    side_offers = [
+        o for o in offers if str(o.get("side") or "").lower() == pick_side_norm and o.get("price") is not None
+    ]
+    implieds = [american_to_implied(o.get("price")) for o in side_offers]
+    implieds = [p for p in implieds if p is not None]
+    if implieds:
+        return statistics.median(implieds), pairs_count, "one_sided_implied", True
+    return None, pairs_count, "missing", False
+
+def select_best_offer_for_pick(
+    offers: List[Dict[str, Any]],
+    pick_side: Optional[str],
+    *,
+    pick_line: Optional[float],
+    preferred_book: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
+    if not offers or not pick_side:
+        return None
+    pick_side_norm = str(pick_side or "").lower()
+    filtered = [o for o in offers if str(o.get("side") or "").lower() == pick_side_norm]
+    if not filtered:
+        return None
+
+    def _recency_score(dt_val: Optional[datetime]) -> float:
+        if not dt_val:
+            return float("inf")
+        return -dt_val.timestamp()
+
+    preferred = str(preferred_book or "").lower()
+    def _key(o: Dict[str, Any]) -> Tuple[int, float, float, float]:
+        book_rank = 0 if preferred and str(o.get("book") or "").lower() == preferred else 1
+        point_val = safe_float(o.get("point"))
+        line_diff = abs((point_val or 0) - (pick_line or 0)) if (pick_line is not None and point_val is not None) else 0.0
+        implied = american_to_implied(o.get("price"))
+        implied_key = implied if implied is not None else 2.0
+        recency = _recency_score(o.get("last_update"))
+        return (book_rank, line_diff, implied_key, recency)
+
+    return sorted(filtered, key=_key)[0]
+
 
 def is_placeholder_odds(home_ml: Any, away_ml: Any) -> bool:
     try:
@@ -1743,6 +1864,8 @@ def is_placeholder_odds(home_ml: Any, away_ml: Any) -> bool:
         return h == -110.0 and a == -110.0
     except Exception:
         return True
+
+PLACEHOLDER_IMPLIED_PROB = american_to_implied(-110)
 
 def safe_iso(value: Any) -> Optional[str]:
     if value is None:
@@ -1882,6 +2005,8 @@ def extract_best_market(game: Dict[str, Any]) -> Dict[str, Any]:
     h2h_candidates: List[Dict[str, Any]] = []
     spread_candidates: List[Dict[str, Any]] = []
     total_candidates: List[Dict[str, Any]] = []
+    spread_offers: List[Dict[str, Any]] = []
+    total_offers: List[Dict[str, Any]] = []
 
     for bm in bookmakers:
         bm_name = bm.get("title") or bm.get("key")
@@ -1914,6 +2039,26 @@ def extract_best_market(game: Dict[str, Any]) -> Dict[str, Any]:
                     away_point, away_price = price_map.get(away)
                     if home_point is None or away_point is None:
                         continue
+                    spread_offers.append(
+                        {
+                            "book": bm_name,
+                            "point": home_point,
+                            "price": home_price,
+                            "side": "home",
+                            "team": home,
+                            "last_update": last_update,
+                        }
+                    )
+                    spread_offers.append(
+                        {
+                            "book": bm_name,
+                            "point": away_point,
+                            "price": away_price,
+                            "side": "away",
+                            "team": away,
+                            "last_update": last_update,
+                        }
+                    )
                     price_scores = [
                         abs(abs(float(p)) - 110) for p in [home_price, away_price] if p is not None
                     ]
@@ -1948,6 +2093,24 @@ def extract_best_market(game: Dict[str, Any]) -> Dict[str, Any]:
                             "over_price": over_price,
                             "under_price": under_price,
                             "price_score": min(price_scores) if price_scores else None,
+                            "last_update": last_update,
+                        }
+                    )
+                    total_offers.append(
+                        {
+                            "book": bm_name,
+                            "point": over_point,
+                            "price": over_price,
+                            "side": "over",
+                            "last_update": last_update,
+                        }
+                    )
+                    total_offers.append(
+                        {
+                            "book": bm_name,
+                            "point": under_point,
+                            "price": under_price,
+                            "side": "under",
                             "last_update": last_update,
                         }
                     )
@@ -2045,6 +2208,7 @@ def extract_best_market(game: Dict[str, Any]) -> Dict[str, Any]:
         "best_spread_price_score": best_spread.get("price_score") if best_spread else None,
         "best_spread_median_point": median_spread,
         "best_spread_mode_point": mode_spread,
+        "spread_offers": spread_offers,
         "best_total_book": best_total.get("book") if best_total else None,
         "total_point": best_total.get("point") if best_total else None,
         "over_price": best_total.get("over_price") if best_total else None,
@@ -2053,6 +2217,7 @@ def extract_best_market(game: Dict[str, Any]) -> Dict[str, Any]:
         "best_total_price_score": best_total.get("price_score") if best_total else None,
         "best_total_median_point": median_total,
         "best_total_mode_point": mode_total,
+        "total_offers": total_offers,
         "warnings": warnings,
     }
 
@@ -3709,19 +3874,18 @@ with tab_master:
         st.error("Kalshi is required but unavailable. Fix Kalshi first.")
         st.stop()
     if run_master:
-        unique_teams = set()
-        for g in games:
-            if g.get("home_team"):
-                unique_teams.add(str(g.get("home_team")))
-            if g.get("away_team"):
-                unique_teams.add(str(g.get("away_team")))
+        df_master = pd.DataFrame(games or [])
+        unique_teams = sorted(
+            set(df_master.get("home_team", pd.Series([], dtype=str)).dropna().astype(str))
+            | set(df_master.get("away_team", pd.Series([], dtype=str)).dropna().astype(str))
+        )
         enable_sentiment_master = st.checkbox(
             "Enable sentiment (NewsAPI)",
-            value=st.session_state.get("enable_sentiment", True),
+            value=True,
             key="enable_sentiment_master",
         )
         st.session_state["enable_sentiment"] = enable_sentiment_master
-        slate_sentiment = get_slate_sentiment(enable_sentiment_master, sorted(unique_teams), "MIXED", news_api_key)
+        slate_sentiment = get_slate_sentiment(enable_sentiment_master, unique_teams, "MIXED", news_api_key)
         st.session_state["sentiment_map"] = slate_sentiment.get("map") or {}
         st.session_state["sentiment_meta_map"] = slate_sentiment.get("meta_map") or {}
         st.session_state["sentiment_meta"] = slate_sentiment.get("meta") or init_sentiment_meta()
@@ -3908,14 +4072,35 @@ with tab_master:
             g["injuries_home_count"] = injuries_home_count
             g["injuries_away_count"] = injuries_away_count
             g["weather_summary"] = weather_summary
+            spread_prob_market_based = None
+            spread_prob_reason = None
+            spread_prob_method = None
+            spread_market_pairs_count = 0
+            total_prob_market_based = None
+            total_prob_reason = None
+            total_prob_method = None
+            total_market_pairs_count = 0
+            spread_odds_placeholder_detected = False
+            total_odds_placeholder_detected = False
+            spread_prob_placeholder_detected = False
+            total_prob_placeholder_detected = False
+            spread_prob = None
+            total_prob = None
+            spread_odds_valid = False
+            total_odds_valid = False
+            best_spread_price = None
+            best_total_price = None
 
             # --- Pre-compute pick context (used for market normalization) ---
+            spread_offers = g.get("spread_offers") or []
+            total_offers = g.get("total_offers") or []
             spread_pick_team, spread_pick_line = parse_spread_pick(g.get("Spread & Pick"), home, away)
             spread_pick_odds = None
             spread_implied = None
+            best_spread_price = None
             if g.get("home_spread_point") is not None:
-                home_spread_prob = american_to_implied_prob(g.get("home_spread_price"))
-                away_spread_prob = american_to_implied_prob(g.get("away_spread_price"))
+                home_spread_prob = american_to_implied(g.get("home_spread_price"))
+                away_spread_prob = american_to_implied(g.get("away_spread_price"))
                 home_spread_point = g.get("home_spread_point")
                 away_spread_point = g.get("away_spread_point")
                 # Default pick based on prices if not already specified
@@ -3930,14 +4115,43 @@ with tab_master:
                         spread_pick_team = away
                     else:
                         spread_pick_team = home
+                best_spread_offer = None
+                preferred_book = g.get("best_spread_book")
                 if spread_pick_team == home:
-                    spread_implied = home_spread_prob
-                    spread_pick_line = spread_pick_line if spread_pick_line is not None else home_spread_point
-                    spread_pick_odds = g.get("home_spread_price")
+                    best_spread_offer = select_best_offer_for_pick(
+                        spread_offers, "home", pick_line=spread_pick_line if spread_pick_line is not None else home_spread_point, preferred_book=preferred_book
+                    )
+                    if best_spread_offer is None and g.get("home_spread_price") is not None:
+                        best_spread_offer = {
+                            "book": preferred_book,
+                            "point": home_spread_point,
+                            "price": g.get("home_spread_price"),
+                            "side": "home",
+                            "team": home,
+                            "last_update": g.get("best_spread_last_update"),
+                        }
                 elif spread_pick_team == away:
-                    spread_implied = away_spread_prob
-                    spread_pick_line = spread_pick_line if spread_pick_line is not None else away_spread_point
-                    spread_pick_odds = g.get("away_spread_price")
+                    best_spread_offer = select_best_offer_for_pick(
+                        spread_offers, "away", pick_line=spread_pick_line if spread_pick_line is not None else away_spread_point, preferred_book=preferred_book
+                    )
+                    if best_spread_offer is None and g.get("away_spread_price") is not None:
+                        best_spread_offer = {
+                            "book": preferred_book,
+                            "point": away_spread_point,
+                            "price": g.get("away_spread_price"),
+                            "side": "away",
+                            "team": away,
+                            "last_update": g.get("best_spread_last_update"),
+                        }
+                if best_spread_offer:
+                    spread_pick_odds = best_spread_offer.get("price")
+                    best_spread_price = spread_pick_odds
+                    if spread_pick_line is None:
+                        spread_pick_line = safe_float(best_spread_offer.get("point"))
+                if spread_pick_team == home:
+                    spread_implied = american_to_implied(spread_pick_odds)
+                elif spread_pick_team == away:
+                    spread_implied = american_to_implied(spread_pick_odds)
             target_spread_team = spread_pick_team if spread_pick_team in {home, away} else home
 
             # Market range aggregates
@@ -3999,7 +4213,7 @@ with tab_master:
             sentiment_debug_global = st.session_state.get("sentiment_debug") or {}
             league_debug = st.session_state.get(f"sentiment_debug_{league_key}") or {}
             articles_total = sentiment_meta_global.get("articles_total") or league_debug.get("articles_total") or 0
-            sentiment_diff = None if (home_sent is None and away_sent is None) else (home_sent or 0.0) - (away_sent or 0.0)
+            sentiment_diff = (home_sent - away_sent) if (home_sent is not None and away_sent is not None) else 0.0
             rate_limited_flag = bool(
                 sentiment_meta_global.get("rate_limited")
                 or sentiment_debug_global.get("rate_limited")
@@ -4261,13 +4475,13 @@ with tab_master:
                     "spread_pick_team": spread_pick_team,
                     "spread_pick_line": spread_pick_line,
                     "spread_pick_odds": spread_pick_odds,
-                    "spread_prob": spread_prob_market_based,
+                    "spread_prob": spread_prob,
                     "spread_confidence": None,
                     "spread_confidence_reason": None,
                     "total_pick_side": total_pick_side,
                     "total_pick_line": total_line,
                     "total_pick_odds": total_pick_odds,
-                    "total_prob": total_prob_market_based,
+                    "total_prob": total_prob,
                     "total_confidence": None,
                     "total_confidence_reason": None,
                     "At_a_Glance_Confidence": None,
@@ -4277,10 +4491,12 @@ with tab_master:
                     "best_spread_last_update": g.get("best_spread_last_update"),
                     "best_spread_price_score": g.get("best_spread_price_score"),
                     "best_spread_median_point": g.get("best_spread_median_point"),
+                    "best_spread_price": best_spread_price,
                     "best_total_book": g.get("best_total_book"),
                     "best_total_last_update": g.get("best_total_last_update"),
                     "best_total_price_score": g.get("best_total_price_score"),
                     "best_total_median_point": g.get("best_total_median_point"),
+                    "best_total_price": best_total_price,
                     "Kalshi_Required": st.session_state.get("kalshi_required", True),
                     "api_sports_used": api_sports_used,
                     "sportsdata_used": sportsdata_used,
@@ -4289,6 +4505,21 @@ with tab_master:
                     "weather_summary": weather_summary,
                     "key_injuries_home": ",".join(key_injuries_home),
                     "key_injuries_away": ",".join(key_injuries_away),
+                    "spread_prob_market_based": spread_prob_market_based,
+                    "spread_prob_reason": spread_prob_reason,
+                    "spread_prob_method": spread_prob_method,
+                    "total_implied_prob": total_implied,
+                    "total_prob_market_based": total_prob_market_based,
+                    "total_prob_reason": total_prob_reason,
+                    "total_prob_method": total_prob_method,
+                    "spread_market_pairs_count": spread_market_pairs_count,
+                    "total_market_pairs_count": total_market_pairs_count,
+                    "spread_odds_valid": spread_odds_valid,
+                    "total_odds_valid": total_odds_valid,
+                    "spread_odds_placeholder_detected": spread_odds_placeholder_detected,
+                    "total_odds_placeholder_detected": total_odds_placeholder_detected,
+                    "spread_prob_placeholder_detected": spread_prob_placeholder_detected,
+                    "total_prob_placeholder_detected": total_prob_placeholder_detected,
                 }
                 conf, reason_short, eligible = score_pick_confidence(fallback_row)
                 fallback_row["Pick_Confidence"] = conf
@@ -4313,11 +4544,12 @@ with tab_master:
             total_line = g.get("total_point")
             total_pick_side = None
             total_pick_odds = None
+            best_total_price = None
             vertex_spread_prob = None
             vertex_total_prob = None
             if g.get("total_point") is not None:
-                over_prob = american_to_implied_prob(g.get("over_price"))
-                under_prob = american_to_implied_prob(g.get("under_price"))
+                over_prob = american_to_implied(g.get("over_price"))
+                under_prob = american_to_implied(g.get("under_price"))
                 if over_prob is not None or under_prob is not None:
                     if over_prob is None:
                         total_pick = "Under"
@@ -4339,14 +4571,63 @@ with tab_master:
                         total_pick_side = "Over"
                         total_implied = over_prob
                         total_pick_odds = g.get("over_price")
+                preferred_total_book = g.get("best_total_book")
+                if total_pick_side == "Over":
+                    best_total_offer = select_best_offer_for_pick(
+                        total_offers, "over", pick_line=total_line, preferred_book=preferred_total_book
+                    )
+                    if best_total_offer is None and g.get("over_price") is not None:
+                        best_total_offer = {
+                            "book": preferred_total_book,
+                            "point": total_line,
+                            "price": g.get("over_price"),
+                            "side": "over",
+                            "last_update": g.get("best_total_last_update"),
+                        }
+                elif total_pick_side == "Under":
+                    best_total_offer = select_best_offer_for_pick(
+                        total_offers, "under", pick_line=total_line, preferred_book=preferred_total_book
+                    )
+                    if best_total_offer is None and g.get("under_price") is not None:
+                        best_total_offer = {
+                            "book": preferred_total_book,
+                            "point": total_line,
+                            "price": g.get("under_price"),
+                            "side": "under",
+                            "last_update": g.get("best_total_last_update"),
+                        }
+                else:
+                    best_total_offer = None
+                if best_total_offer:
+                    total_pick_odds = best_total_offer.get("price")
+                    best_total_price = total_pick_odds
+                    if total_line is None:
+                        total_line = safe_float(best_total_offer.get("point"))
+                if total_pick_odds is not None:
+                    total_implied = american_to_implied(total_pick_odds)
 
             spread_prob_market_based = None
             spread_prob_reason = None
+            spread_prob_method = None
+            spread_market_pairs_count = 0
+            total_prob_market_based = None
+            total_prob_reason = None
+            total_prob_method = None
+            total_market_pairs_count = 0
+            spread_odds_placeholder_detected = False
+            total_odds_placeholder_detected = False
+            spread_prob_placeholder_detected = False
+            total_prob_placeholder_detected = False
+            spread_pick_side_key = "home" if spread_pick_team == home else ("away" if spread_pick_team == away else None)
             if spread_pick:
+                spread_market_prob, spread_market_pairs_count, spread_prob_method, spread_market_placeholder = compute_market_prob_from_offers(
+                    spread_offers, spread_pick_side_key, market_type="spread"
+                )
+                base_spread_prob = spread_market_prob if spread_market_prob is not None else spread_implied
                 spread_prob_market_based, spread_prob_reason = market_based_prob(
                     {
                         "Market": "spread",
-                        "Implied_Prob": spread_implied,
+                        "Implied_Prob": base_spread_prob,
                         "Pick": spread_pick,
                         "Home": home,
                         "Away": away,
@@ -4357,17 +4638,36 @@ with tab_master:
                         "spread_max": spread_max,
                     },
                     market_override="spread",
-                    implied_prob_value=spread_implied,
+                    implied_prob_value=base_spread_prob,
                     range_override=(spread_min, spread_max),
                 )
+                if spread_prob_method == "missing" and spread_implied is not None:
+                    spread_prob_method = "implied"
+                if spread_prob_market_based is None:
+                    spread_prob_method = spread_prob_method or "missing"
+                else:
+                    spread_prob_method = f"{spread_prob_method}_market_adjusted"
+                spread_odds_placeholder_detected = bool(
+                    spread_market_placeholder
+                    or (spread_pick_odds is not None and safe_float(spread_pick_odds) == -110.0 and len(spread_offers) >= 3 and g.get("best_spread_book"))
+                )
+                spread_prob_placeholder_detected = bool(
+                    spread_odds_placeholder_detected
+                    and spread_implied is not None
+                    and PLACEHOLDER_IMPLIED_PROB is not None
+                    and abs(spread_implied - PLACEHOLDER_IMPLIED_PROB) < 1e-4
+                )
 
-            total_prob_market_based = None
-            total_prob_reason = None
+            total_pick_side_key = str(total_pick_side or "").lower() if total_pick_side else None
             if total_pick:
+                total_market_prob, total_market_pairs_count, total_prob_method, total_market_placeholder = compute_market_prob_from_offers(
+                    total_offers, total_pick_side_key, market_type="total"
+                )
+                base_total_prob = total_market_prob if total_market_prob is not None else total_implied
                 total_prob_market_based, total_prob_reason = market_based_prob(
                     {
                         "Market": "total",
-                        "Implied_Prob": total_implied,
+                        "Implied_Prob": base_total_prob,
                         "Pick": total_pick,
                         "Home": home,
                         "Away": away,
@@ -4378,10 +4678,30 @@ with tab_master:
                         "total_max": total_max,
                     },
                     market_override="total",
-                    implied_prob_value=total_implied,
+                    implied_prob_value=base_total_prob,
                     range_override=(total_min, total_max),
                 )
-            
+                if total_prob_method == "missing" and total_implied is not None:
+                    total_prob_method = "implied"
+                if total_prob_market_based is None:
+                    total_prob_method = total_prob_method or "missing"
+                else:
+                    total_prob_method = f"{total_prob_method}_market_adjusted"
+                total_odds_placeholder_detected = bool(
+                    total_market_placeholder
+                    or (total_pick_odds is not None and safe_float(total_pick_odds) == -110.0 and len(total_offers) >= 3 and g.get("best_total_book"))
+                )
+                total_prob_placeholder_detected = bool(
+                    total_odds_placeholder_detected
+                    and total_implied is not None
+                    and PLACEHOLDER_IMPLIED_PROB is not None
+                    and abs(total_implied - PLACEHOLDER_IMPLIED_PROB) < 1e-4
+                )
+            spread_prob = spread_prob_market_based if spread_prob_market_based is not None else spread_implied
+            total_prob = total_prob_market_based if total_prob_market_based is not None else total_implied
+            spread_odds_valid = bool((spread_pick_odds is not None) and (not spread_odds_placeholder_detected))
+            total_odds_valid = bool((total_pick_odds is not None) and (not total_odds_placeholder_detected))
+
             # Baseline probability (Home Win)
             if implied_home is not None:
                 market_home_prob = implied_home
@@ -4533,14 +4853,14 @@ with tab_master:
                         "spread_pick_team": spread_pick_team,
                         "spread_pick_line": spread_pick_line,
                         "spread_pick_odds": spread_pick_odds,
-                        "spread_prob": spread_prob_market_based,
+                        "spread_prob": spread_prob,
                         "spread_confidence": None,
                         "spread_confidence_reason": None,
                         "Total & Pick": f"{total_pick} {total_line}" if total_pick is not None else None,
                         "total_pick_side": total_pick_side,
                         "total_pick_line": total_line,
                         "total_pick_odds": total_pick_odds,
-                        "total_prob": total_prob_market_based,
+                        "total_prob": total_prob,
                         "total_confidence": None,
                         "total_confidence_reason": None,
                         "Vertex Spread Prob": vertex_spread_prob,
@@ -4548,11 +4868,19 @@ with tab_master:
                         "spread_implied_prob": spread_implied,
                         "spread_prob_market_based": spread_prob_market_based,
                         "spread_prob_reason": spread_prob_reason,
+                        "spread_prob_method": spread_prob_method,
                         "total_implied_prob": total_implied,
                         "total_prob_market_based": total_prob_market_based,
                         "total_prob_reason": total_prob_reason,
+                        "total_prob_method": total_prob_method,
                         "odds_valid": odds_valid,
                         "odds_placeholder_detected": odds_placeholder,
+                        "spread_odds_valid": spread_odds_valid,
+                        "total_odds_valid": total_odds_valid,
+                        "spread_odds_placeholder_detected": spread_odds_placeholder_detected,
+                        "total_odds_placeholder_detected": total_odds_placeholder_detected,
+                        "spread_prob_placeholder_detected": spread_prob_placeholder_detected,
+                        "total_prob_placeholder_detected": total_prob_placeholder_detected,
                         "implied_prob_reason": implied_prob_reason,
                         "Warnings": warnings_field,
                         "best_spread_book": g.get("best_spread_book"),
@@ -4560,11 +4888,13 @@ with tab_master:
                         "best_spread_price_score": g.get("best_spread_price_score"),
                         "best_spread_median_point": g.get("best_spread_median_point"),
                         "best_spread_mode_point": g.get("best_spread_mode_point"),
+                        "best_spread_price": best_spread_price,
                         "best_total_book": g.get("best_total_book"),
                         "best_total_last_update": g.get("best_total_last_update"),
                         "best_total_price_score": g.get("best_total_price_score"),
                         "best_total_median_point": g.get("best_total_median_point"),
                         "best_total_mode_point": g.get("best_total_mode_point"),
+                        "best_total_price": best_total_price,
                         "spread_width": width_spread,
                         "total_width": width_total,
                         "Kalshi_Required": st.session_state.get("kalshi_required", True),
@@ -4655,14 +4985,14 @@ with tab_master:
                     "spread_pick_team": spread_pick_team,
                     "spread_pick_line": spread_pick_line,
                     "spread_pick_odds": spread_pick_odds,
-                    "spread_prob": spread_prob_market_based,
+                    "spread_prob": spread_prob,
                     "spread_confidence": None,
                     "spread_confidence_reason": None,
                     "Total & Pick": f"{total_pick} {total_line}" if total_pick is not None else None,
                     "total_pick_side": total_pick_side,
                     "total_pick_line": total_line,
                     "total_pick_odds": total_pick_odds,
-                    "total_prob": total_prob_market_based,
+                    "total_prob": total_prob,
                     "total_confidence": None,
                     "total_confidence_reason": None,
                     "Home_Sentiment": home_sent,
@@ -4672,18 +5002,22 @@ with tab_master:
                     "best_spread_price_score": g.get("best_spread_price_score"),
                     "best_spread_median_point": g.get("best_spread_median_point"),
                     "best_spread_mode_point": g.get("best_spread_mode_point"),
+                    "best_spread_price": best_spread_price,
                     "best_total_book": g.get("best_total_book"),
                     "best_total_last_update": g.get("best_total_last_update"),
                     "best_total_price_score": g.get("best_total_price_score"),
                     "best_total_median_point": g.get("best_total_median_point"),
                     "best_total_mode_point": g.get("best_total_mode_point"),
+                    "best_total_price": best_total_price,
                     "Warnings": warnings_field,
                     "spread_implied_prob": spread_implied,
                     "spread_prob_market_based": spread_prob_market_based,
                     "spread_prob_reason": spread_prob_reason,
+                    "spread_prob_method": spread_prob_method,
                     "total_implied_prob": total_implied,
                     "total_prob_market_based": total_prob_market_based,
                     "total_prob_reason": total_prob_reason,
+                    "total_prob_method": total_prob_method,
                     "Kalshi_Required": st.session_state.get("kalshi_required", True),
                     "api_sports_used": api_sports_used,
                     "sportsdata_used": sportsdata_used,
@@ -4700,8 +5034,16 @@ with tab_master:
                     "total_max": total_max,
                     "spread_books_count": len(spread_books_map),
                     "total_books_count": len(total_books_map),
+                    "spread_market_pairs_count": spread_market_pairs_count,
+                    "total_market_pairs_count": total_market_pairs_count,
                     "spread_width": width_spread,
                     "total_width": width_total,
+                    "spread_odds_valid": spread_odds_valid,
+                    "total_odds_valid": total_odds_valid,
+                    "spread_odds_placeholder_detected": spread_odds_placeholder_detected,
+                    "total_odds_placeholder_detected": total_odds_placeholder_detected,
+                    "spread_prob_placeholder_detected": spread_prob_placeholder_detected,
+                    "total_prob_placeholder_detected": total_prob_placeholder_detected,
                     "sentiment_adj_value": sentiment_adj,
                     "sentiment_adj_reason": sentiment_adj_reason,
                     "prob_reason": None,
@@ -4709,8 +5051,8 @@ with tab_master:
                     "At_a_Glance_Score": None,
                     "At_a_Glance_Reason": None,
                 }
-                spread_row["consensus_prob"] = spread_prob_market_based
-                spread_row["consensus_prob_adj"] = spread_prob_market_based
+                spread_row["consensus_prob"] = spread_prob
+                spread_row["consensus_prob_adj"] = spread_prob
                 spread_row["prob_reason"] = spread_prob_reason
                 conf, reason_short, eligible = score_pick_confidence(spread_row)
                 width_spread = (spread_max - spread_min) if (spread_max is not None and spread_min is not None) else 0.0
@@ -4753,14 +5095,14 @@ with tab_master:
                     "spread_pick_team": spread_pick_team,
                     "spread_pick_line": spread_pick_line,
                     "spread_pick_odds": spread_pick_odds,
-                    "spread_prob": spread_prob_market_based,
+                    "spread_prob": spread_prob,
                     "spread_confidence": None,
                     "spread_confidence_reason": None,
                     "Total & Pick": f"{total_pick} {total_line}" if total_pick is not None else None,
                     "total_pick_side": total_pick_side,
                     "total_pick_line": total_line,
                     "total_pick_odds": total_pick_odds,
-                    "total_prob": total_prob_market_based,
+                    "total_prob": total_prob,
                     "total_confidence": None,
                     "total_confidence_reason": None,
                     "Home_Sentiment": home_sent,
@@ -4790,18 +5132,22 @@ with tab_master:
                     "best_spread_price_score": g.get("best_spread_price_score"),
                     "best_spread_median_point": g.get("best_spread_median_point"),
                     "best_spread_mode_point": g.get("best_spread_mode_point"),
+                    "best_spread_price": best_spread_price,
                     "best_total_book": g.get("best_total_book"),
                     "best_total_last_update": g.get("best_total_last_update"),
                     "best_total_price_score": g.get("best_total_price_score"),
                     "best_total_median_point": g.get("best_total_median_point"),
                     "best_total_mode_point": g.get("best_total_mode_point"),
+                    "best_total_price": best_total_price,
                     "Warnings": warnings_field,
                     "spread_implied_prob": spread_implied,
                     "spread_prob_market_based": spread_prob_market_based,
                     "spread_prob_reason": spread_prob_reason,
+                    "spread_prob_method": spread_prob_method,
                     "total_implied_prob": total_implied,
                     "total_prob_market_based": total_prob_market_based,
                     "total_prob_reason": total_prob_reason,
+                    "total_prob_method": total_prob_method,
                     "Kalshi_Required": st.session_state.get("kalshi_required", True),
                     "api_sports_used": api_sports_used,
                     "sportsdata_used": sportsdata_used,
@@ -4818,8 +5164,16 @@ with tab_master:
                     "total_max": total_max,
                     "spread_books_count": len(spread_books_map),
                     "total_books_count": len(total_books_map),
+                    "spread_market_pairs_count": spread_market_pairs_count,
+                    "total_market_pairs_count": total_market_pairs_count,
                     "spread_width": width_spread,
                     "total_width": width_total,
+                    "spread_odds_valid": spread_odds_valid,
+                    "total_odds_valid": total_odds_valid,
+                    "spread_odds_placeholder_detected": spread_odds_placeholder_detected,
+                    "total_odds_placeholder_detected": total_odds_placeholder_detected,
+                    "spread_prob_placeholder_detected": spread_prob_placeholder_detected,
+                    "total_prob_placeholder_detected": total_prob_placeholder_detected,
                     "sentiment_adj_value": sentiment_adj,
                     "sentiment_adj_reason": sentiment_adj_reason,
                     "prob_reason": None,
@@ -4827,8 +5181,8 @@ with tab_master:
                     "At_a_Glance_Score": None,
                     "At_a_Glance_Reason": None,
                 }
-                total_row["consensus_prob"] = total_prob_market_based
-                total_row["consensus_prob_adj"] = total_prob_market_based
+                total_row["consensus_prob"] = total_prob
+                total_row["consensus_prob_adj"] = total_prob
                 total_row["prob_reason"] = total_prob_reason
                 conf, reason_short, eligible = score_pick_confidence(total_row)
                 width_total = (total_max - total_min) if (total_max is not None and total_min is not None) else 0.0
@@ -4846,6 +5200,19 @@ with tab_master:
                     
         df = pd.DataFrame(rows_out)
         # Collapse to one row per game (prefer the first generated row, typically moneyline)
+        sentiment_meta_for_export = sentiment_pack_meta or init_sentiment_meta()
+        for row in rows_out:
+            row["sentiment_sample_status"] = str(sentiment_meta_for_export.get("sentiment_sample_status", "NO_CALL") or "NO_CALL")
+            row["sentiment_source"] = str(sentiment_meta_for_export.get("sentiment_source", "none") or "none")
+            row["sentiment_status_counts"] = json.dumps(sentiment_meta_for_export.get("sentiment_status_counts", {"NO_CALL": 1}))
+            row["sentiment_sample_query"] = sentiment_meta_for_export.get("sentiment_sample_query", "") or ""
+            row["sentiment_disabled_reason"] = sentiment_meta_for_export.get("sentiment_disabled_reason", "") or ""
+            row["sentiment_errors_sample"] = sentiment_meta_for_export.get("sentiment_errors_sample", "") or ""
+            row["sentiment_error_count"] = int(sentiment_meta_for_export.get("sentiment_error_count", 0) or 0)
+            row["spread_sentiment_arrow"] = row.get("spread_sentiment_arrow") or ""
+            row["total_sentiment_arrow"] = row.get("total_sentiment_arrow") or ""
+            row["spread_sentiment_note"] = row.get("spread_sentiment_note") or ""
+            row["total_sentiment_note"] = row.get("total_sentiment_note") or ""
         deduped_rows: Dict[Tuple[Any, Any, Any, Any], Dict[str, Any]] = {}
         for row in rows_out:
             key = (row.get("League"), row.get("Home"), row.get("Away"), row.get("Commence (UTC)"))
@@ -4903,11 +5270,13 @@ with tab_master:
             "best_spread_last_update",
             "best_spread_price_score",
             "best_spread_median_point",
+            "best_spread_price",
             "best_spread_mode_point",
             "best_total_book",
             "best_total_last_update",
             "best_total_price_score",
             "best_total_median_point",
+            "best_total_price",
             "best_total_mode_point",
             "sentiment_error_count",
             "sentiment_errors_sample",
@@ -4947,9 +5316,13 @@ with tab_master:
             "spread_prob",
             "spread_prob_market_based",
             "spread_prob_reason",
+            "spread_prob_method",
             "spread_confidence",
             "spread_confidence_reason",
+            "spread_market_pairs_count",
             "spread_odds_valid",
+            "spread_odds_placeholder_detected",
+            "spread_prob_placeholder_detected",
             "total_pick_side",
             "total_pick_line",
             "total_pick_odds",
@@ -4957,9 +5330,13 @@ with tab_master:
             "total_prob",
             "total_prob_market_based",
             "total_prob_reason",
+            "total_prob_method",
             "total_confidence",
             "total_confidence_reason",
+            "total_market_pairs_count",
             "total_odds_valid",
+            "total_odds_placeholder_detected",
+            "total_prob_placeholder_detected",
             "spread_min",
             "spread_med",
             "spread_max",
