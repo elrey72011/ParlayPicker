@@ -4038,13 +4038,11 @@ with tab_master:
         value=st.session_state.get("use_gemini_explanations", True),
         key="use_gemini_explanations",
     )
-    st.session_state["use_gemini_explanations"] = use_gemini_explanations
     use_vertex_numeric_probs = st.checkbox(
         "Use Vertex Numeric Probabilities (debug/optional)",
         value=st.session_state.get("use_vertex_numeric_probs", False),
         key="use_vertex_numeric_probs",
     )
-    st.session_state["use_vertex_numeric_probs"] = use_vertex_numeric_probs
     run_master = st.button(
         "Run Master Analysis",
         key="run_master",
