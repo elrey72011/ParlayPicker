@@ -953,18 +953,38 @@ def get_slate_sentiment(enable_sentiment: bool, teams: List[str], league: str, n
     if not enable_sentiment:
         meta["sentiment_source"] = "disabled_by_user"
         meta["sentiment_sample_status"] = "DISABLED"
+        meta["sentiment_status_counts"] = {"DISABLED": 1}
         meta["sentiment_disabled_reason"] = "user_disabled"
         return {"map": {}, "meta_map": {}, "meta": meta, "debug": debug}
     if not news_api_key:
         meta["sentiment_source"] = "disabled_no_key"
         meta["sentiment_sample_status"] = "DISABLED"
+        meta["sentiment_status_counts"] = {"DISABLED": 1}
         meta["sentiment_disabled_reason"] = "missing_NEWS_API_KEY"
         return {"map": {}, "meta_map": {}, "meta": meta, "debug": debug}
     if not teams:
         meta["sentiment_source"] = "disabled_no_teams"
         meta["sentiment_sample_status"] = "DISABLED"
+        meta["sentiment_status_counts"] = {"DISABLED": 1}
         meta["sentiment_disabled_reason"] = "no_teams_found"
         return {"map": {}, "meta_map": {}, "meta": meta, "debug": debug}
+    cooldown_raw = st.session_state.get("sentiment_cooldown_until")
+    try:
+        cooldown_until = datetime.fromisoformat(cooldown_raw) if cooldown_raw else None
+        if cooldown_until and cooldown_until.tzinfo is None:
+            cooldown_until = cooldown_until.replace(tzinfo=timezone.utc)
+    except Exception:
+        cooldown_until = None
+    if cooldown_raw and cooldown_until and datetime.now(timezone.utc) < cooldown_until:
+        meta["sentiment_source"] = "cooldown_cached_only"
+        meta["sentiment_sample_status"] = "COOLDOWN"
+        meta["sentiment_status_counts"] = {"COOLDOWN": 1}
+        meta["sentiment_disabled_reason"] = "cooldown_active"
+        meta["sentiment_cooldown_until"] = cooldown_raw
+        return {"map": {}, "meta_map": {}, "meta": meta, "debug": debug}
+    meta["sentiment_sample_status"] = "PENDING"
+    meta["sentiment_status_counts"] = {"PENDING": 1}
+    meta["sentiment_disabled_reason"] = ""
     games_stub = [{"home_team": t, "away_team": None} for t in teams]
     try:
         sentiment_map, sentiment_meta_map, sentiment_debug = compute_team_sentiment_map(news_api_key, games_stub, league)
@@ -1211,23 +1231,22 @@ def enrich_game_context(game: Dict[str, Any], league_key: str, api_key: Optional
 def init_sentiment_meta() -> Dict[str, Any]:
     return {
         "sentiment_source": "none",
-        "sentiment_articles_total": 0,
-        "status_counts": {"NO_CALL": 1},
+        "sentiment_sample_status": "NO_CALL",
         "sentiment_status_counts": {"NO_CALL": 1},
         "sentiment_sample_query": "",
-        "sentiment_sample_status": "NO_CALL",
         "sentiment_sample_totalResults": 0,
-        "sentiment_auth_error": False,
-        "sentiment_rate_limited": False,
-        "sentiment_cooldown_until": "",
-        "sentiment_cached_teams": 0,
-        "sentiment_cached_teams_count": 0,
-        "sentiment_available_count": 0,
-        "sentiment_used_cached": False,
+        "sentiment_disabled_reason": "not_executed",
         "sentiment_error_count": 0,
         "sentiment_errors_sample": "",
-        "sentiment_disabled_reason": "not_executed",
-        "reddit_used": False,
+        "sentiment_articles_total": 0,
+        "sentiment_available_count": 0,
+        "sentiment_used_cached": False,
+        "sentiment_rate_limited": False,
+        "sentiment_auth_error": False,
+        "sentiment_cooldown_until": "",
+        "sentiment_cached_teams_count": 0,
+        "sentiment_articles_used": 0,
+        "status_counts": {"NO_CALL": 1},
         "articles_total": 0,
         "error_count": 0,
         "sample_query": "",
@@ -1241,6 +1260,7 @@ def init_sentiment_meta() -> Dict[str, Any]:
         "cooldown_active": False,
         "available_count": 0,
         "last_error": None,
+        "reddit_used": False,
     }
 
 
@@ -3854,19 +3874,18 @@ with tab_master:
         st.error("Kalshi is required but unavailable. Fix Kalshi first.")
         st.stop()
     if run_master:
-        unique_teams = set()
-        for g in games:
-            if g.get("home_team"):
-                unique_teams.add(str(g.get("home_team")))
-            if g.get("away_team"):
-                unique_teams.add(str(g.get("away_team")))
+        df_master = pd.DataFrame(games or [])
+        unique_teams = sorted(
+            set(df_master.get("home_team", pd.Series([], dtype=str)).dropna().astype(str))
+            | set(df_master.get("away_team", pd.Series([], dtype=str)).dropna().astype(str))
+        )
         enable_sentiment_master = st.checkbox(
             "Enable sentiment (NewsAPI)",
-            value=st.session_state.get("enable_sentiment", True),
+            value=True,
             key="enable_sentiment_master",
         )
         st.session_state["enable_sentiment"] = enable_sentiment_master
-        slate_sentiment = get_slate_sentiment(enable_sentiment_master, sorted(unique_teams), "MIXED", news_api_key)
+        slate_sentiment = get_slate_sentiment(enable_sentiment_master, unique_teams, "MIXED", news_api_key)
         st.session_state["sentiment_map"] = slate_sentiment.get("map") or {}
         st.session_state["sentiment_meta_map"] = slate_sentiment.get("meta_map") or {}
         st.session_state["sentiment_meta"] = slate_sentiment.get("meta") or init_sentiment_meta()
@@ -4194,7 +4213,7 @@ with tab_master:
             sentiment_debug_global = st.session_state.get("sentiment_debug") or {}
             league_debug = st.session_state.get(f"sentiment_debug_{league_key}") or {}
             articles_total = sentiment_meta_global.get("articles_total") or league_debug.get("articles_total") or 0
-            sentiment_diff = None if (home_sent is None and away_sent is None) else (home_sent or 0.0) - (away_sent or 0.0)
+            sentiment_diff = (home_sent - away_sent) if (home_sent is not None and away_sent is not None) else 0.0
             rate_limited_flag = bool(
                 sentiment_meta_global.get("rate_limited")
                 or sentiment_debug_global.get("rate_limited")
@@ -5181,6 +5200,19 @@ with tab_master:
                     
         df = pd.DataFrame(rows_out)
         # Collapse to one row per game (prefer the first generated row, typically moneyline)
+        sentiment_meta_for_export = sentiment_pack_meta or init_sentiment_meta()
+        for row in rows_out:
+            row["sentiment_sample_status"] = str(sentiment_meta_for_export.get("sentiment_sample_status", "NO_CALL") or "NO_CALL")
+            row["sentiment_source"] = str(sentiment_meta_for_export.get("sentiment_source", "none") or "none")
+            row["sentiment_status_counts"] = json.dumps(sentiment_meta_for_export.get("sentiment_status_counts", {"NO_CALL": 1}))
+            row["sentiment_sample_query"] = sentiment_meta_for_export.get("sentiment_sample_query", "") or ""
+            row["sentiment_disabled_reason"] = sentiment_meta_for_export.get("sentiment_disabled_reason", "") or ""
+            row["sentiment_errors_sample"] = sentiment_meta_for_export.get("sentiment_errors_sample", "") or ""
+            row["sentiment_error_count"] = int(sentiment_meta_for_export.get("sentiment_error_count", 0) or 0)
+            row["spread_sentiment_arrow"] = row.get("spread_sentiment_arrow") or ""
+            row["total_sentiment_arrow"] = row.get("total_sentiment_arrow") or ""
+            row["spread_sentiment_note"] = row.get("spread_sentiment_note") or ""
+            row["total_sentiment_note"] = row.get("total_sentiment_note") or ""
         deduped_rows: Dict[Tuple[Any, Any, Any, Any], Dict[str, Any]] = {}
         for row in rows_out:
             key = (row.get("League"), row.get("Home"), row.get("Away"), row.get("Commence (UTC)"))
