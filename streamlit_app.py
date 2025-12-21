@@ -84,6 +84,27 @@ def compute_sentiment_adj(sentiment_diff: Optional[float]) -> Optional[float]:
         return None
 
 
+def round_pct(p: Any) -> str:
+    try:
+        if p is None:
+            return ""
+        return f"{int(round(float(p) * 100))}%"
+    except Exception:
+        return ""
+
+
+def prob_arrow(base: Any, adj: Any, threshold: float = 0.0075) -> str:
+    try:
+        if base is None or adj is None:
+            return ""
+        delta = float(adj) - float(base)
+        if abs(delta) < threshold:
+            return ""
+        return "▲" if delta > 0 else "▼"
+    except Exception:
+        return ""
+
+
 def _clamp_signed(val: Optional[float], *, limit: float) -> float:
     try:
         v = float(val)
@@ -298,13 +319,13 @@ def reorder_for_spread_total_focus(df: pd.DataFrame) -> pd.DataFrame:
 
     focus_cols = [
         "Spread & Pick",
-        "Spread_Glance",
+        "Spread_Glance_Clean",
         "spread_prob_adj",
         "spread_prob",
         "spread_sentiment_adj",
         "spread_confidence",
         "Total & Pick",
-        "Total_Glance",
+        "Total_Glance_Clean",
         "total_prob_adj",
         "total_prob",
         "total_sentiment_adj",
@@ -588,43 +609,59 @@ def add_spread_total_confidence(df: pd.DataFrame) -> pd.DataFrame:
             row["consensus_prob_adj"] = row.get("total_prob_adj")
         spread_prob_adj = row.get("spread_prob_adj")
         total_prob_adj = row.get("total_prob_adj")
-        spread_prob_display = round(spread_prob_adj * 100) if spread_prob_adj is not None else None
-        total_prob_display = round(total_prob_adj * 100) if total_prob_adj is not None else None
+        spread_prob_display = round_pct(spread_prob_adj)
+        total_prob_display = round_pct(total_prob_adj)
         row["spread_prob_display"] = spread_prob_display
         row["total_prob_display"] = total_prob_display
         spread_arrow = ""
         total_arrow = ""
         spread_note = None
         total_note = None
-        if sentiment_level == "league":
+        signal_zero = bool(not sentiment_signal)
+        if sentiment_level == "league" and not signal_zero:
             direction = "↗" if (sentiment_signal or 0) > 0 else "↘"
             spread_note = f"LEAGUE {direction}"
             total_note = f"LEAGUE {direction}"
-        else:
-            if spread_prob_adj is not None and row.get("spread_prob") is not None:
-                if abs(spread_prob_adj - (row.get("spread_prob") or 0.0)) >= 0.0075:
-                    spread_arrow = "▲" if spread_prob_adj > (row.get("spread_prob") or 0.0) else "▼"
-            if total_prob_adj is not None and row.get("total_prob") is not None:
-                if abs(total_prob_adj - (row.get("total_prob") or 0.0)) >= 0.0075:
-                    total_arrow = "▲" if total_prob_adj > (row.get("total_prob") or 0.0) else "▼"
+        elif sentiment_level in {"team", "game"} and not signal_zero:
+            spread_arrow = prob_arrow(row.get("spread_prob"), spread_prob_adj)
+            total_arrow = prob_arrow(row.get("total_prob"), total_prob_adj)
         row["spread_sentiment_arrow"] = spread_arrow
         row["total_sentiment_arrow"] = total_arrow
         row["spread_sentiment_note"] = spread_note
         row["total_sentiment_note"] = total_note
         def _glance_with_signal(conf_val: Any, prob_display: Optional[int], books: Any, width_val: Any, market_type: str, arrow_val: str, note_val: Optional[str]) -> str:
-            prob_text = "—" if prob_display is None else f"{prob_display}%"
+            prob_text = prob_display if prob_display not in {"", None} else "—"
             signal = ""
             if note_val:
                 signal = f" {note_val}"
             elif arrow_val:
                 signal = f" {arrow_val}"
-            return f"{conf_val or 'LOW'} | {prob_text}{signal} | {depth_label(books)} | {market_width_label(width_val, market_type)}"
-        row["Spread_Glance"] = _glance_with_signal(
+            return f"{conf_val or 'LOW'} | {prob_text} {signal}".rstrip() + f" | {depth_label(books)} | {market_width_label(width_val, market_type)}"
+        clean_spread_glance = _glance_with_signal(
             spread_conf, spread_prob_display, spread_books_count, spread_width_val, "spread", spread_arrow, spread_note
         )
-        row["Total_Glance"] = _glance_with_signal(
+        clean_total_glance = _glance_with_signal(
             total_conf, total_prob_display, total_books_count, total_width_val, "total", total_arrow, total_note
         )
+        row["Spread_Glance"] = clean_spread_glance
+        row["Total_Glance"] = clean_total_glance
+        row["Spread_Glance_Clean"] = clean_spread_glance
+        row["Total_Glance_Clean"] = clean_total_glance
+        conf_rank_map = {"HIGH": 3, "MEDIUM": 2, "LOW": 1}
+        spread_conf_rank = conf_rank_map.get(str(spread_conf or "LOW").upper(), 1)
+        total_conf_rank = conf_rank_map.get(str(total_conf or "LOW").upper(), 1)
+        row["spread_conf_rank"] = spread_conf_rank
+        row["total_conf_rank"] = total_conf_rank
+        row["st_conf_rank"] = min(spread_conf_rank, total_conf_rank)
+        decisiveness = 0.0
+        try:
+            if spread_prob_adj is not None:
+                decisiveness += abs(float(spread_prob_adj) - 0.5)
+            if total_prob_adj is not None:
+                decisiveness += abs(float(total_prob_adj) - 0.5)
+        except Exception:
+            decisiveness = 0.0
+        row["decisiveness"] = decisiveness
         return row
 
     return df.apply(_apply, axis=1)
@@ -4760,12 +4797,16 @@ with tab_master:
             "consensus_prob_adj",
             "Spread_Glance",
             "Total_Glance",
+            "Spread_Glance_Clean",
+            "Total_Glance_Clean",
             "spread_prob_display",
             "total_prob_display",
             "spread_sentiment_arrow",
             "total_sentiment_arrow",
             "spread_sentiment_note",
             "total_sentiment_note",
+            "st_conf_rank",
+            "decisiveness",
             "best_spread_book",
             "best_spread_last_update",
             "best_spread_price_score",
@@ -4872,7 +4913,37 @@ with tab_master:
             if not show_moneyline_rows:
                 df_master_view = df_master_view[df_master_view["Market"].isin(["Spread", "Total"])]
 
+        try:
+            df_master_view["st_conf_rank"] = df_master_view["st_conf_rank"].fillna(0)
+            df_master_view["decisiveness"] = df_master_view["decisiveness"].fillna(0.0)
+            df_master_view = df_master_view.sort_values(
+                by=["st_conf_rank", "decisiveness", "Commence (UTC)"],
+                ascending=[False, False, True],
+            )
+        except Exception:
+            pass
+
         df_master_view = reorder_for_spread_total_focus(df_master_view)
+        show_moneyline_details = st.checkbox("Show Moneyline details", value=False, key="show_moneyline_details")
+        if not show_moneyline_details:
+            ml_detail_cols = [
+                "Pick",
+                "Book",
+                "Home_ML",
+                "Away_ML",
+                "Implied_Prob",
+                "AI_Prob",
+                "ai_prob_adj",
+                "consensus_prob",
+                "consensus_prob_adj",
+                "kalshi_prob",
+                "kalshi_prob_used",
+                "kalshi_event_ticker",
+                "kalshi_event_ticker_used",
+                "edge_vs_odds",
+                "model_minus_market",
+            ]
+            df_master_view = df_master_view.drop(columns=[c for c in ml_detail_cols if c in df_master_view.columns], errors="ignore")
         st.caption(f"Column order (first 8): {', '.join(list(df_master_view.columns[:8]))} ...")
         df_master_view["Spread_Range"] = df_master_view.apply(
             lambda r: f"{r['spread_min']} to {r['spread_max']} (med {r['spread_med']})"
@@ -4911,7 +4982,35 @@ with tab_master:
         top_df = top_df[top_df["Eligible_Top_Picks"] == True]
         if not include_low_in_top:
             top_df = top_df[top_df["Pick_Confidence"].isin(["HIGH", "MEDIUM"])]
+        try:
+            top_df["st_conf_rank"] = top_df["st_conf_rank"].fillna(0)
+            top_df["decisiveness"] = top_df["decisiveness"].fillna(0.0)
+            top_df = top_df.sort_values(
+                by=["st_conf_rank", "decisiveness", "Commence (UTC)"],
+                ascending=[False, False, True],
+            )
+        except Exception:
+            pass
         top_df = reorder_for_spread_total_focus(top_df)
+        if not show_moneyline_details:
+            ml_detail_cols = [
+                "Pick",
+                "Book",
+                "Home_ML",
+                "Away_ML",
+                "Implied_Prob",
+                "AI_Prob",
+                "ai_prob_adj",
+                "consensus_prob",
+                "consensus_prob_adj",
+                "kalshi_prob",
+                "kalshi_prob_used",
+                "kalshi_event_ticker",
+                "kalshi_event_ticker_used",
+                "edge_vs_odds",
+                "model_minus_market",
+            ]
+            top_df = top_df.drop(columns=[c for c in ml_detail_cols if c in top_df.columns], errors="ignore")
         st.dataframe(top_df)
 
         export_cols = [
@@ -4946,6 +5045,10 @@ with tab_master:
             "total_sentiment_arrow",
             "spread_sentiment_note",
             "total_sentiment_note",
+            "Spread_Glance_Clean",
+            "Total_Glance_Clean",
+            "st_conf_rank",
+            "decisiveness",
             "sentiment_error_count",
             "sentiment_errors_sample",
             "sentiment_articles_total",
