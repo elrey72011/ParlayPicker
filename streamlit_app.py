@@ -1899,6 +1899,30 @@ def init_vertex_once() -> Dict[str, Any]:
         info["error"] = str(e)
         return info
 
+
+def ensure_vertex_info_cached() -> Dict[str, Any]:
+    """
+    Wrapper to guard against NameError or other runtime issues when fetching Vertex init status.
+    Ensures a dict is always returned and session state updated.
+    """
+    try:
+        info = st.session_state.get("vertex_info")
+    except Exception:
+        info = None
+    if info:
+        return info
+    try:
+        info = init_vertex_once()
+    except NameError:
+        info = {"ok": False, "project": None, "location": None, "auth": "missing", "error": "init_vertex_once not defined"}
+    except Exception as exc:  # pragma: no cover - defensive guard
+        info = {"ok": False, "project": None, "location": None, "auth": "error", "error": str(exc)}
+    try:
+        st.session_state["vertex_info"] = info
+    except Exception:
+        pass
+    return info
+
 def get_api_keys() -> Dict[str, Optional[str]]:
     return {
         "api_sports_key": read_secret("API_SPORTS_KEY")
@@ -2542,8 +2566,7 @@ except Exception:
 if kalshi_integrator:
     kalshi_integrator.required = st.session_state.get("kalshi_required", True)
 api_sports_clients, sportsdata_clients = init_data_clients()
-vertex_info = st.session_state.get("vertex_info") or init_vertex_once()
-st.session_state["vertex_info"] = vertex_info
+vertex_info = ensure_vertex_info_cached()
 
 @st.cache_data(ttl=60)
 def fetch_odds_games(sport_key: str) -> List[Dict[str, Any]]:
