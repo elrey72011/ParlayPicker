@@ -997,7 +997,7 @@ def ensure_sentiment_loaded(games: List[Dict[str, Any]]) -> None:
         "enabled": enabled,
         "per_league": {},
         "reddit_used": False,
-        "cooldown_until": cooldown_until.isoformat() if cooldown_until else None,
+        "cooldown_until": cooldown_until.isoformat() if cooldown_until else "",
         "cooldown_active": cooldown_active,
     }
     if not enabled:
@@ -3412,6 +3412,17 @@ with tab_master:
         st.error("Kalshi is required but unavailable. Fix Kalshi first.")
         st.stop()
     if run_master:
+        unique_teams = set()
+        for g in games:
+            if g.get("home_team"):
+                unique_teams.add(str(g.get("home_team")))
+            if g.get("away_team"):
+                unique_teams.add(str(g.get("away_team")))
+        ensure_sentiment_loaded(games)
+        sentiment_pack_meta = st.session_state.get("sentiment_meta") or init_sentiment_meta()
+        sentiment_map: Dict[str, Optional[float]] = st.session_state.get("sentiment_map") or {}
+        sentiment_meta_map: Dict[str, Dict[str, Any]] = st.session_state.get("sentiment_meta_map") or {}
+        sentiment_status_counts_global = sentiment_pack_meta.get("status_counts") or {"NO_CALL": 1}
         if st.session_state.get("kalshi_required", True) and kalshi_integrator:
             try:
                 kalshi_integrator.assert_available()
@@ -3425,22 +3436,18 @@ with tab_master:
             if not commence_val:
                 continue
             commence_times_by_league.setdefault(lg, []).append(commence_val)
-        ensure_sentiment_loaded(games)
-        sentiment_map: Dict[str, Optional[float]] = st.session_state.get("sentiment_map") or {}
-        sentiment_meta_map: Dict[str, Dict[str, Any]] = st.session_state.get("sentiment_meta_map") or {}
-        sentiment_meta_global = st.session_state.get("sentiment_meta") or {}
-        sentiment_status_counts_global = sentiment_meta_global.get("status_counts") or {"NO_CALL": 1}
         sentiment_meta_global_raw = st.session_state.get("sentiment_meta") or {}
         sentiment_meta_global: Dict[str, Any] = {
             "sentiment_source": "none",
             "articles_total": 0,
-            "status_counts": {},
+            "status_counts": {"NO_CALL": 1},
             "sample_query": "",
             "sample_status": "NO_CALL",
-            "sample_totalResults": None,
+            "sample_totalResults": 0,
             "auth_error": False,
             "rate_limited": False,
             "cached_teams": 0,
+            "cached_teams_count": 0,
             "used_cached": False,
             "cooldown_until": "",
             "cooldown_active": False,
@@ -3448,6 +3455,7 @@ with tab_master:
             "error_count": 0,
             "sentiment_disabled_reason": "",
             "sentiment_errors_sample": "",
+            "sentiment_error_count": 0,
             **sentiment_meta_global_raw,
         }
         if not sentiment_meta_global.get("sample_status"):
@@ -4957,6 +4965,7 @@ with tab_sentiment:
     with st.expander("Sentiment Debug", expanded=True):
         st.json(st.session_state.get("sentiment_debug", {}))
         st.json({"meta": sent_meta, "error_count": error_count})
+        st.write("Teams with sentiment:", list((st.session_state.get("sentiment_map") or {}).keys())[:20])
 
 
 with tab_debug:
