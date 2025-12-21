@@ -67,6 +67,42 @@ def _clamp(val: float, lo: float = -1.0, hi: float = 1.0) -> float:
     return v
 
 
+def _normalize_sentiment_level(level: Any) -> str:
+    try:
+        lvl = str(level or "none").lower()
+    except Exception:
+        lvl = "none"
+    return lvl if lvl in {"team", "game", "league", "none"} else "none"
+
+
+def sentiment_strength_from_articles(level: str, articles_used: Any) -> str:
+    lvl = _normalize_sentiment_level(level)
+    try:
+        count_val = int(articles_used or 0)
+    except Exception:
+        count_val = 0
+    if lvl == "none" or count_val <= 0:
+        return "NONE"
+    if count_val >= 8:
+        return "STRONG"
+    if count_val >= 3:
+        return "MEDIUM"
+    return "WEAK"
+
+
+def sentiment_badge_for(level: str, strength: str) -> str:
+    lvl = _normalize_sentiment_level(level)
+    strength_norm = str(strength or "").upper()
+    mapping = {
+        "team": {"STRONG": "TEAM_STRONG", "MEDIUM": "TEAM_MED", "WEAK": "TEAM_WEAK"},
+        "game": {"STRONG": "GAME_STRONG", "MEDIUM": "GAME_MED", "WEAK": "GAME_WEAK"},
+        "league": {"STRONG": "LEAGUE_MED", "MEDIUM": "LEAGUE_MED", "WEAK": "LEAGUE_WEAK"},
+    }
+    if lvl in mapping and strength_norm in mapping[lvl]:
+        return mapping[lvl][strength_norm]
+    return "NONE"
+
+
 def score_text_simple(text: str) -> float:
     """Score text using a tiny lexicon; normalized per token and clamped to [-1, 1]."""
     if not text:
@@ -444,6 +480,11 @@ def build_team_sentiment_map(
                     "sentiment_valid": False,
                     "articles": 0,
                     "sentiment_source": "none",
+                    "sentiment_level": "none",
+                    "sentiment_strength": "NONE",
+                    "sentiment_badge": "NONE",
+                    "sentiment_articles_used": 0,
+                    "sentiment_query_used": None,
                     "error": "cooldown_active" if stop_fetching else "calls_capped" if debug["calls_capped"] else "missing_key",
                     "cached": False,
                 }
@@ -499,6 +540,12 @@ def build_team_sentiment_map(
                 "sources": sources,
                 "sentiment_valid": bool(sources > 0 and score_val is not None),
                 "sentiment_source": "newsapi" if sources > 0 else "none",
+                "sentiment_level": "team" if sources > 0 else "none",
+                "sentiment_articles_used": sources,
+                "sentiment_strength": sentiment_strength_from_articles("team", sources) if sources > 0 else "NONE",
+                "sentiment_badge": sentiment_badge_for("team", sentiment_strength_from_articles("team", sources)) if sources > 0 else "NONE",
+                "sentiment_query_used": (fetch_info or {}).get("q"),
+                "status": status_int,
                 "method": "newsapi_simple" if sources > 0 else "none",
                 "reddit_used": False,
                 "rate_limited": bool((fetch_info or {}).get("rate_limited")),
@@ -539,6 +586,11 @@ def build_team_sentiment_map(
                 "sentiment_valid": bool(prev_meta.get("sentiment_valid")),
                 "articles": int(prev_meta.get("sources") or prev_meta.get("articles") or 0),
                 "sentiment_source": prev_meta.get("sentiment_source") or ("newsapi" if prev_meta.get("sentiment_valid") else "none"),
+                "sentiment_level": prev_meta.get("sentiment_level") or ("team" if prev_meta.get("sentiment_valid") else "none"),
+                "sentiment_strength": prev_meta.get("sentiment_strength") or sentiment_strength_from_articles(prev_meta.get("sentiment_level") or "none", prev_meta.get("sources") or 0),
+                "sentiment_badge": prev_meta.get("sentiment_badge") or sentiment_badge_for(prev_meta.get("sentiment_level") or "none", prev_meta.get("sentiment_strength") or "NONE"),
+                "sentiment_articles_used": prev_meta.get("sentiment_articles_used") or prev_meta.get("sources") or 0,
+                "sentiment_query_used": prev_meta.get("sentiment_query_used") or None,
                 "error": str(exc),
                 "cached": bool(prev_meta),
             }
