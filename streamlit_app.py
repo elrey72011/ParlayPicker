@@ -907,6 +907,42 @@ def enrich_game_context(game: Dict[str, Any], league_key: str, api_key: Optional
 
     return enrichment
 
+def init_sentiment_meta() -> Dict[str, Any]:
+    return {
+        "sentiment_source": "none",
+        "sentiment_articles_total": 0,
+        "status_counts": {"NO_CALL": 1},
+        "sentiment_status_counts": {"NO_CALL": 1},
+        "sentiment_sample_query": "",
+        "sentiment_sample_status": "NO_CALL",
+        "sentiment_sample_totalResults": 0,
+        "sentiment_auth_error": False,
+        "sentiment_rate_limited": False,
+        "sentiment_cooldown_until": "",
+        "sentiment_cached_teams": 0,
+        "sentiment_cached_teams_count": 0,
+        "sentiment_available_count": 0,
+        "sentiment_used_cached": False,
+        "sentiment_error_count": 0,
+        "sentiment_errors_sample": "",
+        "sentiment_disabled_reason": "",
+        "reddit_used": False,
+        "articles_total": 0,
+        "error_count": 0,
+        "sample_query": "",
+        "sample_status": "NO_CALL",
+        "sample_totalResults": 0,
+        "auth_error": False,
+        "rate_limited": False,
+        "cached_teams": 0,
+        "cached_teams_count": 0,
+        "cooldown_until": "",
+        "cooldown_active": False,
+        "available_count": 0,
+        "last_error": None,
+    }
+
+
 def ensure_sentiment_loaded(games: List[Dict[str, Any]]) -> None:
     """Compute sentiment for the current slate when enabled and cache in session state."""
     if st.button("🧹 Clear Sentiment Cache", key="clear_sentiment_cache"):
@@ -965,7 +1001,16 @@ def ensure_sentiment_loaded(games: List[Dict[str, Any]]) -> None:
         "cooldown_active": cooldown_active,
     }
     if not enabled:
-        meta = _sentiment_meta_defaults("disabled_by_user", "sentiment_disabled")
+        meta = init_sentiment_meta()
+        meta.update({
+            "sentiment_source": "disabled_by_user",
+            "sentiment_sample_status": "DISABLED",
+            "sentiment_status_counts": {"DISABLED": 1},
+            "sample_status": "DISABLED",
+            "status_counts": {"DISABLED": 1},
+            "sentiment_disabled_reason": "sentiment_disabled",
+            "cooldown_until": st.session_state.get("sentiment_cooldown_until") or "",
+        })
         st.session_state["sentiment_map"] = {}
         st.session_state["sentiment_meta_map"] = {}
         st.session_state["sentiment_meta"] = meta
@@ -976,7 +1021,16 @@ def ensure_sentiment_loaded(games: List[Dict[str, Any]]) -> None:
         return
 
     if not games:
-        meta = _sentiment_meta_defaults("disabled_no_games", "no_games_loaded")
+        meta = init_sentiment_meta()
+        meta.update({
+            "sentiment_source": "disabled_no_games",
+            "sentiment_sample_status": "DISABLED",
+            "sentiment_status_counts": {"DISABLED": 1},
+            "sample_status": "DISABLED",
+            "status_counts": {"DISABLED": 1},
+            "sentiment_disabled_reason": "no_games_loaded",
+            "cooldown_until": st.session_state.get("sentiment_cooldown_until") or "",
+        })
         st.session_state["sentiment_map"] = {}
         st.session_state["sentiment_meta_map"] = {}
         st.session_state["sentiment_meta"] = meta
@@ -987,8 +1041,16 @@ def ensure_sentiment_loaded(games: List[Dict[str, Any]]) -> None:
         return
 
     if not news_api_key:
-        meta = _sentiment_meta_defaults("disabled_no_key", "missing_news_api_key")
-        meta["sample_status"] = "NO_KEY"
+        meta = init_sentiment_meta()
+        meta.update({
+            "sentiment_source": "disabled_no_key",
+            "sentiment_sample_status": "DISABLED",
+            "sentiment_status_counts": {"DISABLED": 1},
+            "sample_status": "DISABLED",
+            "status_counts": {"DISABLED": 1},
+            "sentiment_disabled_reason": "missing_news_api_key",
+            "cooldown_until": st.session_state.get("sentiment_cooldown_until") or "",
+        })
         st.session_state["sentiment_map"] = {}
         st.session_state["sentiment_meta_map"] = {}
         st.session_state["sentiment_meta"] = meta
@@ -1008,15 +1070,11 @@ def ensure_sentiment_loaded(games: List[Dict[str, Any]]) -> None:
         cached_used_any = False
         cached_teams_total = 0
         cooldown_until_value = cooldown_until
-        global_meta = {
-            "sentiment_source": "none",
-            "reddit_used": False,
-            "articles_total": 0,
-            "last_error": None,
-            "error_count": 0,
-            "cooldown_until": cooldown_until.isoformat() if cooldown_until else None,
+        global_meta = init_sentiment_meta()
+        global_meta.update({
+            "cooldown_until": cooldown_until.isoformat() if cooldown_until else "",
             "cooldown_active": cooldown_active,
-        }
+        })
         aggregate_sentiment_map: Dict[str, Optional[float]] = {}
         aggregate_sentiment_meta: Dict[str, Dict[str, Any]] = {}
         status_counts_all: Dict[Any, int] = {}
@@ -1121,6 +1179,8 @@ def ensure_sentiment_loaded(games: List[Dict[str, Any]]) -> None:
         disabled_reason = ""
         if cooldown_active or (cooldown_until_value and now_utc < cooldown_until_value):
             disabled_reason = "cooldown_cached_only" if (cached_used_any or sentiment_available_count > 0) else "cooldown_no_cache"
+        if not status_counts_all:
+            status_counts_all = {"NO_CALL": 1}
         if auth_error:
             sentiment_source = "error_auth"
         elif rate_limited and cached_used_any:
@@ -1143,9 +1203,11 @@ def ensure_sentiment_loaded(games: List[Dict[str, Any]]) -> None:
             elif sentiment_source.startswith("cooldown"):
                 sample_status = "COOLDOWN"
             elif auth_error:
-                sample_status = 401
+                sample_status = "401"
             else:
-                sample_status = 520 if news_api_key else "NO_KEY"
+                sample_status = "NO_CALL" if news_api_key else "NO_KEY"
+        sample_status_str = str(sample_status)
+        sample_query_val = first_sample.get("q") if isinstance(first_sample, dict) else None
         global_meta.update({
             "sentiment_source": sentiment_source,
             "articles_total": total_articles,
@@ -1154,9 +1216,9 @@ def ensure_sentiment_loaded(games: List[Dict[str, Any]]) -> None:
             "status_counts": status_counts_all,
             "auth_error": auth_error,
             "rate_limited": rate_limited,
-            "sample_query": first_sample.get("q") if isinstance(first_sample, dict) else None,
-            "sample_status": sample_status,
-            "sample_totalResults": first_sample.get("totalResults") if isinstance(first_sample, dict) else None,
+            "sample_query": sample_query_val or "",
+            "sample_status": sample_status_str,
+            "sample_totalResults": first_sample.get("totalResults") if isinstance(first_sample, dict) else 0,
             "cached_teams": cached_teams_total,
             "used_cached": cached_used_any,
             "cooldown_until": cooldown_until_value.isoformat() if cooldown_until_value else None,
@@ -1197,26 +1259,33 @@ def ensure_sentiment_loaded(games: List[Dict[str, Any]]) -> None:
         st.session_state["sentiment_meta_map"] = aggregate_sentiment_meta
         st.session_state["sentiment_slate_key"] = slate_key
     except Exception as exc:  # pragma: no cover - defensive UI behavior
-        meta = {
-            "sentiment_source": "error",
-            "reddit_used": False,
+        import traceback as _tb
+        meta = init_sentiment_meta()
+        meta.update({
+            "sentiment_source": "error_exception",
             "error": str(exc),
             "last_error": str(exc),
             "articles_total": 0,
             "error_count": 1,
-            "status_counts": {},
+            "sentiment_error_count": 1,
+            "status_counts": {"EXCEPTION": 1},
+            "sentiment_status_counts": {"EXCEPTION": 1},
             "auth_error": False,
             "rate_limited": False,
             "sample_query": "",
-            "sample_status": "ERROR",
-            "sample_totalResults": None,
+            "sample_status": "EXCEPTION",
+            "sentiment_sample_status": "EXCEPTION",
+            "sample_totalResults": 0,
             "cached_teams": 0,
+            "cached_teams_count": 0,
             "used_cached": False,
-            "cooldown_until": st.session_state.get("sentiment_cooldown_until"),
+            "sentiment_used_cached": False,
+            "cooldown_until": st.session_state.get("sentiment_cooldown_until") or "",
             "cooldown_active": bool(st.session_state.get("sentiment_cooldown_until")),
             "available_count": 0,
             "sentiment_disabled_reason": "exception",
-        }
+            "sentiment_errors_sample": (str(exc) + " | " + _tb.format_exc())[:800],
+        })
         st.session_state["sentiment_map"] = {}
         st.session_state["sentiment_meta_map"] = {}
         st.session_state["sentiment_meta"] = meta
@@ -3360,7 +3429,7 @@ with tab_master:
         sentiment_map: Dict[str, Optional[float]] = st.session_state.get("sentiment_map") or {}
         sentiment_meta_map: Dict[str, Dict[str, Any]] = st.session_state.get("sentiment_meta_map") or {}
         sentiment_meta_global = st.session_state.get("sentiment_meta") or {}
-        sentiment_status_counts_global = sentiment_meta_global.get("status_counts") or {}
+        sentiment_status_counts_global = sentiment_meta_global.get("status_counts") or {"NO_CALL": 1}
         sentiment_meta_global_raw = st.session_state.get("sentiment_meta") or {}
         sentiment_meta_global: Dict[str, Any] = {
             "sentiment_source": "none",
@@ -3383,7 +3452,7 @@ with tab_master:
         }
         if not sentiment_meta_global.get("sample_status"):
             sentiment_meta_global["sample_status"] = "NO_CALL"
-        sentiment_status_counts_global = sentiment_meta_global.get("status_counts") or {}
+        sentiment_status_counts_global = sentiment_meta_global.get("status_counts") or {"NO_CALL": 1}
         leagues_for_fetch = list({k for k in commence_times_by_league.keys() if k}) or (selected_sports or [league])
         try:
             kalshi_markets_by_league = fetch_kalshi_markets_for_leagues(
@@ -3703,6 +3772,11 @@ with tab_master:
             if not sentiment_sample_status and sentiment_rate_limited:
                 sentiment_sample_status = 429
             sentiment_disabled_reason = sentiment_meta_global.get("sentiment_disabled_reason") or ""
+            sentiment_error_count = int(sentiment_error_count or 0)
+            sentiment_articles_total = int(sentiment_articles_total or 0)
+            sentiment_cached_teams_count = int(sentiment_cached_teams_count or 0)
+            sentiment_available_count = int(sentiment_available_count or 0)
+            sentiment_sample_status = str(sentiment_sample_status or "NO_CALL")
 
             vertex_prob_home, vertex_warn = get_vertex_prob(g, sentiment_diff)
             if vertex_warn and vertex_warn not in warnings:
