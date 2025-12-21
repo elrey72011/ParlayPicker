@@ -30,6 +30,7 @@ from app_core.apisports import (
     APISportsBasketballClient,
     APISportsFootballClient,
     APISportsHockeyClient,
+    get_key as get_apisports_key,
 )
 from app_core.sportsdata import (
     SportsDataNBAClient,
@@ -37,6 +38,7 @@ from app_core.sportsdata import (
     SportsDataNHLClient,
     SportsDataNCAABClient,
     SportsDataNCAAFClient,
+    get_key as get_sportsdata_key,
 )
 from vertex_master_analyzer import blended_win_prob
 
@@ -84,6 +86,41 @@ def compute_sentiment_adj(sentiment_diff: Optional[float]) -> Optional[float]:
         return clamp(sentiment_diff * 0.05, -0.05, 0.05)
     except Exception:
         return None
+
+SENTIMENT_CACHE: Dict[Tuple[str, str, str], Dict[str, Any]] = {}
+SENTIMENT_LAST_TS: float = 0.0
+SENTIMENT_CACHE_TTL = timedelta(hours=6)
+
+
+def _sentiment_cache_key(team: str, league: str, bucket: str) -> Tuple[str, str, str]:
+    return (team.lower().strip(), league.upper().strip(), bucket)
+
+
+def _sentiment_cache_get(team: str, league: str, bucket: str) -> Optional[Dict[str, Any]]:
+    entry = SENTIMENT_CACHE.get(_sentiment_cache_key(team, league, bucket))
+    if not entry:
+        return None
+    ts: datetime = entry.get("ts")  # type: ignore
+    if not ts or (datetime.now(timezone.utc) - ts) > SENTIMENT_CACHE_TTL:
+        SENTIMENT_CACHE.pop(_sentiment_cache_key(team, league, bucket), None)
+        return None
+    return entry.get("payload")
+
+
+def _sentiment_cache_put(team: str, league: str, bucket: str, payload: Dict[str, Any]) -> None:
+    SENTIMENT_CACHE[_sentiment_cache_key(team, league, bucket)] = {
+        "ts": datetime.now(timezone.utc),
+        "payload": payload,
+    }
+
+
+def _enforce_sentiment_throttle() -> None:
+    global SENTIMENT_LAST_TS
+    now = time.time()
+    delta = now - SENTIMENT_LAST_TS
+    if delta < 1.0:
+        time.sleep(1.0 - delta)
+    SENTIMENT_LAST_TS = time.time()
 
 
 def round_pct(p: Any) -> str:
@@ -297,6 +334,43 @@ def sentiment_impact_for_pick(
         "sentiment_impact": impact,
         "sentiment_impact_applied": applied,
     }
+
+
+def build_decision_trace(
+    market: str,
+    pick_label: str,
+    implied_prob: Optional[float],
+    kalshi_prob: Optional[float],
+    model_prob: Optional[float],
+    sentiment_adj: Optional[float],
+    weights: Dict[str, Any],
+    final_prob: Optional[float],
+    confidence: Optional[str],
+) -> Tuple[str, str]:
+    trace_obj = {
+        "chosen_market": market,
+        "chosen_pick": pick_label,
+        "source_probs": {
+            "implied_prob": safe_float(implied_prob),
+            "kalshi_prob": safe_float(kalshi_prob),
+            "model_prob": safe_float(model_prob),
+            "sentiment_adj": safe_float(sentiment_adj),
+        },
+        "weights": {
+            "w_implied": safe_float(weights.get("odds_weight")),
+            "w_kalshi": safe_float(weights.get("kalshi_weight")),
+            "w_model": safe_float(weights.get("ml_weight")),
+            "w_sentiment": safe_float(weights.get("sentiment_weight")),
+        },
+        "final_prob": safe_float(final_prob),
+        "confidence_bucket": confidence,
+    }
+    short = f"{market}: {pick_label} -> {trace_obj['final_prob'] or 'n/a'} ({confidence or 'NA'})"
+    try:
+        trace_json = json.dumps(trace_obj, default=safe_str)
+    except Exception:
+        trace_json = "{}"
+    return short, trace_json
 
 
 def engine_label(kalshi_used: bool, market_used: bool) -> str:
@@ -981,9 +1055,12 @@ def compute_team_sentiment_map(news_api_key: Optional[str], games: List[Dict[str
         "status_counts": {},
         "sample_calls": [],
         "league_label_used": league_label(league),
+        "rate_limited": False,
+        "auth_error": False,
+        "cached_teams": 0,
+        "used_cached": False,
     }
 
-    analyzer = RealSentimentAnalyzer(news_api_key) if RealSentimentAnalyzer and news_api_key else None
     cooldown_raw = st.session_state.get("sentiment_cooldown_until")
     cooldown_until = None
     try:
@@ -997,20 +1074,26 @@ def compute_team_sentiment_map(news_api_key: Optional[str], games: List[Dict[str
     if cooldown_active and cooldown_until:
         debug["cooldown_until"] = cooldown_until.isoformat()
 
+    date_bucket = datetime.now(timezone.utc).date().isoformat()
     ordered_teams = sorted(teams)
     calls_capped = len(ordered_teams) > MAX_SENTIMENT_CALLS
     if calls_capped:
         ordered_teams = ordered_teams[:MAX_SENTIMENT_CALLS]
     debug["calls_capped"] = calls_capped
 
-    calls_made = 0
+    cache_miss_calls = 0
+    REQUEST_BUDGET = min(20, MAX_SENTIMENT_CALLS)
     stop_fetching = cooldown_active
-    rate_limit_triggered = False
-    REQUEST_BUDGET = min(MAX_SENTIMENT_CALLS, 10)
 
     for team in ordered_teams:
-        if stop_fetching or calls_made >= REQUEST_BUDGET:
-            sentiment_map[team] = None
+        cache_payload = _sentiment_cache_get(team, league, date_bucket)
+        cached = cache_payload is not None
+        payload = cache_payload or {}
+        if cached:
+            debug["cached_teams"] = debug.get("cached_teams", 0) + 1
+            debug["used_cached"] = True
+
+        if stop_fetching and not cached:
             sentiment_meta[team] = {
                 "sentiment_valid": False,
                 "sentiment_source": "none",
@@ -1019,44 +1102,66 @@ def compute_team_sentiment_map(news_api_key: Optional[str], games: List[Dict[str
                 "sentiment_badge": "NONE",
                 "sentiment_articles_used": 0,
                 "sentiment_query_used": None,
-                "cached": True,
-                "error": "cooldown_active" if cooldown_active else ("rate_limited" if rate_limit_triggered else "calls_capped"),
+                "cached": False,
+                "error": "cooldown_active",
+                "status": 429,
+                "sentiment_status": "cooldown",
+                "sentiment_confidence": 0.0,
+                "sentiment_rate_limited": True,
             }
+            sentiment_map[team] = None
             debug["missing_teams"].append(team)
             continue
-        raw_payload: Dict[str, Any] = {}
-        fetch_info: Dict[str, Any] = {}
-        if analyzer:
+
+        if not cached and cache_miss_calls >= REQUEST_BUDGET:
+            sentiment_meta[team] = {
+                "sentiment_valid": False,
+                "sentiment_source": "none",
+                "sentiment_level": "none",
+                "sentiment_strength": "NONE",
+                "sentiment_badge": "NONE",
+                "sentiment_articles_used": 0,
+                "sentiment_query_used": None,
+                "cached": False,
+                "error": "calls_capped",
+                "status": None,
+                "sentiment_status": "capped",
+                "sentiment_confidence": 0.0,
+                "sentiment_rate_limited": False,
+            }
+            sentiment_map[team] = None
+            debug["missing_teams"].append(team)
+            debug["calls_capped"] = True
+            continue
+
+        if not cached:
+            _enforce_sentiment_throttle()
+            articles, fetch_info = fetch_team_news(news_api_key or "", team, league, date_bucket=date_bucket)
+            cache_miss_calls += 1
+            status_val = fetch_info.get("status") or fetch_info.get("status_code")
             try:
-                raw_payload = analyzer.get_team_sentiment(team, league) or {}
-                fetch_info = raw_payload.get("fetch_info") or {}
-                calls_made += 1
+                status_int = int(status_val) if status_val is not None else None
             except Exception:
-                raw_payload = {}
-                fetch_info = {"error": "analyzer_exception"}
-        if not raw_payload:
-            articles: List[Dict[str, Any]] = []
-            if news_api_key and calls_made < REQUEST_BUDGET and not stop_fetching:
-                articles, fetch_info = fetch_team_news(news_api_key or "", team, league)
-                calls_made += 1
-            else:
-                fetch_info = {"error": "missing_key", "status_code": None, "league_query": league}
+                status_int = None
             score = team_sentiment_from_articles(articles)
-            raw_payload = {
-                "score": score,
+            payload = {
+                "score": score if articles else None,
                 "confidence": 0.6 if articles else 0.0,
                 "sources": len(articles),
-                "method": "newsapi_simple" if articles else "none",
+                "status": status_int,
+                "fetch_info": fetch_info,
+                "rate_limited": bool(fetch_info.get("rate_limited")),
+                "auth_error": bool(fetch_info.get("auth_error")),
+                "method": "newsapi_no_articles" if not articles and not fetch_info.get("rate_limited") else "newsapi",
             }
+            _sentiment_cache_put(team, league, date_bucket, payload)
+        else:
+            fetch_info = payload.get("fetch_info") or {}
+            status_int = payload.get("status")
 
-        status_val = fetch_info.get("status") or fetch_info.get("status_code")
-        try:
-            status_int = int(status_val) if status_val is not None else None
-        except Exception:
-            status_int = None
         if status_int is not None:
             debug["status_counts"][status_int] = debug["status_counts"].get(status_int, 0) + 1
-            if len(debug["sample_calls"]) < 10:
+            if len(debug["sample_calls"]) < 5:
                 debug["sample_calls"].append(
                     {
                         "team": team,
@@ -1066,51 +1171,51 @@ def compute_team_sentiment_map(news_api_key: Optional[str], games: List[Dict[str
                         "totalResults": fetch_info.get("totalResults"),
                         "error": fetch_info.get("error"),
                     }
-            )
-        if status_int == 429:
+                )
+
+        if payload.get("rate_limited") or status_int == 429:
+            retry_after = fetch_info.get("retry_after")
+            cooldown_new = datetime.now(timezone.utc) + timedelta(hours=12)
             try:
-                cooldown_until_new = datetime.now(timezone.utc) + timedelta(hours=12)
-                st.session_state["sentiment_cooldown_until"] = cooldown_until_new.isoformat()
-                debug["cooldown_until"] = cooldown_until_new.isoformat()
+                if retry_after:
+                    retry_sec = int(retry_after)
+                    cooldown_new = datetime.now(timezone.utc) + timedelta(seconds=retry_sec)
+            except Exception:
+                pass
+            try:
+                st.session_state["sentiment_cooldown_until"] = cooldown_new.isoformat()
             except Exception:
                 pass
             debug["rate_limited"] = True
+            debug["cooldown_until"] = cooldown_new.isoformat()
             stop_fetching = True
-            rate_limit_triggered = True
-            sentiment_map[team] = None
-            sentiment_meta[team] = {
-                "sentiment_valid": False,
-                "sentiment_source": "none",
-                "sentiment_level": "none",
-                "sentiment_strength": "NONE",
-                "sentiment_badge": "NONE",
-                "sentiment_articles_used": 0,
-                "sentiment_query_used": fetch_info.get("q") or fetch_info.get("query"),
-                "cached": True,
-                "error": "rate_limited",
-                "status": status_int,
-            }
-            debug["missing_teams"].append(team)
-            continue
+        if payload.get("auth_error"):
+            debug["auth_error"] = True
 
-        meta = sentiment_payload_to_meta(raw_payload)
+        meta = sentiment_payload_to_meta(payload)
+        meta["sentiment_confidence"] = payload.get("confidence") or 0.0
         meta["sentiment_query_used"] = fetch_info.get("q") or fetch_info.get("query")
-        meta["sentiment_articles_used"] = meta.get("sentiment_articles_used") if meta.get("sentiment_articles_used") is not None else meta.get("sources") or 0
+        meta["sentiment_articles_used"] = payload.get("sources") or 0
         meta["sentiment_level"] = meta.get("sentiment_level") or ("team" if meta.get("sentiment_valid") else "none")
         meta["sentiment_strength"] = meta.get("sentiment_strength") or sentiment_strength_from_articles(meta["sentiment_level"], meta.get("sentiment_articles_used") or 0)
         meta["sentiment_badge"] = meta.get("sentiment_badge") or sentiment_badge_for(meta["sentiment_level"], meta["sentiment_strength"])
         meta["status"] = status_int
+        meta["sentiment_status"] = fetch_info.get("status") or fetch_info.get("status_code") or "ok"
+        meta["sentiment_rate_limited"] = bool(payload.get("rate_limited") or status_int == 429)
+        meta["sentiment_used_cached"] = cached
+        if not payload.get("sources") and not meta["sentiment_rate_limited"]:
+            meta["method"] = "newsapi_no_articles"
         sentiment_meta[team] = {**meta, "error": fetch_info.get("error")}
-        debug["raw"][team] = {**raw_payload, "fetch_info": fetch_info}
+        debug["raw"][team] = {**payload, "fetch_info": fetch_info}
         debug["fetch_info"][team] = fetch_info
-        debug["article_counts"][team] = meta.get("sources") or 0
-        debug["articles_total"] += meta.get("sources") or 0
+        debug["article_counts"][team] = meta.get("sentiment_articles_used") or 0
+        debug["articles_total"] += meta.get("sentiment_articles_used") or 0
         if fetch_info.get("error"):
             debug["error_count"] += 1
             if len(debug["errors_sample"]) < 5:
                 debug["errors_sample"].append({"team": team, **fetch_info})
-        if meta["sentiment_valid"]:
-            sentiment_map[team] = meta["score"]
+        if meta["sentiment_valid"] and payload.get("score") is not None:
+            sentiment_map[team] = payload.get("score")
         else:
             sentiment_map[team] = None
             debug["missing_teams"].append(team)
@@ -1137,6 +1242,8 @@ def compute_team_sentiment_map(news_api_key: Optional[str], games: List[Dict[str
         "league_label_used": debug.get("league_label_used"),
         "rate_limited": debug.get("rate_limited"),
         "auth_error": debug.get("auth_error"),
+        "cooldown_active": cooldown_active,
+        "cooldown_until": cooldown_until.isoformat() if cooldown_until else None,
     }
 
 
@@ -1149,18 +1256,21 @@ def get_slate_sentiment(enable_sentiment: bool, teams: List[str], league: str, n
         meta["sentiment_sample_status"] = "DISABLED"
         meta["sentiment_status_counts"] = {"DISABLED": 1}
         meta["sentiment_disabled_reason"] = "user_disabled"
+        meta["sentiment_status"] = "DISABLED"
         return {"map": {}, "meta_map": {}, "meta": meta, "debug": debug}
     if not news_api_key:
         meta["sentiment_source"] = "disabled_no_key"
         meta["sentiment_sample_status"] = "DISABLED"
         meta["sentiment_status_counts"] = {"DISABLED": 1}
         meta["sentiment_disabled_reason"] = "missing_NEWS_API_KEY"
+        meta["sentiment_status"] = "DISABLED"
         return {"map": {}, "meta_map": {}, "meta": meta, "debug": debug}
     if not teams:
         meta["sentiment_source"] = "disabled_no_teams"
         meta["sentiment_sample_status"] = "DISABLED"
         meta["sentiment_status_counts"] = {"DISABLED": 1}
         meta["sentiment_disabled_reason"] = "no_teams_found"
+        meta["sentiment_status"] = "DISABLED"
         return {"map": {}, "meta_map": {}, "meta": meta, "debug": debug}
     cooldown_raw = st.session_state.get("sentiment_cooldown_until")
     try:
@@ -1179,6 +1289,7 @@ def get_slate_sentiment(enable_sentiment: bool, teams: List[str], league: str, n
         meta["sentiment_cooldown_until"] = cooldown_raw
         meta["sentiment_rate_limited"] = True
         meta["sentiment_available_count"] = len([v for v in cached_map.values() if v is not None])
+        meta["sentiment_status"] = "COOLDOWN"
         if meta["sentiment_available_count"] > 0:
             meta["sentiment_source"] = "partial_cached"
         return {"map": cached_map, "meta_map": cached_meta_map, "meta": meta, "debug": debug}
@@ -1204,6 +1315,9 @@ def get_slate_sentiment(enable_sentiment: bool, teams: List[str], league: str, n
         meta["sentiment_available_count"] = len([v for v in sentiment_map.values() if v is not None])
         meta["sentiment_rate_limited"] = bool(meta["sentiment_sample_status"] == "429" or status_counts.get(429) or debug.get("rate_limited"))
         meta["sentiment_auth_error"] = bool(debug.get("auth_error") or meta["sentiment_sample_status"] in {"401", "403"})
+        meta["sentiment_status"] = meta.get("sentiment_sample_status")
+        meta["sentiment_confidence"] = max([safe_float(v) or 0.0 for v in sentiment_map.values() if v is not None] or [0.0])
+        meta["sentiment_score"] = sum([safe_float(v) or 0.0 for v in sentiment_map.values() if v is not None]) / max(1, len([v for v in sentiment_map.values() if v is not None]))
         meta["sentiment_disabled_reason"] = ""
         if meta["sentiment_rate_limited"] and meta["sentiment_available_count"] == 0:
             meta["sentiment_source"] = "error_rate_limited"
@@ -1462,16 +1576,21 @@ def enrich_game_context(game: Dict[str, Any], league_key: str, api_key: Optional
     enrichment: Dict[str, Any] = {
         "injuries_home_count": 0,
         "injuries_away_count": 0,
+        "injuries_home": 0,
+        "injuries_away": 0,
         "key_injuries_home": [],
         "key_injuries_away": [],
         "weather_summary": None,
         "api_sports_used": False,
         "sportsdata_used": False,
+        "api_sports_status": "missing",
+        "sportsdata_status": "missing",
         "schedule_warnings": [],
         "last_5_form_home": None,
         "last_5_form_away": None,
         "pace_signal": None,
         "efficiency_signal": None,
+        "enrichment_errors_sample": [],
     }
     try:
         commence_iso = game.get("commence_time_iso_utc") or game.get("commence_time") or game.get("commence_time_iso")
@@ -1496,6 +1615,7 @@ def enrich_game_context(game: Dict[str, Any], league_key: str, api_key: Optional
             }
             client_cls = api_client_map.get(league_key)
             api_client = client_cls(api_key, key_source="secrets/env") if client_cls else None
+            enrichment["api_sports_status"] = "ok" if api_client else "missing"
         if api_client:
             games_api = api_client.get_games_by_date(commence_date)
             home_norm = canonical_team_name(game.get("home_team"))
@@ -1513,7 +1633,13 @@ def enrich_game_context(game: Dict[str, Any], league_key: str, api_key: Optional
                 if fixture_date and commence_iso and fixture_date != commence_iso:
                     enrichment["schedule_warnings"].append("schedule_mismatch_api_sports")
                 # Placeholder: API-Sports payload often lacks injuries in base tier; keep counts at 0.
+                enrichment["injuries_home"] = enrichment["injuries_home_count"] or "unknown"
+                enrichment["injuries_away"] = enrichment["injuries_away_count"] or "unknown"
+        elif api_key:
+            enrichment["api_sports_status"] = "key_present_no_client"
     except Exception:
+        enrichment["api_sports_status"] = "error"
+        enrichment.setdefault("enrichment_errors_sample", []).append("api_sports_error")
         enrichment.setdefault("schedule_warnings", []).append("api_sports_error")
 
     try:
@@ -1529,6 +1655,7 @@ def enrich_game_context(game: Dict[str, Any], league_key: str, api_key: Optional
             }
             sd_cls = sd_map.get(league_key)
             sd_client = sd_cls(sd_key, key_source="secrets/env") if sd_cls else None
+            enrichment["sportsdata_status"] = "ok" if sd_client else "missing"
         if sd_client:
             scores = sd_client.get_scores_by_date(commence_date)
             match = sd_client.match_game(scores, game.get("home_team", ""), game.get("away_team", ""))
@@ -1550,7 +1677,13 @@ def enrich_game_context(game: Dict[str, Any], league_key: str, api_key: Optional
                     enrichment["last_5_form_away"] = insight.away.trend
                     enrichment["pace_signal"] = insight.home.power_index or insight.away.power_index
                 # Injuries info not available via current helper; counts remain 0.
+                enrichment["injuries_home"] = enrichment["injuries_home_count"] or "unknown"
+                enrichment["injuries_away"] = enrichment["injuries_away_count"] or "unknown"
+        elif sd_key:
+            enrichment["sportsdata_status"] = "key_present_no_client"
     except Exception:
+        enrichment["sportsdata_status"] = "error"
+        enrichment.setdefault("enrichment_errors_sample", []).append("sportsdata_error")
         enrichment.setdefault("schedule_warnings", []).append("sportsdata_error")
 
     return enrichment
@@ -1567,6 +1700,9 @@ def init_sentiment_meta() -> Dict[str, Any]:
         "sentiment_errors_sample": "",
         "sentiment_articles_total": 0,
         "sentiment_available_count": 0,
+        "sentiment_status": "NO_CALL",
+        "sentiment_confidence": 0.0,
+        "sentiment_score": None,
         "sentiment_used_cached": False,
         "sentiment_rate_limited": False,
         "sentiment_auth_error": False,
@@ -2054,46 +2190,21 @@ def ensure_vertex_info_cached() -> Dict[str, Any]:
     return info
 
 def get_api_keys() -> Dict[str, Optional[str]]:
-    def first(candidates: List[str]) -> Optional[str]:
-        for key in candidates:
-            val = read_secret(key)
-            if val:
-                return val
-        return None
-
-    api_sports_key = first(
-        [
-            "API_SPORTS_KEY",
-            "APISPORTS_API_KEY",
-            "APISPORTS_NFL_KEY",
-            "APISPORTS_NBA_KEY",
-            "APISPORTS_NHL_KEY",
-        ]
-    )
-    sportsdata_key = first(
-        [
-            "SPORTSDATA_API_KEY",
-            "SPORTSDATA_KEY",
-            "SPORTSDATA_NFL_KEY",
-            "SPORTSDATA_NBA_KEY",
-            "SPORTSDATA_NHL_KEY",
-            "SPORTSDATA_NCAAB_KEY",
-            "SPORTSDATA_NCAAF_KEY",
-        ]
-    )
+    api_sports_key = get_apisports_key()
+    sportsdata_key = get_sportsdata_key()
     api_sports_keys = {
-        "NFL": first(["APISPORTS_NFL_KEY", "NFL_APISPORTS_API_KEY"]) or api_sports_key,
-        "NBA": first(["APISPORTS_NBA_KEY", "NBA_APISPORTS_API_KEY"]) or api_sports_key,
-        "NHL": first(["APISPORTS_NHL_KEY"]) or api_sports_key,
-        "NCAAB": api_sports_key,
-        "NCAAF": api_sports_key,
+        "NFL": get_apisports_key("NFL") or api_sports_key,
+        "NBA": get_apisports_key("NBA") or api_sports_key,
+        "NHL": get_apisports_key("NHL") or api_sports_key,
+        "NCAAB": get_apisports_key("NCAAB") or api_sports_key,
+        "NCAAF": get_apisports_key("NCAAF") or api_sports_key,
     }
     sportsdata_keys = {
-        "NFL": first(["SPORTSDATA_NFL_KEY"]) or sportsdata_key,
-        "NBA": first(["SPORTSDATA_NBA_KEY"]) or sportsdata_key,
-        "NHL": first(["SPORTSDATA_NHL_KEY"]) or sportsdata_key,
-        "NCAAB": first(["SPORTSDATA_NCAAB_KEY"]) or sportsdata_key,
-        "NCAAF": first(["SPORTSDATA_NCAAF_KEY"]) or sportsdata_key,
+        "NFL": get_sportsdata_key("NFL") or sportsdata_key,
+        "NBA": get_sportsdata_key("NBA") or sportsdata_key,
+        "NHL": get_sportsdata_key("NHL") or sportsdata_key,
+        "NCAAB": get_sportsdata_key("NCAAB") or sportsdata_key,
+        "NCAAF": get_sportsdata_key("NCAAF") or sportsdata_key,
     }
     return {
         "api_sports_key": api_sports_key,
@@ -4166,6 +4277,22 @@ sportsdata_status = "OK" if any(v for v in sportsdata_clients.values() if v) els
 vertex_ready = bool(vertex_endpoint_id) and bool(vertex_info.get("ok"))
 st.sidebar.markdown("---")
 st.sidebar.subheader("Status")
+sentiment_meta_sidebar = st.session_state.get("sentiment_meta") or init_sentiment_meta()
+sentiment_available = int(sentiment_meta_sidebar.get("sentiment_available_count") or 0) > 0
+sentiment_cached = bool(sentiment_meta_sidebar.get("sentiment_used_cached"))
+sentiment_cooldown = bool(sentiment_meta_sidebar.get("sentiment_rate_limited")) or str(sentiment_meta_sidebar.get("sentiment_status", "")).upper() == "COOLDOWN"
+if not enable_sentiment:
+    sentiment_status_text = "Disabled"
+    sentiment_status_color = "red"
+elif sentiment_cooldown:
+    sentiment_status_text = "Rate Limited"
+    sentiment_status_color = "orange"
+elif sentiment_available or sentiment_cached:
+    sentiment_status_text = "OK"
+    sentiment_status_color = "green"
+else:
+    sentiment_status_text = "No Data"
+    sentiment_status_color = "red"
 badges = {
     "OddsAPI": bool(odds_api_key),
     "Vertex": vertex_ready,
@@ -4178,6 +4305,7 @@ badges = {
 for name, ok in badges.items():
     color = "green" if ok else "red"
     st.sidebar.markdown(f"**{name}:** :{color}[{'OK' if ok else 'Missing'}]")
+st.sidebar.markdown(f"**Sentiment:** :{sentiment_status_color}[{sentiment_status_text}]")
 with st.sidebar.expander("Key sources (API-Sports/SportsData)"):
     st.caption("Lookups: API_SPORTS_KEY, APISPORTS_API_KEY, NBA/NFL specific; SPORTSData: SPORTSDATA_API_KEY/KEY variants")
 if not vertex_ready:
@@ -4530,11 +4658,16 @@ with tab_master:
                 warnings.extend(enrichment.get("schedule_warnings") or [])
             injuries_home_count = enrichment.get("injuries_home_count")
             injuries_away_count = enrichment.get("injuries_away_count")
+            injuries_home_display = enrichment.get("injuries_home")
+            injuries_away_display = enrichment.get("injuries_away")
             weather_summary = enrichment.get("weather_summary")
             key_injuries_home = enrichment.get("key_injuries_home") or []
             key_injuries_away = enrichment.get("key_injuries_away") or []
             api_sports_used = enrichment.get("api_sports_used")
             sportsdata_used = enrichment.get("sportsdata_used")
+            api_sports_status_run = enrichment.get("api_sports_status") or api_sports_status
+            sportsdata_status_run = enrichment.get("sportsdata_status") or sportsdata_status
+            enrichment_errors_sample = ";".join(enrichment.get("enrichment_errors_sample") or [])
             g["injuries_home_count"] = injuries_home_count
             g["injuries_away_count"] = injuries_away_count
             g["weather_summary"] = weather_summary
@@ -4792,6 +4925,9 @@ with tab_master:
             sentiment_sample_totalResults = sentiment_meta_global.get("sentiment_sample_totalResults") or (sample_calls[0].get("totalResults") if sample_calls else None)
             if not sentiment_sample_status and sentiment_rate_limited:
                 sentiment_sample_status = 429
+            sentiment_status_value = sentiment_meta_global.get("sentiment_status") or sentiment_sample_status
+            sentiment_confidence_value = safe_float(sentiment_meta_global.get("sentiment_confidence"))
+            sentiment_score_value = sentiment_meta_global.get("sentiment_score")
             sentiment_disabled_reason = sentiment_meta_global.get("sentiment_disabled_reason") or ""
             sentiment_error_count = int(sentiment_error_count or 0)
             sentiment_articles_total = int(sentiment_articles_total or 0)
@@ -4941,6 +5077,9 @@ with tab_master:
                     "sentiment_badge": sentiment_badge,
                     "sentiment_articles_used": sentiment_articles_used,
                     "sentiment_query_used": sentiment_query_used,
+                    "sentiment_status": sentiment_status_value,
+                    "sentiment_confidence": sentiment_confidence_value,
+                    "sentiment_score": sentiment_score_value,
                     "spread_sentiment_adj": spread_sentiment_adj,
                     "total_sentiment_adj": total_sentiment_adj,
                     "sentiment_error_count": sentiment_error_count,
@@ -4957,6 +5096,9 @@ with tab_master:
                     "sentiment_available_count": sentiment_available_count,
                     "sentiment_used_cached": sentiment_used_cached,
                     "sentiment_disabled_reason": sentiment_disabled_reason,
+                    "sentiment_status": sentiment_status_value,
+                    "sentiment_confidence": sentiment_confidence_value,
+                    "sentiment_score": sentiment_score_value,
                     "sentiment_adj_value": sentiment_adj,
                     "sentiment_adj_reason": sentiment_adj_reason,
                     "spread_odds_method": spread_odds_method,
@@ -4991,12 +5133,11 @@ with tab_master:
                     "sportsdata_used": sportsdata_used,
                     "api_sports_status": api_sports_status_run,
                     "sportsdata_status": sportsdata_status_run,
-                    "api_sports_status": api_sports_status_run,
-                    "sportsdata_status": sportsdata_status_run,
-                    "api_sports_status": api_sports_status_run,
-                    "sportsdata_status": sportsdata_status_run,
                     "injuries_home_count": injuries_home_count,
                     "injuries_away_count": injuries_away_count,
+                    "injuries_home": injuries_home_display,
+                    "injuries_away": injuries_away_display,
+                    "enrichment_errors_sample": enrichment_errors_sample,
                     "weather_summary": weather_summary,
                     "key_injuries_home": ",".join(key_injuries_home),
                     "key_injuries_away": ",".join(key_injuries_away),
@@ -5589,6 +5730,9 @@ with tab_master:
                         "sentiment_badge": sentiment_badge,
                         "sentiment_articles_used": sentiment_articles_used,
                         "sentiment_query_used": sentiment_query_used,
+                        "sentiment_status": sentiment_status_value,
+                        "sentiment_confidence": sentiment_confidence_value,
+                        "sentiment_score": sentiment_score_val if sentiment_score_val is not None else sentiment_score_value,
                         "spread_sentiment_adj": spread_sentiment_adj,
                         "total_sentiment_adj": total_sentiment_adj,
                         "sentiment_error_count": sentiment_error_count,
@@ -5752,8 +5896,13 @@ with tab_master:
                         "Kalshi_Required": st.session_state.get("kalshi_required", True),
                         "api_sports_used": api_sports_used,
                         "sportsdata_used": sportsdata_used,
+                        "api_sports_status": api_sports_status_run,
+                        "sportsdata_status": sportsdata_status_run,
                         "injuries_home_count": injuries_home_count,
                         "injuries_away_count": injuries_away_count,
+                        "injuries_home": injuries_home_display,
+                        "injuries_away": injuries_away_display,
+                        "enrichment_errors_sample": enrichment_errors_sample,
                         "weather_summary": weather_summary,
                         "key_injuries_home": ",".join(key_injuries_home),
                         "key_injuries_away": ",".join(key_injuries_away),
@@ -5781,6 +5930,19 @@ with tab_master:
                     ml_row["Pick_Reason_Short"] = reason_short
                     ml_row["confidence_reason"] = reason_short
                     ml_row["decisiveness"] = abs((safe_float(ml_row.get("final_probability")) or 0.5) - 0.5) * 2
+                    trace_short, trace_json = build_decision_trace(
+                        "moneyline",
+                        ml_row.get("Pick") or "",
+                        ml_row.get("Implied_Prob"),
+                        ml_row.get("kalshi_prob"),
+                        ml_row.get("AI_Prob"),
+                        ml_row.get("sentiment_adj"),
+                        consensus_weights,
+                        ml_row.get("final_probability"),
+                        conf,
+                    )
+                    ml_row["decision_trace_short"] = trace_short
+                    ml_row["decision_trace_json"] = trace_json
                     ml_row["Eligible_Top_Picks"] = eligible
                     ml_row = apply_sentiment_defaults(ml_row, sentiment_defaults_base)
                     rows_out.append(ml_row)
@@ -5817,6 +5979,9 @@ with tab_master:
                     "sentiment_badge": sentiment_badge,
                     "sentiment_articles_used": sentiment_articles_used,
                     "sentiment_query_used": sentiment_query_used,
+                    "sentiment_status": sentiment_status_value,
+                    "sentiment_confidence": sentiment_confidence_value,
+                    "sentiment_score": sentiment_score_value,
                     "spread_sentiment_adj": spread_sentiment_adj,
                     "total_sentiment_adj": total_sentiment_adj,
                     "sentiment_error_count": sentiment_error_count,
@@ -5936,12 +6101,17 @@ with tab_master:
                         "total_prob_market_based": total_prob_market_based,
                         "total_prob_reason": total_prob_reason,
                         "total_odds_method": total_odds_method,
-                        "total_prob_method": total_prob_method,
+                    "total_prob_method": total_prob_method,
                     "Kalshi_Required": st.session_state.get("kalshi_required", True),
                     "api_sports_used": api_sports_used,
                     "sportsdata_used": sportsdata_used,
+                    "api_sports_status": api_sports_status_run,
+                    "sportsdata_status": sportsdata_status_run,
                     "injuries_home_count": injuries_home_count,
                     "injuries_away_count": injuries_away_count,
+                    "injuries_home": injuries_home_display,
+                    "injuries_away": injuries_away_display,
+                    "enrichment_errors_sample": enrichment_errors_sample,
                     "weather_summary": weather_summary,
                     "key_injuries_home": ",".join(key_injuries_home),
                     "key_injuries_away": ",".join(key_injuries_away),
@@ -5984,6 +6154,24 @@ with tab_master:
                 spread_row["Pick_Reason_Short"] = reason_short
                 spread_row["confidence_reason"] = reason_short
                 spread_row["decisiveness"] = abs((safe_float(spread_row.get("final_probability")) or 0.5) - 0.5) * 2
+                trace_short, trace_json = build_decision_trace(
+                    "spread",
+                    spread_row.get("Pick") or "",
+                    spread_row.get("Implied_Prob"),
+                    spread_row.get("kalshi_prob"),
+                    spread_row.get("AI_Prob"),
+                    spread_row.get("sentiment_adj"),
+                    {
+                        "odds_weight": spread_row.get("odds_weight"),
+                        "kalshi_weight": spread_row.get("kalshi_weight"),
+                        "ml_weight": spread_row.get("ml_weight"),
+                        "sentiment_weight": spread_row.get("sentiment_weight"),
+                    },
+                    spread_row.get("final_probability"),
+                    conf,
+                )
+                spread_row["decision_trace_short"] = trace_short
+                spread_row["decision_trace_json"] = trace_json
                 spread_row["Eligible_Top_Picks"] = eligible
                 spread_row = apply_sentiment_defaults(spread_row, sentiment_defaults_base)
                 rows_out.append(spread_row)
@@ -6135,8 +6323,13 @@ with tab_master:
                     "Kalshi_Required": st.session_state.get("kalshi_required", True),
                     "api_sports_used": api_sports_used,
                     "sportsdata_used": sportsdata_used,
+                    "api_sports_status": api_sports_status_run,
+                    "sportsdata_status": sportsdata_status_run,
                     "injuries_home_count": injuries_home_count,
                     "injuries_away_count": injuries_away_count,
+                    "injuries_home": injuries_home_display,
+                    "injuries_away": injuries_away_display,
+                    "enrichment_errors_sample": enrichment_errors_sample,
                     "weather_summary": weather_summary,
                     "key_injuries_home": ",".join(key_injuries_home),
                     "key_injuries_away": ",".join(key_injuries_away),
@@ -6181,6 +6374,24 @@ with tab_master:
                 total_row["Pick_Reason_Short"] = reason_short
                 total_row["confidence_reason"] = reason_short
                 total_row["decisiveness"] = abs((safe_float(total_row.get("final_probability")) or 0.5) - 0.5) * 2
+                trace_short, trace_json = build_decision_trace(
+                    "total",
+                    total_row.get("Pick") or "",
+                    total_row.get("Implied_Prob"),
+                    total_row.get("kalshi_prob"),
+                    total_row.get("AI_Prob"),
+                    total_row.get("sentiment_adj"),
+                    {
+                        "odds_weight": total_row.get("odds_weight"),
+                        "kalshi_weight": total_row.get("kalshi_weight"),
+                        "ml_weight": total_row.get("ml_weight"),
+                        "sentiment_weight": total_row.get("sentiment_weight"),
+                    },
+                    total_row.get("final_probability"),
+                    conf,
+                )
+                total_row["decision_trace_short"] = trace_short
+                total_row["decision_trace_json"] = trace_json
                 total_row["Eligible_Top_Picks"] = eligible
                 total_row = apply_sentiment_defaults(total_row, sentiment_defaults_base)
                 rows_out.append(total_row)
@@ -6197,6 +6408,9 @@ with tab_master:
             row["sentiment_disabled_reason"] = sentiment_meta_for_export.get("sentiment_disabled_reason", "") or ""
             row["sentiment_errors_sample"] = sentiment_meta_for_export.get("sentiment_errors_sample", "") or ""
             row["sentiment_error_count"] = int(sentiment_meta_for_export.get("sentiment_error_count", 0) or 0)
+            row["sentiment_status"] = row.get("sentiment_status") or sentiment_meta_for_export.get("sentiment_status")
+            row["sentiment_confidence"] = row.get("sentiment_confidence") or sentiment_meta_for_export.get("sentiment_confidence")
+            row["sentiment_score"] = row.get("sentiment_score") or sentiment_meta_for_export.get("sentiment_score")
             row["spread_sentiment_arrow"] = row.get("spread_sentiment_arrow") or ""
             row["total_sentiment_arrow"] = row.get("total_sentiment_arrow") or ""
             row["spread_sentiment_note"] = row.get("spread_sentiment_note") or ""
@@ -6554,6 +6768,8 @@ with tab_master:
             "decision_trace_version",
             "overall_engine_used",
             "decision_trace_notes",
+            "decision_trace_short",
+            "decision_trace_json",
             "final_probability",
             "decision_driver",
             "kalshi_weight",
@@ -6667,6 +6883,11 @@ with tab_master:
             ]
             top_df = top_df.drop(columns=[c for c in ml_detail_cols if c in top_df.columns], errors="ignore")
         st.dataframe(top_df)
+        with st.expander("Decision Trace (sample)", expanded=False):
+            try:
+                st.dataframe(top_df[["Pick", "decision_trace_short", "decision_trace_json"]].head(20))
+            except Exception:
+                st.write("No decision trace available yet.")
 
         export_cols = [
             "AI_Prob",
@@ -6717,6 +6938,8 @@ with tab_master:
             "decision_trace_version",
             "overall_engine_used",
             "decision_trace_notes",
+            "decision_trace_short",
+            "decision_trace_json",
             "kalshi_matched",
             "kalshi_prob_used",
             "kalshi_event_ticker_used",
@@ -6734,6 +6957,8 @@ with tab_master:
             "sentiment_badge",
             "sentiment_articles_used",
             "sentiment_query_used",
+            "sentiment_status",
+            "sentiment_confidence",
             "spread_sentiment_adj",
             "spread_prob_adj",
             "spread_prob_display",
@@ -6762,6 +6987,7 @@ with tab_master:
             "sentiment_available_count",
             "sentiment_used_cached",
             "sentiment_disabled_reason",
+            "sentiment_score",
             "Pick_Confidence",
             "Pick_Reason_Short",
             "Eligible_Top_Picks",
@@ -6787,8 +7013,12 @@ with tab_master:
             "total_prob_market",
             "api_sports_used",
             "sportsdata_used",
+            "api_sports_status",
+            "sportsdata_status",
             "injuries_home_count",
             "injuries_away_count",
+            "injuries_home",
+            "injuries_away",
             "weather_summary",
             "key_injuries_home",
             "key_injuries_away",
@@ -6841,6 +7071,7 @@ with tab_master:
             "best_total_price_score",
             "best_total_median_point",
             "best_total_mode_point",
+            "enrichment_errors_sample",
         ]
         export_df = df_master_view_full.copy()
         if "Unnamed: 0" in export_df.columns:
