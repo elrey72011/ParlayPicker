@@ -935,6 +935,7 @@ def compute_team_sentiment_map(news_api_key: Optional[str], games: List[Dict[str
 
     calls_made = 0
     stop_fetching = cooldown_active
+    rate_limit_triggered = False
 
     for team in ordered_teams:
         if stop_fetching or calls_made >= MAX_SENTIMENT_CALLS:
@@ -948,7 +949,7 @@ def compute_team_sentiment_map(news_api_key: Optional[str], games: List[Dict[str
                 "sentiment_articles_used": 0,
                 "sentiment_query_used": None,
                 "cached": True,
-                "error": "cooldown_active" if cooldown_active else "calls_capped",
+                "error": "cooldown_active" if cooldown_active else ("rate_limited" if rate_limit_triggered else "calls_capped"),
             }
             debug["missing_teams"].append(team)
             continue
@@ -1004,6 +1005,22 @@ def compute_team_sentiment_map(news_api_key: Optional[str], games: List[Dict[str
                 pass
             debug["rate_limited"] = True
             stop_fetching = True
+            rate_limit_triggered = True
+            sentiment_map[team] = None
+            sentiment_meta[team] = {
+                "sentiment_valid": False,
+                "sentiment_source": "none",
+                "sentiment_level": "none",
+                "sentiment_strength": "NONE",
+                "sentiment_badge": "NONE",
+                "sentiment_articles_used": 0,
+                "sentiment_query_used": fetch_info.get("q") or fetch_info.get("query"),
+                "cached": True,
+                "error": "rate_limited",
+                "status": status_int,
+            }
+            debug["missing_teams"].append(team)
+            continue
 
         meta = sentiment_payload_to_meta(raw_payload)
         meta["sentiment_query_used"] = fetch_info.get("q") or fetch_info.get("query")
@@ -1912,15 +1929,52 @@ def ensure_vertex_info_cached() -> Dict[str, Any]:
     return info
 
 def get_api_keys() -> Dict[str, Optional[str]]:
+    def first(candidates: List[str]) -> Optional[str]:
+        for key in candidates:
+            val = read_secret(key)
+            if val:
+                return val
+        return None
+
+    api_sports_key = first(
+        [
+            "API_SPORTS_KEY",
+            "APISPORTS_API_KEY",
+            "APISPORTS_NFL_KEY",
+            "APISPORTS_NBA_KEY",
+            "APISPORTS_NHL_KEY",
+        ]
+    )
+    sportsdata_key = first(
+        [
+            "SPORTSDATA_API_KEY",
+            "SPORTSDATA_KEY",
+            "SPORTSDATA_NFL_KEY",
+            "SPORTSDATA_NBA_KEY",
+            "SPORTSDATA_NHL_KEY",
+            "SPORTSDATA_NCAAB_KEY",
+            "SPORTSDATA_NCAAF_KEY",
+        ]
+    )
+    api_sports_keys = {
+        "NFL": first(["APISPORTS_NFL_KEY", "NFL_APISPORTS_API_KEY"]) or api_sports_key,
+        "NBA": first(["APISPORTS_NBA_KEY", "NBA_APISPORTS_API_KEY"]) or api_sports_key,
+        "NHL": first(["APISPORTS_NHL_KEY"]) or api_sports_key,
+        "NCAAB": api_sports_key,
+        "NCAAF": api_sports_key,
+    }
+    sportsdata_keys = {
+        "NFL": first(["SPORTSDATA_NFL_KEY"]) or sportsdata_key,
+        "NBA": first(["SPORTSDATA_NBA_KEY"]) or sportsdata_key,
+        "NHL": first(["SPORTSDATA_NHL_KEY"]) or sportsdata_key,
+        "NCAAB": first(["SPORTSDATA_NCAAB_KEY"]) or sportsdata_key,
+        "NCAAF": first(["SPORTSDATA_NCAAF_KEY"]) or sportsdata_key,
+    }
     return {
-        "api_sports_key": read_secret("API_SPORTS_KEY")
-        or read_secret("APISPORTS_API_KEY")
-        or read_secret("NBA_APISPORTS_API_KEY")
-        or read_secret("NFL_APISPORTS_API_KEY"),
-        "sportsdata_key": read_secret("SPORTSDATA_API_KEY")
-        or read_secret("SPORTSDATA_KEY")
-        or read_secret("NBA_SPORTSDATA_API_KEY")
-        or read_secret("NFL_SPORTSDATA_API_KEY"),
+        "api_sports_key": api_sports_key,
+        "sportsdata_key": sportsdata_key,
+        "api_sports_keys": api_sports_keys,
+        "sportsdata_keys": sportsdata_keys,
     }
 
 def get_secret_any(candidates: List[str]) -> Optional[str]:
@@ -1937,24 +1991,63 @@ def init_data_clients() -> Tuple[Dict[str, Any], Dict[str, Any]]:
     keys = get_api_keys()
     api_key = keys.get("api_sports_key")
     sd_key = keys.get("sportsdata_key")
+    api_keys_by_league = keys.get("api_sports_keys") or {}
+    sd_keys_by_league = keys.get("sportsdata_keys") or {}
+    def _league_key(league: str, league_map: Dict[str, Optional[str]], fallback: Optional[str], *, secondary: Optional[str] = None) -> Optional[str]:
+        """Prefer league-specific key; fallback to optional secondary then global."""
+        if league_map.get(league):
+            return league_map.get(league)
+        if secondary and league_map.get(secondary):
+            return league_map.get(secondary)
+        return fallback
+
+    api_key_for = {
+        "NBA": _league_key("NBA", api_keys_by_league, api_key),
+        "NCAAB": _league_key("NCAAB", api_keys_by_league, api_key, secondary="NBA"),
+        "NFL": _league_key("NFL", api_keys_by_league, api_key),
+        "NCAAF": _league_key("NCAAF", api_keys_by_league, api_key, secondary="NFL"),
+        "NHL": _league_key("NHL", api_keys_by_league, api_key),
+    }
+    sd_key_for = {
+        "NBA": _league_key("NBA", sd_keys_by_league, sd_key),
+        "NCAAB": _league_key("NCAAB", sd_keys_by_league, sd_key, secondary="NBA"),
+        "NFL": _league_key("NFL", sd_keys_by_league, sd_key),
+        "NCAAF": _league_key("NCAAF", sd_keys_by_league, sd_key, secondary="NFL"),
+        "NHL": _league_key("NHL", sd_keys_by_league, sd_key),
+    }
     api_sports_clients = {
-        "NBA": APISportsBasketballClient(api_key, key_source="secrets/env") if api_key else None,
-        "NCAAB": APISportsBasketballClient(api_key, key_source="secrets/env") if api_key else None,
-        "NFL": APISportsFootballClient(api_key, key_source="secrets/env") if api_key else None,
-        "NCAAF": APISportsFootballClient(api_key, key_source="secrets/env") if api_key else None,
-        "NHL": APISportsHockeyClient(api_key, key_source="secrets/env") if api_key else None,
+        "NBA": APISportsBasketballClient(api_key_for["NBA"], key_source="secrets/env") if api_key_for.get("NBA") else None,
+        "NCAAB": APISportsBasketballClient(api_key_for["NCAAB"], key_source="secrets/env") if api_key_for.get("NCAAB") else None,
+        "NFL": APISportsFootballClient(api_key_for["NFL"], key_source="secrets/env") if api_key_for.get("NFL") else None,
+        "NCAAF": APISportsFootballClient(api_key_for["NCAAF"], key_source="secrets/env") if api_key_for.get("NCAAF") else None,
+        "NHL": APISportsHockeyClient(api_key_for["NHL"], key_source="secrets/env") if api_key_for.get("NHL") else None,
     }
     sportsdata_clients = {
-        "NBA": SportsDataNBAClient(sd_key, key_source="secrets/env") if sd_key else None,
-        "NCAAB": SportsDataNCAABClient(sd_key, key_source="secrets/env") if sd_key else None,
-        "NFL": SportsDataNFLClient(sd_key, key_source="secrets/env") if sd_key else None,
-        "NCAAF": SportsDataNCAAFClient(sd_key, key_source="secrets/env") if sd_key else None,
-        "NHL": SportsDataNHLClient(sd_key, key_source="secrets/env") if sd_key else None,
+        "NBA": SportsDataNBAClient(sd_key_for["NBA"], key_source="secrets/env") if sd_key_for.get("NBA") else None,
+        "NCAAB": SportsDataNCAABClient(sd_key_for["NCAAB"], key_source="secrets/env") if sd_key_for.get("NCAAB") else None,
+        "NFL": SportsDataNFLClient(sd_key_for["NFL"], key_source="secrets/env") if sd_key_for.get("NFL") else None,
+        "NCAAF": SportsDataNCAAFClient(sd_key_for["NCAAF"], key_source="secrets/env") if sd_key_for.get("NCAAF") else None,
+        "NHL": SportsDataNHLClient(sd_key_for["NHL"], key_source="secrets/env") if sd_key_for.get("NHL") else None,
     }
+    try:
+        st.session_state["data_clients_debug"] = {
+            "api_sports": {lg: bool(cli) for lg, cli in api_sports_clients.items()},
+            "sportsdata": {lg: bool(cli) for lg, cli in sportsdata_clients.items()},
+            "api_sports_keys": {lg: bool(api_key_for.get(lg)) for lg in api_key_for},
+            "sportsdata_keys": {lg: bool(sd_key_for.get(lg)) for lg in sd_key_for},
+        }
+    except Exception:
+        pass
     return api_sports_clients, sportsdata_clients
 
 # Must be the first Streamlit call
 st.set_page_config(page_title="ParlayDesk", layout="wide")
+vertex_info_raw = ensure_vertex_info_cached()
+vertex_info = vertex_info_raw if isinstance(vertex_info_raw, dict) else {"ok": False, "error": "invalid_vertex_info"}
+try:
+    st.session_state["vertex_info"] = vertex_info
+except Exception:
+    pass
 
 # ------------------------------------------------------------
 # Kalshi globals / shims (must exist before any call sites)
@@ -1962,12 +2055,6 @@ st.set_page_config(page_title="ParlayDesk", layout="wide")
 kalshi_integrator: Optional[KalshiIntegrator] = None
 api_sports_clients: Dict[str, Any] = {}
 sportsdata_clients: Dict[str, Any] = {}
-
-vertex_info = ensure_vertex_info_cached()
-try:
-    st.session_state["vertex_info"] = vertex_info
-except Exception:
-    pass
 
 def canonical_league_key(raw: Optional[str]) -> str:
     """Normalize league identifiers to canonical keys used across odds/sentiment/Kalshi."""
@@ -3954,11 +4041,13 @@ if st.sidebar.button("Load Games", use_container_width=True):
 
 api_sports_status = "OK" if any(v for v in api_sports_clients.values() if v) else "MISSING"
 sportsdata_status = "OK" if any(v for v in sportsdata_clients.values() if v) else "MISSING"
+vertex_ready = bool(vertex_endpoint_id) and bool(vertex_info.get("ok"))
 st.sidebar.markdown("---")
 st.sidebar.subheader("Status")
 badges = {
     "OddsAPI": bool(odds_api_key),
-    "Vertex": bool(vertex_endpoint_id),
+    "Vertex": vertex_ready,
+    "Gemini": vertex_ready,
     "News": bool(news_api_key),
     "API-Sports": api_sports_status == "OK",
     "SportsData": sportsdata_status == "OK",
@@ -3969,7 +4058,7 @@ for name, ok in badges.items():
     st.sidebar.markdown(f"**{name}:** :{color}[{'OK' if ok else 'Missing'}]")
 with st.sidebar.expander("Key sources (API-Sports/SportsData)"):
     st.caption("Lookups: API_SPORTS_KEY, APISPORTS_API_KEY, NBA/NFL specific; SPORTSData: SPORTSDATA_API_KEY/KEY variants")
-if not vertex_info.get("ok"):
+if not vertex_ready:
     st.sidebar.warning(f"Vertex not ready: {vertex_info.get('error') or 'not configured'}")
 with st.sidebar.expander("Vertex / Gemini Status", expanded=False):
     st.json(vertex_info)
@@ -6150,11 +6239,13 @@ with tab_master:
             index=0,
             key="confidence_filter_mode",
         )
+        st.session_state.setdefault("show_low_confidence", False)
         hide_low = st.checkbox(
             "Hide low-confidence picks",
-            value=False,
+            value=st.session_state.get("show_low_confidence", False),
             key="hide_low_confidence",
         )
+        st.session_state["show_low_confidence"] = hide_low
         df_master_view, confidence_stats = apply_confidence_filter(df, confidence_mode, not hide_low)
         counts = confidence_stats.get("counts") or {}
         st.caption(
