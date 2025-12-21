@@ -138,7 +138,7 @@ def _newsapi_query(team: str, league: str, league_query: Optional[str] = None) -
     return f'"{team}" {league_fragment}'.strip()
 
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=43200)
 def fetch_team_newsapi_cached(
     team: str,
     league: str,
@@ -194,7 +194,7 @@ def fetch_team_newsapi_cached(
     return meta
 
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=43200)
 def fetch_team_news(news_api_key: str, team: str, league: str, league_query: Optional[str] = None, *, max_retries: int = 2, retry_delay: float = 0.75, date_bucket: Optional[str] = None) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
     """Fetch recent articles for a team; returns (articles, info) where info contains status/error."""
     date_bucket = date_bucket or datetime.now(timezone.utc).date().isoformat()
@@ -359,7 +359,8 @@ def team_sentiment_from_articles(articles: List[Dict[str, Any]]) -> float:
     return _clamp(avg)
 
 
-MAX_SENTIMENT_CALLS = 12
+MAX_SENTIMENT_CALLS = 8
+COOLDOWN_HOURS = 12
 
 
 def _normalize_team_key(name: Any) -> str:
@@ -397,6 +398,11 @@ def build_team_sentiment_map(
             if norm and norm not in seen_norm:
                 seen_norm.add(norm)
                 ordered_teams.append(team)
+    if len(ordered_teams) > max_calls:
+        ordered_teams = ordered_teams[:max_calls]
+        debug_trimmed = True
+    else:
+        debug_trimmed = False
 
     now_utc = datetime.now(timezone.utc)
     cooldown_until_dt: Optional[datetime] = None
@@ -437,6 +443,7 @@ def build_team_sentiment_map(
         "cooldown_active": cooldown_active,
         "cooldown_until": cooldown_until_dt.isoformat() if cooldown_until_dt else None,
     }
+    debug["calls_capped"] = debug_trimmed
     if cooldown_active:
         debug["rate_limited"] = True
 
@@ -520,6 +527,9 @@ def build_team_sentiment_map(
                     "error": result_payload.get("error"),
                 }
             status_int = _record_status(fetch_info or {})
+            if status_int is None and (fetch_info or {}).get("rate_limited"):
+                status_int = 429
+                debug["status_counts"][429] = debug["status_counts"].get(429, 0) + 1
             if len(debug["sample_calls"]) < 10:
                 debug["sample_calls"].append(
                     {
@@ -531,6 +541,16 @@ def build_team_sentiment_map(
                         "error": (fetch_info or {}).get("error"),
                     }
                 )
+            if status_int == 429:
+                debug["rate_limited"] = True
+                cooldown_until_dt = now_utc + timedelta(hours=COOLDOWN_HOURS)
+                debug["cooldown_until"] = cooldown_until_dt.isoformat()
+                try:
+                    st.session_state["sentiment_cooldown_until"] = cooldown_until_dt.isoformat()
+                except Exception:
+                    pass
+                stop_fetching = True
+                break
 
             sources = int(result_payload.get("articles_count") or 0)
             score_val = result_payload.get("sentiment")
