@@ -107,6 +107,27 @@ def prob_arrow(base: Any, adj: Any, threshold: float = 0.0075) -> str:
         return ""
 
 
+def market_prob_from_prices(yes_price: Any, no_price: Any) -> Optional[float]:
+    """
+    Convert Kalshi yes/no prices (0-100) into a probability using midpoint normalization.
+    """
+    try:
+        y = safe_float(yes_price)
+        n = safe_float(no_price)
+        if y is None and n is None:
+            return None
+        if y is None:
+            return clamp(1.0 - float(n) / 100.0, 0.0, 1.0)
+        if n is None:
+            return clamp(float(y) / 100.0, 0.0, 1.0)
+        total = float(y) + float(n)
+        if total <= 0:
+            return None
+        return clamp(float(y) / total, 0.0, 1.0)
+    except Exception:
+        return None
+
+
 def apply_sentiment_defaults(row: Dict[str, Any], defaults: Dict[str, Any]) -> Dict[str, Any]:
     def _is_nan(v: Any) -> bool:
         try:
@@ -3615,18 +3636,19 @@ def match_kalshi_market(
     def extract_prob_and_line(
         market: Dict[str, Any], market_type: str
     ) -> Tuple[Optional[float], Optional[float]]:
-        prices: List[float] = []
-        for val in [market.get("yes_bid"), market.get("yes_ask")]:
-            try:
-                prices.append(float(val))
-            except Exception:
-                continue
-        selected_price = None
-        if len(prices) == 2:
-            selected_price = sum(prices) / 2.0
-        elif prices:
-            selected_price = prices[0]
-        prob = (selected_price / 100.0) if selected_price is not None else None
+        def _avg_price(fields: List[str]) -> Optional[float]:
+            vals = [safe_float(market.get(f)) for f in fields]
+            vals = [v for v in vals if v is not None]
+            if not vals:
+                return None
+            return sum(vals) / len(vals)
+
+        yes_avg = _avg_price(["yes_bid", "yes_ask"])
+        no_avg = _avg_price(["no_bid", "no_ask"])
+        prob = market_prob_from_prices(yes_avg, no_avg)
+        if prob is None:
+            last_price = safe_float(market.get("last_price"))
+            prob = clamp(last_price / 100.0, 0.0, 1.0) if last_price is not None else None
         line = market.get("floor_strike") or market.get("cap_strike")
         if line is not None:
             try:
@@ -3646,25 +3668,21 @@ def match_kalshi_market(
         return 0.0
 
     def winner_prob(market: Dict[str, Any]) -> Optional[float]:
-        yes_bid = market.get("yes_bid")
-        yes_ask = market.get("yes_ask")
-        prices: List[float] = []
-        for val in [yes_bid, yes_ask]:
-            try:
-                if val is not None:
-                    prices.append(float(val))
-            except Exception:
-                continue
-        if len(prices) == 2:
-            return (prices[0] + prices[1]) / 200.0
-        if prices:
-            return prices[0] / 100.0
-        if market.get("last_price") is not None:
-            try:
-                return float(market.get("last_price")) / 100.0
-            except Exception:
+        def _avg_price(fields: List[str]) -> Optional[float]:
+            vals = [safe_float(market.get(f)) for f in fields]
+            vals = [v for v in vals if v is not None]
+            if not vals:
                 return None
-        return None
+            return sum(vals) / len(vals)
+
+        yes_avg = _avg_price(["yes_bid", "yes_ask"])
+        no_avg = _avg_price(["no_bid", "no_ask"])
+        prob = market_prob_from_prices(yes_avg, no_avg)
+        if prob is None:
+            last_price = safe_float(market.get("last_price"))
+            if last_price is not None:
+                prob = clamp(last_price / 100.0, 0.0, 1.0)
+        return prob
 
     if not kalshi_integrator:
         base = {t: base_result("kalshi_not_configured", t) for t in ["total", "spread", "winner"]}
