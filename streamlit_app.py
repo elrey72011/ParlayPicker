@@ -1192,11 +1192,51 @@ def gemini_confidence_explain(row_dict: Dict[str, Any]) -> Dict[str, Any]:
         "alignment": None,
         "risk_flags": [],
         "rationale": None,
+        "gemini_error": None,
     }
     vertex_ok = (st.session_state.get("vertex_info") or {}).get("ok")
     if vertex_ok is False:
+        base["gemini_error"] = "vertex_not_ready"
         return base
-    context_json = json.dumps(row_dict, ensure_ascii=False, default=str)
+    sentiment_meta_guard = st.session_state.get("sentiment_meta") or {}
+    if sentiment_meta_guard.get("sentiment_rate_limited") or sentiment_meta_guard.get("sentiment_auth_error"):
+        base["gemini_error"] = "sentiment_guardrail"
+        return base
+    if str(row_dict.get("odds_placeholder_detected")).lower() == "true":
+        base["gemini_error"] = "placeholder_odds_block"
+        return base
+    allowed_fields = {
+        "league",
+        "home",
+        "away",
+        "commence_local",
+        "spread_pick",
+        "spread_line",
+        "spread_odds",
+        "spread_prob_final",
+        "spread_prob_market",
+        "total_pick",
+        "total_line",
+        "total_odds",
+        "total_prob_final",
+        "total_prob_market",
+        "kalshi_spread_prob",
+        "kalshi_total_prob",
+        "kalshi_matched",
+        "prob_engine",
+        "sentiment_badge",
+        "sentiment_flags",
+        "warnings",
+    }
+    sanitized_payload: Dict[str, Any] = {}
+    for key in allowed_fields:
+        if key in row_dict:
+            val = row_dict.get(key)
+            if isinstance(val, str):
+                sanitized_payload[key] = val[:320]
+            else:
+                sanitized_payload[key] = val
+    context_json = json.dumps(sanitized_payload or row_dict, ensure_ascii=False, default=str)
     prompt = f"""
 You are a qualitative risk and confidence reviewer for sports projections. Provide concise alignment and risk notes only.
 
@@ -1236,6 +1276,62 @@ Context (read-only, do not invent new probabilities):
 @st.cache_data(ttl=3600)
 def cached_gemini_confidence(signature: str, payload: Dict[str, Any]) -> Dict[str, Any]:
     return gemini_confidence_explain(payload)
+
+
+def pipeline_progress_snapshot() -> Dict[str, Any]:
+    games_loaded = len(st.session_state.get("games") or [])
+    matches = st.session_state.get("kalshi_match_results") or []
+    matched_games = len([m for m in matches if (m.get("matches") or {}).get("winner", {}).get("kalshi_matched")])
+    sentiment_meta = st.session_state.get("sentiment_meta") or {}
+    sentiment_ready = sentiment_meta.get("sentiment_source") not in {"error_exception", "none"}
+    sentiment_flags = []
+    if sentiment_meta.get("sentiment_rate_limited"):
+        sentiment_flags.append("rate_limited")
+    if sentiment_meta.get("sentiment_auth_error"):
+        sentiment_flags.append("auth_error")
+    vertex_info = st.session_state.get("vertex_info") or {}
+    vertex_ready = bool(vertex_info.get("ok"))
+    rows_out = st.session_state.get("last_rows_out", 0)
+    master_stats = st.session_state.get("master_stats") or {}
+    return {
+        "games_loaded": games_loaded,
+        "kalshi_matched": matched_games,
+        "sentiment_ready": sentiment_ready,
+        "sentiment_flags": sentiment_flags,
+        "vertex_ready": vertex_ready,
+        "rows_out": rows_out,
+        "market_rows_out": master_stats.get("market_rows_out", 0),
+    }
+
+
+def render_pipeline_banner() -> None:
+    progress = pipeline_progress_snapshot()
+    with st.container():
+        st.markdown("### Pipeline Health")
+        cols = st.columns(4)
+        cols[0].metric("Games Loaded", progress["games_loaded"], help="Loaded from Odds API")
+        cols[1].metric(
+            "Kalshi Matches",
+            progress["kalshi_matched"],
+            help="Games matched to Kalshi markets",
+        )
+        sentiment_delta = ", ".join(progress["sentiment_flags"]) if progress["sentiment_flags"] else ""
+        cols[2].metric(
+            "Sentiment",
+            "Ready" if progress["sentiment_ready"] else "Unavailable",
+            delta=sentiment_delta or None,
+        )
+        cols[3].metric(
+            "Master Rows",
+            progress["rows_out"],
+            delta=f"Markets: {progress['market_rows_out']}",
+        )
+        readiness = []
+        if progress["vertex_ready"]:
+            readiness.append("Vertex OK")
+        else:
+            readiness.append("Vertex missing")
+        st.caption(" | ".join(readiness))
 
 
 def slate_key_from_games(games: List[Dict[str, Any]]) -> str:
@@ -4082,6 +4178,8 @@ if not vertex_ready:
 with st.sidebar.expander("Vertex / Gemini Status", expanded=False):
     st.json(vertex_info)
 
+render_pipeline_banner()
+
 
 # -----------------
 # Tabs
@@ -5285,7 +5383,14 @@ with tab_master:
 
             decision_trace_version = "v1"
             overall_engine_used = f"spread:{spread_engine_used}|total:{total_engine_used}"
-            decision_trace_notes = ""
+            decision_trace_notes_parts: List[str] = []
+            if spread_decision_score_margin is not None:
+                decision_trace_notes_parts.append(f"spread_margin={spread_decision_score_margin:.3f}")
+            if total_decision_score_margin is not None:
+                decision_trace_notes_parts.append(f"total_margin={total_decision_score_margin:.3f}")
+            if odds_placeholder_overall:
+                decision_trace_notes_parts.append("placeholder_odds_guardrail")
+            decision_trace_notes = ";".join(decision_trace_notes_parts)
 
             # Baseline probability (Home Win)
             if implied_home is not None:
@@ -5312,25 +5417,40 @@ with tab_master:
                 return clamp((base or 0.0) + adj, 0.01, 0.99)
 
             # Consensus blending for the selection
-            def consensus_for_selection(selection_team: str, kalshi_prob_used: Optional[float], implied_pick_prob: Optional[float]) -> Tuple[Optional[float], Optional[float], List[str]]:
+            def consensus_for_selection(selection_team: str, kalshi_prob_used: Optional[float], implied_pick_prob: Optional[float]) -> Tuple[Optional[float], Optional[float], List[str], Dict[str, Any]]:
                 notes: List[str] = []
+                weights_debug: Dict[str, Any] = {"ai": 0.0, "market": 0.0, "kalshi": 0.0, "sentiment": 0.0, "total": 0.0, "guardrails": []}
                 ai_prob = ai_prob_for_selection(selection_team)
                 if ai_prob is None:
                     notes.append("Missing AI_Prob")
-                    return None, None, notes
-                weights: List[Tuple[Optional[float], float]] = [(ai_prob, 0.40)]
-                if implied_pick_prob is not None:
-                    weights.append((implied_pick_prob, 0.40))
-                if kalshi_prob_used is not None:
-                    weights.append((kalshi_prob_used, 0.20))
-                consensus_val = blend_probs(weights)
-                if consensus_val is None:
+                    return None, None, notes, weights_debug
+                vertex_weight = 0.45 if vertex_used_for_spread or vertex_used_for_total or (use_vertex_numeric_probs and vertex_prob_home is not None) else 0.40
+                market_weight = 0.35
+                kalshi_weight = 0.20 if kalshi_prob_used is not None else 0.0
+                if odds_placeholder_overall:
+                    market_weight *= 0.4
+                    weights_debug["guardrails"].append("placeholder_odds_downweighted")
+                weight_plan: List[Tuple[Optional[float], float, str]] = [
+                    (ai_prob, vertex_weight, "ai"),
+                    (implied_pick_prob, market_weight, "market"),
+                    (kalshi_prob_used, kalshi_weight, "kalshi"),
+                ]
+                usable = [(p, w, label) for p, w, label in weight_plan if p is not None and w > 0]
+                total_weight = sum(w for _, w, _ in usable)
+                if total_weight <= 0:
                     notes.append("Consensus N/A")
+                    return None, None, notes, weights_debug
+                normalized = [(p, w / total_weight, label) for p, w, label in usable]
+                for _, w_norm, label in normalized:
+                    weights_debug[label] = w_norm
+                    weights_debug["total"] += w_norm
+                consensus_val = sum((p or 0.0) * w for p, w, _ in normalized)
                 signed_sent_adj = None
                 if sentiment_adj is not None:
                     signed_sent_adj = sentiment_adj if selection_team == home else -sentiment_adj
+                weights_debug["sentiment"] = float(sentiment_adj or 0.0)
                 consensus_adj = clamp((consensus_val or 0.0) + (signed_sent_adj or 0.0)) if (consensus_val is not None and signed_sent_adj is not None) else consensus_val
-                return consensus_val, consensus_adj, notes
+                return consensus_val, consensus_adj, notes, weights_debug
 
             # --- 4. DATA ROW GENERATION ---
 
@@ -5369,7 +5489,12 @@ with tab_master:
                     ai_prob_base = ai_prob_for_selection(pick, adjusted=False)
                     ai_prob_row = clamp((ai_prob_base or 0.0) + (sentiment_adj or 0.0), 0.01, 0.99) if ai_prob_base is not None else None
 
-                    consensus_prob, consensus_prob_adj, consensus_notes = consensus_for_selection(
+                    (
+                        consensus_prob,
+                        consensus_prob_adj,
+                        consensus_notes,
+                        consensus_weights,
+                    ) = consensus_for_selection(
                         pick,
                         kalshi_prob_used if kalshi_winner.get("kalshi_matched") else None,
                         implied_pick,
@@ -5396,6 +5521,12 @@ with tab_master:
                         "ai_prob_adj": ai_prob_row,
                         "consensus_prob": consensus_prob,
                         "consensus_prob_adj": consensus_prob_adj,
+                        "consensus_weight_ai": (consensus_weights or {}).get("ai"),
+                        "consensus_weight_market": (consensus_weights or {}).get("market"),
+                        "consensus_weight_kalshi": (consensus_weights or {}).get("kalshi"),
+                        "consensus_weight_sentiment": (consensus_weights or {}).get("sentiment"),
+                        "consensus_weight_total": (consensus_weights or {}).get("total"),
+                        "consensus_guardrails": ";".join((consensus_weights or {}).get("guardrails") or []),
                         "Home_Sentiment": home_sent,
                         "Away_Sentiment": away_sent,
                         "Sentiment_Diff": sentiment_diff,
@@ -6227,11 +6358,21 @@ with tab_master:
                     "sentiment_badge": row.get("sentiment_badge"),
                     "sentiment_flags": [row.get("spread_sentiment_note"), row.get("total_sentiment_note")],
                     "warnings": row.get("Warnings"),
+                    "odds_placeholder_detected": row.get("odds_placeholder_detected"),
                 }
                 sig = _gemini_payload_signature(payload)
                 gem_res = cached_gemini_confidence(sig, payload) or {}
                 flags = gem_res.get("risk_flags") if isinstance(gem_res, dict) else []
                 flags_list = [str(f) for f in flags] if isinstance(flags, list) else []
+                if gem_res.get("gemini_error"):
+                    row["gemini_error"] = gem_res.get("gemini_error")
+                    row["gemini_mode"] = "guardrail"
+                    row["overall_confidence"] = base_overall
+                    row["spread_confidence"] = base_spread_conf
+                    row["total_confidence"] = base_total_conf
+                    row["spread_confidence_gemini"] = base_spread_conf
+                    row["total_confidence_gemini"] = base_total_conf
+                    return row
                 row["overall_confidence"] = gem_res.get("overall_confidence") or base_overall
                 row["spread_confidence"] = gem_res.get("spread_confidence") or base_spread_conf
                 row["total_confidence"] = gem_res.get("total_confidence") or base_total_conf
@@ -6324,6 +6465,13 @@ with tab_master:
             "decision_trace_version",
             "overall_engine_used",
             "decision_trace_notes",
+            "consensus_weight_ai",
+            "consensus_weight_market",
+            "consensus_weight_kalshi",
+            "consensus_weight_sentiment",
+            "consensus_weight_total",
+            "consensus_guardrails",
+            "gemini_error",
         ]
         show_decision_trace = st.checkbox("Show Decision Trace Columns", value=False, key="show_decision_trace")
         if not show_decision_trace:
