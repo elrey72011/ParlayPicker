@@ -960,6 +960,27 @@ def ensure_sentiment_loaded(games: List[Dict[str, Any]]) -> None:
         st.session_state.pop("sentiment_debug", None)
         st.info("Sentiment cache cleared. Re-run analysis to refresh.")
 
+    def _sentiment_meta_defaults(source: str, disabled_reason: str = "") -> Dict[str, Any]:
+        return {
+            "sentiment_source": source,
+            "reddit_used": False,
+            "articles_total": 0,
+            "last_error": None,
+            "error_count": 0,
+            "status_counts": {},
+            "auth_error": False,
+            "rate_limited": False,
+            "sample_query": "",
+            "sample_status": "DISABLED" if source.startswith("disabled") else None,
+            "sample_totalResults": None,
+            "cached_teams": 0,
+            "used_cached": False,
+            "cooldown_until": st.session_state.get("sentiment_cooldown_until"),
+            "cooldown_active": False,
+            "available_count": 0,
+            "sentiment_disabled_reason": disabled_reason,
+        }
+
     enabled = st.session_state.get("enable_sentiment", True)
     now_utc = datetime.now(timezone.utc)
     cooldown_raw = st.session_state.get("sentiment_cooldown_until")
