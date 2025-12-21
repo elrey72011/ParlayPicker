@@ -2542,6 +2542,8 @@ except Exception:
 if kalshi_integrator:
     kalshi_integrator.required = st.session_state.get("kalshi_required", True)
 api_sports_clients, sportsdata_clients = init_data_clients()
+vertex_info = st.session_state.get("vertex_info") or init_vertex_once()
+st.session_state["vertex_info"] = vertex_info
 
 @st.cache_data(ttl=60)
 def fetch_odds_games(sport_key: str) -> List[Dict[str, Any]]:
