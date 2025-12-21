@@ -84,6 +84,91 @@ def compute_sentiment_adj(sentiment_diff: Optional[float]) -> Optional[float]:
         return None
 
 
+def _clamp_signed(val: Optional[float], *, limit: float) -> float:
+    try:
+        v = float(val)
+    except Exception:
+        return 0.0
+    return max(-limit, min(limit, v))
+
+
+SENTIMENT_LEVEL_WEIGHTS = {
+    "team": 1.0,
+    "game": 0.6,
+    "league": 0.35,
+    "none": 0.0,
+}
+
+SENTIMENT_STRENGTH_WEIGHTS = {
+    "STRONG": 1.0,
+    "MEDIUM": 0.7,
+    "WEAK": 0.45,
+    "NONE": 0.0,
+}
+
+SENTIMENT_MARKET_WEIGHTS = {
+    "spread": 0.8,
+    "total": 1.0,
+    "moneyline": 0.6,
+}
+
+
+def _normalize_sentiment_level(level: Any) -> str:
+    level_str = str(level or "none").lower()
+    return level_str if level_str in {"team", "game", "league", "none"} else "none"
+
+
+def sentiment_strength_from_articles(level: str, articles_used: int) -> str:
+    lvl = _normalize_sentiment_level(level)
+    try:
+        articles = int(articles_used or 0)
+    except Exception:
+        articles = 0
+    if lvl == "none" or articles <= 0:
+        return "NONE"
+    if articles >= 8:
+        return "STRONG"
+    if articles >= 3:
+        return "MEDIUM"
+    return "WEAK"
+
+
+def sentiment_badge_for(level: str, strength: str) -> str:
+    lvl = _normalize_sentiment_level(level)
+    strength_norm = str(strength or "").upper()
+    mapping = {
+        "team": {"STRONG": "TEAM_STRONG", "MEDIUM": "TEAM_MED", "WEAK": "TEAM_WEAK"},
+        "game": {"STRONG": "GAME_STRONG", "MEDIUM": "GAME_MED", "WEAK": "GAME_WEAK"},
+        "league": {"STRONG": "LEAGUE_MED", "MEDIUM": "LEAGUE_MED", "WEAK": "LEAGUE_WEAK"},
+    }
+    if lvl in mapping and strength_norm in mapping[lvl]:
+        return mapping[lvl][strength_norm]
+    return "NONE"
+
+
+def sentiment_signal_value(level: str, sentiment_diff: Any, *, game_sentiment: Any = None, league_sentiment: Any = None) -> float:
+    lvl = _normalize_sentiment_level(level)
+    if lvl == "team":
+        return _clamp_signed(safe_float(sentiment_diff), limit=1.0)
+    if lvl in {"game", "league"}:
+        source_val = game_sentiment if lvl == "game" else league_sentiment
+        return _clamp_signed(safe_float(source_val), limit=1.0)
+    return 0.0
+
+
+def compute_market_sentiment_adjustment(level: str, strength: str, market_kind: str, signal_value: float) -> float:
+    lvl = _normalize_sentiment_level(level)
+    strength_norm = str(strength or "NONE").upper()
+    market_key = str(market_kind or "").lower()
+    if lvl == "none" or strength_norm == "NONE":
+        return 0.0
+    level_w = SENTIMENT_LEVEL_WEIGHTS.get(lvl, 0.0)
+    strength_w = SENTIMENT_STRENGTH_WEIGHTS.get(strength_norm, 0.0)
+    market_w = SENTIMENT_MARKET_WEIGHTS.get(market_key, 0.0)
+    raw_adj = (signal_value or 0.0) * 0.02 * level_w * strength_w * market_w
+    return _clamp_signed(raw_adj, limit=0.03)
+
+
 def blend_probs(weighted_probs: List[Tuple[Optional[float], float]]) -> Optional[float]:
     usable_raw = []
     for p, w in weighted_probs:
@@ -213,11 +298,21 @@ def reorder_for_spread_total_focus(df: pd.DataFrame) -> pd.DataFrame:
 
     focus_cols = [
         "Spread & Pick",
+        "Spread_Glance",
+        "spread_prob_adj",
         "spread_prob",
+        "spread_sentiment_adj",
         "spread_confidence",
         "Total & Pick",
+        "Total_Glance",
+        "total_prob_adj",
         "total_prob",
+        "total_sentiment_adj",
         "total_confidence",
+        "sentiment_badge",
+        "sentiment_level",
+        "sentiment_strength",
+        "sentiment_articles_used",
         "At_a_Glance_Confidence",
         "At_a_Glance_Score",
         "At_a_Glance_Reason",
@@ -442,6 +537,94 @@ def add_spread_total_confidence(df: pd.DataFrame) -> pd.DataFrame:
         )
         row["Spread_Glance_Reason"] = spread_reason
         row["Total_Glance_Reason"] = total_reason
+        sentiment_level = _normalize_sentiment_level(row.get("sentiment_level"))
+        articles_used = int(row.get("sentiment_articles_used") or 0)
+        sentiment_strength = str(row.get("sentiment_strength") or "").upper() or sentiment_strength_from_articles(
+            sentiment_level, articles_used
+        )
+        if not sentiment_strength or sentiment_strength == "NONE":
+            sentiment_strength = sentiment_strength_from_articles(sentiment_level, articles_used)
+        sentiment_badge = sentiment_badge_for(sentiment_level, sentiment_strength)
+        sentiment_signal = sentiment_signal_value(
+            sentiment_level,
+            row.get("Sentiment_Diff"),
+            game_sentiment=row.get("Game_Sentiment"),
+            league_sentiment=row.get("League_Sentiment"),
+        )
+        spread_adj_val = row.get("spread_sentiment_adj")
+        total_adj_val = row.get("total_sentiment_adj")
+        auth_error = bool(row.get("sentiment_auth_error"))
+        if auth_error:
+            spread_adj_val = 0.0
+            total_adj_val = 0.0
+        if spread_adj_val is None:
+            spread_adj_val = compute_market_sentiment_adjustment(
+                sentiment_level, sentiment_strength, "spread", sentiment_signal
+            )
+        if total_adj_val is None:
+            total_adj_val = compute_market_sentiment_adjustment(
+                sentiment_level, sentiment_strength, "total", sentiment_signal
+            )
+        row["sentiment_level"] = sentiment_level
+        row["sentiment_strength"] = sentiment_strength
+        row["sentiment_badge"] = sentiment_badge
+        row["sentiment_articles_used"] = articles_used
+        row["spread_sentiment_adj"] = spread_adj_val
+        row["total_sentiment_adj"] = total_adj_val
+        if sentiment_level == "league":
+            spread_adj_val = 0.0
+            total_adj_val = 0.0
+            row["spread_sentiment_adj"] = 0.0
+            row["total_sentiment_adj"] = 0.0
+            row["spread_prob_adj"] = spread_prob_val
+            row["total_prob_adj"] = total_prob_val
+        else:
+            row["spread_prob_adj"] = clamp((spread_prob_val or 0.0) + spread_adj_val, 0.01, 0.99) if spread_prob_val is not None else None
+            row["total_prob_adj"] = clamp((total_prob_val or 0.0) + total_adj_val, 0.01, 0.99) if total_prob_val is not None else None
+        market_kind = str(row.get("Market") or "").lower()
+        if market_kind == "spread" and row.get("spread_prob_adj") is not None:
+            row["consensus_prob_adj"] = row.get("spread_prob_adj")
+        if market_kind == "total" and row.get("total_prob_adj") is not None:
+            row["consensus_prob_adj"] = row.get("total_prob_adj")
+        spread_prob_adj = row.get("spread_prob_adj")
+        total_prob_adj = row.get("total_prob_adj")
+        spread_prob_display = round(spread_prob_adj * 100) if spread_prob_adj is not None else None
+        total_prob_display = round(total_prob_adj * 100) if total_prob_adj is not None else None
+        row["spread_prob_display"] = spread_prob_display
+        row["total_prob_display"] = total_prob_display
+        spread_arrow = ""
+        total_arrow = ""
+        spread_note = None
+        total_note = None
+        if sentiment_level == "league":
+            direction = "↗" if (sentiment_signal or 0) > 0 else "↘"
+            spread_note = f"LEAGUE {direction}"
+            total_note = f"LEAGUE {direction}"
+        else:
+            if spread_prob_adj is not None and row.get("spread_prob") is not None:
+                if abs(spread_prob_adj - (row.get("spread_prob") or 0.0)) >= 0.0075:
+                    spread_arrow = "▲" if spread_prob_adj > (row.get("spread_prob") or 0.0) else "▼"
+            if total_prob_adj is not None and row.get("total_prob") is not None:
+                if abs(total_prob_adj - (row.get("total_prob") or 0.0)) >= 0.0075:
+                    total_arrow = "▲" if total_prob_adj > (row.get("total_prob") or 0.0) else "▼"
+        row["spread_sentiment_arrow"] = spread_arrow
+        row["total_sentiment_arrow"] = total_arrow
+        row["spread_sentiment_note"] = spread_note
+        row["total_sentiment_note"] = total_note
+        def _glance_with_signal(conf_val: Any, prob_display: Optional[int], books: Any, width_val: Any, market_type: str, arrow_val: str, note_val: Optional[str]) -> str:
+            prob_text = "—" if prob_display is None else f"{prob_display}%"
+            signal = ""
+            if note_val:
+                signal = f" {note_val}"
+            elif arrow_val:
+                signal = f" {arrow_val}"
+            return f"{conf_val or 'LOW'} | {prob_text}{signal} | {depth_label(books)} | {market_width_label(width_val, market_type)}"
+        row["Spread_Glance"] = _glance_with_signal(
+            spread_conf, spread_prob_display, spread_books_count, spread_width_val, "spread", spread_arrow, spread_note
+        )
+        row["Total_Glance"] = _glance_with_signal(
+            total_conf, total_prob_display, total_books_count, total_width_val, "total", total_arrow, total_note
+        )
         return row
 
     return df.apply(_apply, axis=1)
@@ -453,33 +636,36 @@ def compute_sentiment_adj_row(row: Dict[str, Any]) -> Tuple[float, str]:
     Returns (adj_value, reason).
     """
     src = str(row.get("sentiment_source") or "none").lower()
-    articles_total = int(row.get("sentiment_articles_total") or 0)
+    articles_used = int(row.get("sentiment_articles_used") or 0)
     rate_limited = bool(row.get("sentiment_rate_limited") or False)
     auth_error = bool(row.get("sentiment_auth_error") or False)
     cached_used = bool(row.get("sentiment_used_cached") or False)
-    home_sent = row.get("Home_Sentiment")
-    away_sent = row.get("Away_Sentiment")
+    level = _normalize_sentiment_level(row.get("sentiment_level"))
+    if level == "league":
+        return 0.0, "league_directional"
+    strength = str(row.get("sentiment_strength") or "").upper() or sentiment_strength_from_articles(level, articles_used)
+    if not strength or strength == "NONE":
+        strength = sentiment_strength_from_articles(level, articles_used)
+    home_sent = safe_float(row.get("Home_Sentiment"))
+    away_sent = safe_float(row.get("Away_Sentiment"))
+    sentiment_diff = None if (home_sent is None and away_sent is None) else (home_sent or 0.0) - (away_sent or 0.0)
+    signal = sentiment_signal_value(level, sentiment_diff)
     if auth_error:
         return 0.0, "auth_error"
-    if home_sent is None or away_sent is None:
-        return 0.0, "missing_sentiment_values"
-    if articles_total < 3 and not cached_used:
-        return 0.0, "insufficient_articles"
-    try:
-        h = float(home_sent) if home_sent is not None else 0.0
-        a = float(away_sent) if away_sent is not None else 0.0
-    except Exception:
-        return 0.0, "bad_sentiment_values"
-    diff = h - a
-    raw = diff * 0.02
-    adj = max(-0.03, min(0.03, raw))
-    if rate_limited and cached_used:
-        return adj, "applied_cached_rate_limited"
+    if articles_used <= 0 or level == "none":
+        return 0.0, "no_sentiment"
+    adj = compute_market_sentiment_adjustment(level, strength, "moneyline", signal)
+    reason_bits: List[str] = []
     if rate_limited:
-        return adj, "applied_rate_limited"
+        reason_bits.append("rate_limited")
+    if cached_used:
+        reason_bits.append("cached")
     if src in {"error", "error_rate_limited", "error_auth"}:
-        return 0.0, "source_error"
-    return adj, "applied"
+        reason_bits.append("source_error")
+    reason = "applied" if not reason_bits else f"applied_{'_'.join(reason_bits)}"
+    if strength == "NONE" or adj == 0.0:
+        reason = "no_sentiment"
+    return adj, reason
 
 
 def market_based_prob(
@@ -572,12 +758,18 @@ def sentiment_payload_to_meta(payload: Dict[str, Any]) -> Dict[str, Any]:
     method = str(payload.get("method") or payload.get("source") or "").lower()
     sentiment_valid = bool(sources >= 1 and (confidence or 0) > 0.25)
     sentiment_source = "newsapi" if sentiment_valid else "none"
+    level = "team" if sentiment_valid else "none"
+    strength = sentiment_strength_from_articles(level, sources)
     return {
         "score": score if sentiment_valid else None,
         "confidence": confidence,
         "sources": sources,
         "sentiment_valid": sentiment_valid,
         "sentiment_source": sentiment_source,
+        "sentiment_level": level,
+        "sentiment_strength": strength,
+        "sentiment_badge": sentiment_badge_for(level, strength),
+        "sentiment_articles_used": sources,
         "method": method or None,
         "reddit_used": False,
     }
@@ -653,6 +845,12 @@ def compute_team_sentiment_map(news_api_key: Optional[str], games: List[Dict[str
             )
 
         meta = sentiment_payload_to_meta(raw_payload)
+        meta["sentiment_query_used"] = fetch_info.get("q") or fetch_info.get("query")
+        meta["sentiment_articles_used"] = meta.get("sentiment_articles_used") if meta.get("sentiment_articles_used") is not None else meta.get("sources") or 0
+        meta["sentiment_level"] = meta.get("sentiment_level") or ("team" if meta.get("sentiment_valid") else "none")
+        meta["sentiment_strength"] = meta.get("sentiment_strength") or sentiment_strength_from_articles(meta["sentiment_level"], meta.get("sentiment_articles_used") or 0)
+        meta["sentiment_badge"] = meta.get("sentiment_badge") or sentiment_badge_for(meta["sentiment_level"], meta["sentiment_strength"])
+        meta["status"] = status_int
         sentiment_meta[team] = {**meta, "error": fetch_info.get("error")}
         debug["raw"][team] = {**raw_payload, "fetch_info": fetch_info}
         debug["fetch_info"][team] = fetch_info
@@ -3684,12 +3882,12 @@ with tab_master:
             sentiment_meta_map = sentiment_meta_map_all or (st.session_state.get(f"sentiment_meta_map_{league_key}") or {})
             home_meta = sentiment_meta_map.get(home, {})
             away_meta = sentiment_meta_map.get(away, {})
-            home_sent = sentiment_map.get(home)
-            away_sent = sentiment_map.get(away)
+            home_sent = safe_float(sentiment_map.get(home))
+            away_sent = safe_float(sentiment_map.get(away))
             sentiment_debug_global = st.session_state.get("sentiment_debug") or {}
             league_debug = st.session_state.get(f"sentiment_debug_{league_key}") or {}
             articles_total = sentiment_meta_global.get("articles_total") or league_debug.get("articles_total") or 0
-            sentiment_diff = (safe_float(home_sent) or 0.0) - (safe_float(away_sent) or 0.0)
+            sentiment_diff = None if (home_sent is None and away_sent is None) else (home_sent or 0.0) - (away_sent or 0.0)
             rate_limited_flag = bool(
                 sentiment_meta_global.get("rate_limited")
                 or sentiment_debug_global.get("rate_limited")
@@ -3719,29 +3917,48 @@ with tab_master:
                 or sentiment_debug_global.get("rate_limited")
                 or league_debug.get("rate_limited")
             )
-            sentiment_adj_reason = "disabled"
+            sentiment_adj_reason = "no_sentiment"
             sentiment_adj = 0.0
-            eligible_sentiment = bool((articles_total >= 3 or sentiment_used_cached) and not sentiment_auth_error)
-            if eligible_sentiment:
-                raw_adj = (sentiment_diff or 0.0) * 0.02
-                sentiment_adj = clamp(raw_adj, -0.03, 0.03) or 0.0
-                if rate_limited_flag and sentiment_used_cached:
-                    sentiment_adj_reason = "applied_cached_rate_limited"
-                elif rate_limited_flag:
-                    sentiment_adj_reason = "applied_rate_limited"
-                elif sentiment_used_cached:
-                    sentiment_adj_reason = "applied_cached"
-                else:
-                    sentiment_adj_reason = "applied"
-            else:
-                if sentiment_auth_error:
-                    sentiment_adj_reason = "auth_error"
-                elif articles_total < 3 and not sentiment_used_cached:
-                    sentiment_adj_reason = "insufficient_articles"
-                else:
-                    sentiment_adj_reason = "disabled"
-                sentiment_adj = 0.0
-            sentiment_valid = bool((articles_total >= 3 or sentiment_used_cached) and not sentiment_auth_error)
+            sentiment_articles_home = int(home_meta.get("sentiment_articles_used") or home_meta.get("sources") or home_meta.get("articles") or 0)
+            sentiment_articles_away = int(away_meta.get("sentiment_articles_used") or away_meta.get("sources") or away_meta.get("articles") or 0)
+            sentiment_articles_used = sentiment_articles_home + sentiment_articles_away
+            sentiment_level = _normalize_sentiment_level(
+                home_meta.get("sentiment_level")
+                or away_meta.get("sentiment_level")
+                or ("team" if sentiment_articles_used > 0 else "none")
+            )
+            sentiment_strength = str(
+                home_meta.get("sentiment_strength")
+                or away_meta.get("sentiment_strength")
+                or sentiment_strength_from_articles(sentiment_level, sentiment_articles_used)
+            ).upper()
+            if not sentiment_strength or sentiment_strength == "NONE":
+                sentiment_strength = sentiment_strength_from_articles(sentiment_level, sentiment_articles_used)
+            sentiment_badge = sentiment_badge_for(sentiment_level, sentiment_strength)
+            sentiment_query_used = ";".join(
+                [
+                    q
+                    for q in [
+                        home_meta.get("sentiment_query_used"),
+                        away_meta.get("sentiment_query_used"),
+                    ]
+                    if q
+                ]
+            )
+            sentiment_signal = sentiment_signal_value(sentiment_level, sentiment_diff)
+            spread_sentiment_adj = compute_market_sentiment_adjustment(sentiment_level, sentiment_strength, "spread", sentiment_signal)
+            total_sentiment_adj = compute_market_sentiment_adjustment(sentiment_level, sentiment_strength, "total", sentiment_signal)
+            if sentiment_auth_error:
+                sentiment_adj_reason = "auth_error"
+            elif sentiment_level != "none" and sentiment_strength != "NONE" and sentiment_articles_used > 0:
+                sentiment_adj = compute_market_sentiment_adjustment(sentiment_level, sentiment_strength, "moneyline", sentiment_signal)
+                reason_bits: List[str] = []
+                if rate_limited_flag:
+                    reason_bits.append("rate_limited")
+                if sentiment_used_cached:
+                    reason_bits.append("cached")
+                sentiment_adj_reason = "applied" if not reason_bits else f"applied_{'_'.join(reason_bits)}"
+            sentiment_valid = bool(sentiment_articles_used > 0 and not sentiment_auth_error)
             sentiment_source = (
                 st.session_state.get(f"sentiment_source_{league_key}")
                 or sentiment_meta_global.get("sentiment_source")
@@ -3755,7 +3972,7 @@ with tab_master:
                 sentiment_source = "error_rate_limited"
             elif sentiment_auth_error:
                 sentiment_source = "error_auth"
-            elif articles_total >= 3 and sentiment_source in ("none", "error", "error_rate_limited"):
+            elif sentiment_valid and sentiment_source in ("none", "error", "error_rate_limited"):
                 sentiment_source = "newsapi"
             reddit_used = False
             sentiment_error_count = league_debug.get("error_count")
@@ -3893,6 +4110,13 @@ with tab_master:
                     "sentiment_source": sentiment_source,
                     "reddit_used": reddit_used,
                     "sentiment_valid": sentiment_valid,
+                    "sentiment_level": sentiment_level,
+                    "sentiment_strength": sentiment_strength,
+                    "sentiment_badge": sentiment_badge,
+                    "sentiment_articles_used": sentiment_articles_used,
+                    "sentiment_query_used": sentiment_query_used,
+                    "spread_sentiment_adj": spread_sentiment_adj,
+                    "total_sentiment_adj": total_sentiment_adj,
                     "sentiment_error_count": sentiment_error_count,
                     "sentiment_errors_sample": sentiment_errors_sample,
                     "sentiment_articles_total": sentiment_articles_total,
@@ -4147,6 +4371,13 @@ with tab_master:
                         "sentiment_source": sentiment_source,
                         "reddit_used": reddit_used,
                         "sentiment_valid": sentiment_valid,
+                        "sentiment_level": sentiment_level,
+                        "sentiment_strength": sentiment_strength,
+                        "sentiment_badge": sentiment_badge,
+                        "sentiment_articles_used": sentiment_articles_used,
+                        "sentiment_query_used": sentiment_query_used,
+                        "spread_sentiment_adj": spread_sentiment_adj,
+                        "total_sentiment_adj": total_sentiment_adj,
                         "sentiment_error_count": sentiment_error_count,
                         "sentiment_errors_sample": sentiment_errors_sample,
                         "sentiment_articles_total": sentiment_articles_total,
@@ -4234,6 +4465,7 @@ with tab_master:
                     ml_row["sentiment_adj"] = adj_val
                     ml_row["sentiment_adj_value"] = adj_val
                     ml_row["sentiment_adj_reason"] = adj_reason
+                    sentiment_adj = adj_val
                     base_prob = clamp(ml_row.get("AI_Prob"))
                     ml_row["ai_prob_adj"] = clamp((base_prob or 0.0) + adj_val) if base_prob is not None else None
                     conf, reason_short, eligible = score_pick_confidence(ml_row)
@@ -4260,6 +4492,13 @@ with tab_master:
                     "Pick": spread_pick, "Implied_Prob": spread_implied, "Line": spread_line, "AI_Prob": ai_prob_base,
                     "ai_prob_adj": ai_prob_row, "consensus_prob": None, "consensus_prob_adj": None,
                     "sentiment_adj": sentiment_adj, "sentiment_source": sentiment_source, "reddit_used": reddit_used, "sentiment_valid": sentiment_valid,
+                    "sentiment_level": sentiment_level,
+                    "sentiment_strength": sentiment_strength,
+                    "sentiment_badge": sentiment_badge,
+                    "sentiment_articles_used": sentiment_articles_used,
+                    "sentiment_query_used": sentiment_query_used,
+                    "spread_sentiment_adj": spread_sentiment_adj,
+                    "total_sentiment_adj": total_sentiment_adj,
                     "sentiment_error_count": sentiment_error_count,
                     "sentiment_errors_sample": sentiment_errors_sample,
                     "sentiment_articles_total": sentiment_articles_total,
@@ -4399,6 +4638,13 @@ with tab_master:
                     "Home_Sentiment": home_sent,
                     "Away_Sentiment": away_sent,
                     "sentiment_adj": sentiment_adj, "sentiment_source": sentiment_source, "reddit_used": reddit_used, "sentiment_valid": sentiment_valid,
+                    "sentiment_level": sentiment_level,
+                    "sentiment_strength": sentiment_strength,
+                    "sentiment_badge": sentiment_badge,
+                    "sentiment_articles_used": sentiment_articles_used,
+                    "sentiment_query_used": sentiment_query_used,
+                    "spread_sentiment_adj": spread_sentiment_adj,
+                    "total_sentiment_adj": total_sentiment_adj,
                     "sentiment_error_count": sentiment_error_count,
                     "sentiment_errors_sample": sentiment_errors_sample,
                     "sentiment_articles_total": sentiment_articles_total,
@@ -4495,6 +4741,15 @@ with tab_master:
             "sentiment_adj",
             "sentiment_source",
             "reddit_used",
+            "sentiment_level",
+            "sentiment_strength",
+            "sentiment_badge",
+            "sentiment_articles_used",
+            "sentiment_query_used",
+            "spread_sentiment_adj",
+            "spread_prob_adj",
+            "total_sentiment_adj",
+            "total_prob_adj",
             "ai_prob_adj",
             "consensus_prob",
             "kalshi_candidate_count",
@@ -4503,6 +4758,14 @@ with tab_master:
             "kalshi_game_prefix_used",
             "kalshi_wanted_tokens",
             "consensus_prob_adj",
+            "Spread_Glance",
+            "Total_Glance",
+            "spread_prob_display",
+            "total_prob_display",
+            "spread_sentiment_arrow",
+            "total_sentiment_arrow",
+            "spread_sentiment_note",
+            "total_sentiment_note",
             "best_spread_book",
             "best_spread_last_update",
             "best_spread_price_score",
@@ -4668,6 +4931,21 @@ with tab_master:
             "reddit_used",
             "sentiment_valid",
             "sentiment_adj",
+            "sentiment_level",
+            "sentiment_strength",
+            "sentiment_badge",
+            "sentiment_articles_used",
+            "sentiment_query_used",
+            "spread_sentiment_adj",
+            "spread_prob_adj",
+            "spread_prob_display",
+            "total_sentiment_adj",
+            "total_prob_adj",
+            "total_prob_display",
+            "spread_sentiment_arrow",
+            "total_sentiment_arrow",
+            "spread_sentiment_note",
+            "total_sentiment_note",
             "sentiment_error_count",
             "sentiment_errors_sample",
             "sentiment_articles_total",
