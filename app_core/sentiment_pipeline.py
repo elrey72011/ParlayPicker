@@ -359,7 +359,7 @@ def team_sentiment_from_articles(articles: List[Dict[str, Any]]) -> float:
     return _clamp(avg)
 
 
-MAX_SENTIMENT_CALLS = 8
+MAX_SENTIMENT_CALLS = 6
 COOLDOWN_HOURS = 12
 
 

@@ -1023,12 +1023,18 @@ def get_slate_sentiment(enable_sentiment: bool, teams: List[str], league: str, n
     except Exception:
         cooldown_until = None
     if cooldown_raw and cooldown_until and datetime.now(timezone.utc) < cooldown_until:
+        cached_map = st.session_state.get("sentiment_map") or {}
+        cached_meta_map = st.session_state.get("sentiment_meta_map") or {}
         meta["sentiment_source"] = "cooldown_cached_only"
         meta["sentiment_sample_status"] = "COOLDOWN"
         meta["sentiment_status_counts"] = {"COOLDOWN": 1}
         meta["sentiment_disabled_reason"] = "cooldown_active"
         meta["sentiment_cooldown_until"] = cooldown_raw
-        return {"map": {}, "meta_map": {}, "meta": meta, "debug": debug}
+        meta["sentiment_rate_limited"] = True
+        meta["sentiment_available_count"] = len([v for v in cached_map.values() if v is not None])
+        if meta["sentiment_available_count"] > 0:
+            meta["sentiment_source"] = "partial_cached"
+        return {"map": cached_map, "meta_map": cached_meta_map, "meta": meta, "debug": debug}
     meta["sentiment_sample_status"] = "PENDING"
     meta["sentiment_status_counts"] = {"PENDING": 1}
     meta["sentiment_disabled_reason"] = ""
@@ -4110,6 +4116,9 @@ with tab_master:
             total_odds_valid = False
             best_spread_price = None
             best_total_price = None
+            spread_odds_method = "missing"
+            total_odds_method = "missing"
+            odds_placeholder_overall = False
 
             # --- Pre-compute pick context (used for market normalization) ---
             spread_offers = g.get("spread_offers") or []
@@ -4166,6 +4175,7 @@ with tab_master:
                 if best_spread_offer:
                     spread_pick_odds = best_spread_offer.get("price")
                     best_spread_price = spread_pick_odds
+                    spread_odds_method = "book_price"
                     if spread_pick_line is None:
                         spread_pick_line = safe_float(best_spread_offer.get("point"))
                 if spread_pick_team == home:
@@ -4492,6 +4502,8 @@ with tab_master:
                     "sentiment_disabled_reason": sentiment_disabled_reason,
                     "sentiment_adj_value": sentiment_adj,
                     "sentiment_adj_reason": sentiment_adj_reason,
+                    "spread_odds_method": spread_odds_method,
+                    "total_odds_method": total_odds_method,
                     "spread_pick_team": spread_pick_team,
                     "spread_pick_line": spread_pick_line,
                     "spread_pick_odds": spread_pick_odds,
@@ -4540,6 +4552,9 @@ with tab_master:
                     "total_odds_placeholder_detected": total_odds_placeholder_detected,
                     "spread_prob_placeholder_detected": spread_prob_placeholder_detected,
                     "total_prob_placeholder_detected": total_prob_placeholder_detected,
+                    "odds_placeholder_detected": bool(odds_placeholder_overall),
+                    "odds_placeholder_detected": bool(odds_placeholder_overall),
+                    "odds_placeholder_detected": bool(odds_placeholder_overall),
                 }
                 conf, reason_short, eligible = score_pick_confidence(fallback_row)
                 fallback_row["Pick_Confidence"] = conf
@@ -4621,6 +4636,7 @@ with tab_master:
                 if best_total_offer:
                     total_pick_odds = best_total_offer.get("price")
                     best_total_price = total_pick_odds
+                    total_odds_method = "book_price"
                     if total_line is None:
                         total_line = safe_float(best_total_offer.get("point"))
                 if total_pick_odds is not None:
@@ -4638,6 +4654,7 @@ with tab_master:
             total_odds_placeholder_detected = False
             spread_prob_placeholder_detected = False
             total_prob_placeholder_detected = False
+            overall_odds_placeholder = False
             spread_pick_side_key = "home" if spread_pick_team == home else ("away" if spread_pick_team == away else None)
             if spread_pick:
                 spread_market_prob, spread_market_pairs_count, spread_prob_method, spread_market_placeholder = compute_market_prob_from_offers(
@@ -4667,10 +4684,7 @@ with tab_master:
                     spread_prob_method = spread_prob_method or "missing"
                 else:
                     spread_prob_method = f"{spread_prob_method}_market_adjusted"
-                spread_odds_placeholder_detected = bool(
-                    spread_market_placeholder
-                    or (spread_pick_odds is not None and safe_float(spread_pick_odds) == -110.0 and len(spread_offers) >= 3 and g.get("best_spread_book"))
-                )
+                spread_odds_placeholder_detected = bool(spread_odds_method == "fallback_default")
                 spread_prob_placeholder_detected = bool(
                     spread_odds_placeholder_detected
                     and spread_implied is not None
@@ -4707,20 +4721,19 @@ with tab_master:
                     total_prob_method = total_prob_method or "missing"
                 else:
                     total_prob_method = f"{total_prob_method}_market_adjusted"
-                total_odds_placeholder_detected = bool(
-                    total_market_placeholder
-                    or (total_pick_odds is not None and safe_float(total_pick_odds) == -110.0 and len(total_offers) >= 3 and g.get("best_total_book"))
-                )
+                total_odds_placeholder_detected = bool(total_odds_method == "fallback_default")
                 total_prob_placeholder_detected = bool(
                     total_odds_placeholder_detected
                     and total_implied is not None
                     and PLACEHOLDER_IMPLIED_PROB is not None
                     and abs(total_implied - PLACEHOLDER_IMPLIED_PROB) < 1e-4
                 )
+            overall_odds_placeholder = bool(spread_odds_placeholder_detected or total_odds_placeholder_detected)
             spread_prob = spread_prob_market_based if spread_prob_market_based is not None else spread_implied
             total_prob = total_prob_market_based if total_prob_market_based is not None else total_implied
-            spread_odds_valid = bool((spread_pick_odds is not None) and (not spread_odds_placeholder_detected))
-            total_odds_valid = bool((total_pick_odds is not None) and (not total_odds_placeholder_detected))
+            spread_odds_valid = bool(spread_odds_method == "book_price")
+            total_odds_valid = bool(total_odds_method == "book_price")
+            odds_placeholder_overall = bool(overall_odds_placeholder)
 
             # Baseline probability (Home Win)
             if implied_home is not None:
@@ -4894,7 +4907,7 @@ with tab_master:
                         "total_prob_reason": total_prob_reason,
                         "total_prob_method": total_prob_method,
                         "odds_valid": odds_valid,
-                        "odds_placeholder_detected": odds_placeholder,
+                        "odds_placeholder_detected": bool(odds_placeholder or odds_placeholder_overall),
                         "spread_odds_valid": spread_odds_valid,
                         "total_odds_valid": total_odds_valid,
                         "spread_odds_placeholder_detected": spread_odds_placeholder_detected,
@@ -5005,6 +5018,7 @@ with tab_master:
                     "spread_pick_team": spread_pick_team,
                     "spread_pick_line": spread_pick_line,
                     "spread_pick_odds": spread_pick_odds,
+                    "spread_odds_method": spread_odds_method,
                     "spread_prob": spread_prob,
                     "spread_confidence": None,
                     "spread_confidence_reason": None,
@@ -5012,6 +5026,7 @@ with tab_master:
                     "total_pick_side": total_pick_side,
                     "total_pick_line": total_line,
                     "total_pick_odds": total_pick_odds,
+                    "total_odds_method": total_odds_method,
                     "total_prob": total_prob,
                     "total_confidence": None,
                     "total_confidence_reason": None,
@@ -5030,14 +5045,16 @@ with tab_master:
                     "best_total_mode_point": g.get("best_total_mode_point"),
                     "best_total_price": best_total_price,
                     "Warnings": warnings_field,
-                    "spread_implied_prob": spread_implied,
-                    "spread_prob_market_based": spread_prob_market_based,
-                    "spread_prob_reason": spread_prob_reason,
-                    "spread_prob_method": spread_prob_method,
-                    "total_implied_prob": total_implied,
-                    "total_prob_market_based": total_prob_market_based,
-                    "total_prob_reason": total_prob_reason,
-                    "total_prob_method": total_prob_method,
+                        "spread_implied_prob": spread_implied,
+                        "spread_prob_market_based": spread_prob_market_based,
+                        "spread_prob_reason": spread_prob_reason,
+                        "spread_odds_method": spread_odds_method,
+                        "spread_prob_method": spread_prob_method,
+                        "total_implied_prob": total_implied,
+                        "total_prob_market_based": total_prob_market_based,
+                        "total_prob_reason": total_prob_reason,
+                        "total_odds_method": total_odds_method,
+                        "total_prob_method": total_prob_method,
                     "Kalshi_Required": st.session_state.get("kalshi_required", True),
                     "api_sports_used": api_sports_used,
                     "sportsdata_used": sportsdata_used,
@@ -5115,6 +5132,7 @@ with tab_master:
                     "spread_pick_team": spread_pick_team,
                     "spread_pick_line": spread_pick_line,
                     "spread_pick_odds": spread_pick_odds,
+                    "spread_odds_method": spread_odds_method,
                     "spread_prob": spread_prob,
                     "spread_confidence": None,
                     "spread_confidence_reason": None,
@@ -5122,6 +5140,7 @@ with tab_master:
                     "total_pick_side": total_pick_side,
                     "total_pick_line": total_line,
                     "total_pick_odds": total_pick_odds,
+                    "total_odds_method": total_odds_method,
                     "total_prob": total_prob,
                     "total_confidence": None,
                     "total_confidence_reason": None,
@@ -5194,6 +5213,8 @@ with tab_master:
                     "total_odds_placeholder_detected": total_odds_placeholder_detected,
                     "spread_prob_placeholder_detected": spread_prob_placeholder_detected,
                     "total_prob_placeholder_detected": total_prob_placeholder_detected,
+                    "odds_placeholder_detected": bool(odds_placeholder_overall),
+                    "odds_placeholder_detected": bool(odds_placeholder_overall),
                     "sentiment_adj_value": sentiment_adj,
                     "sentiment_adj_reason": sentiment_adj_reason,
                     "prob_reason": None,
@@ -5336,6 +5357,7 @@ with tab_master:
             "spread_prob",
             "spread_prob_market_based",
             "spread_prob_reason",
+            "spread_odds_method",
             "spread_prob_method",
             "spread_confidence",
             "spread_confidence_reason",
@@ -5350,6 +5372,7 @@ with tab_master:
             "total_prob",
             "total_prob_market_based",
             "total_prob_reason",
+            "total_odds_method",
             "total_prob_method",
             "total_confidence",
             "total_confidence_reason",
@@ -5384,12 +5407,12 @@ with tab_master:
             index=0,
             key="confidence_filter_mode",
         )
-        show_low = st.checkbox(
-            "Show low-confidence picks (proxy/fallback)",
-            value=True,
-            key="show_low_confidence",
+        hide_low = st.checkbox(
+            "Hide low-confidence picks (proxy/fallback)",
+            value=False,
+            key="hide_low_confidence",
         )
-        df_master_view, confidence_stats = apply_confidence_filter(df, confidence_mode, show_low)
+        df_master_view, confidence_stats = apply_confidence_filter(df, confidence_mode, not hide_low)
         counts = confidence_stats.get("counts") or {}
         st.caption(
             f"Confidence counts (post-filter): HIGH={counts.get('HIGH', 0)}, "
