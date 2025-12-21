@@ -105,6 +105,20 @@ def prob_arrow(base: Any, adj: Any, threshold: float = 0.0075) -> str:
         return ""
 
 
+def apply_sentiment_defaults(row: Dict[str, Any], defaults: Dict[str, Any]) -> Dict[str, Any]:
+    def _is_nan(v: Any) -> bool:
+        try:
+            return v != v
+        except Exception:
+            return False
+
+    for k, v in defaults.items():
+        current = row.get(k)
+        if current is None or _is_nan(current):
+            row[k] = v
+    return row
+
+
 def _clamp_signed(val: Optional[float], *, limit: float) -> float:
     try:
         v = float(val)
@@ -928,6 +942,54 @@ def compute_team_sentiment_map(news_api_key: Optional[str], games: List[Dict[str
     }
 
 
+def get_slate_sentiment(enable_sentiment: bool, teams: List[str], league: str, news_api_key: Optional[str]) -> Dict[str, Any]:
+    meta = init_sentiment_meta()
+    debug: Dict[str, Any] = {}
+    teams = [t for t in teams if t]
+    if not enable_sentiment:
+        meta["sentiment_source"] = "disabled_by_user"
+        meta["sentiment_sample_status"] = "DISABLED"
+        meta["sentiment_disabled_reason"] = "user_disabled"
+        return {"map": {}, "meta_map": {}, "meta": meta, "debug": debug}
+    if not news_api_key:
+        meta["sentiment_source"] = "disabled_no_key"
+        meta["sentiment_sample_status"] = "DISABLED"
+        meta["sentiment_disabled_reason"] = "missing_NEWS_API_KEY"
+        return {"map": {}, "meta_map": {}, "meta": meta, "debug": debug}
+    if not teams:
+        meta["sentiment_source"] = "disabled_no_teams"
+        meta["sentiment_sample_status"] = "DISABLED"
+        meta["sentiment_disabled_reason"] = "no_teams_found"
+        return {"map": {}, "meta_map": {}, "meta": meta, "debug": debug}
+    games_stub = [{"home_team": t, "away_team": None} for t in teams]
+    try:
+        sentiment_map, sentiment_meta_map, sentiment_debug = compute_team_sentiment_map(news_api_key, games_stub, league)
+        debug = sentiment_debug or {}
+        status_counts = debug.get("status_counts") or {}
+        sample_calls = debug.get("sample_calls") or []
+        sample_call = sample_calls[0] if sample_calls else {}
+        meta["sentiment_source"] = "newsapi" if sentiment_map else "none"
+        meta["sentiment_status_counts"] = status_counts if status_counts else {"NO_CALL": 1}
+        meta["sentiment_sample_query"] = sample_call.get("q") or ""
+        meta["sentiment_sample_status"] = str(sample_call.get("status") or (list(status_counts.keys())[0] if status_counts else "NO_CALL"))
+        meta["sentiment_sample_totalResults"] = sample_call.get("totalResults") or 0
+        meta["sentiment_error_count"] = debug.get("error_count") or 0
+        errors_sample = debug.get("errors_sample") or []
+        meta["sentiment_errors_sample"] = ";".join([f"{e.get('team')}: {e.get('error')}" for e in errors_sample]) if errors_sample else ""
+        meta["sentiment_articles_total"] = debug.get("articles_total") or 0
+        meta["sentiment_cached_teams_count"] = debug.get("cached_teams") or 0
+        meta["sentiment_available_count"] = len([v for v in sentiment_map.values() if v is not None])
+        meta["sentiment_disabled_reason"] = ""
+        return {"map": sentiment_map, "meta_map": sentiment_meta_map, "meta": meta, "debug": debug}
+    except Exception as exc:  # pragma: no cover - defensive
+        meta["sentiment_source"] = "error_exception"
+        meta["sentiment_sample_status"] = "EXCEPTION"
+        meta["sentiment_disabled_reason"] = "exception_in_sentiment"
+        meta["sentiment_errors_sample"] = str(exc)
+        meta["sentiment_status_counts"] = {"EXCEPTION": 1}
+        return {"map": {}, "meta_map": {}, "meta": meta, "debug": {"error": str(exc)}}
+
+
 def slate_key_from_games(games: List[Dict[str, Any]]) -> str:
     parts: List[str] = []
     for g in games or []:
@@ -1160,7 +1222,7 @@ def init_sentiment_meta() -> Dict[str, Any]:
         "sentiment_used_cached": False,
         "sentiment_error_count": 0,
         "sentiment_errors_sample": "",
-        "sentiment_disabled_reason": "",
+        "sentiment_disabled_reason": "not_executed",
         "reddit_used": False,
         "articles_total": 0,
         "error_count": 0,
@@ -3653,7 +3715,20 @@ with tab_master:
                 unique_teams.add(str(g.get("home_team")))
             if g.get("away_team"):
                 unique_teams.add(str(g.get("away_team")))
-        ensure_sentiment_loaded(games)
+        enable_sentiment_master = st.checkbox(
+            "Enable sentiment (NewsAPI)",
+            value=st.session_state.get("enable_sentiment", True),
+            key="enable_sentiment_master",
+        )
+        st.session_state["enable_sentiment"] = enable_sentiment_master
+        slate_sentiment = get_slate_sentiment(enable_sentiment_master, sorted(unique_teams), "MIXED", news_api_key)
+        st.session_state["sentiment_map"] = slate_sentiment.get("map") or {}
+        st.session_state["sentiment_meta_map"] = slate_sentiment.get("meta_map") or {}
+        st.session_state["sentiment_meta"] = slate_sentiment.get("meta") or init_sentiment_meta()
+        st.session_state["sentiment_debug"] = slate_sentiment.get("debug") or {}
+        with st.expander("Sentiment Debug", expanded=False):
+            st.json((slate_sentiment.get("meta") or {}))
+            st.write("Unique teams:", len(unique_teams))
         sentiment_pack_meta = st.session_state.get("sentiment_meta") or init_sentiment_meta()
         sentiment_map: Dict[str, Optional[float]] = st.session_state.get("sentiment_map") or {}
         sentiment_meta_map: Dict[str, Dict[str, Any]] = st.session_state.get("sentiment_meta_map") or {}
@@ -4039,6 +4114,19 @@ with tab_master:
             sentiment_cached_teams_count = int(sentiment_cached_teams_count or 0)
             sentiment_available_count = int(sentiment_available_count or 0)
             sentiment_sample_status = str(sentiment_sample_status or "NO_CALL")
+            sentiment_sample_query = sentiment_sample_query or ""
+            sentiment_status_counts_field = sentiment_status_counts_field or ""
+            sentiment_disabled_reason = sentiment_disabled_reason or ""
+            sentiment_defaults_base = {
+                "sentiment_sample_status": sentiment_sample_status,
+                "sentiment_sample_query": sentiment_sample_query,
+                "sentiment_status_counts": sentiment_status_counts_field,
+                "sentiment_disabled_reason": sentiment_disabled_reason,
+                "spread_sentiment_arrow": "",
+                "total_sentiment_arrow": "",
+                "spread_sentiment_note": "",
+                "total_sentiment_note": "",
+            }
 
             vertex_prob_home, vertex_warn = get_vertex_prob(g, sentiment_diff)
             if vertex_warn and vertex_warn not in warnings:
@@ -4206,6 +4294,7 @@ with tab_master:
                 fallback_row["Pick_Confidence"] = conf
                 fallback_row["Pick_Reason_Short"] = reason_short
                 fallback_row["Eligible_Top_Picks"] = eligible
+                fallback_row = apply_sentiment_defaults(fallback_row, sentiment_defaults_base)
                 rows_out.append(fallback_row)
                 master_stats["market_rows_out"] += 1
 
@@ -4509,6 +4598,7 @@ with tab_master:
                     ml_row["Pick_Confidence"] = conf
                     ml_row["Pick_Reason_Short"] = reason_short
                     ml_row["Eligible_Top_Picks"] = eligible
+                    ml_row = apply_sentiment_defaults(ml_row, sentiment_defaults_base)
                     rows_out.append(ml_row)
                     master_stats["h2h_found"] += 1
                     master_stats["market_rows_out"] += 1
@@ -4632,6 +4722,7 @@ with tab_master:
                 spread_row["Pick_Confidence"] = conf
                 spread_row["Pick_Reason_Short"] = reason_short
                 spread_row["Eligible_Top_Picks"] = eligible
+                spread_row = apply_sentiment_defaults(spread_row, sentiment_defaults_base)
                 rows_out.append(spread_row)
                 master_stats["market_rows_out"] += 1
 
@@ -4749,6 +4840,7 @@ with tab_master:
                 total_row["Pick_Confidence"] = conf
                 total_row["Pick_Reason_Short"] = reason_short
                 total_row["Eligible_Top_Picks"] = eligible
+                total_row = apply_sentiment_defaults(total_row, sentiment_defaults_base)
                 rows_out.append(total_row)
                 master_stats["market_rows_out"] += 1
                     
@@ -4909,7 +5001,7 @@ with tab_master:
         )
         show_moneyline_rows = True
         if "Market" in df_master_view.columns:
-            show_moneyline_rows = st.checkbox("Show Moneyline rows", value=True, key="show_moneyline_rows")
+            show_moneyline_rows = st.checkbox("Show Moneyline rows", value=False, key="show_moneyline_rows")
             if not show_moneyline_rows:
                 df_master_view = df_master_view[df_master_view["Market"].isin(["Spread", "Total"])]
 
