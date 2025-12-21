@@ -999,13 +999,6 @@ def ensure_sentiment_loaded(games: List[Dict[str, Any]]) -> None:
         return
 
     slate_key = slate_key_from_games(games)
-    cached_map = st.session_state.get("sentiment_map")
-    cached_meta_map = st.session_state.get("sentiment_meta_map")
-    if st.session_state.get("sentiment_slate_key") == slate_key:
-        meta_cached = st.session_state.get("sentiment_meta") or {}
-        cached_articles = int(meta_cached.get("articles_total") or 0)
-        if cached_articles > 0 and cached_map and cached_meta_map:
-            return
 
     try:
         per_league_debug: Dict[str, Any] = {}
@@ -1145,7 +1138,14 @@ def ensure_sentiment_loaded(games: List[Dict[str, Any]]) -> None:
         if not sample_status and rate_limited:
             sample_status = 429
         if sample_status is None:
-            sample_status = "NO_CALL" if not rate_limited else 429
+            if sentiment_source.startswith("disabled"):
+                sample_status = "DISABLED"
+            elif sentiment_source.startswith("cooldown"):
+                sample_status = "COOLDOWN"
+            elif auth_error:
+                sample_status = 401
+            else:
+                sample_status = 520 if news_api_key else "NO_KEY"
         global_meta.update({
             "sentiment_source": sentiment_source,
             "articles_total": total_articles,
@@ -3359,6 +3359,8 @@ with tab_master:
         ensure_sentiment_loaded(games)
         sentiment_map: Dict[str, Optional[float]] = st.session_state.get("sentiment_map") or {}
         sentiment_meta_map: Dict[str, Dict[str, Any]] = st.session_state.get("sentiment_meta_map") or {}
+        sentiment_meta_global = st.session_state.get("sentiment_meta") or {}
+        sentiment_status_counts_global = sentiment_meta_global.get("status_counts") or {}
         sentiment_meta_global_raw = st.session_state.get("sentiment_meta") or {}
         sentiment_meta_global: Dict[str, Any] = {
             "sentiment_source": "none",
