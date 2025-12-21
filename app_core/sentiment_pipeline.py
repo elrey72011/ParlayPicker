@@ -103,6 +103,36 @@ def _newsapi_query(team: str, league: str, league_query: Optional[str] = None) -
 
 
 @st.cache_data(ttl=3600)
+def fetch_team_newsapi_cached(team: str, league: str, news_api_key: str, date_bucket: Optional[str] = None, league_query: Optional[str] = None) -> Dict[str, Any]:
+    """Fetch NewsAPI once for a team and return normalized debug payload without raising."""
+    meta: Dict[str, Any] = {
+        "status": "NO_CALL",
+        "q_used": "",
+        "totalResults": 0,
+        "articles_count": 0,
+        "sentiment": None,
+        "error": None,
+    }
+    try:
+        date_bucket = date_bucket or datetime.now(timezone.utc).date().isoformat()
+        league_q = league_query or league_label(league)
+        articles, info = fetch_team_news(news_api_key, team, league, league_q, date_bucket=date_bucket)
+        status_val = info.get("status") or info.get("status_code") or "NO_STATUS"
+        meta["status"] = int(status_val) if str(status_val).isdigit() else str(status_val)
+        meta["q_used"] = info.get("q") or _newsapi_query(team, league, league_q)
+        meta["totalResults"] = int(info.get("totalResults") or 0)
+        meta["articles_count"] = len(articles or [])
+        if meta["articles_count"] > 0:
+            meta["sentiment"] = float(team_sentiment_from_articles(articles))
+        meta["error"] = info.get("error")
+    except Exception as exc:
+        meta["status"] = "EXCEPTION"
+        meta["error"] = str(exc)
+        meta["q_used"] = meta.get("q_used") or _newsapi_query(team, league, league_query or league_label(league))
+    return meta
+
+
+@st.cache_data(ttl=3600)
 def fetch_team_news(news_api_key: str, team: str, league: str, league_query: Optional[str] = None, *, max_retries: int = 2, retry_delay: float = 0.75, date_bucket: Optional[str] = None) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
     """Fetch recent articles for a team; returns (articles, info) where info contains status/error."""
     date_bucket = date_bucket or datetime.now(timezone.utc).date().isoformat()
