@@ -3743,14 +3743,16 @@ st.session_state["enable_sentiment"] = enable_sentiment
 if st.sidebar.button("Load Games", use_container_width=True):
     load_games(selected_sports or [league])
 
+api_sports_status = "OK" if any(v for v in api_sports_clients.values() if v) else "MISSING"
+sportsdata_status = "OK" if any(v for v in sportsdata_clients.values() if v) else "MISSING"
 st.sidebar.markdown("---")
 st.sidebar.subheader("Status")
 badges = {
     "OddsAPI": bool(odds_api_key),
     "Vertex": bool(vertex_endpoint_id),
     "News": bool(news_api_key),
-    "API-Sports": any(v for v in api_sports_clients.values() if v),
-    "SportsData": any(v for v in sportsdata_clients.values() if v),
+    "API-Sports": api_sports_status == "OK",
+    "SportsData": sportsdata_status == "OK",
     "Kalshi": bool(kalshi_api_key and kalshi_api_secret),
 }
 for name, ok in badges.items():
@@ -3923,6 +3925,8 @@ with tab_master:
         st.error("Kalshi is required but unavailable. Fix Kalshi first.")
         st.stop()
     if run_master:
+        api_sports_status_run = api_sports_status
+        sportsdata_status_run = sportsdata_status
         df_master = pd.DataFrame(games or [])
         unique_teams = sorted(
             set(df_master.get("home_team", pd.Series([], dtype=str)).dropna().astype(str))
@@ -4532,6 +4536,12 @@ with tab_master:
                     "Kalshi_Required": st.session_state.get("kalshi_required", True),
                     "api_sports_used": api_sports_used,
                     "sportsdata_used": sportsdata_used,
+                    "api_sports_status": api_sports_status_run,
+                    "sportsdata_status": sportsdata_status_run,
+                    "api_sports_status": api_sports_status_run,
+                    "sportsdata_status": sportsdata_status_run,
+                    "api_sports_status": api_sports_status_run,
+                    "sportsdata_status": sportsdata_status_run,
                     "injuries_home_count": injuries_home_count,
                     "injuries_away_count": injuries_away_count,
                     "weather_summary": weather_summary,
@@ -5339,6 +5349,8 @@ with tab_master:
             "Kalshi_Required",
             "api_sports_used",
             "sportsdata_used",
+            "api_sports_status",
+            "sportsdata_status",
             "injuries_home_count",
             "injuries_away_count",
             "weather_summary",
