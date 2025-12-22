@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import re
 import tempfile
@@ -51,6 +52,8 @@ try:
     import altair as alt  # type: ignore
 except Exception:  # pragma: no cover - optional import
     alt = None
+
+logger = logging.getLogger(__name__)
 # -----------------
 # Utility helpers (null-safe probability handling)
 # -----------------
@@ -6001,7 +6004,10 @@ with tab_master:
                     ml_row["decision_trace_json"] = trace_json
                     ml_row["decision_trace"] = decision_trace_full
                     if league_name in {"NFL", "NBA", "NCAAB"} and not SENTIMENT_LOG_SAMPLE.get(league_name):
-                        logger.info(f"Decision trace sample {league_name}: {decision_trace_full}")
+                        try:
+                            logger.info(f"Decision trace sample {league_name}: {decision_trace_full}")
+                        except Exception:
+                            pass
                         SENTIMENT_LOG_SAMPLE[league_name] = True
                     ml_row["Eligible_Top_Picks"] = eligible
                     ml_row = apply_sentiment_defaults(ml_row, sentiment_defaults_base)
@@ -6878,9 +6884,7 @@ with tab_master:
             "consensus_guardrails",
             "gemini_error",
         ]
-        show_decision_trace = st.checkbox("Show Decision Trace Columns", value=False, key="show_decision_trace")
-        if not show_decision_trace:
-            df_master_view = df_master_view.drop(columns=[c for c in trace_cols if c in df_master_view.columns], errors="ignore")
+        df_master_view_display = df_master_view.drop(columns=[c for c in trace_cols if c in df_master_view.columns], errors="ignore")
         show_moneyline_details = st.checkbox("Show Moneyline details", value=False, key="show_moneyline_details")
         if not show_moneyline_details:
             ml_detail_cols = [
@@ -6900,15 +6904,15 @@ with tab_master:
                 "edge_vs_odds",
                 "model_minus_market",
             ]
-            df_master_view = df_master_view.drop(columns=[c for c in ml_detail_cols if c in df_master_view.columns], errors="ignore")
-        st.caption(f"Column order (first 8): {', '.join(list(df_master_view.columns[:8]))} ...")
-        df_master_view["Spread_Range"] = df_master_view.apply(
+            df_master_view_display = df_master_view_display.drop(columns=[c for c in ml_detail_cols if c in df_master_view_display.columns], errors="ignore")
+        st.caption(f"Column order (first 8): {', '.join(list(df_master_view_display.columns[:8]))} ...")
+        df_master_view_display["Spread_Range"] = df_master_view_display.apply(
             lambda r: f"{r['spread_min']} to {r['spread_max']} (med {r['spread_med']})"
             if pd.notnull(r.get("spread_min")) and pd.notnull(r.get("spread_max"))
             else "N/A",
             axis=1,
         )
-        df_master_view["Total_Range"] = df_master_view.apply(
+        df_master_view_display["Total_Range"] = df_master_view_display.apply(
             lambda r: f"{r['total_min']} to {r['total_max']} (med {r['total_med']})"
             if pd.notnull(r.get("total_min")) and pd.notnull(r.get("total_max"))
             else "N/A",
@@ -6923,9 +6927,9 @@ with tab_master:
             if (r.get("spread_books_count") == 1) or (r.get("total_books_count") == 1):
                 badges_local.append("THIN MARKET")
             return ";".join(sorted(set(badges_local))) if badges_local else None
-        df_master_view["Market_Badge"] = df_master_view.apply(_market_badge, axis=1)
-        placeholder_count = int((df_master_view.get("odds_placeholder_detected") == True).sum()) if "odds_placeholder_detected" in df_master_view.columns else 0
-        implied_null_count = int(df_master_view["Implied_Prob"].isna().sum()) if "Implied_Prob" in df_master_view.columns else 0
+        df_master_view_display["Market_Badge"] = df_master_view_display.apply(_market_badge, axis=1)
+        placeholder_count = int((df_master_view_display.get("odds_placeholder_detected") == True).sum()) if "odds_placeholder_detected" in df_master_view_display.columns else 0
+        implied_null_count = int(df_master_view_display["Implied_Prob"].isna().sum()) if "Implied_Prob" in df_master_view_display.columns else 0
         st.caption(f"Debug: placeholder odds rows={placeholder_count}; Implied_Prob null rows={implied_null_count}")
 
         st.subheader("Top Picks / Best Bets")
@@ -6949,8 +6953,7 @@ with tab_master:
         except Exception:
             pass
         top_df = reorder_for_spread_total_focus(top_df)
-        if not show_decision_trace:
-            top_df = top_df.drop(columns=[c for c in trace_cols if c in top_df.columns], errors="ignore")
+        top_df_display = top_df.drop(columns=[c for c in trace_cols if c in top_df.columns], errors="ignore")
         if not show_moneyline_details:
             ml_detail_cols = [
                 "Pick",
@@ -6969,13 +6972,8 @@ with tab_master:
                 "edge_vs_odds",
                 "model_minus_market",
             ]
-            top_df = top_df.drop(columns=[c for c in ml_detail_cols if c in top_df.columns], errors="ignore")
-        st.dataframe(top_df)
-        with st.expander("Decision Trace (sample)", expanded=False):
-            try:
-                st.dataframe(top_df[["Pick", "decision_trace_short", "decision_trace_json"]].head(20))
-            except Exception:
-                st.write("No decision trace available yet.")
+            top_df_display = top_df_display.drop(columns=[c for c in ml_detail_cols if c in top_df_display.columns], errors="ignore")
+        st.dataframe(top_df_display)
 
         export_cols = [
             "AI_Prob",
@@ -7300,10 +7298,15 @@ with tab_master:
             st.warning("No games loaded. Use the sidebar to load games first.")
         else:
             st.success(f"Produced {len(df_master_view)} rows from {len(games)} games")
-            st.dataframe(df_master_view)
+            st.dataframe(df_master_view_display)
             st.caption(
                 f"rows_out/games_in = {master_stats['rows_out']} / {master_stats['games_in']}"
             )
+            with st.expander("Decision Trace (sample)", expanded=False):
+                try:
+                    st.dataframe(df_master_view_full[["Pick", "decision_trace_short", "decision_trace_json"]].head(20))
+                except Exception:
+                    st.write("No decision trace available yet.")
     elif not games:
         st.info("Load games from the sidebar, then run Master Analysis.")
 
