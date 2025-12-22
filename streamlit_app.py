@@ -90,6 +90,7 @@ def compute_sentiment_adj(sentiment_diff: Optional[float]) -> Optional[float]:
 SENTIMENT_CACHE: Dict[Tuple[str, str, str], Dict[str, Any]] = {}
 SENTIMENT_LAST_TS: float = 0.0
 SENTIMENT_CACHE_TTL = timedelta(hours=6)
+SENTIMENT_LOG_SAMPLE: Dict[str, bool] = {}
 
 
 def _sentiment_cache_key(team: str, league: str, bucket: str) -> Tuple[str, str, str]:
@@ -346,10 +347,29 @@ def build_decision_trace(
     weights: Dict[str, Any],
     final_prob: Optional[float],
     confidence: Optional[str],
-) -> Tuple[str, str]:
+    league: Optional[str],
+    kalshi_available: bool,
+    kalshi_market: Optional[str],
+    sentiment_score: Optional[float],
+    sentiment_label: Optional[str],
+    vertex_used: bool,
+    final_pick_reason: Optional[str],
+) -> Tuple[str, str, str]:
     trace_obj = {
-        "chosen_market": market,
-        "chosen_pick": pick_label,
+        "league": league,
+        "kalshi": {
+            "available": kalshi_available,
+            "probability": safe_float(kalshi_prob),
+            "market": kalshi_market,
+        },
+        "model": {
+            "vertex_used": vertex_used,
+            "model_prob": safe_float(model_prob),
+        },
+        "sentiment": {
+            "score": safe_float(sentiment_score),
+            "label": sentiment_label,
+        },
         "source_probs": {
             "implied_prob": safe_float(implied_prob),
             "kalshi_prob": safe_float(kalshi_prob),
@@ -364,13 +384,14 @@ def build_decision_trace(
         },
         "final_prob": safe_float(final_prob),
         "confidence_bucket": confidence,
+        "final_pick_reason": final_pick_reason,
     }
     short = f"{market}: {pick_label} -> {trace_obj['final_prob'] or 'n/a'} ({confidence or 'NA'})"
     try:
         trace_json = json.dumps(trace_obj, default=safe_str)
     except Exception:
         trace_json = "{}"
-    return short, trace_json
+    return short, trace_json, trace_json
 
 
 def engine_label(kalshi_used: bool, market_used: bool) -> str:
@@ -1018,8 +1039,17 @@ def sentiment_payload_to_meta(payload: Dict[str, Any]) -> Dict[str, Any]:
     sentiment_source = "newsapi" if sentiment_valid else "none"
     level = "team" if sentiment_valid else "none"
     strength = sentiment_strength_from_articles(level, sources)
+    label = None
+    if score is not None:
+        if score > 0.05:
+            label = "Positive"
+        elif score < -0.05:
+            label = "Negative"
+        else:
+            label = "Neutral"
     return {
         "score": score if sentiment_valid else None,
+        "label": label if sentiment_valid else None,
         "confidence": confidence,
         "sources": sources,
         "sentiment_valid": sentiment_valid,
@@ -1028,6 +1058,7 @@ def sentiment_payload_to_meta(payload: Dict[str, Any]) -> Dict[str, Any]:
         "sentiment_strength": strength,
         "sentiment_badge": sentiment_badge_for(level, strength),
         "sentiment_articles_used": sources,
+        "sentiment_source_count": sources,
         "method": method or None,
         "reddit_used": False,
     }
@@ -1059,6 +1090,7 @@ def compute_team_sentiment_map(news_api_key: Optional[str], games: List[Dict[str
         "auth_error": False,
         "cached_teams": 0,
         "used_cached": False,
+        "log_reason": "",
     }
 
     cooldown_raw = st.session_state.get("sentiment_cooldown_until")
@@ -1108,6 +1140,8 @@ def compute_team_sentiment_map(news_api_key: Optional[str], games: List[Dict[str
                 "sentiment_status": "cooldown",
                 "sentiment_confidence": 0.0,
                 "sentiment_rate_limited": True,
+                "sentiment_label": None,
+                "sentiment_source_count": 0,
             }
             sentiment_map[team] = None
             debug["missing_teams"].append(team)
@@ -1128,6 +1162,8 @@ def compute_team_sentiment_map(news_api_key: Optional[str], games: List[Dict[str
                 "sentiment_status": "capped",
                 "sentiment_confidence": 0.0,
                 "sentiment_rate_limited": False,
+                "sentiment_label": None,
+                "sentiment_source_count": 0,
             }
             sentiment_map[team] = None
             debug["missing_teams"].append(team)
@@ -1203,6 +1239,8 @@ def compute_team_sentiment_map(news_api_key: Optional[str], games: List[Dict[str
         meta["sentiment_status"] = fetch_info.get("status") or fetch_info.get("status_code") or "ok"
         meta["sentiment_rate_limited"] = bool(payload.get("rate_limited") or status_int == 429)
         meta["sentiment_used_cached"] = cached
+        meta["sentiment_label"] = meta.get("label")
+        meta["sentiment_source_count"] = meta.get("sentiment_articles_used", 0)
         if not payload.get("sources") and not meta["sentiment_rate_limited"]:
             meta["method"] = "newsapi_no_articles"
         sentiment_meta[team] = {**meta, "error": fetch_info.get("error")}
@@ -1318,7 +1356,9 @@ def get_slate_sentiment(enable_sentiment: bool, teams: List[str], league: str, n
         meta["sentiment_status"] = meta.get("sentiment_sample_status")
         meta["sentiment_confidence"] = max([safe_float(v) or 0.0 for v in sentiment_map.values() if v is not None] or [0.0])
         meta["sentiment_score"] = sum([safe_float(v) or 0.0 for v in sentiment_map.values() if v is not None]) / max(1, len([v for v in sentiment_map.values() if v is not None]))
+        meta["sentiment_label"] = None
         meta["sentiment_disabled_reason"] = ""
+        meta["sentiment_source_count"] = meta.get("sentiment_articles_total") or 0
         if meta["sentiment_rate_limited"] and meta["sentiment_available_count"] == 0:
             meta["sentiment_source"] = "error_rate_limited"
         elif meta["sentiment_rate_limited"] and meta["sentiment_available_count"] > 0:
@@ -1327,6 +1367,8 @@ def get_slate_sentiment(enable_sentiment: bool, teams: List[str], league: str, n
             meta["sentiment_source"] = "error_auth"
         else:
             meta["sentiment_source"] = "newsapi" if meta["sentiment_available_count"] > 0 else "none"
+        meta["sentiment_label"] = meta.get("sentiment_label") or None
+        meta["sentiment_source_count"] = meta.get("sentiment_articles_total") or 0
         return {"map": sentiment_map, "meta_map": sentiment_meta_map, "meta": meta, "debug": debug}
     except Exception as exc:  # pragma: no cover - defensive
         meta["sentiment_source"] = "error_exception"
@@ -1444,7 +1486,11 @@ def pipeline_progress_snapshot() -> Dict[str, Any]:
     matches = st.session_state.get("kalshi_match_results") or []
     matched_games = len([m for m in matches if (m.get("matches") or {}).get("winner", {}).get("kalshi_matched")])
     sentiment_meta = st.session_state.get("sentiment_meta") or {}
-    sentiment_ready = sentiment_meta.get("sentiment_source") not in {"error_exception", "none"}
+    sentiment_ready = bool(
+        sentiment_meta.get("sentiment_available_count")
+        or sentiment_meta.get("sentiment_used_cached")
+        or (sentiment_meta.get("sentiment_status") and str(sentiment_meta.get("sentiment_status")).upper() not in {"NO_CALL", "DISABLED"})
+    )
     sentiment_flags = []
     if sentiment_meta.get("sentiment_rate_limited"):
         sentiment_flags.append("rate_limited")
@@ -4851,6 +4897,15 @@ with tab_master:
             sentiment_articles_home = int(home_meta.get("sentiment_articles_used") or home_meta.get("sources") or home_meta.get("articles") or 0)
             sentiment_articles_away = int(away_meta.get("sentiment_articles_used") or away_meta.get("sources") or away_meta.get("articles") or 0)
             sentiment_articles_used = sentiment_articles_home + sentiment_articles_away
+            sentiment_score_field = sentiment_diff if (home_sent is not None and away_sent is not None) else None
+            sentiment_label_field = None
+            if sentiment_score_field is not None:
+                if sentiment_score_field > 0.05:
+                    sentiment_label_field = "Positive"
+                elif sentiment_score_field < -0.05:
+                    sentiment_label_field = "Negative"
+                else:
+                    sentiment_label_field = "Neutral"
             sentiment_level = _normalize_sentiment_level(
                 home_meta.get("sentiment_level")
                 or away_meta.get("sentiment_level")
@@ -5031,7 +5086,7 @@ with tab_master:
             if kalshi_winner.get("kalshi_matched"):
                 kalshi_status_value = "matched"
             else:
-                kalshi_status_value = "NO_MARKET"
+                kalshi_status_value = "NO_MATCH"
 
             if (
                 kalshi_winner.get("kalshi_matched")
@@ -5587,20 +5642,8 @@ with tab_master:
                 base_prob = None
                 if kalshi_prob is not None:
                     decision_driver = "Kalshi"
-                    if kalshi_prob >= 0.60:
-                        base_prob = kalshi_prob
-                        weights_debug["kalshi_weight"] = 1.0
-                    elif 0.52 <= kalshi_prob < 0.60 and odds_prob is not None:
-                        base_prob = clamp(0.6 * kalshi_prob + 0.4 * odds_prob)
-                        weights_debug["kalshi_weight"] = 0.6
-                        weights_debug["odds_weight"] = 0.4
-                    elif odds_prob is not None:
-                        base_prob = clamp(0.55 * kalshi_prob + 0.45 * odds_prob)
-                        weights_debug["kalshi_weight"] = 0.55
-                        weights_debug["odds_weight"] = 0.45
-                    else:
-                        base_prob = kalshi_prob
-                        weights_debug["kalshi_weight"] = 1.0
+                    base_prob = kalshi_prob
+                    weights_debug["kalshi_weight"] = 1.0
                 elif odds_prob is not None:
                     decision_driver = "Odds"
                     base_prob = odds_prob
@@ -5610,12 +5653,15 @@ with tab_master:
                     base_prob = ai_prob
                     weights_debug["ml_weight"] = 1.0
                 else:
-                    base_prob = 0.5
+                    base_prob = None
                 sentiment_info = sentiment_impact_for_pick(sentiment_adj, selection_team, home, away)
                 weights_debug["sentiment_weight"] = abs(sentiment_info.get("sentiment_impact") or 0.0)
-                final_prob = clamp(
-                    (base_prob or 0.0) + (sentiment_info.get("sentiment_impact") or 0.0), 0.0, 1.0
-                )
+                if base_prob is None:
+                    final_prob = None
+                else:
+                    final_prob = clamp(
+                        (base_prob or 0.0) + (sentiment_info.get("sentiment_impact") or 0.0), 0.0, 1.0
+                    )
                 return {
                     "base_prob": base_prob,
                     "final_prob": final_prob,
@@ -5719,7 +5765,9 @@ with tab_master:
                         "Away_Sentiment": away_sent,
                         "Sentiment_Diff": sentiment_diff,
                         "sentiment_adj": sentiment_adj,
-                        "sentiment_score": sentiment_score_val,
+                        "sentiment_score": sentiment_score_field if sentiment_score_field is not None else sentiment_score_val,
+                        "sentiment_label": sentiment_label_field,
+                        "sentiment_source_count": sentiment_articles_used,
                         "sentiment_direction": sentiment_direction,
                         "sentiment_impact_applied": sentiment_impact_applied,
                         "sentiment_source": sentiment_source,
@@ -5929,8 +5977,9 @@ with tab_master:
                     ml_row["Pick_Confidence"] = conf
                     ml_row["Pick_Reason_Short"] = reason_short
                     ml_row["confidence_reason"] = reason_short
-                    ml_row["decisiveness"] = abs((safe_float(ml_row.get("final_probability")) or 0.5) - 0.5) * 2
-                    trace_short, trace_json = build_decision_trace(
+                    _dec_base = safe_float(ml_row.get("final_probability"))
+                    ml_row["decisiveness"] = abs(_dec_base - 0.5) * 2 if _dec_base is not None else None
+                    trace_short, trace_json, decision_trace_full = build_decision_trace(
                         "moneyline",
                         ml_row.get("Pick") or "",
                         ml_row.get("Implied_Prob"),
@@ -5940,9 +5989,20 @@ with tab_master:
                         consensus_weights,
                         ml_row.get("final_probability"),
                         conf,
+                        league_name,
+                        bool(kalshi_winner.get("kalshi_matched")),
+                        kalshi_winner.get("kalshi_reason"),
+                        ml_row.get("sentiment_score"),
+                        ml_row.get("sentiment_label"),
+                        bool(use_vertex_numeric_probs and vertex_prob_home is not None),
+                        reason_short,
                     )
                     ml_row["decision_trace_short"] = trace_short
                     ml_row["decision_trace_json"] = trace_json
+                    ml_row["decision_trace"] = decision_trace_full
+                    if league_name in {"NFL", "NBA", "NCAAB"} and not SENTIMENT_LOG_SAMPLE.get(league_name):
+                        logger.info(f"Decision trace sample {league_name}: {decision_trace_full}")
+                        SENTIMENT_LOG_SAMPLE[league_name] = True
                     ml_row["Eligible_Top_Picks"] = eligible
                     ml_row = apply_sentiment_defaults(ml_row, sentiment_defaults_base)
                     rows_out.append(ml_row)
@@ -5971,7 +6031,9 @@ with tab_master:
                     "ml_weight": None,
                     "sentiment_weight": abs(spread_sentiment_adj or 0.0) if spread_sentiment_adj is not None else None,
                     "sentiment_adj": sentiment_adj, "sentiment_source": sentiment_source, "reddit_used": reddit_used, "sentiment_valid": sentiment_valid,
-                    "sentiment_score": None,
+                    "sentiment_score": sentiment_score_field if sentiment_score_field is not None else None,
+                    "sentiment_label": sentiment_label_field,
+                    "sentiment_source_count": sentiment_articles_used,
                     "sentiment_direction": None,
                     "sentiment_impact_applied": False,
                     "sentiment_level": sentiment_level,
@@ -6153,8 +6215,9 @@ with tab_master:
                 spread_row["Pick_Confidence"] = conf
                 spread_row["Pick_Reason_Short"] = reason_short
                 spread_row["confidence_reason"] = reason_short
-                spread_row["decisiveness"] = abs((safe_float(spread_row.get("final_probability")) or 0.5) - 0.5) * 2
-                trace_short, trace_json = build_decision_trace(
+                _dec_base_spread = safe_float(spread_row.get("final_probability"))
+                spread_row["decisiveness"] = abs(_dec_base_spread - 0.5) * 2 if _dec_base_spread is not None else None
+                trace_short, trace_json, decision_trace_full = build_decision_trace(
                     "spread",
                     spread_row.get("Pick") or "",
                     spread_row.get("Implied_Prob"),
@@ -6169,9 +6232,17 @@ with tab_master:
                     },
                     spread_row.get("final_probability"),
                     conf,
+                    league_name,
+                    bool(kalshi_spread.get("kalshi_matched")),
+                    kalshi_spread.get("kalshi_reason"),
+                    spread_row.get("sentiment_score"),
+                    spread_row.get("sentiment_label"),
+                    bool(use_vertex_numeric_probs and vertex_prob_home is not None),
+                    reason_short,
                 )
                 spread_row["decision_trace_short"] = trace_short
                 spread_row["decision_trace_json"] = trace_json
+                spread_row["decision_trace"] = decision_trace_full
                 spread_row["Eligible_Top_Picks"] = eligible
                 spread_row = apply_sentiment_defaults(spread_row, sentiment_defaults_base)
                 rows_out.append(spread_row)
@@ -6195,7 +6266,9 @@ with tab_master:
                     "odds_weight": None,
                     "ml_weight": None,
                     "sentiment_weight": abs(total_sentiment_adj or 0.0) if total_sentiment_adj is not None else None,
-                    "sentiment_score": None,
+                    "sentiment_score": sentiment_score_field if sentiment_score_field is not None else None,
+                    "sentiment_label": sentiment_label_field,
+                    "sentiment_source_count": sentiment_articles_used,
                     "sentiment_direction": None,
                     "sentiment_impact_applied": False,
                     "Vertex Total Prob": None,
@@ -6285,6 +6358,8 @@ with tab_master:
                     "sentiment_badge": sentiment_badge,
                     "sentiment_articles_used": sentiment_articles_used,
                     "sentiment_query_used": sentiment_query_used,
+                    "sentiment_label": sentiment_label_field,
+                    "sentiment_source_count": sentiment_articles_used,
                     "spread_sentiment_adj": spread_sentiment_adj,
                     "total_sentiment_adj": total_sentiment_adj,
                     "sentiment_error_count": sentiment_error_count,
@@ -6373,8 +6448,9 @@ with tab_master:
                 total_row["Pick_Confidence"] = conf
                 total_row["Pick_Reason_Short"] = reason_short
                 total_row["confidence_reason"] = reason_short
-                total_row["decisiveness"] = abs((safe_float(total_row.get("final_probability")) or 0.5) - 0.5) * 2
-                trace_short, trace_json = build_decision_trace(
+                _dec_base_total = safe_float(total_row.get("final_probability"))
+                total_row["decisiveness"] = abs(_dec_base_total - 0.5) * 2 if _dec_base_total is not None else None
+                trace_short, trace_json, decision_trace_full = build_decision_trace(
                     "total",
                     total_row.get("Pick") or "",
                     total_row.get("Implied_Prob"),
@@ -6389,9 +6465,17 @@ with tab_master:
                     },
                     total_row.get("final_probability"),
                     conf,
+                    league_name,
+                    bool(kalshi_total.get("kalshi_matched")),
+                    kalshi_total.get("kalshi_reason"),
+                    total_row.get("sentiment_score"),
+                    total_row.get("sentiment_label"),
+                    bool(use_vertex_numeric_probs and vertex_prob_home is not None),
+                    reason_short,
                 )
                 total_row["decision_trace_short"] = trace_short
                 total_row["decision_trace_json"] = trace_json
+                total_row["decision_trace"] = decision_trace_full
                 total_row["Eligible_Top_Picks"] = eligible
                 total_row = apply_sentiment_defaults(total_row, sentiment_defaults_base)
                 rows_out.append(total_row)
@@ -6446,6 +6530,8 @@ with tab_master:
             "sentiment_strength",
             "sentiment_badge",
             "sentiment_articles_used",
+            "sentiment_source_count",
+            "sentiment_label",
             "sentiment_query_used",
             "spread_sentiment_adj",
             "spread_prob_adj",
@@ -6492,6 +6578,7 @@ with tab_master:
             "spread_decision_score_alt",
             "spread_decision_score_margin",
             "spread_trace_json",
+            "decision_trace",
             "total_engine_used",
             "total_pick_label",
             "total_alt_label",
@@ -6750,6 +6837,7 @@ with tab_master:
             "spread_decision_score_alt",
             "spread_decision_score_margin",
             "spread_trace_json",
+            "decision_trace",
             "total_engine_used",
             "total_pick_label",
             "total_alt_label",
@@ -7003,6 +7091,7 @@ with tab_master:
             "gemini_flags_short",
             "gemini_mode",
             "gemini_error",
+            "decision_trace",
             "prob_engine",
             "vertex_mode",
             "vertex_spread_prob",
