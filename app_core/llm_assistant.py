@@ -19,8 +19,7 @@ except Exception as e:
     _GEMINI_AVAILABLE = False
     logger.warning(f"Vertex Gemini not available: {e}")
 
-GEMINI_MODEL_NAME = os.getenv("GEMINI_MODEL_NAME", "gemini-1.5-flash")
-
+GEMINI_MODEL_NAME = os.getenv("GEMINI_MODEL_NAME", "gemini-1.5-flash-002")
 
 def _ensure_vertex_init() -> None:
     """
