@@ -7464,6 +7464,12 @@ with tab_master:
             row["total_confidence"] = base_total_conf
             row["spread_confidence_base"] = base_spread_conf
             row["total_confidence_base"] = base_total_conf
+            # Ensure required Gemini columns always exist
+            row.setdefault("gemini_mode", "guardrail")
+            row.setdefault("gemini_alignment", "NEUTRAL")
+            row.setdefault("gemini_rationale", "Gemini skipped: not evaluated")
+            row.setdefault("gemini_flags_short", "")
+            row.setdefault("gemini_risk_flags", json.dumps([]))
             if not use_gemini_explanations:
                 row["gemini_mode"] = "guardrail"
                 row["gemini_alignment"] = "NEUTRAL"
@@ -7471,6 +7477,8 @@ with tab_master:
                 row["gemini_flags_short"] = "sentiment_unavailable"
                 row["gemini_risk_flags"] = row.get("gemini_risk_flags") or json.dumps([])
                 row["llm_disagreement_flag"] = bool(row.get("llm_disagreement_flag"))
+                row["gemini_rationale"] = row.get("gemini_rationale") or "Gemini skipped: disabled"
+                row["gemini_flags_short"] = row.get("gemini_flags_short") or "gemini_disabled"
                 return row
             try:
                 payload = {
@@ -7554,6 +7562,18 @@ with tab_master:
                 logger.warning("Gemini columns contained nulls after apply: %s", dict(null_counts))
         except Exception:
             pass
+
+        # Ensure Gemini columns are never null before export
+        for col, default in [
+            ("gemini_alignment", "NEUTRAL"),
+            ("gemini_rationale", "Gemini skipped: unspecified"),
+            ("gemini_flags_short", ""),
+            ("gemini_mode", "guardrail"),
+            ("prob_engine", "market_only"),
+        ]:
+            if col not in df.columns:
+                df[col] = default
+            df[col] = df[col].fillna(default)
 
         confidence_mode = st.selectbox(
             "Confidence filter",
