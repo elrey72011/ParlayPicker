@@ -9,6 +9,7 @@ import json
 import logging
 from typing import Dict, List, Any, Optional
 from datetime import datetime
+import streamlit as st
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +21,15 @@ try:
 except ImportError:
     VERTEX_AI_AVAILABLE = False
     logger.warning("Vertex AI not available. Install with: pip install google-cloud-aiplatform")
+
+
+def _normalize_flags(flags: Any) -> List[str]:
+    """Normalize risk flags into a short list of strings."""
+    if isinstance(flags, list):
+        return [str(f) for f in flags if f][:8]
+    if isinstance(flags, str):
+        return [flags[:120]] if flags else []
+    return []
 
 
 class GeminiAnalyzer:
@@ -173,14 +183,17 @@ class GeminiAnalyzer:
                 'key_factors': [],
                 'has_edge': False,
                 'edge_explanation': '',
-                'recommended_bet': 'none',
+                'recommended_bet': analysis.get('recommended_bet') or 'none',
+                'confidence': (str(analysis.get('confidence')).upper() if analysis.get('confidence') else 'MEDIUM'),
+                'flags': _normalize_flags(analysis.get('risk_notes')),
                 'bet_type': 'none',
                 'risk_level': 'informational',
                 'best_moneyline': best_moneyline,
                 'best_spread': best_spread,
                 'sources_used': self._get_sources_used(context_data),
                 'analysis_timestamp': datetime.now().isoformat(),
-                'model': 'gemini-2.0-flash-001'
+                'model': 'gemini-2.0-flash-001',
+                'explanation': analysis.get('confidence_explanation') or analysis.get('edge_explanation') or '',
             }
             
         except json.JSONDecodeError as e:
@@ -431,6 +444,25 @@ def test_gemini_connection(project_id: str, region: str = "us-central1") -> bool
     except Exception as e:
         logger.error(f"❌ Gemini connection test failed: {e}")
         return False
+
+
+@st.cache_data(ttl=600)
+def summarize_gemini_result(result: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Map a Gemini analysis result into the lightweight metadata expected by the app.
+    """
+    recommended = result.get("recommended_bet") or "none"
+    explanation = result.get("explanation") or result.get("confidence_explanation") or ""
+    confidence = str(result.get("confidence") or "").upper()
+    if confidence not in {"HIGH", "MEDIUM", "LOW"}:
+        confidence = "MEDIUM"
+    flags = _normalize_flags(result.get("flags") or result.get("risk_notes") or [])
+    return {
+        "recommended_bet": str(recommended),
+        "confidence": confidence,
+        "explanation": str(explanation)[:240],
+        "flags": flags,
+    }
 
 
 # Streamlit UI helper functions
