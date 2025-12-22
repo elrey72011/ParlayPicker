@@ -686,7 +686,6 @@ def _market_range(values: List[Optional[float]]) -> Tuple[Optional[float], Optio
         med = None
     return lo, med, hi
 
-
 def parse_spread_pick(raw_val: Any, home: Optional[str], away: Optional[str]) -> Tuple[Optional[str], Optional[float]]:
     """
     Parse a "Spread & Pick" style string into (team, line).
@@ -703,7 +702,6 @@ def parse_spread_pick(raw_val: Any, home: Optional[str], away: Optional[str]) ->
         return team, line
     return None, None
 
-
 def parse_total_pick(raw_val: Any) -> Tuple[Optional[str], Optional[float]]:
     """
     Parse a "Total & Pick" style string like 'Under 44.5' into (side, line).
@@ -717,7 +715,6 @@ def parse_total_pick(raw_val: Any) -> Tuple[Optional[str], Optional[float]]:
     side = match.group(1).title()
     line = safe_float(match.group(2))
     return side, line
-
 
 def reorder_master_columns(df: pd.DataFrame) -> pd.DataFrame:
     """
@@ -744,7 +741,6 @@ def reorder_master_columns(df: pd.DataFrame) -> pd.DataFrame:
         return df[fixed_front + pick_cols + remaining]
     except Exception:
         return df
-
 
 def reorder_for_spread_total_focus(df: pd.DataFrame) -> pd.DataFrame:
     """
@@ -1289,7 +1285,6 @@ def sentiment_payload_to_meta(payload: Dict[str, Any]) -> Dict[str, Any]:
         "sentiment_confidence": confidence or 0.0,
     }
 
-
 def compute_team_sentiment_map(news_api_key: Optional[str], games: List[Dict[str, Any]], league: str) -> Tuple[Dict[str, Optional[float]], Dict[str, Dict[str, Any]], Dict[str, Any]]:
     teams = set()
     for g in games or []:
@@ -1440,7 +1435,7 @@ def compute_team_sentiment_map(news_api_key: Optional[str], games: List[Dict[str
             from_date = to_date - timedelta(days=3)
             url = "https://newsapi.org/v2/everything"
             # Attempt a combined query that includes the team and league context to reduce per-team calls
-            q = f'"{team}" {league_label(league)}'
+            q = f'"{TeamNameMatcher.normalize(team)}" {league_label(league)}'
             params = {
                 "q": q,
                 "sortBy": "relevancy",
