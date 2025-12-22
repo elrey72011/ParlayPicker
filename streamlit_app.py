@@ -671,8 +671,7 @@ def canonical_team_name(name: Any) -> str:
     cleaned = re.sub(r"\s+", " ", cleaned)
     cleaned = re.sub(r"[^a-z0-9 ]", "", cleaned.lower())
     tokens = [t for t in cleaned.split() if t]
-    return " ".join(tokens)
-
+    return TeamNameMatcher.normalize(str(name))
 
 def _market_range(values: List[Optional[float]]) -> Tuple[Optional[float], Optional[float], Optional[float]]:
     vals = [safe_float(v) for v in values if safe_float(v) is not None]
@@ -4225,7 +4224,6 @@ def classify_kalshi_market(market: Dict[str, Any]) -> str:
         return "winner"
     return "unknown"
 
-
 def team_tokens(name: str) -> set:
     cleaned = re.sub(r"[^a-z0-9 ]", " ", str(name or "").lower())
     tokens = [t for t in cleaned.split() if t]
@@ -4242,8 +4240,8 @@ def team_tokens(name: str) -> set:
         "hockey",
         "baseball",
     }
-    return {t for t in tokens if t not in stopwords}
-
+    normalized = TeamNameMatcher.normalize(name)
+    return set(normalized.split())
 
 def nba_abbrev(team_name: str) -> Optional[str]:
     mapping = {
