@@ -126,15 +126,13 @@ class GeminiAnalyzer:
         """
         context_data = context_data or {}
         
-        # Build comprehensive prompt
-        prompt = self._build_analysis_prompt(
-            home_team=home_team,
-            away_team=away_team,
-            sport_key=sport_key,
-            commence_time=commence_time,
-            best_moneyline=best_moneyline,
-            best_spread=best_spread,
-            context_data=context_data
+        prompt = (
+            "You are a reviewer. The pick is already chosen elsewhere. "
+            "Provide ONLY confidence_explanation and risk_notes in short text. "
+            "Do NOT output probabilities, percentages, or pick a side. "
+            f"Context: home={home_team}, away={away_team}, sport={sport_key}, commence={commence_time}. "
+            f"Moneyline={best_moneyline}, spread={best_spread}, extra={json.dumps(context_data or {}, default=str)}. "
+            'Return JSON: {"confidence_explanation": "...", "risk_notes": "..."}'
         )
         
         try:
@@ -162,26 +160,22 @@ class GeminiAnalyzer:
             response_text = self._extract_json(response_text)
             analysis = json.loads(response_text)
             
-            logger.info(
-                f"✅ Gemini analysis complete: "
-                f"{away_team} @ {home_team} = {analysis.get('home_win_probability')}%"
-            )
-            
             return {
                 'game_id': f"{away_team}_{home_team}_{sport_key}",
                 'home_team': home_team,
                 'away_team': away_team,
                 'sport': sport_key,
                 'commence_time': commence_time,
-                'gemini_probability': analysis.get('home_win_probability', 50.0),
-                'away_probability': 100.0 - analysis.get('home_win_probability', 50.0),
-                'confidence': analysis.get('confidence', 50.0),
-                'key_factors': analysis.get('key_factors', []),
-                'has_edge': analysis.get('has_edge', False),
-                'edge_explanation': analysis.get('edge_explanation', ''),
-                'recommended_bet': analysis.get('recommended_bet', 'none'),
-                'bet_type': analysis.get('bet_type', 'none'),
-                'risk_level': analysis.get('risk_level', 'medium'),
+                'gemini_probability': None,
+                'away_probability': None,
+                'confidence_explanation': analysis.get('confidence_explanation'),
+                'risk_notes': analysis.get('risk_notes'),
+                'key_factors': [],
+                'has_edge': False,
+                'edge_explanation': '',
+                'recommended_bet': 'none',
+                'bet_type': 'none',
+                'risk_level': 'informational',
                 'best_moneyline': best_moneyline,
                 'best_spread': best_spread,
                 'sources_used': self._get_sources_used(context_data),
@@ -384,10 +378,11 @@ CRITICAL RULES:
             'away_team': away_team,
             'sport': sport_key,
             'commence_time': commence_time,
-            'gemini_probability': 50.0,
-            'away_probability': 50.0,
-            'confidence': 0.0,
-            'key_factors': ['Analysis failed', 'Using default values', 'See error log'],
+            'gemini_probability': None,
+            'away_probability': None,
+            'confidence_explanation': "Analysis failed; no probabilities returned.",
+            'risk_notes': error_msg[:120],
+            'key_factors': ['Analysis failed', 'See error log'],
             'has_edge': False,
             'edge_explanation': f'Error: {error_msg[:100]}',
             'recommended_bet': 'none',

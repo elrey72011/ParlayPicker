@@ -138,7 +138,7 @@ def _newsapi_query(team: str, league: str, league_query: Optional[str] = None) -
     return f'"{team}" {league_fragment}'.strip()
 
 
-@st.cache_data(ttl=43200)
+@st.cache_data(ttl=21600)
 def fetch_team_newsapi_cached(
     team: str,
     league: str,
@@ -194,7 +194,7 @@ def fetch_team_newsapi_cached(
     return meta
 
 
-@st.cache_data(ttl=43200)
+@st.cache_data(ttl=21600)
 def fetch_team_news(news_api_key: str, team: str, league: str, league_query: Optional[str] = None, *, max_retries: int = 2, retry_delay: float = 0.75, date_bucket: Optional[str] = None) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
     """Fetch recent articles for a team; returns (articles, info) where info contains status/error."""
     date_bucket = date_bucket or datetime.now(timezone.utc).date().isoformat()
@@ -239,6 +239,11 @@ def fetch_team_news(news_api_key: str, team: str, league: str, league_query: Opt
             total_results = data.get("totalResults") if isinstance(data, dict) else None
             rate_limited = status == 429
             auth_error = status in {401, 403}
+            retry_after_hdr = None
+            try:
+                retry_after_hdr = resp.headers.get("Retry-After")
+            except Exception:
+                retry_after_hdr = None
             if status != 200:
                 error_key = "rate_limited" if rate_limited else ("bad_key" if auth_error else "http_error")
                 if rate_limited and attempts <= max_retries and not articles:
@@ -255,6 +260,7 @@ def fetch_team_news(news_api_key: str, team: str, league: str, league_query: Opt
                     "attempts": attempts,
                     "rate_limited": rate_limited,
                     "auth_error": auth_error,
+                    "retry_after": retry_after_hdr,
                     "response_text_snippet": (resp.text or "")[:200] if hasattr(resp, "text") else None,
                 }
             return articles, {
@@ -267,6 +273,7 @@ def fetch_team_news(news_api_key: str, team: str, league: str, league_query: Opt
                 "attempts": attempts,
                 "rate_limited": rate_limited,
                 "auth_error": auth_error,
+                "retry_after": retry_after_hdr,
             }
         except Exception as exc:
             last_error = str(exc)
@@ -300,7 +307,7 @@ def fetch_team_news(news_api_key: str, team: str, league: str, league_query: Opt
     }
 
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=21600)
 def fetch_team_sentiment_cached(
     news_api_key: str,
     team: str,

@@ -10,6 +10,7 @@ from datetime import date
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 import requests
+import streamlit as st
 
 
 @dataclass
@@ -509,6 +510,38 @@ class SportsDataNCAABClient(SportsDataClientBase):
     )
 
 
+def _read_secret(name: str) -> Optional[str]:
+    """Safely read from Streamlit secrets or environment without logging."""
+    try:
+        if name in st.secrets:
+            return str(st.secrets[name])
+    except Exception:
+        pass
+    return os.environ.get(name)
+
+
+def get_key(league: Optional[str] = None) -> Optional[str]:
+    """
+    Resolve a SportsData.io key from common secret/env names (global or per-league).
+    """
+    league_norm = (league or "").upper()
+    candidates: List[str] = [
+        "SPORTSDATA_KEY",
+        "SPORTSDATA_API_KEY",
+    ]
+    if league_norm:
+        candidates = [
+            f"SPORTSDATA_{league_norm}_KEY",
+            f"{league_norm}_SPORTSDATA_API_KEY",
+            f"{league_norm}_SPORTSDATA_KEY",
+        ] + candidates
+    for name in candidates:
+        val = _read_secret(name)
+        if val:
+            return val
+    return None
+
+
 __all__ = [
     "SportsDataClientBase",
     "SportsDataGameInsight",
@@ -519,4 +552,3 @@ __all__ = [
     "SportsDataNCAAFClient",
     "SportsDataNCAABClient",
 ]
-
