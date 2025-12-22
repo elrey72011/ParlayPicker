@@ -11,6 +11,7 @@ from typing import Dict, List, Optional, Sequence, Tuple
 
 import pytz
 import requests
+import streamlit as st
 
 
 @dataclass
@@ -599,3 +600,38 @@ class APISportsHockeyClient(_APISportsBaseClient):
     SCORING_METRIC_LABEL = "goals"
     SEASON_CUTOFF_MONTH = 7
     SEASON_FORMAT = "split"
+
+
+def _read_secret(name: str) -> Optional[str]:
+    """Safely read from Streamlit secrets or environment without logging."""
+    try:
+        if name in st.secrets:
+            return str(st.secrets[name])
+    except Exception:
+        pass
+    return os.environ.get(name)
+
+
+def get_key(league: Optional[str] = None) -> Optional[str]:
+    """
+    Resolve an API-Sports key from common secret/env names.
+
+    Checks league-specific overrides first, then global fallbacks.
+    """
+    league_norm = (league or "").upper()
+    candidates: List[str] = [
+        "APISPORTS_KEY",
+        "APISPORTS_API_KEY",
+        "API_SPORTS_KEY",
+    ]
+    if league_norm:
+        candidates = [
+            f"APISPORTS_{league_norm}_KEY",
+            f"{league_norm}_APISPORTS_API_KEY",
+            f"{league_norm}_APISPORTS_KEY",
+        ] + candidates
+    for name in candidates:
+        val = _read_secret(name)
+        if val:
+            return val
+    return None

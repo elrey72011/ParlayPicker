@@ -111,17 +111,22 @@ def initialize_all_integrations():
                     APISportsFootballClient,
                     APISportsHockeyClient
                 )
+
+                nba_client = APISportsBasketballClient(api_key=apisports_key)
+                nfl_client = APISportsFootballClient(api_key=apisports_key)
+                nhl_client = APISportsHockeyClient(api_key=apisports_key)
                 
                 st.session_state['apisports_clients'] = {
-                    'nba': APISportsBasketballClient(api_key=apisports_key),
-                    'basketball_nba': APISportsBasketballClient(api_key=apisports_key),
-                    'nfl': APISportsFootballClient(api_key=apisports_key),
-                    'americanfootball_nfl': APISportsFootballClient(api_key=apisports_key),
-                    'nhl': APISportsHockeyClient(api_key=apisports_key),
-                    'icehockey_nhl': APISportsHockeyClient(api_key=apisports_key),
+                    'nba': nba_client,
+                    'basketball_nba': nba_client,
+                    'nfl': nfl_client,
+                    'americanfootball_nfl': nfl_client,
+                    'nhl': nhl_client,
+                    'icehockey_nhl': nhl_client,
                 }
-                st.sidebar.success("✅ API-Sports: 3 sports")
-                logger.info("✅ API-Sports clients initialized")
+                unique_count = len({client for client in st.session_state['apisports_clients'].values() if client})
+                st.sidebar.success(f"✅ API-Sports: {unique_count} sports")
+                logger.info(f"✅ API-Sports clients initialized ({unique_count} unique sports)")
             else:
                 st.session_state['apisports_clients'] = {}
                 st.sidebar.info("⚠️ API-Sports: Not configured")
@@ -131,7 +136,8 @@ def initialize_all_integrations():
             st.sidebar.error(f"❌ API-Sports: {str(e)[:50]}")
             logger.error(f"API-Sports initialization error: {e}")
     else:
-        st.sidebar.info(f"✅ API-Sports: {len(st.session_state['apisports_clients'])} sports")
+        unique_count = len({client for client in st.session_state['apisports_clients'].values() if client})
+        st.sidebar.info(f"✅ API-Sports: {unique_count} sports")
     
     # ============================================================
     # 3. SPORTSDATA.IO INTEGRATION
@@ -145,40 +151,45 @@ def initialize_all_integrations():
             nba_key = st.secrets.get('sportsdata_nba_key') or st.session_state.get('sportsdata_nba_key')
             if nba_key:
                 from app_core import SportsDataNBAClient
-                sportsdata_clients['nba'] = SportsDataNBAClient(api_key=nba_key)
-                sportsdata_clients['basketball_nba'] = SportsDataNBAClient(api_key=nba_key)
+                nba_client = SportsDataNBAClient(api_key=nba_key)
+                sportsdata_clients['nba'] = nba_client
+                sportsdata_clients['basketball_nba'] = nba_client
             
             # NFL
             nfl_key = st.secrets.get('sportsdata_nfl_key') or st.session_state.get('sportsdata_nfl_key')
             if nfl_key:
                 from app_core import SportsDataNFLClient
-                sportsdata_clients['nfl'] = SportsDataNFLClient(api_key=nfl_key)
-                sportsdata_clients['americanfootball_nfl'] = SportsDataNFLClient(api_key=nfl_key)
+                nfl_client = SportsDataNFLClient(api_key=nfl_key)
+                sportsdata_clients['nfl'] = nfl_client
+                sportsdata_clients['americanfootball_nfl'] = nfl_client
             
             # NHL
             nhl_key = st.secrets.get('sportsdata_nhl_key') or st.session_state.get('sportsdata_nhl_key')
             if nhl_key:
                 from app_core import SportsDataNHLClient
-                sportsdata_clients['nhl'] = SportsDataNHLClient(api_key=nhl_key)
-                sportsdata_clients['icehockey_nhl'] = SportsDataNHLClient(api_key=nhl_key)
+                nhl_client = SportsDataNHLClient(api_key=nhl_key)
+                sportsdata_clients['nhl'] = nhl_client
+                sportsdata_clients['icehockey_nhl'] = nhl_client
             
             # NCAAB
             ncaab_key = st.secrets.get('sportsdata_ncaab_key') or st.session_state.get('sportsdata_ncaab_key')
             if ncaab_key:
                 from app_core import SportsDataNCAABClient
-                sportsdata_clients['ncaab'] = SportsDataNCAABClient(api_key=ncaab_key)
-                sportsdata_clients['basketball_ncaab'] = SportsDataNCAABClient(api_key=ncaab_key)
+                ncaab_client = SportsDataNCAABClient(api_key=ncaab_key)
+                sportsdata_clients['ncaab'] = ncaab_client
+                sportsdata_clients['basketball_ncaab'] = ncaab_client
             
             # NCAAF
             ncaaf_key = st.secrets.get('sportsdata_ncaaf_key') or st.session_state.get('sportsdata_ncaaf_key')
             if ncaaf_key:
                 from app_core import SportsDataNCAAFClient
-                sportsdata_clients['ncaaf'] = SportsDataNCAAFClient(api_key=ncaaf_key)
-                sportsdata_clients['americanfootball_ncaaf'] = SportsDataNCAAFClient(api_key=ncaaf_key)
+                ncaaf_client = SportsDataNCAAFClient(api_key=ncaaf_key)
+                sportsdata_clients['ncaaf'] = ncaaf_client
+                sportsdata_clients['americanfootball_ncaaf'] = ncaaf_client
             
             if sportsdata_clients:
                 st.session_state['sportsdata_clients'] = sportsdata_clients
-                unique_count = len(set(sportsdata_clients.values()))
+                unique_count = len({client for client in sportsdata_clients.values() if client})
                 st.sidebar.success(f"✅ SportsData.io: {unique_count} sports")
                 logger.info(f"✅ SportsData.io clients initialized: {unique_count} sports")
             else:
@@ -190,7 +201,7 @@ def initialize_all_integrations():
             st.sidebar.error(f"❌ SportsData.io: {str(e)[:50]}")
             logger.error(f"SportsData.io initialization error: {e}")
     else:
-        unique_count = len(set(st.session_state['sportsdata_clients'].values()))
+        unique_count = len({client for client in st.session_state['sportsdata_clients'].values() if client})
         st.sidebar.info(f"✅ SportsData.io: {unique_count} sports")
     
     # ============================================================
