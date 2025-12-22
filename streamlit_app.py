@@ -7468,11 +7468,15 @@ with tab_master:
             row["spread_confidence_base"] = base_spread_conf
             row["total_confidence_base"] = base_total_conf
             # Ensure required Gemini columns always exist
-            row.setdefault("gemini_mode", "guardrail")
-            row.setdefault("gemini_alignment", "NEUTRAL")
-            row.setdefault("gemini_rationale", "Gemini skipped: not evaluated")
-            row.setdefault("gemini_flags_short", "")
-            row.setdefault("gemini_risk_flags", json.dumps([]))
+            for col, default in [
+                ("gemini_mode", "guardrail"),
+                ("gemini_alignment", "NEUTRAL"),
+                ("gemini_rationale", "Gemini skipped: not evaluated"),
+                ("gemini_flags_short", ""),
+                ("gemini_risk_flags", json.dumps([])),
+            ]:
+                if col not in row or pd.isna(row.get(col)):
+                    row[col] = default
             if not use_gemini_explanations:
                 row["gemini_mode"] = "guardrail"
                 row["gemini_alignment"] = "NEUTRAL"
