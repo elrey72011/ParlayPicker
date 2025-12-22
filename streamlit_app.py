@@ -4325,15 +4325,14 @@ def kalshi_date_token_from_local(date_val: Any) -> Optional[str]:
     except Exception:
         return None
 
-
 def kalshi_ticker_team_codes(market: Dict[str, Any]) -> Tuple[Optional[str], Optional[str]]:
     ticker = str(market.get("event_ticker") or market.get("ticker") or "")
-    match = re.search(r"([A-Z]{6})$", ticker)
+    # Change this line to look for 6 letters followed by an optional suffix
+    match = re.search(r"([A-Z]{6})(?:-[A-Z]+)?$", ticker)
     if match:
         segment = match.group(1)
         return segment[:3], segment[3:]
     return None, None
-
 
 def extract_teams_from_kalshi_text(text: Any) -> Tuple[Optional[str], Optional[str]]:
     content = str(text or "")
