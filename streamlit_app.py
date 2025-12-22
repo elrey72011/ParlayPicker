@@ -7442,6 +7442,7 @@ with tab_master:
             "gemini_alignment": "NEUTRAL",
             "gemini_rationale": "",
             "gemini_flags_short": "",
+            "gemini_risk_flags": json.dumps([]),
         }.items():
             if col not in df.columns:
                 df[col] = default
@@ -7456,6 +7457,8 @@ with tab_master:
                 row["gemini_rationale"] = ""
             if "gemini_flags_short" not in row or pd.isna(row.get("gemini_flags_short")):
                 row["gemini_flags_short"] = ""
+            if "gemini_risk_flags" not in row or pd.isna(row.get("gemini_risk_flags")):
+                row["gemini_risk_flags"] = json.dumps([])
             base_overall = row.get("At_a_Glance_Confidence") or row.get("Pick_Confidence")
             base_spread_conf = row.get("spread_confidence")
             base_total_conf = row.get("total_confidence")
@@ -7562,18 +7565,6 @@ with tab_master:
                 logger.warning("Gemini columns contained nulls after apply: %s", dict(null_counts))
         except Exception:
             pass
-
-        # Ensure Gemini columns are never null before export
-        for col, default in [
-            ("gemini_alignment", "NEUTRAL"),
-            ("gemini_rationale", "Gemini skipped: unspecified"),
-            ("gemini_flags_short", ""),
-            ("gemini_mode", "guardrail"),
-            ("prob_engine", "market_only"),
-        ]:
-            if col not in df.columns:
-                df[col] = default
-            df[col] = df[col].fillna(default)
 
         confidence_mode = st.selectbox(
             "Confidence filter",
