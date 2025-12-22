@@ -6078,6 +6078,11 @@ with tab_master:
                     sentiment_direction = sentiment_info.get("sentiment_direction")
                     sentiment_score_val = sentiment_info.get("sentiment_score")
                     sentiment_impact_applied = bool(sentiment_info.get("sentiment_impact_applied"))
+                    sentiment_score_entry = (
+                        sentiment_score_val
+                        if sentiment_score_val is not None
+                        else (sentiment_score_field if sentiment_score_field is not None else sentiment_score_value)
+                    )
                     consensus_prob = base_prob_blend
                     consensus_prob_adj = final_prob_blend
                     consensus_weights = weights_used
@@ -6125,7 +6130,7 @@ with tab_master:
                         "Away_Sentiment": away_sent,
                         "Sentiment_Diff": sentiment_diff,
                         "sentiment_adj": sentiment_adj,
-                        "sentiment_score": sentiment_score_field if sentiment_score_field is not None else sentiment_score_val,
+                        "sentiment_score": sentiment_score_entry,
                         "sentiment_label": sentiment_label_field,
                         "sentiment_source_count": sentiment_articles_used,
                         "sentiment_direction": sentiment_direction,
@@ -6140,7 +6145,6 @@ with tab_master:
                         "sentiment_query_used": sentiment_query_used,
                         "sentiment_status": sentiment_status_value,
                         "sentiment_confidence": sentiment_confidence_value,
-                        "sentiment_score": sentiment_score_val if sentiment_score_val is not None else sentiment_score_value,
                         "spread_sentiment_adj": spread_sentiment_adj,
                         "total_sentiment_adj": total_sentiment_adj,
                         "sentiment_error_count": sentiment_error_count,
