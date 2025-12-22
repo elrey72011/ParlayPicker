@@ -97,7 +97,7 @@ SENTIMENT_CACHE: Dict[Tuple[str, str, str], Dict[str, Any]] = {}
 SENTIMENT_LAST_TS: float = 0.0
 SENTIMENT_CACHE_TTL = timedelta(hours=12)
 SENTIMENT_LOG_SAMPLE: Dict[str, bool] = {}
-MAX_SENTIMENT_TEAMS_PER_RUN = 25
+MAX_SENTIMENT_TEAMS_PER_RUN = 15
 NEWSAPI_COOLDOWN_HOURS = 12
 REDDIT_CACHE_TTL = timedelta(hours=12)
 DECISION_TRACE_SAMPLE_LEAGUES = {"NFL", "NBA", "NCAAB"}
@@ -235,6 +235,26 @@ def _reddit_cache_put(team: str, league: str, bucket: str, payload: Dict[str, An
         st.session_state["reddit_sentiment_cache"] = cache
     except Exception:
         pass
+
+
+@st.cache_data(ttl=5400, show_spinner=False)
+def _newsapi_fetch_cached(url: str, params: Tuple[Tuple[str, Any], ...]) -> Dict[str, Any]:
+    """Cached NewsAPI call keyed by URL+params for the current date window."""
+    try:
+        response = requests.get(url, params=dict(params), timeout=8)
+        status = response.status_code
+        try:
+            data = response.json() if hasattr(response, "json") else {}
+        except Exception:
+            data = {}
+        return {
+            "status": status,
+            "data": data if isinstance(data, dict) else {},
+            "text_snippet": (response.text or "")[:200] if hasattr(response, "text") else "",
+            "headers": dict(getattr(response, "headers", {}) or {}),
+        }
+    except Exception as exc:  # pragma: no cover - defensive
+        return {"status": None, "error": str(exc), "data": {}, "headers": {}}
 
 
 def round_pct(p: Any) -> str:
@@ -1305,6 +1325,9 @@ def compute_team_sentiment_map(news_api_key: Optional[str], games: List[Dict[str
         "reddit_comments_used": 0,
         "teams_from_reddit": 0,
         "teams_blended": 0,
+        "cache_hits": 0,
+        "cache_misses": 0,
+        "sentiment_degraded": False,
     }
 
     kalshi_matched_teams: set = set()
@@ -1377,6 +1400,9 @@ def compute_team_sentiment_map(news_api_key: Optional[str], games: List[Dict[str
             debug["cached_teams"] = debug.get("cached_teams", 0) + 1
             debug["used_cached"] = True
             debug["requests_skipped_due_to_cache"] = debug.get("requests_skipped_due_to_cache", 0) + 1
+            debug["cache_hits"] = debug.get("cache_hits", 0) + 1
+        else:
+            debug["cache_misses"] = debug.get("cache_misses", 0) + 1
 
         if stop_fetching and not cached:
             payload = {
@@ -1410,24 +1436,58 @@ def compute_team_sentiment_map(news_api_key: Optional[str], games: List[Dict[str
         elif not cached:
             _enforce_sentiment_throttle()
             debug["requests_attempted"] = debug.get("requests_attempted", 0) + 1
-            articles, fetch_info = fetch_team_news(news_api_key or "", team, league, date_bucket=date_bucket)
-            cache_miss_calls += 1
-            status_val = fetch_info.get("status") or fetch_info.get("status_code")
+            to_date = datetime.utcnow().date()
+            from_date = to_date - timedelta(days=3)
+            url = "https://newsapi.org/v2/everything"
+            # Attempt a combined query that includes the team and league context to reduce per-team calls
+            q = f'"{team}" {league_label(league)}'
+            params = {
+                "q": q,
+                "sortBy": "relevancy",
+                "pageSize": 20,
+                "language": "en",
+                "from": from_date.isoformat(),
+                "to": to_date.isoformat(),
+                "apiKey": news_api_key or "",
+            }
+            params_tuple = tuple(sorted(params.items()))
+            cached_fetch = _newsapi_fetch_cached(url, params_tuple)
+            status_val = cached_fetch.get("status")
+            data = cached_fetch.get("data") or {}
+            articles = data.get("articles", []) if isinstance(data, dict) else []
+            retry_after_hdr = (cached_fetch.get("headers") or {}).get("Retry-After")
+            rate_limited_call = status_val == 429
+            auth_error_call = status_val in {401, 403}
+            if rate_limited_call and not articles:
+                # exponential backoff (per run) before giving up
+                time.sleep(min(2.0, 1.0 * max(cache_miss_calls, 1)))
+            fetch_info = {
+                "status": status_val,
+                "status_code": status_val,
+                "q": q,
+                "totalResults": data.get("totalResults") if isinstance(data, dict) else None,
+                "rate_limited": rate_limited_call,
+                "auth_error": auth_error_call,
+                "retry_after": retry_after_hdr,
+                "error": None if status_val == 200 else data.get("message") if isinstance(data, dict) else cached_fetch.get("error"),
+            }
+            status_int = None
             try:
                 status_int = int(status_val) if status_val is not None else None
             except Exception:
                 status_int = None
+            cache_miss_calls += 1
             score = team_sentiment_from_articles(articles)
             payload = {
                 "score": score if articles else None,
-                "confidence": 0.6 if articles else 0.0,
-                "sources": len(articles),
+                "confidence": 0.6 if articles else (0.3 if rate_limited_call else 0.0),
+                "sources": len(articles) if articles else 1 if rate_limited_call else 0,
                 "status": status_int,
                 "fetch_info": fetch_info,
                 "rate_limited": bool(fetch_info.get("rate_limited")),
                 "auth_error": bool(fetch_info.get("auth_error")),
                 "method": "newsapi_no_articles" if not articles and not fetch_info.get("rate_limited") else "newsapi",
-                "sentiment_source": "newsapi" if articles else "none",
+                "sentiment_source": "newsapi" if articles else ("newsapi_degraded" if rate_limited_call else "none"),
             }
             _sentiment_cache_put(team, league, date_bucket, payload)
         else:
@@ -1462,6 +1522,7 @@ def compute_team_sentiment_map(news_api_key: Optional[str], games: List[Dict[str
             stop_fetching = True
             if len(debug.get("errors_sample") or []) < 5:
                 debug.setdefault("errors_sample", []).append({"team": team, "error": "rate_limited", "status_code": 429})
+            debug["sentiment_degraded"] = True
         if payload.get("auth_error"):
             debug["auth_error"] = True
 
@@ -1517,7 +1578,7 @@ def compute_team_sentiment_map(news_api_key: Optional[str], games: List[Dict[str
 
     def _merge_payloads(news_payload: Dict[str, Any], reddit_payload: Dict[str, Any]) -> Dict[str, Any]:
         if reddit_payload and (reddit_payload.get("sources") or 0) > 0 and not news_payload.get("sources"):
-            return {**news_payload, **reddit_payload, "reddit_used": True, "sentiment_source": "reddit"}
+            return {**news_payload, **reddit_payload, "reddit_used": True, "sentiment_source": "reddit_fallback"}
         if not reddit_payload or (reddit_payload.get("sources") or 0) <= 0:
             return {**news_payload, "reddit_used": False}
         news_conf = safe_float(news_payload.get("confidence")) or 0.0
@@ -1535,7 +1596,7 @@ def compute_team_sentiment_map(news_api_key: Optional[str], games: List[Dict[str
             **reddit_payload,
             "score": blended_score,
             "sources": total_sources,
-            "sentiment_source": "blended" if news_payload.get("sources") else "reddit",
+            "sentiment_source": "blended" if news_payload.get("sources") else "reddit_fallback",
             "reddit_used": True,
         }
         return merged
@@ -1698,6 +1759,7 @@ def get_slate_sentiment(enable_sentiment: bool, teams: List[str], league: str, n
         meta["sentiment_auth_error"] = bool(debug.get("auth_error") or meta["sentiment_sample_status"] in {"401", "403"})
         meta["sentiment_status"] = meta.get("sentiment_sample_status")
         meta["sentiment_cooldown_until"] = debug.get("cooldown_until") or meta.get("sentiment_cooldown_until") or ""
+        meta["sentiment_degraded"] = bool(debug.get("sentiment_degraded"))
         valid_scores = [safe_float(v) or 0.0 for t, v in sentiment_map.items() if v is not None and (sentiment_meta_map.get(t, {}).get("sentiment_valid"))]
         confidence_values = [safe_float(mv.get("sentiment_confidence")) or 0.0 for mv in sentiment_meta_map.values()]
         meta["sentiment_confidence"] = max(confidence_values or valid_scores or [0.0])
@@ -1718,6 +1780,8 @@ def get_slate_sentiment(enable_sentiment: bool, teams: List[str], league: str, n
         meta["requests_skipped_due_to_cache"] = debug.get("requests_skipped_due_to_cache", 0)
         meta["requests_skipped_due_to_cooldown"] = debug.get("requests_skipped_due_to_cooldown", 0)
         meta["rate_limit_hit"] = debug.get("rate_limit_hit", False)
+        meta["sentiment_cache_hits"] = debug.get("cache_hits", 0)
+        meta["sentiment_cache_misses"] = debug.get("cache_misses", 0)
         meta["reddit_posts_used"] = debug.get("reddit_posts_used", 0)
         meta["reddit_comments_used"] = debug.get("reddit_comments_used", 0)
         meta["reddit_filled_teams"] = debug.get("teams_from_reddit", 0)
@@ -2149,6 +2213,9 @@ def init_sentiment_meta() -> Dict[str, Any]:
         "reddit_comments_used": 0,
         "reddit_filled_teams": 0,
         "reddit_blended_teams": 0,
+        "sentiment_cache_hits": 0,
+        "sentiment_cache_misses": 0,
+        "sentiment_degraded": False,
     }
 
 
@@ -7379,10 +7446,18 @@ with tab_master:
             row["total_confidence"] = base_total_conf
             row["spread_confidence_base"] = base_spread_conf
             row["total_confidence_base"] = base_total_conf
+            # Ensure required Gemini columns always exist
+            row.setdefault("gemini_mode", "guardrail")
+            row.setdefault("gemini_alignment", "NEUTRAL")
+            row.setdefault("gemini_rationale", "Gemini skipped: not evaluated")
+            row.setdefault("gemini_flags_short", "")
+            row.setdefault("gemini_risk_flags", json.dumps([]))
             if not use_gemini_explanations:
                 row["gemini_mode"] = row.get("gemini_mode") or "disabled"
-                row["gemini_alignment"] = row.get("gemini_alignment") or ("NEUTRAL" if not row.get("kalshi_matched") else None)
+                row["gemini_alignment"] = row.get("gemini_alignment") or "NEUTRAL"
                 row["llm_disagreement_flag"] = bool(row.get("llm_disagreement_flag"))
+                row["gemini_rationale"] = row.get("gemini_rationale") or "Gemini skipped: disabled"
+                row["gemini_flags_short"] = row.get("gemini_flags_short") or "gemini_disabled"
                 return row
             try:
                 payload = {
@@ -7421,6 +7496,8 @@ with tab_master:
                     row["gemini_rationale"] = "Gemini disabled: sentiment unavailable (rate-limited/auth)."
                     row["gemini_flags_short"] = "sentiment_guardrail"
                     row["gemini_risk_flags"] = json.dumps(["sentiment_guardrail"])
+                    if not row.get("prob_engine"):
+                        row["prob_engine"] = "market_only"
                     return row
                 row["overall_confidence"] = base_overall
                 row["spread_confidence"] = base_spread_conf
@@ -7438,8 +7515,23 @@ with tab_master:
                 row["gemini_mode"] = "error"
                 row["gemini_error"] = str(exc)[:240]
                 row["llm_disagreement_flag"] = False
+                row["gemini_alignment"] = row.get("gemini_alignment") or "NEUTRAL"
+                row["gemini_rationale"] = row.get("gemini_rationale") or f"Gemini skipped: {row.get('gemini_error')}"
+                row["gemini_flags_short"] = row.get("gemini_flags_short") or "gemini_error"
             return row
         df = df.apply(_apply_gemini, axis=1)
+
+        # Ensure Gemini columns are never null before export
+        for col, default in [
+            ("gemini_alignment", "NEUTRAL"),
+            ("gemini_rationale", "Gemini skipped: unspecified"),
+            ("gemini_flags_short", ""),
+            ("gemini_mode", "guardrail"),
+            ("prob_engine", "market_only"),
+        ]:
+            if col not in df.columns:
+                df[col] = default
+            df[col] = df[col].fillna(default)
 
         confidence_mode = st.selectbox(
             "Confidence filter",
