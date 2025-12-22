@@ -53,7 +53,9 @@ try:
 except Exception:  # pragma: no cover - optional import
     alt = None
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("parlaypicker")
+if not logger.handlers:
+    logging.basicConfig(level=logging.INFO)
 # -----------------
 # Utility helpers (null-safe probability handling)
 # -----------------
@@ -92,8 +94,56 @@ def compute_sentiment_adj(sentiment_diff: Optional[float]) -> Optional[float]:
 
 SENTIMENT_CACHE: Dict[Tuple[str, str, str], Dict[str, Any]] = {}
 SENTIMENT_LAST_TS: float = 0.0
-SENTIMENT_CACHE_TTL = timedelta(hours=6)
+SENTIMENT_CACHE_TTL = timedelta(hours=12)
 SENTIMENT_LOG_SAMPLE: Dict[str, bool] = {}
+MAX_SENTIMENT_TEAMS_PER_RUN = 25
+NEWSAPI_COOLDOWN_HOURS = 12
+DECISION_TRACE_SAMPLE_LEAGUES = {"NFL", "NBA", "NCAAB"}
+
+
+def _parse_cooldown_ts(raw: Any) -> Optional[datetime]:
+    if not raw:
+        return None
+    try:
+        if isinstance(raw, datetime):
+            dt = raw
+        else:
+            dt = datetime.fromisoformat(str(raw))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt
+    except Exception:
+        return None
+
+
+def newsapi_cooldown_until() -> Optional[datetime]:
+    sentinel = None
+    try:
+        sentinel = st.session_state.get("NEWSAPI_RATE_LIMITED_UNTIL") or st.session_state.get("sentiment_cooldown_until")
+    except Exception:
+        sentinel = None
+    return _parse_cooldown_ts(sentinel)
+
+
+def newsapi_cooldown_active() -> bool:
+    until = newsapi_cooldown_until()
+    return bool(until and datetime.now(timezone.utc) < until)
+
+
+def set_newsapi_cooldown(hours: int = NEWSAPI_COOLDOWN_HOURS, retry_after: Optional[Union[int, str]] = None) -> Optional[datetime]:
+    duration = timedelta(hours=hours)
+    if retry_after is not None:
+        try:
+            duration = timedelta(seconds=int(retry_after))
+        except Exception:
+            pass
+    cooldown_until = datetime.now(timezone.utc) + duration
+    try:
+        st.session_state["NEWSAPI_RATE_LIMITED_UNTIL"] = cooldown_until
+        st.session_state["sentiment_cooldown_until"] = cooldown_until.isoformat()
+    except Exception:
+        pass
+    return cooldown_until
 
 
 def _sentiment_cache_key(team: str, league: str, bucket: str) -> Tuple[str, str, str]:
@@ -1094,31 +1144,66 @@ def compute_team_sentiment_map(news_api_key: Optional[str], games: List[Dict[str
         "cached_teams": 0,
         "used_cached": False,
         "log_reason": "",
+        "requests_attempted": 0,
+        "requests_skipped_due_to_cache": 0,
+        "requests_skipped_due_to_cooldown": 0,
+        "rate_limit_hit": False,
     }
 
-    cooldown_raw = st.session_state.get("sentiment_cooldown_until")
-    cooldown_until = None
+    kalshi_matched_teams: set = set()
     try:
-        cooldown_until = datetime.fromisoformat(cooldown_raw) if cooldown_raw else None
-        if cooldown_until and cooldown_until.tzinfo is None:
-            cooldown_until = cooldown_until.replace(tzinfo=timezone.utc)
+        for entry in st.session_state.get("kalshi_match_results") or []:
+            winner = (entry.get("matches") or {}).get("winner", {})
+            if not winner.get("kalshi_matched"):
+                continue
+            game_meta = entry.get("game") or {}
+            if game_meta.get("home_team"):
+                kalshi_matched_teams.add(str(game_meta.get("home_team")))
+            if game_meta.get("away_team"):
+                kalshi_matched_teams.add(str(game_meta.get("away_team")))
     except Exception:
-        cooldown_until = None
-    cooldown_active = bool(cooldown_until and datetime.now(timezone.utc) < cooldown_until)
+        kalshi_matched_teams = set()
+
+    def _edge_hint(game: Dict[str, Any]) -> float:
+        try:
+            implied_home = american_to_implied_prob(game.get("home_ml_price"))
+            implied_away = american_to_implied_prob(game.get("away_ml_price"))
+            if implied_home is not None and implied_away is not None:
+                return abs(float(implied_home) - float(implied_away))
+        except Exception:
+            return 0.0
+        return 0.0
+
+    cooldown_until = newsapi_cooldown_until()
+    cooldown_active = newsapi_cooldown_active()
     debug["cooldown_active"] = cooldown_active
-    if cooldown_active and cooldown_until:
+    if cooldown_until:
         debug["cooldown_until"] = cooldown_until.isoformat()
 
     date_bucket = datetime.now(timezone.utc).date().isoformat()
-    ordered_teams = sorted(teams)
-    calls_capped = len(ordered_teams) > MAX_SENTIMENT_CALLS
-    if calls_capped:
-        ordered_teams = ordered_teams[:MAX_SENTIMENT_CALLS]
+    team_edge_map: Dict[str, float] = {}
+    for g in games or []:
+        home = str(g.get("home_team") or "").strip()
+        away = str(g.get("away_team") or "").strip()
+        if home:
+            team_edge_map[home] = max(team_edge_map.get(home, 0.0), _edge_hint(g))
+        if away:
+            team_edge_map[away] = max(team_edge_map.get(away, 0.0), _edge_hint(g))
+    ordered_teams = sorted(
+        teams,
+        key=lambda t: (
+            -1 if t in kalshi_matched_teams else 0,
+            -(team_edge_map.get(t, 0.0)),
+            t,
+        ),
+    )
+    calls_capped = False
     debug["calls_capped"] = calls_capped
 
     cache_miss_calls = 0
-    REQUEST_BUDGET = min(20, MAX_SENTIMENT_CALLS)
+    REQUEST_BUDGET = min(MAX_SENTIMENT_TEAMS_PER_RUN, MAX_SENTIMENT_CALLS)
     stop_fetching = cooldown_active
+    debug["rate_limited"] = debug.get("rate_limited") or cooldown_active
 
     for team in ordered_teams:
         cache_payload = _sentiment_cache_get(team, league, date_bucket)
@@ -1127,11 +1212,12 @@ def compute_team_sentiment_map(news_api_key: Optional[str], games: List[Dict[str
         if cached:
             debug["cached_teams"] = debug.get("cached_teams", 0) + 1
             debug["used_cached"] = True
+            debug["requests_skipped_due_to_cache"] = debug.get("requests_skipped_due_to_cache", 0) + 1
 
         if stop_fetching and not cached:
             sentiment_meta[team] = {
                 "sentiment_valid": False,
-                "sentiment_source": "none",
+                "sentiment_source": "rate_limited",
                 "sentiment_level": "none",
                 "sentiment_strength": "NONE",
                 "sentiment_badge": "NONE",
@@ -1143,14 +1229,17 @@ def compute_team_sentiment_map(news_api_key: Optional[str], games: List[Dict[str
                 "sentiment_status": "cooldown",
                 "sentiment_confidence": 0.0,
                 "sentiment_rate_limited": True,
-                "sentiment_label": None,
+                "sentiment_label": "rate_limited",
                 "sentiment_source_count": 0,
+                "score": 0.0,
             }
-            sentiment_map[team] = None
+            sentiment_map[team] = 0.0
             debug["missing_teams"].append(team)
+            debug["requests_skipped_due_to_cooldown"] = debug.get("requests_skipped_due_to_cooldown", 0) + 1
             continue
 
         if not cached and cache_miss_calls >= REQUEST_BUDGET:
+            calls_capped = True
             sentiment_meta[team] = {
                 "sentiment_valid": False,
                 "sentiment_source": "none",
@@ -1175,6 +1264,7 @@ def compute_team_sentiment_map(news_api_key: Optional[str], games: List[Dict[str
 
         if not cached:
             _enforce_sentiment_throttle()
+            debug["requests_attempted"] = debug.get("requests_attempted", 0) + 1
             articles, fetch_info = fetch_team_news(news_api_key or "", team, league, date_bucket=date_bucket)
             cache_miss_calls += 1
             status_val = fetch_info.get("status") or fetch_info.get("status_code")
@@ -1214,19 +1304,14 @@ def compute_team_sentiment_map(news_api_key: Optional[str], games: List[Dict[str
 
         if payload.get("rate_limited") or status_int == 429:
             retry_after = fetch_info.get("retry_after")
-            cooldown_new = datetime.now(timezone.utc) + timedelta(hours=12)
-            try:
-                if retry_after:
-                    retry_sec = int(retry_after)
-                    cooldown_new = datetime.now(timezone.utc) + timedelta(seconds=retry_sec)
-            except Exception:
-                pass
-            try:
-                st.session_state["sentiment_cooldown_until"] = cooldown_new.isoformat()
-            except Exception:
-                pass
+            cooldown_new = set_newsapi_cooldown(hours=NEWSAPI_COOLDOWN_HOURS, retry_after=retry_after)
             debug["rate_limited"] = True
-            debug["cooldown_until"] = cooldown_new.isoformat()
+            debug["rate_limit_hit"] = True
+            cooldown_until = cooldown_new or cooldown_until
+            cooldown_active = True
+            debug["cooldown_active"] = True
+            if cooldown_new:
+                debug["cooldown_until"] = cooldown_new.isoformat()
             stop_fetching = True
         if payload.get("auth_error"):
             debug["auth_error"] = True
@@ -1285,6 +1370,10 @@ def compute_team_sentiment_map(news_api_key: Optional[str], games: List[Dict[str
         "auth_error": debug.get("auth_error"),
         "cooldown_active": cooldown_active,
         "cooldown_until": cooldown_until.isoformat() if cooldown_until else None,
+        "requests_attempted": debug.get("requests_attempted", 0),
+        "requests_skipped_due_to_cache": debug.get("requests_skipped_due_to_cache", 0),
+        "requests_skipped_due_to_cooldown": debug.get("requests_skipped_due_to_cooldown", 0),
+        "rate_limit_hit": debug.get("rate_limit_hit", False),
     }
 
 
@@ -1313,24 +1402,22 @@ def get_slate_sentiment(enable_sentiment: bool, teams: List[str], league: str, n
         meta["sentiment_disabled_reason"] = "no_teams_found"
         meta["sentiment_status"] = "DISABLED"
         return {"map": {}, "meta_map": {}, "meta": meta, "debug": debug}
-    cooldown_raw = st.session_state.get("sentiment_cooldown_until")
-    try:
-        cooldown_until = datetime.fromisoformat(cooldown_raw) if cooldown_raw else None
-        if cooldown_until and cooldown_until.tzinfo is None:
-            cooldown_until = cooldown_until.replace(tzinfo=timezone.utc)
-    except Exception:
-        cooldown_until = None
-    if cooldown_raw and cooldown_until and datetime.now(timezone.utc) < cooldown_until:
+    cooldown_until = newsapi_cooldown_until()
+    cooldown_active = newsapi_cooldown_active()
+    if cooldown_active:
         cached_map = st.session_state.get("sentiment_map") or {}
         cached_meta_map = st.session_state.get("sentiment_meta_map") or {}
         meta["sentiment_source"] = "cooldown_cached_only"
         meta["sentiment_sample_status"] = "COOLDOWN"
         meta["sentiment_status_counts"] = {"COOLDOWN": 1}
         meta["sentiment_disabled_reason"] = "cooldown_active"
-        meta["sentiment_cooldown_until"] = cooldown_raw
+        meta["sentiment_cooldown_until"] = cooldown_until.isoformat() if cooldown_until else None
         meta["sentiment_rate_limited"] = True
         meta["sentiment_available_count"] = len([v for v in cached_map.values() if v is not None])
         meta["sentiment_status"] = "COOLDOWN"
+        debug["cooldown_active"] = True
+        debug["cooldown_until"] = meta["sentiment_cooldown_until"]
+        debug["rate_limited"] = True
         if meta["sentiment_available_count"] > 0:
             meta["sentiment_source"] = "partial_cached"
         return {"map": cached_map, "meta_map": cached_meta_map, "meta": meta, "debug": debug}
@@ -1353,15 +1440,21 @@ def get_slate_sentiment(enable_sentiment: bool, teams: List[str], league: str, n
         meta["sentiment_errors_sample"] = ";".join([f"{e.get('team')}: {e.get('error')}" for e in errors_sample]) if errors_sample else ""
         meta["sentiment_articles_total"] = debug.get("articles_total") or 0
         meta["sentiment_cached_teams_count"] = debug.get("cached_teams") or 0
-        meta["sentiment_available_count"] = len([v for v in sentiment_map.values() if v is not None])
+        meta["sentiment_available_count"] = len([t for t, mv in sentiment_meta_map.items() if mv.get("sentiment_valid")])
         meta["sentiment_rate_limited"] = bool(meta["sentiment_sample_status"] == "429" or status_counts.get(429) or debug.get("rate_limited"))
         meta["sentiment_auth_error"] = bool(debug.get("auth_error") or meta["sentiment_sample_status"] in {"401", "403"})
         meta["sentiment_status"] = meta.get("sentiment_sample_status")
-        meta["sentiment_confidence"] = max([safe_float(v) or 0.0 for v in sentiment_map.values() if v is not None] or [0.0])
-        meta["sentiment_score"] = sum([safe_float(v) or 0.0 for v in sentiment_map.values() if v is not None]) / max(1, len([v for v in sentiment_map.values() if v is not None]))
+        meta["sentiment_cooldown_until"] = debug.get("cooldown_until") or meta.get("sentiment_cooldown_until") or ""
+        valid_scores = [safe_float(v) or 0.0 for t, v in sentiment_map.items() if v is not None and (sentiment_meta_map.get(t, {}).get("sentiment_valid"))]
+        meta["sentiment_confidence"] = max(valid_scores or [0.0])
+        meta["sentiment_score"] = sum(valid_scores) / max(1, len(valid_scores)) if valid_scores else 0.0
         meta["sentiment_label"] = None
         meta["sentiment_disabled_reason"] = ""
         meta["sentiment_source_count"] = meta.get("sentiment_articles_total") or 0
+        meta["requests_attempted"] = debug.get("requests_attempted", 0)
+        meta["requests_skipped_due_to_cache"] = debug.get("requests_skipped_due_to_cache", 0)
+        meta["requests_skipped_due_to_cooldown"] = debug.get("requests_skipped_due_to_cooldown", 0)
+        meta["rate_limit_hit"] = debug.get("rate_limit_hit", False)
         if meta["sentiment_rate_limited"] and meta["sentiment_available_count"] == 0:
             meta["sentiment_source"] = "error_rate_limited"
         elif meta["sentiment_rate_limited"] and meta["sentiment_available_count"] > 0:
@@ -1640,6 +1733,10 @@ def enrich_game_context(game: Dict[str, Any], league_key: str, api_key: Optional
         "pace_signal": None,
         "efficiency_signal": None,
         "enrichment_errors_sample": [],
+        "apisports_enriched": False,
+        "apisports_notes": None,
+        "sportsdata_enriched": False,
+        "sportsdata_notes": None,
     }
     try:
         commence_iso = game.get("commence_time_iso_utc") or game.get("commence_time") or game.get("commence_time_iso")
@@ -1678,18 +1775,25 @@ def enrich_game_context(game: Dict[str, Any], league_key: str, api_key: Optional
                     break
             if matched:
                 enrichment["api_sports_used"] = True
+                enrichment["apisports_enriched"] = True
+                enrichment["apisports_notes"] = "matched_fixture"
                 fixture_date = (matched.get("fixture") or {}).get("date")
                 if fixture_date and commence_iso and fixture_date != commence_iso:
                     enrichment["schedule_warnings"].append("schedule_mismatch_api_sports")
+                    enrichment["apisports_notes"] = "schedule_mismatch_api_sports"
                 # Placeholder: API-Sports payload often lacks injuries in base tier; keep counts at 0.
                 enrichment["injuries_home"] = enrichment["injuries_home_count"] or "unknown"
                 enrichment["injuries_away"] = enrichment["injuries_away_count"] or "unknown"
+            else:
+                enrichment["apisports_notes"] = "no_match_found"
         elif api_key:
             enrichment["api_sports_status"] = "key_present_no_client"
+            enrichment["apisports_notes"] = "client_missing"
     except Exception:
         enrichment["api_sports_status"] = "error"
         enrichment.setdefault("enrichment_errors_sample", []).append("api_sports_error")
         enrichment.setdefault("schedule_warnings", []).append("api_sports_error")
+        enrichment["apisports_notes"] = "api_sports_error"
 
     try:
         # SportsData attempt
@@ -1710,8 +1814,11 @@ def enrich_game_context(game: Dict[str, Any], league_key: str, api_key: Optional
             match = sd_client.match_game(scores, game.get("home_team", ""), game.get("away_team", ""))
             if match:
                 enrichment["sportsdata_used"] = True
+                enrichment["sportsdata_enriched"] = True
+                enrichment["sportsdata_notes"] = "matched_fixture"
                 if match.get("Date") and commence_iso and str(match.get("Date")) != commence_iso:
                     enrichment["schedule_warnings"].append("schedule_mismatch_sportsdata")
+                    enrichment["sportsdata_notes"] = "schedule_mismatch_sportsdata"
                 weather = match.get("Weather") or match.get("WeatherDescription")
                 if weather:
                     enrichment["weather_summary"] = str(weather)
@@ -1728,12 +1835,16 @@ def enrich_game_context(game: Dict[str, Any], league_key: str, api_key: Optional
                 # Injuries info not available via current helper; counts remain 0.
                 enrichment["injuries_home"] = enrichment["injuries_home_count"] or "unknown"
                 enrichment["injuries_away"] = enrichment["injuries_away_count"] or "unknown"
+            else:
+                enrichment["sportsdata_notes"] = "no_match_found"
         elif sd_key:
             enrichment["sportsdata_status"] = "key_present_no_client"
+            enrichment["sportsdata_notes"] = "client_missing"
     except Exception:
         enrichment["sportsdata_status"] = "error"
         enrichment.setdefault("enrichment_errors_sample", []).append("sportsdata_error")
         enrichment.setdefault("schedule_warnings", []).append("sportsdata_error")
+        enrichment["sportsdata_notes"] = "sportsdata_error"
 
     return enrichment
 
@@ -1771,6 +1882,7 @@ def ensure_sentiment_loaded(games: List[Dict[str, Any]]) -> None:
             if k.startswith("sentiment_"):
                 st.session_state.pop(k, None)
         st.session_state.pop("sentiment_cooldown_until", None)
+        st.session_state.pop("NEWSAPI_RATE_LIMITED_UNTIL", None)
         st.session_state.pop("reddit_used", None)
         st.session_state.pop("sentiment_slate_key", None)
         st.session_state.pop("sentiment_source", None)
@@ -2152,12 +2264,29 @@ def kalshi_health_check(selected_league: str = "NBA") -> Dict[str, Any]:
 
 def read_secret(name: str, default: Optional[str] = None) -> Optional[str]:
     """Read from st.secrets then env vars."""
+    ci_val = None
+    try:
+        ci_val = next((v for k, v in st.secrets.items() if str(k).lower() == str(name).lower()), None)
+        if isinstance(ci_val, str) and ci_val.strip():
+            return ci_val.strip()
+    except Exception:
+        ci_val = None
     try:
         if name in st.secrets:
             return st.secrets[name]
     except Exception:
         pass
     return os.getenv(name, default)
+
+
+def _get_secret_ci(name: str) -> Optional[str]:
+    try:
+        for key, val in st.secrets.items():
+            if str(key).lower() == str(name).lower() and isinstance(val, str) and val.strip():
+                return val.strip()
+    except Exception:
+        return None
+    return None
 
 def _get_gcp_sa_from_secrets() -> Optional[Dict[str, Any]]:
     try:
@@ -2239,21 +2368,31 @@ def ensure_vertex_info_cached() -> Dict[str, Any]:
     return info
 
 def get_api_keys() -> Dict[str, Optional[str]]:
-    api_sports_key = get_apisports_key()
-    sportsdata_key = get_sportsdata_key()
+    def _find_key(candidates: List[str]) -> Optional[str]:
+        val = get_secret_any(*candidates)
+        if val:
+            return val
+        for key in candidates:
+            env_val = read_secret(key)
+            if env_val:
+                return env_val
+        return None
+
+    api_sports_key = _find_key(["APISPORTS_API_KEY", "API_SPORTS_KEY", "API_SPORTS_API_KEY"]) or get_apisports_key()
+    sportsdata_key = _find_key(["SPORTSDATA_API_KEY", "SPORTSDATA_KEY"]) or get_sportsdata_key()
     api_sports_keys = {
-        "NFL": get_apisports_key("NFL") or api_sports_key,
-        "NBA": get_apisports_key("NBA") or api_sports_key,
-        "NHL": get_apisports_key("NHL") or api_sports_key,
-        "NCAAB": get_apisports_key("NCAAB") or api_sports_key,
-        "NCAAF": get_apisports_key("NCAAF") or api_sports_key,
+        "NFL": _find_key(["APISPORTS_NFL_KEY", "NFL_APISPORTS_API_KEY"]) or api_sports_key or get_apisports_key("NFL"),
+        "NBA": _find_key(["APISPORTS_NBA_KEY", "NBA_APISPORTS_API_KEY"]) or api_sports_key or get_apisports_key("NBA"),
+        "NHL": _find_key(["APISPORTS_NHL_KEY", "NHL_APISPORTS_API_KEY"]) or api_sports_key or get_apisports_key("NHL"),
+        "NCAAB": _find_key(["APISPORTS_NCAAB_KEY", "NCAAB_APISPORTS_API_KEY"]) or api_sports_key or get_apisports_key("NCAAB"),
+        "NCAAF": _find_key(["APISPORTS_NCAAF_KEY", "NCAAF_APISPORTS_API_KEY"]) or api_sports_key or get_apisports_key("NCAAF"),
     }
     sportsdata_keys = {
-        "NFL": get_sportsdata_key("NFL") or sportsdata_key,
-        "NBA": get_sportsdata_key("NBA") or sportsdata_key,
-        "NHL": get_sportsdata_key("NHL") or sportsdata_key,
-        "NCAAB": get_sportsdata_key("NCAAB") or sportsdata_key,
-        "NCAAF": get_sportsdata_key("NCAAF") or sportsdata_key,
+        "NFL": _find_key(["SPORTSDATA_NFL_KEY"]) or sportsdata_key or get_sportsdata_key("NFL"),
+        "NBA": _find_key(["SPORTSDATA_NBA_KEY"]) or sportsdata_key or get_sportsdata_key("NBA"),
+        "NHL": _find_key(["SPORTSDATA_NHL_KEY"]) or sportsdata_key or get_sportsdata_key("NHL"),
+        "NCAAB": _find_key(["SPORTSDATA_NCAAB_KEY"]) or sportsdata_key or get_sportsdata_key("NCAAB"),
+        "NCAAF": _find_key(["SPORTSDATA_NCAAF_KEY"]) or sportsdata_key or get_sportsdata_key("NCAAF"),
     }
     return {
         "api_sports_key": api_sports_key,
@@ -2262,12 +2401,30 @@ def get_api_keys() -> Dict[str, Optional[str]]:
         "sportsdata_keys": sportsdata_keys,
     }
 
-def get_secret_any(candidates: List[str]) -> Optional[str]:
-    for key in candidates:
-        val = read_secret(key)
-        if val:
-            return val
-    return None
+def get_secret_any(*keys: str, default: Optional[str] = None) -> Optional[str]:
+    for key in keys:
+        ci_val = _get_secret_ci(key)
+        if ci_val:
+            return ci_val
+        try:
+            val = st.secrets.get(key, None)
+        except Exception:
+            val = None
+        if isinstance(val, str) and val.strip():
+            return val.strip()
+    return default
+
+
+def any_secret_prefix(prefix: str) -> bool:
+    try:
+        for key in st.secrets.keys():
+            if str(key).lower().startswith(prefix.lower()):
+                val = st.secrets.get(key, "")
+                if isinstance(val, str) and val.strip():
+                    return True
+    except Exception:
+        return False
+    return False
 
 def init_data_clients() -> Tuple[Dict[str, Any], Dict[str, Any]]:
     global api_sports_clients, sportsdata_clients
@@ -4321,9 +4478,18 @@ st.session_state["enable_sentiment"] = enable_sentiment
 if st.sidebar.button("Load Games", use_container_width=True):
     load_games(selected_sports or [league])
 
-api_sports_status = "OK" if any(v for v in api_sports_clients.values() if v) else "MISSING"
-sportsdata_status = "OK" if any(v for v in sportsdata_clients.values() if v) else "MISSING"
+api_sports_present = (
+    get_secret_any("APISPORTS_API_KEY", "API_SPORTS_KEY", "API_SPORTS_API_KEY") is not None
+    or any_secret_prefix("APISPORTS_")
+)
+sportsdata_present = (
+    get_secret_any("SPORTSDATA_API_KEY", "SPORTSDATA_KEY") is not None
+    or any_secret_prefix("SPORTSDATA_")
+)
+api_sports_status = "OK" if api_sports_present or any(v for v in api_sports_clients.values() if v) else "MISSING"
+sportsdata_status = "OK" if sportsdata_present or any(v for v in sportsdata_clients.values() if v) else "MISSING"
 vertex_ready = bool(vertex_endpoint_id) and bool(vertex_info.get("ok"))
+gemini_ready = bool(get_secret_any("GEMINI_API_KEY"))
 st.sidebar.markdown("---")
 st.sidebar.subheader("Status")
 sentiment_meta_sidebar = st.session_state.get("sentiment_meta") or init_sentiment_meta()
@@ -4345,7 +4511,7 @@ else:
 badges = {
     "OddsAPI": bool(odds_api_key),
     "Vertex": vertex_ready,
-    "Gemini": vertex_ready,
+    "Gemini": gemini_ready,
     "News": bool(news_api_key),
     "API-Sports": api_sports_status == "OK",
     "SportsData": sportsdata_status == "OK",
@@ -4512,6 +4678,7 @@ with tab_master:
             st.warning(warn_detail)
         if kalshi_status.get("warning"):
             st.warning(kalshi_status.get("warning"))
+    st.session_state.setdefault("kalshi_match_only", False)
     kalshi_match_only = st.checkbox(
         "Show only games with a Kalshi match",
         value=st.session_state.get("kalshi_match_only", False),
@@ -4538,6 +4705,40 @@ with tab_master:
         st.error("Kalshi is required but unavailable. Fix Kalshi first.")
         st.stop()
     if run_master:
+        st.session_state["DECISION_TRACE_SAMPLES"] = {}
+
+        def store_decision_trace_sample(
+            league_code: Optional[str],
+            home_team: Optional[str],
+            away_team: Optional[str],
+            market: str,
+            pick: Optional[str],
+            final_probability: Optional[float],
+            trace_json_raw: Any,
+        ) -> None:
+            league_code_norm = (league_code or "").upper()
+            if league_code_norm not in DECISION_TRACE_SAMPLE_LEAGUES:
+                return
+            try:
+                samples = dict(st.session_state.get("DECISION_TRACE_SAMPLES", {}))
+            except Exception:
+                samples = {}
+            if league_code_norm in samples:
+                return
+            try:
+                parsed_trace = json.loads(trace_json_raw) if isinstance(trace_json_raw, str) else trace_json_raw
+            except Exception:
+                parsed_trace = trace_json_raw
+            samples[league_code_norm] = {
+                "league": league_code_norm,
+                "home": home_team,
+                "away": away_team,
+                "market": market,
+                "pick": pick,
+                "final_probability": final_probability,
+                "decision_trace_json": parsed_trace,
+            }
+            st.session_state["DECISION_TRACE_SAMPLES"] = samples
         api_sports_status_run = api_sports_status
         sportsdata_status_run = sportsdata_status
         df_master = pd.DataFrame(games or [])
@@ -4716,6 +4917,10 @@ with tab_master:
             sportsdata_used = enrichment.get("sportsdata_used")
             api_sports_status_run = enrichment.get("api_sports_status") or api_sports_status
             sportsdata_status_run = enrichment.get("sportsdata_status") or sportsdata_status
+            apisports_enriched = enrichment.get("apisports_enriched")
+            apisports_notes = enrichment.get("apisports_notes")
+            sportsdata_enriched = enrichment.get("sportsdata_enriched")
+            sportsdata_notes = enrichment.get("sportsdata_notes")
             enrichment_errors_sample = ";".join(enrichment.get("enrichment_errors_sample") or [])
             g["injuries_home_count"] = injuries_home_count
             g["injuries_away_count"] = injuries_away_count
@@ -5191,6 +5396,12 @@ with tab_master:
                     "sportsdata_used": sportsdata_used,
                     "api_sports_status": api_sports_status_run,
                     "sportsdata_status": sportsdata_status_run,
+                    "apisports_enriched": apisports_enriched,
+                    "apisports_status": api_sports_status_run,
+                    "apisports_notes": apisports_notes,
+                    "sportsdata_enriched": sportsdata_enriched,
+                    "sportsdata_status": sportsdata_status_run,
+                    "sportsdata_notes": sportsdata_notes,
                     "injuries_home_count": injuries_home_count,
                     "injuries_away_count": injuries_away_count,
                     "injuries_home": injuries_home_display,
@@ -5949,6 +6160,12 @@ with tab_master:
                         "sportsdata_used": sportsdata_used,
                         "api_sports_status": api_sports_status_run,
                         "sportsdata_status": sportsdata_status_run,
+                        "apisports_enriched": apisports_enriched,
+                        "apisports_status": api_sports_status_run,
+                        "apisports_notes": apisports_notes,
+                        "sportsdata_enriched": sportsdata_enriched,
+                        "sportsdata_status": sportsdata_status_run,
+                        "sportsdata_notes": sportsdata_notes,
                         "injuries_home_count": injuries_home_count,
                         "injuries_away_count": injuries_away_count,
                         "injuries_home": injuries_home_display,
@@ -6000,9 +6217,19 @@ with tab_master:
                         bool(use_vertex_numeric_probs and vertex_prob_home is not None),
                         reason_short,
                     )
+                    trace_json_str = trace_json if isinstance(trace_json, str) else json.dumps(trace_json)
                     ml_row["decision_trace_short"] = trace_short
-                    ml_row["decision_trace_json"] = trace_json
+                    ml_row["decision_trace_json"] = trace_json_str
                     ml_row["decision_trace"] = decision_trace_full
+                    store_decision_trace_sample(
+                        league_name,
+                        home,
+                        away,
+                        "moneyline",
+                        ml_row.get("Pick"),
+                        ml_row.get("final_probability"),
+                        trace_json_str,
+                    )
                     if league_name in {"NFL", "NBA", "NCAAB"} and not SENTIMENT_LOG_SAMPLE.get(league_name):
                         try:
                             logger.info(f"Decision trace sample {league_name}: {decision_trace_full}")
@@ -6175,6 +6402,12 @@ with tab_master:
                     "sportsdata_used": sportsdata_used,
                     "api_sports_status": api_sports_status_run,
                     "sportsdata_status": sportsdata_status_run,
+                    "apisports_enriched": apisports_enriched,
+                    "apisports_status": api_sports_status_run,
+                    "apisports_notes": apisports_notes,
+                    "sportsdata_enriched": sportsdata_enriched,
+                    "sportsdata_status": sportsdata_status_run,
+                    "sportsdata_notes": sportsdata_notes,
                     "injuries_home_count": injuries_home_count,
                     "injuries_away_count": injuries_away_count,
                     "injuries_home": injuries_home_display,
@@ -6246,9 +6479,19 @@ with tab_master:
                     bool(use_vertex_numeric_probs and vertex_prob_home is not None),
                     reason_short,
                 )
+                trace_json_str = trace_json if isinstance(trace_json, str) else json.dumps(trace_json)
                 spread_row["decision_trace_short"] = trace_short
-                spread_row["decision_trace_json"] = trace_json
+                spread_row["decision_trace_json"] = trace_json_str
                 spread_row["decision_trace"] = decision_trace_full
+                store_decision_trace_sample(
+                    league_name,
+                    home,
+                    away,
+                    "spread",
+                    spread_row.get("Pick"),
+                    spread_row.get("final_probability"),
+                    trace_json_str,
+                )
                 spread_row["Eligible_Top_Picks"] = eligible
                 spread_row = apply_sentiment_defaults(spread_row, sentiment_defaults_base)
                 rows_out.append(spread_row)
@@ -6479,14 +6722,24 @@ with tab_master:
                     bool(use_vertex_numeric_probs and vertex_prob_home is not None),
                     reason_short,
                 )
+                trace_json_str = trace_json if isinstance(trace_json, str) else json.dumps(trace_json)
                 total_row["decision_trace_short"] = trace_short
-                total_row["decision_trace_json"] = trace_json
+                total_row["decision_trace_json"] = trace_json_str
                 total_row["decision_trace"] = decision_trace_full
+                store_decision_trace_sample(
+                    league_name,
+                    home,
+                    away,
+                    "total",
+                    total_row.get("Pick"),
+                    total_row.get("final_probability"),
+                    trace_json_str,
+                )
                 total_row["Eligible_Top_Picks"] = eligible
                 total_row = apply_sentiment_defaults(total_row, sentiment_defaults_base)
                 rows_out.append(total_row)
                 master_stats["market_rows_out"] += 1
-                    
+
         df = pd.DataFrame(rows_out)
         # Collapse to one row per game (prefer the first generated row, typically moneyline)
         sentiment_meta_for_export = sentiment_pack_meta or init_sentiment_meta()
@@ -6660,6 +6913,12 @@ with tab_master:
             "sportsdata_used",
             "api_sports_status",
             "sportsdata_status",
+            "apisports_enriched",
+            "apisports_status",
+            "apisports_notes",
+            "sportsdata_enriched",
+            "sportsdata_status",
+            "sportsdata_notes",
             "injuries_home_count",
             "injuries_away_count",
             "weather_summary",
@@ -7302,11 +7561,30 @@ with tab_master:
             st.caption(
                 f"rows_out/games_in = {master_stats['rows_out']} / {master_stats['games_in']}"
             )
-            with st.expander("Decision Trace (sample)", expanded=False):
-                try:
-                    st.dataframe(df_master_view_full[["Pick", "decision_trace_short", "decision_trace_json"]].head(20))
-                except Exception:
-                    st.write("No decision trace available yet.")
+            with st.expander("Decision Trace (Samples)", expanded=False):
+                st.caption("One sample per league (NFL / NBA / NCAAB) showing how the final pick & probability were derived.")
+                samples = st.session_state.get("DECISION_TRACE_SAMPLES", {}) or {}
+                if not samples:
+                    st.info("No decision trace samples yet. Run Master Analysis first.")
+                else:
+                    for lg in sorted(samples.keys()):
+                        sample = samples.get(lg, {})
+                        if not sample:
+                            continue
+                        home_team = sample.get("home") or "Home"
+                        away_team = sample.get("away") or "Away"
+                        market = sample.get("market") or "moneyline"
+                        pick_val = sample.get("pick") or "N/A"
+                        final_prob = sample.get("final_probability")
+                        st.markdown(f"**{lg}** — {home_team} vs {away_team} ({market})")
+                        st.write(f"Pick: {pick_val} | Final Probability: {final_prob}")
+                        trace_payload = sample.get("decision_trace_json")
+                        if isinstance(trace_payload, str):
+                            try:
+                                trace_payload = json.loads(trace_payload)
+                            except Exception:
+                                trace_payload = {"trace": trace_payload}
+                        st.json(trace_payload or {})
     elif not games:
         st.info("Load games from the sidebar, then run Master Analysis.")
 
@@ -7384,7 +7662,18 @@ with tab_sentiment:
     else:
         st.info("No sentiment scores available yet (missing NewsAPI key or disabled).")
     with st.expander("Sentiment Debug", expanded=True):
-        st.json(st.session_state.get("sentiment_debug", {}))
+        sent_debug = st.session_state.get("sentiment_debug", {})
+        st.json(
+            {
+                "requests_attempted": sent_debug.get("requests_attempted"),
+                "requests_skipped_due_to_cache": sent_debug.get("requests_skipped_due_to_cache"),
+                "requests_skipped_due_to_cooldown": sent_debug.get("requests_skipped_due_to_cooldown"),
+                "rate_limit_hit": sent_debug.get("rate_limit_hit"),
+                "cooldown_until": sent_debug.get("cooldown_until"),
+                "rate_limited": sent_debug.get("rate_limited"),
+            }
+        )
+        st.json(sent_debug or {})
         st.json({"meta": sent_meta, "error_count": error_count})
         st.write("Teams with sentiment:", list((st.session_state.get("sentiment_map") or {}).keys())[:20])
 
