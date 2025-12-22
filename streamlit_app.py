@@ -21,6 +21,7 @@ from app_core.kalshi_integrator import (
     team_code_for_league,
 )
 from app_core.llm_assistant import generate_confidence_explanation
+from app_core.reddit_sentiment import fetch_reddit_sentiment_map
 from app_core.sentiment_pipeline import MAX_SENTIMENT_CALLS, fetch_team_news, league_label, team_sentiment_from_articles
 from app_core.vertex_ai_endpoint import (
     VERTEX_FEATURE_COLUMNS,
@@ -88,7 +89,7 @@ def compute_sentiment_adj(sentiment_diff: Optional[float]) -> Optional[float]:
     if sentiment_diff is None:
         return None
     try:
-        return clamp(sentiment_diff * 0.05, -0.05, 0.05)
+        return clamp(sentiment_diff * 0.03, -0.03, 0.03)
     except Exception:
         return None
 
@@ -98,6 +99,7 @@ SENTIMENT_CACHE_TTL = timedelta(hours=12)
 SENTIMENT_LOG_SAMPLE: Dict[str, bool] = {}
 MAX_SENTIMENT_TEAMS_PER_RUN = 25
 NEWSAPI_COOLDOWN_HOURS = 12
+REDDIT_CACHE_TTL = timedelta(hours=12)
 DECISION_TRACE_SAMPLE_LEAGUES = {"NFL", "NBA", "NCAAB"}
 
 
@@ -150,22 +152,44 @@ def _sentiment_cache_key(team: str, league: str, bucket: str) -> Tuple[str, str,
     return (team.lower().strip(), league.upper().strip(), bucket)
 
 
+def _sentiment_cache_container() -> Optional[Dict[Tuple[str, str, str], Dict[str, Any]]]:
+    try:
+        cache = st.session_state.get("sentiment_run_cache")
+        if cache is None:
+            cache = {}
+            st.session_state["sentiment_run_cache"] = cache
+        return cache
+    except Exception:
+        return None
+
+
 def _sentiment_cache_get(team: str, league: str, bucket: str) -> Optional[Dict[str, Any]]:
-    entry = SENTIMENT_CACHE.get(_sentiment_cache_key(team, league, bucket))
+    key = _sentiment_cache_key(team, league, bucket)
+    container = _sentiment_cache_container() or {}
+    entry = container.get(key) or SENTIMENT_CACHE.get(key)
     if not entry:
         return None
     ts: datetime = entry.get("ts")  # type: ignore
     if not ts or (datetime.now(timezone.utc) - ts) > SENTIMENT_CACHE_TTL:
-        SENTIMENT_CACHE.pop(_sentiment_cache_key(team, league, bucket), None)
+        SENTIMENT_CACHE.pop(key, None)
+        try:
+            container.pop(key, None)
+        except Exception:
+            pass
         return None
     return entry.get("payload")
 
 
 def _sentiment_cache_put(team: str, league: str, bucket: str, payload: Dict[str, Any]) -> None:
-    SENTIMENT_CACHE[_sentiment_cache_key(team, league, bucket)] = {
+    entry = {
         "ts": datetime.now(timezone.utc),
         "payload": payload,
     }
+    key = _sentiment_cache_key(team, league, bucket)
+    SENTIMENT_CACHE[key] = entry
+    container = _sentiment_cache_container()
+    if container is not None:
+        container[key] = entry
 
 
 def _enforce_sentiment_throttle() -> None:
@@ -175,6 +199,42 @@ def _enforce_sentiment_throttle() -> None:
     if delta < 1.0:
         time.sleep(1.0 - delta)
     SENTIMENT_LAST_TS = time.time()
+
+
+def _reddit_cache_key(team: str, league: str, bucket: str) -> str:
+    return f"{league.upper().strip()}::{team.lower().strip()}::{bucket}"
+
+
+def _reddit_cache_get(team: str, league: str, bucket: str) -> Optional[Dict[str, Any]]:
+    try:
+        cache = st.session_state.get("reddit_sentiment_cache") or {}
+    except Exception:
+        cache = {}
+    key = _reddit_cache_key(team, league, bucket)
+    entry = cache.get(key)
+    if not entry:
+        return None
+    ts: datetime = entry.get("ts")  # type: ignore
+    if not ts or (datetime.now(timezone.utc) - ts) > REDDIT_CACHE_TTL:
+        try:
+            cache.pop(key, None)
+            st.session_state["reddit_sentiment_cache"] = cache
+        except Exception:
+            pass
+        return None
+    return entry.get("payload")
+
+
+def _reddit_cache_put(team: str, league: str, bucket: str, payload: Dict[str, Any]) -> None:
+    entry = {"ts": datetime.now(timezone.utc), "payload": payload}
+    try:
+        cache = st.session_state.get("reddit_sentiment_cache")
+        if cache is None:
+            cache = {}
+        cache[_reddit_cache_key(team, league, bucket)] = entry
+        st.session_state["reddit_sentiment_cache"] = cache
+    except Exception:
+        pass
 
 
 def round_pct(p: Any) -> str:
@@ -1054,12 +1114,16 @@ def compute_sentiment_adj_row(row: Dict[str, Any]) -> Tuple[float, str]:
     rate_limited = bool(row.get("sentiment_rate_limited") or False)
     auth_error = bool(row.get("sentiment_auth_error") or False)
     cached_used = bool(row.get("sentiment_used_cached") or False)
+    confidence = safe_float(row.get("sentiment_confidence")) or 0.0
+    source_count = int(row.get("sentiment_source_count") or articles_used or 0)
     level = _normalize_sentiment_level(row.get("sentiment_level"))
     if level == "league":
         return 0.0, "league_directional"
     strength = str(row.get("sentiment_strength") or "").upper() or sentiment_strength_from_articles(level, articles_used)
     if not strength or strength == "NONE":
         strength = sentiment_strength_from_articles(level, articles_used)
+    if confidence < 0.6 or source_count < 5:
+        return 0.0, "low_confidence"
     home_sent = safe_float(row.get("Home_Sentiment"))
     away_sent = safe_float(row.get("Away_Sentiment"))
     sentiment_diff = None if (home_sent is None and away_sent is None) else (home_sent or 0.0) - (away_sent or 0.0)
@@ -1166,22 +1230,26 @@ def sentiment_payload_to_meta(payload: Dict[str, Any]) -> Dict[str, Any]:
     score = safe_float(payload.get("score"))
     confidence = safe_float(payload.get("confidence"))
     try:
-        sources = int(payload.get("sources") or 0)
+        sources = int(payload.get("sources") or payload.get("sentiment_source_count") or 0)
     except Exception:
         sources = 0
     method = str(payload.get("method") or payload.get("source") or "").lower()
+    sentiment_source_override = str(payload.get("sentiment_source") or "").lower()
     sentiment_valid = bool(sources >= 1 and (confidence or 0) > 0.25)
-    sentiment_source = "newsapi" if sentiment_valid else "none"
-    level = "team" if sentiment_valid else "none"
+    sentiment_source = sentiment_source_override or ("newsapi" if sentiment_valid else "none")
+    level = payload.get("sentiment_level") or ("team" if sentiment_valid else "none")
     strength = sentiment_strength_from_articles(level, sources)
     label = None
-    if score is not None:
+    raw_label = payload.get("label")
+    if score is not None and raw_label is None:
         if score > 0.05:
             label = "Positive"
         elif score < -0.05:
             label = "Negative"
         else:
             label = "Neutral"
+    else:
+        label = raw_label if raw_label else None
     return {
         "score": score if sentiment_valid else None,
         "label": label if sentiment_valid else None,
@@ -1195,7 +1263,10 @@ def sentiment_payload_to_meta(payload: Dict[str, Any]) -> Dict[str, Any]:
         "sentiment_articles_used": sources,
         "sentiment_source_count": sources,
         "method": method or None,
-        "reddit_used": False,
+        "reddit_used": bool(payload.get("reddit_used") or sentiment_source in {"reddit", "blended"}),
+        "reddit_posts_used": int(payload.get("reddit_posts_used") or 0),
+        "reddit_comments_used": int(payload.get("reddit_comments_used") or 0),
+        "sentiment_confidence": confidence or 0.0,
     }
 
 
@@ -1230,6 +1301,10 @@ def compute_team_sentiment_map(news_api_key: Optional[str], games: List[Dict[str
         "requests_skipped_due_to_cache": 0,
         "requests_skipped_due_to_cooldown": 0,
         "rate_limit_hit": False,
+        "reddit_posts_used": 0,
+        "reddit_comments_used": 0,
+        "teams_from_reddit": 0,
+        "teams_blended": 0,
     }
 
     kalshi_matched_teams: set = set()
@@ -1279,72 +1354,60 @@ def compute_team_sentiment_map(news_api_key: Optional[str], games: List[Dict[str
             t,
         ),
     )
-    calls_capped = False
-    debug["calls_capped"] = calls_capped
+    debug["sentiment_scope"] = "team_level"
+    if len(ordered_teams) > MAX_SENTIMENT_TEAMS_PER_RUN:
+        ordered_teams = ordered_teams[:MAX_SENTIMENT_TEAMS_PER_RUN]
+        debug["calls_capped"] = True
+        debug["sentiment_scope"] = "team_level_capped"
+    calls_capped = debug.get("calls_capped", False)
 
     cache_miss_calls = 0
-    REQUEST_BUDGET = min(MAX_SENTIMENT_TEAMS_PER_RUN, MAX_SENTIMENT_CALLS)
+    REQUEST_BUDGET = min(MAX_SENTIMENT_TEAMS_PER_RUN, MAX_SENTIMENT_CALLS, len(ordered_teams))
     stop_fetching = cooldown_active
     debug["rate_limited"] = debug.get("rate_limited") or cooldown_active
+    news_payloads: Dict[str, Dict[str, Any]] = {}
 
     for team in ordered_teams:
         cache_payload = _sentiment_cache_get(team, league, date_bucket)
         cached = cache_payload is not None
         payload = cache_payload or {}
+        fetch_info: Dict[str, Any] = payload.get("fetch_info") or {}
+        status_int = payload.get("status")
         if cached:
             debug["cached_teams"] = debug.get("cached_teams", 0) + 1
             debug["used_cached"] = True
             debug["requests_skipped_due_to_cache"] = debug.get("requests_skipped_due_to_cache", 0) + 1
 
         if stop_fetching and not cached:
-            sentiment_meta[team] = {
-                "sentiment_valid": False,
-                "sentiment_source": "rate_limited",
-                "sentiment_level": "none",
-                "sentiment_strength": "NONE",
-                "sentiment_badge": "NONE",
-                "sentiment_articles_used": 0,
-                "sentiment_query_used": None,
-                "cached": False,
-                "error": "cooldown_active",
+            payload = {
+                "score": None,
+                "confidence": 0.0,
+                "sources": 0,
                 "status": 429,
-                "sentiment_status": "cooldown",
-                "sentiment_confidence": 0.0,
-                "sentiment_rate_limited": True,
-                "sentiment_label": "rate_limited",
-                "sentiment_source_count": 0,
-                "score": 0.0,
-            }
-            sentiment_map[team] = 0.0
-            debug["missing_teams"].append(team)
-            debug["requests_skipped_due_to_cooldown"] = debug.get("requests_skipped_due_to_cooldown", 0) + 1
-            continue
-
-        if not cached and cache_miss_calls >= REQUEST_BUDGET:
-            calls_capped = True
-            sentiment_meta[team] = {
-                "sentiment_valid": False,
+                "fetch_info": {"status": 429, "error": "cooldown_active", "retry_after": debug.get("cooldown_until")},
+                "rate_limited": True,
+                "auth_error": False,
+                "method": "cooldown_skip",
                 "sentiment_source": "none",
-                "sentiment_level": "none",
-                "sentiment_strength": "NONE",
-                "sentiment_badge": "NONE",
-                "sentiment_articles_used": 0,
-                "sentiment_query_used": None,
-                "cached": False,
-                "error": "calls_capped",
-                "status": None,
-                "sentiment_status": "capped",
-                "sentiment_confidence": 0.0,
-                "sentiment_rate_limited": False,
-                "sentiment_label": None,
-                "sentiment_source_count": 0,
             }
-            sentiment_map[team] = None
-            debug["missing_teams"].append(team)
-            debug["calls_capped"] = True
-            continue
-
-        if not cached:
+            debug["requests_skipped_due_to_cooldown"] = debug.get("requests_skipped_due_to_cooldown", 0) + 1
+            debug["rate_limited"] = True
+            if len(debug.get("errors_sample") or []) < 5:
+                debug.setdefault("errors_sample", []).append({"team": team, "error": "rate_limited", "status_code": 429})
+        elif not cached and cache_miss_calls >= REQUEST_BUDGET:
+            calls_capped = True
+            payload = {
+                "score": None,
+                "confidence": 0.0,
+                "sources": 0,
+                "status": None,
+                "fetch_info": {"status": None, "error": "calls_capped"},
+                "rate_limited": False,
+                "auth_error": False,
+                "method": "newsapi_capped",
+                "sentiment_source": "none",
+            }
+        elif not cached:
             _enforce_sentiment_throttle()
             debug["requests_attempted"] = debug.get("requests_attempted", 0) + 1
             articles, fetch_info = fetch_team_news(news_api_key or "", team, league, date_bucket=date_bucket)
@@ -1364,12 +1427,14 @@ def compute_team_sentiment_map(news_api_key: Optional[str], games: List[Dict[str
                 "rate_limited": bool(fetch_info.get("rate_limited")),
                 "auth_error": bool(fetch_info.get("auth_error")),
                 "method": "newsapi_no_articles" if not articles and not fetch_info.get("rate_limited") else "newsapi",
+                "sentiment_source": "newsapi" if articles else "none",
             }
             _sentiment_cache_put(team, league, date_bucket, payload)
         else:
-            fetch_info = payload.get("fetch_info") or {}
             status_int = payload.get("status")
+            fetch_info = payload.get("fetch_info") or {}
 
+        status_int = payload.get("status")
         if status_int is not None:
             debug["status_counts"][status_int] = debug["status_counts"].get(status_int, 0) + 1
             if len(debug["sample_calls"]) < 5:
@@ -1395,35 +1460,128 @@ def compute_team_sentiment_map(news_api_key: Optional[str], games: List[Dict[str
             if cooldown_new:
                 debug["cooldown_until"] = cooldown_new.isoformat()
             stop_fetching = True
+            if len(debug.get("errors_sample") or []) < 5:
+                debug.setdefault("errors_sample", []).append({"team": team, "error": "rate_limited", "status_code": 429})
         if payload.get("auth_error"):
             debug["auth_error"] = True
 
-        meta = sentiment_payload_to_meta(payload)
-        meta["sentiment_confidence"] = payload.get("confidence") or 0.0
+        payload["cached"] = cached
+        news_payloads[team] = {**payload, "fetch_info": fetch_info, "status": status_int}
+
+    def _payload_valid(p: Dict[str, Any]) -> bool:
+        try:
+            return bool((p.get("sources") or 0) > 0 and safe_float(p.get("score")) is not None)
+        except Exception:
+            return False
+
+    sentiment_available_news = len([1 for p in news_payloads.values() if _payload_valid(p)])
+    teams_missing_news = [t for t in ordered_teams if not _payload_valid(news_payloads.get(t, {}))]
+    need_reddit = debug.get("rate_limited") or sentiment_available_news == 0 or bool(teams_missing_news)
+    reddit_payloads: Dict[str, Dict[str, Any]] = {}
+    reddit_cached = 0
+    if need_reddit and teams_missing_news:
+        cached_reddit: Dict[str, Dict[str, Any]] = {}
+        to_fetch: List[str] = []
+        for team in teams_missing_news:
+            cached_payload = _reddit_cache_get(team, league, date_bucket)
+            if cached_payload:
+                cached_reddit[team] = {**cached_payload, "cached": True}
+                reddit_cached += 1
+            else:
+                to_fetch.append(team)
+        reddit_payloads.update(cached_reddit)
+        if to_fetch:
+            reddit_results = fetch_reddit_sentiment_map(to_fetch, league)
+            for team, payload in reddit_results.items():
+                reddit_payloads[team] = {
+                    "score": safe_float(payload.get("score")),
+                    "confidence": safe_float(payload.get("confidence")),
+                    "sources": int(payload.get("source_count") or 0),
+                    "status": payload.get("status"),
+                    "rate_limited": bool(payload.get("rate_limited")),
+                    "auth_error": False,
+                    "method": "reddit",
+                    "sentiment_source": "reddit" if (payload.get("source_count") or 0) > 0 else "none",
+                    "reddit_posts_used": int(payload.get("posts_used") or 0),
+                    "reddit_comments_used": int(payload.get("comments_used") or 0),
+                    "label": payload.get("label"),
+                    "fetch_info": {
+                        "query": payload.get("query"),
+                        "status": payload.get("status"),
+                        "error": payload.get("error"),
+                    },
+                    "error": payload.get("error"),
+                    "cached": False,
+                }
+                _reddit_cache_put(team, league, date_bucket, reddit_payloads[team])
+
+    def _merge_payloads(news_payload: Dict[str, Any], reddit_payload: Dict[str, Any]) -> Dict[str, Any]:
+        if reddit_payload and (reddit_payload.get("sources") or 0) > 0 and not news_payload.get("sources"):
+            return {**news_payload, **reddit_payload, "reddit_used": True, "sentiment_source": "reddit"}
+        if not reddit_payload or (reddit_payload.get("sources") or 0) <= 0:
+            return {**news_payload, "reddit_used": False}
+        news_conf = safe_float(news_payload.get("confidence")) or 0.0
+        reddit_conf = safe_float(reddit_payload.get("confidence")) or 0.0
+        if news_payload.get("sources") and reddit_conf <= news_conf:
+            return {**news_payload, "reddit_used": False}
+        score_news = news_payload.get("score")
+        score_reddit = reddit_payload.get("score")
+        blended_score = score_news if score_reddit is None else score_reddit
+        if score_news is not None and score_reddit is not None:
+            blended_score = (0.7 * float(score_news)) + (0.3 * float(score_reddit))
+        total_sources = (news_payload.get("sources") or 0) + (reddit_payload.get("sources") or 0)
+        merged = {
+            **news_payload,
+            **reddit_payload,
+            "score": blended_score,
+            "sources": total_sources,
+            "sentiment_source": "blended" if news_payload.get("sources") else "reddit",
+            "reddit_used": True,
+        }
+        return merged
+
+    for team in ordered_teams:
+        news_payload = news_payloads.get(team, {})
+        reddit_payload = reddit_payloads.get(team, {})
+        merged_payload = _merge_payloads(news_payload, reddit_payload)
+        meta = sentiment_payload_to_meta(merged_payload)
+        fetch_info = news_payload.get("fetch_info") or reddit_payload.get("fetch_info") or {}
+        meta["sentiment_confidence"] = merged_payload.get("confidence") or meta.get("sentiment_confidence") or 0.0
         meta["sentiment_query_used"] = fetch_info.get("q") or fetch_info.get("query")
-        meta["sentiment_articles_used"] = payload.get("sources") or 0
+        meta["sentiment_articles_used"] = merged_payload.get("sources") or news_payload.get("sources") or 0
         meta["sentiment_level"] = meta.get("sentiment_level") or ("team" if meta.get("sentiment_valid") else "none")
         meta["sentiment_strength"] = meta.get("sentiment_strength") or sentiment_strength_from_articles(meta["sentiment_level"], meta.get("sentiment_articles_used") or 0)
         meta["sentiment_badge"] = meta.get("sentiment_badge") or sentiment_badge_for(meta["sentiment_level"], meta["sentiment_strength"])
-        meta["status"] = status_int
-        meta["sentiment_status"] = fetch_info.get("status") or fetch_info.get("status_code") or "ok"
-        meta["sentiment_rate_limited"] = bool(payload.get("rate_limited") or status_int == 429)
-        meta["sentiment_used_cached"] = cached
+        meta["status"] = merged_payload.get("status")
+        meta["sentiment_status"] = fetch_info.get("status") or fetch_info.get("status_code") or merged_payload.get("status") or "ok"
+        meta["sentiment_rate_limited"] = bool(merged_payload.get("rate_limited") or merged_payload.get("status") == 429)
+        meta["sentiment_used_cached"] = bool(news_payload.get("cached")) or bool(reddit_payload.get("cached")) if isinstance(reddit_payload, dict) else False
         meta["sentiment_label"] = meta.get("label")
-        meta["sentiment_source_count"] = meta.get("sentiment_articles_used", 0)
-        if not payload.get("sources") and not meta["sentiment_rate_limited"]:
-            meta["method"] = "newsapi_no_articles"
-        sentiment_meta[team] = {**meta, "error": fetch_info.get("error")}
-        debug["raw"][team] = {**payload, "fetch_info": fetch_info}
+        meta["sentiment_source_count"] = meta.get("sentiment_source_count") or merged_payload.get("sources") or 0
+        meta["sentiment_source"] = merged_payload.get("sentiment_source") or meta.get("sentiment_source") or "none"
+        meta["reddit_posts_used"] = int(merged_payload.get("reddit_posts_used") or 0)
+        meta["reddit_comments_used"] = int(merged_payload.get("reddit_comments_used") or 0)
+        meta["sentiment_confidence"] = meta.get("sentiment_confidence") or merged_payload.get("confidence") or 0.0
+        meta["reddit_used"] = bool(merged_payload.get("reddit_used") or meta.get("reddit_used"))
+        meta["error"] = merged_payload.get("error") or fetch_info.get("error")
+        meta["cached"] = bool(news_payload.get("cached"))
+        sentiment_meta[team] = meta
+        debug["raw"][team] = {**merged_payload, "fetch_info": fetch_info}
         debug["fetch_info"][team] = fetch_info
-        debug["article_counts"][team] = meta.get("sentiment_articles_used") or 0
-        debug["articles_total"] += meta.get("sentiment_articles_used") or 0
+        debug["article_counts"][team] = meta.get("sentiment_source_count") or 0
+        debug["articles_total"] += meta.get("sentiment_source_count") or 0
+        debug["reddit_posts_used"] += meta.get("reddit_posts_used") or 0
+        debug["reddit_comments_used"] += meta.get("reddit_comments_used") or 0
+        if meta["sentiment_source"] == "reddit":
+            debug["teams_from_reddit"] += 1
+        if meta["sentiment_source"] == "blended":
+            debug["teams_blended"] += 1
         if fetch_info.get("error"):
             debug["error_count"] += 1
             if len(debug["errors_sample"]) < 5:
                 debug["errors_sample"].append({"team": team, **fetch_info})
-        if meta["sentiment_valid"] and payload.get("score") is not None:
-            sentiment_map[team] = payload.get("score")
+        if meta["sentiment_valid"] and merged_payload.get("score") is not None:
+            sentiment_map[team] = merged_payload.get("score")
         else:
             sentiment_map[team] = None
             debug["missing_teams"].append(team)
@@ -1436,6 +1594,8 @@ def compute_team_sentiment_map(news_api_key: Optional[str], games: List[Dict[str
     else:
         debug["bottom_5"] = []
         debug["top_5"] = []
+    if debug.get("rate_limited") and 429 not in debug.get("status_counts", {}):
+        debug["status_counts"][429] = debug["status_counts"].get(429, 0) + 1
 
     return sentiment_map, sentiment_meta, {
         "article_counts": debug.get("article_counts"),
@@ -1456,6 +1616,10 @@ def compute_team_sentiment_map(news_api_key: Optional[str], games: List[Dict[str
         "requests_skipped_due_to_cache": debug.get("requests_skipped_due_to_cache", 0),
         "requests_skipped_due_to_cooldown": debug.get("requests_skipped_due_to_cooldown", 0),
         "rate_limit_hit": debug.get("rate_limit_hit", False),
+        "reddit_posts_used": debug.get("reddit_posts_used", 0),
+        "reddit_comments_used": debug.get("reddit_comments_used", 0),
+        "teams_from_reddit": debug.get("teams_from_reddit", 0),
+        "teams_blended": debug.get("teams_blended", 0),
     }
 
 
@@ -1463,6 +1627,8 @@ def get_slate_sentiment(enable_sentiment: bool, teams: List[str], league: str, n
     meta = init_sentiment_meta()
     debug: Dict[str, Any] = {}
     teams = [t for t in teams if t]
+    # Deduplicate while preserving order
+    teams = list(dict.fromkeys(teams))
     if not enable_sentiment:
         meta["sentiment_source"] = "disabled_by_user"
         meta["sentiment_sample_status"] = "DISABLED"
@@ -1490,8 +1656,8 @@ def get_slate_sentiment(enable_sentiment: bool, teams: List[str], league: str, n
         cached_map = st.session_state.get("sentiment_map") or {}
         cached_meta_map = st.session_state.get("sentiment_meta_map") or {}
         meta["sentiment_source"] = "cooldown_cached_only"
-        meta["sentiment_sample_status"] = "COOLDOWN"
-        meta["sentiment_status_counts"] = {"COOLDOWN": 1}
+        meta["sentiment_sample_status"] = "429"
+        meta["sentiment_status_counts"] = {"429": 1}
         meta["sentiment_disabled_reason"] = "cooldown_active"
         meta["sentiment_cooldown_until"] = cooldown_until.isoformat() if cooldown_until else None
         meta["sentiment_rate_limited"] = True
@@ -1502,6 +1668,9 @@ def get_slate_sentiment(enable_sentiment: bool, teams: List[str], league: str, n
         debug["rate_limited"] = True
         if meta["sentiment_available_count"] > 0:
             meta["sentiment_source"] = "partial_cached"
+        else:
+            meta["sentiment_source"] = "error_rate_limited"
+            meta["sentiment_errors_sample"] = f"{teams[0] if teams else 'team'}: rate_limited"
         return {"map": cached_map, "meta_map": cached_meta_map, "meta": meta, "debug": debug}
     meta["sentiment_sample_status"] = "PENDING"
     meta["sentiment_status_counts"] = {"PENDING": 1}
@@ -1511,6 +1680,8 @@ def get_slate_sentiment(enable_sentiment: bool, teams: List[str], league: str, n
         sentiment_map, sentiment_meta_map, sentiment_debug = compute_team_sentiment_map(news_api_key, games_stub, league)
         debug = sentiment_debug or {}
         status_counts = debug.get("status_counts") or {}
+        # Normalize status count keys to strings for downstream export/UI consistency
+        status_counts = {str(k): v for k, v in status_counts.items()}
         sample_calls = debug.get("sample_calls") or []
         sample_call = sample_calls[0] if sample_calls else {}
         meta["sentiment_status_counts"] = status_counts if status_counts else {"NO_CALL": 1}
@@ -1523,30 +1694,54 @@ def get_slate_sentiment(enable_sentiment: bool, teams: List[str], league: str, n
         meta["sentiment_articles_total"] = debug.get("articles_total") or 0
         meta["sentiment_cached_teams_count"] = debug.get("cached_teams") or 0
         meta["sentiment_available_count"] = len([t for t, mv in sentiment_meta_map.items() if mv.get("sentiment_valid")])
-        meta["sentiment_rate_limited"] = bool(meta["sentiment_sample_status"] == "429" or status_counts.get(429) or debug.get("rate_limited"))
+        meta["sentiment_rate_limited"] = bool(meta["sentiment_sample_status"] == "429" or status_counts.get("429") or debug.get("rate_limited"))
         meta["sentiment_auth_error"] = bool(debug.get("auth_error") or meta["sentiment_sample_status"] in {"401", "403"})
         meta["sentiment_status"] = meta.get("sentiment_sample_status")
         meta["sentiment_cooldown_until"] = debug.get("cooldown_until") or meta.get("sentiment_cooldown_until") or ""
         valid_scores = [safe_float(v) or 0.0 for t, v in sentiment_map.items() if v is not None and (sentiment_meta_map.get(t, {}).get("sentiment_valid"))]
-        meta["sentiment_confidence"] = max(valid_scores or [0.0])
+        confidence_values = [safe_float(mv.get("sentiment_confidence")) or 0.0 for mv in sentiment_meta_map.values()]
+        meta["sentiment_confidence"] = max(confidence_values or valid_scores or [0.0])
         meta["sentiment_score"] = sum(valid_scores) / max(1, len(valid_scores)) if valid_scores else 0.0
         meta["sentiment_label"] = None
         meta["sentiment_disabled_reason"] = ""
-        meta["sentiment_source_count"] = meta.get("sentiment_articles_total") or 0
+        if meta["sentiment_rate_limited"] and meta["sentiment_available_count"] == 0:
+            meta["sentiment_sample_status"] = "429"
+            meta["sentiment_status"] = "429"
+            counts_existing = meta.get("sentiment_status_counts") or {}
+            counts_existing[str(429)] = counts_existing.get(str(429), 0) + 1
+            meta["sentiment_status_counts"] = counts_existing
+            if not meta["sentiment_errors_sample"]:
+                rate_limit_team = (errors_sample[0].get("team") if errors_sample else (teams[0] if teams else "team"))
+                meta["sentiment_errors_sample"] = f"{rate_limit_team}: rate_limited"
+        meta["sentiment_source_count"] = (meta.get("sentiment_articles_total") or 0) + (debug.get("reddit_posts_used", 0) + debug.get("reddit_comments_used", 0))
         meta["requests_attempted"] = debug.get("requests_attempted", 0)
         meta["requests_skipped_due_to_cache"] = debug.get("requests_skipped_due_to_cache", 0)
         meta["requests_skipped_due_to_cooldown"] = debug.get("requests_skipped_due_to_cooldown", 0)
         meta["rate_limit_hit"] = debug.get("rate_limit_hit", False)
+        meta["reddit_posts_used"] = debug.get("reddit_posts_used", 0)
+        meta["reddit_comments_used"] = debug.get("reddit_comments_used", 0)
+        meta["reddit_filled_teams"] = debug.get("teams_from_reddit", 0)
+        meta["reddit_blended_teams"] = debug.get("teams_blended", 0)
+        source_counts: Dict[str, int] = {}
+        for mv in sentiment_meta_map.values():
+            src = str(mv.get("sentiment_source") or "none")
+            source_counts[src] = source_counts.get(src, 0) + 1
         if meta["sentiment_rate_limited"] and meta["sentiment_available_count"] == 0:
             meta["sentiment_source"] = "error_rate_limited"
         elif meta["sentiment_rate_limited"] and meta["sentiment_available_count"] > 0:
             meta["sentiment_source"] = "partial_cached"
         elif meta["sentiment_auth_error"]:
             meta["sentiment_source"] = "error_auth"
+        elif source_counts.get("blended"):
+            meta["sentiment_source"] = "blended"
+        elif source_counts.get("reddit") and not source_counts.get("newsapi"):
+            meta["sentiment_source"] = "reddit"
+        elif source_counts.get("newsapi"):
+            meta["sentiment_source"] = "newsapi"
         else:
-            meta["sentiment_source"] = "newsapi" if meta["sentiment_available_count"] > 0 else "none"
+            meta["sentiment_source"] = "none"
         meta["sentiment_label"] = meta.get("sentiment_label") or None
-        meta["sentiment_source_count"] = meta.get("sentiment_articles_total") or 0
+        meta["sentiment_source_count"] = meta.get("sentiment_source_count") or meta.get("sentiment_articles_total") or 0
         return {"map": sentiment_map, "meta_map": sentiment_meta_map, "meta": meta, "debug": debug}
     except Exception as exc:  # pragma: no cover - defensive
         meta["sentiment_source"] = "error_exception"
@@ -1947,8 +2142,13 @@ def init_sentiment_meta() -> Dict[str, Any]:
         "sentiment_cooldown_until": "",
         "sentiment_cached_teams_count": 0,
         "sentiment_articles_used": 0,
+        "sentiment_source_count": 0,
         "last_error": None,
         "reddit_used": False,
+        "reddit_posts_used": 0,
+        "reddit_comments_used": 0,
+        "reddit_filled_teams": 0,
+        "reddit_blended_teams": 0,
     }
 
 
@@ -1962,6 +2162,7 @@ def ensure_sentiment_loaded(games: List[Dict[str, Any]]) -> None:
         st.session_state.pop("sentiment_cooldown_until", None)
         st.session_state.pop("NEWSAPI_RATE_LIMITED_UNTIL", None)
         st.session_state.pop("reddit_used", None)
+        st.session_state.pop("reddit_sentiment_cache", None)
         st.session_state.pop("sentiment_slate_key", None)
         st.session_state.pop("sentiment_source", None)
         st.session_state.pop("sentiment_map", None)
@@ -1974,6 +2175,10 @@ def ensure_sentiment_loaded(games: List[Dict[str, Any]]) -> None:
         return {
             "sentiment_source": source,
             "reddit_used": False,
+            "reddit_posts_used": 0,
+            "reddit_comments_used": 0,
+            "reddit_filled_teams": 0,
+            "reddit_blended_teams": 0,
             "articles_total": 0,
             "last_error": None,
             "error_count": 0,
@@ -1989,6 +2194,8 @@ def ensure_sentiment_loaded(games: List[Dict[str, Any]]) -> None:
             "cooldown_active": False,
             "available_count": 0,
             "sentiment_disabled_reason": disabled_reason,
+            "sentiment_source_count": 0,
+            "sentiment_confidence": 0.0,
         }
 
     enabled = st.session_state.get("enable_sentiment", True)
@@ -4852,8 +5059,22 @@ with tab_master:
         st.session_state["sentiment_meta"] = slate_sentiment.get("meta") or init_sentiment_meta()
         st.session_state["sentiment_debug"] = slate_sentiment.get("debug") or {}
         with st.expander("Sentiment Debug", expanded=False):
-            st.json((slate_sentiment.get("meta") or {}))
+            meta_view = slate_sentiment.get("meta") or {}
+            meta_map_view = slate_sentiment.get("meta_map") or {}
+            source_counts: Dict[str, int] = {}
+            for mv in meta_map_view.values():
+                src_val = str(mv.get("sentiment_source") or "none")
+                source_counts[src_val] = source_counts.get(src_val, 0) + 1
+            st.write("Sentiment source:", meta_view.get("sentiment_source"))
+            st.write("Status counts:", meta_view.get("sentiment_status_counts"))
+            st.write("Teams by source:", source_counts)
+            st.write(
+                "Reddit posts/comments used:",
+                meta_view.get("reddit_posts_used", 0),
+                meta_view.get("reddit_comments_used", 0),
+            )
             st.write("Unique teams:", len(unique_teams))
+            st.json(meta_view)
         sentiment_pack_meta = st.session_state.get("sentiment_meta") or init_sentiment_meta()
         sentiment_map: Dict[str, Optional[float]] = st.session_state.get("sentiment_map") or {}
         sentiment_meta_map: Dict[str, Dict[str, Any]] = st.session_state.get("sentiment_meta_map") or {}
@@ -5199,6 +5420,12 @@ with tab_master:
             sentiment_articles_home = int(home_meta.get("sentiment_articles_used") or home_meta.get("sources") or home_meta.get("articles") or 0)
             sentiment_articles_away = int(away_meta.get("sentiment_articles_used") or away_meta.get("sources") or away_meta.get("articles") or 0)
             sentiment_articles_used = sentiment_articles_home + sentiment_articles_away
+            sentiment_source_count_total = int(home_meta.get("sentiment_source_count") or sentiment_articles_home) + int(away_meta.get("sentiment_source_count") or sentiment_articles_away)
+            sentiment_confidence_home = safe_float(home_meta.get("sentiment_confidence")) or 0.0
+            sentiment_confidence_away = safe_float(away_meta.get("sentiment_confidence")) or 0.0
+            sentiment_confidence_value = safe_float((st.session_state.get("sentiment_meta") or {}).get("sentiment_confidence")) or 0.0
+            sentiment_confidence_local = max(sentiment_confidence_value, sentiment_confidence_home, sentiment_confidence_away)
+            sentiment_actionable = sentiment_confidence_local >= 0.6 and sentiment_source_count_total >= 5
             sentiment_score_field = sentiment_diff if (home_sent is not None and away_sent is not None) else None
             sentiment_label_field = None
             if sentiment_score_field is not None:
@@ -5231,12 +5458,16 @@ with tab_master:
                     if q
                 ]
             )
-            sentiment_signal = sentiment_signal_value(sentiment_level, sentiment_diff)
-            spread_sentiment_adj = compute_market_sentiment_adjustment(sentiment_level, sentiment_strength, "spread", sentiment_signal)
-            total_sentiment_adj = compute_market_sentiment_adjustment(sentiment_level, sentiment_strength, "total", sentiment_signal)
+            if not sentiment_actionable:
+                sentiment_level = "none"
+                sentiment_strength = "NONE"
+                sentiment_badge = "NONE"
+            sentiment_signal = sentiment_signal_value(sentiment_level, sentiment_diff) if sentiment_actionable else 0.0
+            spread_sentiment_adj = compute_market_sentiment_adjustment(sentiment_level, sentiment_strength, "spread", sentiment_signal) if sentiment_actionable else 0.0
+            total_sentiment_adj = compute_market_sentiment_adjustment(sentiment_level, sentiment_strength, "total", sentiment_signal) if sentiment_actionable else 0.0
             if sentiment_auth_error:
                 sentiment_adj_reason = "auth_error"
-            elif sentiment_level != "none" and sentiment_strength != "NONE" and sentiment_articles_used > 0:
+            elif sentiment_actionable and sentiment_level != "none" and sentiment_strength != "NONE" and sentiment_articles_used > 0:
                 sentiment_adj = compute_market_sentiment_adjustment(sentiment_level, sentiment_strength, "moneyline", sentiment_signal)
                 reason_bits: List[str] = []
                 if rate_limited_flag:
@@ -5244,7 +5475,7 @@ with tab_master:
                 if sentiment_used_cached:
                     reason_bits.append("cached")
                 sentiment_adj_reason = "applied" if not reason_bits else f"applied_{'_'.join(reason_bits)}"
-            sentiment_valid = bool(sentiment_articles_used > 0 and not sentiment_auth_error)
+            sentiment_valid = bool(sentiment_actionable and sentiment_articles_used > 0 and not sentiment_auth_error)
             sentiment_source = (
                 st.session_state.get(f"sentiment_source_{league_key}")
                 or sentiment_meta_global.get("sentiment_source")
@@ -5283,7 +5514,7 @@ with tab_master:
             if not sentiment_sample_status and sentiment_rate_limited:
                 sentiment_sample_status = 429
             sentiment_status_value = sentiment_meta_global.get("sentiment_status") or sentiment_sample_status
-            sentiment_confidence_value = safe_float(sentiment_meta_global.get("sentiment_confidence"))
+            sentiment_confidence_value = max(sentiment_confidence_local, safe_float(sentiment_meta_global.get("sentiment_confidence")) or 0.0)
             sentiment_score_value = sentiment_meta_global.get("sentiment_score")
             sentiment_disabled_reason = sentiment_meta_global.get("sentiment_disabled_reason") or ""
             sentiment_error_count = int(sentiment_error_count or 0)
@@ -7186,6 +7417,10 @@ with tab_master:
                     row["gemini_error"] = gem_res.get("gemini_error")
                     row["gemini_mode"] = "guardrail"
                     row["llm_disagreement_flag"] = False
+                    row["gemini_alignment"] = "NEUTRAL"
+                    row["gemini_rationale"] = "Gemini disabled: sentiment unavailable (rate-limited/auth)."
+                    row["gemini_flags_short"] = "sentiment_guardrail"
+                    row["gemini_risk_flags"] = json.dumps(["sentiment_guardrail"])
                     return row
                 row["overall_confidence"] = base_overall
                 row["spread_confidence"] = base_spread_conf
@@ -7598,7 +7833,21 @@ with tab_master:
         )
 
         with st.expander("Sentiment Debug", expanded=False):
-            st.json(st.session_state.get("sentiment_meta", {}))
+            meta_view = st.session_state.get("sentiment_meta", {})
+            meta_map_view = st.session_state.get("sentiment_meta_map", {})
+            source_counts: Dict[str, int] = {}
+            for mv in meta_map_view.values():
+                src_val = str(mv.get("sentiment_source") or "none")
+                source_counts[src_val] = source_counts.get(src_val, 0) + 1
+            st.write("Sentiment source:", meta_view.get("sentiment_source"))
+            st.write("Status counts:", meta_view.get("sentiment_status_counts"))
+            st.write("Teams by source:", source_counts)
+            st.write(
+                "Reddit posts/comments used:",
+                meta_view.get("reddit_posts_used", 0),
+                meta_view.get("reddit_comments_used", 0),
+            )
+            st.json(meta_view)
             st.json(st.session_state.get("sentiment_debug", {}))
 
         # Market range visualizer
@@ -7727,7 +7976,7 @@ with tab_master:
                 st.caption("One sample per league (NFL / NBA / NCAAB) showing how the final pick & probability were derived.")
                 samples = st.session_state.get("DECISION_TRACE_SAMPLES", {}) or {}
                 if not samples:
-                    st.info("No decision trace samples yet. Run Master Analysis first.")
+                    st.info("No decision traces available.")
                 else:
                     for lg in sorted(samples.keys()):
                         sample = samples.get(lg, {})
@@ -7825,6 +8074,11 @@ with tab_sentiment:
         st.info("No sentiment scores available yet (missing NewsAPI key or disabled).")
     with st.expander("Sentiment Debug", expanded=True):
         sent_debug = st.session_state.get("sentiment_debug", {})
+        meta_map_view = st.session_state.get("sentiment_meta_map", {})
+        source_counts: Dict[str, int] = {}
+        for mv in meta_map_view.values():
+            src_val = str(mv.get("sentiment_source") or "none")
+            source_counts[src_val] = source_counts.get(src_val, 0) + 1
         st.json(
             {
                 "requests_attempted": sent_debug.get("requests_attempted"),
@@ -7833,6 +8087,9 @@ with tab_sentiment:
                 "rate_limit_hit": sent_debug.get("rate_limit_hit"),
                 "cooldown_until": sent_debug.get("cooldown_until"),
                 "rate_limited": sent_debug.get("rate_limited"),
+                "reddit_posts_used": sent_debug.get("reddit_posts_used"),
+                "reddit_comments_used": sent_debug.get("reddit_comments_used"),
+                "teams_by_source": source_counts,
             }
         )
         st.json(sent_debug or {})

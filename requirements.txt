@@ -15,6 +15,9 @@ requests>=2.31.0
 # Crypto for Kalshi auth
 cryptography>=42.0.0
 
+# Sentiment fallback
+vaderSentiment>=3.3.2
+
 # Date/Time
 pytz>=2023.3
 
