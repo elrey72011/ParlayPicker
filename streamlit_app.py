@@ -7437,7 +7437,25 @@ with tab_master:
             df["reddit_used"] = df["reddit_used"].fillna(False)
         df = add_spread_total_confidence(df)
         use_gemini_explanations = st.session_state.get("use_gemini_explanations", True)
+        for col, default in {
+            "gemini_mode": "guardrail",
+            "gemini_alignment": "NEUTRAL",
+            "gemini_rationale": "",
+            "gemini_flags_short": "",
+        }.items():
+            if col not in df.columns:
+                df[col] = default
+            df[col] = df[col].fillna(default)
         def _apply_gemini(row: pd.Series) -> pd.Series:
+            row = row.copy()
+            if "gemini_mode" not in row or pd.isna(row.get("gemini_mode")):
+                row["gemini_mode"] = "guardrail"
+            if "gemini_alignment" not in row or pd.isna(row.get("gemini_alignment")):
+                row["gemini_alignment"] = "NEUTRAL"
+            if "gemini_rationale" not in row or pd.isna(row.get("gemini_rationale")):
+                row["gemini_rationale"] = ""
+            if "gemini_flags_short" not in row or pd.isna(row.get("gemini_flags_short")):
+                row["gemini_flags_short"] = ""
             base_overall = row.get("At_a_Glance_Confidence") or row.get("Pick_Confidence")
             base_spread_conf = row.get("spread_confidence")
             base_total_conf = row.get("total_confidence")
@@ -7453,8 +7471,11 @@ with tab_master:
             row.setdefault("gemini_flags_short", "")
             row.setdefault("gemini_risk_flags", json.dumps([]))
             if not use_gemini_explanations:
-                row["gemini_mode"] = row.get("gemini_mode") or "disabled"
-                row["gemini_alignment"] = row.get("gemini_alignment") or "NEUTRAL"
+                row["gemini_mode"] = "guardrail"
+                row["gemini_alignment"] = "NEUTRAL"
+                row["gemini_rationale"] = "Gemini disabled: sentiment unavailable (rate-limited/auth)."
+                row["gemini_flags_short"] = "sentiment_unavailable"
+                row["gemini_risk_flags"] = row.get("gemini_risk_flags") or json.dumps([])
                 row["llm_disagreement_flag"] = bool(row.get("llm_disagreement_flag"))
                 row["gemini_rationale"] = row.get("gemini_rationale") or "Gemini skipped: disabled"
                 row["gemini_flags_short"] = row.get("gemini_flags_short") or "gemini_disabled"
@@ -7494,7 +7515,7 @@ with tab_master:
                     row["llm_disagreement_flag"] = False
                     row["gemini_alignment"] = "NEUTRAL"
                     row["gemini_rationale"] = "Gemini disabled: sentiment unavailable (rate-limited/auth)."
-                    row["gemini_flags_short"] = "sentiment_guardrail"
+                    row["gemini_flags_short"] = "sentiment_unavailable"
                     row["gemini_risk_flags"] = json.dumps(["sentiment_guardrail"])
                     if not row.get("prob_engine"):
                         row["prob_engine"] = "market_only"
@@ -7515,11 +7536,32 @@ with tab_master:
                 row["gemini_mode"] = "error"
                 row["gemini_error"] = str(exc)[:240]
                 row["llm_disagreement_flag"] = False
-                row["gemini_alignment"] = row.get("gemini_alignment") or "NEUTRAL"
-                row["gemini_rationale"] = row.get("gemini_rationale") or f"Gemini skipped: {row.get('gemini_error')}"
-                row["gemini_flags_short"] = row.get("gemini_flags_short") or "gemini_error"
+                row["gemini_alignment"] = "NEUTRAL"
+                row["gemini_rationale"] = f"Gemini error: {row.get('gemini_error')}"
+                existing_flags = str(row.get("gemini_flags_short") or "").strip()
+                if existing_flags:
+                    row["gemini_flags_short"] = f"{existing_flags};gemini_error"
+                else:
+                    row["gemini_flags_short"] = "gemini_error"
             return row
         df = df.apply(_apply_gemini, axis=1)
+        # Ensure Gemini columns are never null before export
+        for col, default in [
+            ("gemini_alignment", "NEUTRAL"),
+            ("gemini_rationale", ""),
+            ("gemini_flags_short", ""),
+            ("gemini_mode", "guardrail"),
+            ("prob_engine", "market_only"),
+        ]:
+            if col not in df.columns:
+                df[col] = default
+            df[col] = df[col].fillna(default)
+        try:
+            null_counts = df[["gemini_mode", "gemini_alignment", "gemini_rationale", "gemini_flags_short"]].isna().sum()
+            if null_counts.sum() > 0 and logger:
+                logger.warning("Gemini columns contained nulls after apply: %s", dict(null_counts))
+        except Exception:
+            pass
 
         # Ensure Gemini columns are never null before export
         for col, default in [
