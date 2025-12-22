@@ -390,6 +390,78 @@ def sentiment_impact_for_pick(
     }
 
 
+def implied_prob_for_pick(odds_home: Any, odds_away: Any, pick_side: Optional[str]) -> Optional[float]:
+    """Return implied probability for the selected side (home/away/over/under)."""
+    side = (pick_side or "").lower()
+    if side in {"home", "over"}:
+        return american_to_implied_prob(odds_home)
+    if side in {"away", "under"}:
+        return american_to_implied_prob(odds_away)
+    return None
+
+
+def map_kalshi_prob_for_pick(
+    kalshi_prob_yes: Optional[float], kalshi_yes_side: Optional[str], pick_side: Optional[str]
+) -> Optional[float]:
+    """Map a Kalshi yes-probability to the selected pick side."""
+    prob = safe_float(kalshi_prob_yes)
+    if prob is None:
+        return None
+    if not kalshi_yes_side or not pick_side:
+        return prob
+    pick_norm = str(pick_side).lower()
+    yes_norm = str(kalshi_yes_side).lower()
+    if yes_norm == pick_norm:
+        return prob
+    return 1.0 - prob
+
+
+def compute_final_probability(
+    pick_side: Optional[str],
+    implied_prob: Optional[float],
+    kalshi_prob_yes: Optional[float],
+    kalshi_side_yes: Optional[str],
+    model_prob: Optional[float],
+    sentiment_adj: Optional[float],
+    weights_dict: Dict[str, Any],
+) -> Tuple[Optional[float], Optional[float], Dict[str, float], str, List[str], Optional[float]]:
+    """
+    Blend available probabilities with weight re-normalization.
+    Returns (final_prob, base_prob, weights_used, driver, warnings, kalshi_prob_for_pick).
+    """
+    warnings: List[str] = []
+    sources: List[Tuple[str, Optional[float], float]] = []
+    weights_used: Dict[str, float] = {"w_implied": 0.0, "w_kalshi": 0.0, "w_model": 0.0, "w_sentiment": 0.0}
+    kalshi_prob_for_pick = map_kalshi_prob_for_pick(kalshi_prob_yes, kalshi_side_yes, pick_side)
+    if implied_prob is not None:
+        sources.append(("implied", clamp(implied_prob), float(weights_dict.get("odds_weight") or 0.0)))
+    if kalshi_prob_for_pick is not None:
+        sources.append(("kalshi", clamp(kalshi_prob_for_pick), float(weights_dict.get("kalshi_weight") or 0.0)))
+    if model_prob is not None:
+        sources.append(("model", clamp(model_prob), float(weights_dict.get("ml_weight") or 0.0)))
+    if sentiment_adj is None:
+        sentiment_adj = 0.0
+    if not sources:
+        return None, None, weights_used, "missing", warnings, kalshi_prob_for_pick
+    if all((w or 0.0) <= 0.0 for _, _, w in sources):
+        sources = [(name, prob, 1.0) for name, prob, _ in sources]
+    total_w = sum(max(w, 0.0) for _, _, w in sources)
+    if total_w <= 0:
+        total_w = float(len(sources))
+        sources = [(name, prob, 1.0) for name, prob, _ in sources]
+    weights_norm: List[Tuple[str, float, float]] = []
+    for name, prob, weight in sources:
+        w_norm = max(weight, 0.0) / total_w
+        weights_used[f"w_{name}"] = w_norm
+        weights_norm.append((name, prob if prob is not None else None, w_norm))
+    driver = max(weights_norm, key=lambda tup: tup[2])[0] if weights_norm else "missing"
+    base_prob = sum((prob or 0.0) * w for _, prob, w in weights_norm)
+    final_prob = clamp((base_prob or 0.0) + sentiment_adj, 0.0, 1.0)
+    if driver == "kalshi" and kalshi_prob_for_pick is not None and kalshi_prob_for_pick < 0.5:
+        warnings.append("kalshi_pick_mismatch")
+    return final_prob, base_prob, weights_used, driver, warnings, kalshi_prob_for_pick
+
+
 def build_decision_trace(
     market: str,
     pick_label: str,
@@ -407,13 +479,21 @@ def build_decision_trace(
     sentiment_label: Optional[str],
     vertex_used: bool,
     final_pick_reason: Optional[str],
+    warnings: Optional[List[str]],
+    kalshi_yes_side: Optional[str],
+    kalshi_prob_for_pick: Optional[float],
 ) -> Tuple[str, str, str]:
+    confidence_bucket = confidence
+    if final_prob is None:
+        confidence_bucket = "UNKNOWN"
     trace_obj = {
         "league": league,
         "kalshi": {
             "available": kalshi_available,
             "probability": safe_float(kalshi_prob),
             "market": kalshi_market,
+            "yes_side": kalshi_yes_side,
+            "prob_for_pick": safe_float(kalshi_prob_for_pick),
         },
         "model": {
             "vertex_used": vertex_used,
@@ -425,19 +505,21 @@ def build_decision_trace(
         },
         "source_probs": {
             "implied_prob": safe_float(implied_prob),
-            "kalshi_prob": safe_float(kalshi_prob),
+            "kalshi_prob_raw_yes": safe_float(kalshi_prob),
+            "kalshi_prob_for_pick": safe_float(kalshi_prob_for_pick),
             "model_prob": safe_float(model_prob),
             "sentiment_adj": safe_float(sentiment_adj),
         },
         "weights": {
-            "w_implied": safe_float(weights.get("odds_weight")),
-            "w_kalshi": safe_float(weights.get("kalshi_weight")),
-            "w_model": safe_float(weights.get("ml_weight")),
-            "w_sentiment": safe_float(weights.get("sentiment_weight")),
+            "w_implied": safe_float(weights.get("w_implied") if "w_implied" in weights else weights.get("odds_weight")) or 0.0,
+            "w_kalshi": safe_float(weights.get("w_kalshi") if "w_kalshi" in weights else weights.get("kalshi_weight")) or 0.0,
+            "w_model": safe_float(weights.get("w_model") if "w_model" in weights else weights.get("ml_weight")) or 0.0,
+            "w_sentiment": safe_float(weights.get("w_sentiment") if "w_sentiment" in weights else weights.get("sentiment_weight")) or 0.0,
         },
         "final_prob": safe_float(final_prob),
-        "confidence_bucket": confidence,
+        "confidence_bucket": confidence_bucket,
         "final_pick_reason": final_pick_reason,
+        "warnings": warnings or [],
     }
     short = f"{market}: {pick_label} -> {trace_obj['final_prob'] or 'n/a'} ({confidence or 'NA'})"
     try:
@@ -1664,13 +1746,9 @@ def score_pick_confidence(row: Dict[str, Any]) -> Tuple[str, str, bool]:
     confidence in {"HIGH", "MEDIUM", "LOW"}.
     """
     market = (row.get("Market") or "").lower()
-    final_prob = safe_float(
-        row.get("final_probability")
-        or row.get("consensus_prob_adj")
-        or row.get("AI_Prob")
-    )
+    final_prob = safe_float(row.get("final_probability") or row.get("consensus_prob_adj") or row.get("AI_Prob"))
     if final_prob is None:
-        return "LOW", "LOW: missing final probability", False
+        return "UNKNOWN", "UNKNOWN: missing final probability", False
 
     decisiveness = abs(final_prob - 0.5) * 2
     if decisiveness >= 0.40:
@@ -4176,6 +4254,20 @@ def match_kalshi_market(
     fallback_with_date: List[Tuple[float, Dict[str, Any]]] = []
     fallback_no_date: List[Tuple[float, Dict[str, Any]]] = []
 
+    def infer_yes_side(market: Dict[str, Any]) -> Optional[str]:
+        codes = kalshi_ticker_team_codes(market)
+        if codes:
+            first, second = codes
+            if first and first == home_code_expected:
+                return "home"
+            if first and first == away_code_expected:
+                return "away"
+            if second and second == home_code_expected:
+                return "away"
+            if second and second == away_code_expected:
+                return "home"
+        return None
+
     home_code_candidates = [c.upper() for c in team_code_candidates(league_name, game.get("home_team"))]
     away_code_candidates = [c.upper() for c in team_code_candidates(league_name, game.get("away_team"))]
 
@@ -4245,6 +4337,7 @@ def match_kalshi_market(
             "kalshi_ticker": best_winner.get("event_ticker") or best_winner.get("ticker"),
             "kalshi_line": None,
             "kalshi_title": best_winner.get("title"),
+            "kalshi_yes_side": infer_yes_side(best_winner),
         }
     else:
         no_reason = winner_reason_override or best_reason or "no_winner_market_for_game"
@@ -4267,6 +4360,7 @@ def match_kalshi_market(
             "kalshi_ticker": chosen.get("event_ticker") or chosen.get("ticker"),
             "kalshi_line": line,
             "kalshi_title": chosen.get("title"),
+            "kalshi_yes_side": "over" if market_type == "total" else "home",
         }
 
     winner_meta = {
@@ -5658,14 +5752,54 @@ with tab_master:
             kalshi_prob_total = safe_float(kalshi_total.get("kalshi_prob"))
             vertex_used_for_spread = bool(use_vertex_numeric_probs and vertex_spread_prob is not None)
             vertex_used_for_total = bool(use_vertex_numeric_probs and vertex_total_prob is not None)
-            spread_prob_final = blend_kalshi_market(kalshi_prob_spread, spread_prob_market) if kalshi_spread.get("kalshi_matched") else spread_prob_market
-            total_prob_final = blend_kalshi_market(kalshi_prob_total, total_prob_market) if kalshi_total.get("kalshi_matched") else total_prob_market
-            if vertex_used_for_spread:
-                spread_prob_final = clamp(vertex_spread_prob)
-            if vertex_used_for_total:
-                total_prob_final = clamp(vertex_total_prob)
+            spread_base_weights = {
+                "odds_weight": 1.0,
+                "kalshi_weight": 1.0,
+                "ml_weight": 1.0,
+                "sentiment_weight": abs(spread_sentiment_adj or 0.0),
+            }
+            spread_prob_final, spread_base_prob, spread_weights_used, spread_decision_driver, spread_warnings_new, spread_kalshi_prob_for_pick = compute_final_probability(
+                spread_pick_side_key,
+                spread_prob_market,
+                kalshi_prob_spread if kalshi_spread.get("kalshi_matched") else None,
+                kalshi_spread.get("kalshi_yes_side") or "home",
+                vertex_spread_prob if vertex_used_for_spread else None,
+                spread_sentiment_adj,
+                spread_base_weights,
+            )
+            if spread_prob_final is None:
+                spread_prob_final = blend_kalshi_market(kalshi_prob_spread, spread_prob_market) if kalshi_spread.get("kalshi_matched") else spread_prob_market
+                if vertex_used_for_spread and vertex_spread_prob is not None:
+                    spread_prob_final = clamp(vertex_spread_prob)
+                spread_base_prob = spread_prob_final
+                spread_weights_used = {"w_implied": 1.0 if spread_prob_final is not None else 0.0, "w_kalshi": 0.0, "w_model": 0.0, "w_sentiment": 0.0}
             spread_prob = spread_prob_final
+            total_base_weights = {
+                "odds_weight": 1.0,
+                "kalshi_weight": 1.0,
+                "ml_weight": 1.0,
+                "sentiment_weight": abs(total_sentiment_adj or 0.0),
+            }
+            total_prob_final, total_base_prob, total_weights_used, total_decision_driver, total_warnings_new, total_kalshi_prob_for_pick = compute_final_probability(
+                total_pick_side_key,
+                total_prob_market,
+                kalshi_prob_total if kalshi_total.get("kalshi_matched") else None,
+                kalshi_total.get("kalshi_yes_side") or "over",
+                vertex_total_prob if vertex_used_for_total else None,
+                total_sentiment_adj,
+                total_base_weights,
+            )
+            if total_prob_final is None:
+                total_prob_final = blend_kalshi_market(kalshi_prob_total, total_prob_market) if kalshi_total.get("kalshi_matched") else total_prob_market
+                if vertex_used_for_total and vertex_total_prob is not None:
+                    total_prob_final = clamp(vertex_total_prob)
+                total_base_prob = total_prob_final
+                total_weights_used = {"w_implied": 1.0 if total_prob_final is not None else 0.0, "w_kalshi": 0.0, "w_model": 0.0, "w_sentiment": 0.0}
             total_prob = total_prob_final
+            if spread_warnings_new:
+                warnings = list(dict.fromkeys(warnings + spread_warnings_new))
+            if total_warnings_new:
+                warnings = list(dict.fromkeys(warnings + total_warnings_new))
             spread_odds_valid = bool(spread_odds_method == "book_price")
             total_odds_valid = bool(total_odds_method == "book_price")
             odds_placeholder_overall = bool(overall_odds_placeholder)
@@ -5922,21 +6056,33 @@ with tab_master:
                     ai_prob_base = ai_prob_for_selection(pick, adjusted=False)
                     ai_prob_row = clamp((ai_prob_base or 0.0) + (sentiment_adj or 0.0), 0.01, 0.99) if ai_prob_base is not None else None
 
-                    decision_bundle = consensus_for_selection(
-                        pick,
-                        kalshi_prob_used if kalshi_winner.get("kalshi_matched") else None,
+                    pick_side = "home" if pick == home else "away"
+                    implied_pick = implied_prob_for_pick(home_ml, away_ml, pick_side)
+                    kalshi_yes_side = kalshi_winner.get("kalshi_yes_side")
+                    base_weights = {
+                        "odds_weight": 1.0,
+                        "kalshi_weight": 1.0,
+                        "ml_weight": 1.0,
+                        "sentiment_weight": abs(sentiment_adj or 0.0),
+                    }
+                    final_prob_blend, base_prob_blend, weights_used, decision_driver, warnings_new, kalshi_prob_for_pick = compute_final_probability(
+                        pick_side,
                         implied_pick,
+                        kalshi_prob_used if kalshi_winner.get("kalshi_matched") else None,
+                        kalshi_yes_side,
+                        ai_prob_base,
+                        sentiment_adj,
+                        base_weights,
                     )
-                    consensus_prob = decision_bundle.get("base_prob")
-                    consensus_prob_adj = decision_bundle.get("final_prob")
-                    consensus_notes = decision_bundle.get("notes") or []
-                    consensus_weights = decision_bundle.get("weights") or {}
-                    decision_driver = decision_bundle.get("decision_driver")
-                    sentiment_direction = decision_bundle.get("sentiment_direction")
-                    sentiment_score_val = decision_bundle.get("sentiment_score")
-                    sentiment_impact_applied = bool(decision_bundle.get("sentiment_impact_applied"))
-                    if consensus_notes:
-                        warnings = list(dict.fromkeys(warnings + consensus_notes))
+                    sentiment_info = sentiment_impact_for_pick(sentiment_adj, pick, home, away)
+                    sentiment_direction = sentiment_info.get("sentiment_direction")
+                    sentiment_score_val = sentiment_info.get("sentiment_score")
+                    sentiment_impact_applied = bool(sentiment_info.get("sentiment_impact_applied"))
+                    consensus_prob = base_prob_blend
+                    consensus_prob_adj = final_prob_blend
+                    consensus_weights = weights_used
+                    if warnings_new:
+                        warnings = list(dict.fromkeys(warnings + warnings_new))
 
                     warnings_field = ";".join(warnings) if warnings else None
                     implied_prob_reason = "missing_or_placeholder_odds" if odds_placeholder or implied_pick is None else f"from_odds_home_{home_ml}_away_{away_ml}"
@@ -5959,14 +6105,14 @@ with tab_master:
                         "consensus_prob_adj": consensus_prob_adj,
                         "final_probability": consensus_prob_adj,
                         "decision_driver": decision_driver,
-                        "kalshi_weight": consensus_weights.get("kalshi_weight"),
-                        "odds_weight": consensus_weights.get("odds_weight"),
-                        "ml_weight": consensus_weights.get("ml_weight"),
-                        "sentiment_weight": consensus_weights.get("sentiment_weight"),
-                        "consensus_weight_ai": (consensus_weights or {}).get("ml_weight"),
-                        "consensus_weight_market": (consensus_weights or {}).get("odds_weight"),
-                        "consensus_weight_kalshi": (consensus_weights or {}).get("kalshi_weight"),
-                        "consensus_weight_sentiment": (consensus_weights or {}).get("sentiment_weight"),
+                        "kalshi_weight": consensus_weights.get("w_kalshi") or consensus_weights.get("kalshi_weight"),
+                        "odds_weight": consensus_weights.get("w_implied") or consensus_weights.get("odds_weight"),
+                        "ml_weight": consensus_weights.get("w_model") or consensus_weights.get("ml_weight"),
+                        "sentiment_weight": consensus_weights.get("w_sentiment") or consensus_weights.get("sentiment_weight"),
+                        "consensus_weight_ai": (consensus_weights or {}).get("w_model"),
+                        "consensus_weight_market": (consensus_weights or {}).get("w_implied"),
+                        "consensus_weight_kalshi": (consensus_weights or {}).get("w_kalshi"),
+                        "consensus_weight_sentiment": (consensus_weights or {}).get("w_sentiment"),
                         "consensus_weight_total": sum(
                             w or 0.0 for w in [
                                 (consensus_weights or {}).get("ml_weight"),
@@ -6067,6 +6213,8 @@ with tab_master:
                         "kalshi_status": kalshi_status_value,
                         "kalshi_prob": kalshi_prob_used,
                         "kalshi_prob_used": kalshi_prob_used,
+                        "kalshi_prob_for_pick": kalshi_prob_for_pick,
+                        "kalshi_yes_side": kalshi_yes_side,
                         "kalshi_event_ticker": kalshi_event_used,
                         "kalshi_event_ticker_used": kalshi_event_used,
                         "kalshi_candidate_count": candidate_debug.get("candidate_count"),
@@ -6216,6 +6364,9 @@ with tab_master:
                         ml_row.get("sentiment_label"),
                         bool(use_vertex_numeric_probs and vertex_prob_home is not None),
                         reason_short,
+                        warnings,
+                        kalshi_yes_side,
+                        kalshi_prob_for_pick,
                     )
                     trace_json_str = trace_json if isinstance(trace_json, str) else json.dumps(trace_json)
                     ml_row["decision_trace_short"] = trace_short
@@ -6255,14 +6406,14 @@ with tab_master:
                     "League": league_name, "Home": home, "Away": away,
                     "Commence (UTC)": commence_iso, "Commence (Local)": commence_local,
                     "Market": "Spread", "Book": g.get("best_spread_book"),
-                    "Pick": spread_pick, "Implied_Prob": spread_implied, "Line": spread_line, "AI_Prob": ai_prob_base,
-                    "ai_prob_adj": ai_prob_row, "consensus_prob": None, "consensus_prob_adj": None,
+                    "Pick": spread_pick, "Implied_Prob": spread_prob_market, "Line": spread_line, "AI_Prob": vertex_spread_prob if vertex_used_for_spread else None,
+                    "ai_prob_adj": ai_prob_row, "consensus_prob": spread_base_prob, "consensus_prob_adj": spread_prob_final,
                     "final_probability": spread_prob_final,
-                    "decision_driver": spread_engine_used,
-                    "kalshi_weight": None,
-                    "odds_weight": None,
-                    "ml_weight": None,
-                    "sentiment_weight": abs(spread_sentiment_adj or 0.0) if spread_sentiment_adj is not None else None,
+                    "decision_driver": spread_decision_driver or spread_engine_used,
+                    "kalshi_weight": spread_weights_used.get("w_kalshi") if 'spread_weights_used' in locals() else None,
+                    "odds_weight": spread_weights_used.get("w_implied") if 'spread_weights_used' in locals() else None,
+                    "ml_weight": spread_weights_used.get("w_model") if 'spread_weights_used' in locals() else None,
+                    "sentiment_weight": spread_weights_used.get("w_sentiment") if 'spread_weights_used' in locals() else abs(spread_sentiment_adj or 0.0),
                     "sentiment_adj": sentiment_adj, "sentiment_source": sentiment_source, "reddit_used": reddit_used, "sentiment_valid": sentiment_valid,
                     "sentiment_score": sentiment_score_field if sentiment_score_field is not None else None,
                     "sentiment_label": sentiment_label_field,
@@ -6310,9 +6461,12 @@ with tab_master:
                     "llm_disagreement_flag": None,
                     "kalshi_prob_spread": kalshi_prob_spread,
                     "kalshi_prob_total": kalshi_prob_total,
+                    "kalshi_prob": kalshi_prob_spread if kalshi_spread.get("kalshi_matched") else None,
                     "spread_prob_market": spread_prob_market,
                     "total_prob_market": total_prob_market,
                     "spread_engine_used": spread_engine_used,
+                    "kalshi_prob_for_pick": spread_kalshi_prob_for_pick,
+                    "kalshi_yes_side": kalshi_spread.get("kalshi_yes_side") or "home",
                     "spread_pick_label": safe_str(spread_pick_label),
                     "spread_alt_label": safe_str(spread_alt_label),
                     "spread_prob_pick_final": spread_prob_final,
@@ -6441,8 +6595,8 @@ with tab_master:
                     "At_a_Glance_Score": None,
                     "At_a_Glance_Reason": None,
                 }
-                spread_row["consensus_prob"] = spread_prob
-                spread_row["consensus_prob_adj"] = spread_prob
+                spread_row["consensus_prob"] = spread_base_prob
+                spread_row["consensus_prob_adj"] = spread_prob_final
                 spread_row["prob_reason"] = spread_prob_reason
                 conf, reason_short, eligible = score_pick_confidence(spread_row)
                 width_spread = (spread_max - spread_min) if (spread_max is not None and spread_min is not None) else 0.0
@@ -6463,12 +6617,7 @@ with tab_master:
                     spread_row.get("kalshi_prob"),
                     spread_row.get("AI_Prob"),
                     spread_row.get("sentiment_adj"),
-                    {
-                        "odds_weight": spread_row.get("odds_weight"),
-                        "kalshi_weight": spread_row.get("kalshi_weight"),
-                        "ml_weight": spread_row.get("ml_weight"),
-                        "sentiment_weight": spread_row.get("sentiment_weight"),
-                    },
+                    spread_weights_used,
                     spread_row.get("final_probability"),
                     conf,
                     league_name,
@@ -6478,6 +6627,9 @@ with tab_master:
                     spread_row.get("sentiment_label"),
                     bool(use_vertex_numeric_probs and vertex_prob_home is not None),
                     reason_short,
+                    warnings,
+                    kalshi_spread.get("kalshi_yes_side") or "home",
+                    spread_kalshi_prob_for_pick,
                 )
                 trace_json_str = trace_json if isinstance(trace_json, str) else json.dumps(trace_json)
                 spread_row["decision_trace_short"] = trace_short
@@ -6507,14 +6659,14 @@ with tab_master:
                     "League": league_name, "Home": home, "Away": away,
                     "Commence (UTC)": commence_iso, "Commence (Local)": commence_local,
                     "Market": "Total", "Book": g.get("best_total_book"),
-                    "Pick": total_pick, "Implied_Prob": total_implied, "Line": total_line, "AI_Prob": ai_prob_base,
-                    "ai_prob_adj": ai_prob_row, "consensus_prob": None, "consensus_prob_adj": None,
+                    "Pick": total_pick, "Implied_Prob": total_prob_market, "Line": total_line, "AI_Prob": vertex_total_prob if vertex_used_for_total else None,
+                    "ai_prob_adj": ai_prob_row, "consensus_prob": total_base_prob, "consensus_prob_adj": total_prob_final,
                     "final_probability": total_prob_final,
-                    "decision_driver": total_engine_used,
-                    "kalshi_weight": None,
-                    "odds_weight": None,
-                    "ml_weight": None,
-                    "sentiment_weight": abs(total_sentiment_adj or 0.0) if total_sentiment_adj is not None else None,
+                    "decision_driver": total_decision_driver or total_engine_used,
+                    "kalshi_weight": total_weights_used.get("w_kalshi") if 'total_weights_used' in locals() else None,
+                    "odds_weight": total_weights_used.get("w_implied") if 'total_weights_used' in locals() else None,
+                    "ml_weight": total_weights_used.get("w_model") if 'total_weights_used' in locals() else None,
+                    "sentiment_weight": total_weights_used.get("w_sentiment") if 'total_weights_used' in locals() else abs(total_sentiment_adj or 0.0),
                     "sentiment_score": sentiment_score_field if sentiment_score_field is not None else None,
                     "sentiment_label": sentiment_label_field,
                     "sentiment_source_count": sentiment_articles_used,
@@ -6540,6 +6692,8 @@ with tab_master:
                     "spread_prob_market": spread_prob_market,
                     "total_prob_market": total_prob_market,
                     "spread_engine_used": spread_engine_used,
+                    "kalshi_prob_for_pick": total_kalshi_prob_for_pick,
+                    "kalshi_yes_side": kalshi_total.get("kalshi_yes_side") or "over",
                     "spread_pick_label": safe_str(spread_pick_label),
                     "spread_alt_label": safe_str(spread_alt_label),
                     "spread_prob_pick_final": spread_prob_final,
@@ -6576,6 +6730,8 @@ with tab_master:
                     "kalshi_matched": kalshi_total.get("kalshi_matched"),
                     "kalshi_prob": kalshi_prob_total if kalshi_total.get("kalshi_matched") else None,
                     "kalshi_prob_used": kalshi_prob_total if kalshi_total.get("kalshi_matched") else None,
+                    "kalshi_prob_for_pick": total_kalshi_prob_for_pick,
+                    "kalshi_yes_side": kalshi_total.get("kalshi_yes_side") or "over",
                     "kalshi_event_ticker_used": kalshi_total.get("kalshi_event_ticker") or (kalshi_event_used if kalshi_total.get("kalshi_matched") else None),
                     "kalshi_candidate_count": candidate_debug.get("candidate_count"),
                     "kalshi_best_score": candidate_debug.get("best_score"),
@@ -6684,8 +6840,8 @@ with tab_master:
                     "At_a_Glance_Score": None,
                     "At_a_Glance_Reason": None,
                 }
-                total_row["consensus_prob"] = total_prob
-                total_row["consensus_prob_adj"] = total_prob
+                total_row["consensus_prob"] = total_base_prob
+                total_row["consensus_prob_adj"] = total_prob_final
                 total_row["prob_reason"] = total_prob_reason
                 conf, reason_short, eligible = score_pick_confidence(total_row)
                 width_total = (total_max - total_min) if (total_max is not None and total_min is not None) else 0.0
@@ -6706,12 +6862,7 @@ with tab_master:
                     total_row.get("kalshi_prob"),
                     total_row.get("AI_Prob"),
                     total_row.get("sentiment_adj"),
-                    {
-                        "odds_weight": total_row.get("odds_weight"),
-                        "kalshi_weight": total_row.get("kalshi_weight"),
-                        "ml_weight": total_row.get("ml_weight"),
-                        "sentiment_weight": total_row.get("sentiment_weight"),
-                    },
+                    total_weights_used,
                     total_row.get("final_probability"),
                     conf,
                     league_name,
@@ -6721,6 +6872,9 @@ with tab_master:
                     total_row.get("sentiment_label"),
                     bool(use_vertex_numeric_probs and vertex_prob_home is not None),
                     reason_short,
+                    warnings,
+                    kalshi_total.get("kalshi_yes_side") or "over",
+                    total_kalshi_prob_for_pick,
                 )
                 trace_json_str = trace_json if isinstance(trace_json, str) else json.dumps(trace_json)
                 total_row["decision_trace_short"] = trace_short
@@ -7130,6 +7284,8 @@ with tab_master:
             "ml_weight",
             "sentiment_weight",
             "sentiment_score",
+            "kalshi_prob_for_pick",
+            "kalshi_yes_side",
             "sentiment_direction",
             "sentiment_impact_applied",
             "confidence_reason",
@@ -7287,6 +7443,8 @@ with tab_master:
             "decision_trace_json",
             "kalshi_matched",
             "kalshi_prob_used",
+            "kalshi_prob_for_pick",
+            "kalshi_yes_side",
             "kalshi_event_ticker_used",
             "kalshi_candidate_count",
             "kalshi_best_score",
