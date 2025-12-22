@@ -36,15 +36,35 @@ logger = logging.getLogger(__name__)
 class ParlayAppPipeline:
     """Main orchestration class for the parlay betting app"""
     
-    def __init__(self, sports: list = None):
+    def __init__(self, sports: list = None, target_date: str = None):
         """
         Initialize pipeline
         
         Args:
             sports: List of sports to process (default: all)
+            target_date: Date string (YYYY-MM-DD) for theover.ai data/output (default: today)
         """
         self.sports = sports or ['NFL', 'NBA', 'NCAAB', 'NCAAF', 'NHL']
-        logger.info(f"Initialized pipeline for sports: {self.sports}")
+        self.target_date = self._normalize_date(target_date)
+        logger.info(f"Initialized pipeline for sports: {self.sports} on date {self.target_date}")
+
+    def _normalize_date(self, date_str: str = None) -> str:
+        """
+        Normalize a date string or default to today.
+
+        Args:
+            date_str: Date string in YYYY-MM-DD format
+
+        Returns:
+            Normalized date string (YYYY-MM-DD)
+        """
+        if date_str is None:
+            return datetime.now().strftime('%Y-%m-%d')
+
+        try:
+            return datetime.strptime(date_str, '%Y-%m-%d').strftime('%Y-%m-%d')
+        except ValueError as exc:
+            raise ValueError("Date must be in YYYY-MM-DD format.") from exc
     
     def step1_collect_historical_data(self, seasons: list = None):
         """
@@ -191,7 +211,7 @@ class ParlayAppPipeline:
         logger.info("STEP 4: Loading theover.ai Data")
         logger.info("="*60)
         
-        date = date or datetime.now().strftime('%Y-%m-%d')
+        date = self._normalize_date(date or self.target_date)
         
         theover_data = {}
         
@@ -268,19 +288,20 @@ class ParlayAppPipeline:
         
         return enriched_data
     
-    def step6_generate_recommendations(self, enriched_data: dict, theover_data: dict):
+    def step6_generate_recommendations(self, enriched_data: dict, theover_data: dict, date_str: str = None):
         """
         Step 6: Generate betting recommendations and parlays
         
         Args:
             enriched_data: Games with ML predictions
             theover_data: Original theover.ai odds data
+            date_str: Date string used for output naming (YYYY-MM-DD)
         """
         logger.info("="*60)
         logger.info("STEP 6: Generating Betting Recommendations")
         logger.info("="*60)
         
-        date_str = datetime.now().strftime('%Y-%m-%d')
+        date_str = self._normalize_date(date_str or self.target_date)
         all_single_bets = []
         all_parlays = []
         
@@ -369,18 +390,20 @@ class ParlayAppPipeline:
         
         return combined_singles, all_parlays
     
-    def run_full_pipeline(self, train_models: bool = False):
+    def run_full_pipeline(self, train_models: bool = False, date: str = None):
         """
         Run complete pipeline from start to finish
         
         Args:
             train_models: Whether to retrain models (False = use existing)
+            date: Date string (YYYY-MM-DD) for theover.ai data/output (overrides initialized target_date)
         """
         logger.info("="*60)
         logger.info("STARTING FULL PIPELINE")
         logger.info("="*60)
         
         start_time = datetime.now()
+        run_date = self._normalize_date(date or self.target_date)
         
         try:
             # Training phase (only if requested)
@@ -392,14 +415,18 @@ class ParlayAppPipeline:
             
             # Prediction phase (always run)
             logger.info("\n*** PREDICTION PHASE ***")
-            theover_data = self.step4_load_theover_data()
+            theover_data = self.step4_load_theover_data(run_date)
             
             if not theover_data:
                 logger.error("No theover.ai data loaded. Exiting...")
                 return
             
             enriched_data = self.step5_apply_probabilities(theover_data)
-            singles, parlays = self.step6_generate_recommendations(enriched_data, theover_data)
+            singles, parlays = self.step6_generate_recommendations(
+                enriched_data,
+                theover_data,
+                date_str=run_date
+            )
             
             # Summary
             elapsed = datetime.now() - start_time
@@ -425,6 +452,12 @@ def main():
         choices=['NFL', 'NBA', 'NCAAB', 'NCAAF', 'NHL'],
         help='Sports to process (default: all)'
     )
+
+    parser.add_argument(
+        '--date',
+        type=str,
+        help='Date (YYYY-MM-DD) for theover.ai data and output naming (default: today)'
+    )
     
     parser.add_argument(
         '--train',
@@ -442,7 +475,11 @@ def main():
     args = parser.parse_args()
     
     # Initialize pipeline
-    pipeline = ParlayAppPipeline(sports=args.sports)
+    try:
+        pipeline = ParlayAppPipeline(sports=args.sports, target_date=args.date)
+    except ValueError as exc:
+        logger.error(exc)
+        sys.exit(1)
     
     if args.step:
         # Run specific step
@@ -463,7 +500,7 @@ def main():
             pipeline.step6_generate_recommendations(enriched_data, theover_data)
     else:
         # Run full pipeline
-        pipeline.run_full_pipeline(train_models=args.train)
+        pipeline.run_full_pipeline(train_models=args.train, date=args.date)
 
 
 if __name__ == "__main__":
