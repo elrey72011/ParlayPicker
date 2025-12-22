@@ -7529,8 +7529,12 @@ with tab_master:
                 row["gemini_error"] = str(exc)[:240]
                 row["llm_disagreement_flag"] = False
                 row["gemini_alignment"] = "NEUTRAL"
-                row["gemini_rationale"] = f"Gemini skipped: {row.get('gemini_error')}"
-                row["gemini_flags_short"] = "gemini_error"
+                row["gemini_rationale"] = f"Gemini error: {row.get('gemini_error')}"
+                existing_flags = str(row.get("gemini_flags_short") or "").strip()
+                if existing_flags:
+                    row["gemini_flags_short"] = f"{existing_flags};gemini_error"
+                else:
+                    row["gemini_flags_short"] = "gemini_error"
             return row
         df = df.apply(_apply_gemini, axis=1)
         # Ensure Gemini columns are never null before export
@@ -7544,6 +7548,12 @@ with tab_master:
             if col not in df.columns:
                 df[col] = default
             df[col] = df[col].fillna(default)
+        try:
+            null_counts = df[["gemini_mode", "gemini_alignment", "gemini_rationale", "gemini_flags_short"]].isna().sum()
+            if null_counts.sum() > 0 and logger:
+                logger.warning("Gemini columns contained nulls after apply: %s", dict(null_counts))
+        except Exception:
+            pass
 
         confidence_mode = st.selectbox(
             "Confidence filter",
