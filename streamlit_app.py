@@ -1828,19 +1828,15 @@ def gemini_confidence_explain(row_dict: Dict[str, Any]) -> Dict[str, Any]:
     Call Gemini for qualitative alignment/explanation metadata (no numeric probabilities).
     """
     base = {
-        "gemini_alignment": None,
-        "gemini_rationale": None,
-        "risk_flags": [],
+        "recommended_bet": None,
+        "confidence": None,
+        "explanation": None,
+        "flags": [],
         "gemini_error": None,
-        "llm_disagreement_flag": False,
     }
     vertex_ok = (st.session_state.get("vertex_info") or {}).get("ok")
     if vertex_ok is False:
         base["gemini_error"] = "vertex_not_ready"
-        return base
-    sentiment_meta_guard = st.session_state.get("sentiment_meta") or {}
-    if sentiment_meta_guard.get("sentiment_rate_limited") or sentiment_meta_guard.get("sentiment_auth_error"):
-        base["gemini_error"] = "sentiment_guardrail"
         return base
     if str(row_dict.get("odds_placeholder_detected")).lower() == "true":
         base["gemini_error"] = "placeholder_odds_block"
@@ -1878,42 +1874,38 @@ def gemini_confidence_explain(row_dict: Dict[str, Any]) -> Dict[str, Any]:
                 sanitized_payload[key] = val
     context_json = json.dumps(sanitized_payload or row_dict, ensure_ascii=False, default=str)
     prompt = f"""
-You are a qualitative reviewer for sports projections. The decision object is frozen and cannot be changed. Provide only alignment and short rationale.
-
-Constraints:
-- Do NOT provide betting advice or call-to-action.
-- Do NOT generate or override numeric probabilities or percentages.
-- Keep responses terse and professional.
-
-Return JSON ONLY with this exact schema:
+You are validating an existing sports betting decision (already chosen elsewhere). Provide only a brief review.
+Return JSON only with this exact schema:
 {{
-  "gemini_alignment": "AGREE|DISAGREE|NEUTRAL",
-  "gemini_rationale": "one short paragraph",
-  "risk_flags": ["short flag strings"]
+  "recommended_bet": "<string describing the pick or 'none'>",
+  "confidence": "HIGH|MEDIUM|LOW",
+  "explanation": "one short paragraph (<=240 chars) explaining agreement or disagreement",
+  "flags": ["short flag strings"]
 }}
-
 Context (read-only, do not invent new probabilities):
 {context_json}
 """
     raw = generate_confidence_explanation(prompt)
     if not isinstance(raw, dict):
         return base
-    result = {**base, **{k: raw.get(k) for k in base.keys() if k != "llm_disagreement_flag"}}
-    flags = raw.get("risk_flags")
+    result = {**base, **{k: raw.get(k) for k in base.keys()}}
+    flags = raw.get("flags") if isinstance(raw, dict) else []
     if isinstance(flags, list):
-        result["risk_flags"] = [str(f) for f in flags[:10]]
+        result["flags"] = [str(f) for f in flags[:10]]
     else:
-        result["risk_flags"] = []
-    alignment = str(result.get("gemini_alignment") or "").upper()
-    if alignment not in {"AGREE", "DISAGREE", "NEUTRAL"}:
-        alignment = None
-    result["gemini_alignment"] = alignment
-    result["gemini_rationale"] = str(result.get("gemini_rationale")) if result.get("gemini_rationale") is not None else None
-    result["llm_disagreement_flag"] = alignment == "DISAGREE"
+        result["flags"] = []
+    result["recommended_bet"] = str(result.get("recommended_bet")) if result.get("recommended_bet") is not None else None
+    confidence = str(result.get("confidence") or "").upper()
+    if confidence not in {"HIGH", "MEDIUM", "LOW"}:
+        confidence = None
+    result["confidence"] = confidence
+    result["explanation"] = (
+        str(result.get("explanation"))[:240] if result.get("explanation") is not None else None
+    )
     return result
 
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=600)
 def cached_gemini_confidence(signature: str, payload: Dict[str, Any]) -> Dict[str, Any]:
     return gemini_confidence_explain(payload)
 
@@ -7437,6 +7429,29 @@ with tab_master:
             df["reddit_used"] = df["reddit_used"].fillna(False)
         df = add_spread_total_confidence(df)
         use_gemini_explanations = st.session_state.get("use_gemini_explanations", True)
+        gemini_row_limit = int(st.session_state.get("gemini_row_limit", 50) or 50)
+        gemini_full_run = bool(st.session_state.get("gemini_full_run", False))
+        if use_gemini_explanations:
+            col_limit, col_full = st.columns([3, 2])
+            with col_limit:
+                gemini_row_limit = int(
+                    st.number_input(
+                        "Gemini rows to evaluate (top by confidence)",
+                        min_value=5,
+                        max_value=500,
+                        value=gemini_row_limit,
+                        step=5,
+                        key="gemini_row_limit",
+                        help="Limits Gemini calls per run to protect quotas.",
+                    )
+                )
+            with col_full:
+                gemini_full_run = st.checkbox(
+                    "Run Gemini on all rows",
+                    value=gemini_full_run,
+                    key="gemini_full_run",
+                    help="Bypass the per-run limit (may be slower).",
+                )
         for col, default in {
             "gemini_mode": "guardrail",
             "gemini_alignment": "NEUTRAL",
@@ -7447,18 +7462,31 @@ with tab_master:
             if col not in df.columns:
                 df[col] = default
             df[col] = df[col].fillna(default)
+        overall_for_rank = pd.to_numeric(
+            df.get("At_a_Glance_Confidence") if "At_a_Glance_Confidence" in df.columns else pd.Series(dtype=float),
+            errors="coerce",
+        ).fillna(pd.to_numeric(df.get("Pick_Confidence"), errors="coerce")).fillna(0)
+        df["_gemini_rank_metric"] = overall_for_rank
+        gemini_allowed_idx = set(
+            df.sort_values(by="_gemini_rank_metric", ascending=False, na_position="last")
+            .head(gemini_row_limit if gemini_row_limit > 0 else len(df))
+            .index
+        )
+        if gemini_full_run:
+            gemini_allowed_idx = set(df.index)
+
         def _apply_gemini(row: pd.Series) -> pd.Series:
             row = row.copy()
-            if "gemini_mode" not in row or pd.isna(row.get("gemini_mode")):
-                row["gemini_mode"] = "guardrail"
-            if "gemini_alignment" not in row or pd.isna(row.get("gemini_alignment")):
-                row["gemini_alignment"] = "NEUTRAL"
-            if "gemini_rationale" not in row or pd.isna(row.get("gemini_rationale")):
-                row["gemini_rationale"] = ""
-            if "gemini_flags_short" not in row or pd.isna(row.get("gemini_flags_short")):
-                row["gemini_flags_short"] = ""
-            if "gemini_risk_flags" not in row or pd.isna(row.get("gemini_risk_flags")):
-                row["gemini_risk_flags"] = json.dumps([])
+            for col, default in [
+                ("gemini_mode", "guardrail"),
+                ("gemini_alignment", "NEUTRAL"),
+                ("gemini_rationale", ""),
+                ("gemini_flags_short", ""),
+                ("gemini_risk_flags", json.dumps([])),
+                ("llm_disagreement_flag", False),
+            ]:
+                if col not in row or pd.isna(row.get(col)):
+                    row[col] = default
             base_overall = row.get("At_a_Glance_Confidence") or row.get("Pick_Confidence")
             base_spread_conf = row.get("spread_confidence")
             base_total_conf = row.get("total_confidence")
@@ -7467,25 +7495,21 @@ with tab_master:
             row["total_confidence"] = base_total_conf
             row["spread_confidence_base"] = base_spread_conf
             row["total_confidence_base"] = base_total_conf
-            # Ensure required Gemini columns always exist
-            for col, default in [
-                ("gemini_mode", "guardrail"),
-                ("gemini_alignment", "NEUTRAL"),
-                ("gemini_rationale", "Gemini skipped: not evaluated"),
-                ("gemini_flags_short", ""),
-                ("gemini_risk_flags", json.dumps([])),
-            ]:
-                if col not in row or pd.isna(row.get(col)):
-                    row[col] = default
             if not use_gemini_explanations:
+                row["gemini_mode"] = "disabled"
+                row["gemini_alignment"] = "NEUTRAL"
+                row["gemini_rationale"] = "Gemini disabled by user."
+                row["gemini_flags_short"] = row.get("gemini_flags_short") or ""
+                row["gemini_risk_flags"] = row.get("gemini_risk_flags") or json.dumps([])
+                row["llm_disagreement_flag"] = False
+                return row
+            if row.name not in gemini_allowed_idx:
                 row["gemini_mode"] = "guardrail"
                 row["gemini_alignment"] = "NEUTRAL"
-                row["gemini_rationale"] = "Gemini disabled: sentiment unavailable (rate-limited/auth)."
-                row["gemini_flags_short"] = "sentiment_unavailable"
+                row["gemini_rationale"] = "Gemini skipped: outside evaluation limit."
+                row["gemini_flags_short"] = row.get("gemini_flags_short") or ""
                 row["gemini_risk_flags"] = row.get("gemini_risk_flags") or json.dumps([])
-                row["llm_disagreement_flag"] = bool(row.get("llm_disagreement_flag"))
-                row["gemini_rationale"] = row.get("gemini_rationale") or "Gemini skipped: disabled"
-                row["gemini_flags_short"] = row.get("gemini_flags_short") or "gemini_disabled"
+                row["llm_disagreement_flag"] = False
                 return row
             try:
                 payload = {
@@ -7514,30 +7538,35 @@ with tab_master:
                 }
                 sig = _gemini_payload_signature(payload)
                 gem_res = cached_gemini_confidence(sig, payload) or {}
-                flags = gem_res.get("risk_flags") if isinstance(gem_res, dict) else []
+                flags = gem_res.get("flags") if isinstance(gem_res, dict) else []
+                if not isinstance(flags, list):
+                    flags = gem_res.get("risk_flags") if isinstance(gem_res, dict) else []
                 flags_list = [str(f) for f in flags] if isinstance(flags, list) else []
                 if gem_res.get("gemini_error"):
                     row["gemini_error"] = gem_res.get("gemini_error")
-                    row["gemini_mode"] = "guardrail"
+                    row["gemini_mode"] = "disabled"
                     row["llm_disagreement_flag"] = False
                     row["gemini_alignment"] = "NEUTRAL"
-                    row["gemini_rationale"] = "Gemini disabled: sentiment unavailable (rate-limited/auth)."
-                    row["gemini_flags_short"] = "sentiment_unavailable"
-                    row["gemini_risk_flags"] = json.dumps(["sentiment_guardrail"])
+                    row["gemini_rationale"] = "Gemini disabled: service unavailable."
+                    row["gemini_flags_short"] = row.get("gemini_flags_short") or "gemini_disabled"
+                    row["gemini_risk_flags"] = json.dumps(flags_list) if flags_list else json.dumps(["gemini_disabled"])
                     if not row.get("prob_engine"):
                         row["prob_engine"] = "market_only"
                     return row
-                row["overall_confidence"] = base_overall
-                row["spread_confidence"] = base_spread_conf
-                row["total_confidence"] = base_total_conf
-                row["spread_confidence_gemini"] = base_spread_conf
-                row["total_confidence_gemini"] = base_total_conf
-                row["gemini_alignment"] = gem_res.get("gemini_alignment") or ("NEUTRAL" if not row.get("kalshi_matched") else None)
-                row["gemini_rationale"] = gem_res.get("gemini_rationale")
-                row["gemini_risk_flags"] = json.dumps(flags_list) if flags_list else None
-                row["gemini_flags_short"] = " | ".join(flags_list[:3]) if flags_list else None
-                row["llm_disagreement_flag"] = bool(gem_res.get("llm_disagreement_flag"))
-                row["gemini_mode"] = "enabled"
+                pick_val = (row.get("Pick") or row.get("Spread & Pick") or row.get("Total & Pick") or "").strip()
+                recommended = str(gem_res.get("recommended_bet") or "").strip()
+                if recommended and pick_val and recommended.lower() == pick_val.lower():
+                    row["gemini_alignment"] = "AGREE"
+                elif not recommended:
+                    row["gemini_alignment"] = "NEUTRAL"
+                else:
+                    row["gemini_alignment"] = "DISAGREE"
+                rationale_text = gem_res.get("explanation") or gem_res.get("gemini_rationale") or ""
+                row["gemini_rationale"] = str(rationale_text)[:240]
+                row["gemini_risk_flags"] = json.dumps(flags_list) if flags_list else json.dumps([])
+                row["gemini_flags_short"] = ";".join(flags_list[:4])
+                row["llm_disagreement_flag"] = row.get("gemini_alignment") == "DISAGREE"
+                row["gemini_mode"] = "full" if gemini_full_run else "guardrail"
                 row["gemini_error"] = None
             except Exception as exc:
                 row["gemini_mode"] = "error"
@@ -7552,6 +7581,8 @@ with tab_master:
                     row["gemini_flags_short"] = "gemini_error"
             return row
         df = df.apply(_apply_gemini, axis=1)
+        if "_gemini_rank_metric" in df.columns:
+            df = df.drop(columns=["_gemini_rank_metric"])
         # Ensure Gemini columns are never null before export
         for col, default in [
             ("gemini_alignment", "NEUTRAL"),
