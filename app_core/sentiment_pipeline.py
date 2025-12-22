@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import requests
 import streamlit as st
+from app_core.reddit_sentiment import fetch_reddit_sentiment_map
 
 _POSITIVE = {
     "win",
@@ -449,6 +450,10 @@ def build_team_sentiment_map(
         "cached_teams": 0,
         "cooldown_active": cooldown_active,
         "cooldown_until": cooldown_until_dt.isoformat() if cooldown_until_dt else None,
+        "reddit_posts_used": 0,
+        "reddit_comments_used": 0,
+        "teams_from_reddit": 0,
+        "teams_blended": 0,
     }
     debug["calls_capped"] = debug_trimmed
     if cooldown_active:
@@ -632,6 +637,81 @@ def build_team_sentiment_map(
             else:
                 debug["missing_teams"].append(team)
             continue
+
+    missing_teams = [t for t, v in sentiment_map.items() if v is None]
+    news_valid_count = len([v for v in sentiment_map.values() if v is not None])
+    need_reddit = debug.get("rate_limited") or news_valid_count == 0 or bool(missing_teams)
+    if need_reddit and missing_teams:
+        reddit_results = fetch_reddit_sentiment_map(missing_teams, league)
+        for team in missing_teams:
+            payload = reddit_results.get(team) or {}
+            score_val = payload.get("score")
+            try:
+                confidence_val = float(payload.get("confidence") or 0.0)
+            except Exception:
+                confidence_val = 0.0
+            try:
+                sources_val = int(payload.get("source_count") or 0)
+            except Exception:
+                sources_val = 0
+            posts_used = int(payload.get("posts_used") or 0)
+            comments_used = int(payload.get("comments_used") or 0)
+            if score_val is None or sources_val <= 0:
+                continue
+            existing_meta = meta_map.get(team) or {}
+            existing_conf = existing_meta.get("confidence") or 0.0
+            blended_score = score_val
+            source_label = "reddit"
+            if existing_meta.get("sentiment_valid") and confidence_val and confidence_val > existing_conf:
+                blended_score = 0.7 * float(existing_meta.get("score") or 0.0) + 0.3 * float(score_val)
+                source_label = "blended"
+            elif existing_meta.get("sentiment_valid"):
+                continue
+            sentiment_map[team] = blended_score
+            sentiment_strength = sentiment_strength_from_articles("team", sources_val)
+            sentiment_badge = sentiment_badge_for("team", sentiment_strength)
+            meta_map[team] = {
+                **existing_meta,
+                "sentiment_valid": True,
+                "sentiment_source": source_label,
+                "sentiment_level": "team",
+                "sentiment_strength": sentiment_strength,
+                "sentiment_badge": sentiment_badge,
+                "sentiment_articles_used": sources_val,
+                "sentiment_source_count": sources_val,
+                "sentiment_query_used": payload.get("query"),
+                "score": blended_score,
+                "confidence": confidence_val,
+                "sentiment_confidence": confidence_val,
+                "reddit_used": True,
+                "reddit_posts_used": posts_used,
+                "reddit_comments_used": comments_used,
+                "error": payload.get("error"),
+            }
+            debug["reddit_posts_used"] += posts_used
+            debug["reddit_comments_used"] += comments_used
+            if source_label == "reddit":
+                debug["teams_from_reddit"] += 1
+            if source_label == "blended":
+                debug["teams_blended"] += 1
+            debug["article_counts"][team] = sources_val
+            debug["articles_total"] += sources_val
+            if team in debug["missing_teams"]:
+                try:
+                    debug["missing_teams"].remove(team)
+                except ValueError:
+                    pass
+            status_key = payload.get("status") if payload.get("status") is not None else "reddit"
+            try:
+                status_int = int(status_key)
+            except Exception:
+                status_int = None
+            if status_int is not None:
+                debug["status_counts"][status_int] = debug["status_counts"].get(status_int, 0) + 1
+            if payload.get("error"):
+                debug["error_count"] += 1
+                if len(debug["errors_sample"]) < 5:
+                    debug["errors_sample"].append({"team": team, "error": payload.get("error"), "status_code": status_key})
 
     if sentiment_map:
         sorted_scores = sorted(sentiment_map.items(), key=lambda kv: kv[1] if kv[1] is not None else -999)
