@@ -1354,11 +1354,15 @@ def compute_team_sentiment_map(news_api_key: Optional[str], games: List[Dict[str
             t,
         ),
     )
-    calls_capped = False
-    debug["calls_capped"] = calls_capped
+    debug["sentiment_scope"] = "team_level"
+    if len(ordered_teams) > MAX_SENTIMENT_TEAMS_PER_RUN:
+        ordered_teams = ordered_teams[:MAX_SENTIMENT_TEAMS_PER_RUN]
+        debug["calls_capped"] = True
+        debug["sentiment_scope"] = "team_level_capped"
+    calls_capped = debug.get("calls_capped", False)
 
     cache_miss_calls = 0
-    REQUEST_BUDGET = min(MAX_SENTIMENT_TEAMS_PER_RUN, MAX_SENTIMENT_CALLS)
+    REQUEST_BUDGET = min(MAX_SENTIMENT_TEAMS_PER_RUN, MAX_SENTIMENT_CALLS, len(ordered_teams))
     stop_fetching = cooldown_active
     debug["rate_limited"] = debug.get("rate_limited") or cooldown_active
     news_payloads: Dict[str, Dict[str, Any]] = {}
@@ -1380,13 +1384,16 @@ def compute_team_sentiment_map(news_api_key: Optional[str], games: List[Dict[str
                 "confidence": 0.0,
                 "sources": 0,
                 "status": 429,
-                "fetch_info": {"status": 429, "error": "cooldown_active"},
+                "fetch_info": {"status": 429, "error": "cooldown_active", "retry_after": debug.get("cooldown_until")},
                 "rate_limited": True,
                 "auth_error": False,
                 "method": "cooldown_skip",
                 "sentiment_source": "none",
             }
             debug["requests_skipped_due_to_cooldown"] = debug.get("requests_skipped_due_to_cooldown", 0) + 1
+            debug["rate_limited"] = True
+            if len(debug.get("errors_sample") or []) < 5:
+                debug.setdefault("errors_sample", []).append({"team": team, "error": "rate_limited", "status_code": 429})
         elif not cached and cache_miss_calls >= REQUEST_BUDGET:
             calls_capped = True
             payload = {
@@ -1453,6 +1460,8 @@ def compute_team_sentiment_map(news_api_key: Optional[str], games: List[Dict[str
             if cooldown_new:
                 debug["cooldown_until"] = cooldown_new.isoformat()
             stop_fetching = True
+            if len(debug.get("errors_sample") or []) < 5:
+                debug.setdefault("errors_sample", []).append({"team": team, "error": "rate_limited", "status_code": 429})
         if payload.get("auth_error"):
             debug["auth_error"] = True
 
@@ -1585,6 +1594,8 @@ def compute_team_sentiment_map(news_api_key: Optional[str], games: List[Dict[str
     else:
         debug["bottom_5"] = []
         debug["top_5"] = []
+    if debug.get("rate_limited") and 429 not in debug.get("status_counts", {}):
+        debug["status_counts"][429] = debug["status_counts"].get(429, 0) + 1
 
     return sentiment_map, sentiment_meta, {
         "article_counts": debug.get("article_counts"),
@@ -1616,6 +1627,8 @@ def get_slate_sentiment(enable_sentiment: bool, teams: List[str], league: str, n
     meta = init_sentiment_meta()
     debug: Dict[str, Any] = {}
     teams = [t for t in teams if t]
+    # Deduplicate while preserving order
+    teams = list(dict.fromkeys(teams))
     if not enable_sentiment:
         meta["sentiment_source"] = "disabled_by_user"
         meta["sentiment_sample_status"] = "DISABLED"
@@ -1643,8 +1656,8 @@ def get_slate_sentiment(enable_sentiment: bool, teams: List[str], league: str, n
         cached_map = st.session_state.get("sentiment_map") or {}
         cached_meta_map = st.session_state.get("sentiment_meta_map") or {}
         meta["sentiment_source"] = "cooldown_cached_only"
-        meta["sentiment_sample_status"] = "COOLDOWN"
-        meta["sentiment_status_counts"] = {"COOLDOWN": 1}
+        meta["sentiment_sample_status"] = "429"
+        meta["sentiment_status_counts"] = {"429": 1}
         meta["sentiment_disabled_reason"] = "cooldown_active"
         meta["sentiment_cooldown_until"] = cooldown_until.isoformat() if cooldown_until else None
         meta["sentiment_rate_limited"] = True
@@ -1655,6 +1668,9 @@ def get_slate_sentiment(enable_sentiment: bool, teams: List[str], league: str, n
         debug["rate_limited"] = True
         if meta["sentiment_available_count"] > 0:
             meta["sentiment_source"] = "partial_cached"
+        else:
+            meta["sentiment_source"] = "error_rate_limited"
+            meta["sentiment_errors_sample"] = f"{teams[0] if teams else 'team'}: rate_limited"
         return {"map": cached_map, "meta_map": cached_meta_map, "meta": meta, "debug": debug}
     meta["sentiment_sample_status"] = "PENDING"
     meta["sentiment_status_counts"] = {"PENDING": 1}
@@ -1664,6 +1680,8 @@ def get_slate_sentiment(enable_sentiment: bool, teams: List[str], league: str, n
         sentiment_map, sentiment_meta_map, sentiment_debug = compute_team_sentiment_map(news_api_key, games_stub, league)
         debug = sentiment_debug or {}
         status_counts = debug.get("status_counts") or {}
+        # Normalize status count keys to strings for downstream export/UI consistency
+        status_counts = {str(k): v for k, v in status_counts.items()}
         sample_calls = debug.get("sample_calls") or []
         sample_call = sample_calls[0] if sample_calls else {}
         meta["sentiment_status_counts"] = status_counts if status_counts else {"NO_CALL": 1}
@@ -1676,7 +1694,7 @@ def get_slate_sentiment(enable_sentiment: bool, teams: List[str], league: str, n
         meta["sentiment_articles_total"] = debug.get("articles_total") or 0
         meta["sentiment_cached_teams_count"] = debug.get("cached_teams") or 0
         meta["sentiment_available_count"] = len([t for t, mv in sentiment_meta_map.items() if mv.get("sentiment_valid")])
-        meta["sentiment_rate_limited"] = bool(meta["sentiment_sample_status"] == "429" or status_counts.get(429) or debug.get("rate_limited"))
+        meta["sentiment_rate_limited"] = bool(meta["sentiment_sample_status"] == "429" or status_counts.get("429") or debug.get("rate_limited"))
         meta["sentiment_auth_error"] = bool(debug.get("auth_error") or meta["sentiment_sample_status"] in {"401", "403"})
         meta["sentiment_status"] = meta.get("sentiment_sample_status")
         meta["sentiment_cooldown_until"] = debug.get("cooldown_until") or meta.get("sentiment_cooldown_until") or ""
@@ -1686,6 +1704,15 @@ def get_slate_sentiment(enable_sentiment: bool, teams: List[str], league: str, n
         meta["sentiment_score"] = sum(valid_scores) / max(1, len(valid_scores)) if valid_scores else 0.0
         meta["sentiment_label"] = None
         meta["sentiment_disabled_reason"] = ""
+        if meta["sentiment_rate_limited"] and meta["sentiment_available_count"] == 0:
+            meta["sentiment_sample_status"] = "429"
+            meta["sentiment_status"] = "429"
+            counts_existing = meta.get("sentiment_status_counts") or {}
+            counts_existing[str(429)] = counts_existing.get(str(429), 0) + 1
+            meta["sentiment_status_counts"] = counts_existing
+            if not meta["sentiment_errors_sample"]:
+                rate_limit_team = (errors_sample[0].get("team") if errors_sample else (teams[0] if teams else "team"))
+                meta["sentiment_errors_sample"] = f"{rate_limit_team}: rate_limited"
         meta["sentiment_source_count"] = (meta.get("sentiment_articles_total") or 0) + (debug.get("reddit_posts_used", 0) + debug.get("reddit_comments_used", 0))
         meta["requests_attempted"] = debug.get("requests_attempted", 0)
         meta["requests_skipped_due_to_cache"] = debug.get("requests_skipped_due_to_cache", 0)
@@ -7390,6 +7417,10 @@ with tab_master:
                     row["gemini_error"] = gem_res.get("gemini_error")
                     row["gemini_mode"] = "guardrail"
                     row["llm_disagreement_flag"] = False
+                    row["gemini_alignment"] = "NEUTRAL"
+                    row["gemini_rationale"] = "Gemini disabled: sentiment unavailable (rate-limited/auth)."
+                    row["gemini_flags_short"] = "sentiment_guardrail"
+                    row["gemini_risk_flags"] = json.dumps(["sentiment_guardrail"])
                     return row
                 row["overall_confidence"] = base_overall
                 row["spread_confidence"] = base_spread_conf
@@ -7945,7 +7976,7 @@ with tab_master:
                 st.caption("One sample per league (NFL / NBA / NCAAB) showing how the final pick & probability were derived.")
                 samples = st.session_state.get("DECISION_TRACE_SAMPLES", {}) or {}
                 if not samples:
-                    st.info("No decision trace samples yet. Run Master Analysis first.")
+                    st.info("No decision traces available.")
                 else:
                     for lg in sorted(samples.keys()):
                         sample = samples.get(lg, {})
