@@ -12,8 +12,40 @@ logger = logging.getLogger(__name__)
 # GEMINI (VERTEX AI) SETUP - Phase 2 Optimized
 # -------------------------------------------------------------------
 import os
-import logging
+import vertexai
+from vertexai.generative_models import GenerativeModel
 
+# Priority list to avoid 404s during the Dec 2025 rollout
+MODEL_FALLBACKS = [
+    "gemini-2.0-flash-exp",   # Your current choice
+    "gemini-1.5-flash-002",   # Stable fallback
+    "gemini-3-flash-preview"  # Newest (if enabled in Model Garden)
+]
+
+def get_active_model():
+    """Tries model IDs until one connects without a 404."""
+    project = os.getenv("GCP_PROJECT_ID") or os.getenv("GOOGLE_CLOUD_PROJECT")
+    location = os.getenv("GCP_REGION") or "us-central1"
+    
+    if not project:
+        return None
+
+    vertexai.init(project=project, location=location)
+    
+    for model_id in MODEL_FALLBACKS:
+        try:
+            model = GenerativeModel(model_id)
+            # Quick test call to verify availability
+            model.generate_content("ping") 
+            return model, model_id
+        except Exception:
+            continue
+    return None, None
+
+# Usage in your app:
+model, active_id = get_active_model()
+if model:
+    print(f"✅ Connected to: {active_id}")
 logger = logging.getLogger(__name__)
 
 try:
