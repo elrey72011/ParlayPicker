@@ -4,83 +4,64 @@ from __future__ import annotations
 import os
 import json
 import logging
+import vertexai
 from typing import Any, Dict, List
+from vertexai.generative_models import GenerativeModel
 
 logger = logging.getLogger(__name__)
 
 # -------------------------------------------------------------------
-# GEMINI (VERTEX AI) SETUP - Phase 2 Optimized
+# UNIFIED GEMINI (VERTEX AI) SETUP
 # -------------------------------------------------------------------
-import os
-import vertexai
-from vertexai.generative_models import GenerativeModel
 
-# Priority list to avoid 404s during the Dec 2025 rollout
+# 1. Define the Fallbacks (Order of preference for Dec 2025)
 MODEL_FALLBACKS = [
-    "gemini-2.0-flash-exp",   # Your current choice
-    "gemini-1.5-flash-002",   # Stable fallback
-    "gemini-3-flash-preview"  # Newest (if enabled in Model Garden)
+    "gemini-2.0-flash-exp",   # Modern experimental stable
+    "gemini-1.5-flash-002",   # Stable workhorse
+    "gemini-3-flash-preview"  # Newest preview (if enabled in Model Garden)
 ]
 
-def get_active_model():
-    """Tries model IDs until one connects without a 404."""
+# 2. Global State Variables
+_ACTIVE_MODEL_ID = None
+_GEMINI_AVAILABLE = False
+
+def initialize_gemini():
+    """Finds the first working model and sets global availability."""
+    global _ACTIVE_MODEL_ID, _GEMINI_AVAILABLE
+    
     project = os.getenv("GCP_PROJECT_ID") or os.getenv("GOOGLE_CLOUD_PROJECT")
     location = os.getenv("GCP_REGION") or "us-central1"
     
     if not project:
+        logger.warning("GCP_PROJECT_ID not found. Gemini disabled.")
         return None
 
-    vertexai.init(project=project, location=location)
-    
-    for model_id in MODEL_FALLBACKS:
-        try:
-            model = GenerativeModel(model_id)
-            # Quick test call to verify availability
-            model.generate_content("ping") 
-            return model, model_id
-        except Exception:
-            continue
-    return None, None
-
-# Usage in your app:
-model, active_id = get_active_model()
-if model:
-    print(f"✅ Connected to: {active_id}")
-logger = logging.getLogger(__name__)
-
-try:
-    from vertexai.generative_models import GenerativeModel
-    import vertexai
-    _GEMINI_AVAILABLE = True
-except ImportError as e:
-    GenerativeModel = None
-    _GEMINI_AVAILABLE = False
-    logger.warning(f"Vertex Gemini SDK not found: {e}")
-
-# December 2025 Stable Model IDs
-# gemini-3-flash-preview: Best for agentic workflows (Dec 17 Release)
-# gemini-2.5-flash: Current GA workhorse
-GEMINI_MODEL_NAME = os.getenv("GEMINI_MODEL_ID") or "gemini-3-flash-preview"
-
-def _ensure_vertex_init() -> None:
-    """
-    Initialize Vertex AI with fallback logic for regions and projects.
-    """
-    if not _GEMINI_AVAILABLE:
-        return
-
     try:
-        project = os.getenv("GCP_PROJECT_ID") or os.getenv("GOOGLE_CLOUD_PROJECT")
-        # Global is now recommended for newer preview models to avoid regional 404s
-        location = os.getenv("GCP_REGION") or "us-central1"
+        vertexai.init(project=project, location=location)
         
-        if project:
-            vertexai.init(project=project, location=location)
-            logger.info(f"✅ Vertex AI initialized: {project} in {location}")
-        else:
-            logger.warning("⚠️ GCP_PROJECT_ID not found. Vertex AI calls may fail.")
+        # Try fallbacks until one works
+        for model_id in MODEL_FALLBACKS:
+            try:
+                test_model = GenerativeModel(model_id)
+                # Quick test call to verify availability
+                test_model.generate_content("ping") 
+                _ACTIVE_MODEL_ID = model_id
+                _GEMINI_AVAILABLE = True
+                logger.info(f"✅ Gemini Initialized with: {model_id}")
+                return test_model
+            except Exception:
+                continue
     except Exception as e:
-        logger.error(f"❌ Critical Vertex AI Init Error: {e}")
+        logger.error(f"Critical Vertex AI Init Error: {e}")
+    
+    return None
+
+# Initialize once on module load
+ACTIVE_MODEL = initialize_gemini()
+
+# -------------------------------------------------------------------
+# HELPER FUNCTIONS
+# -------------------------------------------------------------------
 
 def _safe_json_extract(text: str) -> Dict[str, Any]:
     text = (text or "").strip()
@@ -105,14 +86,13 @@ def _safe_json_extract(text: str) -> Dict[str, Any]:
 
 def analyze_kalshi_context_with_llm(context_markdown: str) -> List[Dict[str, Any]]:
     """
-    Returns a list of contract dicts, or [] on any error.
+    Returns a list of contract dicts using the verified ACTIVE_MODEL.
     """
-    if not _GEMINI_AVAILABLE or GenerativeModel is None:
+    if not _GEMINI_AVAILABLE or ACTIVE_MODEL is None:
         return []
     if not context_markdown or not context_markdown.strip():
         return []
 
-    _ensure_vertex_init()
     system_instructions = """You are a prediction market assistant that evaluates current prices for event contracts on Kalshi.
 
 You will receive a description of a single game, including:
@@ -142,15 +122,10 @@ CRITICAL OUTPUT REQUIREMENTS:
 5) If you see no clear edge, return {"contracts": []}.
 """
 
-    prompt = f"""{system_instructions}
-
-CONTEXT:
-{context_markdown}
-"""
+    prompt = f"{system_instructions}\n\nCONTEXT:\n{context_markdown}"
 
     try:
-        model = GenerativeModel(GEMINI_MODEL_NAME)
-        resp = model.generate_content(prompt)
+        resp = ACTIVE_MODEL.generate_content(prompt)
         text = getattr(resp, "text", "") or ""
 
         payload = _safe_json_extract(text)
@@ -162,16 +137,12 @@ CONTEXT:
         for c in contracts:
             if not isinstance(c, dict):
                 continue
-
-            # sanitize types
             try:
                 c["bid_price"] = int(c.get("bid_price", 0))
                 c["confidence"] = int(c.get("confidence", 0))
             except Exception:
                 continue
-
             cleaned.append(c)
-
         return cleaned
 
     except Exception as e:
@@ -180,17 +151,14 @@ CONTEXT:
 
 def generate_confidence_explanation(prompt: str) -> Dict[str, Any]:
     """
-    Lightweight Gemini call for qualitative confidence/explanation metadata.
-    Returns an empty dict if Gemini is unavailable or any error occurs.
+    Qualitative confidence metadata using the verified ACTIVE_MODEL.
     """
-    if not _GEMINI_AVAILABLE or GenerativeModel is None:
+    if not _GEMINI_AVAILABLE or ACTIVE_MODEL is None:
         return {}
     if not prompt:
         return {}
     try:
-        _ensure_vertex_init()
-        model = GenerativeModel(GEMINI_MODEL_NAME)
-        resp = model.generate_content(prompt)
+        resp = ACTIVE_MODEL.generate_content(prompt)
         text = getattr(resp, "text", "") or ""
         return _safe_json_extract(text)
     except Exception as exc:
