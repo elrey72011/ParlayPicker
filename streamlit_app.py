@@ -711,6 +711,48 @@ def parse_total_pick(raw_val: Any) -> Tuple[Optional[str], Optional[float]]:
     line = safe_float(match.group(2))
     return side, line
 
+def enrich_picks_with_roi_metrics(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Jules: Call this function to prepare the 'Infallible' dashboard view.
+    """
+    if df is None or df.empty:
+        return df
+    
+    # 1. Calculate Edge (Math vs Market Gap)
+    # Ensure columns are numeric to avoid errors
+    df['spread_implied_prob'] = pd.to_numeric(df['spread_implied_prob'], errors='coerce').fillna(0)
+    df['total_implied_prob'] = pd.to_numeric(df['total_implied_prob'], errors='coerce').fillna(0)
+    df['final_probability'] = pd.to_numeric(df['final_probability'], errors='coerce').fillna(0)
+    
+    df['spread_edge'] = df['final_probability'] - df['spread_implied_prob']
+    df['total_edge'] = df['final_probability'] - df['total_implied_prob']
+    
+    # 2. Define Market Stability (Volatility Indicator)
+    def classify_stability(row):
+        # A market is 'Wide' if books disagree on the line
+        sw = safe_float(row.get('spread_width'))
+        tw = safe_float(row.get('total_width'))
+        if (sw is not None and sw > 0.5) or (tw is not None and tw > 1.0):
+            return "WIDE"
+        return "TIGHT"
+    
+    df['market_stability'] = df.apply(classify_stability, axis=1)
+    
+    # 3. Handle 'Market_Badge' Labeling
+    def update_badge(row):
+        existing = str(row.get('Market_Badge') or "")
+        stability = row.get('market_stability')
+        if stability == "WIDE":
+            if "WIDE MARKET" not in existing:
+                 return (existing + ";WIDE MARKET").strip(";")
+        return existing
+
+    if 'Market_Badge' in df.columns:
+        df['Market_Badge'] = df.apply(update_badge, axis=1)
+    
+    return df
+
+
 def reorder_master_columns(df: pd.DataFrame) -> pd.DataFrame:
     """
     Ensure fixed front columns then pick columns; preserve remaining order.
@@ -7460,6 +7502,9 @@ with tab_master:
             "At_a_Glance_Confidence",
             "At_a_Glance_Score",
             "At_a_Glance_Reason",
+            "spread_edge",
+            "total_edge",
+            "market_stability",
         ]
         for col in required_display_cols:
             if col not in df.columns:
@@ -7467,6 +7512,7 @@ with tab_master:
         if "reddit_used" in df.columns:
             df["reddit_used"] = df["reddit_used"].fillna(False)
         df = add_spread_total_confidence(df)
+        df = enrich_picks_with_roi_metrics(df)
         use_gemini_explanations = st.session_state.get("use_gemini_explanations", True)
         gemini_row_limit = int(st.session_state.get("gemini_row_limit", 50) or 50)
         gemini_full_run = bool(st.session_state.get("gemini_full_run", False))
@@ -7640,6 +7686,13 @@ with tab_master:
         except Exception:
             pass
 
+        market_stability_filter = st.sidebar.multiselect(
+            "Market Stability",
+            ["WIDE", "TIGHT"],
+            default=[],
+            key="market_stability_filter"
+        )
+
         confidence_mode = st.selectbox(
             "Confidence filter",
             ["All", "High+Medium (recommended)", "High only"],
@@ -7654,6 +7707,10 @@ with tab_master:
         )
         st.session_state["show_low_confidence"] = hide_low
         df_master_view, confidence_stats = apply_confidence_filter(df, confidence_mode, not hide_low)
+        
+        if market_stability_filter:
+            df_master_view = df_master_view[df_master_view['market_stability'].isin(market_stability_filter)]
+            
         counts = confidence_stats.get("counts") or {}
         st.caption(
             f"Confidence counts (post-filter): HIGH={counts.get('HIGH', 0)}, "
@@ -7800,13 +7857,18 @@ with tab_master:
             top_df["st_conf_rank"] = top_df["st_conf_rank"].fillna(0)
             top_df["decisiveness"] = top_df["decisiveness"].fillna(0.0)
             top_df = top_df.sort_values(
-                by=["st_conf_rank", "decisiveness", "Commence (UTC)"],
-                ascending=[False, False, True],
+                by=["spread_edge", "st_conf_rank", "decisiveness"],
+                ascending=[False, False, False],
             )
         except Exception:
             pass
         top_df = reorder_for_spread_total_focus(top_df)
         top_df_display = top_df.drop(columns=[c for c in trace_cols if c in top_df.columns], errors="ignore")
+
+        # Format spread_edge as percentage
+        if "spread_edge" in top_df_display.columns:
+            top_df_display["spread_edge"] = top_df_display["spread_edge"].apply(lambda x: f"{x:+.1%}" if pd.notnull(x) else "")
+
         if not show_moneyline_details:
             ml_detail_cols = [
                 "Pick",
