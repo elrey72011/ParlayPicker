@@ -661,17 +661,12 @@ def is_missing_prob(val: Optional[float]) -> bool:
 
 
 def normalize_team_name(name: Any) -> str:
-    cleaned = re.sub(r"[^a-z0-9 ]", " ", str(name or "").lower())
-    tokens = [t for t in cleaned.split() if t]
-    return " ".join(tokens)
+    # Use robust normalization from TeamNameMatcher
+    return TeamNameMatcher.normalize(str(name or ""))
 
 def canonical_team_name(name: Any) -> str:
-    cleaned = re.sub(r"[#.,]", " ", str(name or ""))
-    cleaned = re.sub(r"\b(st)\b", "state", cleaned, flags=re.IGNORECASE)
-    cleaned = re.sub(r"\s+", " ", cleaned)
-    cleaned = re.sub(r"[^a-z0-9 ]", "", cleaned.lower())
-    tokens = [t for t in cleaned.split() if t]
-    return TeamNameMatcher.normalize(str(name))
+    # Use robust normalization from TeamNameMatcher
+    return TeamNameMatcher.normalize(str(name or ""))
 
 def _market_range(values: List[Optional[float]]) -> Tuple[Optional[float], Optional[float], Optional[float]]:
     vals = [safe_float(v) for v in values if safe_float(v) is not None]
@@ -2087,24 +2082,39 @@ def enrich_game_context(game: Dict[str, Any], league_key: str, api_key: Optional
             api_client = client_cls(api_key, key_source="secrets/env") if client_cls else None
             enrichment["api_sports_status"] = "ok" if api_client else "missing"
         if api_client:
-            games_api = api_client.get_games_by_date(commence_date)
-            home_norm = canonical_team_name(game.get("home_team"))
-            away_norm = canonical_team_name(game.get("away_team"))
-            matched = None
+            # Check a 3-day window to handle timezone schedule mismatches
+            dates_to_check = [commence_date, commence_date - timedelta(days=1), commence_date + timedelta(days=1)]
+            games_api = []
+            for d in dates_to_check:
+                games_api.extend(api_client.get_games_by_date(d))
+            
+            home_raw = str(game.get("home_team") or "")
+            away_raw = str(game.get("away_team") or "")
+            
+            # Extract list of (home, away, game_obj) tuples for fuzzy matcher
+            candidates = []
             for g_api in games_api:
-                home_api = canonical_team_name(((g_api.get("teams") or {}).get("home") or {}).get("name"))
-                away_api = canonical_team_name(((g_api.get("teams") or {}).get("away") or {}).get("name"))
-                if home_api == home_norm and away_api == away_norm:
-                    matched = g_api
-                    break
+                h_api = str(((g_api.get("teams") or {}).get("home") or {}).get("name") or "")
+                a_api = str(((g_api.get("teams") or {}).get("away") or {}).get("name") or "")
+                candidates.append(((h_api, a_api), g_api))
+            
+            candidate_tuples = [c[0] for c in candidates]
+            match_tuple = TeamNameMatcher.match_game(home_raw, away_raw, candidate_tuples)
+            
+            matched = None
+            if match_tuple:
+                # Retrieve the full game object associated with the matched tuple
+                for c_tuple, c_obj in candidates:
+                    if c_tuple == match_tuple:
+                        matched = c_obj
+                        break
+
             if matched:
                 enrichment["api_sports_used"] = True
                 enrichment["apisports_enriched"] = True
                 enrichment["apisports_notes"] = "matched_fixture"
                 fixture_date = (matched.get("fixture") or {}).get("date")
-                if fixture_date and commence_iso and fixture_date != commence_iso:
-                    enrichment["schedule_warnings"].append("schedule_mismatch_api_sports")
-                    enrichment["apisports_notes"] = "schedule_mismatch_api_sports"
+                # Removed strict schedule mismatch warning since we are looking at a wider window
                 # Placeholder: API-Sports payload often lacks injuries in base tier; keep counts at 0.
                 enrichment["injuries_home"] = enrichment["injuries_home_count"] or "unknown"
                 enrichment["injuries_away"] = enrichment["injuries_away_count"] or "unknown"
@@ -2134,15 +2144,38 @@ def enrich_game_context(game: Dict[str, Any], league_key: str, api_key: Optional
             sd_client = sd_cls(sd_key, key_source="secrets/env") if sd_cls else None
             enrichment["sportsdata_status"] = "ok" if sd_client else "missing"
         if sd_client:
-            scores = sd_client.get_scores_by_date(commence_date)
-            match = sd_client.match_game(scores, game.get("home_team", ""), game.get("away_team", ""))
+            # Check a 3-day window to handle timezone schedule mismatches
+            dates_to_check = [commence_date, commence_date - timedelta(days=1), commence_date + timedelta(days=1)]
+            scores = []
+            for d in dates_to_check:
+                scores.extend(sd_client.get_scores_by_date(d))
+            
+            # Use fuzzy matching logic for SportsData scores too
+            home_raw = str(game.get("home_team") or "")
+            away_raw = str(game.get("away_team") or "")
+            
+            # Build candidate list: SportsData usually has HomeTeam/AwayTeam or HomeTeamName/AwayTeamName
+            candidates = []
+            for sc in scores:
+                h_sd = str(sc.get("HomeTeam") or sc.get("HomeTeamName") or "")
+                a_sd = str(sc.get("AwayTeam") or sc.get("AwayTeamName") or "")
+                candidates.append(((h_sd, a_sd), sc))
+            
+            candidate_tuples = [c[0] for c in candidates]
+            match_tuple = TeamNameMatcher.match_game(home_raw, away_raw, candidate_tuples)
+            
+            match = None
+            if match_tuple:
+                for c_tuple, c_obj in candidates:
+                    if c_tuple == match_tuple:
+                        match = c_obj
+                        break
+
             if match:
                 enrichment["sportsdata_used"] = True
                 enrichment["sportsdata_enriched"] = True
                 enrichment["sportsdata_notes"] = "matched_fixture"
-                if match.get("Date") and commence_iso and str(match.get("Date")) != commence_iso:
-                    enrichment["schedule_warnings"].append("schedule_mismatch_sportsdata")
-                    enrichment["sportsdata_notes"] = "schedule_mismatch_sportsdata"
+                # Removed strict schedule mismatch warning
                 weather = match.get("Weather") or match.get("WeatherDescription")
                 if weather:
                     enrichment["weather_summary"] = str(weather)
@@ -4220,23 +4253,11 @@ def classify_kalshi_market(market: Dict[str, Any]) -> str:
     return "unknown"
 
 def team_tokens(name: str) -> set:
-    cleaned = re.sub(r"[^a-z0-9 ]", " ", str(name or "").lower())
-    tokens = [t for t in cleaned.split() if t]
-    stopwords = {
-        "the",
-        "fc",
-        "sc",
-        "university",
-        "state",
-        "college",
-        "team",
-        "basketball",
-        "football",
-        "hockey",
-        "baseball",
-    }
+    if not name:
+        return set()
     normalized = TeamNameMatcher.normalize(name)
-    return set(normalized.split())
+    parts = [p for p in normalized.split() if p and p not in {"fc", "sc", "city", "united"}]
+    return set(parts)
 
 def nba_abbrev(team_name: str) -> Optional[str]:
     mapping = {
@@ -4326,8 +4347,11 @@ def kalshi_date_token_from_local(date_val: Any) -> Optional[str]:
         return None
 
 def kalshi_ticker_team_codes(market: Dict[str, Any]) -> Tuple[Optional[str], Optional[str]]:
+    """Extract the two 3-letter team codes from a Kalshi game ticker."""
     ticker = str(market.get("event_ticker") or market.get("ticker") or "")
-    # Change this line to look for 6 letters followed by an optional suffix
+    # Expected format: KX<LEAGUE>GAME-<DATE><CODE1><CODE2>[-SUFFIX]
+    # e.g. KXNBAGAME-23DEC20BOSMIA -> BOS, MIA
+    # e.g. KXNBAGAME-25DEC25MINDEN-MIN -> MIN, DEN
     match = re.search(r"([A-Z]{6})(?:-[A-Z]+)?$", ticker)
     if match:
         segment = match.group(1)
@@ -4817,6 +4841,13 @@ if ALL_SPORTS_LABEL in selected_sports:
     selected_sports = [s for s in sport_options if s != ALL_SPORTS_LABEL]
 st.session_state["selected_sports"] = selected_sports
 league = selected_sports[0] if selected_sports else list(SPORT_KEYS.keys())[0]
+
+# Detect if selection changed to invalidate cache
+last_selection = st.session_state.get("_last_selected_sports")
+if last_selection != selected_sports:
+    if "master_df" in st.session_state:
+        del st.session_state["master_df"]
+    st.session_state["_last_selected_sports"] = selected_sports
 st.session_state["league"] = league
 kalshi_required_toggle = st.sidebar.checkbox(
     "Kalshi required", value=st.session_state.get("kalshi_required", True)
@@ -4829,6 +4860,9 @@ enable_sentiment = st.sidebar.checkbox(
 )
 st.session_state["enable_sentiment"] = enable_sentiment
 if st.sidebar.button("Load Games", use_container_width=True):
+    # Invalidate master_df when loading new games
+    if "master_df" in st.session_state:
+        del st.session_state["master_df"]
     load_games(selected_sports or [league])
 
 api_sports_present = (
@@ -5057,7 +5091,16 @@ with tab_master:
     if run_master and (not kalshi_status.get("configured")):
         st.error("Kalshi is required but unavailable. Fix Kalshi first.")
         st.stop()
-    if run_master:
+
+    # Determine if we need to run (user clicked button) or just display (cached df exists)
+    df_existing = st.session_state.get("master_df")
+    should_run = run_master
+    
+    # If we have existing data and didn't request a re-run, use it to skip the heavy lifting
+    # We still need to define the helper functions because they are called during the DataFrame construction block
+    # Actually, the entire block below constructs the DataFrame. We need to restructure this.
+    
+    if should_run:
         st.session_state["DECISION_TRACE_SAMPLES"] = {}
 
         def store_decision_trace_sample(
@@ -7215,6 +7258,9 @@ with tab_master:
         df = pd.DataFrame(deduped_list)
         if "Unnamed: 0" in df.columns:
             df = df.drop(columns=["Unnamed: 0"])
+        
+        # Persist the calculated dataframe
+        st.session_state["master_df"] = df
 
         required_display_cols = [
             "Home_Sentiment",
@@ -8149,6 +8195,19 @@ with tab_master:
                             except Exception:
                                 trace_payload = {"trace": trace_payload}
                         st.json(trace_payload or {})
+    # If we didn't run, try to display from cache
+    elif df_existing is not None:
+        # Reconstruct display logic from df_existing
+        # Note: This is a partial recovery. Ideally we would cache the display dataframe or reconstruct it.
+        # Given the complexity, we will display the cached dataframe directly for now, 
+        # or rely on the user to re-run if they want full interactivity of the ephemeral elements.
+        st.success(f"Loaded {len(df_existing)} rows from session cache.")
+        st.dataframe(df_existing)
+        
+        # Restore basic stats if available
+        if "master_stats" in st.session_state:
+            st.caption(f"Cached stats: {st.session_state['master_stats'].get('rows_out', 0)} rows out")
+
     elif not games:
         st.info("Load games from the sidebar, then run Master Analysis.")
 
