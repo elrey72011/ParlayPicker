@@ -19,7 +19,7 @@ except Exception as e:
     _GEMINI_AVAILABLE = False
     logger.warning(f"Vertex Gemini not available: {e}")
 
-GEMINI_MODEL_NAME = "gemini-3-flash-preview"
+GEMINI_MODEL_NAME = "gemini-2.0-flash-exp"
 
 def _ensure_vertex_init() -> None:
     """
@@ -35,7 +35,6 @@ def _ensure_vertex_init() -> None:
             vertexai.init(project=project, location=location)
     except Exception:
         return
-
 
 def _safe_json_extract(text: str) -> Dict[str, Any]:
     text = (text or "").strip()
@@ -57,7 +56,6 @@ def _safe_json_extract(text: str) -> Dict[str, Any]:
         except Exception:
             return {}
     return {}
-
 
 def analyze_kalshi_context_with_llm(context_markdown: str) -> List[Dict[str, Any]]:
     """
@@ -133,7 +131,6 @@ CONTEXT:
     except Exception as e:
         logger.warning(f"LLM assistant call failed: {e}")
         return []
-
 
 def generate_confidence_explanation(prompt: str) -> Dict[str, Any]:
     """
