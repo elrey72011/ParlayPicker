@@ -9,32 +9,46 @@ from typing import Any, Dict, List
 logger = logging.getLogger(__name__)
 
 # -------------------------------------------------------------------
-# GEMINI (VERTEX AI) SETUP
+# GEMINI (VERTEX AI) SETUP - Phase 2 Optimized
 # -------------------------------------------------------------------
-try:
-    from vertexai.generative_models import GenerativeModel  # type: ignore
-    _GEMINI_AVAILABLE = True
-except Exception as e:
-    GenerativeModel = None  # type: ignore
-    _GEMINI_AVAILABLE = False
-    logger.warning(f"Vertex Gemini not available: {e}")
+import os
+import logging
 
-GEMINI_MODEL_NAME = "gemini-2.0-flash-exp"
+logger = logging.getLogger(__name__)
+
+try:
+    from vertexai.generative_models import GenerativeModel
+    import vertexai
+    _GEMINI_AVAILABLE = True
+except ImportError as e:
+    GenerativeModel = None
+    _GEMINI_AVAILABLE = False
+    logger.warning(f"Vertex Gemini SDK not found: {e}")
+
+# December 2025 Stable Model IDs
+# gemini-3-flash-preview: Best for agentic workflows (Dec 17 Release)
+# gemini-2.5-flash: Current GA workhorse
+GEMINI_MODEL_NAME = os.getenv("GEMINI_MODEL_ID") or "gemini-3-flash-preview"
 
 def _ensure_vertex_init() -> None:
     """
-    Initialize Vertex AI with env-provided project/location if available.
-    Safe to call multiple times; silently no-ops on error.
+    Initialize Vertex AI with fallback logic for regions and projects.
     """
-    try:
-        import vertexai  # type: ignore
+    if not _GEMINI_AVAILABLE:
+        return
 
+    try:
         project = os.getenv("GCP_PROJECT_ID") or os.getenv("GOOGLE_CLOUD_PROJECT")
-        location = os.getenv("GCP_REGION") or os.getenv("GCP_LOCATION") or "us-central1"
+        # Global is now recommended for newer preview models to avoid regional 404s
+        location = os.getenv("GCP_REGION") or "us-central1"
+        
         if project:
             vertexai.init(project=project, location=location)
-    except Exception:
-        return
+            logger.info(f"✅ Vertex AI initialized: {project} in {location}")
+        else:
+            logger.warning("⚠️ GCP_PROJECT_ID not found. Vertex AI calls may fail.")
+    except Exception as e:
+        logger.error(f"❌ Critical Vertex AI Init Error: {e}")
 
 def _safe_json_extract(text: str) -> Dict[str, Any]:
     text = (text or "").strip()
