@@ -35,7 +35,7 @@ from app_core.apisports import (
     APISportsHockeyClient,
     get_key as get_apisports_key,
 )
-from app_core.feature_processing import enrich_with_vertex_features
+from app_core.feature_processing import enrich_with_vertex_features, run_roi_pipeline_validation
 from app_core.sportsdata import (
     SportsDataNBAClient,
     SportsDataNFLClient,
@@ -3578,6 +3578,11 @@ def _build_vertex_feature_row(game: Dict[str, Any], sentiment_diff: Optional[flo
         "injuries_away_count": safe_float(game.get("injuries_away_count")),
         "weather_flag": 1.0 if game.get("weather_summary") else 0.0,
     }
+    # Inject all feature_ columns from game dict
+    for k, v in game.items():
+        if str(k).startswith("feature_"):
+            row[k] = safe_float(v)
+
     return pd.DataFrame([row])
 
 def get_vertex_prob(game: Dict[str, Any], sentiment_diff: Optional[float]) -> Tuple[Optional[float], Optional[str]]:
@@ -5688,6 +5693,9 @@ with tab_master:
             if use_vertex_numeric_probs:
                 if vertex_available:
                     vertex_prob_home, vertex_warn = get_vertex_prob(g, sentiment_diff)
+                    if vertex_prob_home is not None:
+                        vertex_spread_prob = vertex_prob_home
+                        vertex_total_prob = vertex_prob_home # Assign to total too as generic predictor
                     vertex_mode = "enabled" if vertex_prob_home is not None else "error"
                 else:
                     vertex_warn = "vertex_missing_prob"
@@ -6837,7 +6845,7 @@ with tab_master:
                     "gemini_error": None,
                     "gemini_flags_short": None,
                     "llm_disagreement_flag": None,
-                    "kalshi_prob_spread": kalshi_prob_spread,
+                    "kalshi_prob_spread": spread_kalshi_prob_for_pick if spread_kalshi_prob_for_pick is not None else kalshi_prob_spread,
                     "kalshi_prob_total": kalshi_prob_total,
                     "kalshi_prob": kalshi_prob_spread if kalshi_spread.get("kalshi_matched") else None,
                     "spread_prob_market": spread_prob_market,
@@ -7066,7 +7074,7 @@ with tab_master:
                     "gemini_flags_short": None,
                     "llm_disagreement_flag": None,
                     "kalshi_prob_spread": kalshi_prob_spread,
-                    "kalshi_prob_total": kalshi_prob_total,
+                    "kalshi_prob_total": total_kalshi_prob_for_pick if total_kalshi_prob_for_pick is not None else kalshi_prob_total,
                     "spread_prob_market": spread_prob_market,
                     "total_prob_market": total_prob_market,
                     "spread_engine_used": spread_engine_used,
@@ -7307,6 +7315,11 @@ with tab_master:
         if "Unnamed: 0" in df.columns:
             df = df.drop(columns=["Unnamed: 0"])
         
+        # Validation Check
+        validation_results = run_roi_pipeline_validation(df)
+        if validation_results:
+            st.session_state["roi_validation_results"] = validation_results
+            
         # Persist the calculated dataframe
         st.session_state["master_df"] = df
 
@@ -8082,6 +8095,27 @@ with tab_master:
             "best_total_median_point",
             "best_total_mode_point",
             "enrichment_errors_sample",
+            "feature_home_win_pct",
+            "feature_home_home_win_pct",
+            "feature_home_last5_win_pct",
+            "feature_home_ppg",
+            "feature_home_oppg",
+            "feature_home_streak",
+            "feature_away_win_pct",
+            "feature_away_away_win_pct",
+            "feature_away_last5_win_pct",
+            "feature_away_ppg",
+            "feature_away_oppg",
+            "feature_away_streak",
+            "feature_diff_win_pct",
+            "feature_diff_ppg",
+            "feature_diff_oppg",
+            "feature_diff_last5",
+            "feature_diff_streak",
+            "feature_commence_hour",
+            "feature_commence_day_of_week",
+            "feature_home_rest_days",
+            "feature_away_rest_days",
         ]
         export_df = df_master_view_full.copy()
         if "Unnamed: 0" in export_df.columns:
