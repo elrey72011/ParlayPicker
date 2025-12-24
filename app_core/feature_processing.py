@@ -11,6 +11,15 @@ logger = logging.getLogger(__name__)
 
 # Define the 27 features we want to ensure exist
 # We will update VERTEX_FEATURE_COLUMNS in vertex_ai_endpoint.py to match these.
+LEAGUE_AVERAGES = {
+    "NBA": {"ppg": 114.0, "oppg": 114.0, "win_pct": 0.5, "last5_win_pct": 0.5},
+    "NFL": {"ppg": 22.0, "oppg": 22.0, "win_pct": 0.5, "last5_win_pct": 0.5},
+    "NHL": {"ppg": 3.0, "oppg": 3.0, "win_pct": 0.5, "last5_win_pct": 0.5},
+    "NCAAB": {"ppg": 72.0, "oppg": 72.0, "win_pct": 0.5, "last5_win_pct": 0.5},
+    "NCAAF": {"ppg": 28.0, "oppg": 28.0, "win_pct": 0.5, "last5_win_pct": 0.5},
+    "default": {"ppg": 50.0, "oppg": 50.0, "win_pct": 0.5, "last5_win_pct": 0.5}
+}
+
 TARGET_FEATURE_COLUMNS = [
     "implied_home_prob",
     "sentiment_diff",
@@ -204,29 +213,47 @@ def enrich_with_vertex_features(df: pd.DataFrame, api_clients: Dict[str, Any]) -
     }
     df.rename(columns=away_cols, inplace=True)
     
-    # 4. Fill Missing with League Averages
-    avg_stats = stats_df.select_dtypes(include=[np.number]).mean().to_dict()
+    # 4. Fill Missing with League Averages (Robust Fallback)
+    
+    # Determine league from the first row of df if possible, or use default
+    # master_df usually has 'League' column.
+    league_key = "default"
+    if 'League' in df.columns and len(df) > 0:
+        first_league = str(df['League'].iloc[0]).upper()
+        if "NBA" in first_league: league_key = "NBA"
+        elif "NFL" in first_league: league_key = "NFL"
+        elif "NHL" in first_league: league_key = "NHL"
+        elif "NCAAB" in first_league: league_key = "NCAAB"
+        elif "NCAAF" in first_league: league_key = "NCAAF"
+        
+    defaults = LEAGUE_AVERAGES.get(league_key, LEAGUE_AVERAGES["default"])
     
     fill_map = {
-        'feature_home_win_pct': avg_stats.get('win_pct', 0.5),
-        'feature_home_home_win_pct': avg_stats.get('home_win_pct', 0.5),
-        'feature_home_last5_win_pct': avg_stats.get('last5_win_pct', 0.5),
-        'feature_home_ppg': avg_stats.get('ppg', 0.0),
-        'feature_home_oppg': avg_stats.get('oppg', 0.0),
+        'feature_home_win_pct': defaults['win_pct'],
+        'feature_home_home_win_pct': defaults['win_pct'],
+        'feature_home_last5_win_pct': defaults['last5_win_pct'],
+        'feature_home_ppg': defaults['ppg'],
+        'feature_home_oppg': defaults['oppg'],
         'feature_home_streak': 0.0,
-        'feature_away_win_pct': avg_stats.get('win_pct', 0.5),
-        'feature_away_away_win_pct': avg_stats.get('away_win_pct', 0.5),
-        'feature_away_last5_win_pct': avg_stats.get('last5_win_pct', 0.5),
-        'feature_away_ppg': avg_stats.get('ppg', 0.0),
-        'feature_away_oppg': avg_stats.get('oppg', 0.0),
+        'feature_away_win_pct': defaults['win_pct'],
+        'feature_away_away_win_pct': defaults['win_pct'],
+        'feature_away_last5_win_pct': defaults['last5_win_pct'],
+        'feature_away_ppg': defaults['ppg'],
+        'feature_away_oppg': defaults['oppg'],
         'feature_away_streak': 0.0,
     }
     
+    missing_critical = False
     for col, val in fill_map.items():
-        if col in df.columns:
-            df[col] = df[col].fillna(val)
-        else:
+        if col not in df.columns:
             df[col] = val
+            missing_critical = True
+        else:
+            if df[col].isnull().any():
+                df[col] = df[col].fillna(val)
+                
+    if missing_critical:
+        logger.critical(f"Used fallback league averages ({league_key}) for missing critical features!")
 
     # 5. Compute Differentials
     df['feature_diff_win_pct'] = df['feature_home_win_pct'] - df['feature_away_win_pct']

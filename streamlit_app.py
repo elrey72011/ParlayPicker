@@ -5979,8 +5979,7 @@ with tab_master:
             total_pick_side = None
             total_pick_odds = None
             best_total_price = None
-            vertex_spread_prob = None
-            vertex_total_prob = None
+            # vertex_spread_prob/vertex_total_prob are already set earlier
             if g.get("total_point") is not None:
                 over_prob = american_to_implied(g.get("over_price"))
                 under_prob = american_to_implied(g.get("under_price"))
@@ -6774,6 +6773,12 @@ with tab_master:
                             pass
                         SENTIMENT_LOG_SAMPLE[league_name] = True
                     ml_row["Eligible_Top_Picks"] = eligible
+                    
+                    # Inject features
+                    for k, v in g.items():
+                        if str(k).startswith("feature_"):
+                            ml_row[k] = v
+                            
                     ml_row = apply_sentiment_defaults(ml_row, sentiment_defaults_base)
                     rows_out.append(ml_row)
                     master_stats["h2h_found"] += 1
@@ -6785,7 +6790,7 @@ with tab_master:
             if g.get("home_spread_point") is not None and spread_pick is not None:
                 ai_prob_base = None
                 ai_prob_row = None
-                vertex_spread_prob = None
+                # vertex_spread_prob already set
                 warnings.append("market_based_spread_prob")
                 warnings_field = ";".join(warnings) if warnings else None
                 spread_row = {
@@ -7031,6 +7036,12 @@ with tab_master:
                     trace_json_str,
                 )
                 spread_row["Eligible_Top_Picks"] = eligible
+                
+                # Inject features
+                for k, v in g.items():
+                    if str(k).startswith("feature_"):
+                        spread_row[k] = v
+                        
                 spread_row = apply_sentiment_defaults(spread_row, sentiment_defaults_base)
                 rows_out.append(spread_row)
                 master_stats["market_rows_out"] += 1
@@ -7276,6 +7287,12 @@ with tab_master:
                     trace_json_str,
                 )
                 total_row["Eligible_Top_Picks"] = eligible
+                
+                # Inject features
+                for k, v in g.items():
+                    if str(k).startswith("feature_"):
+                        total_row[k] = v
+                        
                 total_row = apply_sentiment_defaults(total_row, sentiment_defaults_base)
                 rows_out.append(total_row)
                 master_stats["market_rows_out"] += 1
@@ -7320,6 +7337,13 @@ with tab_master:
         if validation_results:
             st.session_state["roi_validation_results"] = validation_results
             
+        # Final Verification Check (Pre-Export)
+        if "vertex_spread_prob" in df.columns:
+            if df["vertex_spread_prob"].isnull().all():
+                logger.error("CRITICAL: Vertex output still null before export!")
+        else:
+            logger.error("CRITICAL: vertex_spread_prob column MISSING in final dataframe!")
+
         # Persist the calculated dataframe
         st.session_state["master_df"] = df
 
