@@ -106,9 +106,20 @@ CONTEXT:
 """
 
     try:
-        model = GenerativeModel(GEMINI_MODEL_NAME)
-        resp = model.generate_content(prompt)
-        text = getattr(resp, "text", "") or ""
+        text = ""
+        # Try models in order
+        for model_name in MODEL_FALLBACKS:
+            try:
+                model = GenerativeModel(model_name)
+                resp = model.generate_content(prompt)
+                text = getattr(resp, "text", "") or ""
+                break
+            except Exception as e:
+                logger.warning(f"Kalshi LLM analysis failed with {model_name}: {e}")
+                continue
+        
+        if not text:
+            return []
 
         payload = _safe_json_extract(text)
         contracts = payload.get("contracts", [])
