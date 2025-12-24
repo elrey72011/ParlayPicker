@@ -237,6 +237,10 @@ class _APISportsBaseClient:
             if resp.status_code == 401:
                 self.last_error = "Invalid API-Sports key"
                 return None
+            
+            if resp.status_code == 403:
+                self.last_error = "API-Sports Plan Restriction (403 Forbidden)"
+                return None
 
             if resp.status_code == 429:
                 retry_after = resp.headers.get("Retry-After")

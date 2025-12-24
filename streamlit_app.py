@@ -537,9 +537,18 @@ def compute_final_probability(
         weights_used[f"w_{name}"] = w_norm
         weights_norm.append((name, prob if prob is not None else None, w_norm))
     driver = max(weights_norm, key=lambda tup: tup[2])[0] if weights_norm else "missing"
+    
+    # UI Feedback: Explicitly label Vertex Consensus
+    w_model = weights_used.get("w_model", 0.0)
+    w_kalshi = weights_used.get("w_kalshi", 0.0)
+    if w_model >= 0.3 and w_kalshi >= 0.3:
+        driver = "vertex_consensus"
+    elif w_model >= 0.3:
+        driver = "vertex_ai"
+        
     base_prob = sum((prob or 0.0) * w for _, prob, w in weights_norm)
     final_prob = clamp((base_prob or 0.0) + sentiment_adj, 0.0, 1.0)
-    if driver == "kalshi" and kalshi_prob_for_pick is not None and kalshi_prob_for_pick < 0.5:
+    if (driver == "kalshi" or driver == "vertex_consensus") and kalshi_prob_for_pick is not None and kalshi_prob_for_pick < 0.5:
         warnings.append("kalshi_pick_mismatch")
     return final_prob, base_prob, weights_used, driver, warnings, kalshi_prob_for_pick
 

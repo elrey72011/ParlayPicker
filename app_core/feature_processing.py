@@ -245,13 +245,22 @@ def enrich_with_vertex_features(df: pd.DataFrame, api_clients: Dict[str, Any]) -
     features_df['feature_diff_streak'] = features_df['feature_home_streak'] - features_df['feature_away_streak']
     
     # 6. Map Remaining Features (Existing)
-    implied_val = df.get('Implied_Prob')
-    numeric_val = pd.to_numeric(implied_val, errors='coerce')
-    if hasattr(numeric_val, 'fillna'):
-        features_df['implied_home_prob'] = numeric_val.fillna(0.5)
-    else:
-        features_df['implied_home_prob'] = 0.5 if pd.isna(numeric_val) else numeric_val
+    # Safer logic for Implied_Prob which might be messy/scalar
+    raw_implied = df.get('Implied_Prob', 0.5)
     
+    # Ensure we get a Series for vectorization, even if input was scalar/list
+    if isinstance(raw_implied, pd.Series):
+        features_df['implied_home_prob'] = pd.to_numeric(raw_implied, errors='coerce').fillna(0.5)
+    elif isinstance(raw_implied, (list, np.ndarray)):
+        features_df['implied_home_prob'] = pd.to_numeric(pd.Series(raw_implied), errors='coerce').fillna(0.5).values
+    else:
+        # Scalar fallback - assign to all rows
+        try:
+            val = float(raw_implied)
+        except:
+            val = 0.5
+        features_df['implied_home_prob'] = val
+
     # Try to refine implied prob from ML if available
     def ml_to_prob(ml):
         try:
