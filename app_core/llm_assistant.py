@@ -20,6 +20,7 @@ except Exception as e:
     logger.warning(f"Vertex Gemini not available: {e}")
 
 GEMINI_MODEL_NAME = "gemini-1.5-flash"
+MODEL_FALLBACKS = ["gemini-1.5-flash", "gemini-2.0-flash-exp"]
 
 def _ensure_vertex_init() -> None:
     """
@@ -144,12 +145,20 @@ def generate_confidence_explanation(prompt: str) -> Dict[str, Any]:
         return {}
     if not prompt:
         return {}
-    try:
-        _ensure_vertex_init()
-        model = GenerativeModel(GEMINI_MODEL_NAME)
-        resp = model.generate_content(prompt)
-        text = getattr(resp, "text", "") or ""
-        return _safe_json_extract(text)
-    except Exception as exc:
-        logger.warning(f"Gemini confidence call failed: {exc}")
-        return {}
+    
+    _ensure_vertex_init()
+    
+    # Try models in order
+    errors = []
+    for model_name in MODEL_FALLBACKS:
+        try:
+            model = GenerativeModel(model_name)
+            resp = model.generate_content(prompt)
+            text = getattr(resp, "text", "") or ""
+            return _safe_json_extract(text)
+        except Exception as exc:
+            errors.append(f"{model_name}: {exc}")
+            continue
+            
+    logger.warning(f"Gemini confidence call failed on all fallbacks: {'; '.join(errors)}")
+    return {}

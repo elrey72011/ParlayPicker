@@ -164,8 +164,17 @@ def enrich_with_vertex_features(df: pd.DataFrame, api_clients: Dict[str, Any]) -
     features_df = pd.DataFrame(index=df.index)
     
     # 2. Normalize Names in Master DF (create temporary series)
-    home_norm = df['Home'].apply(lambda x: TeamNameMatcher.normalize(str(x)))
-    away_norm = df['Away'].apply(lambda x: TeamNameMatcher.normalize(str(x)))
+    # Handle variable column names (Home vs home_team)
+    home_col = 'Home' if 'Home' in df.columns else 'home_team'
+    away_col = 'Away' if 'Away' in df.columns else 'away_team'
+    
+    if home_col not in df.columns or away_col not in df.columns:
+        logger.error(f"Missing home/away columns in dataframe. Columns: {list(df.columns)}")
+        # Return original df to avoid crash, but features will be missing
+        return df
+
+    home_norm = df[home_col].apply(lambda x: TeamNameMatcher.normalize(str(x)))
+    away_norm = df[away_col].apply(lambda x: TeamNameMatcher.normalize(str(x)))
     
     # 3. Determine League (for fallbacks)
     league_key = "default"
