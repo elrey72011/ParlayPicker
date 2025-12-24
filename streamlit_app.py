@@ -35,6 +35,7 @@ from app_core.apisports import (
     APISportsHockeyClient,
     get_key as get_apisports_key,
 )
+from app_core.feature_processing import enrich_with_vertex_features
 from app_core.sportsdata import (
     SportsDataNBAClient,
     SportsDataNFLClient,
@@ -5180,6 +5181,11 @@ with tab_master:
         api_sports_status_run = api_sports_status
         sportsdata_status_run = sportsdata_status
         df_master = pd.DataFrame(games or [])
+
+        # Inject real-time stats for Vertex
+        api_sports_clients, _ = init_data_clients()
+        df_master = enrich_with_vertex_features(df_master, api_sports_clients)
+
         unique_teams = sorted(
             set(df_master.get("home_team", pd.Series([], dtype=str)).dropna().astype(str))
             | set(df_master.get("away_team", pd.Series([], dtype=str)).dropna().astype(str))
@@ -6121,9 +6127,9 @@ with tab_master:
             vertex_used_for_spread = bool(use_vertex_numeric_probs and vertex_spread_prob is not None)
             vertex_used_for_total = bool(use_vertex_numeric_probs and vertex_total_prob is not None)
             spread_base_weights = {
-                "odds_weight": 1.0,
-                "kalshi_weight": 1.0,
-                "ml_weight": 1.0,
+                "odds_weight": 0.30,
+                "kalshi_weight": 0.35,
+                "ml_weight": 0.35,
                 "sentiment_weight": abs(spread_sentiment_adj or 0.0),
             }
             spread_prob_final, spread_base_prob, spread_weights_used, spread_decision_driver, spread_warnings_new, spread_kalshi_prob_for_pick = compute_final_probability(
@@ -6143,9 +6149,9 @@ with tab_master:
                 spread_weights_used = {"w_implied": 1.0 if spread_prob_final is not None else 0.0, "w_kalshi": 0.0, "w_model": 0.0, "w_sentiment": 0.0}
             spread_prob = spread_prob_final
             total_base_weights = {
-                "odds_weight": 1.0,
-                "kalshi_weight": 1.0,
-                "ml_weight": 1.0,
+                "odds_weight": 0.30,
+                "kalshi_weight": 0.35,
+                "ml_weight": 0.35,
                 "sentiment_weight": abs(total_sentiment_adj or 0.0),
             }
             total_prob_final, total_base_prob, total_weights_used, total_decision_driver, total_warnings_new, total_kalshi_prob_for_pick = compute_final_probability(
@@ -6428,9 +6434,9 @@ with tab_master:
                     implied_pick = implied_prob_for_pick(home_ml, away_ml, pick_side)
                     kalshi_yes_side = kalshi_winner.get("kalshi_yes_side")
                     base_weights = {
-                        "odds_weight": 1.0,
-                        "kalshi_weight": 1.0,
-                        "ml_weight": 1.0,
+                        "odds_weight": 0.30,
+                        "kalshi_weight": 0.35,
+                        "ml_weight": 0.35,
                         "sentiment_weight": abs(sentiment_adj or 0.0),
                     }
                     final_prob_blend, base_prob_blend, weights_used, decision_driver, warnings_new, kalshi_prob_for_pick = compute_final_probability(

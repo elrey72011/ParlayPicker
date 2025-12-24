@@ -404,6 +404,62 @@ class _APISportsBaseClient:
 
         return {}
 
+    def get_standings(
+        self,
+        league_id: Optional[int] = None,
+        season: Optional[str] = None,
+    ) -> List[Dict]:
+        """Fetch standings for the specified league and season."""
+
+        if not self.is_configured():
+            return []
+
+        league_id = self._resolve_league_id(league_id)
+        if not league_id:
+            if not self.last_error:
+                self.last_error = "Unable to determine API-Sports league ID"
+            return []
+        
+        season_str = str(season) if season is not None else self.current_season_for_date()
+        
+        cache_key = (f"standings_{league_id}_{season_str}",)
+        # We abuse the team cache structure slightly or should add a new one?
+        # Let's just use _request directly and trust LRU cache if we had one, 
+        # but here we don't have a standings cache. 
+        # For safety/performance within a run, we can add a simple ephemeral cache if needed,
+        # but for now direct call is fine as it's usually called once per league.
+
+        payload = self._request(
+            "/standings",
+            {
+                "league": league_id,
+                "season": season_str,
+            },
+        )
+        
+        if not payload:
+            return []
+            
+        response = payload.get("response", [])
+        if not response:
+            return []
+            
+        # API-Sports structure: response[0]['league']['standings'] -> list of lists (groups)
+        # We flatten it.
+        try:
+            league_data = response[0].get("league", {})
+            standings_groups = league_data.get("standings", [])
+            all_teams = []
+            for group in standings_groups:
+                if isinstance(group, list):
+                    all_teams.extend(group)
+                elif isinstance(group, dict): # Sometimes it's a dict?
+                    all_teams.append(group)
+            return all_teams
+        except Exception as e:
+            self.last_error = f"Error parsing standings: {e}"
+            return []
+
     # ------------------------------------------------------------------
     # Formatting helpers
     @staticmethod

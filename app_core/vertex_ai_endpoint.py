@@ -60,14 +60,33 @@ def _get_gcp_credentials():
 #: Columns your Vertex tabular model expects.
 #: Make sure this matches the model's training schema.
 VERTEX_FEATURE_COLUMNS: List[str] = [
-    # TODO: Adjust to exactly match your deployed model
-    # These are placeholders – update if needed.
     "implied_home_prob",
     "sentiment_diff",
     "kalshi_prob",
     "injuries_home_count",
     "injuries_away_count",
     "weather_flag",
+    "home_win_pct",
+    "home_home_win_pct",
+    "home_last5_win_pct",
+    "home_ppg",
+    "home_oppg",
+    "home_streak",
+    "away_win_pct",
+    "away_away_win_pct",
+    "away_last5_win_pct",
+    "away_ppg",
+    "away_oppg",
+    "away_streak",
+    "diff_win_pct",
+    "diff_ppg",
+    "diff_oppg",
+    "diff_last5",
+    "diff_streak",
+    "commence_hour",
+    "commence_day_of_week",
+    "home_rest_days",
+    "away_rest_days",
 ]
 
 # -------------------------------------------------------------------
