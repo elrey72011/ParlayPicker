@@ -5190,6 +5190,9 @@ with tab_master:
         # Inject real-time stats for Vertex
         api_sports_clients, _ = init_data_clients()
         df_master = enrich_with_vertex_features(df_master, api_sports_clients)
+        
+        # Update games list with enriched data for the loop
+        games = df_master.to_dict("records")
 
         unique_teams = sorted(
             set(df_master.get("home_team", pd.Series([], dtype=str)).dropna().astype(str))

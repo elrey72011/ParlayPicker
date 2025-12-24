@@ -152,7 +152,7 @@ def fetch_and_process_standings(api_clients: Dict[str, Any]) -> pd.DataFrame:
 def enrich_with_vertex_features(df: pd.DataFrame, api_clients: Dict[str, Any]) -> pd.DataFrame:
     """
     Enrich the master dataframe with features required for Vertex AI.
-    Uses pd.merge for performance.
+    Uses pd.concat for performance to avoid fragmentation.
     """
     if df is None or df.empty:
         return df
@@ -160,63 +160,14 @@ def enrich_with_vertex_features(df: pd.DataFrame, api_clients: Dict[str, Any]) -
     # 1. Fetch Stats
     stats_df = fetch_and_process_standings(api_clients)
     
-    if stats_df.empty:
-        logger.warning("No stats fetched. Filling with defaults.")
-        # We still need to populate columns to avoid Vertex errors
-        for col in TARGET_FEATURE_COLUMNS:
-            if col not in df.columns:
-                df[col] = 0.0
-        return df
+    # Create a features dataframe aligned with df index
+    features_df = pd.DataFrame(index=df.index)
     
-    # 2. Normalize Names in Master DF
-    df['home_norm'] = df['Home'].apply(lambda x: TeamNameMatcher.normalize(str(x)))
-    df['away_norm'] = df['Away'].apply(lambda x: TeamNameMatcher.normalize(str(x)))
+    # 2. Normalize Names in Master DF (create temporary series)
+    home_norm = df['Home'].apply(lambda x: TeamNameMatcher.normalize(str(x)))
+    away_norm = df['Away'].apply(lambda x: TeamNameMatcher.normalize(str(x)))
     
-    # 3. Merge Stats
-    stats_unique = stats_df.drop_duplicates(subset=['team_norm'])
-    
-    # Merge Home
-    df = df.merge(
-        stats_unique, 
-        left_on='home_norm', 
-        right_on='team_norm', 
-        how='left',
-        suffixes=('', '_home')
-    )
-    # Rename merged columns to feature names
-    home_cols = {
-        'win_pct': 'feature_home_win_pct',
-        'home_win_pct': 'feature_home_home_win_pct',
-        'ppg': 'feature_home_ppg',
-        'oppg': 'feature_home_oppg',
-        'streak': 'feature_home_streak',
-        'last5_win_pct': 'feature_home_last5_win_pct'
-    }
-    df.rename(columns=home_cols, inplace=True)
-    
-    # Merge Away
-    df = df.merge(
-        stats_unique, 
-        left_on='away_norm', 
-        right_on='team_norm', 
-        how='left',
-        suffixes=('', '_away')
-    )
-    # Rename merged columns
-    away_cols = {
-        'win_pct': 'feature_away_win_pct',
-        'away_win_pct': 'feature_away_away_win_pct', # Win % at away
-        'ppg': 'feature_away_ppg',
-        'oppg': 'feature_away_oppg',
-        'streak': 'feature_away_streak',
-        'last5_win_pct': 'feature_away_last5_win_pct'
-    }
-    df.rename(columns=away_cols, inplace=True)
-    
-    # 4. Fill Missing with League Averages (Robust Fallback)
-    
-    # Determine league from the first row of df if possible, or use default
-    # master_df usually has 'League' column.
+    # 3. Determine League (for fallbacks)
     league_key = "default"
     if 'League' in df.columns and len(df) > 0:
         first_league = str(df['League'].iloc[0]).upper()
@@ -228,44 +179,66 @@ def enrich_with_vertex_features(df: pd.DataFrame, api_clients: Dict[str, Any]) -
         
     defaults = LEAGUE_AVERAGES.get(league_key, LEAGUE_AVERAGES["default"])
     
-    fill_map = {
-        'feature_home_win_pct': defaults['win_pct'],
-        'feature_home_home_win_pct': defaults['win_pct'],
-        'feature_home_last5_win_pct': defaults['last5_win_pct'],
-        'feature_home_ppg': defaults['ppg'],
-        'feature_home_oppg': defaults['oppg'],
-        'feature_home_streak': 0.0,
-        'feature_away_win_pct': defaults['win_pct'],
-        'feature_away_away_win_pct': defaults['win_pct'],
-        'feature_away_last5_win_pct': defaults['last5_win_pct'],
-        'feature_away_ppg': defaults['ppg'],
-        'feature_away_oppg': defaults['oppg'],
-        'feature_away_streak': 0.0,
-    }
-    
-    missing_critical = False
-    for col, val in fill_map.items():
-        if col not in df.columns:
-            df[col] = val
-            missing_critical = True
-        else:
-            if df[col].isnull().any():
-                df[col] = df[col].fillna(val)
-                
-    if missing_critical:
-        logger.critical(f"Used fallback league averages ({league_key}) for missing critical features!")
+    if stats_df.empty:
+        logger.warning("No stats fetched. Filling with defaults.")
+        # We will populate defaults later in the 'missing' logic
+    else:
+        # Prepare lookup dictionary: team_norm -> stats_series
+        # Dropping duplicates to ensure unique mapping
+        stats_unique = stats_df.drop_duplicates(subset=['team_norm']).set_index('team_norm')
+        
+        # Helper to map a stat column efficiently
+        def map_stat(norm_series, col_name, default_val):
+            # Using map against the series from the indexed dataframe
+            return norm_series.map(stats_unique[col_name]).fillna(default_val)
 
-    # 5. Compute Differentials
-    df['feature_diff_win_pct'] = df['feature_home_win_pct'] - df['feature_away_win_pct']
-    df['feature_diff_ppg'] = df['feature_home_ppg'] - df['feature_away_ppg']
-    df['feature_diff_oppg'] = df['feature_home_oppg'] - df['feature_away_oppg']
-    df['feature_diff_last5'] = df['feature_home_last5_win_pct'] - df['feature_away_last5_win_pct']
-    df['feature_diff_streak'] = df['feature_home_streak'] - df['feature_away_streak']
+        # Populate features_df
+        # Home Stats
+        features_df['feature_home_win_pct'] = map_stat(home_norm, 'win_pct', defaults['win_pct'])
+        features_df['feature_home_home_win_pct'] = map_stat(home_norm, 'home_win_pct', defaults['win_pct'])
+        features_df['feature_home_last5_win_pct'] = map_stat(home_norm, 'last5_win_pct', defaults['last5_win_pct'])
+        features_df['feature_home_ppg'] = map_stat(home_norm, 'ppg', defaults['ppg'])
+        features_df['feature_home_oppg'] = map_stat(home_norm, 'oppg', defaults['oppg'])
+        features_df['feature_home_streak'] = map_stat(home_norm, 'streak', 0.0)
+        
+        # Away Stats
+        features_df['feature_away_win_pct'] = map_stat(away_norm, 'win_pct', defaults['win_pct'])
+        features_df['feature_away_away_win_pct'] = map_stat(away_norm, 'away_win_pct', defaults['win_pct'])
+        features_df['feature_away_last5_win_pct'] = map_stat(away_norm, 'last5_win_pct', defaults['last5_win_pct'])
+        features_df['feature_away_ppg'] = map_stat(away_norm, 'ppg', defaults['ppg'])
+        features_df['feature_away_oppg'] = map_stat(away_norm, 'oppg', defaults['oppg'])
+        features_df['feature_away_streak'] = map_stat(away_norm, 'streak', 0.0)
+
+    # 4. Fill Defaults if stats_df was empty or map failed (though fillna handles map fail)
+    # If features_df columns don't exist (because stats_df was empty), create them
+    if 'feature_home_win_pct' not in features_df.columns:
+        features_df['feature_home_win_pct'] = defaults['win_pct']
+        features_df['feature_home_home_win_pct'] = defaults['win_pct']
+        features_df['feature_home_last5_win_pct'] = defaults['last5_win_pct']
+        features_df['feature_home_ppg'] = defaults['ppg']
+        features_df['feature_home_oppg'] = defaults['oppg']
+        features_df['feature_home_streak'] = 0.0
+        
+        features_df['feature_away_win_pct'] = defaults['win_pct']
+        features_df['feature_away_away_win_pct'] = defaults['win_pct']
+        features_df['feature_away_last5_win_pct'] = defaults['last5_win_pct']
+        features_df['feature_away_ppg'] = defaults['ppg']
+        features_df['feature_away_oppg'] = defaults['oppg']
+        features_df['feature_away_streak'] = 0.0
+        
+        logger.critical(f"Used fallback league averages ({league_key}) for ALL games (stats fetch failed)!")
+
+    # 5. Compute Differentials (Vectorized)
+    features_df['feature_diff_win_pct'] = features_df['feature_home_win_pct'] - features_df['feature_away_win_pct']
+    features_df['feature_diff_ppg'] = features_df['feature_home_ppg'] - features_df['feature_away_ppg']
+    features_df['feature_diff_oppg'] = features_df['feature_home_oppg'] - features_df['feature_away_oppg']
+    features_df['feature_diff_last5'] = features_df['feature_home_last5_win_pct'] - features_df['feature_away_last5_win_pct']
+    features_df['feature_diff_streak'] = features_df['feature_home_streak'] - features_df['feature_away_streak']
     
     # 6. Map Remaining Features (Existing)
+    features_df['implied_home_prob'] = pd.to_numeric(df.get('Implied_Prob'), errors='coerce').fillna(0.5)
     
-    df['implied_home_prob'] = pd.to_numeric(df.get('Implied_Prob'), errors='coerce').fillna(0.5)
-    
+    # Try to refine implied prob from ML if available
     def ml_to_prob(ml):
         try:
             m = float(ml)
@@ -275,44 +248,39 @@ def enrich_with_vertex_features(df: pd.DataFrame, api_clients: Dict[str, Any]) -
             return 0.5
             
     if 'Home_ML' in df.columns:
-        df['implied_home_prob'] = df['Home_ML'].apply(ml_to_prob)
+        # Use vectorized apply? Or map.
+        features_df['implied_home_prob'] = df['Home_ML'].apply(ml_to_prob)
         
-    df['sentiment_diff'] = pd.to_numeric(df.get('Sentiment_Diff'), errors='coerce').fillna(0.0)
-    df['kalshi_prob'] = pd.to_numeric(df.get('kalshi_prob'), errors='coerce').fillna(0.5)
-    df['injuries_home_count'] = pd.to_numeric(df.get('injuries_home_count'), errors='coerce').fillna(0)
-    df['injuries_away_count'] = pd.to_numeric(df.get('injuries_away_count'), errors='coerce').fillna(0)
+    features_df['sentiment_diff'] = pd.to_numeric(df.get('Sentiment_Diff'), errors='coerce').fillna(0.0)
+    features_df['kalshi_prob'] = pd.to_numeric(df.get('kalshi_prob'), errors='coerce').fillna(0.5)
+    features_df['injuries_home_count'] = pd.to_numeric(df.get('injuries_home_count'), errors='coerce').fillna(0)
+    features_df['injuries_away_count'] = pd.to_numeric(df.get('injuries_away_count'), errors='coerce').fillna(0)
     
     # Weather flag
-    def parse_weather(w):
-        if not w or not isinstance(w, str): return 0.0
-        w = w.lower()
-        if 'rain' in w or 'snow' in w or 'wind' in w: return 1.0
-        return 0.0
-    
     if 'weather_summary' in df.columns:
-        df['weather_flag'] = df['weather_summary'].apply(parse_weather)
+        features_df['weather_flag'] = df['weather_summary'].astype(str).str.lower().apply(
+            lambda w: 1.0 if any(x in w for x in ['rain', 'snow', 'wind']) else 0.0
+        )
     else:
-        df['weather_flag'] = 0.0
+        features_df['weather_flag'] = 0.0
         
     # Time features
     if 'Commence (UTC)' in df.columns:
         dt_series = pd.to_datetime(df['Commence (UTC)'], errors='coerce')
-        df['feature_commence_hour'] = dt_series.dt.hour.fillna(19.0)
-        df['feature_commence_day_of_week'] = dt_series.dt.dayofweek.fillna(6.0)
+        features_df['feature_commence_hour'] = dt_series.dt.hour.fillna(19.0)
+        features_df['feature_commence_day_of_week'] = dt_series.dt.dayofweek.fillna(6.0)
     else:
-        df['feature_commence_hour'] = 19.0
-        df['feature_commence_day_of_week'] = 6.0
+        features_df['feature_commence_hour'] = 19.0
+        features_df['feature_commence_day_of_week'] = 6.0
         
     # Rest Days
-    df['feature_home_rest_days'] = 3.0
-    df['feature_away_rest_days'] = 3.0
+    features_df['feature_home_rest_days'] = 3.0
+    features_df['feature_away_rest_days'] = 3.0
     
-    # Cleanup auxiliary columns
-    for col in TARGET_FEATURE_COLUMNS:
-        if col not in df.columns:
-            df[col] = 0.0
-            
-    return df
+    # 7. Final Concat
+    result = pd.concat([df, features_df], axis=1)
+    
+    return result
 
 def run_roi_pipeline_validation(df: pd.DataFrame):
     """Checks if the data bridge is actually functioning before export."""
