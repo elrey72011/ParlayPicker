@@ -18,27 +18,27 @@ TARGET_FEATURE_COLUMNS = [
     "injuries_home_count",
     "injuries_away_count",
     "weather_flag",
-    "home_win_pct",
-    "home_home_win_pct",
-    "home_last5_win_pct",
-    "home_ppg",
-    "home_oppg",
-    "home_streak",
-    "away_win_pct",
-    "away_away_win_pct",
-    "away_last5_win_pct",
-    "away_ppg",
-    "away_oppg",
-    "away_streak",
-    "diff_win_pct",
-    "diff_ppg",
-    "diff_oppg",
-    "diff_last5",
-    "diff_streak",
-    "commence_hour",
-    "commence_day_of_week",
-    "home_rest_days",
-    "away_rest_days",
+    "feature_home_win_pct",
+    "feature_home_home_win_pct",
+    "feature_home_last5_win_pct",
+    "feature_home_ppg",
+    "feature_home_oppg",
+    "feature_home_streak",
+    "feature_away_win_pct",
+    "feature_away_away_win_pct",
+    "feature_away_last5_win_pct",
+    "feature_away_ppg",
+    "feature_away_oppg",
+    "feature_away_streak",
+    "feature_diff_win_pct",
+    "feature_diff_ppg",
+    "feature_diff_oppg",
+    "feature_diff_last5",
+    "feature_diff_streak",
+    "feature_commence_hour",
+    "feature_commence_day_of_week",
+    "feature_home_rest_days",
+    "feature_away_rest_days",
 ]
 
 def _parse_streak(streak_str: str) -> float:
@@ -72,6 +72,7 @@ def fetch_and_process_standings(api_clients: Dict[str, Any]) -> pd.DataFrame:
             
         standings = client.get_standings()
         if not standings:
+            logger.warning(f"Failed to fetch standings for {league_key}: {getattr(client, 'last_error', 'Unknown error')}")
             continue
             
         for team_entry in standings:
@@ -86,6 +87,9 @@ def fetch_and_process_standings(api_clients: Dict[str, Any]) -> pd.DataFrame:
                 continue
                 
             norm_name = TeamNameMatcher.normalize(raw_name)
+            
+            # Success logging as requested
+            logger.info(f"✅ Stats loaded for {norm_name}")
             
             # Helper to safely get float
             def get_val(d, k, sub_k=None):
@@ -102,11 +106,6 @@ def fetch_and_process_standings(api_clients: Dict[str, Any]) -> pd.DataFrame:
             played_away = get_val(stats_away, "played")
             
             # Win Pcts
-            win_pct = get_val(stats_all, "win") / played if played > 0 else 0.5
-            # API-Sports sometimes gives 'win' as count, sometimes as pct? 
-            # Usually 'win' is count. 'goals' object has 'for'/'against'.
-            
-            # Actually, standard structure: { "all": { "played": 82, "win": 50, ... } }
             win_count = get_val(stats_all, "win")
             win_home = get_val(stats_home, "win")
             win_away = get_val(stats_away, "win")
@@ -116,10 +115,6 @@ def fetch_and_process_standings(api_clients: Dict[str, Any]) -> pd.DataFrame:
             away_win_pct = win_away / played_away if played_away > 0 else 0.5
             
             # PPG / OPPG
-            # For NBA/NFL, use "points" or "goals" depending on sport config.
-            # Client usually sets SCORING_METRIC_LABEL.
-            # But get_standings payload usually has "goals" or "points".
-            # Let's check both or generic.
             goals = stats_all.get("goals") or stats_all.get("points") or {}
             points_for = get_val(goals, "for")
             points_against = get_val(goals, "against")
@@ -169,12 +164,6 @@ def enrich_with_vertex_features(df: pd.DataFrame, api_clients: Dict[str, Any]) -
     df['away_norm'] = df['Away'].apply(lambda x: TeamNameMatcher.normalize(str(x)))
     
     # 3. Merge Stats
-    # We allow cross-league merging if needed, but ideally filter by league. 
-    # Since team names are fairly unique within sport context, merging by normalized name should be safe enough 
-    # provided we don't have collisions. To be safe, we can merge on [league, team].
-    # But master_df league names (e.g. "NBA") might match api_client keys.
-    # Let's try merging on team_norm only first, dropping duplicates in stats_df if any.
-    
     stats_unique = stats_df.drop_duplicates(subset=['team_norm'])
     
     # Merge Home
@@ -187,13 +176,12 @@ def enrich_with_vertex_features(df: pd.DataFrame, api_clients: Dict[str, Any]) -
     )
     # Rename merged columns to feature names
     home_cols = {
-        'win_pct': 'home_win_pct',
-        'home_win_pct': 'home_home_win_pct', # Win % at home
-        'away_win_pct': 'home_away_win_pct', # Not used directly?
-        'ppg': 'home_ppg',
-        'oppg': 'home_oppg',
-        'streak': 'home_streak',
-        'last5_win_pct': 'home_last5_win_pct'
+        'win_pct': 'feature_home_win_pct',
+        'home_win_pct': 'feature_home_home_win_pct',
+        'ppg': 'feature_home_ppg',
+        'oppg': 'feature_home_oppg',
+        'streak': 'feature_home_streak',
+        'last5_win_pct': 'feature_home_last5_win_pct'
     }
     df.rename(columns=home_cols, inplace=True)
     
@@ -205,37 +193,33 @@ def enrich_with_vertex_features(df: pd.DataFrame, api_clients: Dict[str, Any]) -
         how='left',
         suffixes=('', '_away')
     )
-    # Rename merged columns (pandas adds suffix to colliding, but we renamed home ones already)
-    # Wait, 'win_pct' became 'home_win_pct'. The new merge brings 'win_pct' again (from stats_unique).
-    # So we can just rename the new columns.
+    # Rename merged columns
     away_cols = {
-        'win_pct': 'away_win_pct',
-        'home_win_pct': 'away_home_win_pct',
-        'away_win_pct': 'away_away_win_pct', # Win % at away
-        'ppg': 'away_ppg',
-        'oppg': 'away_oppg',
-        'streak': 'away_streak',
-        'last5_win_pct': 'away_last5_win_pct'
+        'win_pct': 'feature_away_win_pct',
+        'away_win_pct': 'feature_away_away_win_pct', # Win % at away
+        'ppg': 'feature_away_ppg',
+        'oppg': 'feature_away_oppg',
+        'streak': 'feature_away_streak',
+        'last5_win_pct': 'feature_away_last5_win_pct'
     }
     df.rename(columns=away_cols, inplace=True)
     
     # 4. Fill Missing with League Averages
-    # We calculate averages from stats_df
     avg_stats = stats_df.select_dtypes(include=[np.number]).mean().to_dict()
     
     fill_map = {
-        'home_win_pct': avg_stats.get('win_pct', 0.5),
-        'home_home_win_pct': avg_stats.get('home_win_pct', 0.5),
-        'home_last5_win_pct': avg_stats.get('last5_win_pct', 0.5),
-        'home_ppg': avg_stats.get('ppg', 0.0),
-        'home_oppg': avg_stats.get('oppg', 0.0),
-        'home_streak': 0.0,
-        'away_win_pct': avg_stats.get('win_pct', 0.5),
-        'away_away_win_pct': avg_stats.get('away_win_pct', 0.5),
-        'away_last5_win_pct': avg_stats.get('last5_win_pct', 0.5),
-        'away_ppg': avg_stats.get('ppg', 0.0),
-        'away_oppg': avg_stats.get('oppg', 0.0),
-        'away_streak': 0.0,
+        'feature_home_win_pct': avg_stats.get('win_pct', 0.5),
+        'feature_home_home_win_pct': avg_stats.get('home_win_pct', 0.5),
+        'feature_home_last5_win_pct': avg_stats.get('last5_win_pct', 0.5),
+        'feature_home_ppg': avg_stats.get('ppg', 0.0),
+        'feature_home_oppg': avg_stats.get('oppg', 0.0),
+        'feature_home_streak': 0.0,
+        'feature_away_win_pct': avg_stats.get('win_pct', 0.5),
+        'feature_away_away_win_pct': avg_stats.get('away_win_pct', 0.5),
+        'feature_away_last5_win_pct': avg_stats.get('last5_win_pct', 0.5),
+        'feature_away_ppg': avg_stats.get('ppg', 0.0),
+        'feature_away_oppg': avg_stats.get('oppg', 0.0),
+        'feature_away_streak': 0.0,
     }
     
     for col, val in fill_map.items():
@@ -245,22 +229,15 @@ def enrich_with_vertex_features(df: pd.DataFrame, api_clients: Dict[str, Any]) -
             df[col] = val
 
     # 5. Compute Differentials
-    df['diff_win_pct'] = df['home_win_pct'] - df['away_win_pct']
-    df['diff_ppg'] = df['home_ppg'] - df['away_ppg']
-    df['diff_oppg'] = df['home_oppg'] - df['away_oppg']
-    df['diff_last5'] = df['home_last5_win_pct'] - df['away_last5_win_pct']
-    df['diff_streak'] = df['home_streak'] - df['away_streak']
+    df['feature_diff_win_pct'] = df['feature_home_win_pct'] - df['feature_away_win_pct']
+    df['feature_diff_ppg'] = df['feature_home_ppg'] - df['feature_away_ppg']
+    df['feature_diff_oppg'] = df['feature_home_oppg'] - df['feature_away_oppg']
+    df['feature_diff_last5'] = df['feature_home_last5_win_pct'] - df['feature_away_last5_win_pct']
+    df['feature_diff_streak'] = df['feature_home_streak'] - df['feature_away_streak']
     
     # 6. Map Remaining Features (Existing)
-    # Ensure they map to the exact names in TARGET_FEATURE_COLUMNS
-    # "implied_home_prob" is usually "Implied_Prob" (or calculated if missing)
-    # We need to ensure we populate them.
     
     df['implied_home_prob'] = pd.to_numeric(df.get('Implied_Prob'), errors='coerce').fillna(0.5)
-    # If Implied_Prob is for Away team, this might be wrong if we just take 'Implied_Prob'.
-    # Master DF usually has 'Implied_Prob' for the *selected pick*. 
-    # We want 'Implied Home Probability'.
-    # We can approximate from 'Home_ML' if available.
     
     def ml_to_prob(ml):
         try:
@@ -293,20 +270,44 @@ def enrich_with_vertex_features(df: pd.DataFrame, api_clients: Dict[str, Any]) -
     # Time features
     if 'Commence (UTC)' in df.columns:
         dt_series = pd.to_datetime(df['Commence (UTC)'], errors='coerce')
-        df['commence_hour'] = dt_series.dt.hour.fillna(19.0) # Default 7 PM
-        df['commence_day_of_week'] = dt_series.dt.dayofweek.fillna(6.0) # Default Sunday
+        df['feature_commence_hour'] = dt_series.dt.hour.fillna(19.0)
+        df['feature_commence_day_of_week'] = dt_series.dt.dayofweek.fillna(6.0)
     else:
-        df['commence_hour'] = 19.0
-        df['commence_day_of_week'] = 6.0
+        df['feature_commence_hour'] = 19.0
+        df['feature_commence_day_of_week'] = 6.0
         
-    # Rest Days (Placeholder 3.0 unless we implement calendar logic)
-    df['home_rest_days'] = 3.0
-    df['away_rest_days'] = 3.0
+    # Rest Days
+    df['feature_home_rest_days'] = 3.0
+    df['feature_away_rest_days'] = 3.0
     
     # Cleanup auxiliary columns
-    # We don't drop them, just ensure TARGET_FEATURE_COLUMNS exist
     for col in TARGET_FEATURE_COLUMNS:
         if col not in df.columns:
             df[col] = 0.0
             
     return df
+
+def run_roi_pipeline_validation(df: pd.DataFrame):
+    """Checks if the data bridge is actually functioning before export."""
+    critical_checks = {
+        "Vertex Prediction": "vertex_spread_prob",
+        "Kalshi Probability": "kalshi_prob_spread",
+        "Team Stats (PPG)": "feature_home_ppg",
+        "Team Stats (Win %)": "feature_home_win_pct"
+    }
+    
+    validation_results = {}
+    
+    for label, col in critical_checks.items():
+        if col not in df.columns:
+            validation_results[label] = "❌ COLUMN MISSING"
+        elif df[col].notnull().sum() == 0:
+            validation_results[label] = "⚠️ COLUMN EMPTY (Data not reaching DF)"
+        else:
+            validation_results[label] = f"✅ OK ({df[col].notnull().sum()} rows populated)"
+            
+    logger.info("--- ROI PIPELINE VALIDATION ---")
+    for label, status in validation_results.items():
+        logger.info(f"{label}: {status}")
+        
+    return validation_results
