@@ -9,6 +9,7 @@ from datetime import datetime, timedelta, timezone
 import statistics
 from typing import Any, Dict, List, Optional, Tuple, Union
 from zoneinfo import ZoneInfo
+import itertools
 
 import pandas as pd
 import requests
@@ -4703,6 +4704,63 @@ def match_kalshi_market(
             "kalshi_yes_side": "over" if market_type == "total" else "home",
         }
 
+    def select_spread_market(markets: List[Dict[str, Any]], target_line: Optional[float]) -> Dict[str, Any]:
+        if not markets:
+            return base_result("no_spread_market", "spread")
+
+        if target_line is None:
+            # Fallback if we don't have a book line
+            return simple_select(markets, "spread")
+
+        best_match = None
+        min_diff = float("inf")
+
+        for m in markets:
+            _, line = extract_prob_and_line(m, "spread")
+            if line is not None:
+                diff = abs(line - target_line)
+                # Prioritize closest line within 0.5 tolerance
+                if diff <= 0.51 and diff < min_diff:
+                    min_diff = diff
+                    best_match = m
+
+        if best_match:
+            prob, line = extract_prob_and_line(best_match, "spread")
+            return {
+                "kalshi_available": True,
+                "kalshi_label": "matched_spread_tolerance",
+                "kalshi_event_ticker": best_match.get("event_ticker") or best_match.get("ticker"),
+                "kalshi_reason": f"matched_spread_diff_{min_diff:.1f}",
+                "kalshi_matched": True,
+                "kalshi_prob": prob,
+                "kalshi_market_type": "spread",
+                "kalshi_match_score": None,
+                "kalshi_ticker": best_match.get("event_ticker") or best_match.get("ticker"),
+                "kalshi_line": line,
+                "kalshi_title": best_match.get("title"),
+                "kalshi_yes_side": "home",
+            }
+
+        # If no strict tolerance match, fall back to first available?
+        # User instruction implies "Accept even if... off by 0.5".
+        # It does NOT say "Accept if off by 10".
+        # So we return base_result if no match found.
+        # However, to be safe and match behavior of simple_select (which matched blindly),
+        # we might want to fallback or strict.
+        # "Relax the matching logic" implies previously it was too strict or (more likely)
+        # simple_select was picking WRONG lines.
+        # Actually simple_select picks ANY line.
+        # If I return nothing, I might reduce matches.
+        # But `kalshi_pick_mismatch` warning suggests we had a probability mismatch likely due to line mismatch.
+        # Let's fallback to simple_select if no tolerance match, but maybe log it?
+        # Actually, if we want to "Force Save", we should probably fallback to the best available even if > 0.5 diff,
+        # but the user said "If the lines are close (e.g., -5.0 vs -5.5), count it as a match".
+        # This implies if they are NOT close, do NOT count it as a match?
+        # Or does it mean "Ensure we pick the one that IS close"?
+        # I will assume we pick the best available if it is within tolerance.
+
+        return base_result("no_spread_market_within_tolerance", "spread")
+
     winner_meta = {
         "expected_date_token": date_token,
         "expected_codes": {"away": away_code_expected, "home": home_code_expected},
@@ -4728,9 +4786,12 @@ def match_kalshi_market(
         "kalshi_wanted_tokens": allowed_date_tokens,
     }
 
+    # Use 'home_spread_point' (usually from best_spread_median_point in load logic)
+    target_spread = game.get("home_spread_point") or game.get("best_spread_median_point")
+
     return {
         "total": simple_select(totals, "total"),
-        "spread": simple_select(spreads, "spread"),
+        "spread": select_spread_market(spreads, target_spread),
         "winner": winner_result,
     }, candidate_debug
 
