@@ -132,13 +132,9 @@ class _APISportsBaseClient:
         """Return possible season identifiers for the target date."""
 
         start_year = cls._season_start_year(target)
-        if cls.SEASON_FORMAT == "split":
-            # API-Sports tends to use "2023-2024" for leagues that span years.
-            return [
-                f"{start_year}-{start_year + 1}",
-                str(start_year),
-                str(start_year + 1),
-            ]
+        # Fix for API Season Parameter: Always return integer-like string (e.g. "2025")
+        # The API-Sports /teams/statistics endpoint often requires the start year as an integer
+        # even for split-season leagues.
         return [str(start_year)]
 
     @classmethod
