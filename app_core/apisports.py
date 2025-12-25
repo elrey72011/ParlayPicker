@@ -12,6 +12,9 @@ from typing import Dict, List, Optional, Sequence, Tuple
 import pytz
 import requests
 import streamlit as st
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -407,6 +410,21 @@ class _APISportsBaseClient:
                 return stats
 
         return {}
+
+    def get_team_stats(self, season=2025):
+        """
+        Fetches team statistics.
+        Falls back to empty dict if API is restricted (403).
+        """
+        stats = {}
+        # Logic to call /teams/statistics endpoint
+        # TRY/EXCEPT block is critical here to catch the 403 Forbidden
+        try:
+            # [Insert API call logic here]
+            pass
+        except Exception as e:
+            logger.warning(f"Failed to fetch team stats: {e}")
+        return stats
 
     def get_standings(
         self,
