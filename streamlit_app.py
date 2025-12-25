@@ -7,7 +7,6 @@ import time
 import traceback
 from datetime import datetime, timedelta, timezone
 import statistics
-import itertools
 from typing import Any, Dict, List, Optional, Tuple, Union
 from zoneinfo import ZoneInfo
 
@@ -1982,129 +1981,6 @@ def pipeline_progress_snapshot() -> Dict[str, Any]:
         "market_rows_out": master_stats.get("market_rows_out", 0),
     }
 
-
-def generate_shotgun_parlays(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Generate 2-Leg Parlays using itertools.combinations.
-    Filter the df_master for High Value Plays:
-    (market_stability == 'TIGHT' AND (spread_edge > 0.05 OR total_edge > 0.05)).
-
-    Staking Plan:
-    Top 3 Pairs: 'Tier 3 (Lock) - Bet $3'.
-    Next 4 Pairs: 'Tier 2 (Core) - Bet $2'.
-    Rest: 'Tier 1 (Flyer) - Bet $1'.
-    """
-    if df is None or df.empty:
-        return pd.DataFrame()
-
-    # Ensure columns exist
-    if 'market_stability' not in df.columns or 'spread_edge' not in df.columns or 'total_edge' not in df.columns:
-        return pd.DataFrame()
-
-    # Convert edge columns to numeric
-    df = df.copy()
-    df['spread_edge'] = pd.to_numeric(df['spread_edge'], errors='coerce').fillna(0)
-    df['total_edge'] = pd.to_numeric(df['total_edge'], errors='coerce').fillna(0)
-
-    # Filter for High Value Plays
-    # Note: spread_edge/total_edge > 0.05 means > 5% edge
-    filtered_df = df[
-        (df['market_stability'] == 'TIGHT') &
-        ((df['spread_edge'] > 0.05) | (df['total_edge'] > 0.05))
-    ].copy()
-
-    if filtered_df.empty:
-        return pd.DataFrame()
-
-    # Helper to get the best bet from a row (Spread or Total)
-    def get_best_bet(row):
-        spread_edge = row['spread_edge']
-        total_edge = row['total_edge']
-        ppg = row.get('feature_home_ppg')
-        market_only_flag = (ppg == 50 or ppg == '50' or ppg == 50.0)
-
-        if spread_edge > total_edge and spread_edge > 0.05:
-            pick = row.get('Spread & Pick') or f"Spread {row.get('Home')} vs {row.get('Away')}"
-            edge = spread_edge
-            prob = row.get('spread_prob')
-            market = "Spread"
-        elif total_edge > 0.05:
-            pick = row.get('Total & Pick') or f"Total {row.get('Home')} vs {row.get('Away')}"
-            edge = total_edge
-            prob = row.get('total_prob')
-            market = "Total"
-        else:
-            return None
-
-        # Append badge if Market Only
-        if market_only_flag:
-            pick = f"{pick} ⚠️ Market Only"
-
-        return {
-            "Game": f"{row.get('Away')} @ {row.get('Home')}",
-            "Pick": pick,
-            "Edge": edge,
-            "Prob": prob,
-            "Market": market,
-            "Commence": row.get('Commence (UTC)')
-        }
-
-    # Extract best bets
-    valid_bets = []
-    for idx, row in filtered_df.iterrows():
-        bet = get_best_bet(row)
-        if bet:
-            valid_bets.append(bet)
-
-    if len(valid_bets) < 2:
-        return pd.DataFrame()
-
-    # Generate 2-Leg Parlays
-    parlays = []
-    for pair in itertools.combinations(valid_bets, 2):
-        bet1, bet2 = pair
-
-        # Avoid parlays from same game if correlated (basic check)
-        if bet1['Game'] == bet2['Game']:
-            continue
-
-        combined_edge = bet1['Edge'] + bet2['Edge']
-        combined_prob = (bet1['Prob'] or 0.5) * (bet2['Prob'] or 0.5)
-
-        parlays.append({
-            "Leg 1": f"{bet1['Pick']} ({bet1['Edge']:.1%})",
-            "Leg 2": f"{bet2['Pick']} ({bet2['Edge']:.1%})",
-            "Combined Edge": combined_edge,
-            "Combined Prob": combined_prob
-        })
-
-    parlay_df = pd.DataFrame(parlays)
-    if parlay_df.empty:
-        return pd.DataFrame()
-
-    # Sort by Combined Edge descending
-    parlay_df = parlay_df.sort_values(by="Combined Edge", ascending=False).reset_index(drop=True)
-
-    # Apply Staking Plan
-    # Top 3 Pairs: 'Tier 3 (Lock) - Bet $3'
-    # Next 4 Pairs: 'Tier 2 (Core) - Bet $2'
-    # Rest: 'Tier 1 (Flyer) - Bet $1'
-
-    def get_tier_stake(rank): # 0-indexed rank
-        if rank < 3:
-            return 'Tier 3 (Lock) - Bet $3'
-        elif rank < 7: # 3 + 4 = 7
-            return 'Tier 2 (Core) - Bet $2'
-        else:
-            return 'Tier 1 (Flyer) - Bet $1'
-
-    parlay_df['Tier & Stake'] = parlay_df.index.map(get_tier_stake)
-
-    # Format Edge
-    parlay_df['Combined Edge'] = parlay_df['Combined Edge'].apply(lambda x: f"{x:+.1%}")
-    parlay_df['Combined Prob'] = parlay_df['Combined Prob'].apply(lambda x: f"{x:.1%}")
-
-    return parlay_df
 
 def render_pipeline_banner() -> None:
     progress = pipeline_progress_snapshot()
@@ -5103,8 +4979,8 @@ render_pipeline_banner()
 # Tabs
 # -----------------
 
-tab_games, tab_master, tab_shotgun, tab_kalshi, tab_sentiment, tab_debug = st.tabs(
-    ["Games & Context", "Master Analysis", "Shotgun Mode", "Kalshi Health", "Sentiment", "Debug"]
+tab_games, tab_master, tab_kalshi, tab_sentiment, tab_debug = st.tabs(
+    ["Games & Odds", "Master Analysis", "Kalshi", "Sentiment", "Debug"]
 )
 
 
@@ -6576,18 +6452,10 @@ with tab_master:
                     pick_side = "home" if pick == home else "away"
                     implied_pick = implied_prob_for_pick(home_ml, away_ml, pick_side)
                     kalshi_yes_side = kalshi_winner.get("kalshi_yes_side")
-
-                    # Safety Valve: Market-First Pivot
-                    # If features are default (50), kill the model weight to prevent poisoning
-                    ml_weight_val = 0.35
-                    feat_ppg = g.get('feature_home_ppg')
-                    if feat_ppg == 50 or feat_ppg == '50' or feat_ppg == 50.0:
-                        ml_weight_val = 0.0
-
                     base_weights = {
                         "odds_weight": 0.30,
                         "kalshi_weight": 0.35,
-                        "ml_weight": ml_weight_val,
+                        "ml_weight": 0.35,
                         "sentiment_weight": abs(sentiment_adj or 0.0),
                     }
                     final_prob_blend, base_prob_blend, weights_used, decision_driver, warnings_new, kalshi_prob_for_pick = compute_final_probability(
@@ -6994,7 +6862,7 @@ with tab_master:
                     "gemini_error": None,
                     "gemini_flags_short": None,
                     "llm_disagreement_flag": None,
-                    "kalshi_prob_spread": spread_kalshi_prob_for_pick,
+                    "kalshi_prob_spread": spread_kalshi_prob_for_pick if spread_kalshi_prob_for_pick is not None else kalshi_prob_spread,
                     "kalshi_prob_total": kalshi_prob_total,
                     "kalshi_prob": kalshi_prob_spread if kalshi_spread.get("kalshi_matched") else None,
                     "spread_prob_market": spread_prob_market,
@@ -7442,31 +7310,6 @@ with tab_master:
                 master_stats["market_rows_out"] += 1
 
         df = pd.DataFrame(rows_out)
-
-        # Force Kalshi Map: Third Time's the Charm
-        # The kalshi_prob_spread column is still 0.0.
-        # Action: In the main loop of streamlit_app.py, immediately after getting kalshi_data,
-        # add this line: df_master.at[index, 'kalshi_prob_spread'] = kalshi_data.get('prob_for_pick')
-        # Since we just created df (df_master), we can iterate and enforce this.
-        # But wait, we don't have access to kalshi_data easily here anymore.
-        # However, the row dictionaries in `rows_out` ALREADY have "kalshi_prob_spread" set.
-        # If it's still 0.0, it means it was set to 0.0 in the dict.
-        # We ensured it's set to None if not matched in the previous step.
-        # Let's add a safety pass here to convert 0.0 to None if that's what's happening and it's not matched.
-
-        # Actually, the user asked to put it "In the main loop ... immediately after getting kalshi_data".
-        # But we are past the loop.
-        # The user said: "The kalshi_prob_spread column is still 0.0. ... Force the raw value into the column".
-        # I will iterate df and ensure if it's 0.0 and we have a valid prob, we use it?
-        # Or better, ensure that the `kalshi_prob_spread` column is float type and nullable.
-
-        if "kalshi_prob_spread" in df.columns:
-             # Ensure numeric
-             df["kalshi_prob_spread"] = pd.to_numeric(df["kalshi_prob_spread"], errors='coerce')
-             # If 0.0 is coming from "None" conversion somewhere?
-             # No, standard is NaN.
-             pass
-
         # Collapse to one row per game (prefer the first generated row, typically moneyline)
         sentiment_meta_for_export = sentiment_pack_meta or init_sentiment_meta()
         for row in rows_out:
@@ -8505,41 +8348,6 @@ with tab_master:
 
     elif not games:
         st.info("Load games from the sidebar, then run Master Analysis.")
-
-
-with tab_shotgun:
-    st.header("Shotgun Mode 🔫")
-    st.caption("Auto-generated 2-Leg Parlays from High Value Plays (Tight Market + >5% Edge)")
-
-    if "master_df" in st.session_state and not st.session_state["master_df"].empty:
-        shotgun_df = generate_shotgun_parlays(st.session_state["master_df"])
-
-        if not shotgun_df.empty:
-            st.success(f"Generated {len(shotgun_df)} High Value Parlays")
-
-            # Display coloring based on Tier
-            def color_tier(val):
-                color = ''
-                if 'Tier 3' in str(val):
-                    color = 'background-color: #d4edda; color: #155724' # Green
-                elif 'Tier 2' in str(val):
-                    color = 'background-color: #fff3cd; color: #856404' # Yellow
-                else:
-                    color = ''
-                return color
-
-            try:
-                st.dataframe(
-                    shotgun_df.style.map(color_tier, subset=['Tier & Stake']),
-                    use_container_width=True,
-                    hide_index=True
-                )
-            except Exception:
-                st.dataframe(shotgun_df, use_container_width=True, hide_index=True)
-        else:
-            st.info("No high-value plays found matching criteria (Tight Market + Edge > 5%).")
-    else:
-        st.warning("Please run Master Analysis first to generate data for Shotgun Mode.")
 
 
 with tab_kalshi:

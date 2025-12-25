@@ -131,9 +131,15 @@ class _APISportsBaseClient:
     def season_candidates_for_date(cls, target: Optional[date] = None) -> List[str]:
         """Return possible season identifiers for the target date."""
 
-        # Hardcoded to 2025 as per Market-First Pivot instructions
-        # to ensure schedule loads even if stats fail.
-        return ["2025"]
+        start_year = cls._season_start_year(target)
+        if cls.SEASON_FORMAT == "split":
+            # API-Sports tends to use "2023-2024" for leagues that span years.
+            return [
+                f"{start_year}-{start_year + 1}",
+                str(start_year),
+                str(start_year + 1),
+            ]
+        return [str(start_year)]
 
     @classmethod
     def current_season_for_date(cls, target: Optional[date] = None) -> str:
@@ -324,35 +330,6 @@ class _APISportsBaseClient:
 
         return last_games
 
-    def get_teams(
-        self,
-        league_id: Optional[int] = None,
-        season: Optional[str] = None,
-    ) -> List[Dict]:
-        """Fetch list of teams for a league and season."""
-        if not self.is_configured():
-            return []
-
-        league_id = self._resolve_league_id(league_id)
-        if not league_id:
-            if not self.last_error:
-                self.last_error = "Unable to determine API-Sports league ID"
-            return []
-
-        season_str = str(season) if season is not None else self.current_season_for_date()
-
-        payload = self._request(
-            "/teams",
-            {
-                "league": league_id,
-                "season": season_str,
-            },
-        )
-        if not payload:
-            return []
-
-        return payload.get("response", [])
-
     def get_games_by_season(
         self,
         season: str,
@@ -431,117 +408,61 @@ class _APISportsBaseClient:
 
         return {}
 
-    def get_team_stats(
-        self,
-        league_id: Optional[int] = None,
-        season: Optional[str] = None,
-    ) -> List[Dict]:
-        """
-        Fetch team statistics for all teams in the league.
-        Replacement for get_standings which is returning 403 Forbidden.
-        Iterates through teams and fetches /teams/statistics.
-        """
-        if not self.is_configured():
-            return []
-
-        league_id = self._resolve_league_id(league_id)
-        if not league_id:
-            return []
-        
-        season_str = str(season) if season is not None else self.current_season_for_date()
-        
-        # 1. Fetch teams
-        teams_response = self.get_teams(league_id, season_str)
-        if not teams_response:
-            return []
-            
-        all_stats_formatted = []
-
-        # 2. Iterate and fetch stats
-        # We limit to first 40 teams to avoid excessive API calls if league has many teams
-        # API-Sports rate limit is usually generous enough for this periodic call
-        for entry in teams_response[:40]:
-            team_info = entry.get("team", {})
-            team_id = team_info.get("id")
-            if not team_id:
-                continue
-
-            raw_stats = self.get_team_statistics(team_id, season_str, league_id)
-            if not raw_stats:
-                continue
-
-            # 3. Format to match expected structure in feature_processing.py
-            # Expected: { "team": {"name": ...}, "all": {"played": ..., "win": ..., "goals": ...}, "streak": ..., "form": ... }
-            
-            fixtures = raw_stats.get("fixtures", {})
-            goals = raw_stats.get("goals", {})
-
-            formatted = {
-                "team": {
-                    "name": team_info.get("name"),
-                    "id": team_id
-                },
-                "all": {
-                    "played": (fixtures.get("played") or {}).get("total", 0),
-                    "win": (fixtures.get("wins") or {}).get("total", 0),
-                    "lose": (fixtures.get("loses") or {}).get("total", 0),
-                    "goals": {
-                        "for": (goals.get("for") or {}).get("total", {}).get("total", 0),
-                        "against": (goals.get("against") or {}).get("total", {}).get("total", 0),
-                    },
-                    "points": { # Some sports use points instead of goals
-                         "for": (goals.get("for") or {}).get("total", {}).get("total", 0),
-                         "against": (goals.get("against") or {}).get("total", {}).get("total", 0),
-                    }
-                },
-                "home": {
-                    "played": (fixtures.get("played") or {}).get("home", 0),
-                    "win": (fixtures.get("wins") or {}).get("home", 0),
-                    "lose": (fixtures.get("loses") or {}).get("home", 0),
-                },
-                "away": {
-                    "played": (fixtures.get("played") or {}).get("away", 0),
-                    "win": (fixtures.get("wins") or {}).get("away", 0),
-                    "lose": (fixtures.get("loses") or {}).get("away", 0),
-                },
-                "form": raw_stats.get("form"),
-                "streak": f"W{raw_stats.get('streak')}" if raw_stats.get("streak", 0) > 0 else f"L{abs(raw_stats.get('streak', 0))}" if raw_stats.get("streak") else ""
-            }
-            # Note: API-Sports /teams/statistics 'streak' is an integer (positive for wins, negative for losses)?
-            # Actually, the documentation says it returns an object or string.
-            # But let's look at get_team_statistics return.
-            # In `_APISportsBaseClient`, get_team_statistics returns `response`.
-            # /teams/statistics response usually has "biggest": { "streak": { "wins": ..., "draws": ..., "loses": ... } }
-            # But `form` is a string like "WLWWL".
-            # The current `feature_processing.py` expects "streak" like "W3".
-            # Let's try to derive streak from form if needed, or use the biggest streak?
-            # Wait, `get_standings` return had a `streak` field "W5".
-            # /teams/statistics doesn't have a current streak field directly in the root usually.
-            # We can calculate it from `form` if needed.
-
-            form_str = raw_stats.get("form", "")
-            current_streak = 0
-            if form_str:
-                last_char = form_str[-1]
-                count = 0
-                for char in reversed(form_str):
-                    if char == last_char:
-                        count += 1
-                    else:
-                        break
-                formatted["streak"] = f"{last_char}{count}"
-
-            all_stats_formatted.append(formatted)
-
-        return all_stats_formatted
-
     def get_standings(
         self,
         league_id: Optional[int] = None,
         season: Optional[str] = None,
     ) -> List[Dict]:
-        """Deprecated: Fetch standings. Use get_team_stats instead."""
-        return self.get_team_stats(league_id, season)
+        """Fetch standings for the specified league and season."""
+
+        if not self.is_configured():
+            return []
+
+        league_id = self._resolve_league_id(league_id)
+        if not league_id:
+            if not self.last_error:
+                self.last_error = "Unable to determine API-Sports league ID"
+            return []
+        
+        season_str = str(season) if season is not None else self.current_season_for_date()
+        
+        cache_key = (f"standings_{league_id}_{season_str}",)
+        # We abuse the team cache structure slightly or should add a new one?
+        # Let's just use _request directly and trust LRU cache if we had one, 
+        # but here we don't have a standings cache. 
+        # For safety/performance within a run, we can add a simple ephemeral cache if needed,
+        # but for now direct call is fine as it's usually called once per league.
+
+        payload = self._request(
+            "/standings",
+            {
+                "league": league_id,
+                "season": season_str,
+            },
+        )
+        
+        if not payload:
+            return []
+            
+        response = payload.get("response", [])
+        if not response:
+            return []
+            
+        # API-Sports structure: response[0]['league']['standings'] -> list of lists (groups)
+        # We flatten it.
+        try:
+            league_data = response[0].get("league", {})
+            standings_groups = league_data.get("standings", [])
+            all_teams = []
+            for group in standings_groups:
+                if isinstance(group, list):
+                    all_teams.extend(group)
+                elif isinstance(group, dict): # Sometimes it's a dict?
+                    all_teams.append(group)
+            return all_teams
+        except Exception as e:
+            self.last_error = f"Error parsing standings: {e}"
+            return []
 
     # ------------------------------------------------------------------
     # Formatting helpers
