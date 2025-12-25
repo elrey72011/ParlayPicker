@@ -338,9 +338,9 @@ class _APISportsBaseClient:
             if not self.last_error:
                 self.last_error = "Unable to determine API-Sports league ID"
             return []
-        
+
         season_str = str(season) if season is not None else self.current_season_for_date()
-        
+
         payload = self._request(
             "/teams",
             {
@@ -350,7 +350,7 @@ class _APISportsBaseClient:
         )
         if not payload:
             return []
-            
+
         return payload.get("response", [])
 
     def get_games_by_season(
@@ -456,7 +456,7 @@ class _APISportsBaseClient:
             return []
             
         all_stats_formatted = []
-        
+
         # 2. Iterate and fetch stats
         # We limit to first 40 teams to avoid excessive API calls if league has many teams
         # API-Sports rate limit is usually generous enough for this periodic call
@@ -465,17 +465,17 @@ class _APISportsBaseClient:
             team_id = team_info.get("id")
             if not team_id:
                 continue
-                
+
             raw_stats = self.get_team_statistics(team_id, season_str, league_id)
             if not raw_stats:
                 continue
-                
+
             # 3. Format to match expected structure in feature_processing.py
             # Expected: { "team": {"name": ...}, "all": {"played": ..., "win": ..., "goals": ...}, "streak": ..., "form": ... }
             
             fixtures = raw_stats.get("fixtures", {})
             goals = raw_stats.get("goals", {})
-            
+
             formatted = {
                 "team": {
                     "name": team_info.get("name"),
@@ -507,18 +507,18 @@ class _APISportsBaseClient:
                 "form": raw_stats.get("form"),
                 "streak": f"W{raw_stats.get('streak')}" if raw_stats.get("streak", 0) > 0 else f"L{abs(raw_stats.get('streak', 0))}" if raw_stats.get("streak") else ""
             }
-            # Note: API-Sports /teams/statistics 'streak' is an integer (positive for wins, negative for losses)? 
-            # Actually, the documentation says it returns an object or string. 
+            # Note: API-Sports /teams/statistics 'streak' is an integer (positive for wins, negative for losses)?
+            # Actually, the documentation says it returns an object or string.
             # But let's look at get_team_statistics return.
             # In `_APISportsBaseClient`, get_team_statistics returns `response`.
             # /teams/statistics response usually has "biggest": { "streak": { "wins": ..., "draws": ..., "loses": ... } }
             # But `form` is a string like "WLWWL".
             # The current `feature_processing.py` expects "streak" like "W3".
-            # Let's try to derive streak from form if needed, or use the biggest streak? 
+            # Let's try to derive streak from form if needed, or use the biggest streak?
             # Wait, `get_standings` return had a `streak` field "W5".
             # /teams/statistics doesn't have a current streak field directly in the root usually.
             # We can calculate it from `form` if needed.
-            
+
             form_str = raw_stats.get("form", "")
             current_streak = 0
             if form_str:
@@ -530,9 +530,9 @@ class _APISportsBaseClient:
                     else:
                         break
                 formatted["streak"] = f"{last_char}{count}"
-            
+
             all_stats_formatted.append(formatted)
-            
+
         return all_stats_formatted
 
     def get_standings(
