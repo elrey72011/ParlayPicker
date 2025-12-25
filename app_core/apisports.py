@@ -435,35 +435,37 @@ class _APISportsBaseClient:
         self,
         league_id: Optional[int] = None,
         season: Optional[str] = None,
-    ) -> List[Dict]:
+    ) -> Dict[str, Dict]:
         """
         Fetch team statistics for all teams in the league.
         Replacement for get_standings which is returning 403 Forbidden.
         Iterates through teams and fetches /teams/statistics.
+        Returns a dictionary mapped by team name.
         """
         if not self.is_configured():
-            return []
+            return {}
 
         league_id = self._resolve_league_id(league_id)
         if not league_id:
-            return []
+            return {}
         
-        season_str = str(season) if season is not None else self.current_season_for_date()
+        # Default to 2025 if season is None, as per previous fix request
+        season_str = str(season) if season is not None else "2025"
         
         # 1. Fetch teams
         teams_response = self.get_teams(league_id, season_str)
         if not teams_response:
-            return []
-            
-        all_stats_formatted = []
+            return {}
+
+        all_stats_dict = {}
 
         # 2. Iterate and fetch stats
         # We limit to first 40 teams to avoid excessive API calls if league has many teams
-        # API-Sports rate limit is usually generous enough for this periodic call
         for entry in teams_response[:40]:
             team_info = entry.get("team", {})
             team_id = team_info.get("id")
-            if not team_id:
+            team_name = team_info.get("name")
+            if not team_id or not team_name:
                 continue
 
             raw_stats = self.get_team_statistics(team_id, season_str, league_id)
@@ -471,14 +473,24 @@ class _APISportsBaseClient:
                 continue
 
             # 3. Format to match expected structure in feature_processing.py
-            # Expected: { "team": {"name": ...}, "all": {"played": ..., "win": ..., "goals": ...}, "streak": ..., "form": ... }
-            
             fixtures = raw_stats.get("fixtures", {})
             goals = raw_stats.get("goals", {})
 
+            form_str = raw_stats.get("form", "")
+            current_streak_str = ""
+            if form_str:
+                last_char = form_str[-1]
+                count = 0
+                for char in reversed(form_str):
+                    if char == last_char:
+                        count += 1
+                    else:
+                        break
+                current_streak_str = f"{last_char}{count}"
+
             formatted = {
                 "team": {
-                    "name": team_info.get("name"),
+                    "name": team_name,
                     "id": team_id
                 },
                 "all": {
@@ -504,36 +516,14 @@ class _APISportsBaseClient:
                     "win": (fixtures.get("wins") or {}).get("away", 0),
                     "lose": (fixtures.get("loses") or {}).get("away", 0),
                 },
-                "form": raw_stats.get("form"),
-                "streak": f"W{raw_stats.get('streak')}" if raw_stats.get("streak", 0) > 0 else f"L{abs(raw_stats.get('streak', 0))}" if raw_stats.get("streak") else ""
+                "form": form_str,
+                "streak": current_streak_str
             }
-            # Note: API-Sports /teams/statistics 'streak' is an integer (positive for wins, negative for losses)?
-            # Actually, the documentation says it returns an object or string.
-            # But let's look at get_team_statistics return.
-            # In `_APISportsBaseClient`, get_team_statistics returns `response`.
-            # /teams/statistics response usually has "biggest": { "streak": { "wins": ..., "draws": ..., "loses": ... } }
-            # But `form` is a string like "WLWWL".
-            # The current `feature_processing.py` expects "streak" like "W3".
-            # Let's try to derive streak from form if needed, or use the biggest streak?
-            # Wait, `get_standings` return had a `streak` field "W5".
-            # /teams/statistics doesn't have a current streak field directly in the root usually.
-            # We can calculate it from `form` if needed.
 
-            form_str = raw_stats.get("form", "")
-            current_streak = 0
-            if form_str:
-                last_char = form_str[-1]
-                count = 0
-                for char in reversed(form_str):
-                    if char == last_char:
-                        count += 1
-                    else:
-                        break
-                formatted["streak"] = f"{last_char}{count}"
+            # Map by Team Name
+            all_stats_dict[team_name] = formatted
 
-            all_stats_formatted.append(formatted)
-
-        return all_stats_formatted
+        return all_stats_dict
 
     def get_standings(
         self,

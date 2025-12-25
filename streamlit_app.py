@@ -2007,10 +2007,14 @@ def generate_shotgun_parlays(df: pd.DataFrame) -> pd.DataFrame:
     df['total_edge'] = pd.to_numeric(df['total_edge'], errors='coerce').fillna(0)
 
     # Filter for High Value Plays
-    # Note: spread_edge/total_edge > 0.05 means > 5% edge
+    # Note: spread_edge/total_edge > 0.04 means > 4% edge (Lowered threshold)
+    # Handle missing market stability (default to TIGHT)
+    df = df.copy()
+    df['market_stability'] = df['market_stability'].fillna('TIGHT')
+
     filtered_df = df[
         (df['market_stability'] == 'TIGHT') &
-        ((df['spread_edge'] > 0.05) | (df['total_edge'] > 0.05))
+        ((df['spread_edge'] > 0.04) | (df['total_edge'] > 0.04))
     ].copy()
 
     if filtered_df.empty:
@@ -2023,12 +2027,12 @@ def generate_shotgun_parlays(df: pd.DataFrame) -> pd.DataFrame:
         ppg = row.get('feature_home_ppg')
         market_only_flag = (ppg == 50 or ppg == '50' or ppg == 50.0)
 
-        if spread_edge > total_edge and spread_edge > 0.05:
+        if spread_edge > total_edge and spread_edge > 0.04:
             pick = row.get('Spread & Pick') or f"Spread {row.get('Home')} vs {row.get('Away')}"
             edge = spread_edge
             prob = row.get('spread_prob')
             market = "Spread"
-        elif total_edge > 0.05:
+        elif total_edge > 0.04:
             pick = row.get('Total & Pick') or f"Total {row.get('Home')} vs {row.get('Away')}"
             edge = total_edge
             prob = row.get('total_prob')
@@ -7444,6 +7448,12 @@ with tab_master:
         df = pd.DataFrame(rows_out)
 
         # Force Kalshi Map: Third Time's the Charm
+        for index, row in df.iterrows():
+            # Force assignment to master DF to ensure visibility
+            val = row.get('kalshi_prob_spread')
+            df.at[index, 'kalshi_prob_spread'] = float(val) if val is not None else None
+            val_total = row.get('kalshi_prob_total')
+            df.at[index, 'kalshi_prob_total'] = float(val_total) if val_total is not None else None
         # The kalshi_prob_spread column is still 0.0.
         # Action: In the main loop of streamlit_app.py, immediately after getting kalshi_data,
         # add this line: df_master.at[index, 'kalshi_prob_spread'] = kalshi_data.get('prob_for_pick')
