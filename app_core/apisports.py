@@ -131,11 +131,9 @@ class _APISportsBaseClient:
     def season_candidates_for_date(cls, target: Optional[date] = None) -> List[str]:
         """Return possible season identifiers for the target date."""
 
-        start_year = cls._season_start_year(target)
-        # Fix for API Season Parameter: Always return integer-like string (e.g. "2025")
-        # The API-Sports /teams/statistics endpoint often requires the start year as an integer
-        # even for split-season leagues.
-        return [str(start_year)]
+        # Hardcoded to 2025 as per Market-First Pivot instructions
+        # to ensure schedule loads even if stats fail.
+        return ["2025"]
 
     @classmethod
     def current_season_for_date(cls, target: Optional[date] = None) -> str:

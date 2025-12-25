@@ -2020,6 +2020,8 @@ def generate_shotgun_parlays(df: pd.DataFrame) -> pd.DataFrame:
     def get_best_bet(row):
         spread_edge = row['spread_edge']
         total_edge = row['total_edge']
+        ppg = row.get('feature_home_ppg')
+        market_only_flag = (ppg == 50 or ppg == '50' or ppg == 50.0)
 
         if spread_edge > total_edge and spread_edge > 0.05:
             pick = row.get('Spread & Pick') or f"Spread {row.get('Home')} vs {row.get('Away')}"
@@ -2033,6 +2035,10 @@ def generate_shotgun_parlays(df: pd.DataFrame) -> pd.DataFrame:
             market = "Total"
         else:
             return None
+
+        # Append badge if Market Only
+        if market_only_flag:
+            pick = f"{pick} ⚠️ Market Only"
 
         return {
             "Game": f"{row.get('Away')} @ {row.get('Home')}",
@@ -6570,10 +6576,18 @@ with tab_master:
                     pick_side = "home" if pick == home else "away"
                     implied_pick = implied_prob_for_pick(home_ml, away_ml, pick_side)
                     kalshi_yes_side = kalshi_winner.get("kalshi_yes_side")
+
+                    # Safety Valve: Market-First Pivot
+                    # If features are default (50), kill the model weight to prevent poisoning
+                    ml_weight_val = 0.35
+                    feat_ppg = g.get('feature_home_ppg')
+                    if feat_ppg == 50 or feat_ppg == '50' or feat_ppg == 50.0:
+                        ml_weight_val = 0.0
+
                     base_weights = {
                         "odds_weight": 0.30,
                         "kalshi_weight": 0.35,
-                        "ml_weight": 0.35,
+                        "ml_weight": ml_weight_val,
                         "sentiment_weight": abs(sentiment_adj or 0.0),
                     }
                     final_prob_blend, base_prob_blend, weights_used, decision_driver, warnings_new, kalshi_prob_for_pick = compute_final_probability(
@@ -6980,7 +6994,7 @@ with tab_master:
                     "gemini_error": None,
                     "gemini_flags_short": None,
                     "llm_disagreement_flag": None,
-                    "kalshi_prob_spread": float(spread_kalshi_prob_for_pick) if kalshi_spread.get("kalshi_matched") and spread_kalshi_prob_for_pick is not None else None,
+                    "kalshi_prob_spread": spread_kalshi_prob_for_pick,
                     "kalshi_prob_total": kalshi_prob_total,
                     "kalshi_prob": kalshi_prob_spread if kalshi_spread.get("kalshi_matched") else None,
                     "spread_prob_market": spread_prob_market,
