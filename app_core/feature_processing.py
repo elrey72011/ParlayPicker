@@ -79,9 +79,11 @@ def fetch_and_process_standings(api_clients: Dict[str, Any]) -> pd.DataFrame:
         if not client or not client.is_configured():
             continue
             
-        standings = client.get_standings()
+        # Use get_team_stats instead of get_standings to avoid 403 errors
+        # This will fetch team stats one by one if needed (via new get_team_stats in apisports.py)
+        standings = client.get_team_stats()
         if not standings:
-            logger.warning(f"Failed to fetch standings for {league_key}: {getattr(client, 'last_error', 'Unknown error')}")
+            logger.warning(f"Failed to fetch team stats for {league_key}: {getattr(client, 'last_error', 'Unknown error')}")
             continue
             
         for team_entry in standings:
