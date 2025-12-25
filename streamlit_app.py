@@ -2020,7 +2020,9 @@ def generate_shotgun_parlays(df: pd.DataFrame) -> pd.DataFrame:
     def get_best_bet(row):
         spread_edge = row['spread_edge']
         total_edge = row['total_edge']
-        
+        ppg = row.get('feature_home_ppg')
+        market_only_flag = (ppg == 50 or ppg == '50' or ppg == 50.0)
+
         if spread_edge > total_edge and spread_edge > 0.05:
             pick = row.get('Spread & Pick') or f"Spread {row.get('Home')} vs {row.get('Away')}"
             edge = spread_edge
@@ -2033,7 +2035,11 @@ def generate_shotgun_parlays(df: pd.DataFrame) -> pd.DataFrame:
             market = "Total"
         else:
             return None
-            
+
+        # Append badge if Market Only
+        if market_only_flag:
+            pick = f"{pick} ⚠️ Market Only"
+
         return {
             "Game": f"{row.get('Away')} @ {row.get('Home')}",
             "Pick": pick,
@@ -6570,10 +6576,18 @@ with tab_master:
                     pick_side = "home" if pick == home else "away"
                     implied_pick = implied_prob_for_pick(home_ml, away_ml, pick_side)
                     kalshi_yes_side = kalshi_winner.get("kalshi_yes_side")
+
+                    # Safety Valve: Market-First Pivot
+                    # If features are default (50), kill the model weight to prevent poisoning
+                    ml_weight_val = 0.35
+                    feat_ppg = g.get('feature_home_ppg')
+                    if feat_ppg == 50 or feat_ppg == '50' or feat_ppg == 50.0:
+                        ml_weight_val = 0.0
+
                     base_weights = {
                         "odds_weight": 0.30,
                         "kalshi_weight": 0.35,
-                        "ml_weight": 0.35,
+                        "ml_weight": ml_weight_val,
                         "sentiment_weight": abs(sentiment_adj or 0.0),
                     }
                     final_prob_blend, base_prob_blend, weights_used, decision_driver, warnings_new, kalshi_prob_for_pick = compute_final_probability(
@@ -6980,7 +6994,7 @@ with tab_master:
                     "gemini_error": None,
                     "gemini_flags_short": None,
                     "llm_disagreement_flag": None,
-                    "kalshi_prob_spread": float(spread_kalshi_prob_for_pick) if kalshi_spread.get("kalshi_matched") and spread_kalshi_prob_for_pick is not None else None,
+                    "kalshi_prob_spread": spread_kalshi_prob_for_pick,
                     "kalshi_prob_total": kalshi_prob_total,
                     "kalshi_prob": kalshi_prob_spread if kalshi_spread.get("kalshi_matched") else None,
                     "spread_prob_market": spread_prob_market,
@@ -7431,7 +7445,7 @@ with tab_master:
 
         # Force Kalshi Map: Third Time's the Charm
         # The kalshi_prob_spread column is still 0.0.
-        # Action: In the main loop of streamlit_app.py, immediately after getting kalshi_data, 
+        # Action: In the main loop of streamlit_app.py, immediately after getting kalshi_data,
         # add this line: df_master.at[index, 'kalshi_prob_spread'] = kalshi_data.get('prob_for_pick')
         # Since we just created df (df_master), we can iterate and enforce this.
         # But wait, we don't have access to kalshi_data easily here anymore.
@@ -7439,17 +7453,17 @@ with tab_master:
         # If it's still 0.0, it means it was set to 0.0 in the dict.
         # We ensured it's set to None if not matched in the previous step.
         # Let's add a safety pass here to convert 0.0 to None if that's what's happening and it's not matched.
-        
+
         # Actually, the user asked to put it "In the main loop ... immediately after getting kalshi_data".
-        # But we are past the loop. 
+        # But we are past the loop.
         # The user said: "The kalshi_prob_spread column is still 0.0. ... Force the raw value into the column".
         # I will iterate df and ensure if it's 0.0 and we have a valid prob, we use it?
         # Or better, ensure that the `kalshi_prob_spread` column is float type and nullable.
-        
+
         if "kalshi_prob_spread" in df.columns:
              # Ensure numeric
              df["kalshi_prob_spread"] = pd.to_numeric(df["kalshi_prob_spread"], errors='coerce')
-             # If 0.0 is coming from "None" conversion somewhere? 
+             # If 0.0 is coming from "None" conversion somewhere?
              # No, standard is NaN.
              pass
 
