@@ -1986,9 +1986,9 @@ def pipeline_progress_snapshot() -> Dict[str, Any]:
 def generate_shotgun_parlays(df: pd.DataFrame) -> pd.DataFrame:
     """
     Generate 2-Leg Parlays using itertools.combinations.
-    Filter the df_master for High Value Plays: 
+    Filter the df_master for High Value Plays:
     (market_stability == 'TIGHT' AND (spread_edge > 0.05 OR total_edge > 0.05)).
-    
+
     Staking Plan:
     Top 3 Pairs: 'Tier 3 (Lock) - Bet $3'.
     Next 4 Pairs: 'Tier 2 (Core) - Bet $2'.
@@ -1996,26 +1996,26 @@ def generate_shotgun_parlays(df: pd.DataFrame) -> pd.DataFrame:
     """
     if df is None or df.empty:
         return pd.DataFrame()
-        
+
     # Ensure columns exist
     if 'market_stability' not in df.columns or 'spread_edge' not in df.columns or 'total_edge' not in df.columns:
         return pd.DataFrame()
-        
+
     # Convert edge columns to numeric
     df = df.copy()
     df['spread_edge'] = pd.to_numeric(df['spread_edge'], errors='coerce').fillna(0)
     df['total_edge'] = pd.to_numeric(df['total_edge'], errors='coerce').fillna(0)
-    
+
     # Filter for High Value Plays
     # Note: spread_edge/total_edge > 0.05 means > 5% edge
     filtered_df = df[
-        (df['market_stability'] == 'TIGHT') & 
+        (df['market_stability'] == 'TIGHT') &
         ((df['spread_edge'] > 0.05) | (df['total_edge'] > 0.05))
     ].copy()
-    
+
     if filtered_df.empty:
         return pd.DataFrame()
-        
+
     # Helper to get the best bet from a row (Spread or Total)
     def get_best_bet(row):
         spread_edge = row['spread_edge']
@@ -2055,41 +2055,41 @@ def generate_shotgun_parlays(df: pd.DataFrame) -> pd.DataFrame:
         bet = get_best_bet(row)
         if bet:
             valid_bets.append(bet)
-            
+
     if len(valid_bets) < 2:
         return pd.DataFrame()
-        
+
     # Generate 2-Leg Parlays
     parlays = []
     for pair in itertools.combinations(valid_bets, 2):
         bet1, bet2 = pair
-        
+
         # Avoid parlays from same game if correlated (basic check)
         if bet1['Game'] == bet2['Game']:
             continue
-            
+
         combined_edge = bet1['Edge'] + bet2['Edge']
         combined_prob = (bet1['Prob'] or 0.5) * (bet2['Prob'] or 0.5)
-        
+
         parlays.append({
             "Leg 1": f"{bet1['Pick']} ({bet1['Edge']:.1%})",
             "Leg 2": f"{bet2['Pick']} ({bet2['Edge']:.1%})",
             "Combined Edge": combined_edge,
             "Combined Prob": combined_prob
         })
-        
+
     parlay_df = pd.DataFrame(parlays)
     if parlay_df.empty:
         return pd.DataFrame()
-        
+
     # Sort by Combined Edge descending
     parlay_df = parlay_df.sort_values(by="Combined Edge", ascending=False).reset_index(drop=True)
-    
+
     # Apply Staking Plan
     # Top 3 Pairs: 'Tier 3 (Lock) - Bet $3'
     # Next 4 Pairs: 'Tier 2 (Core) - Bet $2'
     # Rest: 'Tier 1 (Flyer) - Bet $1'
-    
+
     def get_tier_stake(rank): # 0-indexed rank
         if rank < 3:
             return 'Tier 3 (Lock) - Bet $3'
@@ -2097,13 +2097,13 @@ def generate_shotgun_parlays(df: pd.DataFrame) -> pd.DataFrame:
             return 'Tier 2 (Core) - Bet $2'
         else:
             return 'Tier 1 (Flyer) - Bet $1'
-            
+
     parlay_df['Tier & Stake'] = parlay_df.index.map(get_tier_stake)
-    
+
     # Format Edge
     parlay_df['Combined Edge'] = parlay_df['Combined Edge'].apply(lambda x: f"{x:+.1%}")
     parlay_df['Combined Prob'] = parlay_df['Combined Prob'].apply(lambda x: f"{x:.1%}")
-    
+
     return parlay_df
 
 def render_pipeline_banner() -> None:
@@ -8510,13 +8510,13 @@ with tab_master:
 with tab_shotgun:
     st.header("Shotgun Mode 🔫")
     st.caption("Auto-generated 2-Leg Parlays from High Value Plays (Tight Market + >5% Edge)")
-    
+
     if "master_df" in st.session_state and not st.session_state["master_df"].empty:
         shotgun_df = generate_shotgun_parlays(st.session_state["master_df"])
-        
+
         if not shotgun_df.empty:
             st.success(f"Generated {len(shotgun_df)} High Value Parlays")
-            
+
             # Display coloring based on Tier
             def color_tier(val):
                 color = ''
