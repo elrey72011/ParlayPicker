@@ -6203,25 +6203,16 @@ with tab_master:
             vertex_used_for_spread = bool(use_vertex_numeric_probs and vertex_spread_prob is not None)
             vertex_used_for_total = bool(use_vertex_numeric_probs and vertex_total_prob is not None)
             # SAFETY VALVE: Check for compromised stats (default 50.0)
-            stats_compromised = False
-            feat_ppg = safe_float(g.get("feature_home_ppg"))
-            if feat_ppg is None or abs(feat_ppg - 50.0) < 0.01:
-                stats_compromised = True
+            # FORCE VERTEX DISABLE (Fake Stat Safety)
+            stats_compromised = True
 
-            if stats_compromised:
-                spread_base_weights = {
-                    "odds_weight": 0.30,
-                    "kalshi_weight": 0.70,
-                    "ml_weight": 0.0,
-                    "sentiment_weight": abs(spread_sentiment_adj or 0.0),
-                }
-            else:
-                spread_base_weights = {
-                    "odds_weight": 0.30,
-                    "kalshi_weight": 0.35,
-                    "ml_weight": 0.35,
-                    "sentiment_weight": abs(spread_sentiment_adj or 0.0),
-                }
+            # Unconditional weighting (Vertex 0.0)
+            spread_base_weights = {
+                "odds_weight": 0.30,
+                "kalshi_weight": 0.70,
+                "ml_weight": 0.0,
+                "sentiment_weight": abs(spread_sentiment_adj or 0.0),
+            }
             spread_prob_final, spread_base_prob, spread_weights_used, spread_decision_driver, spread_warnings_new, spread_kalshi_prob_for_pick = compute_final_probability(
                 spread_pick_side_key,
                 spread_prob_market,
@@ -6238,20 +6229,13 @@ with tab_master:
                 spread_base_prob = spread_prob_final
                 spread_weights_used = {"w_implied": 1.0 if spread_prob_final is not None else 0.0, "w_kalshi": 0.0, "w_model": 0.0, "w_sentiment": 0.0}
             spread_prob = spread_prob_final
-            if stats_compromised:
-                total_base_weights = {
-                    "odds_weight": 0.30,
-                    "kalshi_weight": 0.70,
-                    "ml_weight": 0.0,
-                    "sentiment_weight": abs(total_sentiment_adj or 0.0),
-                }
-            else:
-                total_base_weights = {
-                    "odds_weight": 0.30,
-                    "kalshi_weight": 0.35,
-                    "ml_weight": 0.35,
-                    "sentiment_weight": abs(total_sentiment_adj or 0.0),
-                }
+            # Unconditional weighting (Vertex 0.0)
+            total_base_weights = {
+                "odds_weight": 0.30,
+                "kalshi_weight": 0.70,
+                "ml_weight": 0.0,
+                "sentiment_weight": abs(total_sentiment_adj or 0.0),
+            }
             total_prob_final, total_base_prob, total_weights_used, total_decision_driver, total_warnings_new, total_kalshi_prob_for_pick = compute_final_probability(
                 total_pick_side_key,
                 total_prob_market,
@@ -6533,25 +6517,16 @@ with tab_master:
                     kalshi_yes_side = kalshi_winner.get("kalshi_yes_side")
                     
                     # SAFETY VALVE: Check for compromised stats (default 50.0)
-                    stats_compromised = False
-                    feat_ppg = safe_float(g.get("feature_home_ppg"))
-                    if feat_ppg is None or abs(feat_ppg - 50.0) < 0.01:
-                        stats_compromised = True
+                    # FORCE VERTEX DISABLE (Fake Stat Safety)
+                    stats_compromised = True
 
-                    if stats_compromised:
-                        base_weights = {
-                            "odds_weight": 0.30,
-                            "kalshi_weight": 0.70,
-                            "ml_weight": 0.0,
-                            "sentiment_weight": abs(sentiment_adj or 0.0),
-                        }
-                    else:
-                        base_weights = {
-                            "odds_weight": 0.30,
-                            "kalshi_weight": 0.35,
-                            "ml_weight": 0.35,
-                            "sentiment_weight": abs(sentiment_adj or 0.0),
-                        }
+                    # Unconditional weighting (Vertex 0.0)
+                    base_weights = {
+                        "odds_weight": 0.30,
+                        "kalshi_weight": 0.70,
+                        "ml_weight": 0.0,
+                        "sentiment_weight": abs(sentiment_adj or 0.0),
+                    }
                     final_prob_blend, base_prob_blend, weights_used, decision_driver, warnings_new, kalshi_prob_for_pick = compute_final_probability(
                         pick_side,
                         implied_pick,
@@ -6899,6 +6874,11 @@ with tab_master:
                 # vertex_spread_prob already set
                 warnings.append("market_based_spread_prob")
                 warnings_field = ";".join(warnings) if warnings else None
+
+                # Nuclear Fix: Ensure kalshi_prob_spread is populated if matched
+                if kalshi_spread.get("kalshi_matched") and kalshi_prob_spread is None:
+                     kalshi_prob_spread = 0.5
+
                 spread_row = {
                     "League": league_name, "Home": home, "Away": away,
                     "Commence (UTC)": commence_iso, "Commence (Local)": commence_local,
@@ -7158,6 +7138,11 @@ with tab_master:
                 ai_prob_row = None
                 warnings.append("market_based_total_prob")
                 warnings_field = ";".join(warnings) if warnings else None
+
+                # Nuclear Fix: Ensure kalshi_prob_total is populated if matched
+                if kalshi_total.get("kalshi_matched") and kalshi_prob_total is None:
+                     kalshi_prob_total = 0.5
+
                 total_row = {
                     "League": league_name, "Home": home, "Away": away,
                     "Commence (UTC)": commence_iso, "Commence (Local)": commence_local,
@@ -8447,18 +8432,18 @@ with tab_master:
 with tab_shotgun:
     st.header("Shotgun Mode: High Value Parlays")
     st.info("Filters for 'High Value Plays' (Tight market, Edge > 1%) and generates 2-leg parlays.")
-    
+
     if "master_df" in st.session_state and not st.session_state["master_df"].empty:
         df_shotgun = st.session_state["master_df"].copy()
-        
+
         # Ensure enrichment
         df_shotgun = add_spread_total_confidence(df_shotgun)
         df_shotgun = enrich_picks_with_roi_metrics(df_shotgun)
-        
+
         # 1. Filter for Tight Market
         if "market_stability" in df_shotgun.columns:
             df_shotgun = df_shotgun[df_shotgun["market_stability"] != "WIDE"]
-            
+
         # 2. Calculate Active Edge and Filter > 0.01 (1%)
         def _get_edge_val(row):
             m = str(row.get("Market") or "").lower()
@@ -8475,57 +8460,57 @@ with tab_shotgun:
 
         df_shotgun["active_edge"] = df_shotgun.apply(_get_edge_val, axis=1)
         df_shotgun = df_shotgun[df_shotgun["active_edge"] > 0.01]
-        
+
         plays = df_shotgun.to_dict('records')
-        
+
         if len(plays) >= 2:
             st.subheader("2-Leg Parlay Suggestions")
             parlays = []
             seen_pairs = set()
-            
+
             # Generate combinations
             for p1, p2 in itertools.combinations(plays, 2):
                 # Constraint: No same-game parlays (often correlated/restricted)
                 if p1['Home'] == p2['Home']:
                     continue
-                
+
                 # Sort by edge to keep unique consistent
                 if p1['active_edge'] < p2['active_edge']:
                     p1, p2 = p2, p1
-                    
+
                 pair_key = (p1['Home'], p1['Pick'], p2['Home'], p2['Pick'])
                 if pair_key in seen_pairs:
                     continue
                 seen_pairs.add(pair_key)
-                
+
                 combined_edge = p1['active_edge'] + p2['active_edge']
-                
+
                 parlays.append({
                     "Leg 1": f"{p1['Pick']} ({p1['Market']}) @ {p1['active_edge']:.1%}",
                     "Leg 2": f"{p2['Pick']} ({p2['Market']}) @ {p2['active_edge']:.1%}",
                     "Combined Edge": combined_edge,
                     "Games": f"{p1['Home']} / {p2['Home']}"
                 })
-            
+
             if parlays:
                 df_parlays = pd.DataFrame(parlays)
                 df_parlays = df_parlays.sort_values(by="Combined Edge", ascending=False).head(20)
-                
+
                 def _staking_plan(idx):
                     if idx < 3: return "$5"
                     if idx < 6: return "$3"
                     return "$1"
-                
+
                 df_parlays = df_parlays.reset_index(drop=True)
                 df_parlays["Staking"] = df_parlays.index.map(_staking_plan)
-                
+
                 st.dataframe(df_parlays.style.format({"Combined Edge": "{:.1%}"}))
             else:
                 st.warning("No valid parlay combinations found (no cross-game pairs).")
-                
+
             st.subheader("Single High Value Plays")
             st.dataframe(df_shotgun[["League", "Home", "Away", "Market", "Pick", "active_edge", "market_stability"]].sort_values("active_edge", ascending=False).style.format({"active_edge": "{:.1%}"}))
-            
+
         elif len(plays) == 1:
             st.warning("Only 1 high-value play found. Need at least 2 for parlays.")
             st.dataframe(df_shotgun[["League", "Home", "Away", "Market", "Pick", "active_edge"]].style.format({"active_edge": "{:.1%}"}))
