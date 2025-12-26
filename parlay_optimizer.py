@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 class ParlayOptimizer:
     """Optimize parlay selection based on ML predictions and betting strategy"""
     
-    def __init__(self, model_dir: str, min_edge: float = 0.05):
+    def __init__(self, model_dir: str, min_edge: float = 0.01):
         """
         Initialize optimizer
         
@@ -498,7 +498,7 @@ def main():
     # Initialize optimizer
     optimizer = ParlayOptimizer(
         model_dir='./models/nfl',
-        min_edge=0.03  # 3% minimum edge
+        min_edge=0.01  # 1% minimum edge
     )
     
     # Load models
