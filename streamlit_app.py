@@ -4707,7 +4707,7 @@ def match_kalshi_market(
     def select_spread_market(markets: List[Dict[str, Any]], target_line: Optional[float]) -> Dict[str, Any]:
         if not markets:
             return base_result("no_spread_market", "spread")
-
+        
         if target_line is None:
             # Fallback if we don't have a book line
             return simple_select(markets, "spread")
@@ -4723,7 +4723,7 @@ def match_kalshi_market(
                 if diff <= 1.6 and diff < min_diff:
                     min_diff = diff
                     best_match = m
-
+        
         if best_match:
             prob, line = extract_prob_and_line(best_match, "spread")
             res = {
@@ -4740,11 +4740,11 @@ def match_kalshi_market(
                 "kalshi_title": best_match.get("title"),
                 "kalshi_yes_side": "home",
             }
-            # Helper for force-save: keep prob_for_pick accessible if needed,
+            # Helper for force-save: keep prob_for_pick accessible if needed, 
             # though here we are just returning standard dict.
             # The caller will use 'kalshi_prob' (which is prob) for 'kalshi_prob_spread'.
             return res
-
+        
         return base_result("no_spread_market_within_tolerance", "spread")
 
     winner_meta = {
@@ -6192,12 +6192,12 @@ with tab_master:
             # Force save if we have ANY probability, even with a warning
             if kalshi_spread.get('kalshi_prob') is not None:
                 # We use 'kalshi_prob' here because that's what's returned by the matcher
-                # 'prob_for_pick' might be derived later or in compute_final_probability,
+                # 'prob_for_pick' might be derived later or in compute_final_probability, 
                 # but let's ensure the base value is available.
                 # Actually, the user asked to assign to df_master.at[index, 'kalshi_prob_spread'].
                 # Since we are building a list of dicts (rows_out) and then creating the DF,
                 # we just need to ensure `kalshi_prob_spread` variable is set correctly for the dictionary.
-                pass
+                pass 
 
             kalshi_prob_total = safe_float(kalshi_total.get("kalshi_prob"))
             vertex_used_for_spread = bool(use_vertex_numeric_probs and vertex_spread_prob is not None)
@@ -6531,7 +6531,7 @@ with tab_master:
                     pick_side = "home" if pick == home else "away"
                     implied_pick = implied_prob_for_pick(home_ml, away_ml, pick_side)
                     kalshi_yes_side = kalshi_winner.get("kalshi_yes_side")
-
+                    
                     # SAFETY VALVE: Check for compromised stats (default 50.0)
                     stats_compromised = False
                     feat_ppg = safe_float(g.get("feature_home_ppg"))
