@@ -731,7 +731,7 @@ def enrich_picks_with_roi_metrics(df: pd.DataFrame) -> pd.DataFrame:
     
     # Avoid fragmentation warnings by operating on a copy
     df = df.copy()
-
+    
     # 1. Calculate Edge (Math vs Market Gap)
     # Ensure columns are numeric to avoid errors
     df['spread_implied_prob'] = pd.to_numeric(df['spread_implied_prob'], errors='coerce').fillna(0)
@@ -4711,7 +4711,7 @@ def match_kalshi_market(
     def select_spread_market(markets: List[Dict[str, Any]], target_line: Optional[float]) -> Dict[str, Any]:
         if not markets:
             return base_result("no_spread_market", "spread")
-
+        
         if target_line is None:
             # Fallback if we don't have a book line
             return simple_select(markets, "spread")
@@ -4727,7 +4727,7 @@ def match_kalshi_market(
                 if diff <= 1.6 and diff < min_diff:
                     min_diff = diff
                     best_match = m
-
+        
         if best_match:
             prob, line = extract_prob_and_line(best_match, "spread")
             res = {
@@ -4744,11 +4744,11 @@ def match_kalshi_market(
                 "kalshi_title": best_match.get("title"),
                 "kalshi_yes_side": "home",
             }
-            # Helper for force-save: keep prob_for_pick accessible if needed,
+            # Helper for force-save: keep prob_for_pick accessible if needed, 
             # though here we are just returning standard dict.
             # The caller will use 'kalshi_prob' (which is prob) for 'kalshi_prob_spread'.
             return res
-
+        
         return base_result("no_spread_market_within_tolerance", "spread")
 
     winner_meta = {
@@ -6196,20 +6196,20 @@ with tab_master:
             # Force save if we have ANY probability, even with a warning
             if kalshi_spread.get('kalshi_prob') is not None:
                 # We use 'kalshi_prob' here because that's what's returned by the matcher
-                # 'prob_for_pick' might be derived later or in compute_final_probability,
+                # 'prob_for_pick' might be derived later or in compute_final_probability, 
                 # but let's ensure the base value is available.
                 # Actually, the user asked to assign to df_master.at[index, 'kalshi_prob_spread'].
                 # Since we are building a list of dicts (rows_out) and then creating the DF,
                 # we just need to ensure `kalshi_prob_spread` variable is set correctly for the dictionary.
-                pass
+                pass 
 
             kalshi_prob_total = safe_float(kalshi_total.get("kalshi_prob"))
             vertex_used_for_spread = bool(use_vertex_numeric_probs and vertex_spread_prob is not None)
             vertex_used_for_total = bool(use_vertex_numeric_probs and vertex_total_prob is not None)
             # SAFETY VALVE: Check for compromised stats (default 50.0)
             # FORCE VERTEX DISABLE (Fake Stat Safety)
-            stats_compromised = True
-
+            stats_compromised = True 
+            
             # Unconditional weighting (Vertex 0.0)
             spread_base_weights = {
                 "odds_weight": 0.30,
@@ -6519,7 +6519,7 @@ with tab_master:
                     pick_side = "home" if pick == home else "away"
                     implied_pick = implied_prob_for_pick(home_ml, away_ml, pick_side)
                     kalshi_yes_side = kalshi_winner.get("kalshi_yes_side")
-
+                    
                     # SAFETY VALVE: Check for compromised stats (default 50.0)
                     # FORCE VERTEX DISABLE (Fake Stat Safety)
                     stats_compromised = True
@@ -6878,7 +6878,7 @@ with tab_master:
                 # vertex_spread_prob already set
                 warnings.append("market_based_spread_prob")
                 warnings_field = ";".join(warnings) if warnings else None
-
+                
                 # Nuclear Fix: Ensure kalshi_prob_spread is populated if matched
                 if kalshi_spread.get("kalshi_matched") and kalshi_prob_spread is None:
                      kalshi_prob_spread = 0.5
@@ -7142,7 +7142,7 @@ with tab_master:
                 ai_prob_row = None
                 warnings.append("market_based_total_prob")
                 warnings_field = ";".join(warnings) if warnings else None
-
+                
                 # Nuclear Fix: Ensure kalshi_prob_total is populated if matched
                 if kalshi_total.get("kalshi_matched") and kalshi_prob_total is None:
                      kalshi_prob_total = 0.5
@@ -7644,9 +7644,12 @@ with tab_master:
             "total_edge",
             "market_stability",
         ]
-        for col in required_display_cols:
-            if col not in df.columns:
-                df[col] = None
+        # Avoid fragmentation: Batch insert missing columns
+        existing_cols = set(df.columns)
+        missing_cols = [c for c in required_display_cols if c not in existing_cols]
+        if missing_cols:
+            df = df.reindex(columns=list(df.columns) + missing_cols)
+            
         if "reddit_used" in df.columns:
             df["reddit_used"] = df["reddit_used"].fillna(False)
         df = add_spread_total_confidence(df)
@@ -7985,9 +7988,13 @@ with tab_master:
         top_df = df.copy()
         if "Unnamed: 0" in top_df.columns:
             top_df = top_df.drop(columns=["Unnamed: 0"])
-        for col in required_display_cols:
-            if col not in top_df.columns:
-                top_df[col] = None
+            
+        # Avoid fragmentation: Batch insert missing columns (redundant if df fixed, but safe)
+        existing_cols_top = set(top_df.columns)
+        missing_cols_top = [c for c in required_display_cols if c not in existing_cols_top]
+        if missing_cols_top:
+            top_df = top_df.reindex(columns=list(top_df.columns) + missing_cols_top)
+            
         top_df = top_df[top_df["Eligible_Top_Picks"] == True]
         if not include_low_in_top:
             top_df = top_df[top_df["Pick_Confidence"].isin(["HIGH", "MEDIUM"])]
@@ -8436,14 +8443,14 @@ with tab_master:
 with tab_shotgun:
     st.header("Shotgun Mode: High Value Parlays")
     st.info("Filters for 'High Value Plays' (Tight market, Edge > 1%) and generates 2-leg parlays.")
-
+    
     if "master_df" in st.session_state and not st.session_state["master_df"].empty:
         df_shotgun = st.session_state["master_df"].copy()
-
+        
         # Ensure enrichment
         df_shotgun = add_spread_total_confidence(df_shotgun)
         df_shotgun = enrich_picks_with_roi_metrics(df_shotgun)
-
+        
         # 1. Calculate Active Edge
         def _get_edge_val(row):
             m = str(row.get("Market") or "").lower()
@@ -8459,26 +8466,26 @@ with tab_shotgun:
             return 0.0
 
         df_shotgun["active_edge"] = df_shotgun.apply(_get_edge_val, axis=1)
-
+        
         # 2. Filter logic with Fallback (Tight -> Normal)
         # Tight: <= 0.5 spread width
         # Normal: <= 1.5 spread width
-
+        
         def _get_spread_width(row):
             return safe_float(row.get("spread_width"))
 
         df_shotgun["_sw"] = df_shotgun.apply(_get_spread_width, axis=1)
-
+        
         mask_edge = df_shotgun["active_edge"] > 0.01
-
+        
         # Tight logic
         mask_tight = (df_shotgun["market_stability"] != "WIDE") if "market_stability" in df_shotgun.columns else (df_shotgun["_sw"] <= 0.5)
-
+        
         # Normal logic
         mask_normal = (df_shotgun["_sw"].notnull()) & (df_shotgun["_sw"] <= 1.5)
-
+        
         candidates_tight = df_shotgun[mask_edge & mask_tight]
-
+        
         if len(candidates_tight) >= 2:
             df_shotgun = candidates_tight
             st.success(f"Using TIGHT markets (Count: {len(df_shotgun)})")
@@ -8490,57 +8497,57 @@ with tab_shotgun:
             else:
                 # Fallback to whatever tight/high edge we found (even if 0 or 1)
                 df_shotgun = candidates_tight
-
+        
         plays = df_shotgun.to_dict('records')
-
+        
         if len(plays) >= 2:
             st.subheader("2-Leg Parlay Suggestions")
             parlays = []
             seen_pairs = set()
-
+            
             # Generate combinations
             for p1, p2 in itertools.combinations(plays, 2):
                 # Constraint: No same-game parlays (often correlated/restricted)
                 if p1['Home'] == p2['Home']:
                     continue
-
+                
                 # Sort by edge to keep unique consistent
                 if p1['active_edge'] < p2['active_edge']:
                     p1, p2 = p2, p1
-
+                    
                 pair_key = (p1['Home'], p1['Pick'], p2['Home'], p2['Pick'])
                 if pair_key in seen_pairs:
                     continue
                 seen_pairs.add(pair_key)
-
+                
                 combined_edge = p1['active_edge'] + p2['active_edge']
-
+                
                 parlays.append({
                     "Leg 1": f"{p1['Pick']} ({p1['Market']}) @ {p1['active_edge']:.1%}",
                     "Leg 2": f"{p2['Pick']} ({p2['Market']}) @ {p2['active_edge']:.1%}",
                     "Combined Edge": combined_edge,
                     "Games": f"{p1['Home']} / {p2['Home']}"
                 })
-
+            
             if parlays:
                 df_parlays = pd.DataFrame(parlays)
                 df_parlays = df_parlays.sort_values(by="Combined Edge", ascending=False).head(20)
-
+                
                 def _staking_plan(idx):
                     if idx < 3: return "$5"
                     if idx < 6: return "$3"
                     return "$1"
-
+                
                 df_parlays = df_parlays.reset_index(drop=True)
                 df_parlays["Staking"] = df_parlays.index.map(_staking_plan)
-
+                
                 st.dataframe(df_parlays.style.format({"Combined Edge": "{:.1%}"}))
             else:
                 st.warning("No valid parlay combinations found (no cross-game pairs).")
-
+                
             st.subheader("Single High Value Plays")
             st.dataframe(df_shotgun[["League", "Home", "Away", "Market", "Pick", "active_edge", "market_stability"]].sort_values("active_edge", ascending=False).style.format({"active_edge": "{:.1%}"}))
-
+            
         elif len(plays) == 1:
             st.warning("Only 1 high-value play found. Need at least 2 for parlays.")
             st.dataframe(df_shotgun[["League", "Home", "Away", "Market", "Pick", "active_edge"]].style.format({"active_edge": "{:.1%}"}))
