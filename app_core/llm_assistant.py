@@ -21,7 +21,7 @@ except Exception as e:
     logger.warning(f"Vertex Gemini not available: {e}")
 
 GEMINI_MODEL_NAME = "gemini-1.5-pro-002"
-MODEL_FALLBACKS = ["gemini-1.5-pro-002", "gemini-1.5-flash-002"]
+MODEL_FALLBACKS = ["gemini-1.5-pro-002"]
 
 def _ensure_vertex_init() -> None:
     """
