@@ -413,7 +413,7 @@ class _APISportsBaseClient:
 
     def get_team_stats(self, season=2025):
         """
-        Fetches team statistics.
+        Fetches team statistics. 
         Falls back to empty dict if API is restricted (403).
         """
         stats = {}
@@ -421,7 +421,7 @@ class _APISportsBaseClient:
         # TRY/EXCEPT block is critical here to catch the 403 Forbidden
         try:
             # [Insert API call logic here]
-            pass
+            pass 
         except Exception as e:
             logger.warning(f"Failed to fetch team stats: {e}")
         return stats
