@@ -6203,25 +6203,16 @@ with tab_master:
             vertex_used_for_spread = bool(use_vertex_numeric_probs and vertex_spread_prob is not None)
             vertex_used_for_total = bool(use_vertex_numeric_probs and vertex_total_prob is not None)
             # SAFETY VALVE: Check for compromised stats (default 50.0)
-            stats_compromised = False
-            feat_ppg = safe_float(g.get("feature_home_ppg"))
-            if feat_ppg is None or abs(feat_ppg - 50.0) < 0.01:
-                stats_compromised = True
+            # FORCE VERTEX DISABLE (Fake Stat Safety)
+            stats_compromised = True
 
-            if stats_compromised:
-                spread_base_weights = {
-                    "odds_weight": 0.30,
-                    "kalshi_weight": 0.70,
-                    "ml_weight": 0.0,
-                    "sentiment_weight": abs(spread_sentiment_adj or 0.0),
-                }
-            else:
-                spread_base_weights = {
-                    "odds_weight": 0.30,
-                    "kalshi_weight": 0.35,
-                    "ml_weight": 0.35,
-                    "sentiment_weight": abs(spread_sentiment_adj or 0.0),
-                }
+            # Unconditional weighting (Vertex 0.0)
+            spread_base_weights = {
+                "odds_weight": 0.30,
+                "kalshi_weight": 0.70,
+                "ml_weight": 0.0,
+                "sentiment_weight": abs(spread_sentiment_adj or 0.0),
+            }
             spread_prob_final, spread_base_prob, spread_weights_used, spread_decision_driver, spread_warnings_new, spread_kalshi_prob_for_pick = compute_final_probability(
                 spread_pick_side_key,
                 spread_prob_market,
@@ -6238,20 +6229,13 @@ with tab_master:
                 spread_base_prob = spread_prob_final
                 spread_weights_used = {"w_implied": 1.0 if spread_prob_final is not None else 0.0, "w_kalshi": 0.0, "w_model": 0.0, "w_sentiment": 0.0}
             spread_prob = spread_prob_final
-            if stats_compromised:
-                total_base_weights = {
-                    "odds_weight": 0.30,
-                    "kalshi_weight": 0.70,
-                    "ml_weight": 0.0,
-                    "sentiment_weight": abs(total_sentiment_adj or 0.0),
-                }
-            else:
-                total_base_weights = {
-                    "odds_weight": 0.30,
-                    "kalshi_weight": 0.35,
-                    "ml_weight": 0.35,
-                    "sentiment_weight": abs(total_sentiment_adj or 0.0),
-                }
+            # Unconditional weighting (Vertex 0.0)
+            total_base_weights = {
+                "odds_weight": 0.30,
+                "kalshi_weight": 0.70,
+                "ml_weight": 0.0,
+                "sentiment_weight": abs(total_sentiment_adj or 0.0),
+            }
             total_prob_final, total_base_prob, total_weights_used, total_decision_driver, total_warnings_new, total_kalshi_prob_for_pick = compute_final_probability(
                 total_pick_side_key,
                 total_prob_market,
@@ -6533,25 +6517,16 @@ with tab_master:
                     kalshi_yes_side = kalshi_winner.get("kalshi_yes_side")
 
                     # SAFETY VALVE: Check for compromised stats (default 50.0)
-                    stats_compromised = False
-                    feat_ppg = safe_float(g.get("feature_home_ppg"))
-                    if feat_ppg is None or abs(feat_ppg - 50.0) < 0.01:
-                        stats_compromised = True
+                    # FORCE VERTEX DISABLE (Fake Stat Safety)
+                    stats_compromised = True
 
-                    if stats_compromised:
-                        base_weights = {
-                            "odds_weight": 0.30,
-                            "kalshi_weight": 0.70,
-                            "ml_weight": 0.0,
-                            "sentiment_weight": abs(sentiment_adj or 0.0),
-                        }
-                    else:
-                        base_weights = {
-                            "odds_weight": 0.30,
-                            "kalshi_weight": 0.35,
-                            "ml_weight": 0.35,
-                            "sentiment_weight": abs(sentiment_adj or 0.0),
-                        }
+                    # Unconditional weighting (Vertex 0.0)
+                    base_weights = {
+                        "odds_weight": 0.30,
+                        "kalshi_weight": 0.70,
+                        "ml_weight": 0.0,
+                        "sentiment_weight": abs(sentiment_adj or 0.0),
+                    }
                     final_prob_blend, base_prob_blend, weights_used, decision_driver, warnings_new, kalshi_prob_for_pick = compute_final_probability(
                         pick_side,
                         implied_pick,
@@ -6899,6 +6874,11 @@ with tab_master:
                 # vertex_spread_prob already set
                 warnings.append("market_based_spread_prob")
                 warnings_field = ";".join(warnings) if warnings else None
+
+                # Nuclear Fix: Ensure kalshi_prob_spread is populated if matched
+                if kalshi_spread.get("kalshi_matched") and kalshi_prob_spread is None:
+                     kalshi_prob_spread = 0.5
+
                 spread_row = {
                     "League": league_name, "Home": home, "Away": away,
                     "Commence (UTC)": commence_iso, "Commence (Local)": commence_local,
@@ -7158,6 +7138,11 @@ with tab_master:
                 ai_prob_row = None
                 warnings.append("market_based_total_prob")
                 warnings_field = ";".join(warnings) if warnings else None
+
+                # Nuclear Fix: Ensure kalshi_prob_total is populated if matched
+                if kalshi_total.get("kalshi_matched") and kalshi_prob_total is None:
+                     kalshi_prob_total = 0.5
+
                 total_row = {
                     "League": league_name, "Home": home, "Away": away,
                     "Commence (UTC)": commence_iso, "Commence (Local)": commence_local,
