@@ -25,7 +25,26 @@ from cryptography.hazmat.primitives.asymmetric import padding
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["KalshiIntegrator", "LEAGUE_SERIES_MAP", "KalshiMatchResult"]
+__all__ = [
+    "KalshiIntegrator",
+    "LEAGUE_SERIES_MAP",
+    "KalshiMatchResult",
+    "KalshiAPIError",
+    "KalshiRateLimitError",
+    "league_game_prefix",
+    "league_series_ticker",
+    "team_code_for_league",
+]
+
+
+class KalshiAPIError(Exception):
+    """Base error for Kalshi API issues."""
+    pass
+
+
+class KalshiRateLimitError(KalshiAPIError):
+    """Raised when 429 is encountered."""
+    pass
 
 
 @dataclass
@@ -40,10 +59,6 @@ class KalshiMatchResult:
     mid_prob: Optional[float] = None
     reason: Optional[str] = None
 
-class KalshiAPIError(Exception):
-    """Custom exception for Kalshi API-related errors."""
-    pass
-    
 # ---------------------------------------------------------------------------
 # Constants & Mappings
 # ---------------------------------------------------------------------------
@@ -92,6 +107,11 @@ def league_game_prefix(league: str) -> str:
     league_key = (league or "").upper()
     series = league_series_ticker(league_key) or f"KX{league_key}"
     return f"{series}GAME"
+
+
+def normalize_name(name: str) -> str:
+    return re.sub(r"[^A-Z]", "", (name or "").upper())
+
 
 # Extensive abbreviation list
 KALSHI_TEAM_ABBREVIATIONS: Dict[str, List[str]] = {
