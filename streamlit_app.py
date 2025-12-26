@@ -16,7 +16,6 @@ import requests
 import streamlit as st
 from app_core.kalshi_integrator import (
     KalshiIntegrator,
-    KalshiAPIError,
     LEAGUE_SERIES_MAP,
     league_game_prefix,
     league_series_ticker,
@@ -8446,29 +8445,27 @@ with tab_master:
 
 
 with tab_shotgun:
-    st.header("Shotgun Mode: High Value Plays")
-    st.info("Filters for 'High Value Plays' (Tight market, Edge > 4%) with tiered staking ($3/$2/$1).")
+    st.header("Shotgun Mode: High Value Parlays")
+    st.info("Filters for 'High Value Plays' (Tight market, Edge > 1%) and generates 2-leg parlays.")
     
     if "master_df" in st.session_state and not st.session_state["master_df"].empty:
-        # Working on a copy to avoid mutating session state unexpectedly
         df_shotgun = st.session_state["master_df"].copy()
         
         # Ensure enrichment
         df_shotgun = add_spread_total_confidence(df_shotgun)
         df_shotgun = enrich_picks_with_roi_metrics(df_shotgun)
         
-        # 1. Filter for Tight Market (defaults to TIGHT if missing, so exclude WIDE)
+        # 1. Filter for Tight Market
         if "market_stability" in df_shotgun.columns:
             df_shotgun = df_shotgun[df_shotgun["market_stability"] != "WIDE"]
             
-        # 2. Calculate Active Edge and Filter > 0.04
+        # 2. Calculate Active Edge and Filter > 0.01 (1%)
         def _get_edge_val(row):
             m = str(row.get("Market") or "").lower()
             if m == "spread":
                 return float(row.get("spread_edge") or 0.0)
             if m == "total":
                 return float(row.get("total_edge") or 0.0)
-            # Moneyline edge fallback if needed, but Shotgun usually implies spread/total structure in context
             if m == "moneyline":
                 p = row.get("final_probability")
                 imp = row.get("Implied_Prob")
@@ -8477,35 +8474,63 @@ with tab_shotgun:
             return 0.0
 
         df_shotgun["active_edge"] = df_shotgun.apply(_get_edge_val, axis=1)
-        df_shotgun = df_shotgun[df_shotgun["active_edge"] > 0.04]
+        df_shotgun = df_shotgun[df_shotgun["active_edge"] > 0.01]
         
-        # 3. Sort by Edge Descending
-        df_shotgun = df_shotgun.sort_values(by="active_edge", ascending=False).reset_index(drop=True)
+        plays = df_shotgun.to_dict('records')
         
-        # 4. Staking Plan
-        def _staking_plan(idx):
-            if idx < 3: return "$3"
-            if idx < 6: return "$2"
-            return "$1"
+        if len(plays) >= 2:
+            st.subheader("2-Leg Parlay Suggestions")
+            parlays = []
+            seen_pairs = set()
             
-        if not df_shotgun.empty:
-            df_shotgun["Staking"] = df_shotgun.index.map(_staking_plan)
+            # Generate combinations
+            for p1, p2 in itertools.combinations(plays, 2):
+                # Constraint: No same-game parlays (often correlated/restricted)
+                if p1['Home'] == p2['Home']:
+                    continue
+                
+                # Sort by edge to keep unique consistent
+                if p1['active_edge'] < p2['active_edge']:
+                    p1, p2 = p2, p1
+                    
+                pair_key = (p1['Home'], p1['Pick'], p2['Home'], p2['Pick'])
+                if pair_key in seen_pairs:
+                    continue
+                seen_pairs.add(pair_key)
+                
+                combined_edge = p1['active_edge'] + p2['active_edge']
+                
+                parlays.append({
+                    "Leg 1": f"{p1['Pick']} ({p1['Market']}) @ {p1['active_edge']:.1%}",
+                    "Leg 2": f"{p2['Pick']} ({p2['Market']}) @ {p2['active_edge']:.1%}",
+                    "Combined Edge": combined_edge,
+                    "Games": f"{p1['Home']} / {p2['Home']}"
+                })
             
-            # Display Column subset
-            cols_to_show = [
-                "League", "Home", "Away", "Market", "Pick", 
-                "active_edge", "Staking", "market_stability", 
-                "prob_engine", "vertex_mode"
-            ]
-            # Ensure columns exist
-            cols_to_show = [c for c in cols_to_show if c in df_shotgun.columns]
+            if parlays:
+                df_parlays = pd.DataFrame(parlays)
+                df_parlays = df_parlays.sort_values(by="Combined Edge", ascending=False).head(20)
+                
+                def _staking_plan(idx):
+                    if idx < 3: return "$5"
+                    if idx < 6: return "$3"
+                    return "$1"
+                
+                df_parlays = df_parlays.reset_index(drop=True)
+                df_parlays["Staking"] = df_parlays.index.map(_staking_plan)
+                
+                st.dataframe(df_parlays.style.format({"Combined Edge": "{:.1%}"}))
+            else:
+                st.warning("No valid parlay combinations found (no cross-game pairs).")
+                
+            st.subheader("Single High Value Plays")
+            st.dataframe(df_shotgun[["League", "Home", "Away", "Market", "Pick", "active_edge", "market_stability"]].sort_values("active_edge", ascending=False).style.format({"active_edge": "{:.1%}"}))
             
-            # Formatting
-            st.dataframe(
-                df_shotgun[cols_to_show].style.format({"active_edge": "{:.1%}"})
-            )
+        elif len(plays) == 1:
+            st.warning("Only 1 high-value play found. Need at least 2 for parlays.")
+            st.dataframe(df_shotgun[["League", "Home", "Away", "Market", "Pick", "active_edge"]].style.format({"active_edge": "{:.1%}"}))
         else:
-            st.warning("No plays met the 'High Value' criteria (Edge > 4% & Tight Market).")
+            st.warning("No plays met the 'High Value' criteria (Edge > 1% & Tight Market).")
     else:
         st.info("Run Master Analysis to generate data.")
 
