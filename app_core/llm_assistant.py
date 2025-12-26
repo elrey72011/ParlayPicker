@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import time
 import json
 import logging
 from typing import Any, Dict, List
@@ -110,6 +111,7 @@ CONTEXT:
         # Try models in order
         for model_name in MODEL_FALLBACKS:
             try:
+                time.sleep(2.0) # Rate limit protection
                 model = GenerativeModel(model_name)
                 resp = model.generate_content(prompt)
                 text = getattr(resp, "text", "") or ""
@@ -163,6 +165,7 @@ def generate_confidence_explanation(prompt: str) -> Dict[str, Any]:
     errors = []
     for model_name in MODEL_FALLBACKS:
         try:
+            time.sleep(2.0) # Rate limit protection
             model = GenerativeModel(model_name)
             resp = model.generate_content(prompt)
             text = getattr(resp, "text", "") or ""

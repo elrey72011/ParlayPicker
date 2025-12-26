@@ -56,6 +56,10 @@ class TeamNameMatcher:
     
     # Special case full replacements
     FULL_REPLACEMENTS = {
+        'la': 'los angeles',
+        'ny': 'new york',
+        'l.a.': 'los angeles',
+        'n.y.': 'new york',
         'sacramento st': 'sacramento state',
         'sam houston st': 'sam houston state',
         'oklahoma st': 'oklahoma state',

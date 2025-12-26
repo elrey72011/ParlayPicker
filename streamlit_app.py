@@ -7644,9 +7644,12 @@ with tab_master:
             "total_edge",
             "market_stability",
         ]
-        for col in required_display_cols:
-            if col not in df.columns:
-                df[col] = None
+        # Avoid fragmentation: Batch insert missing columns
+        existing_cols = set(df.columns)
+        missing_cols = [c for c in required_display_cols if c not in existing_cols]
+        if missing_cols:
+            df = df.reindex(columns=list(df.columns) + missing_cols)
+
         if "reddit_used" in df.columns:
             df["reddit_used"] = df["reddit_used"].fillna(False)
         df = add_spread_total_confidence(df)
@@ -7985,9 +7988,13 @@ with tab_master:
         top_df = df.copy()
         if "Unnamed: 0" in top_df.columns:
             top_df = top_df.drop(columns=["Unnamed: 0"])
-        for col in required_display_cols:
-            if col not in top_df.columns:
-                top_df[col] = None
+
+        # Avoid fragmentation: Batch insert missing columns (redundant if df fixed, but safe)
+        existing_cols_top = set(top_df.columns)
+        missing_cols_top = [c for c in required_display_cols if c not in existing_cols_top]
+        if missing_cols_top:
+            top_df = top_df.reindex(columns=list(top_df.columns) + missing_cols_top)
+
         top_df = top_df[top_df["Eligible_Top_Picks"] == True]
         if not include_low_in_top:
             top_df = top_df[top_df["Pick_Confidence"].isin(["HIGH", "MEDIUM"])]
