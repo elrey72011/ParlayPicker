@@ -20,8 +20,8 @@ except Exception as e:
     _GEMINI_AVAILABLE = False
     logger.warning(f"Vertex Gemini not available: {e}")
 
-GEMINI_MODEL_NAME = "gemini-1.5-flash-002"
-MODEL_FALLBACKS = ["gemini-1.5-flash-002", "gemini-1.5-pro-002"]
+GEMINI_MODEL_NAME = "gemini-1.5-pro-002"
+MODEL_FALLBACKS = ["gemini-1.5-pro-002"]
 
 def _ensure_vertex_init() -> None:
     """
@@ -111,7 +111,7 @@ CONTEXT:
         # Try models in order
         for model_name in MODEL_FALLBACKS:
             try:
-                time.sleep(2.0) # Rate limit protection
+                time.sleep(1.0) # Rate limit protection
                 model = GenerativeModel(model_name)
                 resp = model.generate_content(prompt)
                 text = getattr(resp, "text", "") or ""
@@ -165,7 +165,7 @@ def generate_confidence_explanation(prompt: str) -> Dict[str, Any]:
     errors = []
     for model_name in MODEL_FALLBACKS:
         try:
-            time.sleep(2.0) # Rate limit protection
+            time.sleep(1.0) # Rate limit protection
             model = GenerativeModel(model_name)
             resp = model.generate_content(prompt)
             text = getattr(resp, "text", "") or ""

@@ -2158,6 +2158,22 @@ def enrich_game_context(game: Dict[str, Any], league_key: str, api_key: Optional
             # Use explicit 0.80 threshold for fuzzy matching
             match_tuple = TeamNameMatcher.match_game(home_raw, away_raw, candidate_tuples, threshold=0.80)
             
+            # Fallback: If strict game match fails, try independent team matching
+            if not match_tuple:
+                # Gather lists for individual matching using candidate_tuples
+                home_candidates = [t[0] for t in candidate_tuples]
+                away_candidates = [t[1] for t in candidate_tuples]
+
+                matched_home_name = TeamNameMatcher.match_team(home_raw, home_candidates, threshold=0.80)
+                matched_away_name = TeamNameMatcher.match_team(away_raw, away_candidates, threshold=0.80)
+
+                if matched_home_name and matched_away_name:
+                    # Find the tuple that has both
+                    for c_tuple in candidate_tuples:
+                        if c_tuple[0] == matched_home_name and c_tuple[1] == matched_away_name:
+                            match_tuple = c_tuple
+                            break
+
             matched = None
             if match_tuple:
                 # Retrieve the full game object associated with the matched tuple
@@ -7392,6 +7408,12 @@ with tab_master:
                 rows_out.append(total_row)
                 master_stats["market_rows_out"] += 1
 
+        # Pre-fill missing columns in rows_out to avoid fragmentation
+        for row in rows_out:
+            for col in required_display_cols:
+                if col not in row:
+                    row[col] = None
+
         df = pd.DataFrame(rows_out)
         # Collapse to one row per game (prefer the first generated row, typically moneyline)
         sentiment_meta_for_export = sentiment_pack_meta or init_sentiment_meta()
@@ -7644,11 +7666,7 @@ with tab_master:
             "total_edge",
             "market_stability",
         ]
-        # Avoid fragmentation: Batch insert missing columns
-        existing_cols = set(df.columns)
-        missing_cols = [c for c in required_display_cols if c not in existing_cols]
-        if missing_cols:
-            df = df.reindex(columns=list(df.columns) + missing_cols)
+        # (Removed reindex block to avoid fragmentation; handled via pre-fill above)
             
         if "reddit_used" in df.columns:
             df["reddit_used"] = df["reddit_used"].fillna(False)
@@ -8478,20 +8496,22 @@ with tab_shotgun:
         
         mask_edge = df_shotgun["active_edge"] > 0.01
         
-        # Tight logic
+        # Tight logic (Spread <= 0.5 or stability check)
         mask_tight = (df_shotgun["market_stability"] != "WIDE") if "market_stability" in df_shotgun.columns else (df_shotgun["_sw"] <= 0.5)
         
-        # Normal logic
+        # Normal logic (Spread <= 1.5) - Used as fallback to ensure sufficient parlay legs
         mask_normal = (df_shotgun["_sw"].notnull()) & (df_shotgun["_sw"] <= 1.5)
         
         candidates_tight = df_shotgun[mask_edge & mask_tight]
         
+        # Relax filters if we don't have enough tight plays for a parlay
         if len(candidates_tight) >= 2:
             df_shotgun = candidates_tight
             st.success(f"Using TIGHT markets (Count: {len(df_shotgun)})")
         else:
             candidates_normal = df_shotgun[mask_edge & mask_normal]
-            if len(candidates_normal) > 0:
+            # Ensure we use the relaxed pool if it offers more plays (or at least one valid one)
+            if len(candidates_normal) > len(candidates_tight):
                 df_shotgun = candidates_normal
                 st.warning(f"Tight markets insufficient. Relaxed to NORMAL (width <= 1.5). Count: {len(df_shotgun)}")
             else:
