@@ -5026,8 +5026,8 @@ render_pipeline_banner()
 # Tabs
 # -----------------
 
-tab_games, tab_master, tab_kalshi, tab_sentiment, tab_debug = st.tabs(
-    ["Games & Odds", "Master Analysis", "Kalshi", "Sentiment", "Debug"]
+tab_games, tab_master, tab_shotgun, tab_kalshi, tab_sentiment, tab_debug = st.tabs(
+    ["Games & Odds", "Master Analysis", "Shotgun Mode", "Kalshi", "Sentiment", "Debug"]
 )
 
 
@@ -8443,6 +8443,70 @@ with tab_master:
     elif not games:
         st.info("Load games from the sidebar, then run Master Analysis.")
 
+
+with tab_shotgun:
+    st.header("Shotgun Mode: High Value Plays")
+    st.info("Filters for 'High Value Plays' (Tight market, Edge > 4%) with tiered staking ($3/$2/$1).")
+
+    if "master_df" in st.session_state and not st.session_state["master_df"].empty:
+        # Working on a copy to avoid mutating session state unexpectedly
+        df_shotgun = st.session_state["master_df"].copy()
+
+        # Ensure enrichment
+        df_shotgun = add_spread_total_confidence(df_shotgun)
+        df_shotgun = enrich_picks_with_roi_metrics(df_shotgun)
+
+        # 1. Filter for Tight Market (defaults to TIGHT if missing, so exclude WIDE)
+        if "market_stability" in df_shotgun.columns:
+            df_shotgun = df_shotgun[df_shotgun["market_stability"] != "WIDE"]
+
+        # 2. Calculate Active Edge and Filter > 0.04
+        def _get_edge_val(row):
+            m = str(row.get("Market") or "").lower()
+            if m == "spread":
+                return float(row.get("spread_edge") or 0.0)
+            if m == "total":
+                return float(row.get("total_edge") or 0.0)
+            # Moneyline edge fallback if needed, but Shotgun usually implies spread/total structure in context
+            if m == "moneyline":
+                p = row.get("final_probability")
+                imp = row.get("Implied_Prob")
+                if p is not None and imp is not None:
+                    return float(p) - float(imp)
+            return 0.0
+
+        df_shotgun["active_edge"] = df_shotgun.apply(_get_edge_val, axis=1)
+        df_shotgun = df_shotgun[df_shotgun["active_edge"] > 0.04]
+
+        # 3. Sort by Edge Descending
+        df_shotgun = df_shotgun.sort_values(by="active_edge", ascending=False).reset_index(drop=True)
+
+        # 4. Staking Plan
+        def _staking_plan(idx):
+            if idx < 3: return "$3"
+            if idx < 6: return "$2"
+            return "$1"
+
+        if not df_shotgun.empty:
+            df_shotgun["Staking"] = df_shotgun.index.map(_staking_plan)
+
+            # Display Column subset
+            cols_to_show = [
+                "League", "Home", "Away", "Market", "Pick",
+                "active_edge", "Staking", "market_stability",
+                "prob_engine", "vertex_mode"
+            ]
+            # Ensure columns exist
+            cols_to_show = [c for c in cols_to_show if c in df_shotgun.columns]
+
+            # Formatting
+            st.dataframe(
+                df_shotgun[cols_to_show].style.format({"active_edge": "{:.1%}"})
+            )
+        else:
+            st.warning("No plays met the 'High Value' criteria (Edge > 4% & Tight Market).")
+    else:
+        st.info("Run Master Analysis to generate data.")
 
 with tab_kalshi:
     st.header("Kalshi Health")
