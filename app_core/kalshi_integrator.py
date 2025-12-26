@@ -40,6 +40,10 @@ class KalshiMatchResult:
     mid_prob: Optional[float] = None
     reason: Optional[str] = None
 
+class KalshiAPIError(Exception):
+    """Custom exception for Kalshi API-related errors."""
+    pass
+    
 # ---------------------------------------------------------------------------
 # Constants & Mappings
 # ---------------------------------------------------------------------------
