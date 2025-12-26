@@ -16,6 +16,7 @@ import requests
 import streamlit as st
 from app_core.kalshi_integrator import (
     KalshiIntegrator,
+    KalshiAPIError,
     LEAGUE_SERIES_MAP,
     league_game_prefix,
     league_series_ticker,
