@@ -729,6 +729,9 @@ def enrich_picks_with_roi_metrics(df: pd.DataFrame) -> pd.DataFrame:
     if df is None or df.empty:
         return df
     
+    # Avoid fragmentation warnings by operating on a copy
+    df = df.copy()
+
     # 1. Calculate Edge (Math vs Market Gap)
     # Ensure columns are numeric to avoid errors
     df['spread_implied_prob'] = pd.to_numeric(df['spread_implied_prob'], errors='coerce').fillna(0)
@@ -2152,7 +2155,8 @@ def enrich_game_context(game: Dict[str, Any], league_key: str, api_key: Optional
                 candidates.append(((h_api, a_api), g_api))
             
             candidate_tuples = [c[0] for c in candidates]
-            match_tuple = TeamNameMatcher.match_game(home_raw, away_raw, candidate_tuples)
+            # Use explicit 0.80 threshold for fuzzy matching
+            match_tuple = TeamNameMatcher.match_game(home_raw, away_raw, candidate_tuples, threshold=0.80)
             
             matched = None
             if match_tuple:
@@ -4707,7 +4711,7 @@ def match_kalshi_market(
     def select_spread_market(markets: List[Dict[str, Any]], target_line: Optional[float]) -> Dict[str, Any]:
         if not markets:
             return base_result("no_spread_market", "spread")
-        
+
         if target_line is None:
             # Fallback if we don't have a book line
             return simple_select(markets, "spread")
@@ -4723,7 +4727,7 @@ def match_kalshi_market(
                 if diff <= 1.6 and diff < min_diff:
                     min_diff = diff
                     best_match = m
-        
+
         if best_match:
             prob, line = extract_prob_and_line(best_match, "spread")
             res = {
@@ -4740,11 +4744,11 @@ def match_kalshi_market(
                 "kalshi_title": best_match.get("title"),
                 "kalshi_yes_side": "home",
             }
-            # Helper for force-save: keep prob_for_pick accessible if needed, 
+            # Helper for force-save: keep prob_for_pick accessible if needed,
             # though here we are just returning standard dict.
             # The caller will use 'kalshi_prob' (which is prob) for 'kalshi_prob_spread'.
             return res
-        
+
         return base_result("no_spread_market_within_tolerance", "spread")
 
     winner_meta = {
@@ -6192,12 +6196,12 @@ with tab_master:
             # Force save if we have ANY probability, even with a warning
             if kalshi_spread.get('kalshi_prob') is not None:
                 # We use 'kalshi_prob' here because that's what's returned by the matcher
-                # 'prob_for_pick' might be derived later or in compute_final_probability, 
+                # 'prob_for_pick' might be derived later or in compute_final_probability,
                 # but let's ensure the base value is available.
                 # Actually, the user asked to assign to df_master.at[index, 'kalshi_prob_spread'].
                 # Since we are building a list of dicts (rows_out) and then creating the DF,
                 # we just need to ensure `kalshi_prob_spread` variable is set correctly for the dictionary.
-                pass 
+                pass
 
             kalshi_prob_total = safe_float(kalshi_total.get("kalshi_prob"))
             vertex_used_for_spread = bool(use_vertex_numeric_probs and vertex_spread_prob is not None)
@@ -6515,7 +6519,7 @@ with tab_master:
                     pick_side = "home" if pick == home else "away"
                     implied_pick = implied_prob_for_pick(home_ml, away_ml, pick_side)
                     kalshi_yes_side = kalshi_winner.get("kalshi_yes_side")
-                    
+
                     # SAFETY VALVE: Check for compromised stats (default 50.0)
                     # FORCE VERTEX DISABLE (Fake Stat Safety)
                     stats_compromised = True
@@ -8440,11 +8444,7 @@ with tab_shotgun:
         df_shotgun = add_spread_total_confidence(df_shotgun)
         df_shotgun = enrich_picks_with_roi_metrics(df_shotgun)
 
-        # 1. Filter for Tight Market
-        if "market_stability" in df_shotgun.columns:
-            df_shotgun = df_shotgun[df_shotgun["market_stability"] != "WIDE"]
-
-        # 2. Calculate Active Edge and Filter > 0.01 (1%)
+        # 1. Calculate Active Edge
         def _get_edge_val(row):
             m = str(row.get("Market") or "").lower()
             if m == "spread":
@@ -8459,7 +8459,37 @@ with tab_shotgun:
             return 0.0
 
         df_shotgun["active_edge"] = df_shotgun.apply(_get_edge_val, axis=1)
-        df_shotgun = df_shotgun[df_shotgun["active_edge"] > 0.01]
+
+        # 2. Filter logic with Fallback (Tight -> Normal)
+        # Tight: <= 0.5 spread width
+        # Normal: <= 1.5 spread width
+
+        def _get_spread_width(row):
+            return safe_float(row.get("spread_width"))
+
+        df_shotgun["_sw"] = df_shotgun.apply(_get_spread_width, axis=1)
+
+        mask_edge = df_shotgun["active_edge"] > 0.01
+
+        # Tight logic
+        mask_tight = (df_shotgun["market_stability"] != "WIDE") if "market_stability" in df_shotgun.columns else (df_shotgun["_sw"] <= 0.5)
+
+        # Normal logic
+        mask_normal = (df_shotgun["_sw"].notnull()) & (df_shotgun["_sw"] <= 1.5)
+
+        candidates_tight = df_shotgun[mask_edge & mask_tight]
+
+        if len(candidates_tight) >= 2:
+            df_shotgun = candidates_tight
+            st.success(f"Using TIGHT markets (Count: {len(df_shotgun)})")
+        else:
+            candidates_normal = df_shotgun[mask_edge & mask_normal]
+            if len(candidates_normal) > 0:
+                df_shotgun = candidates_normal
+                st.warning(f"Tight markets insufficient. Relaxed to NORMAL (width <= 1.5). Count: {len(df_shotgun)}")
+            else:
+                # Fallback to whatever tight/high edge we found (even if 0 or 1)
+                df_shotgun = candidates_tight
 
         plays = df_shotgun.to_dict('records')
 
