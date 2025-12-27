@@ -14,30 +14,30 @@ logger = logging.getLogger(__name__)
 # -------------------------------------------------------------------
 try:
     from vertexai.generative_models import GenerativeModel  # type: ignore
+    import vertexai
     _GEMINI_AVAILABLE = True
-except Exception as e:
+except ImportError:
     GenerativeModel = None  # type: ignore
     _GEMINI_AVAILABLE = False
-    logger.warning(f"Vertex Gemini not available: {e}")
+    logger.warning("Vertex AI SDK not installed.")
 
-GEMINI_MODEL_NAME = "gemini-1.5-pro-002"
-MODEL_FALLBACKS = ["gemini-1.5-flash", "gemini-1.5-pro"]
+# Global holding the currently active model name
+ACTIVE_MODEL = "gemini-1.5-pro-002"
 
-def _ensure_vertex_init() -> None:
-    """
-    Initialize Vertex AI with env-provided project/location if available.
-    Safe to call multiple times; silently no-ops on error.
-    """
-    try:
-        import vertexai  # type: ignore
+# Fallback list as requested
+MODEL_FALLBACKS = ["gemini-2.0-flash-exp", "gemini-1.5-flash-002", "gemini-1.5-pro-002"]
 
-        project = os.getenv("GCP_PROJECT_ID") or os.getenv("GOOGLE_CLOUD_PROJECT")
-        location = os.getenv("GCP_REGION") or os.getenv("GCP_LOCATION") or "us-central1"
-        if project:
-            vertexai.init(project=project, location=location)
-    except Exception:
+def initialize_gemini():
+    """Initializes Vertex AI."""
+    if not _GEMINI_AVAILABLE:
         return
-
+    project_id = os.getenv("GCP_PROJECT_ID") or os.getenv("GOOGLE_CLOUD_PROJECT")
+    location = os.getenv("GCP_REGION") or os.getenv("GCP_LOCATION") or "us-central1"
+    if project_id:
+        try:
+            vertexai.init(project=project_id, location=location)
+        except Exception as e:
+            logger.error(f"Failed to initialize Vertex AI: {e}")
 
 def _safe_json_extract(text: str) -> Dict[str, Any]:
     text = (text or "").strip()
@@ -60,7 +60,6 @@ def _safe_json_extract(text: str) -> Dict[str, Any]:
             return {}
     return {}
 
-
 def analyze_kalshi_context_with_llm(context_markdown: str) -> List[Dict[str, Any]]:
     """
     Returns a list of contract dicts, or [] on any error.
@@ -70,7 +69,8 @@ def analyze_kalshi_context_with_llm(context_markdown: str) -> List[Dict[str, Any
     if not context_markdown or not context_markdown.strip():
         return []
 
-    _ensure_vertex_init()
+    initialize_gemini()
+
     system_instructions = """You are a prediction market assistant that evaluates current prices for event contracts on Kalshi.
 
 You will receive a description of a single game, including:
@@ -111,7 +111,8 @@ CONTEXT:
         # Try models in order
         for model_name in MODEL_FALLBACKS:
             try:
-                time.sleep(2.0) # Rate limit protection
+                # Rate limit protection
+                time.sleep(2.0)
                 model = GenerativeModel(model_name)
                 resp = model.generate_content(prompt)
                 text = getattr(resp, "text", "") or ""
@@ -148,7 +149,6 @@ CONTEXT:
         logger.warning(f"LLM assistant call failed: {e}")
         return []
 
-
 def generate_confidence_explanation(prompt: str) -> Dict[str, Any]:
     """
     Lightweight Gemini call for qualitative confidence/explanation metadata.
@@ -159,13 +159,14 @@ def generate_confidence_explanation(prompt: str) -> Dict[str, Any]:
     if not prompt:
         return {}
     
-    _ensure_vertex_init()
+    initialize_gemini()
     
     # Try models in order
     errors = []
     for model_name in MODEL_FALLBACKS:
         try:
-            time.sleep(2.0) # Rate limit protection
+            # Rate limit protection
+            time.sleep(2.0)
             model = GenerativeModel(model_name)
             resp = model.generate_content(prompt)
             text = getattr(resp, "text", "") or ""
