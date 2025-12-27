@@ -2149,44 +2149,20 @@ def enrich_game_context(game: Dict[str, Any], league_key: str, api_key: Optional
             home_raw = str(game.get("home_team") or "")
             away_raw = str(game.get("away_team") or "")
             
-            # Extract list of (home, away, game_obj) tuples for fuzzy matcher
-            candidates = []
-            for g_api in games_api:
-                h_api = str(((g_api.get("teams") or {}).get("home") or {}).get("name") or "")
-                a_api = str(((g_api.get("teams") or {}).get("away") or {}).get("name") or "")
-                candidates.append(((h_api, a_api), g_api))
-            
-            candidate_tuples = [c[0] for c in candidates]
-            # Use explicit 0.80 threshold for fuzzy matching
-            match_tuple = TeamNameMatcher.match_game(home_raw, away_raw, candidate_tuples, threshold=0.80)
-            
-            # Fallback: If strict game match fails, try independent team matching
-            if not match_tuple:
-                # Gather lists for individual matching using candidate_tuples
-                home_candidates = [t[0] for t in candidate_tuples]
-                away_candidates = [t[1] for t in candidate_tuples]
-
-                matched_home_name = TeamNameMatcher.match_team(home_raw, home_candidates, threshold=0.80)
-                matched_away_name = TeamNameMatcher.match_team(away_raw, away_candidates, threshold=0.80)
-
-                if matched_home_name and matched_away_name:
-                    # Find the tuple that has both
-                    for c_tuple in candidate_tuples:
-                        # Use match_team to verify if c_tuple[0] matches matched_home_name
-                        h_check = TeamNameMatcher.match_team(c_tuple[0], [matched_home_name], threshold=0.80)
-                        a_check = TeamNameMatcher.match_team(c_tuple[1], [matched_away_name], threshold=0.80)
-
-                        if h_check and a_check:
-                            match_tuple = c_tuple
-                            break
+            home_norm = TeamNameMatcher.normalize(home_raw)
+            away_norm = TeamNameMatcher.normalize(away_raw)
 
             matched = None
-            if match_tuple:
-                # Retrieve the full game object associated with the matched tuple
-                for c_tuple, c_obj in candidates:
-                    if c_tuple == match_tuple:
-                        matched = c_obj
-                        break
+            for g_api in games_api:
+                home_api = str(((g_api.get("teams") or {}).get("home") or {}).get("name") or "")
+                away_api = str(((g_api.get("teams") or {}).get("away") or {}).get("name") or "")
+
+                # Use the matcher you already imported
+                is_home_match = TeamNameMatcher.match_team(home_norm, [home_api], threshold=0.80)
+                is_away_match = TeamNameMatcher.match_team(away_norm, [away_api], threshold=0.80)
+                if is_home_match and is_away_match:
+                    matched = g_api
+                    break
 
             if matched:
                 enrichment["api_sports_used"] = True
