@@ -25,7 +25,7 @@ except ImportError:
 ACTIVE_MODEL = "gemini-1.5-pro-002"
 
 # Fallback list as requested
-MODEL_FALLBACKS = ["gemini-2.0-flash-exp", "gemini-1.5-flash-002", "gemini-1.5-pro-002"]
+MODEL_FALLBACKS = ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash-exp"]
 
 def initialize_gemini():
     """Initializes Vertex AI."""
