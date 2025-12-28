@@ -2164,15 +2164,17 @@ def enrich_game_context(game: Dict[str, Any], league_key: str, api_key: Optional
             
             matched = None
 
+            # Force fuzzy match for both teams to unlock stats
             home_norm = TeamNameMatcher.normalize(home_raw)
             away_norm = TeamNameMatcher.normalize(away_raw)
 
-            for g_api in games_api:
+            # iterate over the list (safe against None)
+            for g_api in (games_api or []):
                 api_teams = g_api.get("teams", {})
                 h_api = api_teams.get("home", {}).get("name", "")
                 a_api = api_teams.get("away", {}).get("name", "")
 
-                # NO strict == check. Use fuzzy matcher as the ONLY logic.
+                # Use fuzzy matching as the ONLY logic to bridge naming gaps
                 if TeamNameMatcher.match_team(home_norm, [h_api], threshold=0.75) and \
                    TeamNameMatcher.match_team(away_norm, [a_api], threshold=0.75):
                     matched = g_api
@@ -2891,6 +2893,12 @@ def init_data_clients() -> Tuple[Dict[str, Any], Dict[str, Any]]:
         return api_sports_clients, sportsdata_clients
     keys = get_api_keys()
     api_key = keys.get("api_sports_key")
+    # Action 4: Verify that api_sports_key is being pulled from st.secrets['general']['api_sports_key']
+    if not api_key:
+        try:
+            api_key = st.secrets["general"]["api_sports_key"]
+        except Exception:
+            pass
     sd_key = keys.get("sportsdata_key")
 
     st.write(f"DEBUG: API-Sports Key: {str(api_key)[:4]}... | SportsData Key: {str(sd_key)[:4]}...")
@@ -4271,11 +4279,11 @@ def filter_kalshi_game_markets(
             prefix_ok = any(t.startswith(pfx) for pfx in allowed_prefixes)
 
             # NCAAB/NCAAF Relaxation: Allow if 'GAME' and team code present
-            if league_upper in ["NCAAB", "NCAAF"] and "GAME" in t:
-                # Check for either team code being present
-                h_code_hit = any(c in t for c in home_codes) if home_codes else False
-                a_code_hit = any(c in t for c in away_codes) if away_codes else False
-                if h_code_hit or a_code_hit:
+            h_code_hit = any(c in t for c in home_codes) if home_codes else False
+            a_code_hit = any(c in t for c in away_codes) if away_codes else False
+
+            if league_upper in ["NCAAB", "NCAAF"]:
+                if "NCAA" in t and "GAME" in t and (h_code_hit or a_code_hit):
                     prefix_ok = True
 
             if not prefix_ok:
@@ -4293,8 +4301,9 @@ def filter_kalshi_game_markets(
 
             # If college relaxation triggered, we might ignore date mismatch if strong team code match?
             # User request: "allow any market ticker that contains 'GAME' and at least one of the team codes, even if the date token is missing."
-            if league_upper in ["NCAAB", "NCAAF"] and "GAME" in t and (h_code_hit or a_code_hit):
-                 date_match = True # Bypass date check
+            if league_upper in ["NCAAB", "NCAAF"]:
+                 if "NCAA" in t and "GAME" in t and (h_code_hit or a_code_hit):
+                     date_match = True # Bypass date check
 
             if not date_match:
                 continue
