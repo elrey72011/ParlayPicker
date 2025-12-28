@@ -8530,7 +8530,7 @@ with tab_shotgun:
                     continue
                 
                 # Sort by edge to keep unique consistent
-                if p1['active_edge'] < p2['active_edge']:
+                if p1.get('active_edge', 0) < p2.get('active_edge', 0):
                     p1, p2 = p2, p1
                     
                 pair_key = (p1['Home'], p1['Pick'], p2['Home'], p2['Pick'])
