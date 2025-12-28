@@ -178,27 +178,30 @@ class SportsDataClientBase:
     # ------------------------------------------------------------------
     # Data fetchers
     def get_scores_by_date(self, target_date: date) -> List[Dict[str, Any]]:
-        date_key = target_date.isoformat()
-        if date_key in self._scores_cache:
-            return self._scores_cache[date_key]
+        try:
+            date_key = target_date.isoformat()
+            if date_key in self._scores_cache:
+                return self._scores_cache[date_key]
 
-        candidates = [
-            target_date.strftime("%Y-%m-%d"),
-            target_date.strftime("%Y%m%d"),
-            target_date.strftime("%Y%b%d").upper(),
-        ]
+            candidates = [
+                target_date.strftime("%Y-%m-%d"),
+                target_date.strftime("%Y%m%d"),
+                target_date.strftime("%Y%b%d").upper(),
+            ]
 
-        games: List[Dict[str, Any]] = []
-        for token in candidates:
-            payload = self._request(f"/scores/json/ScoresByDate/{token}")
-            if isinstance(payload, list) and payload:
-                games = payload
-                break
-            if isinstance(payload, list):
-                games = payload
+            games: List[Dict[str, Any]] = []
+            for token in candidates:
+                payload = self._request(f"/scores/json/ScoresByDate/{token}")
+                if isinstance(payload, list) and payload:
+                    games = payload
+                    break
+                if isinstance(payload, list):
+                    games = payload
 
-        self._scores_cache[date_key] = games
-        return games or []
+            self._scores_cache[date_key] = games
+            return games or []
+        except Exception:
+            return []
 
     def _season_tokens(self, season: Optional[str], season_type: Optional[str]) -> List[str]:
         tokens: List[str] = []

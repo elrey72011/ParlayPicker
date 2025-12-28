@@ -294,47 +294,49 @@ class _APISportsBaseClient:
         season: Optional[str] = None,
     ) -> List[Dict]:
         """Fetch games for a given date and timezone."""
+        try:
+            if not self.is_configured():
+                return []
 
-        if not self.is_configured():
+            league_id = self._resolve_league_id(league_id)
+            if not league_id:
+                if not self.last_error:
+                    self.last_error = "Unable to determine API-Sports league ID"
+                return []
+            season_candidates = (
+                [season]
+                if season
+                else self.season_candidates_for_date(target_date)
+            )
+
+            last_games: List[Dict] = []
+            for season_label in season_candidates:
+                cache_key = (target_date.isoformat(), timezone, league_id, season_label)
+                if cache_key in self._games_cache:
+                    games = self._games_cache[cache_key]
+                else:
+                    payload = self._request(
+                        "/games",
+                        {
+                            "date": target_date.isoformat(),
+                            "timezone": timezone,
+                            "league": league_id,
+                            "season": season_label,
+                        },
+                    )
+                    if payload is None:
+                        payload = {}
+                    # Ensure we default to empty list [] if key missing or None
+                    games = payload.get("response") or []
+                    self._games_cache[cache_key] = games
+
+                last_games = games
+                if games:
+                    return games
+
+            return last_games or []
+        except Exception:
             return []
-
-        league_id = self._resolve_league_id(league_id)
-        if not league_id:
-            if not self.last_error:
-                self.last_error = "Unable to determine API-Sports league ID"
-            return []
-        season_candidates = (
-            [season]
-            if season
-            else self.season_candidates_for_date(target_date)
-        )
-
-        last_games: List[Dict] = []
-        for season_label in season_candidates:
-            cache_key = (target_date.isoformat(), timezone, league_id, season_label)
-            if cache_key in self._games_cache:
-                games = self._games_cache[cache_key]
-            else:
-                payload = self._request(
-                    "/games",
-                    {
-                        "date": target_date.isoformat(),
-                        "timezone": timezone,
-                        "league": league_id,
-                        "season": season_label,
-                    },
-                )
-                if payload is None:
-                    payload = {}
-                # Ensure we default to empty list [] if key missing or None
-                games = payload.get("response") or []
-                self._games_cache[cache_key] = games
-
-            last_games = games
-            if games:
-                return games
-
-        return last_games or []
 
     def get_games_by_season(
         self,
