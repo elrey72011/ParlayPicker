@@ -334,7 +334,7 @@ class _APISportsBaseClient:
             if games:
                 return games
 
-        return last_games or []
+        return last_games if last_games is not None else []
 
     def get_games_by_season(
         self,
@@ -429,7 +429,7 @@ class _APISportsBaseClient:
             pass 
         except Exception as e:
             logger.warning(f"Failed to fetch team stats: {e}")
-        return stats
+        return stats or []
 
     def get_standings(
         self,
