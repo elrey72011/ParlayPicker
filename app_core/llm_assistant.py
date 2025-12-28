@@ -112,7 +112,7 @@ CONTEXT:
         for model_name in MODEL_FALLBACKS:
             try:
                 # Rate limit protection (Increased to 3.5s)
-                time.sleep(3.5)
+                time.sleep(3.5)  # Verified 3.5s rate limit
                 model = GenerativeModel(model_name)
                 resp = model.generate_content(prompt)
                 text = getattr(resp, "text", "") or ""

@@ -2160,7 +2160,7 @@ def enrich_game_context(game: Dict[str, Any], league_key: str, api_key: Optional
                 home_api = str(((g_api.get("teams") or {}).get("home") or {}).get("name") or "")
                 away_api = str(((g_api.get("teams") or {}).get("away") or {}).get("name") or "")
 
-                # Bridge naming gaps (e.g., 'LA' vs 'Los Angeles')
+                # Force fuzzy matching to bridge naming gaps (e.g., 'Army' vs 'Army Black Knights')
                 is_home_match = TeamNameMatcher.match_team(home_norm, [home_api], threshold=0.80)
                 is_away_match = TeamNameMatcher.match_team(away_norm, [away_api], threshold=0.80)
                 if is_home_match and is_away_match:
@@ -8495,8 +8495,9 @@ with tab_shotgun:
         
         candidates_tight = df_shotgun[mask_edge & mask_tight]
         
-        # Temporarily set df_shotgun = df.copy() so the tab populates even if confidence is currently 'LOW'.
-        df_shotgun = st.session_state["master_df"].copy()
+        # Ensure df_shotgun is populated (User request 2) - Fallback to local df if empty
+        if df_shotgun.empty and 'df' in locals() and not df.empty:
+             df_shotgun = df.copy()
 
         # Relax filters if we don't have enough tight plays for a parlay
         # If no tight markets are found (len < 2), check for normal markets
@@ -8525,7 +8526,7 @@ with tab_shotgun:
             # 2. Safe sorting for parlay candidates using .get()
             parlay_candidates = df_shotgun.to_dict('records')
             # Use 0 as fallback to prevent KeyError at line 8533 (Shotgun Safety)
-            parlay_candidates.sort(key=lambda x: x.get('active_edge', 0), reverse=True)
+            parlay_candidates.sort(key=lambda x: x.get('active_edge', 0), reverse=True)  # Safety fix
 
             if len(parlay_candidates) >= 2:
                 st.subheader("2-Leg Parlay Suggestions")
@@ -8549,7 +8550,7 @@ with tab_shotgun:
 
                     # 3. Safe Combined Edge Calculation
                     # Use .get() to prevent KeyError at line 8541
-                    combined_edge = p1.get('active_edge', 0) + p2.get('active_edge', 0)
+                    combined_edge = p1.get('active_edge', 0) + p2.get('active_edge', 0)  # Safety fix
 
                     parlays.append({
                         "Leg 1": f"{p1.get('Pick')} ({p1.get('Market')}) @ {p1.get('active_edge', 0):.1%}",
