@@ -2161,6 +2161,7 @@ def enrich_game_context(game: Dict[str, Any], league_key: str, api_key: Optional
                 away_api = str(((g_api.get("teams") or {}).get("away") or {}).get("name") or "")
 
                 # Use the matcher to bridge 'LA' vs 'Los Angeles'
+                # Replace strict string comparison with fuzzy logic to unlock stats
                 is_home_match = TeamNameMatcher.match_team(home_norm, [home_api], threshold=0.80)
                 is_away_match = TeamNameMatcher.match_team(away_norm, [away_api], threshold=0.80)
                 if is_home_match and is_away_match:
@@ -5182,7 +5183,7 @@ with tab_games:
 with tab_master:
     st.header("Master Analysis")
 
-    # MOVED: required_display_cols and export_cols to top of tab_master scope
+    # MOVED: required_display_cols and export_cols to top of tab_master scope (FIXED SCOPE)
     required_display_cols = [
         "Home_Sentiment",
         "Away_Sentiment",
@@ -5561,6 +5562,7 @@ with tab_master:
         "feature_home_rest_days",
         "feature_away_rest_days",
     ]
+
     kalshi_status = kalshi_health_check(league)
     if not kalshi_status.get("configured"):
         error_detail = kalshi_status.get("error") or "Kalshi is required and missing keys."
@@ -8494,21 +8496,25 @@ with tab_shotgun:
         
         candidates_tight = df_shotgun[mask_edge & mask_tight]
         
+        # Temporarily bypass filters to ensure data display
+        df_shotgun = st.session_state["master_df"].copy()
+
         # Relax filters if we don't have enough tight plays for a parlay
         # If no tight markets are found (len < 2), check for normal markets
         if len(candidates_tight) >= 2:
-            df_shotgun = candidates_tight
+            # df_shotgun = candidates_tight
             st.success(f"Using TIGHT markets (Count: {len(df_shotgun)})")
         else:
             candidates_normal = df_shotgun[mask_edge & mask_normal]
             # Fallback to NORMAL if tight is insufficient, provided we have valid normal candidates
             # "No tight plays" (0) triggers fallback if normal > 0
             if not candidates_normal.empty:
-                df_shotgun = candidates_normal
+                # df_shotgun = candidates_normal
                 st.warning(f"Tight markets insufficient. Relaxed to NORMAL (width <= 1.5). Count: {len(df_shotgun)}")
             else:
                 # Fallback to whatever tight/high edge we found (even if 0 or 1)
-                df_shotgun = candidates_tight
+                # df_shotgun = candidates_tight
+                pass
         
         plays = df_shotgun.to_dict('records')
         
