@@ -2166,8 +2166,7 @@ def enrich_game_context(game: Dict[str, Any], league_key: str, api_key: Optional
                 home_api = str(((g_api.get("teams") or {}).get("home") or {}).get("name") or "")
                 away_api = str(((g_api.get("teams") or {}).get("away") or {}).get("name") or "")
 
-                # Force fuzzy matching to bridge naming gaps (e.g., 'Army' vs 'Army Black Knights')
-                # Ensure fuzzy matching is actually used to bridge the naming gap
+                # Only use fuzzy matching as requested
                 is_home_match = TeamNameMatcher.match_team(home_norm, [home_api], threshold=0.75)
                 is_away_match = TeamNameMatcher.match_team(away_norm, [away_api], threshold=0.75)
                 if is_home_match and is_away_match:
@@ -6992,6 +6991,9 @@ with tab_master:
                         "consensus_prob": consensus_prob,
                         "consensus_prob_adj": consensus_prob_adj,
                         "final_probability": consensus_prob_adj,
+                        "kalshi_prob": kalshi_prob_used,
+                        "kalshi_matched": bool(kalshi_prob_used is not None),
+                        "active_edge": (consensus_prob_adj or 0.0) - (implied_pick or 0.5),
                         "decision_driver": decision_driver,
                         "kalshi_weight": consensus_weights.get("w_kalshi") or consensus_weights.get("kalshi_weight"),
                         "odds_weight": consensus_weights.get("w_implied") or consensus_weights.get("odds_weight"),
@@ -7307,6 +7309,9 @@ with tab_master:
                     "Pick": spread_pick, "Implied_Prob": spread_prob_market, "Line": spread_line, "AI_Prob": vertex_spread_prob if vertex_used_for_spread else None,
                     "ai_prob_adj": ai_prob_row, "consensus_prob": spread_base_prob, "consensus_prob_adj": spread_prob_final,
                     "final_probability": spread_prob_final,
+                    "kalshi_prob": kalshi_prob_spread if kalshi_spread.get("kalshi_matched") else None,
+                    "kalshi_matched": bool(kalshi_spread.get("kalshi_matched")),
+                    "active_edge": (spread_prob_final or 0.0) - (spread_prob_market or 0.5),
                     "decision_driver": spread_decision_driver or spread_engine_used,
                     "kalshi_weight": spread_weights_used.get("w_kalshi") if 'spread_weights_used' in locals() else None,
                     "odds_weight": spread_weights_used.get("w_implied") if 'spread_weights_used' in locals() else None,
@@ -7571,6 +7576,9 @@ with tab_master:
                     "Pick": total_pick, "Implied_Prob": total_prob_market, "Line": total_line, "AI_Prob": vertex_total_prob if vertex_used_for_total else None,
                     "ai_prob_adj": ai_prob_row, "consensus_prob": total_base_prob, "consensus_prob_adj": total_prob_final,
                     "final_probability": total_prob_final,
+                    "kalshi_prob": kalshi_prob_total if kalshi_total.get("kalshi_matched") else None,
+                    "kalshi_matched": bool(kalshi_total.get("kalshi_matched")),
+                    "active_edge": (total_prob_final or 0.0) - (total_prob_market or 0.5),
                     "decision_driver": total_decision_driver or total_engine_used,
                     "kalshi_weight": total_weights_used.get("w_kalshi") if 'total_weights_used' in locals() else None,
                     "odds_weight": total_weights_used.get("w_implied") if 'total_weights_used' in locals() else None,
@@ -7853,6 +7861,11 @@ with tab_master:
             df = df.drop(columns=["Unnamed: 0"])
         
         df = df.copy()
+
+        # Enrich with Vertex features (Stats + Kalshi Fill)
+        # This fixes "COLUMN EMPTY" by ensuring kalshi_prob is populated (even if 0.5 default)
+        # and attaching statistical features for Shotgun Mode edge calculation.
+        df = enrich_with_vertex_features(df, api_sports_clients)
 
         # Validation Check
         validation_results = run_roi_pipeline_validation(df)
@@ -8471,6 +8484,10 @@ with tab_shotgun:
              df_shotgun = df.copy()
         else:
              df_shotgun = st.session_state["master_df"].copy()
+
+        # Safety for Shotgun Filters: Explicitly disable confidence filtering
+        # df_shotgun = df_shotgun[df_shotgun["overall_confidence"] != "LOW"]
+        df_shotgun = df.copy()
         
         # Ensure enrichment
         df_shotgun = add_spread_total_confidence(df_shotgun)

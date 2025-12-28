@@ -232,18 +232,18 @@ class _APISportsBaseClient:
                 resp = self.session.get(url, params=params or {}, timeout=self.timeout)
             except requests.exceptions.Timeout:
                 self.last_error = "API-Sports timeout"
-                return None
+                return {} # Return empty dict instead of None
             except requests.RequestException as exc:
                 self.last_error = f"API-Sports request failed: {exc}"
-                return None
+                return {} # Return empty dict instead of None
 
             if resp.status_code == 401:
                 self.last_error = "Invalid API-Sports key"
-                return None
+                return {} # Return empty dict instead of None
             
             if resp.status_code == 403:
                 self.last_error = "API-Sports Plan Restriction (403 Forbidden)"
-                return None
+                return {} # Return empty dict instead of None
 
             if resp.status_code == 429:
                 retry_after = resp.headers.get("Retry-After")
@@ -260,7 +260,7 @@ class _APISportsBaseClient:
                 attempts += 1
                 if attempts >= self.max_retries:
                     self.last_error = "API-Sports rate limit reached. Please try again shortly."
-                    return None
+                    return {} # Return empty dict instead of None
                 self.last_error = "API-Sports rate limit reached. Retrying shortly..."
                 time.sleep(wait_seconds)
                 continue
@@ -269,22 +269,22 @@ class _APISportsBaseClient:
                 resp.raise_for_status()
             except requests.RequestException as exc:
                 self.last_error = f"API-Sports request failed: {exc}"
-                return None
+                return {} # Return empty dict instead of None
 
             try:
                 payload = resp.json()
             except ValueError:
                 self.last_error = "Invalid JSON from API-Sports"
-                return None
+                return {} # Return empty dict instead of None
 
             if payload.get("errors"):
                 self.last_error = "; ".join(payload.get("errors", {}).values()) or "Unknown API-Sports error"
-                return None
+                return {} # Return empty dict instead of None
 
             self.last_error = None
             return payload
 
-        return None
+        return {} # Return empty dict instead of None
 
     def get_games_by_date(
         self,
@@ -414,9 +414,9 @@ class _APISportsBaseClient:
     def get_team_stats(self, season=2025):
         """
         Fetches team statistics. 
-        Falls back to empty dict if API is restricted (403).
+        Falls back to empty list if API is restricted (403).
         """
-        stats = {}
+        stats = []
         # Logic to call /teams/statistics endpoint
         # TRY/EXCEPT block is critical here to catch the 403 Forbidden
         try:
