@@ -2160,8 +2160,7 @@ def enrich_game_context(game: Dict[str, Any], league_key: str, api_key: Optional
                 home_api = str(((g_api.get("teams") or {}).get("home") or {}).get("name") or "")
                 away_api = str(((g_api.get("teams") or {}).get("away") or {}).get("name") or "")
 
-                # Use the matcher to bridge 'LA' vs 'Los Angeles'
-                # Replace strict string comparison with fuzzy logic to unlock stats
+                # Bridge naming gaps (e.g., 'LA' vs 'Los Angeles')
                 is_home_match = TeamNameMatcher.match_team(home_norm, [home_api], threshold=0.80)
                 is_away_match = TeamNameMatcher.match_team(away_norm, [away_api], threshold=0.80)
                 if is_home_match and is_away_match:
@@ -8496,7 +8495,7 @@ with tab_shotgun:
         
         candidates_tight = df_shotgun[mask_edge & mask_tight]
         
-        # Temporarily bypass filters to ensure data display
+        # Temporarily set df_shotgun = df.copy() so the tab populates even if confidence is currently 'LOW'.
         df_shotgun = st.session_state["master_df"].copy()
 
         # Relax filters if we don't have enough tight plays for a parlay
@@ -8525,7 +8524,7 @@ with tab_shotgun:
         else:
             # 2. Safe sorting for parlay candidates using .get()
             parlay_candidates = df_shotgun.to_dict('records')
-            # Use 0 as fallback to prevent KeyError at line 8533
+            # Use 0 as fallback to prevent KeyError at line 8533 (Shotgun Safety)
             parlay_candidates.sort(key=lambda x: x.get('active_edge', 0), reverse=True)
 
             if len(parlay_candidates) >= 2:

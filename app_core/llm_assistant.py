@@ -24,7 +24,7 @@ except ImportError:
 # Global holding the currently active model name
 ACTIVE_MODEL = "gemini-1.5-flash"
 
-# Fallback list as requested
+# Fallback list as requested (Updated for stability)
 MODEL_FALLBACKS = ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash-exp"]
 
 def initialize_gemini():
@@ -111,7 +111,7 @@ CONTEXT:
         # Try models in order
         for model_name in MODEL_FALLBACKS:
             try:
-                # Rate limit protection
+                # Rate limit protection (Increased to 3.5s)
                 time.sleep(3.5)
                 model = GenerativeModel(model_name)
                 resp = model.generate_content(prompt)
