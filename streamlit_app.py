@@ -2166,7 +2166,7 @@ def enrich_game_context(game: Dict[str, Any], league_key: str, api_key: Optional
                 home_api = str(((g_api.get("teams") or {}).get("home") or {}).get("name") or "")
                 away_api = str(((g_api.get("teams") or {}).get("away") or {}).get("name") or "")
 
-                # Override the Strict Match: Ensure fuzzy matcher is the primary method
+                # Use fuzzy matching as the primary bridge for team names
                 is_home_match = TeamNameMatcher.match_team(home_norm, [home_api], threshold=0.75)
                 is_away_match = TeamNameMatcher.match_team(away_norm, [away_api], threshold=0.75)
                 if is_home_match and is_away_match:
