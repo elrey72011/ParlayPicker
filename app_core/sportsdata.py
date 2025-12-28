@@ -198,7 +198,7 @@ class SportsDataClientBase:
                 games = payload
 
         self._scores_cache[date_key] = games
-        return games
+        return games or []
 
     def _season_tokens(self, season: Optional[str], season_type: Optional[str]) -> List[str]:
         tokens: List[str] = []

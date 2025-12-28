@@ -334,7 +334,7 @@ class _APISportsBaseClient:
             if games:
                 return games
 
-        return last_games if last_games is not None else []
+        return last_games or []
 
     def get_games_by_season(
         self,
