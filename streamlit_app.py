@@ -1496,7 +1496,8 @@ def compute_team_sentiment_map(news_api_key: Optional[str], games: List[Dict[str
 
             url = "https://newsapi.org/v2/everything"
             # Attempt a combined query that includes the team and league context to reduce per-team calls
-            q = f'"{TeamNameMatcher.normalize(team)}" {league_label(league)}'
+            # Simplify query to just team name to avoid plan restrictions (HTTP 403)
+            q = f'"{TeamNameMatcher.normalize(team)}"'
             params = {
                 "q": q,
                 "sortBy": "relevancy",
@@ -2166,8 +2167,9 @@ def enrich_game_context(game: Dict[str, Any], league_key: str, api_key: Optional
                 away_api = str(((g_api.get("teams") or {}).get("away") or {}).get("name") or "")
 
                 # Force fuzzy matching to bridge naming gaps (e.g., 'Army' vs 'Army Black Knights')
-                is_home_match = TeamNameMatcher.match_team(home_norm, [home_api], threshold=0.80)
-                is_away_match = TeamNameMatcher.match_team(away_norm, [away_api], threshold=0.80)
+                # Ensure fuzzy matching is actually used to bridge the naming gap
+                is_home_match = TeamNameMatcher.match_team(home_norm, [home_api], threshold=0.75)
+                is_away_match = TeamNameMatcher.match_team(away_norm, [away_api], threshold=0.75)
                 if is_home_match and is_away_match:
                     matched = g_api
                     break
@@ -4205,6 +4207,7 @@ def filter_kalshi_game_markets(
     home_code: Optional[str] = None,
     away_code: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
+    """Flexible filtering for game markets with title-based fallback."""
     try:
         tz_name = get_local_tz()
         local_tz = None
@@ -4251,6 +4254,8 @@ def filter_kalshi_game_markets(
             allowed_date_tokens.append(date_token)
 
         matched: List[Dict[str, Any]] = []
+
+        # 1. Strict + Relaxed NCAA Logic
         for m in markets or []:
             t = ticker_upper(m)
             if "GAME" not in t:
@@ -4258,57 +4263,62 @@ def filter_kalshi_game_markets(
 
             prefix_ok = any(t.startswith(pfx) for pfx in allowed_prefixes)
 
-            if not prefix_ok and league_upper in {"NCAAB", "NCAAF"}:
-                if ("NCAAB" in t or "NCAA" in t or "NCAAF" in t) and "GAME" in t:
+            # NCAAB/NCAAF Relaxation: Allow if 'GAME' and team code present
+            if league_upper in ["NCAAB", "NCAAF"] and "GAME" in t:
+                # Check for either team code being present
+                h_code_hit = any(c in t for c in home_codes) if home_codes else False
+                a_code_hit = any(c in t for c in away_codes) if away_codes else False
+                if h_code_hit or a_code_hit:
                     prefix_ok = True
 
             if not prefix_ok:
                 continue
-            if date_token and date_token not in t:
+
+            # If date token present, filter by it (unless college relaxation above implies skipping strict date)
+            # For robustness, we still prefer date match but allow relaxation if needed.
+            # Here we keep strict date if possible, but the previous logic enforced it.
+            # Let's check date token if available
+            date_match = False
+            if allowed_date_tokens:
+                date_match = any(tok in t for tok in allowed_date_tokens)
+            elif date_token and date_token in t:
+                date_match = True
+
+            # If college relaxation triggered, we might ignore date mismatch if strong team code match?
+            # User request: "allow any market ticker that contains 'GAME' and at least one of the team codes, even if the date token is missing."
+            if league_upper in ["NCAAB", "NCAAF"] and "GAME" in t and (h_code_hit or a_code_hit):
+                 date_match = True # Bypass date check
+
+            if not date_match:
                 continue
-            if home_codes and not any(code in t for code in home_codes):
-                continue
-            if away_codes and not any(code in t for code in away_codes):
-                continue
+
+            # Standard team check (unless college relaxed)
+            if league_upper not in ["NCAAB", "NCAAF"]:
+                if home_codes and not any(code in t for code in home_codes):
+                    continue
+                if away_codes and not any(code in t for code in away_codes):
+                    continue
+
             matched.append(m)
 
-        # Fallback: relax date token filtering while still enforcing team presence to avoid cross-sport contamination.
-        if not matched:
-            fallback_candidates: List[Tuple[float, Dict[str, Any]]] = []
-            fallback_no_date: List[Tuple[float, Dict[str, Any]]] = []
-            for m in markets or []:
-                t = ticker_upper(m)
-                if "GAME" not in t:
-                    continue
-                if not (
-                    any(t.startswith(pfx) for pfx in allowed_prefixes)
-                    or ("NCAAB" in t or "NCAA" in t or "NCAAF" in t)
-                ):
-                    continue
-                blob = " ".join(
-                    [
-                        t,
-                        str(m.get("title") or ""),
-                        str(m.get("rules") or m.get("rules_primary") or ""),
-                    ]
-                ).lower()
-                blob_tokens = {tok for tok in re.findall(r"[a-z0-9]+", blob)}
-                team_hit = bool(team_tokens(home_team).intersection(blob_tokens)) and bool(
-                    team_tokens(away_team).intersection(blob_tokens)
-                )
-                code_home_hit = home_codes and any(code in t for code in home_codes)
-                code_away_hit = away_codes and any(code in t for code in away_codes)
-                code_hit = code_home_hit and code_away_hit
-                if not (team_hit or code_hit):
-                    continue
-                date_hit = bool(allowed_date_tokens and any(tok in t for tok in allowed_date_tokens))
-                score = (2 if team_hit else 0) + (2 if code_hit else 0) + (1 if date_hit else 0)
-                target_list = fallback_candidates if date_hit else fallback_no_date
-                target_list.append((score, m))
+        # 2. Fallback: Title Matching if strict failed
+        if not matched and (home_team or away_team):
+            home_norm = TeamNameMatcher.normalize(str(home_team)) if home_team else ""
+            away_norm = TeamNameMatcher.normalize(str(away_team)) if away_team else ""
 
-            chosen = fallback_candidates or fallback_no_date
-            if chosen:
-                matched = [m for _, m in sorted(chosen, key=lambda kv: kv[0], reverse=True)]
+            for m in markets or []:
+                if m in matched: continue
+                t = ticker_upper(m)
+                # Ensure it's at least likely related to the league
+                if not any(pfx in t for pfx in allowed_prefixes) and "GAME" not in t:
+                    continue
+
+                title = str(m.get("title") or "").upper()
+                h_match = TeamNameMatcher.match_team(home_norm, [title], threshold=0.75) if home_norm else False
+                a_match = TeamNameMatcher.match_team(away_norm, [title], threshold=0.75) if away_norm else False
+
+                if h_match or a_match:
+                    matched.append(m)
 
         return matched
     except Exception:
@@ -7806,11 +7816,6 @@ with tab_master:
                     row[col] = None
 
         df = pd.DataFrame(rows_out)
-        df = df.copy()
-        # Performance Warning Fix: Consolidate dataframe
-        df = df.copy()
-
-        # Additional De-fragmentation before further processing
         df = df.copy()
 
         # Collapse to one row per game (prefer the first generated row, typically moneyline)

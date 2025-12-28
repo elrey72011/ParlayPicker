@@ -44,7 +44,7 @@ class TeamNameMatcher:
         'Seahawks', 'Colonels', 'Bluejays', 'Leathernecks', 'Racers',
         'Beacons', 'Mean Green', 'Green Wave', 'Waves', 'Lions',
         'Rebels', 'Fighting Irish', 'Billikens', 'Sharks', 'Chippewas',
-        'Braves', 'Hornets'
+        'Braves', 'Hornets', 'Black Knights'
     ]
     
     # State abbreviation normalization
