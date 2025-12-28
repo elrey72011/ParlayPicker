@@ -367,7 +367,7 @@ class _APISportsBaseClient:
         )
         games = (payload or {}).get("response", []) if payload else []
         self._season_games_cache[cache_key] = games
-        return games
+        return games or []
 
     def get_team_statistics(
         self,

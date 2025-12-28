@@ -2164,14 +2164,17 @@ def enrich_game_context(game: Dict[str, Any], league_key: str, api_key: Optional
             matched = None
             # Fuzzy Enrichment Match: iterate and match individually
             # Force this specific matching logic
+            # 1. Normalize first
             home_norm = TeamNameMatcher.normalize(home_raw)
             away_norm = TeamNameMatcher.normalize(away_raw)
 
-            for g_api in (games_api or []): # Safety against None
+            # 2. Iterate safely over the list
+            for g_api in (games_api or []):
                 api_teams = g_api.get("teams", {})
                 h_api = api_teams.get("home", {}).get("name", "")
                 a_api = api_teams.get("away", {}).get("name", "")
 
+                # Force fuzzy matching logic
                 if TeamNameMatcher.match_team(home_norm, [h_api], threshold=0.75) and \
                    TeamNameMatcher.match_team(away_norm, [a_api], threshold=0.75):
                     matched = g_api
@@ -8537,7 +8540,7 @@ with tab_shotgun:
         df_shotgun = df_shotgun.loc[:, ~df_shotgun.columns.duplicated()].copy()
 
         # 2. Use .values to bypass index-alignment checks (safer for filtered DFs) - User Request 4
-        mask_edge = (df_shotgun['active_edge'] > 0.01).values
+        mask_edge = (df_shotgun['active_edge'] > 0.03).values
         # Ensure numeric
         df_shotgun['market_width'] = pd.to_numeric(df_shotgun['market_width'], errors='coerce')
         mask_normal = (df_shotgun['market_width'] < 1.5).values
@@ -8592,7 +8595,7 @@ with tab_shotgun:
                         continue
 
                     # Double Check: Ensure both legs have positive active_edge (redundant but safe)
-                    if p1.get('active_edge', 0) <= 0.01 or p2.get('active_edge', 0) <= 0.01:
+                    if p1.get('active_edge', 0) <= 0.03 or p2.get('active_edge', 0) <= 0.03:
                         continue
                     
                     # Sort by edge to keep unique consistent
@@ -8639,7 +8642,7 @@ with tab_shotgun:
                 # Sort and format only if the primary key exists
                 # Ensure filter is applied even after fallback logic
                 if "active_edge" in df_shotgun.columns:
-                    df_shotgun_display = df_shotgun[df_shotgun["active_edge"] > 0.01].copy()
+                    df_shotgun_display = df_shotgun[df_shotgun["active_edge"] > 0.03].copy()
                 else:
                     df_shotgun_display = df_shotgun.copy()
 
