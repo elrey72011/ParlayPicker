@@ -8515,22 +8515,23 @@ with tab_shotgun:
         df_shotgun = df_shotgun[df_shotgun["active_edge"] > 0.01].copy()
 
         # 2. Filter logic with Fallback (Tight -> Normal)
-        # Tight: <= 0.5 spread width
-        # Normal: <= 1.5 spread width
-        
-        def _get_spread_width(row):
-            return safe_float(row.get("spread_width"))
 
-        df_shotgun["_sw"] = df_shotgun.apply(_get_spread_width, axis=1)
-        
-        mask_edge = df_shotgun["active_edge"] > 0.01
-        
-        # Tight logic (Spread <= 0.5 or stability check)
-        mask_tight = (df_shotgun["market_stability"] != "WIDE") if "market_stability" in df_shotgun.columns else (df_shotgun["_sw"] <= 0.5)
-        
-        # Normal logic (Spread <= 1.5) - Used as fallback to ensure sufficient parlay legs
-        mask_normal = (df_shotgun["_sw"].notnull()) & (df_shotgun["_sw"] <= 1.5)
-        
+        # Ensure market_width exists for the user's snippet
+        if "market_width" not in df_shotgun.columns:
+            df_shotgun["market_width"] = df_shotgun.apply(lambda row: safe_float(row.get("spread_width")), axis=1)
+
+        # 1. Consolidated Shotgun Cleanup to prevent IndexingError
+        df_shotgun = df_shotgun.loc[:, ~df_shotgun.columns.duplicated()].copy()
+
+        # 2. Use .values to bypass index-alignment checks (safer for filtered DFs)
+        mask_edge = (df_shotgun['active_edge'] > 0.01).values
+        # Ensure numeric
+        df_shotgun['market_width'] = pd.to_numeric(df_shotgun['market_width'], errors='coerce')
+        mask_normal = (df_shotgun['market_width'] < 1.5).values
+        mask_tight = (df_shotgun['market_width'] <= 0.5).values
+
+        # 3. Perform the filtering
+        candidates_normal = df_shotgun[mask_edge & mask_normal]
         candidates_tight = df_shotgun[mask_edge & mask_tight]
         
         # Ensure df_shotgun is populated (User request 2) - Fallback to local df if empty
