@@ -7867,6 +7867,8 @@ with tab_master:
         # and attaching statistical features for Shotgun Mode edge calculation.
         df = enrich_with_vertex_features(df, api_sports_clients)
 
+        # Final safety check before validation
+        df = df.loc[:, ~df.columns.duplicated()].copy()
         # Validation Check
         validation_results = run_roi_pipeline_validation(df)
         if validation_results:
