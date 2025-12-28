@@ -83,7 +83,8 @@ def fetch_and_process_standings(api_clients: Dict[str, Any]) -> pd.DataFrame:
         # This will fetch team stats one by one if needed (via new get_team_stats in apisports.py)
         standings = client.get_team_stats()
         if not standings:
-            logger.warning(f"Failed to fetch team stats for {league_key}: {getattr(client, 'last_error', 'Unknown error')}")
+            status_code = getattr(client, 'last_status_code', 'N/A')
+            logger.warning(f"Failed to fetch team stats for {league_key}: {getattr(client, 'last_error', 'Unknown error')} (Status: {status_code})")
             continue
             
         for team_entry in standings:
@@ -318,7 +319,7 @@ def run_roi_pipeline_validation(df: pd.DataFrame):
     """Checks if the data bridge is actually functioning before export."""
     critical_checks = {
         "Vertex Prediction": "vertex_spread_prob",
-        "Kalshi Probability": "kalshi_prob_spread",
+        "Kalshi Probability": "kalshi_prob",
         "Team Stats (PPG)": "feature_home_ppg",
         "Team Stats (Win %)": "feature_home_win_pct"
     }
