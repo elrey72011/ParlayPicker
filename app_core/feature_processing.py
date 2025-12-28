@@ -329,10 +329,14 @@ def run_roi_pipeline_validation(df: pd.DataFrame):
     for label, col in critical_checks.items():
         if col not in df.columns:
             validation_results[label] = "❌ COLUMN MISSING"
-        elif (df[col].notnull().sum() == 0).any() if isinstance(df[col], pd.DataFrame) else df[col].notnull().sum() == 0:
+        elif (df[col].notnull().sum() == 0).any() if isinstance(df[col], pd.DataFrame) else (df[col].notnull().sum() == 0):
             validation_results[label] = "⚠️ COLUMN EMPTY (Data not reaching DF)"
         else:
-            validation_results[label] = f"✅ OK ({df[col].notnull().sum()} rows populated)"
+            # Handle duplicates in logging if needed, though usually notnull().sum() on DataFrame returns Series
+            count = df[col].notnull().sum()
+            if isinstance(count, pd.Series):
+                count = count.iloc[0] # Just take first for display
+            validation_results[label] = f"✅ OK ({count} rows populated)"
             
     logger.info("--- ROI PIPELINE VALIDATION ---")
     for label, status in validation_results.items():
