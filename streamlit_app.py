@@ -2151,30 +2151,28 @@ def enrich_game_context(game: Dict[str, Any], league_key: str, api_key: Optional
         if api_client:
             # Check a 3-day window to handle timezone schedule mismatches
             dates_to_check = [commence_date, commence_date - timedelta(days=1), commence_date + timedelta(days=1)]
+
+            # Force empty list safety and fuzzy matching
             games_api = []
             for d in dates_to_check:
-                g_list = api_client.get_games_by_date(d) or []
-                if not g_list:
-                    logger.warning(f"DEBUG: API returned 0 games for date {d}")
-                games_api.extend(g_list)
+                raw_games = api_client.get_games_by_date(d)
+                if raw_games:
+                    games_api.extend(raw_games)
             
             home_raw = str(game.get("home_team") or "")
             away_raw = str(game.get("away_team") or "")
             
             matched = None
-            # Fuzzy Enrichment Match: iterate and match individually
-            # Force this specific matching logic
-            # 1. Normalize first
+
             home_norm = TeamNameMatcher.normalize(home_raw)
             away_norm = TeamNameMatcher.normalize(away_raw)
 
-            # 2. Iterate safely over the list
-            for g_api in (games_api or []):
+            for g_api in games_api:
                 api_teams = g_api.get("teams", {})
                 h_api = api_teams.get("home", {}).get("name", "")
                 a_api = api_teams.get("away", {}).get("name", "")
 
-                # Force fuzzy matching logic
+                # NO strict == check. Use fuzzy matcher as the ONLY logic.
                 if TeamNameMatcher.match_team(home_norm, [h_api], threshold=0.75) and \
                    TeamNameMatcher.match_team(away_norm, [a_api], threshold=0.75):
                     matched = g_api
