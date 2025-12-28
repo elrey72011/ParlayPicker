@@ -2166,7 +2166,7 @@ def enrich_game_context(game: Dict[str, Any], league_key: str, api_key: Optional
                 home_api = str(((g_api.get("teams") or {}).get("home") or {}).get("name") or "")
                 away_api = str(((g_api.get("teams") or {}).get("away") or {}).get("name") or "")
 
-                # Force fuzzy matching to bridge naming gaps (e.g., 'Army' vs 'Army Black Knights')
+                # Override the Strict Match: Ensure fuzzy matcher is the primary method
                 is_home_match = TeamNameMatcher.match_team(home_norm, [home_api], threshold=0.75)
                 is_away_match = TeamNameMatcher.match_team(away_norm, [away_api], threshold=0.75)
                 if is_home_match and is_away_match:
@@ -7863,6 +7863,9 @@ with tab_master:
         if "Unnamed: 0" in df.columns:
             df = df.drop(columns=["Unnamed: 0"])
         
+        # Clean the Row Dictionary (Line 7810) - Ensure master rows count is updated
+        st.session_state["master_rows"] = len(rows_out)
+
         df = df.copy()
 
         # Enrich with Vertex features (Stats + Kalshi Fill)

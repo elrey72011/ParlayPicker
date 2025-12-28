@@ -326,14 +326,15 @@ class _APISportsBaseClient:
                 )
                 if payload is None:
                     payload = {}
-                games = payload.get("response", [])
+                # Ensure we default to empty list [] if key missing or None
+                games = payload.get("response") or []
                 self._games_cache[cache_key] = games
 
             last_games = games
             if games:
                 return games
 
-        return last_games
+        return last_games or []
 
     def get_games_by_season(
         self,
