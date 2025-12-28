@@ -246,10 +246,10 @@ def _reddit_cache_put(team: str, league: str, bucket: str, payload: Dict[str, An
 
 
 @st.cache_data(ttl=5400, show_spinner=False)
-def _newsapi_fetch_cached(url: str, params: Tuple[Tuple[str, Any], ...]) -> Dict[str, Any]:
+def _newsapi_fetch_cached(url: str, params: Tuple[Tuple[str, Any], ...], headers: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
     """Cached NewsAPI call keyed by URL+params for the current date window."""
     try:
-        response = requests.get(url, params=dict(params), timeout=8)
+        response = requests.get(url, params=dict(params), headers=headers, timeout=8)
         status = response.status_code
         try:
             data = response.json() if hasattr(response, "json") else {}
@@ -1488,7 +1488,12 @@ def compute_team_sentiment_map(news_api_key: Optional[str], games: List[Dict[str
             _enforce_sentiment_throttle()
             debug["requests_attempted"] = debug.get("requests_attempted", 0) + 1
             to_date = datetime.utcnow().date()
+            # Enforce max lookback of 28 days to stay safely within free tier limits
+            # But default to 3 days for relevance
             from_date = to_date - timedelta(days=3)
+            if (to_date - from_date).days > 28:
+                from_date = to_date - timedelta(days=28)
+
             url = "https://newsapi.org/v2/everything"
             # Attempt a combined query that includes the team and league context to reduce per-team calls
             q = f'"{TeamNameMatcher.normalize(team)}" {league_label(league)}'
@@ -1499,10 +1504,10 @@ def compute_team_sentiment_map(news_api_key: Optional[str], games: List[Dict[str
                 "language": "en",
                 "from": from_date.isoformat(),
                 "to": to_date.isoformat(),
-                "apiKey": news_api_key or "",
             }
+            headers = {"X-Api-Key": news_api_key or ""}
             params_tuple = tuple(sorted(params.items()))
-            cached_fetch = _newsapi_fetch_cached(url, params_tuple)
+            cached_fetch = _newsapi_fetch_cached(url, params_tuple, headers=headers)
             status_val = cached_fetch.get("status")
             data = cached_fetch.get("data") or {}
             articles = data.get("articles", []) if isinstance(data, dict) else []
@@ -2161,8 +2166,8 @@ def enrich_game_context(game: Dict[str, Any], league_key: str, api_key: Optional
                 away_api = str(((g_api.get("teams") or {}).get("away") or {}).get("name") or "")
 
                 # Force fuzzy matching to bridge naming gaps (e.g., 'Army' vs 'Army Black Knights')
-                is_home_match = TeamNameMatcher.match_team(home_norm, [home_api], threshold=0.80)
-                is_away_match = TeamNameMatcher.match_team(away_norm, [away_api], threshold=0.80)
+                is_home_match = TeamNameMatcher.match_team(home_norm, [home_api], threshold=0.75)
+                is_away_match = TeamNameMatcher.match_team(away_norm, [away_api], threshold=0.75)
                 if is_home_match and is_away_match:
                     matched = g_api
                     break
@@ -2220,21 +2225,21 @@ def enrich_game_context(game: Dict[str, Any], league_key: str, api_key: Optional
                 candidates.append(((h_sd, a_sd), sc))
             
             candidate_tuples = [c[0] for c in candidates]
-            match_tuple = TeamNameMatcher.match_game(home_raw, away_raw, candidate_tuples, threshold=0.80)
+            match_tuple = TeamNameMatcher.match_game(home_raw, away_raw, candidate_tuples, threshold=0.75)
             
             # Fallback for SportsData: If strict game match fails, try independent team matching
             if not match_tuple:
                 home_candidates = [t[0] for t in candidate_tuples]
                 away_candidates = [t[1] for t in candidate_tuples]
 
-                matched_home_name = TeamNameMatcher.match_team(home_raw, home_candidates, threshold=0.80)
-                matched_away_name = TeamNameMatcher.match_team(away_raw, away_candidates, threshold=0.80)
+                matched_home_name = TeamNameMatcher.match_team(home_raw, home_candidates, threshold=0.75)
+                matched_away_name = TeamNameMatcher.match_team(away_raw, away_candidates, threshold=0.75)
 
                 if matched_home_name and matched_away_name:
                     for c_tuple in candidate_tuples:
                         # Use fuzzy matching instead of strict equality for SportsData too
-                        h_check = TeamNameMatcher.match_team(c_tuple[0], [matched_home_name], threshold=0.80)
-                        a_check = TeamNameMatcher.match_team(c_tuple[1], [matched_away_name], threshold=0.80)
+                        h_check = TeamNameMatcher.match_team(c_tuple[0], [matched_home_name], threshold=0.75)
+                        a_check = TeamNameMatcher.match_team(c_tuple[1], [matched_away_name], threshold=0.75)
 
                         if h_check and a_check:
                             match_tuple = c_tuple
@@ -7802,6 +7807,8 @@ with tab_master:
 
         df = pd.DataFrame(rows_out)
         df = df.copy()
+        # Performance Warning Fix: Consolidate dataframe
+        df = df.copy()
         # Collapse to one row per game (prefer the first generated row, typically moneyline)
         sentiment_meta_for_export = sentiment_pack_meta or init_sentiment_meta()
         for row in rows_out:
@@ -8476,6 +8483,9 @@ with tab_shotgun:
 
         df_shotgun["active_edge"] = df_shotgun.apply(_get_edge_val, axis=1)
         
+        # Tighten Logic: Only allow positive edges
+        df_shotgun = df_shotgun[df_shotgun["active_edge"] > 0.01].copy()
+
         # 2. Filter logic with Fallback (Tight -> Normal)
         # Tight: <= 0.5 spread width
         # Normal: <= 1.5 spread width
@@ -8537,6 +8547,10 @@ with tab_shotgun:
                 for p1, p2 in itertools.combinations(parlay_candidates, 2):
                     # Constraint: No same-game parlays (often correlated/restricted)
                     if p1.get('Home') == p2.get('Home'):
+                        continue
+
+                    # Double Check: Ensure both legs have positive active_edge (redundant but safe)
+                    if p1.get('active_edge', 0) <= 0.01 or p2.get('active_edge', 0) <= 0.01:
                         continue
                     
                     # Sort by edge to keep unique consistent
