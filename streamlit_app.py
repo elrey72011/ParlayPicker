@@ -8518,59 +8518,85 @@ with tab_shotgun:
         
         plays = df_shotgun.to_dict('records')
         
-        if len(plays) >= 2:
-            st.subheader("2-Leg Parlay Suggestions")
-            parlays = []
-            seen_pairs = set()
-            
-            # Generate combinations
-            for p1, p2 in itertools.combinations(plays, 2):
-                # Constraint: No same-game parlays (often correlated/restricted)
-                if p1['Home'] == p2['Home']:
-                    continue
-                
-                # Sort by edge to keep unique consistent
-                if p1.get('active_edge', 0) < p2.get('active_edge', 0):
-                    p1, p2 = p2, p1
-                    
-                pair_key = (p1['Home'], p1['Pick'], p2['Home'], p2['Pick'])
-                if pair_key in seen_pairs:
-                    continue
-                seen_pairs.add(pair_key)
-                
-                combined_edge = p1.get('active_edge', 0) + p2.get('active_edge', 0)
-                
-                parlays.append({
-                    "Leg 1": f"{p1['Pick']} ({p1['Market']}) @ {p1.get('active_edge', 0):.1%}",
-                    "Leg 2": f"{p2['Pick']} ({p2['Market']}) @ {p2.get('active_edge', 0):.1%}",
-                    "Combined Edge": combined_edge,
-                    "Games": f"{p1['Home']} / {p2['Home']}"
-                })
-            
-            if parlays:
-                df_parlays = pd.DataFrame(parlays)
-                df_parlays = df_parlays.sort_values(by="Combined Edge", ascending=False).head(20)
-                
-                def _staking_plan(idx):
-                    if idx < 3: return "$5"
-                    if idx < 6: return "$3"
-                    return "$1"
-                
-                df_parlays = df_parlays.reset_index(drop=True)
-                df_parlays["Staking"] = df_parlays.index.map(_staking_plan)
-                
-                st.dataframe(df_parlays.style.format({"Combined Edge": "{:.1%}"}))
-            else:
-                st.warning("No valid parlay combinations found (no cross-game pairs).")
-                
-            st.subheader("Single High Value Plays")
-            st.dataframe(df_shotgun[["League", "Home", "Away", "Market", "Pick", "active_edge", "market_stability"]].sort_values("active_edge", ascending=False).style.format({"active_edge": "{:.1%}"}))
-            
-        elif len(plays) == 1:
-            st.warning("Only 1 high-value play found. Need at least 2 for parlays.")
-            st.dataframe(df_shotgun[["League", "Home", "Away", "Market", "Pick", "active_edge"]].style.format({"active_edge": "{:.1%}"}))
+        # --- REWRITTEN SHOTGUN LOGIC FOR SAFETY ---
+        # 1. Ensure columns exist before calculating parlays
+        if "active_edge" not in df_shotgun.columns:
+            st.warning("No Edge data available. Please verify Team Stat enrichment.")
         else:
-            st.warning("No plays met the 'High Value' criteria (Edge > 1% & Tight Market).")
+            # 2. Safe sorting for parlay candidates using .get()
+            parlay_candidates = df_shotgun.to_dict('records')
+            # Use 0 as fallback to prevent KeyError at line 8533
+            parlay_candidates.sort(key=lambda x: x.get('active_edge', 0), reverse=True)
+
+            if len(parlay_candidates) >= 2:
+                st.subheader("2-Leg Parlay Suggestions")
+                parlays = []
+                seen_pairs = set()
+                
+                # Generate combinations
+                for p1, p2 in itertools.combinations(parlay_candidates, 2):
+                    # Constraint: No same-game parlays (often correlated/restricted)
+                    if p1.get('Home') == p2.get('Home'):
+                        continue
+                    
+                    # Sort by edge to keep unique consistent
+                    if p1.get('active_edge', 0) < p2.get('active_edge', 0):
+                        p1, p2 = p2, p1
+
+                    pair_key = (p1.get('Home'), p1.get('Pick'), p2.get('Home'), p2.get('Pick'))
+                    if pair_key in seen_pairs:
+                        continue
+                    seen_pairs.add(pair_key)
+
+                    # 3. Safe Combined Edge Calculation
+                    # Use .get() to prevent KeyError at line 8541
+                    combined_edge = p1.get('active_edge', 0) + p2.get('active_edge', 0)
+
+                    parlays.append({
+                        "Leg 1": f"{p1.get('Pick')} ({p1.get('Market')}) @ {p1.get('active_edge', 0):.1%}",
+                        "Leg 2": f"{p2.get('Pick')} ({p2.get('Market')}) @ {p2.get('active_edge', 0):.1%}",
+                        "Combined Edge": combined_edge,
+                        "Games": f"{p1.get('Home')} / {p2.get('Home')}"
+                    })
+                
+                if parlays:
+                    df_parlays = pd.DataFrame(parlays)
+                    df_parlays = df_parlays.sort_values(by="Combined Edge", ascending=False).head(20)
+
+                    def _staking_plan(idx):
+                        if idx < 3: return "$5"
+                        if idx < 6: return "$3"
+                        return "$1"
+
+                    df_parlays = df_parlays.reset_index(drop=True)
+                    df_parlays["Staking"] = df_parlays.index.map(_staking_plan)
+
+                    st.dataframe(df_parlays.style.format({"Combined Edge": "{:.1%}"}))
+                else:
+                    st.warning("No valid parlay combinations found (no cross-game pairs).")
+
+                # 4. Safe DataFrame Display for Shotgun Table
+                required_cols = ["League", "Home", "Away", "Market", "Pick", "active_edge", "market_stability"]
+                display_cols = [c for c in required_cols if c in df_shotgun.columns]
+                
+                st.subheader("Single High Value Plays")
+                # Sort and format only if the primary key exists
+                st.dataframe(
+                    df_shotgun[display_cols]
+                    .sort_values("active_edge", ascending=False)
+                    .style.format({"active_edge": "{:.1%}"})
+                )
+                
+            elif len(parlay_candidates) == 1:
+                st.warning("Only 1 high-value play found. Need at least 2 for parlays.")
+                required_cols = ["League", "Home", "Away", "Market", "Pick", "active_edge"]
+                display_cols = [c for c in required_cols if c in df_shotgun.columns]
+                st.dataframe(
+                    df_shotgun[display_cols]
+                    .style.format({"active_edge": "{:.1%}"})
+                )
+            else:
+                st.warning("No plays met the 'High Value' criteria (Edge > 1% & Tight Market).")
     else:
         st.info("Run Master Analysis to generate data.")
 

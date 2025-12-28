@@ -112,7 +112,7 @@ CONTEXT:
         for model_name in MODEL_FALLBACKS:
             try:
                 # Rate limit protection
-                time.sleep(3.0)
+                time.sleep(3.5)
                 model = GenerativeModel(model_name)
                 resp = model.generate_content(prompt)
                 text = getattr(resp, "text", "") or ""
@@ -166,7 +166,7 @@ def generate_confidence_explanation(prompt: str) -> Dict[str, Any]:
     for model_name in MODEL_FALLBACKS:
         try:
             # Rate limit protection
-            time.sleep(3.0)
+            time.sleep(3.5)
             model = GenerativeModel(model_name)
             resp = model.generate_content(prompt)
             text = getattr(resp, "text", "") or ""
