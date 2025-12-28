@@ -135,7 +135,7 @@ def league_label(league: str) -> str:
 
 
 def _newsapi_query(team: str, league: str, league_query: Optional[str] = None) -> str:
-    # Use simple team name only to avoid 'restricted query' errors on free tier
+    # Use simple team name only to avoid 'restricted query' errors on free tier (User Request 3)
     return f'"{team}"'.strip()
 
 

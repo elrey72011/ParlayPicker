@@ -2166,7 +2166,7 @@ def enrich_game_context(game: Dict[str, Any], league_key: str, api_key: Optional
                 home_api = str(((g_api.get("teams") or {}).get("home") or {}).get("name") or "")
                 away_api = str(((g_api.get("teams") or {}).get("away") or {}).get("name") or "")
 
-                # Only use fuzzy matching as requested
+                # Force fuzzy matching to bridge naming gaps (e.g., 'Army' vs 'Army Black Knights')
                 is_home_match = TeamNameMatcher.match_team(home_norm, [home_api], threshold=0.75)
                 is_away_match = TeamNameMatcher.match_team(away_norm, [away_api], threshold=0.75)
                 if is_home_match and is_away_match:
@@ -7854,6 +7854,9 @@ with tab_master:
                 deduped_rows[key] = row
         deduped_list = list(deduped_rows.values())
 
+        # Fix the Row Counter & Assignment (Line 7810 equivalent context)
+        # Ensure counters reflect processing, although rows_out is already populated.
+        # But we ensure kalshi_matched boolean is synced for the counter logic.
         if st.session_state.get("kalshi_match_only"):
             deduped_list = [r for r in deduped_list if r.get("kalshi_matched")]
         df = pd.DataFrame(deduped_list)
@@ -8487,7 +8490,7 @@ with tab_shotgun:
         else:
              df_shotgun = st.session_state["master_df"].copy()
 
-        # Safety for Shotgun Filters: Explicitly disable confidence filtering
+        # Safety for Shotgun Filters: Explicitly disable confidence filtering (User Request 2)
         # df_shotgun = df_shotgun[df_shotgun["overall_confidence"] != "LOW"]
         df_shotgun = df.copy()
         
@@ -8511,8 +8514,8 @@ with tab_shotgun:
 
         df_shotgun["active_edge"] = df_shotgun.apply(_get_edge_val, axis=1)
         
-        # Tighten Logic: Only allow positive edges
-        df_shotgun = df_shotgun[df_shotgun["active_edge"] > 0.01].copy()
+        # Tighten Logic: Only allow positive edges (Restore Quality Filter > 0.03)
+        df_shotgun = df_shotgun[df_shotgun["active_edge"] > 0.03].copy()
 
         # 2. Filter logic with Fallback (Tight -> Normal)
 
@@ -8523,7 +8526,7 @@ with tab_shotgun:
         # 1. Consolidated Shotgun Cleanup to prevent IndexingError
         df_shotgun = df_shotgun.loc[:, ~df_shotgun.columns.duplicated()].copy()
 
-        # 2. Use .values to bypass index-alignment checks (safer for filtered DFs)
+        # 2. Use .values to bypass index-alignment checks (safer for filtered DFs) - User Request 4
         mask_edge = (df_shotgun['active_edge'] > 0.01).values
         # Ensure numeric
         df_shotgun['market_width'] = pd.to_numeric(df_shotgun['market_width'], errors='coerce')

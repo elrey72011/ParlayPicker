@@ -223,7 +223,7 @@ class _APISportsBaseClient:
     def _request(self, path: str, params: Optional[Dict] = None) -> Optional[Dict]:
         if not self.is_configured():
             self.last_error = "Missing API-Sports key"
-            return None
+            return {}
 
         url = f"{self.BASE_URL}{path}"
         attempts = 0
@@ -324,7 +324,9 @@ class _APISportsBaseClient:
                         "season": season_label,
                     },
                 )
-                games = (payload or {}).get("response", []) if payload else []
+                if payload is None:
+                    payload = {}
+                games = payload.get("response", [])
                 self._games_cache[cache_key] = games
 
             last_games = games
@@ -404,7 +406,9 @@ class _APISportsBaseClient:
                         "season": season_label,
                     },
                 )
-                stats = (payload or {}).get("response", {}) if payload else {}
+                if payload is None:
+                    payload = {}
+                stats = payload.get("response", {})
                 self._team_cache[cache_key] = stats
             if stats:
                 return stats
