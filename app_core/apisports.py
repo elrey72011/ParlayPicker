@@ -345,31 +345,33 @@ class _APISportsBaseClient:
         league_id: Optional[int] = None,
     ) -> List[Dict]:
         """Fetch all games for a given season label."""
+        try:
+            if not self.is_configured():
+                return []
 
-        if not self.is_configured():
+            league_id = self._resolve_league_id(league_id)
+            if not league_id:
+                if not self.last_error:
+                    self.last_error = "Unable to determine API-Sports league ID"
+                return []
+            season_label = str(season)
+            cache_key = (season_label, timezone, league_id)
+            if cache_key in self._season_games_cache:
+                return self._season_games_cache[cache_key]
+
+            payload = self._request(
+                "/games",
+                {
+                    "season": season_label,
+                    "timezone": timezone,
+                    "league": league_id,
+                },
+            )
+            games = (payload or {}).get("response", []) if payload else []
+            self._season_games_cache[cache_key] = games
+            return games or []
+        except Exception:
             return []
-
-        league_id = self._resolve_league_id(league_id)
-        if not league_id:
-            if not self.last_error:
-                self.last_error = "Unable to determine API-Sports league ID"
-            return []
-        season_label = str(season)
-        cache_key = (season_label, timezone, league_id)
-        if cache_key in self._season_games_cache:
-            return self._season_games_cache[cache_key]
-
-        payload = self._request(
-            "/games",
-            {
-                "season": season_label,
-                "timezone": timezone,
-                "league": league_id,
-            },
-        )
-        games = (payload or {}).get("response", []) if payload else []
-        self._season_games_cache[cache_key] = games
-        return games or []
 
     def get_team_statistics(
         self,

@@ -2164,15 +2164,17 @@ def enrich_game_context(game: Dict[str, Any], league_key: str, api_key: Optional
             
             matched = None
 
+            # Force fuzzy match for both teams to unlock stats
             home_norm = TeamNameMatcher.normalize(home_raw)
             away_norm = TeamNameMatcher.normalize(away_raw)
 
-            for g_api in games_api:
+            # iterate over the list (safe against None)
+            for g_api in (games_api or []):
                 api_teams = g_api.get("teams", {})
                 h_api = api_teams.get("home", {}).get("name", "")
                 a_api = api_teams.get("away", {}).get("name", "")
 
-                # NO strict == check. Use fuzzy matcher as the ONLY logic.
+                # Use fuzzy matching as the ONLY logic to bridge naming gaps
                 if TeamNameMatcher.match_team(home_norm, [h_api], threshold=0.75) and \
                    TeamNameMatcher.match_team(away_norm, [a_api], threshold=0.75):
                     matched = g_api
@@ -2837,7 +2839,11 @@ def get_api_keys() -> Dict[str, Optional[str]]:
                 return env_val
         return None
 
-    api_sports_key = _find_key(["APISPORTS_API_KEY", "API_SPORTS_KEY", "API_SPORTS_API_KEY"]) or get_apisports_key()
+    api_sports_key = (
+        _find_key(["APISPORTS_API_KEY", "API_SPORTS_KEY", "API_SPORTS_API_KEY"])
+        or get_apisports_key()
+        or st.secrets.get("general", {}).get("api_sports_key")
+    )
     sportsdata_key = _find_key(["SPORTSDATA_API_KEY", "SPORTSDATA_KEY"]) or get_sportsdata_key()
     api_sports_keys = {
         "NFL": _find_key(["APISPORTS_NFL_KEY", "NFL_APISPORTS_API_KEY"]) or api_sports_key or get_apisports_key("NFL"),
@@ -4276,6 +4282,9 @@ def filter_kalshi_game_markets(
                 h_code_hit = any(c in t for c in home_codes) if home_codes else False
                 a_code_hit = any(c in t for c in away_codes) if away_codes else False
                 if h_code_hit or a_code_hit:
+                    prefix_ok = True
+                # User request: allow if 'NCAA' and 'GAME' and team code
+                if "NCAA" in t and "GAME" in t and (h_code_hit or a_code_hit):
                     prefix_ok = True
 
             if not prefix_ok:
