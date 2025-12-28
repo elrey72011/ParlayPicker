@@ -8538,11 +8538,11 @@ with tab_shotgun:
                     continue
                 seen_pairs.add(pair_key)
                 
-                combined_edge = p1['active_edge'] + p2['active_edge']
+                combined_edge = p1.get('active_edge', 0) + p2.get('active_edge', 0)
                 
                 parlays.append({
-                    "Leg 1": f"{p1['Pick']} ({p1['Market']}) @ {p1['active_edge']:.1%}",
-                    "Leg 2": f"{p2['Pick']} ({p2['Market']}) @ {p2['active_edge']:.1%}",
+                    "Leg 1": f"{p1['Pick']} ({p1['Market']}) @ {p1.get('active_edge', 0):.1%}",
+                    "Leg 2": f"{p2['Pick']} ({p2['Market']}) @ {p2.get('active_edge', 0):.1%}",
                     "Combined Edge": combined_edge,
                     "Games": f"{p1['Home']} / {p2['Home']}"
                 })
