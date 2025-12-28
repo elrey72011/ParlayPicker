@@ -2166,8 +2166,8 @@ def enrich_game_context(game: Dict[str, Any], league_key: str, api_key: Optional
                 away_api = str(((g_api.get("teams") or {}).get("away") or {}).get("name") or "")
 
                 # Force fuzzy matching to bridge naming gaps (e.g., 'Army' vs 'Army Black Knights')
-                is_home_match = TeamNameMatcher.match_team(home_norm, [home_api], threshold=0.75)
-                is_away_match = TeamNameMatcher.match_team(away_norm, [away_api], threshold=0.75)
+                is_home_match = TeamNameMatcher.match_team(home_norm, [home_api], threshold=0.80)
+                is_away_match = TeamNameMatcher.match_team(away_norm, [away_api], threshold=0.80)
                 if is_home_match and is_away_match:
                     matched = g_api
                     break
@@ -7809,6 +7809,10 @@ with tab_master:
         df = df.copy()
         # Performance Warning Fix: Consolidate dataframe
         df = df.copy()
+
+        # Additional De-fragmentation before further processing
+        df = df.copy()
+
         # Collapse to one row per game (prefer the first generated row, typically moneyline)
         sentiment_meta_for_export = sentiment_pack_meta or init_sentiment_meta()
         for row in rows_out:
@@ -8595,8 +8599,14 @@ with tab_shotgun:
                 
                 st.subheader("Single High Value Plays")
                 # Sort and format only if the primary key exists
+                # Ensure filter is applied even after fallback logic
+                if "active_edge" in df_shotgun.columns:
+                    df_shotgun_display = df_shotgun[df_shotgun["active_edge"] > 0.01].copy()
+                else:
+                    df_shotgun_display = df_shotgun.copy()
+
                 st.dataframe(
-                    df_shotgun[display_cols]
+                    df_shotgun_display[display_cols]
                     .sort_values("active_edge", ascending=False)
                     .style.format({"active_edge": "{:.1%}"})
                 )

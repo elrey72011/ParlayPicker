@@ -135,8 +135,8 @@ def league_label(league: str) -> str:
 
 
 def _newsapi_query(team: str, league: str, league_query: Optional[str] = None) -> str:
-    league_fragment = (league_query or league_label(league)).strip()
-    return f'"{team}" {league_fragment}'.strip()
+    # Use simple team name only to avoid 'restricted query' errors on free tier
+    return f'"{team}"'.strip()
 
 
 @st.cache_data(ttl=21600)
