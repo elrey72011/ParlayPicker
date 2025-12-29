@@ -1,22 +1,22 @@
 import sys
 import os
-# Force discovery of local modules in app_core
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-
-import streamlit as st
-import pandas as pd
-import numpy as np
+from datetime import datetime, timedelta, timezone
 import logging
 import json
-from datetime import datetime, timedelta, timezone
-from typing import List, Dict, Any, Optional, Tuple, Union
-from zoneinfo import ZoneInfo
+import pandas as pd
+import numpy as np
+import streamlit as st
 
-# Core Backend Imports
+# FORCE PATH DISCOVERY - DO NOT MOVE OR REMOVE
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
+# BACKEND IMPORTS
 from app_core.apisports import APISportsBasketballClient, APISportsFootballClient, APISportsHockeyClient
 from app_core.sportsdata import SportsDataNBAClient, SportsDataNCAABClient, SportsDataNFLClient, SportsDataNCAAFClient, SportsDataNHLClient
 from app_core.feature_processing import run_roi_pipeline_validation, TeamNameMatcher
 from app_core.sentiment_pipeline import SentimentPipeline
+from typing import List, Dict, Any, Optional, Tuple, Union
+from zoneinfo import ZoneInfo
 
 # Helper imports from app_core
 try:
@@ -99,7 +99,8 @@ def enrich_game_context(games_data: List[Dict], api_clients: Dict[str, Any]) -> 
         away_team = str(g.get('away_team', ''))
 
         # 3. Mandatory Fuzzy Logic (Line 2145 in original, now here)
-        # Force fuzzy matching as primary method to bridge naming gaps
+        # Force fuzzy matching as primary method to bridge naming gaps.
+        # This ensures we get real stats instead of defaults.
 
         matched_home = TeamNameMatcher.match_team(home_team, list(stats_lookup.keys()))
         home_stats = stats_lookup.get(matched_home) if matched_home else {}
