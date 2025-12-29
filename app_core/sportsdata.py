@@ -205,7 +205,8 @@ class SportsDataClientBase:
 
     def get_games_by_date(self, target_date: date) -> List[Dict[str, Any]]:
         """Alias for get_scores_by_date to match other client interfaces."""
-        return self.get_scores_by_date(target_date)
+        # Return type fix confirmed
+        return self.get_scores_by_date(target_date) or []
 
     def get_games_by_season(self, season: str) -> List[Dict[str, Any]]:
         """Fetch games for a full season."""
