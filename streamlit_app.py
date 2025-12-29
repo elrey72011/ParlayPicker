@@ -7282,23 +7282,38 @@ with tab_master:
         # 1. Create the base Master DataFrame from your processed rows
         master_df = pd.DataFrame(rows_out)
 
-        # 2. MANDATORY ENRICHMENT: This fills the '0.0' columns seen in logs
-        # Use the api_clients dict to fetch the standings needed for diffs
+        # 2. Add 'League' column if missing (required for enrichment lookup)
+        if 'League' not in master_df.columns:
+            master_df['League'] = league
+
+        # 3. CRITICAL: Enrich the whole batch to fill 'feature_diff' columns
+        # This fixes the 'Missing feature column' warnings in the logs
         with st.spinner("🚀 Running Batch Feature Enrichment..."):
             master_df = enrich_with_vertex_features(master_df, {league: api_sports_clients.get(league)})
 
-        # 3. BATCH PREDICTION: Call the endpoint once for the whole sheet
+        # 4. BATCH PREDICTION: Call the endpoint once for the whole sheet
         if is_vertex_prediction_configured():
             with st.spinner("🔮 Calling Vertex AI Batch Inference..."):
+                # 4. Filter for exactly the columns the model expects
+                from app_core.vertex_ai_endpoint import VERTEX_FEATURE_COLUMNS
+                inference_df = master_df[VERTEX_FEATURE_COLUMNS].copy()
+
+                # 5. Force numeric types to prevent XGBoost C-level crashes
+                for col in VERTEX_FEATURE_COLUMNS:
+                    inference_df[col] = pd.to_numeric(inference_df[col], errors='coerce').fillna(0.0).astype(float)
+
+                # 6. Call prediction using the sanitized batch
                 # This uses Endpoint ID: 5331759481992773632
-                probs = predict_win_probabilities(master_df)
+                probs = predict_win_probabilities(inference_df)
+
                 if probs and len(probs) == len(master_df):
                     master_df["AI_Prob"] = probs
                     # Functional Fix: Calculate Edge immediately after successful prediction
                     master_df["AI_Edge"] = master_df["AI_Prob"] - master_df.get("Implied_Prob", 0.5)
                 else:
-                    st.error(f"Prediction failed. Expected {len(master_df)} rows but got {len(probs) if probs else 0}.")
-                    # Fallback to prevent KeyError crash
+                    if probs:
+                        st.error(f"Prediction failed. Expected {len(master_df)} rows but got {len(probs)}.")
+                    # Emergency fallbacks to prevent KeyError: 'AI_Edge'
                     master_df["AI_Prob"] = 0.5
                     master_df["AI_Edge"] = 0.0
 
