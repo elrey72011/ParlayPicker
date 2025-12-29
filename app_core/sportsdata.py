@@ -140,7 +140,7 @@ class SportsDataClientBase:
     def _request(self, path: str, params: Optional[Dict[str, Any]] = None) -> Optional[Any]:
         if not self.api_key:
             self.last_error = "missing_api_key"
-            return None
+            return []
 
         url = f"{self.BASE_URL}{path}"
         params = params.copy() if params else {}
