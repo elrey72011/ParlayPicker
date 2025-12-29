@@ -1,3 +1,57 @@
+"""
+Streamlit App - ParlayDesk
+"""
+from typing import List, Dict, Any, Optional, Tuple, Union
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
+import logging
+import pandas as pd
+import streamlit as st
+
+# Helper imports from app_core
+try:
+    from app_core.kalshi_integrator import league_game_prefix, team_code_for_league
+except ImportError:
+    # Fallback if imports fail during initial setup
+    def league_game_prefix(league: str) -> str:
+        return f"KX{league.upper()}GAME"
+    def team_code_for_league(league: str, team: str) -> str:
+        return team[:3].upper()
+
+logger = logging.getLogger(__name__)
+
+# --- Helper Functions (restored/stubbed to fix NameErrors) ---
+
+def get_local_tz() -> str:
+    """Return the local timezone string."""
+    # Default to Eastern for betting apps usually
+    return "America/New_York"
+
+def parse_commence_to_utc(date_str: str) -> datetime:
+    """Parse a commence time string to UTC datetime."""
+    try:
+        if not date_str:
+            return datetime.now(timezone.utc)
+        dt = datetime.fromisoformat(str(date_str).replace("Z", "+00:00"))
+        return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+    except Exception:
+        return datetime.now(timezone.utc)
+
+def kalshi_date_token_from_local(dt: Optional[datetime]) -> str:
+    """Generate Kalshi date token from local time."""
+    if not dt:
+        return "UNKNOWN"
+    return dt.strftime("%y%b%d").upper()
+
+def team_code_candidates(league: str, team: Any) -> List[str]:
+    """Get candidate team codes for a team."""
+    if not team:
+        return []
+    code = team_code_for_league(league, str(team))
+    return [code] if code else []
+
+# --- Main Logic ---
+
 def filter_kalshi_game_markets(
     markets: List[Dict[str, Any]],
     game_time_utc: Optional[datetime],
@@ -108,3 +162,8 @@ def filter_kalshi_game_markets(
 
     except Exception:
         return []
+
+if __name__ == "__main__":
+    st.title("ParlayDesk (Repair Mode)")
+    st.warning("This file appears to have been overwritten with a partial function definition. A repair has been applied to make it valid Python.")
+    st.write("Function `filter_kalshi_game_markets` is available.")
