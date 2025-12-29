@@ -52,6 +52,11 @@ except Exception:  # pragma: no cover - optional import
     RealSentimentAnalyzer = None
 
 try:
+    from parlay_optimizer import ParlayOptimizer
+except ImportError:
+    ParlayOptimizer = None
+
+try:
     import altair as alt  # type: ignore
 except Exception:  # pragma: no cover - optional import
     alt = None
@@ -2641,6 +2646,8 @@ def ensure_sentiment_loaded(games: List[Dict[str, Any]]) -> None:
         st.session_state["last_exception"] = traceback.format_exc()
         st.session_state["sentiment_source"] = "error"
         st.session_state["reddit_used"] = False
+
+
 
 
 def kalshi_health_check(selected_league: str = "NBA") -> Dict[str, Any]:
@@ -7272,29 +7279,90 @@ with tab_master:
                 rows_out.append(total_row)
                 master_stats["market_rows_out"] += 1
 
-        df = pd.DataFrame(rows_out)
-        # Collapse to one row per game (prefer the first generated row, typically moneyline)
+        # 1. Create the base Master DataFrame from your processed rows
+        master_df = pd.DataFrame(rows_out)
+
+        # 2. MANDATORY ENRICHMENT: This fills the '0.0' columns seen in logs
+        # Use the api_clients dict to fetch the standings needed for diffs
+        with st.spinner("🚀 Running Batch Feature Enrichment..."):
+            master_df = enrich_with_vertex_features(master_df, api_sports_clients)
+
+        # 3. BATCH PREDICTION: Call the endpoint once for the whole sheet
+        if is_vertex_prediction_configured():
+            with st.spinner("🔮 Calling Vertex AI Batch Inference..."):
+                # This uses Endpoint ID: 5331759481992773632
+                probs = predict_win_probabilities(master_df)
+                if len(probs) == len(master_df):
+                    master_df["AI_Prob"] = probs
+                    # Calculate Edge: Prob - Implied (ensure Implied_Prob exists)
+                    master_df["AI_Edge"] = master_df["AI_Prob"] - master_df.get("Implied_Prob", 0.5)
+                else:
+                    st.error("Prediction count mismatch. Check logs.")
+
+        # 4. SHOTGUN ACTIVATION: Use ParlayOptimizer to tier the results
+        if ParlayOptimizer:
+            optimizer = ParlayOptimizer(model_dir="./models")
+            shotgun_picks = optimizer.get_shotgun_picks(master_df)
+            st.session_state["shotgun_data"] = shotgun_picks
+
+        # Collapse to one row per game (prefer the first generated row, typically moneyline) for Master View
+        # NOTE: master_df now has ALL rows (ML/Spread/Total). We duplicate logic for deduping for the UI view if needed,
+        # but the prompt implies we persist the FULL master_df to session state for tabs to use.
+
+        # We need to preserve the sentiment metadata enrichment logic
         sentiment_meta_for_export = sentiment_pack_meta or init_sentiment_meta()
-        for row in rows_out:
-            row["sentiment_sample_status"] = str(sentiment_meta_for_export.get("sentiment_sample_status", "NO_CALL") or "NO_CALL")
-            row["sentiment_source"] = str(sentiment_meta_for_export.get("sentiment_source", "none") or "none")
-            row["sentiment_status_counts"] = json.dumps(sentiment_meta_for_export.get("sentiment_status_counts", {"NO_CALL": 1}))
-            row["sentiment_sample_query"] = sentiment_meta_for_export.get("sentiment_sample_query", "") or ""
-            row["sentiment_disabled_reason"] = sentiment_meta_for_export.get("sentiment_disabled_reason", "") or ""
-            row["sentiment_errors_sample"] = sentiment_meta_for_export.get("sentiment_errors_sample", "") or ""
-            row["sentiment_error_count"] = int(sentiment_meta_for_export.get("sentiment_error_count", 0) or 0)
-            row["sentiment_status"] = row.get("sentiment_status") or sentiment_meta_for_export.get("sentiment_status")
-            row["sentiment_confidence"] = row.get("sentiment_confidence") or sentiment_meta_for_export.get("sentiment_confidence")
-            row["sentiment_score"] = row.get("sentiment_score") or sentiment_meta_for_export.get("sentiment_score")
-            row["spread_sentiment_arrow"] = row.get("spread_sentiment_arrow") or ""
-            row["total_sentiment_arrow"] = row.get("total_sentiment_arrow") or ""
-            row["spread_sentiment_note"] = row.get("spread_sentiment_note") or ""
-            row["total_sentiment_note"] = row.get("total_sentiment_note") or ""
+        # Vectorized or simple loop to fill sentiment meta if missing
+        # (Assuming enrich_with_vertex_features preserves existing cols, which it does)
+
+        # Deduping logic for "Master View" (one row per game)
+        # We'll create a view for display, but keep master_df full for shotgun/optimizer.
+
+        # But wait, the previous code replaced `df` with `deduped_list`.
+        # If we overwrite `st.session_state["master_df"]` with the full `master_df`,
+        # downstream code expecting 1 row per game might break.
+        # However, the user instruction was "Persist to session state for the tabs to use".
+        # The tabs (Shotgun) likely need the full rows.
+        # The "Master Analysis" tab view logic (later in the file) uses `df` (which was deduped).
+        # We should probably assign `df` to the deduped version for the immediate display logic below,
+        # but maybe store `master_df_full` or similar?
+        # Actually, let's follow the pattern but adapt for the existing `df` variable usage.
+
+        # Apply sentiment meta to master_df
+        # (Simulating what the loop did)
+        if not master_df.empty:
+            master_df["sentiment_sample_status"] = str(sentiment_meta_for_export.get("sentiment_sample_status", "NO_CALL") or "NO_CALL")
+            master_df["sentiment_source"] = str(sentiment_meta_for_export.get("sentiment_source", "none") or "none")
+            master_df["sentiment_status_counts"] = json.dumps(sentiment_meta_for_export.get("sentiment_status_counts", {"NO_CALL": 1}))
+            master_df["sentiment_sample_query"] = sentiment_meta_for_export.get("sentiment_sample_query", "") or ""
+            master_df["sentiment_disabled_reason"] = sentiment_meta_for_export.get("sentiment_disabled_reason", "") or ""
+            master_df["sentiment_errors_sample"] = sentiment_meta_for_export.get("sentiment_errors_sample", "") or ""
+            master_df["sentiment_error_count"] = int(sentiment_meta_for_export.get("sentiment_error_count", 0) or 0)
+
+            # Fill remaining fields if they are missing or null in rows
+            if "sentiment_status" not in master_df.columns:
+                master_df["sentiment_status"] = None
+            master_df["sentiment_status"] = master_df["sentiment_status"].fillna(sentiment_meta_for_export.get("sentiment_status"))
+
+            if "sentiment_confidence" not in master_df.columns:
+                master_df["sentiment_confidence"] = None
+            master_df["sentiment_confidence"] = master_df["sentiment_confidence"].fillna(sentiment_meta_for_export.get("sentiment_confidence"))
+
+            if "sentiment_score" not in master_df.columns:
+                master_df["sentiment_score"] = None
+            master_df["sentiment_score"] = master_df["sentiment_score"].fillna(sentiment_meta_for_export.get("sentiment_score"))
+
+            # Ensure visual columns exist
+            for col in ["spread_sentiment_arrow", "total_sentiment_arrow", "spread_sentiment_note", "total_sentiment_note"]:
+                if col not in master_df.columns:
+                    master_df[col] = ""
+                master_df[col] = master_df[col].fillna("")
+
+        # Re-implement deduping for the `df` variable used by the UI below
+        rows_for_dedupe = master_df.to_dict("records")
         deduped_rows: Dict[Tuple[Any, Any, Any, Any], Dict[str, Any]] = {}
-        for row in rows_out:
+        for row in rows_for_dedupe:
             key = (row.get("League"), row.get("Home"), row.get("Away"), row.get("Commence (UTC)"))
             existing = deduped_rows.get(key)
-            # Prefer rows with kalshi match; otherwise keep the first one seen.
             if (existing is None) or (
                 not existing.get("kalshi_matched") and row.get("kalshi_matched")
             ):
@@ -7303,11 +7371,14 @@ with tab_master:
 
         if st.session_state.get("kalshi_match_only"):
             deduped_list = [r for r in deduped_list if r.get("kalshi_matched")]
+
         df = pd.DataFrame(deduped_list)
         if "Unnamed: 0" in df.columns:
             df = df.drop(columns=["Unnamed: 0"])
         
-        # Persist the calculated dataframe
+        # 5. UI PERSISTENCE
+        # We persist the DEDUPED df as "master_df" because that's what the UI expects for the "Master Analysis" tab table.
+        # The shotgun data is stored separately.
         st.session_state["master_df"] = df
 
         required_display_cols = [
