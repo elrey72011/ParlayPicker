@@ -7285,19 +7285,22 @@ with tab_master:
         # 2. MANDATORY ENRICHMENT: This fills the '0.0' columns seen in logs
         # Use the api_clients dict to fetch the standings needed for diffs
         with st.spinner("🚀 Running Batch Feature Enrichment..."):
-            master_df = enrich_with_vertex_features(master_df, api_sports_clients)
+            master_df = enrich_with_vertex_features(master_df, {league: api_sports_clients.get(league)})
 
         # 3. BATCH PREDICTION: Call the endpoint once for the whole sheet
         if is_vertex_prediction_configured():
             with st.spinner("🔮 Calling Vertex AI Batch Inference..."):
                 # This uses Endpoint ID: 5331759481992773632
                 probs = predict_win_probabilities(master_df)
-                if len(probs) == len(master_df):
+                if probs and len(probs) == len(master_df):
                     master_df["AI_Prob"] = probs
-                    # Calculate Edge: Prob - Implied (ensure Implied_Prob exists)
+                    # Functional Fix: Calculate Edge immediately after successful prediction
                     master_df["AI_Edge"] = master_df["AI_Prob"] - master_df.get("Implied_Prob", 0.5)
                 else:
-                    st.error("Prediction count mismatch. Check logs.")
+                    st.error(f"Prediction failed. Expected {len(master_df)} rows but got {len(probs) if probs else 0}.")
+                    # Fallback to prevent KeyError crash
+                    master_df["AI_Prob"] = 0.5
+                    master_df["AI_Edge"] = 0.0
 
         # 4. SHOTGUN ACTIVATION: Use ParlayOptimizer to tier the results
         if ParlayOptimizer:
