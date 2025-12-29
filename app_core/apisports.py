@@ -439,13 +439,10 @@ class _APISportsBaseClient:
 
     def get_team_stats(self, season=2025):
         """
-        Fetches team statistics. 
+        Fetches team statistics (proxied to get_standings for full league data).
         Falls back to empty list if API is restricted (403).
         """
-        # This function signature is likely incorrect for fetching specific team stats
-        # but is kept for backward compatibility or if used generically.
-        # It currently does nothing, but returns [] to prevent 'None' errors.
-        return []
+        return self.get_standings(season=str(season))
 
     def get_standings(
         self,
@@ -483,7 +480,7 @@ class _APISportsBaseClient:
         if not payload:
             return []
             
-        response = payload.get("response", [])
+        response = payload.get("response") or []
         if not response:
             return []
             
