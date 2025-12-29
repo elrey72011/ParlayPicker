@@ -12,6 +12,7 @@ from zoneinfo import ZoneInfo
 
 import pandas as pd
 import requests
+import numpy as np
 import streamlit as st
 from app_core.kalshi_integrator import (
     KalshiIntegrator,
@@ -4972,8 +4973,8 @@ render_pipeline_banner()
 # Tabs
 # -----------------
 
-# --- Tab UI Implementation ---
-# Ensure there are 6 variables for 6 tabs
+# --- 6. Tab UI Implementation ---
+# Ensure 4-space indentation and exact variable matching
 tab_shotgun, tab_master, tab_games, tab_kalshi, tab_sentiment, tab_debug = st.tabs(
     ["🚀 Shotgun Mode", "📊 Master Analysis", "🎮 Games & Odds", "📉 Kalshi", "🧠 Sentiment", "Debug"]
 )
@@ -4985,20 +4986,25 @@ with tab_shotgun:
         col1, col2, col3 = st.columns(3)
 
         with col1:
-            st.info("🎯 $3 Snipers (High Prob)")
+            st.info("🎯 $3 'Snipers' (High Prob)")
             if not shotgun['snipers'].empty:
                 st.dataframe(shotgun['snipers'][['Pick', 'AI_Prob', 'AI_Edge']])
-            else: st.write("No snipers found.")
+            else:
+                st.write("No snipers found.")
 
         with col2:
-            st.success("📈 $2 Strategy (High EV)")
+            st.success("📈 $2 'Strategy' (High EV)")
             if not shotgun['strategy'].empty:
                 st.dataframe(shotgun['strategy'][['Pick', 'AI_Prob', 'AI_Edge']])
+            else:
+                st.write("No strategy picks found.")
 
         with col3:
-            st.warning("🎲 $1 Longshots (Lottos)")
+            st.warning("🎲 $1 'Longshots' (Lottos)")
             if not shotgun['longshots'].empty:
                 st.dataframe(shotgun['longshots'][['Pick', 'AI_Prob', 'AI_Edge']])
+            else:
+                st.write("No longshots found.")
     else:
         st.info("Run Master Analysis to generate Shotgun picks.")
 
@@ -7327,10 +7333,12 @@ with tab_master:
                 # 1. Sanitize the feature batch
                 inference_df = master_df[VERTEX_FEATURE_COLUMNS].copy()
                 for col in VERTEX_FEATURE_COLUMNS:
-                    # Force 1D and Float type for model compatibility
                     col_data = inference_df[col]
                     if isinstance(col_data, pd.DataFrame): col_data = col_data.iloc[:, 0]
-                    inference_df[col] = pd.to_numeric(col_data, errors='coerce').fillna(0.0).astype(float)
+
+                    # Force numeric, then replace both NaN AND Inf with 0.0
+                    num_data = pd.to_numeric(col_data, errors='coerce')
+                    inference_df[col] = num_data.replace([np.inf, -np.inf], np.nan).fillna(0.0).astype(float)
 
                 # 2. Batch Prediction Call
                 probs = predict_win_probabilities(inference_df)
