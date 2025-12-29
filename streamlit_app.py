@@ -1,23 +1,23 @@
 import sys
 import os
-from datetime import datetime, timedelta, timezone
-import logging
-import json
+import streamlit as st
 import pandas as pd
 import numpy as np
-import streamlit as st
+import logging
+import json
+from datetime import datetime, timedelta, timezone
+from typing import List, Dict, Any, Optional, Tuple, Union
 
-# FORCE PATH DISCOVERY - DO NOT MOVE OR REMOVE
+# CRITICAL: Force discovery of local modules
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-# BACKEND IMPORTS
+# Backend Imports
 from app_core.apisports import APISportsBasketballClient, APISportsFootballClient, APISportsHockeyClient, get_key
 from app_core.sportsdata import SportsDataNBAClient, SportsDataNCAABClient, SportsDataNFLClient, SportsDataNCAAFClient, SportsDataNHLClient
 from app_core.feature_processing import run_roi_pipeline_validation, TeamNameMatcher
-from app_core.kalshi_integrator import KalshiIntegrator
 from app_core.sentiment_pipeline import SentimentPipeline
-from typing import List, Dict, Any, Optional, Tuple, Union
 from zoneinfo import ZoneInfo
+from app_core.kalshi_integrator import KalshiIntegrator
 
 # Helper imports from app_core
 try:
@@ -69,7 +69,7 @@ def team_code_candidates(league: str, team: Any) -> List[str]:
     code = team_code_for_league(league, str(team))
     return [code] if code else []
 
-def enrich_game_context(games_data: List[Dict], api_clients: Dict[str, Any]) -> List[Dict]:
+def enrich_game_context(games_data: List[Dict], api_clients: Dict[str, Any], games_api: List[Dict] = None) -> List[Dict]:
     """
     Enrich game data with stats using fuzzy matching as the only way to match teams.
     Ref: Unlock Real Win Rates - Mandatory Fuzzy Logic.
@@ -95,19 +95,47 @@ def enrich_game_context(games_data: List[Dict], api_clients: Dict[str, Any]) -> 
     for game in games_data:
         g = game.copy()
 
-        # Use fuzzy matcher to normalize names
-        home_team = str(g.get('home_team', ''))
-        away_team = str(g.get('away_team', ''))
+        home_raw = g.get('home_team')
+        away_raw = g.get('away_team')
 
         # 3. Mandatory Fuzzy Logic (Line 2145 in original, now here)
-        # Force fuzzy matching as primary method to bridge naming gaps.
-        # This ensures we get real stats instead of defaults.
 
-        matched_home = TeamNameMatcher.match_team(home_team, list(stats_lookup.keys()))
-        home_stats = stats_lookup.get(matched_home) if matched_home else {}
+        # Force fuzzy matching to bridge naming gaps
+        home_norm = TeamNameMatcher.normalize(home_raw)
+        away_norm = TeamNameMatcher.normalize(away_raw)
 
-        matched_away = TeamNameMatcher.match_team(away_team, list(stats_lookup.keys()))
-        away_stats = stats_lookup.get(matched_away) if matched_away else {}
+        matched = None
+        for g_api in (games_api or []):
+            api_teams = g_api.get("teams", {})
+            h_api = api_teams.get("home", {}).get("name", "")
+            a_api = api_teams.get("away", {}).get("name", "")
+
+            if TeamNameMatcher.match_team(home_norm, [h_api], threshold=0.75) and \
+               TeamNameMatcher.match_team(away_norm, [a_api], threshold=0.75):
+                matched = g_api
+                break
+
+        home_stats = {}
+        away_stats = {}
+
+        if matched:
+            # Use matched game to retrieve canonical names for stats lookup
+            h_api_name = matched.get("teams", {}).get("home", {}).get("name")
+            a_api_name = matched.get("teams", {}).get("away", {}).get("name")
+
+            # Match these canonical names to our stats_lookup (which uses normalized names)
+            matched_home = TeamNameMatcher.match_team(TeamNameMatcher.normalize(h_api_name), list(stats_lookup.keys()))
+            home_stats = stats_lookup.get(matched_home) if matched_home else {}
+
+            matched_away = TeamNameMatcher.match_team(TeamNameMatcher.normalize(a_api_name), list(stats_lookup.keys()))
+            away_stats = stats_lookup.get(matched_away) if matched_away else {}
+        else:
+            # Fallback if no game match (use original names)
+            matched_home = TeamNameMatcher.match_team(home_norm, list(stats_lookup.keys()))
+            home_stats = stats_lookup.get(matched_home) if matched_home else {}
+
+            matched_away = TeamNameMatcher.match_team(away_norm, list(stats_lookup.keys()))
+            away_stats = stats_lookup.get(matched_away) if matched_away else {}
 
         # Inject stats with defaults if missing
         g['home_win_pct'] = home_stats.get('win_pct', 0.5)
@@ -228,7 +256,19 @@ if __name__ == "__main__":
     # 2. Initialize Data Clients
     # -------------------------------------------------------------------------
     client_cls = CLIENT_MAPPING.get(selected_league)
+
+    # 2a. Secure Key Loading
+    # Try the wrapper first, then fallback to st.secrets['general']
     api_key = get_key(selected_league)
+    if not api_key:
+         try:
+             # APISports vs SportsData key names in secrets
+             if selected_league in ["NBA", "NFL", "NHL"]:
+                 api_key = st.secrets["general"]["api_sports_key"]
+             else:
+                 api_key = st.secrets["general"]["sportsdata_key"]
+         except Exception:
+             pass
 
     if not client_cls or not api_key:
         st.error(f"Configuration missing for {selected_league}. Please check secrets.")
@@ -281,7 +321,7 @@ if __name__ == "__main__":
     # 4. Enrichment
     # -------------------------------------------------------------------------
     with st.spinner("Enriching game context with stats..."):
-        enriched_games = enrich_game_context(games_flat, {selected_league: client})
+        enriched_games = enrich_game_context(games_flat, {selected_league: client}, games_api=games_raw)
 
     # Fetch Kalshi Markets globally for the league to avoid rate limits
     kalshi_markets = []
