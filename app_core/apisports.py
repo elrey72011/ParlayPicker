@@ -338,7 +338,7 @@ class _APISportsBaseClient:
                     return games
 
             # Explicitly verify last_games is not None before returning
-            return last_games or []
+            return last_games if last_games is not None else []
         except Exception:
             return []
 
