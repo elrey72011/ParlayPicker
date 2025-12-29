@@ -19,6 +19,8 @@ from app_core.sentiment_pipeline import SentimentPipeline
 from app_core.vertex_ai_endpoint import is_vertex_prediction_configured, predict_win_probabilities, VERTEX_FEATURE_COLUMNS
 from zoneinfo import ZoneInfo
 from app_core.kalshi_integrator import KalshiIntegrator
+from parlay_optimizer import ParlayOptimizer
+from vertex_master_analyzer import blended_win_prob
 
 # Helper imports from app_core
 try:
@@ -335,12 +337,33 @@ if __name__ == "__main__":
             st.write(getattr(client, 'last_error', 'No error logged'))
 
         # Display tabs even if no games, to show debug info if needed, but mostly stop
-        tab_games, tab_master, tab_kalshi, tab_sentiment, tab_debug = st.tabs(
-            ["Games & Odds", "Master Analysis", "Kalshi", "Sentiment", "Debug"]
+        tab_shotgun, tab_master, tab_games, tab_kalshi, tab_sentiment, tab_debug = st.tabs(
+            ["🚀 Shotgun Mode", "Master Analysis", "Games & Odds", "Kalshi", "Sentiment", "Debug"]
         )
         with tab_debug:
              st.write("Client Last Error:", getattr(client, 'last_error', 'None'))
         st.stop()
+
+    # Load TheOver.ai Odds CSV if available
+    odds_df = pd.DataFrame()
+    try:
+        csv_path = f"data/theover/{selected_date.strftime('%Y-%m-%d')}.csv"
+        # Fallback to test file if date specific not found for dev
+        if not os.path.exists(csv_path) and os.path.exists("data/theover/test_odds.csv"):
+             # Only strictly use test file if user requested (or for this dev session)
+             # But for automation requirement, we check the date.
+             pass
+
+        if os.path.exists(csv_path):
+             odds_df = pd.read_csv(csv_path)
+             st.toast(f"Loaded TheOver.ai Odds from {csv_path}", icon="✅")
+        elif os.path.exists("data/theover/test_odds.csv"):
+             # For dev verification purposes in this environment
+             odds_df = pd.read_csv("data/theover/test_odds.csv")
+             st.toast("Loaded Test Odds Data (Dev Mode)", icon="⚠️")
+
+    except Exception as e:
+        logger.error(f"Failed to load odds CSV: {e}")
 
     # Enrichment
     with st.spinner("Enriching game context with stats..."):
@@ -432,28 +455,46 @@ if __name__ == "__main__":
         home_streak = game.get("home_streak", 0.0)
         away_streak = game.get("away_streak", 0.0)
 
+        # E. Odds Matching (TheOver.ai)
+        pick_odds = None
+        market_prob = None
+
+        if not odds_df.empty:
+            # Fuzzy match team names
+            home_norm = TeamNameMatcher.normalize(home_team)
+
+            # Simple exact match on normalized names or loop through odds_df
+            # This is O(N*M), but acceptable for small N
+            matched_odds = None
+            for _, o_row in odds_df.iterrows():
+                o_home = TeamNameMatcher.normalize(o_row.get('HomeTeam', ''))
+                o_away = TeamNameMatcher.normalize(o_row.get('AwayTeam', ''))
+
+                # Check match
+                if TeamNameMatcher.match_team(home_norm, [o_row.get('HomeTeam', '')], threshold=0.8):
+                    matched_odds = o_row
+                    break
+
+            if matched_odds is not None:
+                # Decide implied probability from odds
+                # Assuming Moneyline for simplicity in this bridge
+                h_ml = matched_odds.get('HomeMoneyLine')
+                a_ml = matched_odds.get('AwayMoneyLine')
+
+                # Assign odds based on predicted winner (pre-vertex)
+                # We will refine this after Vertex
+                # For now, store both
+                pass
+
         predicted_winner = home_team if home_win_pct >= away_win_pct else away_team
         win_prob = max(home_win_pct, away_win_pct)
 
         # ROI Calculation (pre-Vertex)
         roi = 0.0
         if kalshi_prob and kalshi_prob > 0:
-            # Check which side we are betting on (Predicted Winner)
-            # Implied prob is kalshi_prob (usually home win prob in Kalshi?)
-            # Wait, Kalshi markets are typically "Will Home Team Win?"
-            # If we predict Home, we buy Yes at kalshi_prob.
-            # If we predict Away, we buy No (sell Yes) at kalshi_prob (or rather 1-kalshi_prob).
-
             # Simplified Assumption: Kalshi Prob is for Home Win
             implied_prob = kalshi_prob
             my_prob = home_win_pct
-
-            # If we like Away, we are shorting Home.
-            # Or simplified: just show ROI for Home Bet for now?
-            # Let's stick to Home Win ROI for simplicity or standard logic
-
-            # Standard logic: ROI = (MyProb - MarketProb) / MarketProb
-            # Only valid if MyProb > MarketProb (Positive Edge)
             roi = (my_prob - implied_prob) / implied_prob
 
         row_data = {
@@ -474,7 +515,11 @@ if __name__ == "__main__":
             "sentiment_home": home_sent,
             "sentiment_away": away_sent,
             "sentiment_diff": sentiment_diff,
-            "commence_time": game.get("commence_time")
+            "commence_time": game.get("commence_time"),
+            # Store matched odds data if any
+            "odds_home_ml": matched_odds.get('HomeMoneyLine') if 'matched_odds' in locals() and matched_odds is not None else None,
+            "odds_away_ml": matched_odds.get('AwayMoneyLine') if 'matched_odds' in locals() and matched_odds is not None else None,
+            "game": f"{away_team} @ {home_team}"
         }
 
         # Prepare Vertex Row
@@ -530,14 +575,49 @@ if __name__ == "__main__":
             preds = predict_win_probabilities(vertex_df)
 
             # Attach predictions to df
-            # preds is a list of floats (home win prob)
             if len(preds) == len(df):
                 df["vertex_home_win_prob"] = preds
-                # Update "Win Prob" and "Predicted Winner" based on Vertex?
-                # Usually we want to show Vertex Confidence.
-                # Let's add a column for it.
             else:
                 df["vertex_home_win_prob"] = np.nan
+
+    # --- Blended Probability Calculation ---
+    if not df.empty:
+        # Calculate final_win_prob using blended logic
+        def calc_blended(row):
+            v_prob = row.get("vertex_home_win_prob")
+            k_prob = row.get("kalshi_prob")
+            sent = row.get("sentiment_diff")
+
+            # Use market prob from odds if available, else 0.5 default
+            m_prob = 0.5
+            if row.get("odds_home_ml"):
+                # Convert ML to prob
+                def ml_to_prob(ml):
+                    try:
+                        ml = float(ml)
+                        return 100/(ml+100) if ml > 0 else abs(ml)/(abs(ml)+100)
+                    except: return 0.5
+                m_prob = ml_to_prob(row["odds_home_ml"])
+
+            # Determine selection based on vertex or basic stats
+            home_prob = v_prob if pd.notnull(v_prob) else row.get("home_win_pct", 0.5)
+            selection = "home" if home_prob >= 0.5 else "away"
+
+            final_prob = blended_win_prob(
+                market_prob=m_prob,
+                vertex_prob=v_prob if pd.notnull(v_prob) else None,
+                theover_prob=None, # Not explicitly parsed yet
+                kalshi_prob=k_prob if row.get("kalshi_matched") else None,
+                sentiment_diff=sent,
+                selection=selection
+            )
+            return pd.Series([final_prob, selection])
+
+        df[["final_win_prob", "Pick_Side"]] = df.apply(calc_blended, axis=1)
+
+        # Set final pick text and odds
+        df["Pick"] = df.apply(lambda r: r["Home Team"] if r["Pick_Side"] == "home" else r["Away Team"], axis=1)
+        df["pick_odds"] = df.apply(lambda r: r["odds_home_ml"] if r["Pick_Side"] == "home" else r["odds_away_ml"], axis=1)
 
     # Persist
     st.session_state["master_df"] = df
@@ -546,11 +626,61 @@ if __name__ == "__main__":
     # 6. Tab UI Implementation
     # -------------------------------------------------------------------------
 
-    tab_games, tab_master, tab_kalshi, tab_sentiment, tab_debug = st.tabs(
-        ["Games & Odds", "Master Analysis", "Kalshi", "Sentiment", "Debug"]
+    tab_shotgun, tab_master, tab_games, tab_kalshi, tab_sentiment, tab_debug = st.tabs(
+        ["🚀 Shotgun Mode", "Master Analysis", "Games & Odds", "Kalshi", "Sentiment", "Debug"]
     )
 
-    # --- Tab 1: Games & Odds ---
+    # --- Tab 1: Shotgun Mode ---
+    with tab_shotgun:
+        st.subheader("🚀 Shotgun Allocation")
+        if not df.empty:
+             optimizer = ParlayOptimizer(model_dir=".", min_edge=0.01)
+             # Calculate allocation
+             allocation = optimizer.get_shotgun_allocation(df)
+
+             c1, c2, c3 = st.columns(3)
+
+             with c1:
+                 st.markdown("### 🎯 $3 Snipers")
+                 st.caption("High Confidence, Positive EV")
+                 if not allocation['snipers'].empty:
+                     for _, row in allocation['snipers'].iterrows():
+                         st.success(f"**{row['Pick']}**")
+                         st.write(f"Prob: {row['final_win_prob']:.1%} | EV: {row['ev']:.1%}")
+                         if pd.notnull(row.get('pick_odds')):
+                             st.caption(f"Odds: {row['pick_odds']}")
+                         st.divider()
+                 else:
+                     st.info("No Sniper plays found.")
+
+             with c2:
+                 st.markdown("### ♟️ $2 Strategy")
+                 st.caption("3-Leg Parlays, Edge > 5%")
+                 if not allocation['strategy'].empty:
+                     for _, row in allocation['strategy'].iterrows():
+                         st.warning(f"**{row['Odds']}**")
+                         st.write(f"{row['Legs']}")
+                         st.write(f"EV: {row['EV']:.1%}")
+                         st.divider()
+                 else:
+                     st.info("No Strategy plays found.")
+
+             with c3:
+                 st.markdown("### 🚀 $1 Longshots")
+                 st.caption("4-5 Legs, High Upside")
+                 if not allocation['longshots'].empty:
+                     for _, row in allocation['longshots'].iterrows():
+                         st.error(f"**{row['Odds']}**")
+                         st.write(f"{row['Legs']}")
+                         st.write(f"Kelly Growth: {row['Kelly ROI']:.2%}")
+                         st.divider()
+                 else:
+                     st.info("No Longshot plays found.")
+
+        else:
+            st.info("No data available for Shotgun Mode.")
+
+    # --- Tab 3: Games & Odds ---
     with tab_games:
         st.subheader(f"Games for {selected_date}")
         if not df.empty:
