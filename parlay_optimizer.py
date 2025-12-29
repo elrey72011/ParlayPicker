@@ -491,12 +491,36 @@ class ParlayOptimizer:
         
         return top_singles, parlay_df
 
-    def get_shotgun_allocation(self, best_bets_df):
-        """Categorizes into $3, $2, and $1 tiers"""
+    def get_shotgun_picks(self, master_df: pd.DataFrame):
+        """Categorizes the best functioning bets into $3, $2, and $1 tiers."""
+        # Snipers ($3): High Prob (>60%) and High Confidence
+        snipers = master_df[
+            (master_df['AI_Prob'] > 0.60) &
+            (master_df['AI_Edge'] > 0.05)
+        ].sort_values('AI_Prob', ascending=False).head(3)
+
+        # Strategy ($2): High Edge (>8%) and Positive EV
+        strategy = master_df[
+            (master_df['AI_Edge'] > 0.08) &
+            (master_df['AI_Prob'] > 0.52)
+        ].sort_values('AI_Edge', ascending=False).head(5)
+
+        # Longshots ($1): Highest EV regardless of win prob
+        longshots = master_df.sort_values('AI_Edge', ascending=False).head(10)
+
         return {
-            "snipers_3": best_bets_df[best_bets_df['AI_Prob'] > 0.60].head(3),
-            "strategy_2": best_bets_df[(best_bets_df['AI_Edge'] > 0.05)].head(5),
-            "longshots_1": best_bets_df.sort_values('ev', ascending=False).head(10)
+            "snipers": snipers,
+            "strategy": strategy,
+            "longshots": longshots
+        }
+
+    def get_shotgun_allocation(self, best_bets_df):
+        """Categorizes into $3, $2, and $1 tiers (Legacy)"""
+        result = self.get_shotgun_picks(best_bets_df)
+        return {
+            "snipers_3": result["snipers"],
+            "strategy_2": result["strategy"],
+            "longshots_1": result["longshots"]
         }
 
 

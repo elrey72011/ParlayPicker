@@ -694,58 +694,34 @@ if __name__ == "__main__":
 
     # --- Tab 1: Shotgun Mode ---
     with tab_shotgun:
-        st.subheader("🚀 Shotgun Allocation")
+        st.subheader("Today's Shotgun Allocation")
         if not df.empty:
-             optimizer = ParlayOptimizer(model_dir=".", min_edge=0.01)
-             # Calculate allocation
-             allocation = optimizer.get_shotgun_allocation(df)
+            # 1. Initialize the Optimizer
+            optimizer = ParlayOptimizer(model_dir="./models")
 
-             c1, c2, c3 = st.columns(3)
+            # 2. Get the Shotgun Tiers
+            shotgun_data = optimizer.get_shotgun_picks(df)
 
-             with c1:
-                 st.markdown("### 🎯 $3 Snipers")
-                 st.caption("High Confidence, Positive EV")
-                 if 'snipers_3' in allocation and not allocation['snipers_3'].empty:
-                     for _, row in allocation['snipers_3'].iterrows():
-                         st.success(f"**{row['Pick']}**")
-                         st.write(f"Prob: {row['final_win_prob']:.1%} | EV: {row['ev']:.1%}")
-                         if pd.notnull(row.get('pick_odds')):
-                             st.caption(f"Odds: {row['pick_odds']}")
-                         st.divider()
-                 else:
-                     st.info("No Sniper plays found.")
+            col1, col2, col3 = st.columns(3)
 
-             with c2:
-                 st.markdown("### ♟️ $2 Strategy")
-                 st.caption("Value Plays (Edge > 5%)")
-                 if 'strategy_2' in allocation and not allocation['strategy_2'].empty:
-                     for _, row in allocation['strategy_2'].iterrows():
-                         # Use pick_odds and Pick for single bets
-                         odds_display = row.get('pick_odds', 'N/A')
-                         st.warning(f"**{odds_display}**")
-                         st.write(f"**{row.get('Pick', 'Unknown')}**")
+            with col1:
+                st.info("🎯 $3 Snipers")
+                if not shotgun_data['snipers'].empty:
+                    for _, pick in shotgun_data['snipers'].iterrows():
+                        st.metric(f"{pick['Pick']}", f"{pick['AI_Prob']:.1%}", f"Edge: {pick['AI_Edge']:.1%}")
+                else: st.write("No High-Prob Snipers found.")
 
-                         ev_val = row.get('ev', row.get('AI_Edge', 0))
-                         st.write(f"EV: {ev_val:.1%}")
-                         st.divider()
-                 else:
-                     st.info("No Strategy plays found.")
+            with col2:
+                st.success("📈 $2 Strategy")
+                if not shotgun_data['strategy'].empty:
+                    st.dataframe(shotgun_data['strategy'][['Pick', 'AI_Prob', 'AI_Edge']])
+                else: st.write("No Strategy bets found.")
 
-             with c3:
-                 st.markdown("### 🚀 $1 Longshots")
-                 st.caption("Highest Expected Value")
-                 if 'longshots_1' in allocation and not allocation['longshots_1'].empty:
-                     for _, row in allocation['longshots_1'].iterrows():
-                         odds_display = row.get('pick_odds', 'N/A')
-                         st.error(f"**{odds_display}**")
-                         st.write(f"**{row.get('Pick', 'Unknown')}**")
-
-                         ev_val = row.get('ev', 0)
-                         st.write(f"EV: {ev_val:.1%}")
-                         st.divider()
-                 else:
-                     st.info("No Longshot plays found.")
-
+            with col3:
+                st.warning("🎲 $1 Longshots")
+                if not shotgun_data['longshots'].empty:
+                    st.dataframe(shotgun_data['longshots'][['Pick', 'AI_Prob', 'AI_Edge']])
+                else: st.write("No Longshot bets found.")
         else:
             st.info("No data available for Shotgun Mode.")
 
