@@ -5223,6 +5223,8 @@ with tab_master:
 
         # Inject real-time stats for Vertex
         api_sports_clients, _ = init_data_clients()
+        # Remove duplicate columns to prevent matrix errors
+        df_master = df_master.loc[:, ~df_master.columns.duplicated()]
         df_master = enrich_with_vertex_features(df_master, api_sports_clients)
 
         unique_teams = sorted(
@@ -7324,6 +7326,8 @@ with tab_master:
         # 3. CRITICAL: Enrich the whole batch to fill 'feature_diff' columns
         # This fixes the 'Missing feature column' warnings in the logs
         with st.spinner("🚀 Running Batch Feature Enrichment..."):
+            # Remove duplicate columns to prevent matrix errors
+            master_df = master_df.loc[:, ~master_df.columns.duplicated()]
             master_df = enrich_with_vertex_features(master_df, {league: api_sports_clients.get(league)})
 
         # 4. BATCH PREDICTION: Call the endpoint once for the whole sheet
