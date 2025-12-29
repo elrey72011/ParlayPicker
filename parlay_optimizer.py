@@ -492,7 +492,7 @@ class ParlayOptimizer:
         return top_singles, parlay_df
 
     def get_shotgun_picks(self, master_df: pd.DataFrame):
-        if "AI_Edge" not in master_df.columns:
+        if "AI_Prob" not in master_df.columns or "AI_Edge" not in master_df.columns:
             return {"snipers": pd.DataFrame(), "strategy": pd.DataFrame(), "longshots": pd.DataFrame()}
 
         # Filter tiers as requested
