@@ -303,8 +303,9 @@ def predict_win_probabilities(
     try:
         prediction = endpoint.predict(instances=instances)
     except Exception as e:
-        logger.error(f"Vertex endpoint prediction failed: {e}")
-        return []
+        logger.error(f"CRITICAL XGBOOST ERROR: {e}")
+        # Return neutral probabilities (0.5) so the app keeps running
+        return [0.5] * len(instances)
 
     # ------------------------------------------------------------------
     # Output parsing
