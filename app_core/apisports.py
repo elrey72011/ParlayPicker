@@ -336,7 +336,8 @@ class _APISportsBaseClient:
                 if games:
                     return games
 
-            return last_games or []
+            # Explicitly verify last_games is not None before returning
+            return last_games if last_games is not None else []
         except Exception:
             return []
 
@@ -441,15 +442,10 @@ class _APISportsBaseClient:
         Fetches team statistics. 
         Falls back to empty list if API is restricted (403).
         """
-        stats = []
-        # Logic to call /teams/statistics endpoint
-        # TRY/EXCEPT block is critical here to catch the 403 Forbidden
-        try:
-            # [Insert API call logic here]
-            pass 
-        except Exception as e:
-            logger.warning(f"Failed to fetch team stats: {e}")
-        return stats or []
+        # This function signature is likely incorrect for fetching specific team stats
+        # but is kept for backward compatibility or if used generically.
+        # It currently does nothing, but returns [] to prevent 'None' errors.
+        return []
 
     def get_standings(
         self,
