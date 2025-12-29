@@ -11,9 +11,10 @@ import streamlit as st
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 # BACKEND IMPORTS
-from app_core.apisports import APISportsBasketballClient, APISportsFootballClient, APISportsHockeyClient
+from app_core.apisports import APISportsBasketballClient, APISportsFootballClient, APISportsHockeyClient, get_key
 from app_core.sportsdata import SportsDataNBAClient, SportsDataNCAABClient, SportsDataNFLClient, SportsDataNCAAFClient, SportsDataNHLClient
 from app_core.feature_processing import run_roi_pipeline_validation, TeamNameMatcher
+from app_core.kalshi_integrator import KalshiIntegrator
 from app_core.sentiment_pipeline import SentimentPipeline
 from typing import List, Dict, Any, Optional, Tuple, Union
 from zoneinfo import ZoneInfo
@@ -214,10 +215,175 @@ def filter_kalshi_game_markets(
         return []
 
 if __name__ == "__main__":
-    st.title("ParlayDesk (System Restored)")
-    st.success("Core modules and headers restored. Application ready for logic injection.")
+    st.title("ParlayDesk")
 
-    # Placeholder for Missing Main Loop
-    # TODO: RESTORE MAIN ANALYSIS LOOP
-    # The user has requested to ensure rows_out.append(row_data) is at the absolute bottom.
-    # When the logic is injected, ensure that instruction is followed.
+    # -------------------------------------------------------------------------
+    # 1. Initialize Sidebar Controls
+    # -------------------------------------------------------------------------
+    st.sidebar.header("Configuration")
+    selected_date = st.sidebar.date_input("Game Date", datetime.now())
+    selected_league = st.sidebar.selectbox("League", list(CLIENT_MAPPING.keys()), index=0)
+
+    # -------------------------------------------------------------------------
+    # 2. Initialize Data Clients
+    # -------------------------------------------------------------------------
+    client_cls = CLIENT_MAPPING.get(selected_league)
+    api_key = get_key(selected_league)
+
+    if not client_cls or not api_key:
+        st.error(f"Configuration missing for {selected_league}. Please check secrets.")
+        st.stop()
+
+    client = client_cls(api_key=api_key)
+    if not client.is_configured():
+        st.error(f"Failed to configure client for {selected_league}.")
+        st.stop()
+
+    kalshi = KalshiIntegrator()
+    if not kalshi.api_key:
+        st.warning("Kalshi API key not found. Market data will be unavailable.")
+
+    # -------------------------------------------------------------------------
+    # 3. Data Fetching
+    # -------------------------------------------------------------------------
+    with st.spinner(f"Fetching {selected_league} games for {selected_date}..."):
+        games_raw = client.get_games_by_date(selected_date)
+
+    if not games_raw:
+        st.info(f"No games found for {selected_league} on {selected_date}.")
+        st.stop()
+
+    # Normalize games for enrichment
+    # We need a flat structure: home_team, away_team, commence_time, game_id
+    games_flat = []
+    for g in games_raw:
+        norm_game = {}
+        # APISports vs SportsData handling
+        if "teams" in g and "home" in g["teams"]: # APISports
+            norm_game["home_team"] = g["teams"]["home"]["name"]
+            norm_game["away_team"] = g["teams"]["away"]["name"]
+            norm_game["commence_time"] = g["game"]["date"]
+            norm_game["game_id"] = g["game"]["id"]
+        elif "HomeTeam" in g or "HomeTeamName" in g: # SportsData
+            norm_game["home_team"] = g.get("HomeTeamName") or g.get("HomeTeam")
+            norm_game["away_team"] = g.get("AwayTeamName") or g.get("AwayTeam")
+            norm_game["commence_time"] = g.get("DateTime") or g.get("Date")
+            norm_game["game_id"] = g.get("GameKey") or g.get("GlobalGameID")
+
+        if norm_game.get("home_team"):
+            # Attach original raw data if needed
+            norm_game.update(g)
+            games_flat.append(norm_game)
+
+    # -------------------------------------------------------------------------
+    # 4. Enrichment
+    # -------------------------------------------------------------------------
+    with st.spinner("Enriching game context with stats..."):
+        enriched_games = enrich_game_context(games_flat, {selected_league: client})
+
+    # Fetch Kalshi Markets globally for the league to avoid rate limits
+    kalshi_markets = []
+    if kalshi.api_key:
+        with st.spinner("Fetching Kalshi markets..."):
+            kalshi_markets = kalshi.get_markets_for_league(selected_league)
+
+    # -------------------------------------------------------------------------
+    # 5. Main Analysis Loop
+    # -------------------------------------------------------------------------
+    rows_out = []
+
+    progress_bar = st.progress(0)
+    total_games = len(enriched_games)
+
+    for i, game in enumerate(enriched_games):
+        # A. Validation
+        # Create a single-row DataFrame for validation as requested.
+        # We populate it with the stats we already enriched via enrich_game_context.
+        game_df_dict = {
+            "home_team": [game.get("home_team")],
+            "away_team": [game.get("away_team")],
+            "commence_time": [game.get("commence_time")],
+            "feature_home_ppg": [game.get("home_ppg")],
+            "feature_home_win_pct": [game.get("home_win_pct")],
+            "feature_away_ppg": [game.get("away_ppg")],
+            "feature_away_win_pct": [game.get("away_win_pct")],
+            "League": [selected_league]
+        }
+        val_df = pd.DataFrame(game_df_dict)
+
+        # Run validation (logging only)
+        run_roi_pipeline_validation(val_df)
+
+        # B. Kalshi Matching
+        # Filter markets for this specific game
+        matched_markets = filter_kalshi_game_markets(
+            kalshi_markets,
+            game_time_utc=game.get("commence_time"),
+            league=selected_league,
+            home_team=game.get("home_team"),
+            away_team=game.get("away_team")
+        )
+
+        # Pick the best market (e.g., Moneyline/Winner)
+        # filter_kalshi_game_markets returns a list. We take the first one if available.
+        # Ideally we want the "Winner" market.
+        kalshi_match = None
+        kalshi_ticker = "N/A"
+        kalshi_prob = None
+
+        if matched_markets:
+            kalshi_match = matched_markets[0] # Best match
+            kalshi_ticker = kalshi_match.get("ticker") or kalshi_match.get("event_ticker")
+
+            # Extract probability (approximate from yes/ask/bid)
+            # KalshiIntegrator helpers might be useful, or use raw
+            # filter_kalshi_game_markets returns dicts.
+            # Let's try to get probability from 'yes_bid' or 'last_price'
+            try:
+                # Simple logic: use yes_bid / 100 or last_price / 100
+                price = kalshi_match.get("yes_bid") or kalshi_match.get("last_price") or 50
+                kalshi_prob = float(price) / 100.0
+            except:
+                kalshi_prob = 0.5
+
+        # C. Construct Output Row
+        home_team = game.get("home_team")
+        away_team = game.get("away_team")
+
+        # Use enriched features for prediction
+        home_win_pct = game.get("home_win_pct", 0.5)
+        away_win_pct = game.get("away_win_pct", 0.5)
+
+        predicted_winner = home_team if home_win_pct >= away_win_pct else away_team
+        win_prob = max(home_win_pct, away_win_pct)
+
+        # ROI Calculation
+        # ROI = (Win Prob - Implied Prob) / Implied Prob
+        roi = 0.0
+        if kalshi_prob and kalshi_prob > 0:
+            roi = (win_prob - kalshi_prob) / kalshi_prob
+
+        row_data = {
+            "Home Team": home_team,
+            "Away Team": away_team,
+            "Predicted Winner": predicted_winner,
+            "Win Prob": f"{win_prob:.1%}",
+            "ROI": f"{roi:.1%}",
+            "Kalshi Ticker": kalshi_ticker
+        }
+
+        # CRUCIAL REQUIREMENT: Append at the absolute bottom
+        progress_bar.progress((i + 1) / total_games)
+        rows_out.append(row_data)
+
+    progress_bar.empty()
+
+    # -------------------------------------------------------------------------
+    # 6. Display Results
+    # -------------------------------------------------------------------------
+    if rows_out:
+        df_results = pd.DataFrame(rows_out)
+        st.subheader(f"Analysis Results ({len(df_results)} Games)")
+        st.dataframe(df_results, use_container_width=True)
+    else:
+        st.warning("No games processed.")
