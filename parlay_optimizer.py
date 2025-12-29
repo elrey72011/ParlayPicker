@@ -492,50 +492,14 @@ class ParlayOptimizer:
         return top_singles, parlay_df
 
     def get_shotgun_picks(self, master_df: pd.DataFrame):
-        """
-        Categorizes the best functioning bets into $3, $2, and $1 tiers.
+        if "AI_Edge" not in master_df.columns:
+            return {"snipers": pd.DataFrame(), "strategy": pd.DataFrame(), "longshots": pd.DataFrame()}
 
-        $3 'Snipers': AI_Prob > 0.60 and AI_Edge > 0.05, sorted by probability.
-        $2 'Strategy': AI_Edge > 0.08 and AI_Prob > 0.52, sorted by Edge.
-        $1 'Longshots': Top 10 rows sorted by highest expected_value (EV).
-        """
-        if master_df.empty:
-            return {
-                "snipers": pd.DataFrame(),
-                "strategy": pd.DataFrame(),
-                "longshots": pd.DataFrame()
-            }
-
-        # Ensure numeric columns
-        cols = ['AI_Prob', 'AI_Edge', 'ev']
-        for c in cols:
-            if c in master_df.columns:
-                master_df[c] = pd.to_numeric(master_df[c], errors='coerce').fillna(0)
-
-        # Snipers ($3): AI_Prob > 0.60 and AI_Edge > 0.05, sorted by probability
-        snipers = master_df[
-            (master_df['AI_Prob'] > 0.60) &
-            (master_df['AI_Edge'] > 0.05)
-        ].sort_values('AI_Prob', ascending=False).head(10)
-
-        # Strategy ($2): AI_Edge > 0.08 and AI_Prob > 0.52, sorted by Edge
-        strategy = master_df[
-            (master_df['AI_Edge'] > 0.08) &
-            (master_df['AI_Prob'] > 0.52)
-        ].sort_values('AI_Edge', ascending=False).head(10)
-
-        # Longshots ($1): Top 10 rows sorted by highest expected_value (EV)
-        # Fallback to AI_Edge if 'ev' is missing
-        if 'ev' in master_df.columns:
-            longshots = master_df.sort_values('ev', ascending=False).head(10)
-        else:
-             longshots = master_df.sort_values('AI_Edge', ascending=False).head(10)
-
-        return {
-            "snipers": snipers,
-            "strategy": strategy,
-            "longshots": longshots
-        }
+        # Filter tiers as requested
+        snipers = master_df[master_df['AI_Prob'] > 0.60].head(3)
+        strategy = master_df[master_df['AI_Edge'] > 0.05].head(5)
+        longshots = master_df.sort_values('AI_Edge', ascending=False).head(10)
+        return {"snipers": snipers, "strategy": strategy, "longshots": longshots}
 
     def get_shotgun_allocation(self, best_bets_df):
         """Categorizes into $3, $2, and $1 tiers (Legacy)"""
