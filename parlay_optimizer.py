@@ -512,20 +512,20 @@ class ParlayOptimizer:
             if c in master_df.columns:
                 master_df[c] = pd.to_numeric(master_df[c], errors='coerce').fillna(0)
 
-        # Snipers ($3): AI_Prob > 0.60 and AI_Edge > 0.05
+        # Snipers ($3): AI_Prob > 0.60 and AI_Edge > 0.05, sorted by probability
         snipers = master_df[
             (master_df['AI_Prob'] > 0.60) &
             (master_df['AI_Edge'] > 0.05)
         ].sort_values('AI_Prob', ascending=False).head(10)
 
-        # Strategy ($2): AI_Edge > 0.08 and AI_Prob > 0.52
+        # Strategy ($2): AI_Edge > 0.08 and AI_Prob > 0.52, sorted by Edge
         strategy = master_df[
             (master_df['AI_Edge'] > 0.08) &
             (master_df['AI_Prob'] > 0.52)
         ].sort_values('AI_Edge', ascending=False).head(10)
 
         # Longshots ($1): Top 10 rows sorted by highest expected_value (EV)
-        # Note: 'ev' column is required
+        # Fallback to AI_Edge if 'ev' is missing
         if 'ev' in master_df.columns:
             longshots = master_df.sort_values('ev', ascending=False).head(10)
         else:
