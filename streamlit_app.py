@@ -1,9 +1,6 @@
 import sys
 import os
-
-# 1. Force Path Discovery (Top of file)
-# Add current directory to path to ensure app_core is discoverable
-# Path fix confirmed
+# Force discovery of app_core
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 import streamlit as st
@@ -12,10 +9,10 @@ import numpy as np
 import logging
 import json
 from datetime import datetime, timedelta, timezone
-from typing import List, Dict, Any, Optional, Tuple, Union, cast
+from typing import List, Dict, Any, Optional, Tuple, Union
 from zoneinfo import ZoneInfo
 
-# Import Core Components
+# Core Imports
 from app_core.apisports import APISportsBasketballClient, APISportsFootballClient, APISportsHockeyClient
 from app_core.sportsdata import SportsDataNBAClient, SportsDataNCAABClient, SportsDataNFLClient, SportsDataNCAAFClient, SportsDataNHLClient
 from app_core.feature_processing import run_roi_pipeline_validation, TeamNameMatcher
@@ -218,3 +215,8 @@ def filter_kalshi_game_markets(
 if __name__ == "__main__":
     st.title("ParlayDesk (System Restored)")
     st.success("Core modules and headers restored. Application ready for logic injection.")
+
+    # Placeholder for Missing Main Loop
+    # TODO: RESTORE MAIN ANALYSIS LOOP
+    # The user has requested to ensure rows_out.append(row_data) is at the absolute bottom.
+    # When the logic is injected, ensure that instruction is followed.
