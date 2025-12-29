@@ -288,9 +288,38 @@ if __name__ == "__main__":
     # -------------------------------------------------------------------------
     # 1. Initialize Sidebar Controls
     # -------------------------------------------------------------------------
+
+    # Auto-discovery logic (must run before sidebar inputs to set defaults if needed,
+    # but we can also just use it to populate session state or override)
+    target_date_str = datetime.now().strftime('%Y-%m-%d')
+    # Check for specific league files (e.g. NBA) to auto-select league
+    auto_league = None
+
+    # Check for NBA file
+    nba_path = f"data/theover/theover_nba_{target_date_str}.csv"
+    if os.path.exists(nba_path):
+        st.session_state['theover_data'] = pd.read_csv(nba_path)
+        auto_league = "NBA"
+
+    # Fallback to generic date file if no specific league file
+    if not auto_league:
+        generic_path = f"data/theover/{target_date_str}.csv"
+        if os.path.exists(generic_path):
+             # Try to infer league or just load it
+             st.session_state['theover_data'] = pd.read_csv(generic_path)
+             # Assume NBA or use user selection if we can't tell
+             # auto_league = "NBA"
+
     st.sidebar.header("Configuration")
-    selected_date = st.sidebar.date_input("Game Date", datetime.now())
-    selected_league = st.sidebar.selectbox("League", list(CLIENT_MAPPING.keys()), index=0)
+
+    default_date = datetime.now()
+    default_league_index = 0
+
+    if auto_league and auto_league in CLIENT_MAPPING:
+        default_league_index = list(CLIENT_MAPPING.keys()).index(auto_league)
+
+    selected_date = st.sidebar.date_input("Game Date", default_date)
+    selected_league = st.sidebar.selectbox("League", list(CLIENT_MAPPING.keys()), index=default_league_index)
 
     # -------------------------------------------------------------------------
     # 2. Initialize Data Clients
@@ -619,6 +648,39 @@ if __name__ == "__main__":
         df["Pick"] = df.apply(lambda r: r["Home Team"] if r["Pick_Side"] == "home" else r["Away Team"], axis=1)
         df["pick_odds"] = df.apply(lambda r: r["odds_home_ml"] if r["Pick_Side"] == "home" else r["odds_away_ml"], axis=1)
 
+        # --- Prepare columns for Parlay Optimizer (Shotgun Mode) ---
+        # Map final_win_prob to AI_Prob
+        df['AI_Prob'] = df['final_win_prob']
+
+        # Calculate AI_Edge and ev if not present
+        def calc_metrics(row):
+            # Implied Prob from odds
+            implied = 0.5
+            odds = row.get('pick_odds')
+            if pd.notnull(odds):
+                try:
+                    o = float(odds)
+                    if o > 0: implied = 100 / (o + 100)
+                    else: implied = abs(o) / (abs(o) + 100)
+                except: pass
+
+            ai_prob = row.get('AI_Prob', 0.5)
+            edge = ai_prob - implied
+
+            # EV Calculation
+            # EV = (WinProb * (DecimalOdds - 1)) - (1 - WinProb)
+            ev = 0.0
+            if pd.notnull(odds):
+                try:
+                    o = float(odds)
+                    dec = (o/100)+1 if o > 0 else (100/abs(o))+1
+                    ev = (ai_prob * (dec - 1)) - (1 - ai_prob)
+                except: pass
+
+            return pd.Series([edge, ev])
+
+        df[['AI_Edge', 'ev']] = df.apply(calc_metrics, axis=1)
+
     # Persist
     st.session_state["master_df"] = df
 
@@ -643,8 +705,8 @@ if __name__ == "__main__":
              with c1:
                  st.markdown("### 🎯 $3 Snipers")
                  st.caption("High Confidence, Positive EV")
-                 if not allocation['snipers'].empty:
-                     for _, row in allocation['snipers'].iterrows():
+                 if 'snipers_3' in allocation and not allocation['snipers_3'].empty:
+                     for _, row in allocation['snipers_3'].iterrows():
                          st.success(f"**{row['Pick']}**")
                          st.write(f"Prob: {row['final_win_prob']:.1%} | EV: {row['ev']:.1%}")
                          if pd.notnull(row.get('pick_odds')):
@@ -655,24 +717,31 @@ if __name__ == "__main__":
 
              with c2:
                  st.markdown("### ♟️ $2 Strategy")
-                 st.caption("3-Leg Parlays, Edge > 5%")
-                 if not allocation['strategy'].empty:
-                     for _, row in allocation['strategy'].iterrows():
-                         st.warning(f"**{row['Odds']}**")
-                         st.write(f"{row['Legs']}")
-                         st.write(f"EV: {row['EV']:.1%}")
+                 st.caption("Value Plays (Edge > 5%)")
+                 if 'strategy_2' in allocation and not allocation['strategy_2'].empty:
+                     for _, row in allocation['strategy_2'].iterrows():
+                         # Use pick_odds and Pick for single bets
+                         odds_display = row.get('pick_odds', 'N/A')
+                         st.warning(f"**{odds_display}**")
+                         st.write(f"**{row.get('Pick', 'Unknown')}**")
+
+                         ev_val = row.get('ev', row.get('AI_Edge', 0))
+                         st.write(f"EV: {ev_val:.1%}")
                          st.divider()
                  else:
                      st.info("No Strategy plays found.")
 
              with c3:
                  st.markdown("### 🚀 $1 Longshots")
-                 st.caption("4-5 Legs, High Upside")
-                 if not allocation['longshots'].empty:
-                     for _, row in allocation['longshots'].iterrows():
-                         st.error(f"**{row['Odds']}**")
-                         st.write(f"{row['Legs']}")
-                         st.write(f"Kelly Growth: {row['Kelly ROI']:.2%}")
+                 st.caption("Highest Expected Value")
+                 if 'longshots_1' in allocation and not allocation['longshots_1'].empty:
+                     for _, row in allocation['longshots_1'].iterrows():
+                         odds_display = row.get('pick_odds', 'N/A')
+                         st.error(f"**{odds_display}**")
+                         st.write(f"**{row.get('Pick', 'Unknown')}**")
+
+                         ev_val = row.get('ev', 0)
+                         st.write(f"EV: {ev_val:.1%}")
                          st.divider()
                  else:
                      st.info("No Longshot plays found.")
