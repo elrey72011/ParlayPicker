@@ -95,7 +95,7 @@ VERTEX_FEATURE_COLUMNS: List[str] = [
 
 DEFAULT_PROJECT_ID = "elite-hangar-479017-m8"
 DEFAULT_LOCATION = "us-central1"
-DEFAULT_ENDPOINT_ID = "5331759481992773632"  # numeric endpoint id from your logs
+DEFAULT_ENDPOINT_ID = "3242045274427752448"  # numeric endpoint id from your logs
 
 # Cached endpoint client & name so we don't recreate it constantly
 _vertex_endpoint_client = None

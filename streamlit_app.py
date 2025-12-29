@@ -4972,8 +4972,8 @@ render_pipeline_banner()
 # Tabs
 # -----------------
 
-tab_games, tab_master, tab_kalshi, tab_sentiment, tab_debug = st.tabs(
-    ["Games & Odds", "Master Analysis", "Kalshi", "Sentiment", "Debug"]
+    tab_shotgun, tab_master, tab_games, tab_kalshi, tab_sentiment, tab_debug = st.tabs(
+        ["🚀 Shotgun Mode", "Master Analysis", "Games & Odds", "Kalshi", "Sentiment", "Debug"]
 )
 
 
@@ -7282,6 +7282,9 @@ with tab_master:
         # 1. Create the base Master DataFrame from your processed rows
         master_df = pd.DataFrame(rows_out)
 
+        # Force de-duplication of columns to prevent TypeError crashes
+        master_df = master_df.loc[:, ~master_df.columns.duplicated()].copy()
+
         # 2. Add 'League' column if missing (required for enrichment lookup)
         if 'League' not in master_df.columns:
             master_df['League'] = league
@@ -7294,33 +7297,23 @@ with tab_master:
         # 4. BATCH PREDICTION: Call the endpoint once for the whole sheet
         if is_vertex_prediction_configured():
             with st.spinner("🔮 Calling Vertex AI Batch Inference..."):
-                # 1. Force de-duplication of columns to prevent TypeError
-                master_df = master_df.loc[:, ~master_df.columns.duplicated()].copy()
+                from app_core.vertex_ai_endpoint import VERTEX_FEATURE_COLUMNS, predict_win_probabilities
 
-                # 2. Filter for exactly the columns the model expects
-                from app_core.vertex_ai_endpoint import VERTEX_FEATURE_COLUMNS
+                # 1. Sanitize the feature batch
                 inference_df = master_df[VERTEX_FEATURE_COLUMNS].copy()
-
-                # 3. Sanitize feature batch for XGBoost
                 for col in VERTEX_FEATURE_COLUMNS:
-                    # Ensure we are working with a Series (1D), not a DataFrame (2D)
+                    # Force 1D and Float type for model compatibility
                     col_data = inference_df[col]
-                    if isinstance(col_data, pd.DataFrame):
-                        col_data = col_data.iloc[:, 0]
-
+                    if isinstance(col_data, pd.DataFrame): col_data = col_data.iloc[:, 0]
                     inference_df[col] = pd.to_numeric(col_data, errors='coerce').fillna(0.0).astype(float)
 
-                # 6. Call prediction using the sanitized batch
-                # This uses Endpoint ID: 5331759481992773632
+                # 2. Batch Prediction Call
                 probs = predict_win_probabilities(inference_df)
-
                 if probs and len(probs) == len(master_df):
                     master_df["AI_Prob"] = probs
                     master_df["AI_Edge"] = master_df["AI_Prob"] - master_df.get("Implied_Prob", 0.5)
                 else:
-                    if probs:
-                        st.error(f"Prediction failed. Expected {len(master_df)} rows but got {len(probs)}.")
-                    # Emergency fallbacks to prevent KeyError: 'AI_Edge'
+                    # Safe fallbacks to prevent KeyError: 'AI_Edge' in Optimizer
                     master_df["AI_Prob"] = 0.5
                     master_df["AI_Edge"] = 0.0
 
@@ -8375,6 +8368,40 @@ with tab_master:
     elif not games:
         st.info("Load games from the sidebar, then run Master Analysis.")
 
+# Shotgun Mode Tab
+with tab_shotgun:
+    st.header("🚀 Shotgun Mode")
+    shotgun_data = st.session_state.get("shotgun_data")
+
+    if shotgun_data:
+        # Display tier cards side-by-side
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+            st.subheader("🎯 Snipers ($3)")
+            st.caption("Confidence > 60% | Edge > 5%")
+            if not shotgun_data["snipers"].empty:
+                st.dataframe(shotgun_data["snipers"][["Pick", "AI_Prob", "AI_Edge"]])
+            else:
+                st.info("No Snipers found today")
+
+        with col2:
+            st.subheader("🧠 Strategy ($2)")
+            st.caption("Edge > 8%")
+            if not shotgun_data["strategy"].empty:
+                st.dataframe(shotgun_data["strategy"][["Pick", "AI_Prob", "AI_Edge"]])
+            else:
+                st.info("No Strategy plays found")
+
+        with col3:
+            st.subheader("🎲 Longshots ($1)")
+            st.caption("Top 10 Highest Edge")
+            if not shotgun_data["longshots"].empty:
+                st.dataframe(shotgun_data["longshots"][["Pick", "AI_Prob", "AI_Edge"]])
+            else:
+                st.info("No Longshots found")
+    else:
+        st.info("Run Master Analysis to generate Shotgun picks")
 
 with tab_kalshi:
     st.header("Kalshi Health")
