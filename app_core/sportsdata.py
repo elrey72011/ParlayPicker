@@ -203,6 +203,23 @@ class SportsDataClientBase:
         except Exception:
             return []
 
+    def get_games_by_date(self, target_date: date) -> List[Dict[str, Any]]:
+        """Alias for get_scores_by_date to match other client interfaces."""
+        return self.get_scores_by_date(target_date)
+
+    def get_games_by_season(self, season: str) -> List[Dict[str, Any]]:
+        """Fetch games for a full season."""
+        try:
+            # Note: SportsData endpoint typically /scores/json/Scores/{season}
+            # We must map 'season' correctly (e.g. 2024REG).
+            token = str(season)
+            payload = self._request(f"/scores/json/Scores/{token}")
+            if isinstance(payload, list):
+                return payload
+            return []
+        except Exception:
+            return []
+
     def _season_tokens(self, season: Optional[str], season_type: Optional[str]) -> List[str]:
         tokens: List[str] = []
         base = str(season) if season else ""

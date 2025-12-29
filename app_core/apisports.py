@@ -340,6 +340,22 @@ class _APISportsBaseClient:
         except Exception:
             return []
 
+    def get_odds(self, game_id: int) -> List[Dict]:
+        """Fetch odds for a specific game."""
+        try:
+            if not self.is_configured():
+                return []
+
+            # This method assumes that the specific sport client might have an odds endpoint
+            # similar to /odds?game={id}. If not supported by all, it returns empty list.
+            # Base implementation:
+            payload = self._request("/odds", {"game": game_id})
+            if payload is None:
+                payload = {}
+            return payload.get("response") or []
+        except Exception:
+            return []
+
     def get_games_by_season(
         self,
         season: str,
