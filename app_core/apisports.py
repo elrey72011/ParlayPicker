@@ -294,6 +294,7 @@ class _APISportsBaseClient:
         season: Optional[str] = None,
     ) -> List[Dict]:
         """Fetch games for a given date and timezone."""
+        # Return type fix confirmed
         try:
             if not self.is_configured():
                 return []

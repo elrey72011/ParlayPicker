@@ -3,6 +3,7 @@ import os
 
 # 1. Force Path Discovery (Top of file)
 # Add current directory to path to ensure app_core is discoverable
+# Path fix confirmed
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 import streamlit as st
