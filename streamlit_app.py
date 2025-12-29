@@ -1,3 +1,9 @@
+import sys
+import os
+
+# Add current directory to path to ensure app_core is discoverable
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -12,6 +18,7 @@ from app_core.apisports import APISportsBasketballClient, APISportsFootballClien
 from app_core.sportsdata import SportsDataNBAClient, SportsDataNCAABClient, SportsDataNFLClient, SportsDataNCAAFClient, SportsDataNHLClient
 from app_core.feature_processing import run_roi_pipeline_validation, TeamNameMatcher
 from app_core.sentiment_pipeline import SentimentPipeline
+from app_core.sentiment import RealSentimentAnalyzer
 
 # Helper imports from app_core
 try:
@@ -82,11 +89,28 @@ def enrich_game_context(games_data: List[Dict], api_clients: Dict[str, Any]) -> 
         home_team = str(g.get('home_team', ''))
         away_team = str(g.get('away_team', ''))
 
+        # 3. Fuzzy Match Strategy
+        # Explicitly requested: bridge 'Toronto Raptors' -> 'Raptors'
+        # We rely on TeamNameMatcher.match_team logic if strict lookup fails
+
         home_norm = TeamNameMatcher.normalize(home_team)
         away_norm = TeamNameMatcher.normalize(away_team)
 
-        home_stats = stats_lookup.get(home_norm, {})
-        away_stats = stats_lookup.get(away_norm, {})
+        home_stats = stats_lookup.get(home_norm)
+        if not home_stats:
+             # Fallback to direct fuzzy search against keys
+             matched_key = TeamNameMatcher.match_team(home_team, list(stats_lookup.keys()))
+             if matched_key:
+                  home_stats = stats_lookup.get(matched_key)
+
+        away_stats = stats_lookup.get(away_norm)
+        if not away_stats:
+             matched_key = TeamNameMatcher.match_team(away_team, list(stats_lookup.keys()))
+             if matched_key:
+                  away_stats = stats_lookup.get(matched_key)
+
+        home_stats = home_stats or {}
+        away_stats = away_stats or {}
 
         # Inject stats with defaults if missing
         g['home_win_pct'] = home_stats.get('win_pct', 0.5)

@@ -10,6 +10,32 @@ import requests
 import streamlit as st
 from app_core.reddit_sentiment import fetch_reddit_sentiment_map
 
+# ... existing imports and constants ...
+
+class SentimentPipeline:
+    """Facade for sentiment analysis operations."""
+
+    @staticmethod
+    def build_team_sentiment_map(
+        news_api_key: str,
+        games: List[Dict[str, Any]],
+        league: str,
+        *,
+        existing_map: Optional[Dict[str, Optional[float]]] = None,
+        existing_meta_map: Optional[Dict[str, Dict[str, Any]]] = None,
+        cooldown_until: Optional[Any] = None,
+        max_calls: int = 6,
+    ) -> Tuple[Dict[str, Optional[float]], Dict[str, Dict[str, Any]], Dict[str, Any]]:
+        return build_team_sentiment_map(
+            news_api_key,
+            games,
+            league,
+            existing_map=existing_map,
+            existing_meta_map=existing_meta_map,
+            cooldown_until=cooldown_until,
+            max_calls=max_calls
+        )
+
 _POSITIVE = {
     "win",
     "wins",
@@ -471,6 +497,8 @@ def build_team_sentiment_map(
         return status_int
 
     date_bucket = now_utc.date().isoformat()
+    # Import RealSentimentAnalyzer dynamically or assume available via injection if integrated
+    from app_core.sentiment import RealSentimentAnalyzer
     analyzer = RealSentimentAnalyzer(news_api_key) if RealSentimentAnalyzer and news_api_key else None
     stop_fetching = cooldown_active or False
 

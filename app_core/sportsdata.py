@@ -214,9 +214,7 @@ class SportsDataClientBase:
             # We must map 'season' correctly (e.g. 2024REG).
             token = str(season)
             payload = self._request(f"/scores/json/Scores/{token}")
-            if isinstance(payload, list):
-                return payload
-            return []
+            return payload if isinstance(payload, list) else []
         except Exception:
             return []
 
