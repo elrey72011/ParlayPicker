@@ -4972,10 +4972,35 @@ render_pipeline_banner()
 # Tabs
 # -----------------
 
-    tab_shotgun, tab_master, tab_games, tab_kalshi, tab_sentiment, tab_debug = st.tabs(
-        ["🚀 Shotgun Mode", "Master Analysis", "Games & Odds", "Kalshi", "Sentiment", "Debug"]
+# --- Tab UI Implementation ---
+# Ensure there are 6 variables for 6 tabs
+tab_shotgun, tab_master, tab_games, tab_kalshi, tab_sentiment, tab_debug = st.tabs(
+    ["🚀 Shotgun Mode", "📊 Master Analysis", "🎮 Games & Odds", "📉 Kalshi", "🧠 Sentiment", "Debug"]
 )
 
+with tab_shotgun:
+    st.header("🚀 Shotgun Allocation")
+    if "shotgun_data" in st.session_state:
+        shotgun = st.session_state["shotgun_data"]
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+            st.info("🎯 $3 Snipers (High Prob)")
+            if not shotgun['snipers'].empty:
+                st.dataframe(shotgun['snipers'][['Pick', 'AI_Prob', 'AI_Edge']])
+            else: st.write("No snipers found.")
+
+        with col2:
+            st.success("📈 $2 Strategy (High EV)")
+            if not shotgun['strategy'].empty:
+                st.dataframe(shotgun['strategy'][['Pick', 'AI_Prob', 'AI_Edge']])
+
+        with col3:
+            st.warning("🎲 $1 Longshots (Lottos)")
+            if not shotgun['longshots'].empty:
+                st.dataframe(shotgun['longshots'][['Pick', 'AI_Prob', 'AI_Edge']])
+    else:
+        st.info("Run Master Analysis to generate Shotgun picks.")
 
 with tab_games:
     st.header("Games & Odds")
@@ -8368,40 +8393,6 @@ with tab_master:
     elif not games:
         st.info("Load games from the sidebar, then run Master Analysis.")
 
-# Shotgun Mode Tab
-with tab_shotgun:
-    st.header("🚀 Shotgun Mode")
-    shotgun_data = st.session_state.get("shotgun_data")
-
-    if shotgun_data:
-        # Display tier cards side-by-side
-        col1, col2, col3 = st.columns(3)
-
-        with col1:
-            st.subheader("🎯 Snipers ($3)")
-            st.caption("Confidence > 60% | Edge > 5%")
-            if not shotgun_data["snipers"].empty:
-                st.dataframe(shotgun_data["snipers"][["Pick", "AI_Prob", "AI_Edge"]])
-            else:
-                st.info("No Snipers found today")
-
-        with col2:
-            st.subheader("🧠 Strategy ($2)")
-            st.caption("Edge > 8%")
-            if not shotgun_data["strategy"].empty:
-                st.dataframe(shotgun_data["strategy"][["Pick", "AI_Prob", "AI_Edge"]])
-            else:
-                st.info("No Strategy plays found")
-
-        with col3:
-            st.subheader("🎲 Longshots ($1)")
-            st.caption("Top 10 Highest Edge")
-            if not shotgun_data["longshots"].empty:
-                st.dataframe(shotgun_data["longshots"][["Pick", "AI_Prob", "AI_Edge"]])
-            else:
-                st.info("No Longshots found")
-    else:
-        st.info("Run Master Analysis to generate Shotgun picks")
 
 with tab_kalshi:
     st.header("Kalshi Health")
