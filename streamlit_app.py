@@ -376,14 +376,25 @@ if __name__ == "__main__":
     # Load TheOver.ai Odds CSV if available
     odds_df = pd.DataFrame()
     try:
-        csv_path = f"data/theover/{selected_date.strftime('%Y-%m-%d')}.csv"
-        # Fallback to test file if date specific not found for dev
-        if not os.path.exists(csv_path) and os.path.exists("data/theover/test_odds.csv"):
-             # Only strictly use test file if user requested (or for this dev session)
-             # But for automation requirement, we check the date.
+        # Automate Data Loading: Try today's file first, then fallback to selected date
+        today_str = datetime.now().strftime('%Y-%m-%d')
+        today_path = f"data/theover/{today_str}.csv"
+        selected_date_str = selected_date.strftime('%Y-%m-%d')
+        selected_path = f"data/theover/{selected_date_str}.csv"
+
+        csv_path = None
+
+        if os.path.exists(today_path):
+             csv_path = today_path
+        elif os.path.exists(selected_path):
+             csv_path = selected_path
+
+        # Fallback to test file if neither found
+        if not csv_path and os.path.exists("data/theover/test_odds.csv"):
+             # Only use if we really have no data
              pass
 
-        if os.path.exists(csv_path):
+        if csv_path and os.path.exists(csv_path):
              odds_df = pd.read_csv(csv_path)
              st.toast(f"Loaded TheOver.ai Odds from {csv_path}", icon="✅")
         elif os.path.exists("data/theover/test_odds.csv"):
@@ -598,16 +609,22 @@ if __name__ == "__main__":
     df = pd.DataFrame(rows_out)
 
     # Run Vertex Predictions if configured
+    # Requirement: Activate the Blended Prediction Engine
     if not df.empty and is_vertex_prediction_configured():
-        with st.spinner("Running Vertex AI Predictions..."):
+        with st.spinner("Running Vertex AI Predictions (Endpoint: 6435...)..."):
             vertex_df = pd.DataFrame(vertex_rows)
+            # Calls the Vertex AI Endpoint with the feature schema
             preds = predict_win_probabilities(vertex_df)
 
             # Attach predictions to df
             if len(preds) == len(df):
                 df["vertex_home_win_prob"] = preds
+                logger.info(f"Successfully generated {len(preds)} Vertex AI predictions.")
             else:
                 df["vertex_home_win_prob"] = np.nan
+                logger.warning("Vertex AI prediction count mismatch.")
+    elif not df.empty:
+         logger.warning("Vertex AI is not configured. Skipping predictions.")
 
     # --- Blended Probability Calculation ---
     if not df.empty:
@@ -706,21 +723,36 @@ if __name__ == "__main__":
 
             with col1:
                 st.info("🎯 $3 Snipers")
+                # Snipers: AI_Prob > 0.60 and AI_Edge > 0.05
                 if not shotgun_data['snipers'].empty:
                     for _, pick in shotgun_data['snipers'].iterrows():
-                        st.metric(f"{pick['Pick']}", f"{pick['AI_Prob']:.1%}", f"Edge: {pick['AI_Edge']:.1%}")
+                        st.metric(
+                            label=f"{pick['Pick']}",
+                            value=f"{pick['AI_Prob']:.1%}",
+                            delta=f"Edge: {pick['AI_Edge']:.1%}"
+                        )
                 else: st.write("No High-Prob Snipers found.")
 
             with col2:
                 st.success("📈 $2 Strategy")
+                # Strategy: AI_Edge > 0.08 and AI_Prob > 0.52
                 if not shotgun_data['strategy'].empty:
-                    st.dataframe(shotgun_data['strategy'][['Pick', 'AI_Prob', 'AI_Edge']])
+                    st.dataframe(
+                        shotgun_data['strategy'][['Pick', 'AI_Prob', 'AI_Edge']],
+                        use_container_width=True,
+                        hide_index=True
+                    )
                 else: st.write("No Strategy bets found.")
 
             with col3:
                 st.warning("🎲 $1 Longshots")
+                # Longshots: Top 10 rows sorted by highest EV
                 if not shotgun_data['longshots'].empty:
-                    st.dataframe(shotgun_data['longshots'][['Pick', 'AI_Prob', 'AI_Edge']])
+                    st.dataframe(
+                        shotgun_data['longshots'][['Pick', 'ev', 'AI_Edge']],
+                        use_container_width=True,
+                        hide_index=True
+                    )
                 else: st.write("No Longshot bets found.")
         else:
             st.info("No data available for Shotgun Mode.")
