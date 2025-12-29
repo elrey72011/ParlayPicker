@@ -281,6 +281,9 @@ def predict_win_probabilities(
         logger.info("predict_win_probabilities called with empty features_df")
         return []
 
+    # CRITICAL FIX: XGBoost segfaults on duplicate columns. Remove them.
+    features_df = features_df.loc[:, ~features_df.columns.duplicated()]
+
     if feature_columns is None:
         feature_columns = VERTEX_FEATURE_COLUMNS
 
@@ -301,10 +304,12 @@ def predict_win_probabilities(
         return []
 
     try:
+        # Predict using Vertex AI Endpoint
         prediction = endpoint.predict(instances=instances)
     except Exception as e:
-        logger.error(f"CRITICAL XGBOOST ERROR: {e}")
-        # Return neutral probabilities (0.5) so the app keeps running
+        print(f"CRITICAL VERTEX FAILURE: {e}")
+        logger.error(f"CRITICAL VERTEX FAILURE: {e}")
+        # Return 0.5 (neutral) for all rows so the app survives
         return [0.5] * len(instances)
 
     # ------------------------------------------------------------------
