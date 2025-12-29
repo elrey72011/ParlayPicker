@@ -2140,23 +2140,22 @@ def enrich_game_context(game: Dict[str, Any], league_key: str, api_key: Optional
             home_raw = str(game.get("home_team") or "")
             away_raw = str(game.get("away_team") or "")
             
-            # Extract list of (home, away, game_obj) tuples for fuzzy matcher
-            candidates = []
-            for g_api in games_api:
-                h_api = str(((g_api.get("teams") or {}).get("home") or {}).get("name") or "")
-                a_api = str(((g_api.get("teams") or {}).get("away") or {}).get("name") or "")
-                candidates.append(((h_api, a_api), g_api))
-            
-            candidate_tuples = [c[0] for c in candidates]
-            match_tuple = TeamNameMatcher.match_game(home_raw, away_raw, candidate_tuples)
-            
+            # Force normalization and fuzzy matching to unlock stats
+            home_norm = TeamNameMatcher.normalize(home_raw)
+            away_norm = TeamNameMatcher.normalize(away_raw)
+
             matched = None
-            if match_tuple:
-                # Retrieve the full game object associated with the matched tuple
-                for c_tuple, c_obj in candidates:
-                    if c_tuple == match_tuple:
-                        matched = c_obj
-                        break
+            # iterate over the list (now safe against None because of Step 1)
+            for g_api in (games_api or []):
+                api_teams = g_api.get("teams", {})
+                h_api = api_teams.get("home", {}).get("name", "")
+                a_api = api_teams.get("away", {}).get("name", "")
+
+                # Use fuzzy matching as the ONLY logic to bridge naming gaps
+                if TeamNameMatcher.match_team(home_norm, [h_api], threshold=0.75) and \
+                   TeamNameMatcher.match_team(away_norm, [a_api], threshold=0.75):
+                    matched = g_api
+                    break
 
             if matched:
                 enrichment["api_sports_used"] = True
@@ -2203,22 +2202,21 @@ def enrich_game_context(game: Dict[str, Any], league_key: str, api_key: Optional
             home_raw = str(game.get("home_team") or "")
             away_raw = str(game.get("away_team") or "")
             
-            # Build candidate list: SportsData usually has HomeTeam/AwayTeam or HomeTeamName/AwayTeamName
-            candidates = []
-            for sc in scores:
+            # Force normalization and fuzzy matching to unlock stats
+            home_norm = TeamNameMatcher.normalize(home_raw)
+            away_norm = TeamNameMatcher.normalize(away_raw)
+
+            match = None
+            # iterate over the list (now safe against None because of Step 1)
+            for sc in (scores or []):
                 h_sd = str(sc.get("HomeTeam") or sc.get("HomeTeamName") or "")
                 a_sd = str(sc.get("AwayTeam") or sc.get("AwayTeamName") or "")
-                candidates.append(((h_sd, a_sd), sc))
-            
-            candidate_tuples = [c[0] for c in candidates]
-            match_tuple = TeamNameMatcher.match_game(home_raw, away_raw, candidate_tuples)
-            
-            match = None
-            if match_tuple:
-                for c_tuple, c_obj in candidates:
-                    if c_tuple == match_tuple:
-                        match = c_obj
-                        break
+
+                # Use fuzzy matching as the ONLY logic to bridge naming gaps
+                if TeamNameMatcher.match_team(home_norm, [h_sd], threshold=0.75) and \
+                   TeamNameMatcher.match_team(away_norm, [a_sd], threshold=0.75):
+                    match = sc
+                    break
 
             if match:
                 enrichment["sportsdata_used"] = True
@@ -2697,6 +2695,9 @@ def read_secret(name: str, default: Optional[str] = None) -> Optional[str]:
     try:
         if name in st.secrets:
             return st.secrets[name]
+        # Check general block for nested secrets
+        if "general" in st.secrets and name in st.secrets["general"]:
+            return st.secrets["general"][name]
     except Exception:
         pass
     return os.getenv(name, default)

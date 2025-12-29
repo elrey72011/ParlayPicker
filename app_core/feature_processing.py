@@ -329,14 +329,31 @@ def run_roi_pipeline_validation(df: pd.DataFrame):
     for label, col in critical_checks.items():
         if col not in df.columns:
             validation_results[label] = "❌ COLUMN MISSING"
-        elif (df[col].notnull().sum() == 0).any() if isinstance(df[col], pd.DataFrame) else df[col].notnull().sum() == 0:
+            continue
+
+        # Handle duplicate columns by selecting the first occurrence
+        series_data = df[col]
+        if isinstance(series_data, pd.DataFrame):
+            series_data = series_data.iloc[:, 0]
+
+        populated_count = series_data.notnull().sum()
+
+        if populated_count == 0:
             validation_results[label] = "⚠️ COLUMN EMPTY (Data not reaching DF)"
+        elif col == "feature_home_win_pct":
+            # Check if all populated values are exactly 0.50 (default fallback)
+            # We use a small tolerance for float comparison, though exactly 0.5 is expected for default
+            is_default = ((series_data - 0.5).abs() < 1e-6)
+            default_count = is_default.sum()
+
+            if default_count == populated_count:
+                validation_results[label] = "⚠️ ALL DEFAULTS (0.50 detected, stats fetch failed)"
+            elif default_count > 0:
+                validation_results[label] = f"⚠️ MIXED ({populated_count} rows, {default_count} defaults)"
+            else:
+                validation_results[label] = f"✅ OK ({populated_count} rows populated)"
         else:
-            # Handle duplicates in logging if needed, though usually notnull().sum() on DataFrame returns Series
-            count = df[col].notnull().sum()
-            if isinstance(count, pd.Series):
-                count = count.iloc[0] # Just take first for display
-            validation_results[label] = f"✅ OK ({count} rows populated)"
+            validation_results[label] = f"✅ OK ({populated_count} rows populated)"
             
     logger.info("--- ROI PIPELINE VALIDATION ---")
     for label, status in validation_results.items():
