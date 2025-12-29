@@ -1,6 +1,7 @@
 import sys
 import os
 
+# 1. Force Path Discovery (Top of file)
 # Add current directory to path to ensure app_core is discoverable
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
@@ -28,6 +29,16 @@ except ImportError:
         return f"KX{league.upper()}GAME"
     def team_code_for_league(league: str, team: str) -> str:
         return team[:3].upper()
+
+# --- Global Definitions ---
+# 4. Verify Global Definitions
+CLIENT_MAPPING = {
+    "NBA": APISportsBasketballClient,
+    "NFL": APISportsFootballClient,
+    "NHL": APISportsHockeyClient,
+    "NCAAB": SportsDataNCAABClient,
+    "NCAAF": SportsDataNCAAFClient,
+}
 
 logger = logging.getLogger(__name__)
 
@@ -89,28 +100,14 @@ def enrich_game_context(games_data: List[Dict], api_clients: Dict[str, Any]) -> 
         home_team = str(g.get('home_team', ''))
         away_team = str(g.get('away_team', ''))
 
-        # 3. Fuzzy Match Strategy
-        # Explicitly requested: bridge 'Toronto Raptors' -> 'Raptors'
-        # We rely on TeamNameMatcher.match_team logic if strict lookup fails
+        # 3. Mandatory Fuzzy Logic (Line 2145 in original, now here)
+        # Force fuzzy matching as primary method to bridge naming gaps
 
-        home_norm = TeamNameMatcher.normalize(home_team)
-        away_norm = TeamNameMatcher.normalize(away_team)
+        matched_home = TeamNameMatcher.match_team(home_team, list(stats_lookup.keys()))
+        home_stats = stats_lookup.get(matched_home) if matched_home else {}
 
-        home_stats = stats_lookup.get(home_norm)
-        if not home_stats:
-             # Fallback to direct fuzzy search against keys
-             matched_key = TeamNameMatcher.match_team(home_team, list(stats_lookup.keys()))
-             if matched_key:
-                  home_stats = stats_lookup.get(matched_key)
-
-        away_stats = stats_lookup.get(away_norm)
-        if not away_stats:
-             matched_key = TeamNameMatcher.match_team(away_team, list(stats_lookup.keys()))
-             if matched_key:
-                  away_stats = stats_lookup.get(matched_key)
-
-        home_stats = home_stats or {}
-        away_stats = away_stats or {}
+        matched_away = TeamNameMatcher.match_team(away_team, list(stats_lookup.keys()))
+        away_stats = stats_lookup.get(matched_away) if matched_away else {}
 
         # Inject stats with defaults if missing
         g['home_win_pct'] = home_stats.get('win_pct', 0.5)

@@ -510,7 +510,7 @@ class _APISportsBaseClient:
         """Match an odds snapshot game to an API-Sports game response."""
 
         if not games:
-            return None
+            return {}
 
         home_norm = self._normalize_name(home)
         away_norm = self._normalize_name(away)
@@ -524,7 +524,7 @@ class _APISportsBaseClient:
                 and self._normalize_name(away_team.get("name", "")) == away_norm
             ):
                 return game
-        return None
+        return {}
 
     @staticmethod
     def _format_record(stats: Dict) -> Optional[str]:

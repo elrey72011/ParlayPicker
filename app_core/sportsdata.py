@@ -169,11 +169,11 @@ class SportsDataClientBase:
                     time.sleep(delay)
                     attempt += 1
                     continue
-                return None
+                return []
             except Exception:
                 self.last_error = "request_failed"
-                return None
-        return None
+                return []
+        return []
 
     # ------------------------------------------------------------------
     # Data fetchers
