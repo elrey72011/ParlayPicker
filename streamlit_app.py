@@ -7294,13 +7294,21 @@ with tab_master:
         # 4. BATCH PREDICTION: Call the endpoint once for the whole sheet
         if is_vertex_prediction_configured():
             with st.spinner("🔮 Calling Vertex AI Batch Inference..."):
-                # 4. Filter for exactly the columns the model expects
+                # 1. Force de-duplication of columns to prevent TypeError
+                master_df = master_df.loc[:, ~master_df.columns.duplicated()].copy()
+
+                # 2. Filter for exactly the columns the model expects
                 from app_core.vertex_ai_endpoint import VERTEX_FEATURE_COLUMNS
                 inference_df = master_df[VERTEX_FEATURE_COLUMNS].copy()
 
-                # 5. Force numeric types to prevent XGBoost C-level crashes
+                # 3. Sanitize feature batch for XGBoost
                 for col in VERTEX_FEATURE_COLUMNS:
-                    inference_df[col] = pd.to_numeric(inference_df[col], errors='coerce').fillna(0.0).astype(float)
+                    # Ensure we are working with a Series (1D), not a DataFrame (2D)
+                    col_data = inference_df[col]
+                    if isinstance(col_data, pd.DataFrame):
+                        col_data = col_data.iloc[:, 0]
+
+                    inference_df[col] = pd.to_numeric(col_data, errors='coerce').fillna(0.0).astype(float)
 
                 # 6. Call prediction using the sanitized batch
                 # This uses Endpoint ID: 5331759481992773632
@@ -7308,7 +7316,6 @@ with tab_master:
 
                 if probs and len(probs) == len(master_df):
                     master_df["AI_Prob"] = probs
-                    # Functional Fix: Calculate Edge immediately after successful prediction
                     master_df["AI_Edge"] = master_df["AI_Prob"] - master_df.get("Implied_Prob", 0.5)
                 else:
                     if probs:
