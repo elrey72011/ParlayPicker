@@ -16,6 +16,7 @@ from app_core.apisports import APISportsBasketballClient, APISportsFootballClien
 from app_core.sportsdata import SportsDataNBAClient, SportsDataNCAABClient, SportsDataNFLClient, SportsDataNCAAFClient, SportsDataNHLClient
 from app_core.feature_processing import run_roi_pipeline_validation, TeamNameMatcher
 from app_core.sentiment_pipeline import SentimentPipeline
+from app_core.vertex_ai_endpoint import is_vertex_prediction_configured, predict_win_probabilities, VERTEX_FEATURE_COLUMNS
 from zoneinfo import ZoneInfo
 from app_core.kalshi_integrator import KalshiIntegrator
 
@@ -29,7 +30,6 @@ except ImportError:
         return team[:3].upper()
 
 # --- Global Definitions ---
-# 4. Verify Global Definitions
 CLIENT_MAPPING = {
     "NBA": APISportsBasketballClient,
     "NFL": APISportsFootballClient,
@@ -98,8 +98,7 @@ def enrich_game_context(games_data: List[Dict], api_clients: Dict[str, Any], gam
         home_raw = g.get('home_team')
         away_raw = g.get('away_team')
 
-        # 3. Mandatory Fuzzy Logic (Line 2145 in original, now here)
-
+        # 3. Mandatory Fuzzy Logic
         # Force fuzzy matching to bridge naming gaps
         home_norm = TeamNameMatcher.normalize(home_raw)
         away_norm = TeamNameMatcher.normalize(away_raw)
@@ -242,7 +241,46 @@ def filter_kalshi_game_markets(
     except Exception:
         return []
 
+def load_games(client, selected_date: datetime, league: str) -> Tuple[List[Dict], List[Dict]]:
+    """
+    Fetch games and normalize them.
+    Returns (raw_games, normalized_games).
+    """
+    with st.spinner(f"Fetching {league} games for {selected_date}..."):
+        # Ensure date format if needed or pass date object directly if client supports it
+        # Clients usually take datetime or string. Assuming datetime is fine based on previous code.
+        games_raw = client.get_games_by_date(selected_date)
+
+    if not games_raw:
+        return [], []
+
+    # Normalize games for enrichment
+    # We need a flat structure: home_team, away_team, commence_time, game_id
+    games_flat = []
+    for g in games_raw:
+        norm_game = {}
+        # APISports vs SportsData handling
+        if "teams" in g and "home" in g["teams"]: # APISports
+            norm_game["home_team"] = g["teams"]["home"]["name"]
+            norm_game["away_team"] = g["teams"]["away"]["name"]
+            norm_game["commence_time"] = g["game"]["date"]
+            norm_game["game_id"] = g["game"]["id"]
+        elif "HomeTeam" in g or "HomeTeamName" in g: # SportsData
+            norm_game["home_team"] = g.get("HomeTeamName") or g.get("HomeTeam")
+            norm_game["away_team"] = g.get("AwayTeamName") or g.get("AwayTeam")
+            norm_game["commence_time"] = g.get("DateTime") or g.get("Date")
+            norm_game["game_id"] = g.get("GameKey") or g.get("GlobalGameID")
+
+        if norm_game.get("home_team"):
+            # Attach original raw data if needed for later reference
+            norm_game.update(g)
+            games_flat.append(norm_game)
+
+    return games_raw, games_flat
+
+
 if __name__ == "__main__":
+    st.set_page_config(page_title="ParlayDesk", layout="wide")
     st.title("ParlayDesk")
 
     # -------------------------------------------------------------------------
@@ -279,70 +317,62 @@ if __name__ == "__main__":
         st.error(f"Failed to configure client for {selected_league}.")
         st.stop()
 
+    # Initialize Kalshi
     kalshi = KalshiIntegrator()
     if not kalshi.api_key:
         st.warning("Kalshi API key not found. Market data will be unavailable.")
 
     # -------------------------------------------------------------------------
-    # 3. Data Fetching
+    # 3. Data Fetching & Processing
     # -------------------------------------------------------------------------
-    with st.spinner(f"Fetching {selected_league} games for {selected_date}..."):
-        games_raw = client.get_games_by_date(selected_date)
+
+    # Load Games
+    games_raw, games_flat = load_games(client, selected_date, selected_league)
 
     if not games_raw:
         st.info(f"No games found for {selected_league} on {selected_date}.")
         with st.expander("Debug Info"):
             st.write(getattr(client, 'last_error', 'No error logged'))
+
+        # Display tabs even if no games, to show debug info if needed, but mostly stop
+        tab_games, tab_master, tab_kalshi, tab_sentiment, tab_debug = st.tabs(
+            ["Games & Odds", "Master Analysis", "Kalshi", "Sentiment", "Debug"]
+        )
+        with tab_debug:
+             st.write("Client Last Error:", getattr(client, 'last_error', 'None'))
         st.stop()
 
-    # Normalize games for enrichment
-    # We need a flat structure: home_team, away_team, commence_time, game_id
-    games_flat = []
-    for g in games_raw:
-        norm_game = {}
-        # APISports vs SportsData handling
-        if "teams" in g and "home" in g["teams"]: # APISports
-            norm_game["home_team"] = g["teams"]["home"]["name"]
-            norm_game["away_team"] = g["teams"]["away"]["name"]
-            norm_game["commence_time"] = g["game"]["date"]
-            norm_game["game_id"] = g["game"]["id"]
-        elif "HomeTeam" in g or "HomeTeamName" in g: # SportsData
-            norm_game["home_team"] = g.get("HomeTeamName") or g.get("HomeTeam")
-            norm_game["away_team"] = g.get("AwayTeamName") or g.get("AwayTeam")
-            norm_game["commence_time"] = g.get("DateTime") or g.get("Date")
-            norm_game["game_id"] = g.get("GameKey") or g.get("GlobalGameID")
-
-        if norm_game.get("home_team"):
-            # Attach original raw data if needed
-            norm_game.update(g)
-            games_flat.append(norm_game)
-
-    # -------------------------------------------------------------------------
-    # 4. Enrichment
-    # -------------------------------------------------------------------------
+    # Enrichment
     with st.spinner("Enriching game context with stats..."):
         enriched_games = enrich_game_context(games_flat, {selected_league: client}, games_api=games_raw)
 
-    # Fetch Kalshi Markets globally for the league to avoid rate limits
+    # Fetch Kalshi Markets
     kalshi_markets = []
     if kalshi.api_key:
         with st.spinner("Fetching Kalshi markets..."):
             kalshi_markets = kalshi.get_markets_for_league(selected_league)
 
+    # Sentiment Analysis
+    with st.spinner("Analyzing Sentiment..."):
+        news_key = st.secrets["general"].get("news_api_key")
+        sentiment_map, sentiment_meta, sentiment_debug = SentimentPipeline.build_team_sentiment_map(
+            news_key, enriched_games, selected_league
+        )
+
     # -------------------------------------------------------------------------
-    # 5. Main Analysis Loop
+    # 4. Master Analysis Loop
     # -------------------------------------------------------------------------
     rows_out = []
-    processed_games = []
     validation_rows = []
 
     progress_bar = st.progress(0)
     total_games = len(enriched_games)
 
+    # Store Vertex features to batch predict later
+    vertex_rows = []
+
     for i, game in enumerate(enriched_games):
         # A. Validation
-        # Create a single-row DataFrame for validation as requested.
-        # We populate it with the stats we already enriched via enrich_game_context.
         game_df_dict = {
             "home_team": [game.get("home_team")],
             "away_team": [game.get("away_team")],
@@ -355,12 +385,9 @@ if __name__ == "__main__":
         }
         val_df = pd.DataFrame(game_df_dict)
         validation_rows.append(val_df)
-
-        # Run validation (logging only) - also will be run in ROI tab
         run_roi_pipeline_validation(val_df)
 
         # B. Kalshi Matching
-        # Filter markets for this specific game
         matched_markets = filter_kalshi_game_markets(
             kalshi_markets,
             game_time_utc=game.get("commence_time"),
@@ -369,171 +396,233 @@ if __name__ == "__main__":
             away_team=game.get("away_team")
         )
 
-        # Pick the best market (e.g., Moneyline/Winner)
-        # filter_kalshi_game_markets returns a list. We take the first one if available.
-        # Ideally we want the "Winner" market.
         kalshi_match = None
         kalshi_ticker = "N/A"
         kalshi_prob = None
+        kalshi_matched = False
 
         if matched_markets:
             kalshi_match = matched_markets[0] # Best match
             kalshi_ticker = kalshi_match.get("ticker") or kalshi_match.get("event_ticker")
-
-            # Extract probability (approximate from yes/ask/bid)
-            # KalshiIntegrator helpers might be useful, or use raw
-            # filter_kalshi_game_markets returns dicts.
-            # Let's try to get probability from 'yes_bid' or 'last_price'
+            kalshi_matched = True
             try:
-                # Simple logic: use yes_bid / 100 or last_price / 100
                 price = kalshi_match.get("yes_bid") or kalshi_match.get("last_price") or 50
                 kalshi_prob = float(price) / 100.0
             except:
                 kalshi_prob = 0.5
 
-        # C. Construct Output Row
+        # C. Sentiment Injection
         home_team = game.get("home_team")
         away_team = game.get("away_team")
 
+        home_sent = sentiment_map.get(home_team, 0.0)
+        away_sent = sentiment_map.get(away_team, 0.0)
+        # Handle None if sentiment returns None
+        if home_sent is None: home_sent = 0.0
+        if away_sent is None: away_sent = 0.0
+
+        sentiment_diff = home_sent - away_sent
+
+        # D. Construct Output Row
         # Use enriched features for prediction
         home_win_pct = game.get("home_win_pct", 0.5)
         away_win_pct = game.get("away_win_pct", 0.5)
+        home_ppg = game.get("home_ppg", 50.0)
+        away_ppg = game.get("away_ppg", 50.0)
+        home_streak = game.get("home_streak", 0.0)
+        away_streak = game.get("away_streak", 0.0)
 
         predicted_winner = home_team if home_win_pct >= away_win_pct else away_team
         win_prob = max(home_win_pct, away_win_pct)
 
-        # ROI Calculation
-        # ROI = (Win Prob - Implied Prob) / Implied Prob
+        # ROI Calculation (pre-Vertex)
         roi = 0.0
         if kalshi_prob and kalshi_prob > 0:
-            roi = (win_prob - kalshi_prob) / kalshi_prob
+            # Check which side we are betting on (Predicted Winner)
+            # Implied prob is kalshi_prob (usually home win prob in Kalshi?)
+            # Wait, Kalshi markets are typically "Will Home Team Win?"
+            # If we predict Home, we buy Yes at kalshi_prob.
+            # If we predict Away, we buy No (sell Yes) at kalshi_prob (or rather 1-kalshi_prob).
+
+            # Simplified Assumption: Kalshi Prob is for Home Win
+            implied_prob = kalshi_prob
+            my_prob = home_win_pct
+
+            # If we like Away, we are shorting Home.
+            # Or simplified: just show ROI for Home Bet for now?
+            # Let's stick to Home Win ROI for simplicity or standard logic
+
+            # Standard logic: ROI = (MyProb - MarketProb) / MarketProb
+            # Only valid if MyProb > MarketProb (Positive Edge)
+            roi = (my_prob - implied_prob) / implied_prob
 
         row_data = {
             "Home Team": home_team,
             "Away Team": away_team,
             "Predicted Winner": predicted_winner,
-            "Win Prob": f"{win_prob:.1%}",
-            "ROI": f"{roi:.1%}",
-            "Kalshi Ticker": kalshi_ticker
-        }
-
-        # Store rich data for Tabs
-        game_display_data = {
-            "home_team": home_team,
-            "away_team": away_team,
-            "home_streak": game.get("home_streak", 0.0),
-            "away_streak": game.get("away_streak", 0.0),
-            "home_ppg": game.get("home_ppg", 0.0),
-            "away_ppg": game.get("away_ppg", 0.0),
+            "Win Prob": win_prob, # Float for now
+            "ROI": roi,
+            "Kalshi Ticker": kalshi_ticker,
+            "kalshi_prob": kalshi_prob,
+            "kalshi_matched": kalshi_matched,
             "home_win_pct": home_win_pct,
             "away_win_pct": away_win_pct,
-            "kalshi_ticker": kalshi_ticker,
-            "kalshi_prob": kalshi_prob,
-            "win_prob": win_prob,
-            "roi": roi,
-            "predicted_winner": predicted_winner,
+            "home_ppg": home_ppg,
+            "away_ppg": away_ppg,
+            "home_streak": home_streak,
+            "away_streak": away_streak,
+            "sentiment_home": home_sent,
+            "sentiment_away": away_sent,
+            "sentiment_diff": sentiment_diff,
             "commence_time": game.get("commence_time")
         }
-        processed_games.append(game_display_data)
 
-        # CRUCIAL REQUIREMENT: Append at the absolute bottom
+        # Prepare Vertex Row
+        # Needs to match VERTEX_FEATURE_COLUMNS
+        v_row = {
+            "implied_home_prob": kalshi_prob if kalshi_prob else 0.5,
+            "sentiment_diff": sentiment_diff,
+            "kalshi_prob": kalshi_prob if kalshi_prob else 0.5,
+            "feature_home_win_pct": home_win_pct,
+            "feature_home_ppg": home_ppg,
+            "feature_home_streak": home_streak,
+            "feature_away_win_pct": away_win_pct,
+            "feature_away_ppg": away_ppg,
+            "feature_away_streak": away_streak,
+            # Add other required columns with defaults
+            "injuries_home_count": 0.0,
+            "injuries_away_count": 0.0,
+            "weather_flag": 0.0,
+            "feature_home_home_win_pct": home_win_pct, # Proxy
+            "feature_home_last5_win_pct": home_win_pct, # Proxy
+            "feature_home_oppg": 50.0, # Default
+            "feature_away_away_win_pct": away_win_pct, # Proxy
+            "feature_away_last5_win_pct": away_win_pct, # Proxy
+            "feature_away_oppg": 50.0, # Default
+            "feature_diff_win_pct": home_win_pct - away_win_pct,
+            "feature_diff_ppg": home_ppg - away_ppg,
+            "feature_diff_oppg": 0.0,
+            "feature_diff_last5": 0.0,
+            "feature_diff_streak": home_streak - away_streak,
+            "feature_commence_hour": 19.0, # Default
+            "feature_commence_day_of_week": 0.0, # Default
+            "feature_home_rest_days": 3.0, # Default
+            "feature_away_rest_days": 3.0, # Default
+        }
+        vertex_rows.append(v_row)
+
         progress_bar.progress((i + 1) / total_games)
         rows_out.append(row_data)
 
     progress_bar.empty()
 
     # -------------------------------------------------------------------------
-    # 6. Display Results
+    # 5. Post-Loop Processing (Vertex & Persistence)
     # -------------------------------------------------------------------------
-    if rows_out:
-        # Create Tabs
-        tab_pred, tab_insights, tab_roi = st.tabs(["🎯 Predictions", "📊 Team Insights", "📈 ROI Analysis"])
 
-        # --- TAB 1: Predictions (Game Cards) ---
-        with tab_pred:
-            st.subheader(f"Game Cards ({len(processed_games)})")
+    # Create Master DataFrame
+    df = pd.DataFrame(rows_out)
 
-            for g in processed_games:
+    # Run Vertex Predictions if configured
+    if not df.empty and is_vertex_prediction_configured():
+        with st.spinner("Running Vertex AI Predictions..."):
+            vertex_df = pd.DataFrame(vertex_rows)
+            preds = predict_win_probabilities(vertex_df)
+
+            # Attach predictions to df
+            # preds is a list of floats (home win prob)
+            if len(preds) == len(df):
+                df["vertex_home_win_prob"] = preds
+                # Update "Win Prob" and "Predicted Winner" based on Vertex?
+                # Usually we want to show Vertex Confidence.
+                # Let's add a column for it.
+            else:
+                df["vertex_home_win_prob"] = np.nan
+
+    # Persist
+    st.session_state["master_df"] = df
+
+    # -------------------------------------------------------------------------
+    # 6. Tab UI Implementation
+    # -------------------------------------------------------------------------
+
+    tab_games, tab_master, tab_kalshi, tab_sentiment, tab_debug = st.tabs(
+        ["Games & Odds", "Master Analysis", "Kalshi", "Sentiment", "Debug"]
+    )
+
+    # --- Tab 1: Games & Odds ---
+    with tab_games:
+        st.subheader(f"Games for {selected_date}")
+        if not df.empty:
+            # Simplified view
+            display_cols = ["Home Team", "Away Team", "Predicted Winner", "Win Prob", "Kalshi Ticker", "ROI"]
+            # Formatting
+            st.dataframe(
+                df[display_cols].style.format({
+                    "Win Prob": "{:.1%}",
+                    "ROI": "{:.1%}"
+                }),
+                use_container_width=True
+            )
+
+            st.markdown("### Game Cards")
+            for idx, row in df.iterrows():
                 with st.container(border=True):
                     c1, c2, c3 = st.columns([1.5, 1, 1.5])
-
-                    # Helper for hot/cold
-                    def get_trend_str(streak_val):
-                        if streak_val > 0: return f"🔥 Hot (W{int(streak_val)})"
-                        if streak_val < 0: return f"❄️ Cold (L{int(abs(streak_val))})"
-                        return "Neutral"
-
-                    # Column 1: Home
                     with c1:
-                        st.markdown(f"### 🏠 {g['home_team']}")
-                        st.caption(f"PPG: {g['home_ppg']:.1f} | Win%: {g['home_win_pct']:.1%}")
-                        st.markdown(f"**Trend:** {get_trend_str(g['home_streak'])}")
-
-                    # Column 2: VS / Info
+                        st.markdown(f"**{row['Home Team']}**")
+                        st.caption(f"Win%: {row['home_win_pct']:.1%}")
                     with c2:
-                        st.markdown("#### VS")
-                        st.metric("Win Prob", f"{g['win_prob']:.1%}", delta=f"ROI: {g['roi']:.1%}")
-                        st.caption(f"Winner: {g['predicted_winner']}")
-                        if g['kalshi_ticker'] != "N/A":
-                            st.caption(f"Kalshi: {g['kalshi_ticker']}")
-
-                    # Column 3: Away
+                        st.markdown(f"**VS**")
+                        if row['vertex_home_win_prob'] and not pd.isna(row['vertex_home_win_prob']):
+                             st.metric("Vertex Home %", f"{row['vertex_home_win_prob']:.1%}")
                     with c3:
-                        st.markdown(f"### ✈️ {g['away_team']}")
-                        st.caption(f"PPG: {g['away_ppg']:.1f} | Win%: {g['away_win_pct']:.1%}")
-                        st.markdown(f"**Trend:** {get_trend_str(g['away_streak'])}")
+                        st.markdown(f"**{row['Away Team']}**")
+                        st.caption(f"Win%: {row['away_win_pct']:.1%}")
 
-        # --- TAB 2: Team Insights ---
-        with tab_insights:
-            st.subheader("Deep Metrics")
-            if enriched_games:
-                # Construct a clean DataFrame for insights
-                insight_rows = []
-                for g in enriched_games:
-                    # Home row
-                    insight_rows.append({
-                        "Team": g.get("home_team"),
-                        "Role": "Home",
-                        "PPG": g.get("home_ppg"),
-                        "OPPG": g.get("home_oppg"),
-                        "Win Pct": g.get("home_win_pct"),
-                        "Streak": g.get("home_streak"),
-                    })
-                    # Away row
-                    insight_rows.append({
-                        "Team": g.get("away_team"),
-                        "Role": "Away",
-                        "PPG": g.get("away_ppg"),
-                        "OPPG": g.get("away_oppg"),
-                        "Win Pct": g.get("away_win_pct"),
-                        "Streak": g.get("away_streak"),
-                    })
-                st.dataframe(pd.DataFrame(insight_rows), use_container_width=True)
-            else:
-                st.info("No insights available.")
+        else:
+            st.info("No games processed.")
 
-        # --- TAB 3: ROI Analysis ---
-        with tab_roi:
-            st.subheader("Pipeline Validation Breakdown")
-            if validation_rows:
-                master_val_df = pd.concat(validation_rows, ignore_index=True)
-                val_results = run_roi_pipeline_validation(master_val_df)
+    # --- Tab 2: Master Analysis ---
+    with tab_master:
+        st.subheader("Master Analysis DataFrame")
+        if not df.empty:
+            st.dataframe(df, use_container_width=True)
+        else:
+            st.info("No data available.")
 
-                # Display validation results nicely
-                st.write("### Validation Status")
-                for k, v in val_results.items():
-                    if "❌" in v:
-                        st.error(f"**{k}**: {v}")
-                    elif "⚠️" in v:
-                        st.warning(f"**{k}**: {v}")
-                    else:
-                        st.success(f"**{k}**: {v}")
+    # --- Tab 3: Kalshi ---
+    with tab_kalshi:
+        st.subheader("Kalshi Market Data")
+        if kalshi_markets:
+             st.write(f"Found {len(kalshi_markets)} markets for {selected_league}")
+             st.dataframe(pd.DataFrame(kalshi_markets).head(50), use_container_width=True)
+        else:
+             st.info("No Kalshi markets found or API key missing.")
 
-                st.markdown("---")
-                st.write("### Raw Validation Data")
-                st.dataframe(master_val_df, use_container_width=True)
-            else:
-                st.warning("No validation data collected.")
+    # --- Tab 4: Sentiment ---
+    with tab_sentiment:
+        st.subheader("Sentiment Analysis")
 
-    else:
-        st.warning("No games processed.")
+        c1, c2 = st.columns(2)
+        with c1:
+            st.write("### Sentiment Map")
+            st.json(sentiment_map)
+        with c2:
+            st.write("### Debug Info")
+            st.json(sentiment_debug)
+
+    # --- Tab 5: Debug ---
+    with tab_debug:
+        st.subheader("System Debug")
+        st.write("### Client Info")
+        st.write(f"Client: {client_cls.__name__}")
+        st.write(f"Last Error: {getattr(client, 'last_error', 'None')}")
+
+        st.write("### Session State")
+        st.write(st.session_state)
+
+        if validation_rows:
+            st.write("### Validation Data")
+            st.dataframe(pd.concat(validation_rows), use_container_width=True)
+
