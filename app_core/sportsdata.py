@@ -199,14 +199,15 @@ class SportsDataClientBase:
                     games = payload
 
             self._scores_cache[date_key] = games
-            return games or []
+            return games if games is not None else []
         except Exception:
             return []
 
     def get_games_by_date(self, target_date: date) -> List[Dict[str, Any]]:
         """Alias for get_scores_by_date to match other client interfaces."""
         # Return type fix confirmed
-        return self.get_scores_by_date(target_date) or []
+        games = self.get_scores_by_date(target_date)
+        return games if games is not None else []
 
     def get_games_by_season(self, season: str) -> List[Dict[str, Any]]:
         """Fetch games for a full season."""
