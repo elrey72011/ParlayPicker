@@ -251,6 +251,8 @@ if __name__ == "__main__":
 
     if not games_raw:
         st.info(f"No games found for {selected_league} on {selected_date}.")
+        with st.expander("Debug Info"):
+            st.write(getattr(client, 'last_error', 'No error logged'))
         st.stop()
 
     # Normalize games for enrichment
@@ -291,6 +293,8 @@ if __name__ == "__main__":
     # 5. Main Analysis Loop
     # -------------------------------------------------------------------------
     rows_out = []
+    processed_games = []
+    validation_rows = []
 
     progress_bar = st.progress(0)
     total_games = len(enriched_games)
@@ -310,8 +314,9 @@ if __name__ == "__main__":
             "League": [selected_league]
         }
         val_df = pd.DataFrame(game_df_dict)
+        validation_rows.append(val_df)
 
-        # Run validation (logging only)
+        # Run validation (logging only) - also will be run in ROI tab
         run_roi_pipeline_validation(val_df)
 
         # B. Kalshi Matching
@@ -372,6 +377,25 @@ if __name__ == "__main__":
             "Kalshi Ticker": kalshi_ticker
         }
 
+        # Store rich data for Tabs
+        game_display_data = {
+            "home_team": home_team,
+            "away_team": away_team,
+            "home_streak": game.get("home_streak", 0.0),
+            "away_streak": game.get("away_streak", 0.0),
+            "home_ppg": game.get("home_ppg", 0.0),
+            "away_ppg": game.get("away_ppg", 0.0),
+            "home_win_pct": home_win_pct,
+            "away_win_pct": away_win_pct,
+            "kalshi_ticker": kalshi_ticker,
+            "kalshi_prob": kalshi_prob,
+            "win_prob": win_prob,
+            "roi": roi,
+            "predicted_winner": predicted_winner,
+            "commence_time": game.get("commence_time")
+        }
+        processed_games.append(game_display_data)
+
         # CRUCIAL REQUIREMENT: Append at the absolute bottom
         progress_bar.progress((i + 1) / total_games)
         rows_out.append(row_data)
@@ -382,8 +406,94 @@ if __name__ == "__main__":
     # 6. Display Results
     # -------------------------------------------------------------------------
     if rows_out:
-        df_results = pd.DataFrame(rows_out)
-        st.subheader(f"Analysis Results ({len(df_results)} Games)")
-        st.dataframe(df_results, use_container_width=True)
+        # Create Tabs
+        tab_pred, tab_insights, tab_roi = st.tabs(["🎯 Predictions", "📊 Team Insights", "📈 ROI Analysis"])
+
+        # --- TAB 1: Predictions (Game Cards) ---
+        with tab_pred:
+            st.subheader(f"Game Cards ({len(processed_games)})")
+
+            for g in processed_games:
+                with st.container(border=True):
+                    c1, c2, c3 = st.columns([1.5, 1, 1.5])
+
+                    # Helper for hot/cold
+                    def get_trend_str(streak_val):
+                        if streak_val > 0: return f"🔥 Hot (W{int(streak_val)})"
+                        if streak_val < 0: return f"❄️ Cold (L{int(abs(streak_val))})"
+                        return "Neutral"
+
+                    # Column 1: Home
+                    with c1:
+                        st.markdown(f"### 🏠 {g['home_team']}")
+                        st.caption(f"PPG: {g['home_ppg']:.1f} | Win%: {g['home_win_pct']:.1%}")
+                        st.markdown(f"**Trend:** {get_trend_str(g['home_streak'])}")
+
+                    # Column 2: VS / Info
+                    with c2:
+                        st.markdown("#### VS")
+                        st.metric("Win Prob", f"{g['win_prob']:.1%}", delta=f"ROI: {g['roi']:.1%}")
+                        st.caption(f"Winner: {g['predicted_winner']}")
+                        if g['kalshi_ticker'] != "N/A":
+                            st.caption(f"Kalshi: {g['kalshi_ticker']}")
+
+                    # Column 3: Away
+                    with c3:
+                        st.markdown(f"### ✈️ {g['away_team']}")
+                        st.caption(f"PPG: {g['away_ppg']:.1f} | Win%: {g['away_win_pct']:.1%}")
+                        st.markdown(f"**Trend:** {get_trend_str(g['away_streak'])}")
+
+        # --- TAB 2: Team Insights ---
+        with tab_insights:
+            st.subheader("Deep Metrics")
+            if enriched_games:
+                # Construct a clean DataFrame for insights
+                insight_rows = []
+                for g in enriched_games:
+                    # Home row
+                    insight_rows.append({
+                        "Team": g.get("home_team"),
+                        "Role": "Home",
+                        "PPG": g.get("home_ppg"),
+                        "OPPG": g.get("home_oppg"),
+                        "Win Pct": g.get("home_win_pct"),
+                        "Streak": g.get("home_streak"),
+                    })
+                    # Away row
+                    insight_rows.append({
+                        "Team": g.get("away_team"),
+                        "Role": "Away",
+                        "PPG": g.get("away_ppg"),
+                        "OPPG": g.get("away_oppg"),
+                        "Win Pct": g.get("away_win_pct"),
+                        "Streak": g.get("away_streak"),
+                    })
+                st.dataframe(pd.DataFrame(insight_rows), use_container_width=True)
+            else:
+                st.info("No insights available.")
+
+        # --- TAB 3: ROI Analysis ---
+        with tab_roi:
+            st.subheader("Pipeline Validation Breakdown")
+            if validation_rows:
+                master_val_df = pd.concat(validation_rows, ignore_index=True)
+                val_results = run_roi_pipeline_validation(master_val_df)
+
+                # Display validation results nicely
+                st.write("### Validation Status")
+                for k, v in val_results.items():
+                    if "❌" in v:
+                        st.error(f"**{k}**: {v}")
+                    elif "⚠️" in v:
+                        st.warning(f"**{k}**: {v}")
+                    else:
+                        st.success(f"**{k}**: {v}")
+
+                st.markdown("---")
+                st.write("### Raw Validation Data")
+                st.dataframe(master_val_df, use_container_width=True)
+            else:
+                st.warning("No validation data collected.")
+
     else:
         st.warning("No games processed.")
