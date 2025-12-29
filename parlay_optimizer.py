@@ -496,9 +496,15 @@ class ParlayOptimizer:
             return {"snipers": pd.DataFrame(), "strategy": pd.DataFrame(), "longshots": pd.DataFrame()}
 
         # Filter tiers as requested
-        snipers = master_df[master_df['AI_Prob'] > 0.60].head(3)
-        strategy = master_df[master_df['AI_Edge'] > 0.05].head(5)
+        # $3 'Snipers': AI_Prob > 0.60 and AI_Edge > 0.05
+        snipers = master_df[(master_df['AI_Prob'] > 0.60) & (master_df['AI_Edge'] > 0.05)].head(3)
+
+        # $2 'Strategy': AI_Edge > 0.08
+        strategy = master_df[master_df['AI_Edge'] > 0.08].head(5)
+
+        # $1 'Longshots': Top 10 by highest AI_Edge
         longshots = master_df.sort_values('AI_Edge', ascending=False).head(10)
+
         return {"snipers": snipers, "strategy": strategy, "longshots": longshots}
 
     def get_shotgun_allocation(self, best_bets_df):
