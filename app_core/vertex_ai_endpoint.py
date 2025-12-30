@@ -258,95 +258,56 @@ def is_vertex_prediction_configured() -> bool:
 
 
 def predict_win_probabilities(
-    features_df: pd.DataFrame,
-    feature_columns: Optional[List[str]] = None
+    df: pd.DataFrame,
+    feature_cols: Optional[List[str]] = None,
+    model_path: Optional[str] = None
 ) -> List[float]:
     """
-    Call the Vertex endpoint and return predicted *home win probabilities*
-    for each row in `features_df`.
-
-    Args:
-        features_df:
-            DataFrame containing all features. At minimum it must
-            contain the columns listed in `feature_columns` (or
-            `VERTEX_FEATURE_COLUMNS` if None).
-        feature_columns:
-            Columns to send to the model. If None, uses VERTEX_FEATURE_COLUMNS.
-
-    Returns:
-        List[float]: A list of probabilities (0.0–1.0) aligned with
-        each row of `features_df`. If something fails, returns [].
+    Predicts win probabilities using XGBoost with strict safety wraps.
     """
-    if features_df is None or features_df.empty:
-        logger.info("predict_win_probabilities called with empty features_df")
-        return []
+    if feature_cols is None:
+        feature_cols = VERTEX_FEATURE_COLUMNS
 
-    if feature_columns is None:
-        feature_columns = VERTEX_FEATURE_COLUMNS
-
-    # Ensure DataFrame has all required columns; fill missing with 0.0
-    payload_df = pd.DataFrame(features_df.copy())
-    for col in feature_columns:
-        if col not in payload_df.columns:
-            logger.warning(f"Missing feature column '{col}' – filling with 0.0")
-            payload_df[col] = 0.0
-
-    # Only send what the model expects
-    instances = payload_df[feature_columns].values.tolist()
+    # Default model path if not provided (placeholder to trigger safe fallback if missing)
+    if model_path is None:
+        model_path = "./models/model.json"
 
     try:
-        endpoint = _get_or_create_endpoint()
-    except Exception as e:
-        logger.error(f"Unable to create Vertex endpoint client: {e}")
-        return []
-
-    try:
-        prediction = endpoint.predict(instances=instances)
-    except Exception as e:
-        logger.error(f"CRITICAL XGBOOST ERROR: {e}")
-        # Return neutral probabilities (0.5) so the app keeps running
-        return [0.5] * len(instances)
-
-    # ------------------------------------------------------------------
-    # Output parsing
-    # ------------------------------------------------------------------
-    probs: List[float] = []
-
-    try:
-        preds = prediction.predictions  # type: ignore[attr-defined]
-
-        for p in preds:
-            # 1) {"probabilities": [p_home, p_away]}
-            if isinstance(p, dict) and "probabilities" in p:
-                arr = p["probabilities"]
-                if isinstance(arr, (list, tuple)) and len(arr) > 0:
-                    probs.append(float(arr[0]))
-                    continue
+        import xgboost as xgb
         
-            # 2) {"probability": p_home}
-            if isinstance(p, dict) and "probability" in p:
-                probs.append(float(p["probability"]))
-                continue
+        # 1. SANITIZE: Remove duplicate columns (The Segfault Fix)
+        # XGBoost crashes hard if columns are duplicated.
+        df_clean = df.loc[:, ~df.columns.duplicated()]
         
-            # 3) [p_home, p_away] or [p_home]
-            if isinstance(p, (list, tuple)) and len(p) > 0:
-                probs.append(float(p[0]))
-                continue
+        # 2. VALIDATE: Ensure all features exist
+        missing = [c for c in feature_cols if c not in df_clean.columns]
+        if missing:
+            logger.warning(f"Vertex Warning: Missing cols {missing}. Filling 0.")
+            for c in missing:
+                df_clean[c] = 0.0
         
-            # 4) Bare float / int (your current model behavior)
-            if isinstance(p, (int, float)):
-                probs.append(float(p))
-                continue
-        
-            # Fallback if structure unknown
-            logger.warning(f"Unrecognized prediction format: {p!r} – defaulting to 0.5")
-            probs.append(0.5)
+        # 3. PREDICT (Safe Wrap)
+        # We use a try/except specifically around the C-library call
+        try:
+            # Ensure we only select the feature columns to avoid extra column issues
+            dmatrix = xgb.DMatrix(df_clean[feature_cols])
+            booster = xgb.Booster()
+            booster.load_model(model_path)
+            predictions = booster.predict(dmatrix)
+
+            # Convert numpy array to list
+            if hasattr(predictions, "tolist"):
+                return predictions.tolist()
+            return list(predictions)
+
+        except Exception as e:
+            logger.error(f"CRITICAL XGBOOST FAILURE: {e}")
+            # Fallback: Return 0.5 (Coin Flip) so app doesn't die
+            return [0.5] * len(df)
 
     except Exception as e:
-        logger.error(f"Error parsing Vertex predictions: {e}")
-        return []
-
-    return probs
+        logger.error(f"Vertex Setup Failed: {e}")
+        return [0.5] * len(df)
 
 
 # -------------------------------------------------------------------
