@@ -54,7 +54,7 @@ except Exception:  # pragma: no cover - optional import
 
 # Vertex Model Configuration
 # Set to False if Vertex AI features are unavailable (e.g. Free Tier)
-ENABLE_VERTEX_MODEL = False
+ENABLE_VERTEX_MODEL = True
 
 try:
     from parlay_optimizer import ParlayOptimizer
@@ -7662,21 +7662,12 @@ with tab_master:
                 master_df[col] = master_df[col].fillna("")
 
         # Re-implement deduping for the `df` variable used by the UI below
-        rows_for_dedupe = master_df.to_dict("records")
-        deduped_rows: Dict[Tuple[Any, Any, Any, Any], Dict[str, Any]] = {}
-        for row in rows_for_dedupe:
-            key = (row.get("League"), row.get("Home"), row.get("Away"), row.get("Commence (UTC)"))
-            existing = deduped_rows.get(key)
-            if (existing is None) or (
-                not existing.get("kalshi_matched") and row.get("kalshi_matched")
-            ):
-                deduped_rows[key] = row
-        deduped_list = list(deduped_rows.values())
+        # Dedupe logic removed to prevent data loss (ML/Spread/Total rows preserved)
+        df = master_df.copy()
 
         if st.session_state.get("kalshi_match_only"):
-            deduped_list = [r for r in deduped_list if r.get("kalshi_matched")]
+            df = df[df["kalshi_matched"] == True]
 
-        df = pd.DataFrame(deduped_list)
         if "Unnamed: 0" in df.columns:
             df = df.drop(columns=["Unnamed: 0"])
         
