@@ -7440,7 +7440,19 @@ with tab_master:
         with st.spinner("🚀 Running Batch Feature Enrichment..."):
             # Remove duplicate columns to prevent matrix errors
             master_df = master_df.loc[:, ~master_df.columns.duplicated()]
-            master_df = enrich_with_vertex_features(master_df, {league: api_sports_clients.get(league)})
+
+            # Determine season year for open-source stat fetching (heuristic)
+            now = datetime.now()
+            season_year = now.year
+            # If we are in the early part of the year (Jan-July), the season started the previous year
+            if now.month < 8:
+                season_year -= 1
+
+            master_df = enrich_with_vertex_features(
+                master_df,
+                {league: api_sports_clients.get(league)},
+                season_year=season_year
+            )
             # CRITICAL: Remove duplicate columns to prevent XGBoost Segfault
             master_df = master_df.loc[:, ~master_df.columns.duplicated()]
 

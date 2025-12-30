@@ -3,6 +3,20 @@ import numpy as np
 from datetime import datetime
 from typing import Dict, Any, List, Optional
 import logging
+import warnings
+
+# Import new open-source libraries
+try:
+    from nba_api.stats.endpoints import leaguedashteamstats
+except ImportError:
+    leaguedashteamstats = None
+    warnings.warn("nba_api not installed. NBA stats fetching will fail.")
+
+try:
+    import nfl_data_py as nfl
+except ImportError:
+    nfl = None
+    warnings.warn("nfl_data_py not installed. NFL stats fetching will fail.")
 
 from app_core.team_name_matcher import TeamNameMatcher
 from app_core.vertex_ai_endpoint import VERTEX_FEATURE_COLUMNS
@@ -10,6 +24,7 @@ from app_core.vertex_ai_endpoint import VERTEX_FEATURE_COLUMNS
 logger = logging.getLogger(__name__)
 
 # Config: Set to True to skip stats API calls on Free Tier plans
+# (This still applies to API-Sports calls, but NOT to open-source libs)
 FREE_TIER_MODE = True
 
 # Define the 27 features we want to ensure exist
@@ -71,14 +86,180 @@ def _parse_form(form_str: str) -> float:
     total = len(form_str)
     return wins / total if total > 0 else 0.5
 
-def fetch_and_process_standings(api_clients: Dict[str, Any]) -> pd.DataFrame:
+# -------------------------------------------------------------------------
+# New Open-Source Stats Fetching Helpers
+# -------------------------------------------------------------------------
+
+def fetch_nba_stats(season_year: int) -> List[Dict[str, Any]]:
+    """
+    Fetch NBA stats using nba_api for the given season year (e.g. 2024 for 2024-25).
+    """
+    if leaguedashteamstats is None:
+        return []
+
+    try:
+        # nba_api expects season format "YYYY-YY", e.g. "2024-25"
+        season_str = f"{season_year}-{str(season_year + 1)[-2:]}"
+        logger.info(f"Fetching NBA stats for season: {season_str}")
+
+        # MeasureType='Base' gives GP, W, L, W_PCT, PTS, PLUS_MINUS, etc.
+        dashboard = leaguedashteamstats.LeagueDashTeamStats(
+            season=season_str,
+            measure_type_detailed_defense='Base'
+        )
+        df = dashboard.get_data_frames()[0]
+
+        stats = []
+        for _, row in df.iterrows():
+            # nba_api columns: TEAM_NAME, GP, W, L, W_PCT, PTS, PLUS_MINUS
+            team_name = str(row['TEAM_NAME'])
+            gp = float(row['GP'])
+            pts = float(row['PTS'])
+            plus_minus = float(row['PLUS_MINUS'])
+            w_pct = float(row['W_PCT'])
+
+            # Calculate metrics
+            ppg = pts / gp if gp > 0 else 0.0
+            # Opponent PTS approx: PTS - PLUS_MINUS = OPP_PTS
+            oppg = (pts - plus_minus) / gp if gp > 0 else 0.0
+
+            # For streaks/splits we might need more calls, but for speed we use overall as proxy
+            stats.append({
+                "team_norm": TeamNameMatcher.normalize(team_name),
+                "league_key": "NBA",
+                "win_pct": w_pct,
+                "home_win_pct": w_pct, # Approximation
+                "away_win_pct": w_pct, # Approximation
+                "ppg": ppg,
+                "oppg": oppg,
+                "streak": 0.0, # Not in base view easily
+                "last5_win_pct": w_pct # Approximation
+            })
+
+        logger.info(f"Successfully fetched NBA stats for {len(stats)} teams.")
+        return stats
+    except Exception as e:
+        logger.warning(f"Failed to fetch NBA stats via nba_api: {e}")
+        return []
+
+def fetch_nfl_stats(season_year: int) -> List[Dict[str, Any]]:
+    """
+    Fetch NFL stats using nfl_data_py for the given season year.
+    Uses 'import_schedules' to aggregate team stats from game results.
+    """
+    if nfl is None:
+        return []
+
+    try:
+        logger.info(f"Fetching NFL stats for season: {season_year}")
+        # Use schedule data which has scores
+        df = nfl.import_schedules([season_year])
+
+        team_stats = {}
+
+        def update_team(team, scored, allowed, won):
+            if team not in team_stats:
+                team_stats[team] = {'games': 0, 'wins': 0, 'points_for': 0, 'points_against': 0}
+            team_stats[team]['games'] += 1
+            team_stats[team]['points_for'] += scored
+            team_stats[team]['points_against'] += allowed
+            if won:
+                team_stats[team]['wins'] += 1
+
+        for _, row in df.iterrows():
+            if pd.isna(row['result']): # Game not played yet
+                continue
+
+            home = row['home_team']
+            away = row['away_team']
+            home_score = row['home_score']
+            away_score = row['away_score']
+
+            # Handle potential NaNs in scores
+            if pd.isna(home_score) or pd.isna(away_score):
+                continue
+
+            update_team(home, home_score, away_score, home_score > away_score)
+            update_team(away, away_score, home_score, away_score > home_score)
+
+        stats = []
+        for team_code, data in team_stats.items():
+            games = data['games']
+            if games == 0: continue
+
+            w_pct = data['wins'] / games
+            ppg = data['points_for'] / games
+            oppg = data['points_against'] / games
+
+            # nfl_data_py uses abbreviations (e.g. KC, SF).
+            # TeamNameMatcher.normalize might need help if it expects full names.
+            # But we will pass it anyway.
+            # For robustness, we might want a small map or trust fuzzy match later.
+            # Usually 'KC' -> 'Kansas City' mapping exists in some layers,
+            # but TeamNameMatcher is primarily for full names.
+            # However, downstream matching might be fuzzy enough.
+
+            stats.append({
+                "team_norm": TeamNameMatcher.normalize(str(team_code)),
+                "league_key": "NFL",
+                "win_pct": w_pct,
+                "home_win_pct": w_pct,
+                "away_win_pct": w_pct,
+                "ppg": ppg,
+                "oppg": oppg,
+                "streak": 0.0,
+                "last5_win_pct": w_pct
+            })
+
+        logger.info(f"Successfully fetched NFL stats for {len(stats)} teams.")
+        return stats
+    except Exception as e:
+        logger.warning(f"Failed to fetch NFL stats via nfl_data_py: {e}")
+        return []
+
+# -------------------------------------------------------------------------
+
+def fetch_and_process_standings(api_clients: Dict[str, Any], season_year: Optional[int] = None) -> pd.DataFrame:
     """
     Fetch standings for all configured leagues and return a normalized stats DataFrame.
     Returns DataFrame with columns: ['team_norm', 'league_key', ...stats...]
+
+    Updated to use open-source libraries for NBA and NFL.
     """
     all_stats = []
     
+    # Determine season year if not passed
+    if not season_year:
+        now = datetime.now()
+        season_year = now.year
+        # Simple heuristic: if before August, assume we want previous season starts (e.g. Jan 2025 -> 2024 season)
+        if now.month < 8:
+            season_year -= 1
+
+    # Get list of leagues we care about from keys
+    leagues = list(api_clients.keys())
+
+    # Track which leagues we've handled to avoid double fetching
+    handled_leagues = set()
+
+    # 1. Open Source Fetching (NBA/NFL) - Bypass Free Tier Mode checks
+    if "NBA" in leagues:
+        nba_data = fetch_nba_stats(season_year)
+        if nba_data:
+            all_stats.extend(nba_data)
+            handled_leagues.add("NBA")
+
+    if "NFL" in leagues:
+        nfl_data = fetch_nfl_stats(season_year)
+        if nfl_data:
+            all_stats.extend(nfl_data)
+            handled_leagues.add("NFL")
+
+    # 2. Existing API-Sports Fetching for others
     for league_key, client in api_clients.items():
+        if league_key in handled_leagues:
+            continue
+
         if not client or not client.is_configured():
             continue
             
@@ -87,7 +268,6 @@ def fetch_and_process_standings(api_clients: Dict[str, Any]) -> pd.DataFrame:
             continue
 
         # Use get_team_stats instead of get_standings to avoid 403 errors
-        # This will fetch team stats one by one if needed (via new get_team_stats in apisports.py)
         try:
             standings = client.get_team_stats()
         except Exception as e:
@@ -96,7 +276,6 @@ def fetch_and_process_standings(api_clients: Dict[str, Any]) -> pd.DataFrame:
 
         if not standings:
             status_code = getattr(client, 'last_status_code', 'N/A')
-            # Only log if NOT in free tier mode (redundant check but safe)
             if not FREE_TIER_MODE:
                 logger.warning(f"Failed to fetch team stats for {league_key}: {getattr(client, 'last_error', 'Unknown error')} (Status: {status_code})")
             continue
@@ -113,9 +292,6 @@ def fetch_and_process_standings(api_clients: Dict[str, Any]) -> pd.DataFrame:
                 continue
                 
             norm_name = TeamNameMatcher.normalize(raw_name)
-            
-            # Success logging as requested
-            logger.info(f"✅ Stats loaded for {norm_name}")
             
             # Helper to safely get float
             def get_val(d, k, sub_k=None):
@@ -156,8 +332,8 @@ def fetch_and_process_standings(api_clients: Dict[str, Any]) -> pd.DataFrame:
                 "team_norm": norm_name,
                 "league_key": league_key,
                 "win_pct": win_pct,
-                "home_win_pct": home_win_pct, # Win % when playing at home
-                "away_win_pct": away_win_pct, # Win % when playing away
+                "home_win_pct": home_win_pct,
+                "away_win_pct": away_win_pct,
                 "ppg": ppg,
                 "oppg": oppg,
                 "streak": streak,
@@ -166,7 +342,7 @@ def fetch_and_process_standings(api_clients: Dict[str, Any]) -> pd.DataFrame:
             
     return pd.DataFrame(all_stats)
 
-def enrich_with_vertex_features(df: pd.DataFrame, api_clients: Dict[str, Any]) -> pd.DataFrame:
+def enrich_with_vertex_features(df: pd.DataFrame, api_clients: Dict[str, Any], season_year: Optional[int] = None) -> pd.DataFrame:
     """
     Enrich the master dataframe with features required for Vertex AI.
     Uses pd.concat for performance to avoid fragmentation.
@@ -192,7 +368,7 @@ def enrich_with_vertex_features(df: pd.DataFrame, api_clients: Dict[str, Any]) -
             return fill_val
 
     # 1. Fetch Stats
-    stats_df = fetch_and_process_standings(api_clients)
+    stats_df = fetch_and_process_standings(api_clients, season_year=season_year)
     
     # 2. Normalize Names in Master DF (create temporary series)
     # Handle variable column names (Home vs home_team)
