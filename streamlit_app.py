@@ -3535,12 +3535,17 @@ def fetch_odds_games(sport_key: str) -> List[Dict[str, Any]]:
     url = f"https://api.the-odds-api.com/v4/sports/{sport_key}/odds/"
     params = {
         "apiKey": odds_api_key,
-        "regions": "us",
+        "regions": "us",  # Explicitly set to 'us' for US bookmakers
         "markets": "h2h,spreads,totals",
         "oddsFormat": "american",
         "dateFormat": "iso",
     }
     resp = requests.get(url, params=params, timeout=15)
+    try:
+        st.session_state["raw_odds_response"] = resp.text
+        st.session_state["last_odds_url"] = resp.url
+    except Exception:
+        pass
     resp.raise_for_status()
     return resp.json()
 
@@ -8760,6 +8765,17 @@ with tab_debug:
     }
     st.subheader("Config Flags")
     st.json({**flags, "project_id": project_id, "location": location})
+
+    with st.expander("Raw Odds Response", expanded=False):
+        st.write("Last URL:", st.session_state.get("last_odds_url"))
+        raw_resp = st.session_state.get("raw_odds_response")
+        if raw_resp:
+            try:
+                st.json(json.loads(raw_resp))
+            except Exception:
+                st.text(raw_resp)
+        else:
+            st.info("No odds response captured yet.")
 
     games = st.session_state.get("games", [])
     st.subheader("Counts")
