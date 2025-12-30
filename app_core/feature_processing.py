@@ -159,12 +159,16 @@ def fetch_nba_stats(season_year: int) -> List[Dict[str, Any]]:
             plus_minus = float(row['PLUS_MINUS'])
             w_pct = float(row['W_PCT'])
             tov = float(row['TOV']) if 'TOV' in row else 0.0
+            ast = float(row['AST']) if 'AST' in row else 0.0
+            reb = float(row['REB']) if 'REB' in row else 0.0
 
             # Calculate metrics
             ppg = pts / gp if gp > 0 else 0.0
             # Opponent PTS approx: PTS - PLUS_MINUS = OPP_PTS
             oppg = (pts - plus_minus) / gp if gp > 0 else 0.0
             avg_tov = tov / gp if gp > 0 else 0.0
+            avg_ast = ast / gp if gp > 0 else 0.0
+            avg_reb = reb / gp if gp > 0 else 0.0
 
             stats.append({
                 "team_norm": TeamNameMatcher.normalize(team_name),
@@ -172,8 +176,10 @@ def fetch_nba_stats(season_year: int) -> List[Dict[str, Any]]:
                 "win_pct": w_pct,
                 "home_win_pct": w_pct, # Approximation
                 "away_win_pct": w_pct, # Approximation
-                "ppg": ppg,
-                "oppg": oppg,
+                "points_per_game": ppg,
+                "points_allowed_per_game": oppg,
+                "assists_per_game": avg_ast,
+                "rebounds_per_game": avg_reb,
                 "turnovers": avg_tov,
                 "streak": 0.0, # Not in base view easily
                 "last5_win_pct": w_pct # Approximation
@@ -252,8 +258,8 @@ def fetch_nfl_stats(season_year: int) -> List[Dict[str, Any]]:
                 "win_pct": w_pct,
                 "home_win_pct": w_pct,
                 "away_win_pct": w_pct,
-                "ppg": ppg,
-                "oppg": oppg,
+                "points_per_game": ppg,
+                "points_allowed_per_game": oppg,
                 "turnovers": avg_tov,
                 "streak": 0.0,
                 "last5_win_pct": w_pct
@@ -285,72 +291,94 @@ def fetch_ncaaf_stats(season_year: int) -> List[Dict[str, Any]]:
         configuration.api_key_prefix['Authorization'] = 'Bearer'
 
         api_instance = cfbd.StatsApi(cfbd.ApiClient(configuration))
-        # Fetch team stats for the season
-        team_stats = api_instance.get_team_stats(year=season_year)
+        # Use get_team_game_stats instead of get_team_stats (which is deprecated/missing)
+        # This returns a list of game stats for teams. We need to aggregate.
+        # It accepts year.
+        game_stats = api_instance.get_team_game_stats(year=season_year)
 
-        # Need records for win pct
-        games_api = cfbd.GamesApi(cfbd.ApiClient(configuration))
-        # records = games_api.get_team_records(year=season_year) # This might be heavy, let's try to infer from stats or fetch records
+        # Aggregate game stats by team
+        team_aggregates = {}
 
-        # For simplicity and speed, we will use get_team_records if available, otherwise default to 0.5
-        # Actually, get_team_stats returns complex objects.
-        # Structure: [{'season': 2024, 'team': 'Air Force', 'conference': 'Mountain West', 'stat_name': 'games', 'stat_value': 12}, ...]
-
-        # We need to pivot this data
-        pivot_data = {}
-        for entry in team_stats:
-            team = entry.team
-            if team not in pivot_data:
-                pivot_data[team] = {}
-            pivot_data[team][entry.stat_name] = entry.stat_value
+        for g in game_stats:
+            # g has team, points, turnovers, etc. (Check API, but assuming common fields)
+            # Usually: g.team, g.points, g.turnovers
+            # We need to verify the fields. Assuming `points` is 'points' and `turnovers` is 'turnovers'
+            # If `cfbd` uses object attributes:
+            t_name = getattr(g, 'team', None)
+            pts = getattr(g, 'points', 0)
+            # turnovers might be in 'stats' dict or attribute.
+            # Actually get_team_game_stats usually returns objects with 'stats' list?
+            # Or it returns object with 'points'.
+            # Let's assume generic object structure or dictionary if valid.
+            # cfbd python client usually returns objects.
             
-        # Get records for W-L
-        try:
-            records = games_api.get_team_records(year=season_year)
-            for r in records:
-                if r.team in pivot_data:
-                    pivot_data[r.team]['wins'] = r.total.wins
-                    pivot_data[r.team]['losses'] = r.total.losses
-                    pivot_data[r.team]['games'] = r.total.games
-        except Exception as e:
-            logger.warning(f"Failed to fetch NCAAF records: {e}")
+            if not t_name: continue
+
+            if t_name not in team_aggregates:
+                team_aggregates[t_name] = {'games': 0, 'points': 0, 'turnovers': 0}
+            
+            team_aggregates[t_name]['games'] += 1
+            # Check for points. If None/missing, treat as 0
+            if pts:
+                team_aggregates[t_name]['points'] += int(pts)
+            
+            # Turnovers - check attribute
+            tov = getattr(g, 'turnovers', 0)
+            if tov:
+                team_aggregates[t_name]['turnovers'] += int(tov)
+
+        # We also need records for wins/losses/points_allowed (oppg)
+        # get_team_game_stats gives OFFENSIVE stats usually.
+        # To get defense (OPPG), we need to look at what the opponent scored.
+        # But get_team_game_stats is per team. We'd need to link games.
+        # Alternatively, use GamesApi to get scores for OPPG and Wins.
+
+        games_api = cfbd.GamesApi(cfbd.ApiClient(configuration))
+
+        # We can use get_games to get scores (home_team, away_team, home_points, away_points)
+        season_games = games_api.get_games(year=season_year)
+
+        final_stats_map = {}
+        for g in season_games:
+            if not g.home_team or not g.away_team: continue
+
+            # Ensure stats map entries exist
+            for t in [g.home_team, g.away_team]:
+                if t not in final_stats_map:
+                    final_stats_map[t] = {'games': 0, 'wins': 0, 'points_for': 0, 'points_against': 0, 'turnovers': 0}
+
+            h_pts = g.home_points if g.home_points is not None else 0
+            a_pts = g.away_points if g.away_points is not None else 0
+
+            # Home
+            final_stats_map[g.home_team]['games'] += 1
+            final_stats_map[g.home_team]['points_for'] += h_pts
+            final_stats_map[g.home_team]['points_against'] += a_pts
+            if h_pts > a_pts:
+                final_stats_map[g.home_team]['wins'] += 1
+
+            # Away
+            final_stats_map[g.away_team]['games'] += 1
+            final_stats_map[g.away_team]['points_for'] += a_pts
+            final_stats_map[g.away_team]['points_against'] += h_pts
+            if a_pts > h_pts:
+                final_stats_map[g.away_team]['wins'] += 1
+
+        # Merge turnovers from the other call if available, or just ignore if too complex to link
+        # We aggregated turnovers above in `team_aggregates`.
+        for t, agg in team_aggregates.items():
+            if t in final_stats_map:
+                final_stats_map[t]['turnovers'] = agg['turnovers']
 
         stats = []
-        for team_name, data in pivot_data.items():
-            games = data.get('games', 0)
+        for team_name, data in final_stats_map.items():
+            games = data['games']
             if games == 0: continue
-            
-            # Extract stat_values are mostly strings? Check documentation or assume int/float
-            # cfbd usually returns int/float/str. Assuming safely.
-            def get_stat(name):
-                return float(data.get(name, 0))
 
-            # Defensive stats (points allowed) are usually under 'allowed' category in some endpoints,
-            # but get_team_stats returns generic list.
-            # Usually we look for 'points' (offense) and maybe we can't get defense easily from this endpoint alone without more processing.
-            # Wait, get_team_stats has a 'conference' filter but returns all?
-            # Let's assume 'turnovers' might be there.
-            
-            # Note: CFBD team stats are a bit raw.
-            # If complex, we might fallback to simple defaults or try to best effort.
-            # Let's trust 'games', 'wins' from records.
-            # For ppg, we need 'points'.
-
-            # Fallback if specific stats are tricky without extensive mapping
-            ppg = 28.0
-            oppg = 28.0
-            tov = 0.0
-
-            # If we don't have detailed stats easily mapped, we rely on records for win_pct
-            # Data from 'get_team_stats' is a list of objects, we'd need to map 'stat_name' -> value.
-            # Common names: 'games', 'pass_yds', 'rush_yds', 'penalties', 'turnovers'.
-            # 'turnovers' might be 'turnovers_lost'.
-
-            if 'turnovers' in data:
-                tov = get_stat('turnovers') / games
-
-            wins = data.get('wins', 0)
-            win_pct = wins / games
+            win_pct = data['wins'] / games
+            ppg = data['points_for'] / games
+            oppg = data['points_against'] / games
+            avg_tov = data['turnovers'] / games
 
             stats.append({
                 "team_norm": TeamNameMatcher.normalize(team_name),
@@ -358,9 +386,9 @@ def fetch_ncaaf_stats(season_year: int) -> List[Dict[str, Any]]:
                 "win_pct": win_pct,
                 "home_win_pct": win_pct,
                 "away_win_pct": win_pct,
-                "ppg": ppg, # Placeholder if not easily extracted
-                "oppg": oppg, # Placeholder
-                "turnovers": tov,
+                "points_per_game": ppg,
+                "points_allowed_per_game": oppg,
+                "turnovers": avg_tov,
                 "streak": 0.0,
                 "last5_win_pct": win_pct
             })
@@ -416,8 +444,8 @@ def fetch_nhl_stats(season_year: int) -> List[Dict[str, Any]]:
                 "win_pct": win_pct,
                 "home_win_pct": win_pct,
                 "away_win_pct": win_pct,
-                "ppg": ppg,
-                "oppg": oppg,
+                "points_per_game": ppg,
+                "points_allowed_per_game": oppg,
                 "turnovers": 0.0,
                 "streak": streak,
                 "last5_win_pct": entry.get('l10Points', 0) / 20.0 # Approx from L10 points? Or just use win_pct
@@ -496,8 +524,8 @@ def fetch_ncaab_stats(season_year: int) -> List[Dict[str, Any]]:
                 "win_pct": win_pct,
                 "home_win_pct": win_pct,
                 "away_win_pct": win_pct,
-                "ppg": ppg,
-                "oppg": oppg,
+                "points_per_game": ppg,
+                "points_allowed_per_game": oppg,
                 "turnovers": avg_tov,
                 "streak": 0.0,
                 "last5_win_pct": win_pct
@@ -632,8 +660,11 @@ def enrich_with_vertex_features(df: pd.DataFrame, api_clients: Dict[str, Any], s
         features_data['feature_home_win_pct'] = map_stat(home_norm, 'win_pct', defaults['win_pct'])
         features_data['feature_home_home_win_pct'] = map_stat(home_norm, 'home_win_pct', defaults['win_pct'])
         features_data['feature_home_last5_win_pct'] = map_stat(home_norm, 'last5_win_pct', defaults['last5_win_pct'])
-        features_data['feature_home_ppg'] = map_stat(home_norm, 'ppg', defaults['ppg'])
-        features_data['feature_home_oppg'] = map_stat(home_norm, 'oppg', defaults['oppg'])
+
+        # New key mapping for standardized keys
+        features_data['feature_home_ppg'] = map_stat(home_norm, 'points_per_game', defaults['ppg'])
+        features_data['feature_home_oppg'] = map_stat(home_norm, 'points_allowed_per_game', defaults['oppg'])
+
         features_data['feature_home_streak'] = map_stat(home_norm, 'streak', 0.0)
         # Add turnovers if available (not in vertex columns yet, but useful for later)
         features_data['feature_home_turnovers'] = map_stat(home_norm, 'turnovers', 0.0)
@@ -642,8 +673,10 @@ def enrich_with_vertex_features(df: pd.DataFrame, api_clients: Dict[str, Any], s
         features_data['feature_away_win_pct'] = map_stat(away_norm, 'win_pct', defaults['win_pct'])
         features_data['feature_away_away_win_pct'] = map_stat(away_norm, 'away_win_pct', defaults['win_pct'])
         features_data['feature_away_last5_win_pct'] = map_stat(away_norm, 'last5_win_pct', defaults['last5_win_pct'])
-        features_data['feature_away_ppg'] = map_stat(away_norm, 'ppg', defaults['ppg'])
-        features_data['feature_away_oppg'] = map_stat(away_norm, 'oppg', defaults['oppg'])
+
+        features_data['feature_away_ppg'] = map_stat(away_norm, 'points_per_game', defaults['ppg'])
+        features_data['feature_away_oppg'] = map_stat(away_norm, 'points_allowed_per_game', defaults['oppg'])
+
         features_data['feature_away_streak'] = map_stat(away_norm, 'streak', 0.0)
         features_data['feature_away_turnovers'] = map_stat(away_norm, 'turnovers', 0.0)
 
