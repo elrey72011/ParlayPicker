@@ -257,56 +257,34 @@ def is_vertex_prediction_configured() -> bool:
     return True
 
 
-def predict_win_probabilities(
-    df: pd.DataFrame,
-    feature_cols: Optional[List[str]] = None,
-    model_path: Optional[str] = None
-) -> List[float]:
-    """
-    Predicts win probabilities using XGBoost with strict safety wraps.
-    """
-    if feature_cols is None:
-        feature_cols = VERTEX_FEATURE_COLUMNS
-
-    # Default model path if not provided (placeholder to trigger safe fallback if missing)
-    if model_path is None:
-        model_path = "./models/model.json"
-
+def predict_win_probabilities(df, feature_cols=None, model_path=None):
     try:
         import xgboost as xgb
+        # ... existing logic ...
+        # Ensure duplicates are stripped here too just in case
+        df = df.loc[:, ~df.columns.duplicated()]
         
-        # 1. SANITIZE: Remove duplicate columns (The Segfault Fix)
-        # XGBoost crashes hard if columns are duplicated.
-        df_clean = df.loc[:, ~df.columns.duplicated()]
-        
+        if feature_cols is None:
+            feature_cols = VERTEX_FEATURE_COLUMNS
+
+        # Default model path if not provided (placeholder to trigger safe fallback if missing)
+        if model_path is None:
+            model_path = "./models/model.json"
+
         # 2. VALIDATE: Ensure all features exist
-        missing = [c for c in feature_cols if c not in df_clean.columns]
+        missing = [c for c in feature_cols if c not in df.columns]
         if missing:
             logger.warning(f"Vertex Warning: Missing cols {missing}. Filling 0.")
             for c in missing:
-                df_clean[c] = 0.0
-        
-        # 3. PREDICT (Safe Wrap)
-        # We use a try/except specifically around the C-library call
-        try:
-            # Ensure we only select the feature columns to avoid extra column issues
-            dmatrix = xgb.DMatrix(df_clean[feature_cols])
-            booster = xgb.Booster()
-            booster.load_model(model_path)
-            predictions = booster.predict(dmatrix)
+                df[c] = 0.0
 
-            # Convert numpy array to list
-            if hasattr(predictions, "tolist"):
-                return predictions.tolist()
-            return list(predictions)
-
-        except Exception as e:
-            logger.error(f"CRITICAL XGBOOST FAILURE: {e}")
-            # Fallback: Return 0.5 (Coin Flip) so app doesn't die
-            return [0.5] * len(df)
-
+        dmatrix = xgb.DMatrix(df[feature_cols])
+        booster = xgb.Booster()
+        booster.load_model(model_path)
+        return booster.predict(dmatrix)
     except Exception as e:
-        logger.error(f"Vertex Setup Failed: {e}")
+        print(f"Vertex Crash Prevented: {e}")
+        # Return 50% probabilities so the app FINISHES instead of restarting
         return [0.5] * len(df)
 
 
