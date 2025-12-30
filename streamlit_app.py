@@ -3648,10 +3648,13 @@ def get_vertex_prediction(endpoint, row: pd.Series) -> float:
             final_prob = prob_home / (prob_home + prob_away)
             return final_prob
         except Exception as e:
-            print(f"Vertex Prediction Error: {e}")
+            # PRINT THE ERROR TO THE SCREEN so we can see it
+            print(f"VERTEX CRASH: {e}")
+            st.error(f"Vertex Failed: {e}") # This will show in red on your app
             return 0.5
     except Exception as e:
-        logger.error(f"Vertex prediction failed: {e}")
+        print(f"VERTEX CRASH: {e}")
+        st.error(f"Vertex Failed: {e}")
         return 0.5 # Return 0.5 to populate AI_Prob
 
 
@@ -5079,33 +5082,24 @@ render_pipeline_banner()
 # )
 
 with tab_shotgun:
-    # Fix Shotgun Tab "Memory": Check session state and load master_df if analysis has run
-    df = None
+    # Check if we have data in memory
     if st.session_state.get('analysis_run') and 'master_df' in st.session_state:
         df = st.session_state['master_df']
-    else:
-        st.warning("⚠ Please run Master Analysis in Tab 1 first.")
-        # Removed st.stop() to allow script to proceed to Master Analysis tab
-
-    if df is not None:
         st.header("🚀 Shotgun Allocation")
 
-    if df is not None and st.session_state.get('analysis_complete'):
-        # Use analysis_results as the source of truth if available
-        df = st.session_state['analysis_results']
+        # Ensure games data is available for shotgun context
+        st.session_state["games_data"] = st.session_state.get("games", [])
 
-        # Hydrate if missing but analysis results exist
-        if "shotgun_data" not in st.session_state and ParlayOptimizer:
+        # Hydrate optimizer if needed
+        if "shotgun_data" not in st.session_state and ParlayOptimizer and df is not None:
             try:
                 optimizer = ParlayOptimizer(model_dir="./models")
-                # Note: optimizer typically needs full master_df or similar.
-                # analysis_results is the DEDUPED version from master analysis loop.
-                # If optimizer needs enriched columns, they are present.
                 st.session_state["shotgun_data"] = optimizer.get_shotgun_picks(df)
-            except Exception:
-                pass
+            except Exception as e:
+                st.error(f"Optimizer failed: {e}")
     else:
-        st.warning("Please go to the Master Analysis tab and run the model first.")
+        st.warning("Please run the Master Analysis in Tab 1 first.")
+        df = None
 
     # Fallback: Inside the tab, if len(candidates) == 0, display a message
     shotgun_data = st.session_state.get("shotgun_data")
@@ -5347,16 +5341,9 @@ with tab_master:
 
     # FIX: Check session state flag, independent of sidebar button return value
     if st.session_state.get('games_loaded', False):
-        st.success(f"Loaded {len(games)} games.")
+        st.info(f"Games Loaded: {len(st.session_state.get('games', []))}")
 
-        run_master = st.button(
-            "Run Master Analysis",
-            key="run_master",
-            disabled=(not kalshi_status.get("configured")) and st.session_state.get("kalshi_required", True),
-            help="Requires Kalshi availability",
-        )
-
-        if run_master:
+        if st.button("Run Master Analysis", key="run_master_analysis_btn"):
             if (not kalshi_status.get("configured")):
                 st.error("Kalshi is required but unavailable. Fix Kalshi first.")
                 st.stop()

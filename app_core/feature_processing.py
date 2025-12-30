@@ -295,8 +295,8 @@ def fetch_ncaaf_stats(season_year: int) -> List[Dict[str, Any]]:
         configuration.api_key_prefix['Authorization'] = 'Bearer'
 
         api_instance = cfbd.StatsApi(cfbd.ApiClient(configuration))
-        # Use get_advanced_season_stats per instruction (replaces get_team_season_stats)
-        season_stats = api_instance.get_advanced_season_stats(year=season_year)
+        # Use get_team_season_stats per instruction (replaces get_advanced_season_stats)
+        season_stats = api_instance.get_team_season_stats(year=season_year)
 
         # To get Win PCT, we still need records or game outcomes.
         # We will use GamesApi to get games and calculate win pct,
@@ -327,7 +327,7 @@ def fetch_ncaaf_stats(season_year: int) -> List[Dict[str, Any]]:
 
         stats = []
         for item in season_stats:
-            team_name = item.team
+            team_name = getattr(item, 'team', None)
             if not team_name: continue
 
             offense = getattr(item, 'offense', None)
@@ -339,9 +339,9 @@ def fetch_ncaaf_stats(season_year: int) -> List[Dict[str, Any]]:
             # Need games count to average if points is Total.
             # 'games' is usually on the item itself for TeamSeasonStat
             games = getattr(item, 'games', 0)
-            # If not there, try offense
+            # If not there, try offense (handles older versions too)
             if not games and hasattr(offense, 'games'):
-                games = offense.games
+                games = getattr(offense, 'games', 0)
 
             # If still not found, check our team_records map
             if not games and team_name in team_records:
@@ -350,20 +350,24 @@ def fetch_ncaaf_stats(season_year: int) -> List[Dict[str, Any]]:
             pts = getattr(offense, 'points', 0)
             pts_allowed = getattr(defense, 'points', 0) if defense else 0
 
-            # Calculate PPG / OPPG
+            # Additional metrics if available (yards etc)
+            total_yards = getattr(offense, 'total_yards', 0)
+
+            # Calculate PPG / OPPG / YPG
             if games and games > 0:
                 ppg = pts / games
                 oppg = pts_allowed / games
+                # yards_per_game logic as requested
+                ypg = total_yards / games
                 tov = getattr(offense, 'turnovers', 0)
                 avg_tov = tov / games
             else:
-                # If games is 0 but we have points, maybe points IS ppg?
-                # Unlikely for season_stats. Default to 0 if cannot normalize.
                 ppg = 0.0
                 oppg = 0.0
+                ypg = 0.0
                 avg_tov = 0.0
 
-            # Win PCT from map
+            # Win PCT from map or default
             if team_name in team_records and team_records[team_name]['games'] > 0:
                 rec = team_records[team_name]
                 w_pct = rec['wins'] / rec['games']
@@ -378,6 +382,7 @@ def fetch_ncaaf_stats(season_year: int) -> List[Dict[str, Any]]:
                 "away_win_pct": w_pct,
                 "points_per_game": ppg,
                 "points_allowed_per_game": oppg,
+                "yards_per_game": ypg, # Added per instructions
                 "turnovers": avg_tov,
                 "streak": 0.0,
                 "last5_win_pct": w_pct
