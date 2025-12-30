@@ -144,9 +144,11 @@ def fetch_nba_stats(season_year: int) -> List[Dict[str, Any]]:
         logger.info(f"Fetching NBA stats for season: {season_str}")
 
         # MeasureType='Base' gives GP, W, L, W_PCT, PTS, PLUS_MINUS, TOV, etc.
+        # Added per_mode_detailed='PerGame' to get averaged stats directly as requested
         dashboard = leaguedashteamstats.LeagueDashTeamStats(
             season=season_str,
-            measure_type_detailed_defense='Base'
+            measure_type_detailed_defense='Base',
+            per_mode_detailed='PerGame'
         )
         df = dashboard.get_data_frames()[0]
 
@@ -155,7 +157,9 @@ def fetch_nba_stats(season_year: int) -> List[Dict[str, Any]]:
             # nba_api columns: TEAM_NAME, GP, W, L, W_PCT, PTS, PLUS_MINUS, TOV
             team_name = str(row['TEAM_NAME'])
             gp = float(row['GP'])
-            pts = float(row['PTS'])
+
+            # With PerGame, these are already averages
+            pts = float(row['PTS']) # Points Per Game
             plus_minus = float(row['PLUS_MINUS'])
             w_pct = float(row['W_PCT'])
             tov = float(row['TOV']) if 'TOV' in row else 0.0
@@ -163,12 +167,12 @@ def fetch_nba_stats(season_year: int) -> List[Dict[str, Any]]:
             reb = float(row['REB']) if 'REB' in row else 0.0
 
             # Calculate metrics
-            ppg = pts / gp if gp > 0 else 0.0
-            # Opponent PTS approx: PTS - PLUS_MINUS = OPP_PTS
-            oppg = (pts - plus_minus) / gp if gp > 0 else 0.0
-            avg_tov = tov / gp if gp > 0 else 0.0
-            avg_ast = ast / gp if gp > 0 else 0.0
-            avg_reb = reb / gp if gp > 0 else 0.0
+            ppg = pts
+            # Opponent PTS approx: PTS - PLUS_MINUS = OPP_PTS (Plus Minus is also per game)
+            oppg = (pts - plus_minus)
+            avg_tov = tov
+            avg_ast = ast
+            avg_reb = reb
 
             stats.append({
                 "team_norm": TeamNameMatcher.normalize(team_name),
@@ -291,106 +295,92 @@ def fetch_ncaaf_stats(season_year: int) -> List[Dict[str, Any]]:
         configuration.api_key_prefix['Authorization'] = 'Bearer'
 
         api_instance = cfbd.StatsApi(cfbd.ApiClient(configuration))
-        # Use get_team_game_stats instead of get_team_stats (which is deprecated/missing)
-        # This returns a list of game stats for teams. We need to aggregate.
-        # It accepts year.
-        game_stats = api_instance.get_team_game_stats(year=season_year)
+        # Use get_team_season_stats per instruction
+        season_stats = api_instance.get_team_season_stats(year=season_year)
 
-        # Aggregate game stats by team
-        team_aggregates = {}
-
-        for g in game_stats:
-            # g has team, points, turnovers, etc. (Check API, but assuming common fields)
-            # Usually: g.team, g.points, g.turnovers
-            # We need to verify the fields. Assuming `points` is 'points' and `turnovers` is 'turnovers'
-            # If `cfbd` uses object attributes:
-            t_name = getattr(g, 'team', None)
-            pts = getattr(g, 'points', 0)
-            # turnovers might be in 'stats' dict or attribute.
-            # Actually get_team_game_stats usually returns objects with 'stats' list?
-            # Or it returns object with 'points'.
-            # Let's assume generic object structure or dictionary if valid.
-            # cfbd python client usually returns objects.
-            
-            if not t_name: continue
-
-            if t_name not in team_aggregates:
-                team_aggregates[t_name] = {'games': 0, 'points': 0, 'turnovers': 0}
-            
-            team_aggregates[t_name]['games'] += 1
-            # Check for points. If None/missing, treat as 0
-            if pts:
-                team_aggregates[t_name]['points'] += int(pts)
-            
-            # Turnovers - check attribute
-            tov = getattr(g, 'turnovers', 0)
-            if tov:
-                team_aggregates[t_name]['turnovers'] += int(tov)
-
-        # We also need records for wins/losses/points_allowed (oppg)
-        # get_team_game_stats gives OFFENSIVE stats usually.
-        # To get defense (OPPG), we need to look at what the opponent scored.
-        # But get_team_game_stats is per team. We'd need to link games.
-        # Alternatively, use GamesApi to get scores for OPPG and Wins.
-
+        # To get Win PCT, we still need records or game outcomes.
+        # We will use GamesApi to get games and calculate win pct,
+        # but rely on season_stats for the points metrics as requested.
         games_api = cfbd.GamesApi(cfbd.ApiClient(configuration))
-
-        # We can use get_games to get scores (home_team, away_team, home_points, away_points)
         season_games = games_api.get_games(year=season_year)
 
-        final_stats_map = {}
+        # Build win pct map
+        team_records = {}
         for g in season_games:
             if not g.home_team or not g.away_team: continue
 
-            # Ensure stats map entries exist
+            # Init if needed
             for t in [g.home_team, g.away_team]:
-                if t not in final_stats_map:
-                    final_stats_map[t] = {'games': 0, 'wins': 0, 'points_for': 0, 'points_against': 0, 'turnovers': 0}
+                if t not in team_records:
+                    team_records[t] = {'games': 0, 'wins': 0}
 
             h_pts = g.home_points if g.home_points is not None else 0
             a_pts = g.away_points if g.away_points is not None else 0
 
-            # Home
-            final_stats_map[g.home_team]['games'] += 1
-            final_stats_map[g.home_team]['points_for'] += h_pts
-            final_stats_map[g.home_team]['points_against'] += a_pts
+            team_records[g.home_team]['games'] += 1
+            team_records[g.away_team]['games'] += 1
+
             if h_pts > a_pts:
-                final_stats_map[g.home_team]['wins'] += 1
-
-            # Away
-            final_stats_map[g.away_team]['games'] += 1
-            final_stats_map[g.away_team]['points_for'] += a_pts
-            final_stats_map[g.away_team]['points_against'] += h_pts
-            if a_pts > h_pts:
-                final_stats_map[g.away_team]['wins'] += 1
-
-        # Merge turnovers from the other call if available, or just ignore if too complex to link
-        # We aggregated turnovers above in `team_aggregates`.
-        for t, agg in team_aggregates.items():
-            if t in final_stats_map:
-                final_stats_map[t]['turnovers'] = agg['turnovers']
+                team_records[g.home_team]['wins'] += 1
+            elif a_pts > h_pts:
+                team_records[g.away_team]['wins'] += 1
 
         stats = []
-        for team_name, data in final_stats_map.items():
-            games = data['games']
-            if games == 0: continue
+        for item in season_stats:
+            team_name = item.team
+            if not team_name: continue
 
-            win_pct = data['wins'] / games
-            ppg = data['points_for'] / games
-            oppg = data['points_against'] / games
-            avg_tov = data['turnovers'] / games
+            offense = getattr(item, 'offense', None)
+            defense = getattr(item, 'defense', None)
+
+            if not offense: continue
+
+            # Map stat.offense.points -> points_per_game
+            # Need games count to average if points is Total.
+            # 'games' is usually on the item itself for TeamSeasonStat
+            games = getattr(item, 'games', 0)
+            # If not there, try offense
+            if not games and hasattr(offense, 'games'):
+                games = offense.games
+
+            # If still not found, check our team_records map
+            if not games and team_name in team_records:
+                games = team_records[team_name]['games']
+
+            pts = getattr(offense, 'points', 0)
+            pts_allowed = getattr(defense, 'points', 0) if defense else 0
+
+            # Calculate PPG / OPPG
+            if games and games > 0:
+                ppg = pts / games
+                oppg = pts_allowed / games
+                tov = getattr(offense, 'turnovers', 0)
+                avg_tov = tov / games
+            else:
+                # If games is 0 but we have points, maybe points IS ppg?
+                # Unlikely for season_stats. Default to 0 if cannot normalize.
+                ppg = 0.0
+                oppg = 0.0
+                avg_tov = 0.0
+
+            # Win PCT from map
+            if team_name in team_records and team_records[team_name]['games'] > 0:
+                rec = team_records[team_name]
+                w_pct = rec['wins'] / rec['games']
+            else:
+                w_pct = 0.5
 
             stats.append({
                 "team_norm": TeamNameMatcher.normalize(team_name),
                 "league_key": "NCAAF",
-                "win_pct": win_pct,
-                "home_win_pct": win_pct,
-                "away_win_pct": win_pct,
+                "win_pct": w_pct,
+                "home_win_pct": w_pct,
+                "away_win_pct": w_pct,
                 "points_per_game": ppg,
                 "points_allowed_per_game": oppg,
                 "turnovers": avg_tov,
                 "streak": 0.0,
-                "last5_win_pct": win_pct
+                "last5_win_pct": w_pct
             })
             
         logger.info(f"Successfully fetched NCAAF stats for {len(stats)} teams.")
@@ -429,7 +419,13 @@ def fetch_nhl_stats(season_year: int) -> List[Dict[str, Any]]:
             wins = entry.get('wins', 0)
             
             win_pct = wins / games
-            ppg = points_for / games
+
+            # Map goalsPerGame -> points_per_game if available
+            if 'goalsPerGame' in entry:
+                ppg = float(entry['goalsPerGame'])
+            else:
+                ppg = points_for / games
+
             oppg = points_against / games
             
             # Streak

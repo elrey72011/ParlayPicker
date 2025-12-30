@@ -7472,6 +7472,17 @@ with tab_master:
                     inference_df[col] = num_data.replace([np.inf, -np.inf], np.nan).fillna(0.0).astype(float)
 
                 # 2. Batch Prediction Call
+                # Debug output as requested: print inputs for each game
+                for idx, row in inference_df.iterrows():
+                    game_id = master_df.loc[idx, 'Home'] + " vs " + master_df.loc[idx, 'Away']
+                    # Construct dictionary of relevant stats for debug
+                    home_stats = {
+                        'ppg': row.get('feature_home_ppg'),
+                        'oppg': row.get('feature_home_oppg'),
+                        'win_pct': row.get('feature_home_win_pct')
+                    }
+                    print(f"DEBUG MODEL INPUTS for {game_id}: {home_stats}")
+
                 probs = predict_win_probabilities(inference_df)
                 if probs and len(probs) == len(master_df):
                     master_df["AI_Prob"] = probs
