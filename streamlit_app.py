@@ -4998,11 +4998,14 @@ enable_sentiment = st.sidebar.checkbox(
     "Enable Sentiment", value=st.session_state.get("enable_sentiment", True)
 )
 st.session_state["enable_sentiment"] = enable_sentiment
-if st.sidebar.button("Load Games", use_container_width=True):
+load_games_btn = st.sidebar.button("Load Games", use_container_width=True)
+if load_games_btn:
     # Invalidate master_df when loading new games
     if "master_df" in st.session_state:
         del st.session_state["master_df"]
     load_games(selected_sports or [league])
+    st.session_state["games_loaded"] = True
+    st.session_state["games_data"] = st.session_state.get("games", [])
 
 api_sports_present = (
     get_secret_any("APISPORTS_API_KEY", "API_SPORTS_KEY", "API_SPORTS_API_KEY") is not None
@@ -5323,25 +5326,38 @@ with tab_master:
         value=st.session_state.get("use_vertex_numeric_probs", False),
         key="use_vertex_numeric_probs",
     )
-    run_master = st.button(
-        "Run Master Analysis",
-        key="run_master",
-        disabled=(not kalshi_status.get("configured")) and st.session_state.get("kalshi_required", True),
-        help="Requires Kalshi availability",
-    )
+    # Check if games are loaded (using the persistent flag or fallback)
+    games_loaded = st.session_state.get("games_loaded", False)
+    if not games_loaded and st.session_state.get("games"):
+        games_loaded = True
+        st.session_state["games_loaded"] = True
+        st.session_state["games_data"] = st.session_state["games"]
+
     games = st.session_state.get("games", [])
-    if run_master and (not kalshi_status.get("configured")):
-        st.error("Kalshi is required but unavailable. Fix Kalshi first.")
-        st.stop()
 
     # Determine if we need to run (user clicked button) or just display (cached df exists)
     df_existing = st.session_state.get("master_df")
-    should_run = run_master
-    
-    # If we have existing data and didn't request a re-run, use it to skip the heavy lifting
-    # We still need to define the helper functions because they are called during the DataFrame construction block
-    # Actually, the entire block below constructs the DataFrame. We need to restructure this.
-    
+    should_run = False
+
+    if games_loaded:
+        st.success(f"Loaded {len(games)} games.")
+
+        run_master = st.button(
+            "Run Master Analysis",
+            key="run_master",
+            disabled=(not kalshi_status.get("configured")) and st.session_state.get("kalshi_required", True),
+            help="Requires Kalshi availability",
+        )
+
+        if run_master:
+            if (not kalshi_status.get("configured")):
+                st.error("Kalshi is required but unavailable. Fix Kalshi first.")
+                st.stop()
+            should_run = True
+
+    elif df_existing is None:
+        st.info("Load games from the sidebar, then run Master Analysis.")
+
     if should_run:
         st.session_state["DECISION_TRACE_SAMPLES"] = {}
 
