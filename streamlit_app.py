@@ -3632,6 +3632,7 @@ def get_vertex_prediction(endpoint, row: pd.Series) -> float:
         # Force sequential calls to avoid "Batch vs Instance" mismatch
         try:
             # Call 1: Home Team
+            # Explicitly separate calls to avoid batch dimension errors
             resp_home = endpoint.predict(instances=[home_instance])
             prob_home = resp_home.predictions[0][0] # Adjust index based on your model output shape
 
@@ -4998,8 +4999,7 @@ enable_sentiment = st.sidebar.checkbox(
     "Enable Sentiment", value=st.session_state.get("enable_sentiment", True)
 )
 st.session_state["enable_sentiment"] = enable_sentiment
-load_games_btn = st.sidebar.button("Load Games", use_container_width=True)
-if load_games_btn:
+if st.sidebar.button("Load Games", use_container_width=True):
     # Invalidate master_df when loading new games
     if "master_df" in st.session_state:
         del st.session_state["master_df"]
@@ -5075,12 +5075,12 @@ render_pipeline_banner()
 # )
 
 with tab_shotgun:
-    if st.session_state.get('analysis_run', False) and 'master_df' in st.session_state:
+    # Fix Shotgun Tab "Memory": Check session state and load master_df if analysis has run
+    if st.session_state.get('analysis_run') and 'master_df' in st.session_state:
         df = st.session_state['master_df']
-        # ... proceed with Shotgun UI ...
     else:
-        st.warning("⚠ Please run the Master Analysis in Tab 1 first to generate data.")
-        st.stop() # Stop execution so it doesn't crash later
+        st.warning("⚠ Please run Master Analysis in Tab 1 first.")
+        st.stop()
 
     st.header("🚀 Shotgun Allocation")
 
@@ -5339,7 +5339,8 @@ with tab_master:
     df_existing = st.session_state.get("master_df")
     should_run = False
 
-    if games_loaded:
+    # FIX: Check session state flag, independent of sidebar button return value
+    if st.session_state.get('games_loaded', False):
         st.success(f"Loaded {len(games)} games.")
 
         run_master = st.button(
