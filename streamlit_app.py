@@ -8559,8 +8559,8 @@ with tab_master:
             else:
                 st.info("Enable line movement by saving periodic snapshots to data/line_history.csv")
 
-        master_stats["rows_out"] = len(deduped_list)
-        st.session_state["last_rows_out"] = len(deduped_list)
+        master_stats["rows_out"] = len(df)
+        st.session_state["last_rows_out"] = len(df)
         st.session_state["master_stats"] = master_stats
         st.session_state["kalshi_match_results"] = kalshi_match_results
         st.session_state["data_source_debug"] = data_source_stats
