@@ -257,6 +257,23 @@ def fetch_team_news(news_api_key: str, team: str, league: str, league_query: Opt
         try:
             resp = requests.get(url, params=params, timeout=8)
             status = resp.status_code
+
+            # Special Handling for 403 (User Request): Return neutral instead of error
+            if status == 403:
+                return [], {
+                    "error": None,
+                    "status": 200, # Mask as 200 to downstream
+                    "status_code": 403, # Keep real code for debug
+                    "league_query": league_query,
+                    "totalResults": 0,
+                    "q": q,
+                    "attempts": attempts,
+                    "rate_limited": False,
+                    "auth_error": False, # Treat as non-fatal
+                    "retry_after": None,
+                    "note": "403_masked_as_neutral"
+                }
+
             data: Dict[str, Any] = {}
             try:
                 data = resp.json() if hasattr(resp, "json") else {}
@@ -265,7 +282,7 @@ def fetch_team_news(news_api_key: str, team: str, league: str, league_query: Opt
             articles = data.get("articles", []) if isinstance(data, dict) else []
             total_results = data.get("totalResults") if isinstance(data, dict) else None
             rate_limited = status == 429
-            auth_error = status in {401, 403}
+            auth_error = status in {401} # Removed 403 from auth_error set
             retry_after_hdr = None
             try:
                 retry_after_hdr = resp.headers.get("Retry-After")

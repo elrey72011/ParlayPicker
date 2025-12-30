@@ -278,6 +278,10 @@ def predict_win_probabilities(df, feature_cols=None, model_path=None):
             for c in missing:
                 df[c] = 0.0
 
+        # DEBUG LOG requested by user
+        instances = df[feature_cols].to_dict(orient='records')
+        print(f"DEBUG VERTEX INPUT: {instances}")
+
         dmatrix = xgb.DMatrix(df[feature_cols])
         booster = xgb.Booster()
         booster.load_model(model_path)
