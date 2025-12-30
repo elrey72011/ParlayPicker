@@ -2726,13 +2726,8 @@ def _get_gcp_sa_from_secrets() -> Optional[Dict[str, Any]]:
 @st.cache_resource
 def init_vertex_once() -> Dict[str, Any]:
     info: Dict[str, Any] = {"ok": False, "project": None, "location": None, "auth": "missing", "error": None}
-    project = read_secret("GCP_PROJECT_ID") or read_secret("gcp_project_id")
-    location = (
-        read_secret("GCP_REGION")
-        or read_secret("GCP_LOCATION")
-        or read_secret("gcp_region")
-        or "us-central1"
-    )
+    project = read_secret("GCP_PROJECT_ID") or read_secret("gcp_project_id") or "elite-hangar-479017-m8"
+    location = read_secret("GCP_LOCATION") or read_secret("GCP_REGION") or "us-central1"
     info["project"] = project
     info["location"] = location
     if project:
@@ -7533,6 +7528,9 @@ with tab_master:
         # Force de-duplication of columns to prevent TypeError crashes
         master_df = master_df.loc[:, ~master_df.columns.duplicated()].copy()
 
+        # Initialize with default 0.5 to prevent 'Column Missing' error
+        master_df["AI_Prob"] = 0.5
+
         # 2. Add 'League' column if missing (required for enrichment lookup)
         if 'League' not in master_df.columns:
             master_df['League'] = league
@@ -7562,6 +7560,8 @@ with tab_master:
         if is_vertex_prediction_configured() and ENABLE_VERTEX_MODEL:
             with st.spinner("🔮 Calling Vertex AI Batch Inference..."):
                 from app_core.vertex_ai_endpoint import VERTEX_FEATURE_COLUMNS, get_vertex_endpoint
+
+                print(f'Missing columns: {set(VERTEX_FEATURE_COLUMNS) - set(master_df.columns)}')
 
                 # 1. Sanitize the feature batch
                 inference_df = master_df[VERTEX_FEATURE_COLUMNS].copy()
