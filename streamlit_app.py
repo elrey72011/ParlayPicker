@@ -4702,7 +4702,9 @@ def match_kalshi_market(
                          best_m = m
 
              # Tolerance check (1.6 for spread/total)
-             if best_m and min_diff <= 1.6:
+             # NUCLEAR OVERRIDE: Save Kalshi data even if lines don't match exactly.
+             # We need the 'Signal' more than we need perfect precision.
+             if best_m: # and min_diff <= 1.6:
                  chosen = best_m
 
         prob, line = extract_prob_and_line(chosen, market_type)
@@ -5017,6 +5019,14 @@ with tab_shotgun:
             st.session_state["shotgun_data"] = optimizer.get_shotgun_picks(st.session_state["master_df"])
         except Exception:
             pass
+
+    # Fallback: Inside the tab, if len(candidates) == 0, display a message
+    shotgun_data = st.session_state.get("shotgun_data")
+    if not shotgun_data and "master_df" in st.session_state:
+        st.warning("No perfect matches found. Showing Raw Market Data:")
+        fallback_df = st.session_state["master_df"]
+        cols_to_show = [c for c in ['Home', 'Away', 'spread_edge'] if c in fallback_df.columns]
+        st.dataframe(fallback_df[cols_to_show])
 
     shotgun = st.session_state.get("shotgun_data")
     has_picks = False
@@ -6240,8 +6250,8 @@ with tab_master:
             vertex_used_for_spread = bool(use_vertex_numeric_probs and vertex_spread_prob is not None)
             vertex_used_for_total = bool(use_vertex_numeric_probs and vertex_total_prob is not None)
             spread_base_weights = {
-                "odds_weight": 0.30,
-                "kalshi_weight": 0.70,
+                "odds_weight": 0.0,
+                "kalshi_weight": 1.0,
                 "ml_weight": 0.0,
                 "sentiment_weight": abs(spread_sentiment_adj or 0.0),
             }
@@ -6262,8 +6272,8 @@ with tab_master:
                 spread_weights_used = {"w_implied": 1.0 if spread_prob_final is not None else 0.0, "w_kalshi": 0.0, "w_model": 0.0, "w_sentiment": 0.0}
             spread_prob = spread_prob_final
             total_base_weights = {
-                "odds_weight": 0.30,
-                "kalshi_weight": 0.70,
+                "odds_weight": 0.0,
+                "kalshi_weight": 1.0,
                 "ml_weight": 0.0,
                 "sentiment_weight": abs(total_sentiment_adj or 0.0),
             }
@@ -6547,8 +6557,8 @@ with tab_master:
                     implied_pick = implied_prob_for_pick(home_ml, away_ml, pick_side)
                     kalshi_yes_side = kalshi_winner.get("kalshi_yes_side")
                     base_weights = {
-                        "odds_weight": 0.30,
-                        "kalshi_weight": 0.70,
+                        "odds_weight": 0.0,
+                        "kalshi_weight": 1.0,
                         "ml_weight": 0.0,
                         "sentiment_weight": abs(sentiment_adj or 0.0),
                     }
