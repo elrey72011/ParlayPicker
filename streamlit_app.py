@@ -3638,11 +3638,11 @@ def get_vertex_prediction(endpoint, row: pd.Series) -> float:
             # Call 1: Home Team
             # Explicitly separate calls to avoid batch dimension errors
             resp_home = endpoint.predict(instances=[home_values])
-            prob_home = resp_home.predictions[0][0] # Adjust index based on your model output shape
+            prob_home = resp_home.predictions[0] # Adjust index based on your model output shape
 
             # Call 2: Away Team
             resp_away = endpoint.predict(instances=[away_values])
-            prob_away = resp_away.predictions[0][0]
+            prob_away = resp_away.predictions[0]
 
             # Combine (Normalize)
             final_prob = prob_home / (prob_home + prob_away)
