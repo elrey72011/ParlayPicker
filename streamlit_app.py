@@ -3535,7 +3535,7 @@ def fetch_odds_games(sport_key: str) -> List[Dict[str, Any]]:
     url = f"https://api.the-odds-api.com/v4/sports/{sport_key}/odds/"
     params = {
         "apiKey": odds_api_key,
-        "regions": "us",  # Explicitly set to 'us' for US bookmakers
+        "regions": "us",  # Hardcoded to 'us' per user request
         "markets": "h2h,spreads,totals",
         "oddsFormat": "american",
         "dateFormat": "iso",
@@ -5081,15 +5081,17 @@ render_pipeline_banner()
 
 with tab_shotgun:
     # Fix Shotgun Tab "Memory": Check session state and load master_df if analysis has run
+    df = None
     if st.session_state.get('analysis_run') and 'master_df' in st.session_state:
         df = st.session_state['master_df']
     else:
         st.warning("⚠ Please run Master Analysis in Tab 1 first.")
-        st.stop()
+        # Removed st.stop() to allow script to proceed to Master Analysis tab
 
-    st.header("🚀 Shotgun Allocation")
+    if df is not None:
+        st.header("🚀 Shotgun Allocation")
 
-    if st.session_state.get('analysis_complete'):
+    if df is not None and st.session_state.get('analysis_complete'):
         # Use analysis_results as the source of truth if available
         df = st.session_state['analysis_results']
 
@@ -8771,6 +8773,8 @@ with tab_debug:
         raw_resp = st.session_state.get("raw_odds_response")
         if raw_resp:
             try:
+                # Use st.write as requested for raw debug inspection
+                st.write(json.loads(raw_resp))
                 st.json(json.loads(raw_resp))
             except Exception:
                 st.text(raw_resp)
