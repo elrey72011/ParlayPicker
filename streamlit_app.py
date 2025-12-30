@@ -5006,6 +5006,15 @@ tab_shotgun, tab_master, tab_games, tab_kalshi, tab_sentiment, tab_debug = st.ta
 
 with tab_shotgun:
     st.header("🚀 Shotgun Allocation")
+
+    # Hydrate if missing but master_df exists (Persistence Fix)
+    if "shotgun_data" not in st.session_state and "master_df" in st.session_state and ParlayOptimizer:
+        try:
+            optimizer = ParlayOptimizer(model_dir="./models")
+            st.session_state["shotgun_data"] = optimizer.get_shotgun_picks(st.session_state["master_df"])
+        except Exception:
+            pass
+
     if "shotgun_data" in st.session_state:
         shotgun = st.session_state["shotgun_data"]
         col1, col2, col3 = st.columns(3)
@@ -7353,6 +7362,8 @@ with tab_master:
             # Remove duplicate columns to prevent matrix errors
             master_df = master_df.loc[:, ~master_df.columns.duplicated()]
             master_df = enrich_with_vertex_features(master_df, {league: api_sports_clients.get(league)})
+            # CRITICAL: Remove duplicate columns to prevent XGBoost Segfault
+            master_df = master_df.loc[:, ~master_df.columns.duplicated()]
 
         # 4. BATCH PREDICTION: Call the endpoint once for the whole sheet
         if is_vertex_prediction_configured():
