@@ -255,7 +255,7 @@ def enrich_with_vertex_features(df: pd.DataFrame, api_clients: Dict[str, Any]) -
         features_data['feature_away_oppg'] = defaults['oppg']
         features_data['feature_away_streak'] = 0.0
         
-        logger.critical(f"Used fallback league averages ({league_key}) for ALL games (stats fetch failed)!")
+        logger.warning(f"Used fallback league averages ({league_key}) for ALL games (stats fetch failed)!")
 
     # 5. Compute Differentials (Vectorized)
     # We can use numpy subtraction on the Series/arrays/scalars in features_data

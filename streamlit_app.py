@@ -2008,7 +2008,6 @@ def render_pipeline_banner() -> None:
             readiness.append("Vertex missing")
         st.caption(" | ".join(readiness))
 
-
 def slate_key_from_games(games: List[Dict[str, Any]]) -> str:
     parts: List[str] = []
     for g in games or []:
@@ -4993,6 +4992,10 @@ with st.sidebar.expander("Vertex / Gemini Status", expanded=False):
 
 render_pipeline_banner()
 
+tab_shotgun, tab_master, tab_games, tab_kalshi, tab_sentiment, tab_debug = st.tabs(
+    ["🚀 Shotgun Mode", "📊 Master Analysis", "🎮 Games & Odds", "📉 Kalshi", "🧠 Sentiment", "Debug"]
+)
+
 
 # -----------------
 # Tabs
@@ -5000,9 +5003,9 @@ render_pipeline_banner()
 
 # --- 6. Tab UI Implementation ---
 # Ensure 4-space indentation and exact variable matching
-tab_shotgun, tab_master, tab_games, tab_kalshi, tab_sentiment, tab_debug = st.tabs(
-    ["🚀 Shotgun Mode", "📊 Master Analysis", "🎮 Games & Odds", "📉 Kalshi", "🧠 Sentiment", "Debug"]
-)
+# tab_shotgun, tab_master, tab_games, tab_kalshi, tab_sentiment, tab_debug = st.tabs(
+#    ["🚀 Shotgun Mode", "Master Analysis", "Games & Odds", "Kalshi", "Sentiment", "Debug"]
+# )
 
 with tab_shotgun:
     st.header("🚀 Shotgun Allocation")
@@ -7471,6 +7474,8 @@ with tab_master:
         # We persist the DEDUPED df as "master_df" because that's what the UI expects for the "Master Analysis" tab table.
         # The shotgun data is stored separately.
         st.session_state["master_df"] = df
+
+# tab_shotgun, tab_master, tab_games, tab_kalshi, tab_sentiment, tab_debug = st.tabs(["🚀 Shotgun Mode", "Master Analysis", "Games & Odds", "Kalshi", "Sentiment", "Debug"])
 
         required_display_cols = [
             "Home_Sentiment",
