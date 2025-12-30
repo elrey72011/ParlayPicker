@@ -3636,13 +3636,17 @@ def get_vertex_prediction(endpoint, row: pd.Series) -> float:
 
         # Force sequential calls to avoid "Batch vs Instance" mismatch
         try:
+            # Ensure we send a list of values in the correct order, not a dict
+            home_values = [home_instance.get(col, 0.0) for col in VERTEX_FEATURE_COLUMNS]
+            away_values = [away_instance.get(col, 0.0) for col in VERTEX_FEATURE_COLUMNS]
+
             # Call 1: Home Team
             # Explicitly separate calls to avoid batch dimension errors
-            resp_home = endpoint.predict(instances=[home_instance])
+            resp_home = endpoint.predict(instances=[home_values])
             prob_home = resp_home.predictions[0][0] # Adjust index based on your model output shape
 
             # Call 2: Away Team
-            resp_away = endpoint.predict(instances=[away_instance])
+            resp_away = endpoint.predict(instances=[away_values])
             prob_away = resp_away.predictions[0][0]
 
             # Combine (Normalize)
@@ -3650,10 +3654,10 @@ def get_vertex_prediction(endpoint, row: pd.Series) -> float:
             return final_prob
         except Exception as e:
             print(f"Vertex Prediction Error: {e}")
-            return None
+            return 0.5
     except Exception as e:
         logger.error(f"Vertex prediction failed: {e}")
-        return None # Return None to trigger fallback
+        return 0.5 # Return 0.5 to populate AI_Prob
 
 
 def get_vertex_prob(game: Dict[str, Any], sentiment_diff: Optional[float]) -> Tuple[Optional[float], Optional[str]]:

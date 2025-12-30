@@ -22,10 +22,10 @@ except ImportError:
     logger.warning("Vertex AI SDK not installed.")
 
 # Global holding the currently active model name
-ACTIVE_MODEL = "gemini-1.5-flash"
+ACTIVE_MODEL = "gemini-1.5-flash-001"
 
 # Fallback list as requested (Updated for stability)
-MODEL_FALLBACKS = ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash-exp"]
+MODEL_FALLBACKS = ["gemini-1.5-flash-001", "gemini-1.5-pro-001", "gemini-2.0-flash-exp"]
 
 def initialize_gemini():
     """Initializes Vertex AI."""
