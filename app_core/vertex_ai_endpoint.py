@@ -181,7 +181,7 @@ def _build_endpoint_name(project_id: str, location: str, endpoint_id: str) -> st
     return f"projects/{project_id}/locations/{location}/endpoints/{endpoint_id}"
 
 
-def _get_or_create_endpoint():
+def get_vertex_endpoint():
     """
     Get a configured Vertex Endpoint client.
 
