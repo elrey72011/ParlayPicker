@@ -3629,40 +3629,22 @@ def get_vertex_prediction(endpoint, row: pd.Series) -> float:
             if key.startswith('feature_diff_'):
                 away_instance[key] = -1.0 * home_instance.get(key, 0.0)
 
-        # C. Call Predict Sequentially
-        # Home prediction (Prob Home Wins)
-        p_home = 0.5
-        p_away = 0.5
-
-        def _extract_prob(pred):
-            if isinstance(pred, list): return float(pred[0])
-            return float(pred)
-
+        # Force sequential calls to avoid "Batch vs Instance" mismatch
         try:
-            home_resp = endpoint.predict(instances=[home_instance])
-            home_pred = home_resp.predictions[0]
-            p_home = _extract_prob(home_pred)
+            # Call 1: Home Team
+            resp_home = endpoint.predict(instances=[home_instance])
+            prob_home = resp_home.predictions[0][0] # Adjust index based on your model output shape
+
+            # Call 2: Away Team
+            resp_away = endpoint.predict(instances=[away_instance])
+            prob_away = resp_away.predictions[0][0]
+
+            # Combine (Normalize)
+            final_prob = prob_home / (prob_home + prob_away)
+            return final_prob
         except Exception as e:
-            # logger.warning(f"Vertex prediction failed for HOME instance: {e}")
-            pass
-
-        # Away prediction (Prob Away Wins)
-        try:
-            away_resp = endpoint.predict(instances=[away_instance])
-            away_pred = away_resp.predictions[0]
-            p_away = _extract_prob(away_pred)
-        except Exception as e:
-            # logger.warning(f"Vertex prediction failed for AWAY instance: {e}")
-            pass
-
-        # D. Combine (Normalize Independent Probabilities)
-        # User requested: final_home_prob = prob_home / (prob_home + prob_away)
-        denominator = p_home + p_away
-        if denominator == 0:
-            return 0.5
-        combined_prob = p_home / denominator
-        return combined_prob
-
+            print(f"Vertex Prediction Error: {e}")
+            return None
     except Exception as e:
         logger.error(f"Vertex prediction failed: {e}")
         return None # Return None to trigger fallback
@@ -5090,6 +5072,13 @@ render_pipeline_banner()
 # )
 
 with tab_shotgun:
+    if st.session_state.get('analysis_run', False) and 'master_df' in st.session_state:
+        df = st.session_state['master_df']
+        # ... proceed with Shotgun UI ...
+    else:
+        st.warning("⚠ Please run the Master Analysis in Tab 1 first to generate data.")
+        st.stop() # Stop execution so it doesn't crash later
+
     st.header("🚀 Shotgun Allocation")
 
     if st.session_state.get('analysis_complete'):
@@ -7671,6 +7660,7 @@ with tab_master:
         # We persist the DEDUPED df as "master_df" because that's what the UI expects for the "Master Analysis" tab table.
         # The shotgun data is stored separately.
         st.session_state["master_df"] = df
+        st.session_state['analysis_run'] = True
         st.session_state['analysis_results'] = df
         st.session_state['analysis_complete'] = True
 
