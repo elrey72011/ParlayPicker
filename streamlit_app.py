@@ -4990,11 +4990,11 @@ if not vertex_ready:
 with st.sidebar.expander("Vertex / Gemini Status", expanded=False):
     st.json(vertex_info)
 
-render_pipeline_banner()
-
 tab_shotgun, tab_master, tab_games, tab_kalshi, tab_sentiment, tab_debug = st.tabs(
     ["🚀 Shotgun Mode", "📊 Master Analysis", "🎮 Games & Odds", "📉 Kalshi", "🧠 Sentiment", "Debug"]
 )
+
+render_pipeline_banner()
 
 
 # -----------------
@@ -5018,8 +5018,13 @@ with tab_shotgun:
         except Exception:
             pass
 
-    if "shotgun_data" in st.session_state:
-        shotgun = st.session_state["shotgun_data"]
+    shotgun = st.session_state.get("shotgun_data")
+    has_picks = False
+    if shotgun:
+        # Check if any of the dataframes are non-empty
+        has_picks = not (shotgun['snipers'].empty and shotgun['strategy'].empty and shotgun['longshots'].empty)
+
+    if has_picks:
         col1, col2, col3 = st.columns(3)
 
         with col1:
@@ -5043,7 +5048,38 @@ with tab_shotgun:
             else:
                 st.write("No longshots found.")
     else:
-        st.info("Run Master Analysis to generate Shotgun picks.")
+        st.warning("No high-edge bets found. Showing all positive EV plays...")
+
+        if "master_df" in st.session_state:
+            try:
+                mdf = st.session_state["master_df"].copy()
+                fallback_df = enrich_picks_with_roi_metrics(mdf)
+
+                # Filter for any positive edge (spread or total)
+                # Ensure columns are numeric
+                if 'spread_edge' in fallback_df.columns:
+                    fallback_df['spread_edge'] = pd.to_numeric(fallback_df['spread_edge'], errors='coerce').fillna(0)
+                else:
+                    fallback_df['spread_edge'] = 0.0
+
+                if 'total_edge' in fallback_df.columns:
+                    fallback_df['total_edge'] = pd.to_numeric(fallback_df['total_edge'], errors='coerce').fillna(0)
+                else:
+                    fallback_df['total_edge'] = 0.0
+
+                positive_ev = fallback_df[ (fallback_df['spread_edge'] > 0) | (fallback_df['total_edge'] > 0) ]
+
+                if not positive_ev.empty:
+                    # Select relevant columns for display
+                    display_cols = ['League', 'Home', 'Away', 'Pick', 'Spread & Pick', 'Total & Pick', 'spread_edge', 'total_edge', 'final_probability']
+                    display_cols = [c for c in display_cols if c in positive_ev.columns]
+                    st.dataframe(positive_ev[display_cols].sort_values(by='spread_edge', ascending=False))
+                else:
+                    st.write("No positive EV plays found in market data.")
+            except Exception as e:
+                st.error(f"Error generating fallback table: {str(e)}")
+        else:
+            st.info("Run Master Analysis to generate data.")
 
 with tab_games:
     st.header("Games & Odds")
@@ -6205,8 +6241,8 @@ with tab_master:
             vertex_used_for_total = bool(use_vertex_numeric_probs and vertex_total_prob is not None)
             spread_base_weights = {
                 "odds_weight": 0.30,
-                "kalshi_weight": 0.35,
-                "ml_weight": 0.35,
+                "kalshi_weight": 0.70,
+                "ml_weight": 0.0,
                 "sentiment_weight": abs(spread_sentiment_adj or 0.0),
             }
             spread_prob_final, spread_base_prob, spread_weights_used, spread_decision_driver, spread_warnings_new, spread_kalshi_prob_for_pick = compute_final_probability(
@@ -6227,8 +6263,8 @@ with tab_master:
             spread_prob = spread_prob_final
             total_base_weights = {
                 "odds_weight": 0.30,
-                "kalshi_weight": 0.35,
-                "ml_weight": 0.35,
+                "kalshi_weight": 0.70,
+                "ml_weight": 0.0,
                 "sentiment_weight": abs(total_sentiment_adj or 0.0),
             }
             total_prob_final, total_base_prob, total_weights_used, total_decision_driver, total_warnings_new, total_kalshi_prob_for_pick = compute_final_probability(
@@ -6512,8 +6548,8 @@ with tab_master:
                     kalshi_yes_side = kalshi_winner.get("kalshi_yes_side")
                     base_weights = {
                         "odds_weight": 0.30,
-                        "kalshi_weight": 0.35,
-                        "ml_weight": 0.35,
+                        "kalshi_weight": 0.70,
+                        "ml_weight": 0.0,
                         "sentiment_weight": abs(sentiment_adj or 0.0),
                     }
                     final_prob_blend, base_prob_blend, weights_used, decision_driver, warnings_new, kalshi_prob_for_pick = compute_final_probability(
