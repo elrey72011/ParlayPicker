@@ -3592,6 +3592,72 @@ def _build_vertex_feature_row(game: Dict[str, Any], sentiment_diff: Optional[flo
     }
     return pd.DataFrame([row])
 
+def get_vertex_prediction(endpoint, row: pd.Series) -> float:
+    """
+    Perform sequential Vertex AI predictions for Home and Away instances
+    derived from a single row, and return the combined home win probability.
+    """
+    try:
+        # A. Prepare Home Instance
+        home_instance = row.to_dict()
+
+        # B. Prepare Away Instance (Mirrored)
+        away_instance = home_instance.copy()
+
+        # Swap logic
+        away_instance['implied_home_prob'] = 1.0 - home_instance.get('implied_home_prob', 0.5)
+        away_instance['sentiment_diff'] = -1.0 * home_instance.get('sentiment_diff', 0.0)
+        away_instance['kalshi_prob'] = 1.0 - home_instance.get('kalshi_prob', 0.5)
+
+        # Swap injuries
+        away_instance['injuries_home_count'] = home_instance.get('injuries_away_count', 0)
+        away_instance['injuries_away_count'] = home_instance.get('injuries_home_count', 0)
+
+        # Swap rest days
+        away_instance['feature_home_rest_days'] = home_instance.get('feature_away_rest_days', 0)
+        away_instance['feature_away_rest_days'] = home_instance.get('feature_home_rest_days', 0)
+
+        # Swap team stats (feature_home_X <-> feature_away_X)
+        for key in list(home_instance.keys()):
+            if key.startswith('feature_home_') and 'rest_days' not in key:
+                away_key = key.replace('feature_home_', 'feature_away_')
+                if away_key in home_instance:
+                    away_instance[key] = home_instance[away_key]
+                    away_instance[away_key] = home_instance[key]
+
+            # Negate diffs
+            if key.startswith('feature_diff_'):
+                away_instance[key] = -1.0 * home_instance.get(key, 0.0)
+
+        # C. Call Predict Sequentially
+        # Home prediction (Prob Home Wins)
+        home_resp = endpoint.predict(instances=[home_instance])
+        home_pred = home_resp.predictions[0]
+
+        # Away prediction (Prob Away Wins)
+        away_resp = endpoint.predict(instances=[away_instance])
+        away_pred = away_resp.predictions[0]
+
+        def _extract_prob(pred):
+            if isinstance(pred, list): return float(pred[0])
+            return float(pred)
+
+        p_home = _extract_prob(home_pred)
+        p_away = _extract_prob(away_pred)
+
+        # D. Combine (Normalize Independent Probabilities)
+        # User requested: final_home_prob = prob_home / (prob_home + prob_away)
+        denominator = p_home + p_away
+        if denominator == 0:
+            return 0.5
+        combined_prob = p_home / denominator
+        return combined_prob
+
+    except Exception as e:
+        logger.error(f"Vertex prediction failed: {e}")
+        return None # Return None to trigger fallback
+
+
 def get_vertex_prob(game: Dict[str, Any], sentiment_diff: Optional[float]) -> Tuple[Optional[float], Optional[str]]:
     """Return Vertex home win prob (0-1) and an optional warning code."""
     if not is_vertex_prediction_configured():
@@ -7480,65 +7546,15 @@ with tab_master:
 
                 probs = []
                 if endpoint:
-                    def _extract_prob(pred):
-                        if isinstance(pred, list): return float(pred[0])
-                        return float(pred)
-
                     prediction_progress = st.progress(0)
                     total_games = len(inference_df)
 
                     for i, (idx, row) in enumerate(inference_df.iterrows()):
-                        try:
-                            # A. Prepare Home Instance
-                            home_instance = row.to_dict()
-
-                            # B. Prepare Away Instance (Mirrored)
-                            away_instance = home_instance.copy()
-
-                            # Swap logic
-                            away_instance['implied_home_prob'] = 1.0 - home_instance.get('implied_home_prob', 0.5)
-                            away_instance['sentiment_diff'] = -1.0 * home_instance.get('sentiment_diff', 0.0)
-                            away_instance['kalshi_prob'] = 1.0 - home_instance.get('kalshi_prob', 0.5)
-
-                            # Swap injuries
-                            away_instance['injuries_home_count'] = home_instance.get('injuries_away_count', 0)
-                            away_instance['injuries_away_count'] = home_instance.get('injuries_home_count', 0)
-
-                            # Swap rest days
-                            away_instance['feature_home_rest_days'] = home_instance.get('feature_away_rest_days', 0)
-                            away_instance['feature_away_rest_days'] = home_instance.get('feature_home_rest_days', 0)
-
-                            # Swap team stats (feature_home_X <-> feature_away_X)
-                            for key in list(home_instance.keys()):
-                                if key.startswith('feature_home_') and 'rest_days' not in key:
-                                    away_key = key.replace('feature_home_', 'feature_away_')
-                                    if away_key in home_instance:
-                                        away_instance[key] = home_instance[away_key]
-                                        away_instance[away_key] = home_instance[key]
-
-                                # Negate diffs
-                                if key.startswith('feature_diff_'):
-                                    away_instance[key] = -1.0 * home_instance.get(key, 0.0)
-
-                            # C. Call Predict Sequentially
-                            # Home prediction (Prob Home Wins)
-                            home_resp = endpoint.predict(instances=[home_instance])
-                            home_pred = home_resp.predictions[0]
-
-                            # Away prediction (Prob Away Wins)
-                            away_resp = endpoint.predict(instances=[away_instance])
-                            away_pred = away_resp.predictions[0]
-
-                            p_home = _extract_prob(home_pred)
-                            p_away = _extract_prob(away_pred)
-
-                            # D. Combine (Average of Home Prob and 1-Away Prob)
-                            combined_prob = (p_home + (1.0 - p_away)) / 2.0
-                            probs.append(combined_prob)
-
-                        except Exception as e:
-                            logger.error(f"Prediction failed for row {idx}: {e}")
-                            probs.append(0.5) # Fallback
+                        prob = get_vertex_prediction(endpoint, row)
+                        if prob is not None:
+                            probs.append(prob)
+                        else:
+                            probs.append(0.5)
 
                         prediction_progress.progress((i + 1) / total_games)
 
