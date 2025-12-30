@@ -4681,7 +4681,31 @@ def match_kalshi_market(
     def simple_select(markets: List[Dict[str, Any]], market_type: str) -> Dict[str, Any]:
         if not markets:
             return base_result(f"no_{market_type}_market", market_type)
+
+        # Nuclear Fix: Tolerance check (< 1.6)
         chosen = markets[0]
+
+        target_line = None
+        if market_type == "spread":
+             target_line = game.get("home_spread_point") or game.get("spread_point")
+        elif market_type == "total":
+             target_line = game.get("total_point")
+
+        if target_line is not None:
+             best_m = None
+             min_diff = 999.0
+             for m in markets:
+                 prob, line = extract_prob_and_line(m, market_type)
+                 if line is not None:
+                     diff = abs(line - float(target_line))
+                     if diff < min_diff:
+                         min_diff = diff
+                         best_m = m
+
+             # Tolerance check (1.6 for spread/total)
+             if best_m and min_diff <= 1.6:
+                 chosen = best_m
+
         prob, line = extract_prob_and_line(chosen, market_type)
         return {
             "kalshi_available": True,
