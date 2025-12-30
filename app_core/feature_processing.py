@@ -295,7 +295,7 @@ def fetch_ncaaf_stats(season_year: int) -> List[Dict[str, Any]]:
         configuration.api_key_prefix['Authorization'] = 'Bearer'
 
         api_instance = cfbd.StatsApi(cfbd.ApiClient(configuration))
-        # Use get_team_season_stats per instruction
+        # Use get_team_season_stats per instruction (Verified: matches user request)
         season_stats = api_instance.get_team_season_stats(year=season_year)
 
         # To get Win PCT, we still need records or game outcomes.

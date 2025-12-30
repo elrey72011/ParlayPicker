@@ -3631,19 +3631,29 @@ def get_vertex_prediction(endpoint, row: pd.Series) -> float:
 
         # C. Call Predict Sequentially
         # Home prediction (Prob Home Wins)
-        home_resp = endpoint.predict(instances=[home_instance])
-        home_pred = home_resp.predictions[0]
-
-        # Away prediction (Prob Away Wins)
-        away_resp = endpoint.predict(instances=[away_instance])
-        away_pred = away_resp.predictions[0]
+        p_home = 0.5
+        p_away = 0.5
 
         def _extract_prob(pred):
             if isinstance(pred, list): return float(pred[0])
             return float(pred)
 
-        p_home = _extract_prob(home_pred)
-        p_away = _extract_prob(away_pred)
+        try:
+            home_resp = endpoint.predict(instances=[home_instance])
+            home_pred = home_resp.predictions[0]
+            p_home = _extract_prob(home_pred)
+        except Exception as e:
+            # logger.warning(f"Vertex prediction failed for HOME instance: {e}")
+            pass
+
+        # Away prediction (Prob Away Wins)
+        try:
+            away_resp = endpoint.predict(instances=[away_instance])
+            away_pred = away_resp.predictions[0]
+            p_away = _extract_prob(away_pred)
+        except Exception as e:
+            # logger.warning(f"Vertex prediction failed for AWAY instance: {e}")
+            pass
 
         # D. Combine (Normalize Independent Probabilities)
         # User requested: final_home_prob = prob_home / (prob_home + prob_away)
@@ -5062,8 +5072,8 @@ if not vertex_ready:
 with st.sidebar.expander("Vertex / Gemini Status", expanded=False):
     st.json(vertex_info)
 
-tab_shotgun, tab_master, tab_games, tab_kalshi, tab_sentiment, tab_debug = st.tabs(
-    ["🚀 Shotgun Mode", "📊 Master Analysis", "🎮 Games & Odds", "📉 Kalshi", "🧠 Sentiment", "Debug"]
+tab_master, tab_shotgun, tab_games, tab_kalshi, tab_sentiment, tab_debug = st.tabs(
+    ["📊 Master Analysis", "🚀 Shotgun Mode", "🎮 Games & Odds", "📉 Kalshi", "🧠 Sentiment", "Debug"]
 )
 
 render_pipeline_banner()
@@ -5075,20 +5085,29 @@ render_pipeline_banner()
 
 # --- 6. Tab UI Implementation ---
 # Ensure 4-space indentation and exact variable matching
-# tab_shotgun, tab_master, tab_games, tab_kalshi, tab_sentiment, tab_debug = st.tabs(
-#    ["🚀 Shotgun Mode", "Master Analysis", "Games & Odds", "Kalshi", "Sentiment", "Debug"]
+# tab_master, tab_shotgun, tab_games, tab_kalshi, tab_sentiment, tab_debug = st.tabs(
+#    ["Master Analysis", "🚀 Shotgun Mode", "Games & Odds", "Kalshi", "Sentiment", "Debug"]
 # )
 
 with tab_shotgun:
     st.header("🚀 Shotgun Allocation")
 
-    # Hydrate if missing but master_df exists (Persistence Fix)
-    if "shotgun_data" not in st.session_state and "master_df" in st.session_state and ParlayOptimizer:
-        try:
-            optimizer = ParlayOptimizer(model_dir="./models")
-            st.session_state["shotgun_data"] = optimizer.get_shotgun_picks(st.session_state["master_df"])
-        except Exception:
-            pass
+    if st.session_state.get('analysis_complete'):
+        # Use analysis_results as the source of truth if available
+        df = st.session_state['analysis_results']
+
+        # Hydrate if missing but analysis results exist
+        if "shotgun_data" not in st.session_state and ParlayOptimizer:
+            try:
+                optimizer = ParlayOptimizer(model_dir="./models")
+                # Note: optimizer typically needs full master_df or similar.
+                # analysis_results is the DEDUPED version from master analysis loop.
+                # If optimizer needs enriched columns, they are present.
+                st.session_state["shotgun_data"] = optimizer.get_shotgun_picks(df)
+            except Exception:
+                pass
+    else:
+        st.warning("Please go to the Master Analysis tab and run the model first.")
 
     # Fallback: Inside the tab, if len(candidates) == 0, display a message
     shotgun_data = st.session_state.get("shotgun_data")
@@ -7652,6 +7671,8 @@ with tab_master:
         # We persist the DEDUPED df as "master_df" because that's what the UI expects for the "Master Analysis" tab table.
         # The shotgun data is stored separately.
         st.session_state["master_df"] = df
+        st.session_state['analysis_results'] = df
+        st.session_state['analysis_complete'] = True
 
 # tab_shotgun, tab_master, tab_games, tab_kalshi, tab_sentiment, tab_debug = st.tabs(["🚀 Shotgun Mode", "Master Analysis", "Games & Odds", "Kalshi", "Sentiment", "Debug"])
 
