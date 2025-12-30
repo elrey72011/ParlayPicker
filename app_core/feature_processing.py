@@ -9,6 +9,9 @@ from app_core.vertex_ai_endpoint import VERTEX_FEATURE_COLUMNS
 
 logger = logging.getLogger(__name__)
 
+# Config: Set to True to skip stats API calls on Free Tier plans
+FREE_TIER_MODE = True
+
 # Define the 27 features we want to ensure exist
 # We will update VERTEX_FEATURE_COLUMNS in vertex_ai_endpoint.py to match these.
 LEAGUE_AVERAGES = {
@@ -79,12 +82,23 @@ def fetch_and_process_standings(api_clients: Dict[str, Any]) -> pd.DataFrame:
         if not client or not client.is_configured():
             continue
             
+        # Free Tier Mode: Skip API calls to prevent 403 errors
+        if FREE_TIER_MODE:
+            continue
+
         # Use get_team_stats instead of get_standings to avoid 403 errors
         # This will fetch team stats one by one if needed (via new get_team_stats in apisports.py)
-        standings = client.get_team_stats()
+        try:
+            standings = client.get_team_stats()
+        except Exception as e:
+            logger.warning(f"Error fetching stats for {league_key}: {e}")
+            standings = []
+
         if not standings:
             status_code = getattr(client, 'last_status_code', 'N/A')
-            logger.warning(f"Failed to fetch team stats for {league_key}: {getattr(client, 'last_error', 'Unknown error')} (Status: {status_code})")
+            # Only log if NOT in free tier mode (redundant check but safe)
+            if not FREE_TIER_MODE:
+                logger.warning(f"Failed to fetch team stats for {league_key}: {getattr(client, 'last_error', 'Unknown error')} (Status: {status_code})")
             continue
             
         for team_entry in standings:
@@ -209,7 +223,8 @@ def enrich_with_vertex_features(df: pd.DataFrame, api_clients: Dict[str, Any]) -
     features_data = {}
     
     if stats_df.empty:
-        logger.warning("No stats fetched. Filling with defaults.")
+        if not FREE_TIER_MODE:
+            logger.warning("No stats fetched. Filling with defaults.")
         # Fill defaults logic comes later
     else:
         # Prepare lookup dictionary: team_norm -> stats_series
@@ -255,7 +270,8 @@ def enrich_with_vertex_features(df: pd.DataFrame, api_clients: Dict[str, Any]) -
         features_data['feature_away_oppg'] = defaults['oppg']
         features_data['feature_away_streak'] = 0.0
         
-        logger.warning(f"Used fallback league averages ({league_key}) for ALL games (stats fetch failed)!")
+        if not FREE_TIER_MODE:
+            logger.warning(f"Used fallback league averages ({league_key}) for ALL games (stats fetch failed)!")
 
     # 5. Compute Differentials (Vectorized)
     # We can use numpy subtraction on the Series/arrays/scalars in features_data

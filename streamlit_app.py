@@ -52,6 +52,10 @@ try:
 except Exception:  # pragma: no cover - optional import
     RealSentimentAnalyzer = None
 
+# Vertex Model Configuration
+# Set to False if Vertex AI features are unavailable (e.g. Free Tier)
+ENABLE_VERTEX_MODEL = False
+
 try:
     from parlay_optimizer import ParlayOptimizer
 except ImportError:
@@ -1475,7 +1479,7 @@ def compute_team_sentiment_map(news_api_key: Optional[str], games: List[Dict[str
         elif not cached:
             _enforce_sentiment_throttle()
             debug["requests_attempted"] = debug.get("requests_attempted", 0) + 1
-            to_date = datetime.utcnow().date()
+            to_date = datetime.now(timezone.utc).date()
             from_date = to_date - timedelta(days=3)
             url = "https://newsapi.org/v2/everything"
             # Attempt a combined query that includes the team and league context to reduce per-team calls
@@ -6249,12 +6253,20 @@ with tab_master:
             kalshi_prob_total = safe_float(kalshi_total.get("kalshi_prob"))
             vertex_used_for_spread = bool(use_vertex_numeric_probs and vertex_spread_prob is not None)
             vertex_used_for_total = bool(use_vertex_numeric_probs and vertex_total_prob is not None)
-            spread_base_weights = {
-                "odds_weight": 0.0,
-                "kalshi_weight": 1.0,
-                "ml_weight": 0.0,
-                "sentiment_weight": abs(spread_sentiment_adj or 0.0),
-            }
+            if not ENABLE_VERTEX_MODEL:
+                spread_base_weights = {
+                    "odds_weight": 0.5,
+                    "kalshi_weight": 0.5,
+                    "ml_weight": 0.0,
+                    "sentiment_weight": abs(spread_sentiment_adj or 0.0),
+                }
+            else:
+                spread_base_weights = {
+                    "odds_weight": 0.0,
+                    "kalshi_weight": 1.0,
+                    "ml_weight": 0.0,
+                    "sentiment_weight": abs(spread_sentiment_adj or 0.0),
+                }
             spread_prob_final, spread_base_prob, spread_weights_used, spread_decision_driver, spread_warnings_new, spread_kalshi_prob_for_pick = compute_final_probability(
                 spread_pick_side_key,
                 spread_prob_market,
@@ -6271,12 +6283,20 @@ with tab_master:
                 spread_base_prob = spread_prob_final
                 spread_weights_used = {"w_implied": 1.0 if spread_prob_final is not None else 0.0, "w_kalshi": 0.0, "w_model": 0.0, "w_sentiment": 0.0}
             spread_prob = spread_prob_final
-            total_base_weights = {
-                "odds_weight": 0.0,
-                "kalshi_weight": 1.0,
-                "ml_weight": 0.0,
-                "sentiment_weight": abs(total_sentiment_adj or 0.0),
-            }
+            if not ENABLE_VERTEX_MODEL:
+                total_base_weights = {
+                    "odds_weight": 0.5,
+                    "kalshi_weight": 0.5,
+                    "ml_weight": 0.0,
+                    "sentiment_weight": abs(total_sentiment_adj or 0.0),
+                }
+            else:
+                total_base_weights = {
+                    "odds_weight": 0.0,
+                    "kalshi_weight": 1.0,
+                    "ml_weight": 0.0,
+                    "sentiment_weight": abs(total_sentiment_adj or 0.0),
+                }
             total_prob_final, total_base_prob, total_weights_used, total_decision_driver, total_warnings_new, total_kalshi_prob_for_pick = compute_final_probability(
                 total_pick_side_key,
                 total_prob_market,
@@ -6556,12 +6576,22 @@ with tab_master:
                     pick_side = "home" if pick == home else "away"
                     implied_pick = implied_prob_for_pick(home_ml, away_ml, pick_side)
                     kalshi_yes_side = kalshi_winner.get("kalshi_yes_side")
-                    base_weights = {
-                        "odds_weight": 0.0,
-                        "kalshi_weight": 1.0,
-                        "ml_weight": 0.0,
-                        "sentiment_weight": abs(sentiment_adj or 0.0),
-                    }
+                    if not ENABLE_VERTEX_MODEL:
+                        # Model OFF: 50/50 split between implied (Odds) and Kalshi
+                        base_weights = {
+                            "odds_weight": 0.5,
+                            "kalshi_weight": 0.5,
+                            "ml_weight": 0.0,
+                            "sentiment_weight": abs(sentiment_adj or 0.0),
+                        }
+                    else:
+                        # Model ON: Original weight logic (Kalshi dominance)
+                        base_weights = {
+                            "odds_weight": 0.0,
+                            "kalshi_weight": 1.0,
+                            "ml_weight": 0.0,
+                            "sentiment_weight": abs(sentiment_adj or 0.0),
+                        }
                     final_prob_blend, base_prob_blend, weights_used, decision_driver, warnings_new, kalshi_prob_for_pick = compute_final_probability(
                         pick_side,
                         implied_pick,
@@ -7415,7 +7445,7 @@ with tab_master:
             master_df = master_df.loc[:, ~master_df.columns.duplicated()]
 
         # 4. BATCH PREDICTION: Call the endpoint once for the whole sheet
-        if is_vertex_prediction_configured():
+        if is_vertex_prediction_configured() and ENABLE_VERTEX_MODEL:
             with st.spinner("🔮 Calling Vertex AI Batch Inference..."):
                 from app_core.vertex_ai_endpoint import VERTEX_FEATURE_COLUMNS, predict_win_probabilities
 
