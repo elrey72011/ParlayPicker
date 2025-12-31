@@ -2915,12 +2915,12 @@ try:
 except Exception:
     pass
 
-if 'games_loaded' not in st.session_state:
-    st.session_state['games_loaded'] = False
-
-# 1. Initialize Session State
+# 1. Initialize Session State (Memory)
 if 'games_data' not in st.session_state:
     st.session_state['games_data'] = None
+
+if 'games_loaded' not in st.session_state:
+    st.session_state['games_loaded'] = False
 
 # ------------------------------------------------------------
 # Kalshi globals / shims (must exist before any call sites)
@@ -5379,10 +5379,6 @@ with tab_master:
         value=st.session_state.get("use_vertex_numeric_probs", False),
         key="use_vertex_numeric_probs",
     )
-    # 1. Initialize Session State (Memory)
-    if 'games_data' not in st.session_state:
-        st.session_state['games_data'] = None
-
     # 2. Section: Load Games
     # The on_click parameter guarantees the logic runs BEFORE the app reloads
     st.button("Load Today's Games", key="btn_load_games", on_click=load_games_callback)
