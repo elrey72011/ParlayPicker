@@ -4996,22 +4996,26 @@ def fetch_and_process_games():
 
 
 def load_games_callback():
-    """Fetches games and saves to state. Called only when button is clicked."""
     try:
         with st.spinner("Fetching games..."):
-            # Invalidate master_df when loading new games
             if "master_df" in st.session_state:
                 del st.session_state["master_df"]
 
+            # Call the fetcher
             games = fetch_and_process_games()
+
+            # Debug Print
+            print(f"DEBUG: Fetched {len(games) if games else 0} games")
+
             st.session_state['games_data'] = games
             # Restore compatibility for legacy views relying on 'games'
             st.session_state['games'] = games
             st.session_state['games_loaded'] = True
+
     except Exception as e:
-        st.error(f"Critical Error loading games: {e}")
-        # Ensure we don't leave the app in a broken state
-        st.session_state['games_loaded'] = False
+        st.error(f"CRASH in Callback: {e}")
+        print(f"CRASH in Callback: {e}")
+        st.session_state['games_loaded'] = False # Reset on failure
 
 
 # -----------------
@@ -5396,33 +5400,35 @@ with tab_master:
     should_run = False
     games = st.session_state.get("games_data") or st.session_state.get("games") or []
 
-    # 3. Section: Run Analysis
-    # We check 'games_loaded' to verify the attempt was made.
-    if st.session_state.get('games_loaded', False):
+    # --- DIAGNOSTIC UI BLOCK ---
+    st.divider()
 
-        # Safe retrieval ensuring a list
-        games = st.session_state.get('games_data') or []
+    # 1. Check if the "Load" button was even clicked/processed
+    if not st.session_state.get('games_loaded', False):
+        if df_existing is None:
+            st.info("ℹ️ Status: Games have not been loaded yet. Please click 'Load Today's Games' above.")
 
-        st.divider()
+    else:
+        # 2. The load was attempted. Now check the data.
+        games = st.session_state.get('games_data')
 
-        if not games:
-            # CASE A: Load attempted, but 0 games found.
-            st.warning("⚠️ No games found for the selected leagues/dates.")
-            st.info("Check your 'Selected Sports' in the sidebar or try again later.")
-            # We do NOT show the run button here because there is nothing to analyze.
+        if games is None:
+             st.error("❌ Error: 'games_loaded' is True, but 'games_data' is None. The fetch function likely failed.")
+
+        elif len(games) == 0:
+             # THIS is likely the issue. The list is empty, so the previous code hid the button.
+             st.warning("⚠️ 0 Games Found. The API returned an empty list.")
+             st.write("Troubleshooting: Check 'Selected Sports' in the sidebar or try a different date.")
 
         else:
-            # CASE B: Games found. Show the button.
-            st.success(f"✅ Loaded {len(games)} games.")
+             # 3. Success Case: We have games!
+             st.success(f"✅ Ready to Analyze: {len(games)} games loaded.")
 
-            if st.button("Run Master Analysis", key="btn_run_analysis"):
-                if (not kalshi_status.get("configured")):
-                    st.error("Kalshi is required but unavailable. Fix Kalshi first.")
+             if st.button("Run Master Analysis", key="btn_run_analysis_diagnostic"):
+                 if (not kalshi_status.get("configured")):
+                    st.error("Kalshi is required but unavailable.")
                     st.stop()
-                should_run = True
-
-    elif df_existing is None:
-        st.info("Load games, then run Master Analysis.")
+                 should_run = True
 
     if should_run:
         st.session_state["DECISION_TRACE_SAMPLES"] = {}
