@@ -5093,9 +5093,14 @@ render_pipeline_banner()
 # )
 
 with tab_shotgun:
+    if st.button("🔄 Refresh Shotgun View"):
+        st.rerun()
+
     # Check if we have data in memory
-    if st.session_state.get('analysis_run') and 'master_df' in st.session_state:
+    if "master_df" in st.session_state:
         df = st.session_state['master_df']
+        st.success(f"Loaded {len(df)} games from Master Analysis.")
+
         st.header("🚀 Shotgun Allocation")
 
         # Ensure games data is available for shotgun context
@@ -5111,6 +5116,7 @@ with tab_shotgun:
     else:
         st.warning("Please run the Master Analysis in Tab 1 first.")
         df = None
+        st.stop()
 
     # Fallback: Inside the tab, if len(candidates) == 0, display a message
     shotgun_data = st.session_state.get("shotgun_data")
@@ -5131,24 +5137,33 @@ with tab_shotgun:
 
         with col1:
             st.info("🎯 $3 'Snipers' (High Prob)")
-            if not shotgun['snipers'].empty:
-                st.dataframe(shotgun['snipers'][['Pick', 'AI_Prob', 'AI_Edge']])
-            else:
-                st.write("No snipers found.")
+            try:
+                if not shotgun['snipers'].empty:
+                    st.dataframe(shotgun['snipers'][['Pick', 'AI_Prob', 'AI_Edge']])
+                else:
+                    st.write("No snipers found.")
+            except Exception as e:
+                 st.error(f"Error rendering snipers: {e}")
 
         with col2:
             st.success("📈 $2 'Strategy' (High EV)")
-            if not shotgun['strategy'].empty:
-                st.dataframe(shotgun['strategy'][['Pick', 'AI_Prob', 'AI_Edge']])
-            else:
-                st.write("No strategy picks found.")
+            try:
+                if not shotgun['strategy'].empty:
+                    st.dataframe(shotgun['strategy'][['Pick', 'AI_Prob', 'AI_Edge']])
+                else:
+                    st.write("No strategy picks found.")
+            except Exception as e:
+                 st.error(f"Error rendering strategy: {e}")
 
         with col3:
             st.warning("🎲 $1 'Longshots' (Lottos)")
-            if not shotgun['longshots'].empty:
-                st.dataframe(shotgun['longshots'][['Pick', 'AI_Prob', 'AI_Edge']])
-            else:
-                st.write("No longshots found.")
+            try:
+                if not shotgun['longshots'].empty:
+                    st.dataframe(shotgun['longshots'][['Pick', 'AI_Prob', 'AI_Edge']])
+                else:
+                    st.write("No longshots found.")
+            except Exception as e:
+                 st.error(f"Error rendering longshots: {e}")
     else:
         st.warning("No high-edge bets found. Showing all positive EV plays...")
 
@@ -5665,6 +5680,46 @@ with tab_master:
             g["weather_summary"] = weather_summary
 
             # --- 1. SINGLE ROW INITIALIZATION ---
+            # Pre-calculate Glance/Market Stats for the Row
+            spread_offers = g.get("spread_offers") or []
+            total_offers = g.get("total_offers") or []
+
+            # Spread Metrics
+            spread_points = [safe_float(o.get("point")) for o in spread_offers if safe_float(o.get("point")) is not None]
+            spread_books = {o.get("book") for o in spread_offers if o.get("book")}
+            spread_books_count = len(spread_books)
+            spread_min, spread_med, spread_max = _market_range(spread_points)
+            spread_width = abs(spread_max - spread_min) if (spread_max is not None and spread_min is not None) else None
+
+            # Total Metrics
+            total_points = [safe_float(o.get("point")) for o in total_offers if safe_float(o.get("point")) is not None]
+            total_books = {o.get("book") for o in total_offers if o.get("book")}
+            total_books_count = len(total_books)
+            total_min, total_med, total_max = _market_range(total_points)
+            total_width = abs(total_max - total_min) if (total_max is not None and total_min is not None) else None
+
+            # Calculate Confidence & Glance
+            # We need to detect if odds are valid (simplified check)
+            spread_odds_valid = bool(spread_offers)
+            total_odds_valid = bool(total_offers)
+
+            # Use helper to get confidence
+            spread_conf, spread_reason = confidence_from_market(
+                spread_books_count, spread_width, spread_odds_valid, False, False, market_kind="spread"
+            )
+            total_conf, total_reason = confidence_from_market(
+                total_books_count, total_width, total_odds_valid, False, False, market_kind="total"
+            )
+
+            # Compute Overall "At a Glance"
+            overall_conf, overall_score, overall_reason = compute_at_a_glance(
+                 spread_conf, spread_reason, total_conf, total_reason
+            )
+
+            # Build Glance Strings
+            spread_glance = build_clean_glance(spread_conf, None, spread_books_count, spread_width, "spread")
+            total_glance = build_clean_glance(total_conf, None, total_books_count, total_width, "total")
+
             game_row = {
                 "League": league_name,
                 "Home": home,
@@ -5690,6 +5745,28 @@ with tab_master:
                 "weather_summary": weather_summary,
                 "api_sports_used": api_sports_used,
                 "sportsdata_used": sportsdata_used,
+                # UI / Glance Columns (Explicitly Added)
+                "spread_books_count": spread_books_count,
+                "total_books_count": total_books_count,
+                "spread_width": spread_width,
+                "total_width": total_width,
+                "spread_min": spread_min,
+                "spread_max": spread_max,
+                "spread_med": spread_med,
+                "total_min": total_min,
+                "total_max": total_max,
+                "total_med": total_med,
+                "spread_confidence": spread_conf,
+                "spread_confidence_reason": spread_reason,
+                "total_confidence": total_conf,
+                "total_confidence_reason": total_reason,
+                "At_a_Glance_Confidence": overall_conf,
+                "At_a_Glance_Score": overall_score,
+                "At_a_Glance_Reason": overall_reason,
+                "Spread_Glance": spread_glance,
+                "Total_Glance": total_glance,
+                "Spread_Glance_Reason": spread_reason,
+                "Total_Glance_Reason": total_reason,
             }
 
             sentiment_map_all = st.session_state.get("sentiment_map") or {}
