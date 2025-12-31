@@ -4996,26 +4996,40 @@ def fetch_and_process_games():
 
 
 def load_games_callback():
+    """Fetches games with full error trapping."""
+    # 1. Clear previous errors/results
+    st.session_state['load_error'] = None
+    st.session_state['games_loaded'] = False
+
     try:
-        with st.spinner("Fetching games..."):
-            if "master_df" in st.session_state:
-                del st.session_state["master_df"]
+        # We use a placeholder here because st.spinner doesn't always render in callbacks
+        print("DEBUG: Starting Load Games Callback...")
 
-            # Call the fetcher
-            games = fetch_and_process_games()
+        # Invalidate old data
+        if "master_df" in st.session_state:
+            del st.session_state["master_df"]
 
-            # Debug Print
-            print(f"DEBUG: Fetched {len(games) if games else 0} games")
+        # 2. Attempt Fetch
+        games = fetch_and_process_games()
 
-            st.session_state['games_data'] = games
-            # Restore compatibility for legacy views relying on 'games'
-            st.session_state['games'] = games
-            st.session_state['games_loaded'] = True
+        # 3. Validate Result
+        if games is None:
+            raise ValueError("fetch_and_process_games() returned None")
+
+        print(f"DEBUG: Success! Fetched {len(games)} games.")
+
+        # 4. Save State
+        st.session_state['games_data'] = games
+        st.session_state['games'] = games
+        st.session_state['games_loaded'] = True
 
     except Exception as e:
-        st.error(f"CRASH in Callback: {e}")
-        print(f"CRASH in Callback: {e}")
-        st.session_state['games_loaded'] = False # Reset on failure
+        # 5. CATCH THE CRASH
+        error_msg = f"CRASH IN LOADER: {str(e)}"
+        print(error_msg)
+        # Save error to state so we can show it in the main UI
+        st.session_state['load_error'] = error_msg
+        st.session_state['games_loaded'] = False
 
 
 # -----------------
