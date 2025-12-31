@@ -6445,82 +6445,157 @@ with tab_master:
                 row["gemini_risk_flags"] = row.get("gemini_risk_flags") or json.dumps([])
                 row["llm_disagreement_flag"] = False
                 return row
-            if row.name not in gemini_allowed_idx:
-                row["gemini_mode"] = "guardrail"
-                row["gemini_alignment"] = "NEUTRAL"
-                row["gemini_rationale"] = "Gemini skipped: outside evaluation limit."
-                row["gemini_flags_short"] = row.get("gemini_flags_short") or ""
-                row["gemini_risk_flags"] = row.get("gemini_risk_flags") or json.dumps([])
-                row["llm_disagreement_flag"] = False
-                return row
-            try:
-                payload = {
-                    "league": row.get("League"),
-                    "home": row.get("Home"),
-                    "away": row.get("Away"),
-                    "commence_local": row.get("Commence (Local)"),
-                    "spread_pick": row.get("Spread & Pick"),
-                    "spread_line": row.get("spread_pick_line") or (row.get("Line") if str(row.get("Market")).lower() == "spread" else None),
-                    "spread_odds": row.get("spread_pick_odds"),
-                    "spread_prob_final": row.get("spread_prob"),
-                    "spread_prob_market": row.get("spread_prob_market"),
-                    "total_pick": row.get("Total & Pick"),
-                    "total_line": row.get("total_pick_line") or (row.get("Line") if str(row.get("Market")).lower() == "total" else None),
-                    "total_odds": row.get("total_pick_odds"),
-                    "total_prob_final": row.get("total_prob"),
-                    "total_prob_market": row.get("total_prob_market"),
-                    "kalshi_spread_prob": row.get("kalshi_prob_spread"),
-                    "kalshi_total_prob": row.get("kalshi_prob_total"),
-                    "kalshi_matched": bool(row.get("kalshi_matched")),
-                    "prob_engine": row.get("prob_engine"),
-                    "sentiment_badge": row.get("sentiment_badge"),
-                    "sentiment_flags": [row.get("spread_sentiment_note"), row.get("total_sentiment_note")],
-                    "warnings": row.get("Warnings"),
-                    "odds_placeholder_detected": row.get("odds_placeholder_detected"),
-                }
-                sig = _gemini_payload_signature(payload)
-                gem_res = cached_gemini_confidence(sig, payload) or {}
-                flags = gem_res.get("flags") if isinstance(gem_res, dict) else []
-                if not isinstance(flags, list):
-                    flags = gem_res.get("risk_flags") if isinstance(gem_res, dict) else []
-                flags_list = [str(f) for f in flags] if isinstance(flags, list) else []
-                if gem_res.get("gemini_error"):
-                    row["gemini_error"] = gem_res.get("gemini_error")
-                    row["gemini_mode"] = "disabled"
-                    row["llm_disagreement_flag"] = False
-                    row["gemini_alignment"] = "NEUTRAL"
-                    row["gemini_rationale"] = "Gemini disabled: service unavailable."
-                    row["gemini_flags_short"] = row.get("gemini_flags_short") or "gemini_disabled"
-                    row["gemini_risk_flags"] = json.dumps(flags_list) if flags_list else json.dumps(["gemini_disabled"])
-                    if not row.get("prob_engine"):
-                        row["prob_engine"] = "market_only"
-                    return row
-                pick_val = (row.get("Pick") or row.get("Spread & Pick") or row.get("Total & Pick") or "").strip()
-                recommended = str(gem_res.get("recommended_bet") or "").strip()
-                if recommended and pick_val and recommended.lower() == pick_val.lower():
-                    row["gemini_alignment"] = "AGREE"
-                elif not recommended:
-                    row["gemini_alignment"] = "NEUTRAL"
+
+            # --- Directional Logic Update ---
+            # Instead of relying solely on the LLM's text response, we implement a math-based
+            # "Directional Alignment" check. This ensures "AGREE" tags are more forgiving.
+            def calculate_directional_alignment(r):
+                market = str(r.get("Market") or "").lower()
+                home_team = str(r.get("Home") or "Home")
+                away_team = str(r.get("Away") or "Away")
+
+                # Determine "Home" probabilities for both sources
+                model_home_prob = safe_float(r.get("AI_Prob")) # Vertex is always Home Win Prob
+                market_home_prob = None
+
+                if market == "moneyline":
+                    # Use ML Implied Prob
+                    # If Pick is Home, implied prob is Home. If Pick is Away, implied prob is Away.
+                    # We need standardization.
+                    # Let's derive it from Home_ML directly if available
+                    h_ml = r.get("Home_ML")
+                    if h_ml:
+                        market_home_prob = american_to_implied_prob(h_ml)
+                    else:
+                        # Fallback: if Pick == Home, use Implied_Prob. If Pick == Away, use 1 - Implied_Prob
+                        if str(r.get("Pick")) == home_team:
+                            market_home_prob = safe_float(r.get("Implied_Prob"))
+                        elif str(r.get("Pick")) == away_team:
+                            p = safe_float(r.get("Implied_Prob"))
+                            market_home_prob = (1.0 - p) if p else None
+
+                elif market == "spread":
+                    # For spread, we use the Spread Market Prob.
+                    # Assuming spread_prob_market aligns with the PICK side.
+                    # We need to flip it if the pick is Away to get a "Home-centric" view?
+                    # Actually, let's just stick to the Pick side.
+                    # If Model says Home > 0.5 and Pick is Home (Market > 0.5) -> Agree.
+                    # But vertex_spread_prob is basically AI_Prob (Home Win).
+                    # So:
+                    model_home_prob = safe_float(r.get("vertex_spread_prob")) or model_home_prob
+
+                    pick_team = r.get("spread_pick_team")
+                    m_prob = safe_float(r.get("spread_prob_market"))
+
+                    if pick_team == home_team:
+                        market_home_prob = m_prob
+                    elif pick_team == away_team:
+                        market_home_prob = (1.0 - m_prob) if m_prob else None
+
+                elif market == "total":
+                    # For total, Model is usually 0.5 (Neutral).
+                    # Comparison is Over vs Under.
+                    # Model "Home" concept doesn't apply.
+                    # We use "Over" as the standard.
+                    model_over_prob = safe_float(r.get("vertex_total_prob")) or 0.5
+                    m_prob = safe_float(r.get("total_prob_market"))
+                    pick_side = str(r.get("total_pick_side") or "").lower()
+
+                    market_over_prob = None
+                    if pick_side == "over":
+                        market_over_prob = m_prob
+                    elif pick_side == "under":
+                        market_over_prob = (1.0 - m_prob) if m_prob else None
+
+                    # Override for return
+                    model_home_prob = model_over_prob
+                    market_home_prob = market_over_prob
+                    home_team = "Over" # For rationale text
+                    away_team = "Under"
+
+                # If data missing, default to Neutral
+                if model_home_prob is None or market_home_prob is None:
+                    return "NEUTRAL", "Missing probability data for alignment check."
+
+                # Neutral Zone Check (0.47 - 0.53)
+                if (0.47 <= model_home_prob <= 0.53) or (0.47 <= market_home_prob <= 0.53):
+                    return "NEUTRAL", "Model or Market is uncertain (Neutral Zone)."
+
+                # Directional Check
+                model_favors_home = model_home_prob > 0.5
+                market_favors_home = market_home_prob > 0.5
+
+                if model_favors_home == market_favors_home:
+                    # Both favor Home (or Over) OR Both favor Away (or Under)
+                    side = home_team if model_favors_home else away_team
+                    return "AGREE", f"Model and Market both favor {side}."
                 else:
-                    row["gemini_alignment"] = "DISAGREE"
-                rationale_text = gem_res.get("explanation") or gem_res.get("gemini_rationale") or ""
-                row["gemini_rationale"] = str(rationale_text)[:240]
-                row["gemini_risk_flags"] = json.dumps(flags_list) if flags_list else json.dumps([])
-                row["gemini_flags_short"] = ";".join(flags_list[:4])
-                row["llm_disagreement_flag"] = row.get("gemini_alignment") == "DISAGREE"
-                row["gemini_mode"] = "full" if gemini_full_run else "guardrail"
-                row["gemini_error"] = None
-            except Exception as exc:
-                row["gemini_mode"] = "error"
-                row["gemini_error"] = str(exc)[:240]
-                row["llm_disagreement_flag"] = False
-                row["gemini_alignment"] = "NEUTRAL"
-                row["gemini_rationale"] = f"Gemini error: {row.get('gemini_error')}"
-                existing_flags = str(row.get("gemini_flags_short") or "").strip()
-                if existing_flags:
-                    row["gemini_flags_short"] = f"{existing_flags};gemini_error"
-                else:
-                    row["gemini_flags_short"] = "gemini_error"
+                    fav_model = home_team if model_favors_home else away_team
+                    fav_market = home_team if market_favors_home else away_team
+                    return "DISAGREE", f"Model favors {fav_model} while Market favors {fav_market}."
+
+            # Calculate Alignment & Rationale
+            align_status, align_reason = calculate_directional_alignment(row)
+            row["gemini_alignment"] = align_status
+            row["gemini_rationale"] = align_reason
+            row["llm_disagreement_flag"] = (align_status == "DISAGREE")
+
+            # Still call Gemini if enabled/allowed, just to get flags (optional enhancement)
+            # We preserve the original flow to ensure flags are populated if possible
+            if row.name in gemini_allowed_idx:
+                try:
+                    payload = {
+                        "league": row.get("League"),
+                        "home": row.get("Home"),
+                        "away": row.get("Away"),
+                        "commence_local": row.get("Commence (Local)"),
+                        "spread_pick": row.get("Spread & Pick"),
+                        "spread_line": row.get("spread_pick_line") or (row.get("Line") if str(row.get("Market")).lower() == "spread" else None),
+                        "spread_odds": row.get("spread_pick_odds"),
+                        "spread_prob_final": row.get("spread_prob"),
+                        "spread_prob_market": row.get("spread_prob_market"),
+                        "total_pick": row.get("Total & Pick"),
+                        "total_line": row.get("total_pick_line") or (row.get("Line") if str(row.get("Market")).lower() == "total" else None),
+                        "total_odds": row.get("total_pick_odds"),
+                        "total_prob_final": row.get("total_prob"),
+                        "total_prob_market": row.get("total_prob_market"),
+                        "kalshi_spread_prob": row.get("kalshi_prob_spread"),
+                        "kalshi_total_prob": row.get("kalshi_prob_total"),
+                        "kalshi_matched": bool(row.get("kalshi_matched")),
+                        "prob_engine": row.get("prob_engine"),
+                        "sentiment_badge": row.get("sentiment_badge"),
+                        "sentiment_flags": [row.get("spread_sentiment_note"), row.get("total_sentiment_note")],
+                        "warnings": row.get("Warnings"),
+                        "odds_placeholder_detected": row.get("odds_placeholder_detected"),
+                    }
+                    sig = _gemini_payload_signature(payload)
+                    gem_res = cached_gemini_confidence(sig, payload) or {}
+                    flags = gem_res.get("flags") if isinstance(gem_res, dict) else []
+                    if not isinstance(flags, list):
+                        flags = gem_res.get("risk_flags") if isinstance(gem_res, dict) else []
+                    flags_list = [str(f) for f in flags] if isinstance(flags, list) else []
+
+                    # Store flags, but DO NOT overwrite alignment/rationale
+                    row["gemini_risk_flags"] = json.dumps(flags_list) if flags_list else json.dumps([])
+                    row["gemini_flags_short"] = ";".join(flags_list[:4])
+                    row["gemini_mode"] = "full" if gemini_full_run else "guardrail"
+                    row["gemini_error"] = None
+
+                    # If there's an error in LLM, log it but keep our math alignment
+                    if gem_res.get("gemini_error"):
+                         row["gemini_error"] = gem_res.get("gemini_error")
+                         row["gemini_flags_short"] = row.get("gemini_flags_short") or "gemini_disabled"
+
+                except Exception as exc:
+                    row["gemini_mode"] = "error"
+                    row["gemini_error"] = str(exc)[:240]
+                    # Don't reset alignment on LLM error, we have math fallback
+                    existing_flags = str(row.get("gemini_flags_short") or "").strip()
+                    if existing_flags:
+                        row["gemini_flags_short"] = f"{existing_flags};gemini_error"
+                    else:
+                        row["gemini_flags_short"] = "gemini_error"
+
             return row
         df = df.apply(_apply_gemini, axis=1)
         if "_gemini_rank_metric" in df.columns:
