@@ -147,13 +147,45 @@ NBA_TEAM_CODE_MAP: Dict[str, str] = {
     "CHARLOTTE HORNETS": "CHA", "CHICAGO BULLS": "CHI", "CLEVELAND CAVALIERS": "CLE",
     "DALLAS MAVERICKS": "DAL", "DENVER NUGGETS": "DEN", "DETROIT PISTONS": "DET",
     "GOLDEN STATE WARRIORS": "GSW", "HOUSTON ROCKETS": "HOU", "INDIANA PACERS": "IND",
-    "LOS ANGELES CLIPPERS": "LAC", "LA CLIPPERS": "LAC", "LOS ANGELES LAKERS": "LAL",
-    "LA LAKERS": "LAL", "MEMPHIS GRIZZLIES": "MEM", "MIAMI HEAT": "MIA",
+    "LA CLIPPERS": "LAC", "LOS ANGELES CLIPPERS": "LAC", "LA LAKERS": "LAL",
+    "LOS ANGELES LAKERS": "LAL", "MEMPHIS GRIZZLIES": "MEM", "MIAMI HEAT": "MIA",
     "MILWAUKEE BUCKS": "MIL", "MINNESOTA TIMBERWOLVES": "MIN", "NEW ORLEANS PELICANS": "NOP",
     "NEW YORK KNICKS": "NYK", "OKLAHOMA CITY THUNDER": "OKC", "ORLANDO MAGIC": "ORL",
     "PHILADELPHIA 76ERS": "PHI", "PHOENIX SUNS": "PHX", "PORTLAND TRAIL BLAZERS": "POR",
     "SACRAMENTO KINGS": "SAC", "SAN ANTONIO SPURS": "SAS", "TORONTO RAPTORS": "TOR",
     "UTAH JAZZ": "UTA", "WASHINGTON WIZARDS": "WAS"
+}
+
+NCAAB_TEAM_CODE_MAP: Dict[str, str] = {
+    "DUKE": "DUK", "NORTH CAROLINA": "UNC", "KANSAS": "KAN", "KENTUCKY": "KEN",
+    "GONZAGA": "GON", "BAYLOR": "BAY", "ARIZONA": "ARI", "UCLA": "UCL",
+    "HOUSTON": "HOU", "PURDUE": "PUR", "UCONN": "CON", "CONNECTICUT": "CON",
+    "VILLANOVA": "VIL", "MICHIGAN STATE": "MSU", "TENNESSEE": "TEN", "ALABAMA": "ALA",
+    "AUBURN": "AUB", "TEXAS": "TEX", "VIRGINIA": "VIR", "ILLINOIS": "ILL",
+    "ARKANSAS": "ARK", "INDIANA": "IND", "MICHIGAN": "MIC", "OHIO STATE": "OSU",
+    "FLORIDA": "FLO", "TEXAS TECH": "TTU", "WISCONSIN": "WIS", "MARYLAND": "MAR",
+    "IOWA": "IOW", "XAVIER": "XAV", "CREIGHTON": "CRE", "MARQUETTE": "MAR",
+    "PROVIDENCE": "PRO", "SETON HALL": "SET", "ST. JOHN'S": "STJ", "ST JOHNS": "STJ",
+    "GEORGETOWN": "GEO", "BUTLER": "BUT", "DEPAUL": "DEP", "MEMPHIS": "MEM",
+    "CINCINNATI": "CIN", "SMU": "SMU", "WICHITA STATE": "WIC", "TEMPLE": "TEM",
+    "TULANE": "TUL", "USF": "USF", "UCF": "UCF", "ECU": "ECU", "TULSA": "TUL",
+    "DAYTON": "DAY", "VCU": "VCU", "SAINT LOUIS": "SLU", "ST. BONAVENTURE": "SBU",
+    "RICHMOND": "RIC", "DAVIDSON": "DAV", "LOYOLA CHICAGO": "LOY", "SAN DIEGO STATE": "SDS",
+    "SAN DIEGO ST": "SDS", "NEVADA": "NEV", "UTAH STATE": "USU", "BOISE STATE": "BOI",
+    "BOISE ST": "BOI", "UNLV": "UNLV", "NEW MEXICO": "UNM", "COLORADO STATE": "CSU",
+    "SAINT MARY'S": "SMC", "ST MARYS": "SMC", "SAN FRANCISCO": "USF", "BYU": "BYU",
+    "SANTA CLARA": "SCU", "PEPPERDINE": "PEP", "LMU": "LMU", "PACIFIC": "PAC",
+    "PORTLAND": "POR", "SAN DIEGO": "USD", "TCU": "TCU", "IOWA STATE": "ISU",
+    "KANSAS STATE": "KSU", "OKLAHOMA": "OKL", "OKLAHOMA STATE": "OSU", "WEST VIRGINIA": "WVU",
+    "LOUISVILLE": "LOU", "SYRACUSE": "SYR", "NOTRE DAME": "UND", "MIAMI": "MIA",
+    "FLORIDA STATE": "FSU", "CLEMSON": "CLE", "NC STATE": "NCS", "WAKE FOREST": "WAK",
+    "PITTSBURGH": "PIT", "BOSTON COLLEGE": "BC", "GEORGIA TECH": "GAT", "VIRGINIA TECH": "VAT",
+    "LSU": "LSU", "TEXAS A&M": "TAM", "MISSISSIPPI STATE": "MSU", "OLE MISS": "MIS",
+    "MISSOURI": "MIZ", "SOUTH CAROLINA": "SCA", "GEORGIA": "GEO", "VANDERBILT": "VAN",
+    "OREGON": "ORE", "OREGON STATE": "OSU", "USC": "USC", "WASHINGTON": "WAS",
+    "WASHINGTON STATE": "WSU", "COLORADO": "COL", "UTAH": "UTA", "ARIZONA STATE": "ASU",
+    "CALIFORNIA": "CAL", "STANFORD": "STA", "RUTGERS": "RUT", "PENN STATE": "PSU",
+    "MINNESOTA": "MIN", "NORTHWESTERN": "NOR", "NEBRASKA": "NEB"
 }
 
 
@@ -169,6 +201,15 @@ def team_name_to_code(league: str, team_name: str) -> Optional[str]:
         mapping = globals().get("NBA_TEAM_CODE_MAP") or {}
         if team_upper in mapping:
             return mapping[team_upper]
+
+    if league_u == "NCAAB":
+        mapping = globals().get("NCAAB_TEAM_CODE_MAP") or {}
+        if team_upper in mapping:
+            return mapping[team_upper]
+        # Try without 'State' -> 'St'
+        alt = team_upper.replace("STATE", "ST").replace("SAINT", "ST")
+        if alt in mapping:
+            return mapping[alt]
 
     cleaned = team_upper.replace(".", "").replace(",", "")
     return None

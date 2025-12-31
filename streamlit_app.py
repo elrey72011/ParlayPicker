@@ -4558,7 +4558,7 @@ def main():
                 "away_hit": team_hit or code_away_hit,
             }
             winner_candidate_debug.append(debug_row)
-            if date_match and code_hit:
+            if code_hit:
                 strict_candidates.append((score, m))
             elif date_match:
                 fallback_with_date.append((score, m))
@@ -5270,6 +5270,7 @@ def main():
         if st.session_state.get("run_analysis"):
             with st.spinner("🚀 Running Master Analysis..."):
                 st.session_state["DECISION_TRACE_SAMPLES"] = {}
+                st.session_state["debug_team_codes"] = []
 
                 def store_decision_trace_sample(
                     league_code: Optional[str],
@@ -5686,6 +5687,16 @@ def main():
                         away_code = team_code_for_league(league_name, away)
                     except Exception:
                         home_code, away_code = None, None
+
+                    # Debug Log Code Generation
+                    if len(st.session_state.get("debug_team_codes", [])) < 5:
+                        st.session_state.setdefault("debug_team_codes", []).append({
+                            "league": league_name,
+                            "home": home,
+                            "away": away,
+                            "home_code": home_code,
+                            "away_code": away_code
+                        })
 
                     commence_for_match = (
                         g.get("commence_time_iso_utc")
@@ -7176,6 +7187,12 @@ def main():
 
         st.subheader("Fuzzy Matching Debug")
         with st.expander("OddsAPI vs Kalshi Naming", expanded=True):
+            st.write("**Team Code Generation Debug (First 5 in Loop)**")
+            if st.session_state.get("debug_team_codes"):
+                st.json(st.session_state["debug_team_codes"])
+            else:
+                st.info("No debug codes captured (Run Analysis to populate)")
+
             games_debug = st.session_state.get("games", [])
             kalshi_debug = st.session_state.get("kalshi_all_markets", [])
 
