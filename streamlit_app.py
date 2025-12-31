@@ -2296,7 +2296,15 @@ def init_sentiment_meta() -> Dict[str, Any]:
 
 def ensure_sentiment_loaded(games: List[Dict[str, Any]]) -> None:
     """Compute sentiment for the current slate when enabled and cache in session state."""
-    news_api_key = st.secrets["general"].get("news_api_key")
+    try:
+        if "general" in st.secrets and "news_api_key" in st.secrets["general"]:
+            news_api_key = st.secrets["general"]["news_api_key"]
+        elif "news_api_key" in st.secrets:
+            news_api_key = st.secrets["news_api_key"]
+        else:
+            news_api_key = os.environ.get("news_api_key")
+    except Exception:
+        news_api_key = None
     if st.button("🧹 Clear Sentiment Cache", key="clear_sentiment_cache"):
         st.cache_data.clear()
         for k in list(st.session_state.keys()):
