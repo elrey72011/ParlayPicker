@@ -2159,7 +2159,7 @@ def enrich_game_context(game: Dict[str, Any], league_key: str, api_key: Optional
                 h_api = api_teams.get("home", {}).get("name", "")
                 a_api = api_teams.get("away", {}).get("name", "")
 
-                # Use fuzzy matching as the ONLY logic to bridge naming gaps (Confirmed)
+                # Use fuzzy matching as the ONLY logic to bridge naming gaps
                 if TeamNameMatcher.match_team(home_norm, [h_api], threshold=0.75) and \
                    TeamNameMatcher.match_team(away_norm, [a_api], threshold=0.75):
                     matched = g_api
@@ -2296,6 +2296,7 @@ def init_sentiment_meta() -> Dict[str, Any]:
 
 def ensure_sentiment_loaded(games: List[Dict[str, Any]]) -> None:
     """Compute sentiment for the current slate when enabled and cache in session state."""
+    news_api_key = st.secrets.get("general", {}).get("news_api_key")
     try:
         if "general" in st.secrets and "news_api_key" in st.secrets["general"]:
             news_api_key = st.secrets["general"]["news_api_key"]
@@ -5074,6 +5075,17 @@ def main():
             del st.session_state["master_df"]
         st.session_state["_last_selected_sports"] = selected_sports
     st.session_state["league"] = league
+
+    # --- MAIN EXECUTION TRIGGER ---
+    st.sidebar.markdown("---")
+    if st.sidebar.button("🚀 Run Master Analysis", use_container_width=True, type="primary"):
+        st.session_state.run_analysis = True
+        # Clear old state to ensure fresh calculations
+        st.session_state.master_rows = 0
+        st.session_state.rows_out = []
+        # Force a rerun to enter the processing loop
+        st.rerun()
+
     kalshi_required_toggle = st.sidebar.checkbox(
         "Kalshi required", value=st.session_state.get("kalshi_required", True)
     )
