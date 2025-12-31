@@ -5360,28 +5360,40 @@ with tab_master:
         value=st.session_state.get("use_vertex_numeric_probs", False),
         key="use_vertex_numeric_probs",
     )
-    # 2. Load Games Button
-    if st.button("Load Today's Games"):
-        with st.spinner("Fetching games..."):
+    # 1. Initialize Session State (Memory)
+    if 'games_data' not in st.session_state:
+        st.session_state['games_data'] = None
+
+    # 2. Section: Load Games
+    # This button exists independently. When clicked, it saves data to memory and RELOADS the app.
+    if st.button("Load Today's Games", key="btn_load_games"):
+        with st.spinner("Fetching games from API..."):
+            # Call your existing fetch logic here
             games_loaded_data = load_games(selected_sports or [league])
+
+            # Save to Session State (Critical Step)
             st.session_state['games_data'] = games_loaded_data
             # Maintain compatibility
             st.session_state['games'] = games_loaded_data
             st.session_state['games_loaded'] = True
-            st.rerun()
+            st.success(f"Successfully loaded {len(games_loaded_data)} games.")
 
-    games = st.session_state.get("games_data") or st.session_state.get("games") or []
+            # Force a rerun so the app realizes 'games_data' is now filled
+            st.rerun()
 
     # Determine if we need to run (user clicked button) or just display (cached df exists)
     df_existing = st.session_state.get("master_df")
     should_run = False
+    games = st.session_state.get("games_data") or st.session_state.get("games") or []
 
-    # 3. Conditional Analysis Button
-    # Check if data exists in state. Do NOT nest this under the Load button.
-    if st.session_state.get('games_data') is not None:
-        st.success(f"Loaded {len(st.session_state['games_data'])} games.")
+    # 3. Section: Run Analysis
+    # This block runs ONLY if 'games_data' exists in memory.
+    # It is NOT nested under the Load button.
+    if st.session_state['games_data'] is not None:
+        st.divider()
+        st.write(f"**Games Ready for Analysis:** {len(st.session_state['games_data'])}")
 
-        if st.button("Run Master Analysis", key="run_master_analysis_btn"):
+        if st.button("Run Master Analysis", key="btn_run_analysis"):
              if (not kalshi_status.get("configured")):
                 st.error("Kalshi is required but unavailable. Fix Kalshi first.")
                 st.stop()
