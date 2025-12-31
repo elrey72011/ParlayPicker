@@ -6240,9 +6240,12 @@ with tab_master:
             "total_edge",
             "market_stability",
         ]
-        for col in required_display_cols:
-            if col not in df.columns:
-                df[col] = None
+        # Performance fix: Batch creation of new columns to prevent fragmentation
+        new_cols_data = {col: None for col in required_display_cols if col not in df.columns}
+        if new_cols_data:
+            df_new = pd.DataFrame(new_cols_data, index=df.index)
+            df = pd.concat([df, df_new], axis=1)
+
         if "reddit_used" in df.columns:
             df["reddit_used"] = df["reddit_used"].fillna(False)
         df = add_spread_total_confidence(df)
@@ -6271,16 +6274,28 @@ with tab_master:
                     key="gemini_full_run",
                     help="Bypass the per-run limit (may be slower).",
                 )
-        for col, default in {
+
+        # Performance fix: Batch assignment for Gemini defaults
+        gemini_defaults = {
             "gemini_mode": "guardrail",
             "gemini_alignment": "NEUTRAL",
             "gemini_rationale": "",
             "gemini_flags_short": "",
             "gemini_risk_flags": json.dumps([]),
-        }.items():
-            if col not in df.columns:
-                df[col] = default
-            df[col] = df[col].fillna(default)
+        }
+
+        # 1. Add missing columns efficiently
+        gemini_missing = {k: v for k, v in gemini_defaults.items() if k not in df.columns}
+        if gemini_missing:
+             df_gemini_new = pd.DataFrame(gemini_missing, index=df.index)
+             df = pd.concat([df, df_gemini_new], axis=1)
+
+        # 2. Fill NA values for existing columns
+        df = df.fillna(gemini_defaults)
+
+        # De-fragment before heavy calculation
+        df = df.copy()
+
         overall_for_rank = pd.to_numeric(
             df.get("At_a_Glance_Confidence") if "At_a_Glance_Confidence" in df.columns else pd.Series(dtype=float),
             errors="coerce",
