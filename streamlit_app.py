@@ -2296,6 +2296,7 @@ def init_sentiment_meta() -> Dict[str, Any]:
 
 def ensure_sentiment_loaded(games: List[Dict[str, Any]]) -> None:
     """Compute sentiment for the current slate when enabled and cache in session state."""
+    news_api_key = st.secrets["general"].get("news_api_key")
     # Scope fix: Ensure news_api_key is defined for this function
     try:
         news_api_key = st.secrets["general"].get("news_api_key")
@@ -5446,780 +5447,776 @@ def main():
             st.warning("⚠️ No games data found in memory. Please click 'Load Today's Games' first.")
         else:
             st.success(f"✅ Ready to Analyze {len(games)} games.")
+        # (Removed duplicate button trigger as per fix)
 
-        # Ensure this block exists in the main workspace section
-        if st.sidebar.button("🚀 Run Master Analysis", use_container_width=True):
-            st.session_state.run_analysis = True
-            # Force a clear of previous results to prevent ghost data
-            st.session_state.master_rows = 0
-            st.session_state.rows_out = []
+        if st.session_state.get("run_analysis"):
+            with st.spinner("🚀 Running Master Analysis..."):
+                st.session_state["DECISION_TRACE_SAMPLES"] = {}
 
-        if st.session_state.get("run_analysis") or should_run:
-            st.session_state["DECISION_TRACE_SAMPLES"] = {}
+                def store_decision_trace_sample(
+                    league_code: Optional[str],
+                    home_team: Optional[str],
+                    away_team: Optional[str],
+                    market: str,
+                    pick: Optional[str],
+                    final_probability: Optional[float],
+                    trace_json_raw: Any,
+                ) -> None:
+                    league_code_norm = (league_code or "").upper()
+                    if league_code_norm not in DECISION_TRACE_SAMPLE_LEAGUES:
+                        return
+                    try:
+                        samples = dict(st.session_state.get("DECISION_TRACE_SAMPLES", {}))
+                    except Exception:
+                        samples = {}
+                    if league_code_norm in samples:
+                        return
+                    try:
+                        parsed_trace = json.loads(trace_json_raw) if isinstance(trace_json_raw, str) else trace_json_raw
+                    except Exception:
+                        parsed_trace = trace_json_raw
+                    samples[league_code_norm] = {
+                        "league": league_code_norm,
+                        "home": home_team,
+                        "away": away_team,
+                        "market": market,
+                        "pick": pick,
+                        "final_probability": final_probability,
+                        "decision_trace_json": parsed_trace,
+                    }
+                    st.session_state["DECISION_TRACE_SAMPLES"] = samples
+                api_sports_status_run = api_sports_status
+                sportsdata_status_run = sportsdata_status
+                df_master = pd.DataFrame(games or [])
 
-            def store_decision_trace_sample(
-                league_code: Optional[str],
-                home_team: Optional[str],
-                away_team: Optional[str],
-                market: str,
-                pick: Optional[str],
-                final_probability: Optional[float],
-                trace_json_raw: Any,
-            ) -> None:
-                league_code_norm = (league_code or "").upper()
-                if league_code_norm not in DECISION_TRACE_SAMPLE_LEAGUES:
-                    return
-                try:
-                    samples = dict(st.session_state.get("DECISION_TRACE_SAMPLES", {}))
-                except Exception:
-                    samples = {}
-                if league_code_norm in samples:
-                    return
-                try:
-                    parsed_trace = json.loads(trace_json_raw) if isinstance(trace_json_raw, str) else trace_json_raw
-                except Exception:
-                    parsed_trace = trace_json_raw
-                samples[league_code_norm] = {
-                    "league": league_code_norm,
-                    "home": home_team,
-                    "away": away_team,
-                    "market": market,
-                    "pick": pick,
-                    "final_probability": final_probability,
-                    "decision_trace_json": parsed_trace,
-                }
-                st.session_state["DECISION_TRACE_SAMPLES"] = samples
-            api_sports_status_run = api_sports_status
-            sportsdata_status_run = sportsdata_status
-            df_master = pd.DataFrame(games or [])
+                # Inject real-time stats for Vertex
+                api_sports_clients, _ = init_data_clients()
+                # Remove duplicate columns to prevent matrix errors
+                df_master = df_master.loc[:, ~df_master.columns.duplicated()]
+                df_master = enrich_with_vertex_features(df_master, api_sports_clients)
 
-            # Inject real-time stats for Vertex
-            api_sports_clients, _ = init_data_clients()
-            # Remove duplicate columns to prevent matrix errors
-            df_master = df_master.loc[:, ~df_master.columns.duplicated()]
-            df_master = enrich_with_vertex_features(df_master, api_sports_clients)
+                # Check for NCAAF Outage
+                if league == "NCAAF" and not df_master.empty:
+                     # Check if we have defaults (0.5 win pct) which indicates missing stats
+                     if 'feature_home_win_pct' in df_master.columns:
+                         # Check first row
+                         first_val = df_master['feature_home_win_pct'].iloc[0]
+                         if abs(first_val - 0.5) < 0.0001:
+                             st.warning("Notice: NCAAF Data API is currently experiencing a server outage. College football stats may be limited.")
 
-            # Check for NCAAF Outage
-            if league == "NCAAF" and not df_master.empty:
-                 # Check if we have defaults (0.5 win pct) which indicates missing stats
-                 if 'feature_home_win_pct' in df_master.columns:
-                     # Check first row
-                     first_val = df_master['feature_home_win_pct'].iloc[0]
-                     if abs(first_val - 0.5) < 0.0001:
-                         st.warning("Notice: NCAAF Data API is currently experiencing a server outage. College football stats may be limited.")
-
-            unique_teams = sorted(
-                set(df_master.get("home_team", pd.Series([], dtype=str)).dropna().astype(str))
-                | set(df_master.get("away_team", pd.Series([], dtype=str)).dropna().astype(str))
-            )
-            enable_sentiment_master = st.checkbox(
-                "Enable sentiment (NewsAPI)",
-                value=True,
-                key="enable_sentiment_master",
-            )
-            st.session_state["enable_sentiment"] = enable_sentiment_master
-            slate_sentiment = get_slate_sentiment(enable_sentiment_master, unique_teams, "MIXED", news_api_key)
-            st.session_state["sentiment_map"] = slate_sentiment.get("map") or {}
-            st.session_state["sentiment_meta_map"] = slate_sentiment.get("meta_map") or {}
-            st.session_state["sentiment_meta"] = slate_sentiment.get("meta") or init_sentiment_meta()
-            st.session_state["sentiment_debug"] = slate_sentiment.get("debug") or {}
-            with st.expander("Sentiment Debug", expanded=False):
-                meta_view = slate_sentiment.get("meta") or {}
-                meta_map_view = slate_sentiment.get("meta_map") or {}
-                source_counts: Dict[str, int] = {}
-                for mv in meta_map_view.values():
-                    src_val = str(mv.get("sentiment_source") or "none")
-                    source_counts[src_val] = source_counts.get(src_val, 0) + 1
-                st.write("Sentiment source:", meta_view.get("sentiment_source"))
-                st.write("Status counts:", meta_view.get("sentiment_status_counts"))
-                st.write("Teams by source:", source_counts)
-                st.write(
-                    "Reddit posts/comments used:",
-                    meta_view.get("reddit_posts_used", 0),
-                    meta_view.get("reddit_comments_used", 0),
+                unique_teams = sorted(
+                    set(df_master.get("home_team", pd.Series([], dtype=str)).dropna().astype(str))
+                    | set(df_master.get("away_team", pd.Series([], dtype=str)).dropna().astype(str))
                 )
-                st.write("Unique teams:", len(unique_teams))
-                st.json(meta_view)
-            sentiment_pack_meta = st.session_state.get("sentiment_meta") or init_sentiment_meta()
-            sentiment_map: Dict[str, Optional[float]] = st.session_state.get("sentiment_map") or {}
-            sentiment_meta_map: Dict[str, Dict[str, Any]] = st.session_state.get("sentiment_meta_map") or {}
-            sentiment_status_counts_global = sentiment_pack_meta.get("sentiment_status_counts") or {"NO_CALL": 1}
-            if st.session_state.get("kalshi_required", True) and kalshi_integrator:
+                enable_sentiment_master = st.checkbox(
+                    "Enable sentiment (NewsAPI)",
+                    value=True,
+                    key="enable_sentiment_master",
+                )
+                st.session_state["enable_sentiment"] = enable_sentiment_master
+                slate_sentiment = get_slate_sentiment(enable_sentiment_master, unique_teams, "MIXED", news_api_key)
+                st.session_state["sentiment_map"] = slate_sentiment.get("map") or {}
+                st.session_state["sentiment_meta_map"] = slate_sentiment.get("meta_map") or {}
+                st.session_state["sentiment_meta"] = slate_sentiment.get("meta") or init_sentiment_meta()
+                st.session_state["sentiment_debug"] = slate_sentiment.get("debug") or {}
+                with st.expander("Sentiment Debug", expanded=False):
+                    meta_view = slate_sentiment.get("meta") or {}
+                    meta_map_view = slate_sentiment.get("meta_map") or {}
+                    source_counts: Dict[str, int] = {}
+                    for mv in meta_map_view.values():
+                        src_val = str(mv.get("sentiment_source") or "none")
+                        source_counts[src_val] = source_counts.get(src_val, 0) + 1
+                    st.write("Sentiment source:", meta_view.get("sentiment_source"))
+                    st.write("Status counts:", meta_view.get("sentiment_status_counts"))
+                    st.write("Teams by source:", source_counts)
+                    st.write(
+                        "Reddit posts/comments used:",
+                        meta_view.get("reddit_posts_used", 0),
+                        meta_view.get("reddit_comments_used", 0),
+                    )
+                    st.write("Unique teams:", len(unique_teams))
+                    st.json(meta_view)
+                sentiment_pack_meta = st.session_state.get("sentiment_meta") or init_sentiment_meta()
+                sentiment_map: Dict[str, Optional[float]] = st.session_state.get("sentiment_map") or {}
+                sentiment_meta_map: Dict[str, Dict[str, Any]] = st.session_state.get("sentiment_meta_map") or {}
+                sentiment_status_counts_global = sentiment_pack_meta.get("sentiment_status_counts") or {"NO_CALL": 1}
+                if st.session_state.get("kalshi_required", True) and kalshi_integrator:
+                    try:
+                        kalshi_integrator.assert_available()
+                    except Exception as exc:
+                        st.error(str(exc))
+                        st.stop()
+                commence_times_by_league: Dict[str, List[str]] = {}
+                for g in games:
+                    lg = g.get("league")
+                    commence_val = g.get("commence_time_iso_utc") or g.get("commence_time") or g.get("commence_time_iso")
+                    if not commence_val:
+                        continue
+                    commence_times_by_league.setdefault(lg, []).append(commence_val)
+                sentiment_meta_global: Dict[str, Any] = {**init_sentiment_meta(), **(st.session_state.get("sentiment_meta") or {})}
+                sentiment_status_counts_global = sentiment_meta_global.get("sentiment_status_counts") or {"NO_CALL": 1}
+                leagues_for_fetch = list({k for k in commence_times_by_league.keys() if k}) or (selected_sports or [league])
                 try:
-                    kalshi_integrator.assert_available()
+                    kalshi_markets_by_league = fetch_kalshi_markets_for_leagues(
+                        leagues_for_fetch, commence_times_by_league
+                    )
+                except RuntimeError as exc:
+                    msg = str(exc)
+                    if "429" in msg or "rate limit" in msg.lower():
+                        st.error("Kalshi rate-limited. Please retry in ~X seconds.")
+                    else:
+                        st.error(msg)
+                    st.stop()
                 except Exception as exc:
                     st.error(str(exc))
                     st.stop()
-            commence_times_by_league: Dict[str, List[str]] = {}
-            for g in games:
-                lg = g.get("league")
-                commence_val = g.get("commence_time_iso_utc") or g.get("commence_time") or g.get("commence_time_iso")
-                if not commence_val:
-                    continue
-                commence_times_by_league.setdefault(lg, []).append(commence_val)
-            sentiment_meta_global: Dict[str, Any] = {**init_sentiment_meta(), **(st.session_state.get("sentiment_meta") or {})}
-            sentiment_status_counts_global = sentiment_meta_global.get("sentiment_status_counts") or {"NO_CALL": 1}
-            leagues_for_fetch = list({k for k in commence_times_by_league.keys() if k}) or (selected_sports or [league])
-            try:
-                kalshi_markets_by_league = fetch_kalshi_markets_for_leagues(
-                    leagues_for_fetch, commence_times_by_league
-                )
-            except RuntimeError as exc:
-                msg = str(exc)
-                if "429" in msg or "rate limit" in msg.lower():
-                    st.error("Kalshi rate-limited. Please retry in ~X seconds.")
-                else:
-                    st.error(msg)
-                st.stop()
-            except Exception as exc:
-                st.error(str(exc))
-                st.stop()
-            if not kalshi_markets_by_league:
-                st.warning(
-                    "Kalshi markets could not be fetched; proceeding with cached/empty set."
-                )
-                kalshi_markets_by_league = {}
-            all_markets_flat: List[Dict[str, Any]] = []
-            for mkts in kalshi_markets_by_league.values():
-                all_markets_flat.extend(mkts)
-            st.session_state["kalshi_all_markets"] = all_markets_flat
-            winner_refetch_attempted = False
-            full_search_first_game: Optional[Dict[str, Any]] = None
-            if games:
-                fg_league = league
-                try:
-                    fg = games[0]
-                    fg_league = fg.get("league")
-                    fg_markets = kalshi_markets_by_league.get(fg_league, [])
-                    full_search_first_game = debug_search_markets_for_game(
-                        fg_markets,
-                        fg.get("home_team"),
-                        fg.get("away_team"),
-                        (team_code_candidates(fg_league, fg.get("home_team")) or [None])[0],
-                        (team_code_candidates(fg_league, fg.get("away_team")) or [None])[0],
-                        league=fg_league,
+                if not kalshi_markets_by_league:
+                    st.warning(
+                        "Kalshi markets could not be fetched; proceeding with cached/empty set."
                     )
-                except Exception:
-                    st.session_state["last_exception"] = traceback.format_exc()
-            if (
-                full_search_first_game
-                and (fg_league or league) == "NBA"
-                and not full_search_first_game.get("found_any_winner_market_for_game")
-                and (
-                    full_search_first_game.get("found_any_total_market_for_game")
-                    or full_search_first_game.get("matches")
-                )
-            ):
-                winner_refetch_attempted = True
-                try:
-                    refreshed = kalshi_integrator.get_sports_markets() if kalshi_integrator else []
-                    prefix = LEAGUE_SERIES_MAP.get((league or "").upper())
-                    if prefix:
-                        refreshed = [
-                            m
-                            for m in refreshed
-                            if str(m.get("ticker") or "").upper().startswith(prefix)
-                        ]
-                    if refreshed:
-                        kalshi_markets_by_league[(fg_league or league)] = refreshed
-                        st.session_state["kalshi_all_markets"] = refreshed
-                        if games:
-                            try:
-                                fg = games[0]
-                                full_search_first_game = debug_search_markets_for_game(
-                                    kalshi_markets_by_league.get(fg_league or league, []),
-                                    fg.get("home_team"),
-                                    fg.get("away_team"),
-                                    (team_code_candidates(fg_league or league, fg.get("home_team")) or [None])[0],
-                                    (team_code_candidates(fg_league or league, fg.get("away_team")) or [None])[0],
-                                    league=fg_league or league,
-                                )
-                            except Exception:
-                                st.session_state["last_exception"] = traceback.format_exc()
-                except Exception:
-                    st.session_state["last_exception"] = traceback.format_exc()
-            filtered_counts: List[int] = []
-            per_game_kalshi_debug: List[Dict[str, Any]] = []
-            first_game_full_search = full_search_first_game
-            rows_out: List[Dict[str, Any]] = []
-            master_stats = {
-                "games_in": len(games),
-                "rows_out": 0,
-                "h2h_found": 0,
-                "exceptions": 0,
-                "market_rows_out": 0,
-                "kalshi_matches": 0,
-                "kalshi_total": len(games),
-            }
-            data_source_stats = {
-                "api_sports_games": 0,
-                "sportsdata_games": 0,
-                "injury_pulls": 0,
-                "weather_pulls": 0,
-                "errors": [],
-            }
-            kalshi_match_results: List[Dict[str, Any]] = []
-
-            # --- PRE-LOOP: BATCH ENRICHMENT ---
-            # Create a lookup map: (Home, Away) -> Row Series
-            enriched_lookup = {}
-            if games:
-                # Create a simple DataFrame for enrichment
-                pre_enrich_data = []
-                for g in games:
-                    home_ml = g.get("home_ml_price")
-                    implied_home = american_to_implied_prob(home_ml)
-                    pre_enrich_data.append({
-                        "Home": g.get("home_team"),
-                        "Away": g.get("away_team"),
-                        "League": g.get("league"),
-                        "Commence (UTC)": g.get("commence_time_iso_utc") or safe_iso(g.get("commence_time_iso")),
-                        "Implied_Prob": implied_home,
-                    })
-
-                enrich_df = pd.DataFrame(pre_enrich_data)
-
-                # Determine season year for open-source stat fetching (heuristic)
-                now = datetime.now()
-                season_year = now.year
-                # If we are in the early part of the year (Jan-July), the season started the previous year
-                if now.month < 8:
-                    season_year -= 1
-
-                with st.spinner("🚀 Running Batch Feature Enrichment (Pre-Loop)..."):
-                    enrich_df = enrich_with_vertex_features(
-                        enrich_df,
-                        {league: api_sports_clients.get(league)},
-                        season_year=season_year
+                    kalshi_markets_by_league = {}
+                all_markets_flat: List[Dict[str, Any]] = []
+                for mkts in kalshi_markets_by_league.values():
+                    all_markets_flat.extend(mkts)
+                st.session_state["kalshi_all_markets"] = all_markets_flat
+                winner_refetch_attempted = False
+                full_search_first_game: Optional[Dict[str, Any]] = None
+                if games:
+                    fg_league = league
+                    try:
+                        fg = games[0]
+                        fg_league = fg.get("league")
+                        fg_markets = kalshi_markets_by_league.get(fg_league, [])
+                        full_search_first_game = debug_search_markets_for_game(
+                            fg_markets,
+                            fg.get("home_team"),
+                            fg.get("away_team"),
+                            (team_code_candidates(fg_league, fg.get("home_team")) or [None])[0],
+                            (team_code_candidates(fg_league, fg.get("away_team")) or [None])[0],
+                            league=fg_league,
+                        )
+                    except Exception:
+                        st.session_state["last_exception"] = traceback.format_exc()
+                if (
+                    full_search_first_game
+                    and (fg_league or league) == "NBA"
+                    and not full_search_first_game.get("found_any_winner_market_for_game")
+                    and (
+                        full_search_first_game.get("found_any_total_market_for_game")
+                        or full_search_first_game.get("matches")
                     )
-                    # De-dupe columns
-                    enrich_df = enrich_df.loc[:, ~enrich_df.columns.duplicated()]
-
-                for idx_e, row_e in enrich_df.iterrows():
-                    key = (str(row_e.get("Home")), str(row_e.get("Away")))
-                    enriched_lookup[key] = row_e
-
-            # Initialize Vertex Endpoint once
-            vertex_endpoint = None
-            if is_vertex_prediction_configured() and ENABLE_VERTEX_MODEL:
-                try:
-                    from app_core.vertex_ai_endpoint import get_vertex_endpoint
-                    vertex_endpoint = get_vertex_endpoint()
-                except Exception as e:
-                    logger.error(f"Failed to init Vertex endpoint: {e}")
-
-            # --- CLEANED MASTER ANALYSIS LOOP ---
-            # --- FIX: Define variables at the start of the loop ---
-            for idx, g in enumerate(games):
-                kalshi_prob_used: Optional[float] = None
-                kalshi_event_used: Optional[str] = None
-                warnings: List[str] = list(g.get("warnings") or [])
-                league_name = g.get("league")
-                league_key = canonical_league_key(league_name)
-                home = g.get("home_team")
-                away = g.get("away_team")
-                league_markets = kalshi_markets_by_league.get(league_key, []) or kalshi_markets_by_league.get(league_name, [])
-
-                # DEFINE THESE HERE TO FIX THE NAMEERROR
-                commence_iso = g.get("commence_time_iso_utc") or safe_iso(g.get("commence_time_iso"))
-                commence_local = fmt_local_time(g.get("commence_time_local"))
-                commence_date_local = g.get("commence_date_local") or ""
-
-                enrichment = enrich_game_context(g, league_key, api_sports_key, sportsdata_key)
-                if enrichment.get("api_sports_used"):
-                    data_source_stats["api_sports_games"] += 1
-                if enrichment.get("sportsdata_used"):
-                    data_source_stats["sportsdata_games"] += 1
-                data_source_stats["injury_pulls"] += int(enrichment.get("injuries_home_count") or 0) + int(enrichment.get("injuries_away_count") or 0)
-                if enrichment.get("weather_summary"):
-                    data_source_stats["weather_pulls"] += 1
-                if enrichment.get("schedule_warnings"):
-                    warnings.extend(enrichment.get("schedule_warnings") or [])
-                injuries_home_count = enrichment.get("injuries_home_count")
-                injuries_away_count = enrichment.get("injuries_away_count")
-                injuries_home_display = enrichment.get("injuries_home")
-                injuries_away_display = enrichment.get("injuries_away")
-                weather_summary = enrichment.get("weather_summary")
-                key_injuries_home = enrichment.get("key_injuries_home") or []
-                key_injuries_away = enrichment.get("key_injuries_away") or []
-                api_sports_used = enrichment.get("api_sports_used")
-                sportsdata_used = enrichment.get("sportsdata_used")
-                api_sports_status_run = enrichment.get("api_sports_status") or api_sports_status
-                sportsdata_status_run = enrichment.get("sportsdata_status") or sportsdata_status
-                apisports_enriched = enrichment.get("apisports_enriched")
-                apisports_notes = enrichment.get("apisports_notes")
-                sportsdata_enriched = enrichment.get("sportsdata_enriched")
-                sportsdata_notes = enrichment.get("sportsdata_notes")
-                enrichment_errors_sample = ";".join(enrichment.get("enrichment_errors_sample") or [])
-                g["injuries_home_count"] = injuries_home_count
-                g["injuries_away_count"] = injuries_away_count
-                g["weather_summary"] = weather_summary
-
-                # --- 1. SINGLE ROW INITIALIZATION ---
-                # Pre-calculate Glance/Market Stats for the Row
-                spread_offers = g.get("spread_offers") or []
-                total_offers = g.get("total_offers") or []
-
-                # Spread Metrics
-                spread_points = [safe_float(o.get("point")) for o in spread_offers if safe_float(o.get("point")) is not None]
-                spread_books = {o.get("book") for o in spread_offers if o.get("book")}
-                spread_books_count = len(spread_books)
-                spread_min, spread_med, spread_max = _market_range(spread_points)
-                spread_width = abs(spread_max - spread_min) if (spread_max is not None and spread_min is not None) else None
-
-                # Total Metrics
-                total_points = [safe_float(o.get("point")) for o in total_offers if safe_float(o.get("point")) is not None]
-                total_books = {o.get("book") for o in total_offers if o.get("book")}
-                total_books_count = len(total_books)
-                total_min, total_med, total_max = _market_range(total_points)
-                total_width = abs(total_max - total_min) if (total_max is not None and total_min is not None) else None
-
-                # Calculate Confidence & Glance
-                # We need to detect if odds are valid (simplified check)
-                spread_odds_valid = bool(spread_offers)
-                total_odds_valid = bool(total_offers)
-
-                # Use helper to get confidence
-                spread_conf, spread_reason = confidence_from_market(
-                    spread_books_count, spread_width, spread_odds_valid, False, False, market_kind="spread"
-                )
-                total_conf, total_reason = confidence_from_market(
-                    total_books_count, total_width, total_odds_valid, False, False, market_kind="total"
-                )
-
-                # Compute Overall "At a Glance"
-                overall_conf, overall_score, overall_reason = compute_at_a_glance(
-                     spread_conf, spread_reason, total_conf, total_reason
-                )
-
-                # Build Glance Strings
-                spread_glance = build_clean_glance(spread_conf, None, spread_books_count, spread_width, "spread")
-                total_glance = build_clean_glance(total_conf, None, total_books_count, total_width, "total")
-
-                game_row = {
-                    "League": league_name,
-                    "Home": home,
-                    "Away": away,
-                    "Commence (UTC)": commence_iso,
-                    "Commence (Local)": commence_local,
-                    "Local Date": commence_date_local,
-                    # Default Market/Book/Pick to Moneyline as primary, but can be overridden or generalized
-                    "Market": "Moneyline",
-                    "Book": g.get("best_ml_book"),
-                    # Initialize Market Columns with None
-                    "moneyline_pick": None, "moneyline_implied_prob": None,
-                    "spread_pick": None, "spread_implied_prob": None,
-                    "total_pick": None, "total_implied_prob": None,
-                    "spread_pick_team": None, "spread_pick_line": None,
-                    "total_pick_side": None, "total_pick_line": None,
-                    # Initialize Vertex/Kalshi Probabilities
-                    "AI_Prob": 0.5, # Default, updated by Vertex
-                    "kalshi_prob_moneyline": None, "kalshi_prob_spread": None, "kalshi_prob_total": None,
-                    # Shared Metadata
-                    "injuries_home_count": injuries_home_count,
-                    "injuries_away_count": injuries_away_count,
-                    "weather_summary": weather_summary,
-                    "api_sports_used": api_sports_used,
-                    "sportsdata_used": sportsdata_used,
-                    # UI / Glance Columns (Explicitly Added)
-                    "spread_books_count": spread_books_count,
-                    "total_books_count": total_books_count,
-                    "spread_width": spread_width,
-                    "total_width": total_width,
-                    "spread_min": spread_min,
-                    "spread_max": spread_max,
-                    "spread_med": spread_med,
-                    "total_min": total_min,
-                    "total_max": total_max,
-                    "total_med": total_med,
-                    "spread_confidence": spread_conf,
-                    "spread_confidence_reason": spread_reason,
-                    "total_confidence": total_conf,
-                    "total_confidence_reason": total_reason,
-                    "At_a_Glance_Confidence": overall_conf,
-                    "At_a_Glance_Score": overall_score,
-                    "At_a_Glance_Reason": overall_reason,
-                    "Spread_Glance": spread_glance,
-                    "Total_Glance": total_glance,
-                    "Spread_Glance_Reason": spread_reason,
-                    "Total_Glance_Reason": total_reason,
+                ):
+                    winner_refetch_attempted = True
+                    try:
+                        refreshed = kalshi_integrator.get_sports_markets() if kalshi_integrator else []
+                        prefix = LEAGUE_SERIES_MAP.get((league or "").upper())
+                        if prefix:
+                            refreshed = [
+                                m
+                                for m in refreshed
+                                if str(m.get("ticker") or "").upper().startswith(prefix)
+                            ]
+                        if refreshed:
+                            kalshi_markets_by_league[(fg_league or league)] = refreshed
+                            st.session_state["kalshi_all_markets"] = refreshed
+                            if games:
+                                try:
+                                    fg = games[0]
+                                    full_search_first_game = debug_search_markets_for_game(
+                                        kalshi_markets_by_league.get(fg_league or league, []),
+                                        fg.get("home_team"),
+                                        fg.get("away_team"),
+                                        (team_code_candidates(fg_league or league, fg.get("home_team")) or [None])[0],
+                                        (team_code_candidates(fg_league or league, fg.get("away_team")) or [None])[0],
+                                        league=fg_league or league,
+                                    )
+                                except Exception:
+                                    st.session_state["last_exception"] = traceback.format_exc()
+                    except Exception:
+                        st.session_state["last_exception"] = traceback.format_exc()
+                filtered_counts: List[int] = []
+                per_game_kalshi_debug: List[Dict[str, Any]] = []
+                first_game_full_search = full_search_first_game
+                rows_out: List[Dict[str, Any]] = []
+                master_stats = {
+                    "games_in": len(games),
+                    "rows_out": 0,
+                    "h2h_found": 0,
+                    "exceptions": 0,
+                    "market_rows_out": 0,
+                    "kalshi_matches": 0,
+                    "kalshi_total": len(games),
                 }
+                data_source_stats = {
+                    "api_sports_games": 0,
+                    "sportsdata_games": 0,
+                    "injury_pulls": 0,
+                    "weather_pulls": 0,
+                    "errors": [],
+                }
+                kalshi_match_results: List[Dict[str, Any]] = []
 
-                sentiment_map_all = st.session_state.get("sentiment_map") or {}
-                sentiment_map = sentiment_map_all or (st.session_state.get(f"sentiment_map_{league_key}") or {})
-                sentiment_meta_map_all = st.session_state.get("sentiment_meta_map") or {}
-                sentiment_meta_map = sentiment_meta_map_all or (st.session_state.get(f"sentiment_meta_map_{league_key}") or {})
-                home_meta = sentiment_meta_map.get(home, {})
-                away_meta = sentiment_meta_map.get(away, {})
-                home_sent = safe_float(sentiment_map.get(home))
-                away_sent = safe_float(sentiment_map.get(away))
-                sentiment_debug_global = st.session_state.get("sentiment_debug") or {}
-                league_debug = st.session_state.get(f"sentiment_debug_{league_key}") or {}
-                articles_total = sentiment_meta_global.get("sentiment_articles_total") or league_debug.get("articles_total") or 0
+                # --- PRE-LOOP: BATCH ENRICHMENT ---
+                # Create a lookup map: (Home, Away) -> Row Series
+                enriched_lookup = {}
+                if games:
+                    # Create a simple DataFrame for enrichment
+                    pre_enrich_data = []
+                    for g in games:
+                        home_ml = g.get("home_ml_price")
+                        implied_home = american_to_implied_prob(home_ml)
+                        pre_enrich_data.append({
+                            "Home": g.get("home_team"),
+                            "Away": g.get("away_team"),
+                            "League": g.get("league"),
+                            "Commence (UTC)": g.get("commence_time_iso_utc") or safe_iso(g.get("commence_time_iso")),
+                            "Implied_Prob": implied_home,
+                        })
 
-                sentiment_diff = (home_sent - away_sent) if (home_sent is not None and away_sent is not None) else 0.0
+                    enrich_df = pd.DataFrame(pre_enrich_data)
 
-                # Populate Sentiment Data into game_row
-                game_row["Home_Sentiment"] = home_sent
-                game_row["Away_Sentiment"] = away_sent
-                game_row["Sentiment_Diff"] = sentiment_diff
+                    # Determine season year for open-source stat fetching (heuristic)
+                    now = datetime.now()
+                    season_year = now.year
+                    # If we are in the early part of the year (Jan-July), the season started the previous year
+                    if now.month < 8:
+                        season_year -= 1
 
-                # --- 2. KALSHI MATCHING ---
-                home_code: Optional[str] = None
-                away_code: Optional[str] = None
-                try:
-                    home_code = team_code_for_league(league_name, home)
-                    away_code = team_code_for_league(league_name, away)
-                except Exception:
-                    home_code, away_code = None, None
+                    with st.spinner("🚀 Running Batch Feature Enrichment (Pre-Loop)..."):
+                        enrich_df = enrich_with_vertex_features(
+                            enrich_df,
+                            {league: api_sports_clients.get(league)},
+                            season_year=season_year
+                        )
+                        # De-dupe columns
+                        enrich_df = enrich_df.loc[:, ~enrich_df.columns.duplicated()]
 
-                commence_for_match = (
-                    g.get("commence_time_iso_utc")
-                    or g.get("commence_time")
-                    or g.get("commence_time_iso")
-                    or g.get("commence_time_utc")
-                )
+                    for idx_e, row_e in enrich_df.iterrows():
+                        key = (str(row_e.get("Home")), str(row_e.get("Away")))
+                        enriched_lookup[key] = row_e
 
-                filtered_markets = filter_kalshi_game_markets(
-                    league_markets,
-                    commence_for_match,
-                    league_name,
-                    home,
-                    away,
-                    home_code,
-                    away_code,
-                )
-                deduped = {m.get("event_ticker") or m.get("ticker"): m for m in filtered_markets}
-                filtered_markets = list(deduped.values())
-                filtered_counts.append(len(filtered_markets))
+                # Initialize Vertex Endpoint once
+                vertex_endpoint = None
+                if is_vertex_prediction_configured() and ENABLE_VERTEX_MODEL:
+                    try:
+                        from app_core.vertex_ai_endpoint import get_vertex_endpoint
+                        vertex_endpoint = get_vertex_endpoint()
+                    except Exception as e:
+                        logger.error(f"Failed to init Vertex endpoint: {e}")
 
-                winner_reason_override = None
-                if (idx == 0 and first_game_full_search and not first_game_full_search.get("found_any_winner_market_for_game")):
-                    winner_reason_override = "winner_not_in_fetched_markets"
+                # --- CLEANED MASTER ANALYSIS LOOP ---
+                # --- FIX: Define variables at the start of the loop ---
+                for idx, g in enumerate(games):
+                    kalshi_prob_used: Optional[float] = None
+                    kalshi_event_used: Optional[str] = None
+                    warnings: List[str] = list(g.get("warnings") or [])
+                    league_name = g.get("league")
+                    league_key = canonical_league_key(league_name)
+                    home = g.get("home_team")
+                    away = g.get("away_team")
+                    league_markets = kalshi_markets_by_league.get(league_key, []) or kalshi_markets_by_league.get(league_name, [])
 
-                kalshi_matches, candidate_debug = match_kalshi_market(
-                    g, filtered_markets, winner_reason_override
-                )
-                candidate_debug["candidate_count"] = len(filtered_markets)
-                per_game_kalshi_debug.append(candidate_debug)
-                kalshi_match_results.append({"game": g, "matches": kalshi_matches, "candidate_debug": candidate_debug})
+                    # DEFINE THESE HERE TO FIX THE NAMEERROR
+                    commence_iso = g.get("commence_time_iso_utc") or safe_iso(g.get("commence_time_iso"))
+                    commence_local = fmt_local_time(g.get("commence_time_local"))
+                    commence_date_local = g.get("commence_date_local") or ""
 
-                kalshi_winner = kalshi_matches.get("winner", {})
-                kalshi_spread = kalshi_matches.get("spread", {})
-                kalshi_total = kalshi_matches.get("total", {})
+                    enrichment = enrich_game_context(g, league_key, api_sports_key, sportsdata_key)
+                    if enrichment.get("api_sports_used"):
+                        data_source_stats["api_sports_games"] += 1
+                    if enrichment.get("sportsdata_used"):
+                        data_source_stats["sportsdata_games"] += 1
+                    data_source_stats["injury_pulls"] += int(enrichment.get("injuries_home_count") or 0) + int(enrichment.get("injuries_away_count") or 0)
+                    if enrichment.get("weather_summary"):
+                        data_source_stats["weather_pulls"] += 1
+                    if enrichment.get("schedule_warnings"):
+                        warnings.extend(enrichment.get("schedule_warnings") or [])
+                    injuries_home_count = enrichment.get("injuries_home_count")
+                    injuries_away_count = enrichment.get("injuries_away_count")
+                    injuries_home_display = enrichment.get("injuries_home")
+                    injuries_away_display = enrichment.get("injuries_away")
+                    weather_summary = enrichment.get("weather_summary")
+                    key_injuries_home = enrichment.get("key_injuries_home") or []
+                    key_injuries_away = enrichment.get("key_injuries_away") or []
+                    api_sports_used = enrichment.get("api_sports_used")
+                    sportsdata_used = enrichment.get("sportsdata_used")
+                    api_sports_status_run = enrichment.get("api_sports_status") or api_sports_status
+                    sportsdata_status_run = enrichment.get("sportsdata_status") or sportsdata_status
+                    apisports_enriched = enrichment.get("apisports_enriched")
+                    apisports_notes = enrichment.get("apisports_notes")
+                    sportsdata_enriched = enrichment.get("sportsdata_enriched")
+                    sportsdata_notes = enrichment.get("sportsdata_notes")
+                    enrichment_errors_sample = ";".join(enrichment.get("enrichment_errors_sample") or [])
+                    g["injuries_home_count"] = injuries_home_count
+                    g["injuries_away_count"] = injuries_away_count
+                    g["weather_summary"] = weather_summary
 
-                # Store Kalshi matched status and probabilities in game_row
-                game_row["kalshi_matched"] = kalshi_winner.get("kalshi_matched") or kalshi_spread.get("kalshi_matched") or kalshi_total.get("kalshi_matched")
-                game_row["kalshi_prob_moneyline"] = safe_float(kalshi_winner.get("kalshi_prob")) if kalshi_winner.get("kalshi_matched") else None
-                game_row["kalshi_prob_spread"] = safe_float(kalshi_spread.get("kalshi_prob")) if kalshi_spread.get("kalshi_matched") else None
-                game_row["kalshi_prob_total"] = safe_float(kalshi_total.get("kalshi_prob")) if kalshi_total.get("kalshi_matched") else None
-                game_row["kalshi_prob"] = game_row["kalshi_prob_moneyline"] # Default specific override
+                    # --- 1. SINGLE ROW INITIALIZATION ---
+                    # Pre-calculate Glance/Market Stats for the Row
+                    spread_offers = g.get("spread_offers") or []
+                    total_offers = g.get("total_offers") or []
 
-                if game_row["kalshi_matched"]:
-                    master_stats["kalshi_matches"] += 1
+                    # Spread Metrics
+                    spread_points = [safe_float(o.get("point")) for o in spread_offers if safe_float(o.get("point")) is not None]
+                    spread_books = {o.get("book") for o in spread_offers if o.get("book")}
+                    spread_books_count = len(spread_books)
+                    spread_min, spread_med, spread_max = _market_range(spread_points)
+                    spread_width = abs(spread_max - spread_min) if (spread_max is not None and spread_min is not None) else None
 
-                # --- 3. VERTEX AI (REAL-TIME PREDICTION) ---
-                vertex_prob_home = 0.5  # Default
-                vertex_spread_prob = 0.5
-                vertex_total_prob = 0.5
+                    # Total Metrics
+                    total_points = [safe_float(o.get("point")) for o in total_offers if safe_float(o.get("point")) is not None]
+                    total_books = {o.get("book") for o in total_offers if o.get("book")}
+                    total_books_count = len(total_books)
+                    total_min, total_med, total_max = _market_range(total_points)
+                    total_width = abs(total_max - total_min) if (total_max is not None and total_min is not None) else None
 
-                if vertex_endpoint and enriched_lookup:
-                    lookup_key = (str(home), str(away))
-                    enriched_row = enriched_lookup.get(lookup_key)
-                    if enriched_row is not None:
-                        try:
-                            print(f"DEBUG: Calling Vertex for {home} vs {away}...")
-                            # Check stats validity (simple check for non-zero features)
-                            # feature_home_ppg is a good proxy for stats presence
-                            if 'feature_home_ppg' in enriched_row:
-                                 print(f"DEBUG: Stats Found. Home PPG: {enriched_row['feature_home_ppg']}")
-                            else:
-                                 print(f"DEBUG: Stats Missing in Enriched Row!")
+                    # Calculate Confidence & Glance
+                    # We need to detect if odds are valid (simplified check)
+                    spread_odds_valid = bool(spread_offers)
+                    total_odds_valid = bool(total_offers)
 
-                            pred = get_vertex_prediction(vertex_endpoint, enriched_row)
-                            print(f"DEBUG: Vertex Result for {home}: {pred}")
+                    # Use helper to get confidence
+                    spread_conf, spread_reason = confidence_from_market(
+                        spread_books_count, spread_width, spread_odds_valid, False, False, market_kind="spread"
+                    )
+                    total_conf, total_reason = confidence_from_market(
+                        total_books_count, total_width, total_odds_valid, False, False, market_kind="total"
+                    )
 
-                            if pred is not None:
-                                vertex_prob_home = pred
-                                vertex_spread_prob = pred # Proxy
-                                vertex_total_prob = 0.5   # Placeholder
-                        except Exception as e:
-                            print(f"DEBUG: Vertex Error: {e}")
-                            # Log but don't crash
-                            pass
-                    else:
-                        print(f"DEBUG: No enriched data found for {home} vs {away}")
+                    # Compute Overall "At a Glance"
+                    overall_conf, overall_score, overall_reason = compute_at_a_glance(
+                         spread_conf, spread_reason, total_conf, total_reason
+                    )
 
-                game_row["AI_Prob"] = vertex_prob_home
-                game_row["vertex_spread_prob"] = vertex_spread_prob
-                game_row["vertex_total_prob"] = vertex_total_prob
-                game_row["AI_Edge"] = vertex_prob_home - (american_to_implied_prob(g.get("home_ml_price")) or 0.5)
+                    # Build Glance Strings
+                    spread_glance = build_clean_glance(spread_conf, None, spread_books_count, spread_width, "spread")
+                    total_glance = build_clean_glance(total_conf, None, total_books_count, total_width, "total")
 
-                # --- 4. MONEYLINE LOGIC ---
-                home_ml = g.get("home_ml_price")
-                away_ml = g.get("away_ml_price")
-                game_row["Home_ML"] = home_ml
-                game_row["Away_ML"] = away_ml
+                    game_row = {
+                        "League": league_name,
+                        "Home": home,
+                        "Away": away,
+                        "Commence (UTC)": commence_iso,
+                        "Commence (Local)": commence_local,
+                        "Local Date": commence_date_local,
+                        # Default Market/Book/Pick to Moneyline as primary, but can be overridden or generalized
+                        "Market": "Moneyline",
+                        "Book": g.get("best_ml_book"),
+                        # Initialize Market Columns with None
+                        "moneyline_pick": None, "moneyline_implied_prob": None,
+                        "spread_pick": None, "spread_implied_prob": None,
+                        "total_pick": None, "total_implied_prob": None,
+                        "spread_pick_team": None, "spread_pick_line": None,
+                        "total_pick_side": None, "total_pick_line": None,
+                        # Initialize Vertex/Kalshi Probabilities
+                        "AI_Prob": 0.5, # Default, updated by Vertex
+                        "kalshi_prob_moneyline": None, "kalshi_prob_spread": None, "kalshi_prob_total": None,
+                        # Shared Metadata
+                        "injuries_home_count": injuries_home_count,
+                        "injuries_away_count": injuries_away_count,
+                        "weather_summary": weather_summary,
+                        "api_sports_used": api_sports_used,
+                        "sportsdata_used": sportsdata_used,
+                        # UI / Glance Columns (Explicitly Added)
+                        "spread_books_count": spread_books_count,
+                        "total_books_count": total_books_count,
+                        "spread_width": spread_width,
+                        "total_width": total_width,
+                        "spread_min": spread_min,
+                        "spread_max": spread_max,
+                        "spread_med": spread_med,
+                        "total_min": total_min,
+                        "total_max": total_max,
+                        "total_med": total_med,
+                        "spread_confidence": spread_conf,
+                        "spread_confidence_reason": spread_reason,
+                        "total_confidence": total_conf,
+                        "total_confidence_reason": total_reason,
+                        "At_a_Glance_Confidence": overall_conf,
+                        "At_a_Glance_Score": overall_score,
+                        "At_a_Glance_Reason": overall_reason,
+                        "Spread_Glance": spread_glance,
+                        "Total_Glance": total_glance,
+                        "Spread_Glance_Reason": spread_reason,
+                        "Total_Glance_Reason": total_reason,
+                    }
 
-                implied_home = american_to_implied_prob(home_ml)
-                implied_away = american_to_implied_prob(away_ml)
+                    sentiment_map_all = st.session_state.get("sentiment_map") or {}
+                    sentiment_map = sentiment_map_all or (st.session_state.get(f"sentiment_map_{league_key}") or {})
+                    sentiment_meta_map_all = st.session_state.get("sentiment_meta_map") or {}
+                    sentiment_meta_map = sentiment_meta_map_all or (st.session_state.get(f"sentiment_meta_map_{league_key}") or {})
+                    home_meta = sentiment_meta_map.get(home, {})
+                    away_meta = sentiment_meta_map.get(away, {})
+                    home_sent = safe_float(sentiment_map.get(home))
+                    away_sent = safe_float(sentiment_map.get(away))
+                    sentiment_debug_global = st.session_state.get("sentiment_debug") or {}
+                    league_debug = st.session_state.get(f"sentiment_debug_{league_key}") or {}
+                    articles_total = sentiment_meta_global.get("sentiment_articles_total") or league_debug.get("articles_total") or 0
 
-                ml_pick = None
-                ml_implied_prob = None
-                if implied_home is not None and implied_away is not None:
-                    if implied_home >= implied_away:
+                    sentiment_diff = (home_sent - away_sent) if (home_sent is not None and away_sent is not None) else 0.0
+
+                    # Populate Sentiment Data into game_row
+                    game_row["Home_Sentiment"] = home_sent
+                    game_row["Away_Sentiment"] = away_sent
+                    game_row["Sentiment_Diff"] = sentiment_diff
+
+                    # --- 2. KALSHI MATCHING ---
+                    home_code: Optional[str] = None
+                    away_code: Optional[str] = None
+                    try:
+                        home_code = team_code_for_league(league_name, home)
+                        away_code = team_code_for_league(league_name, away)
+                    except Exception:
+                        home_code, away_code = None, None
+
+                    commence_for_match = (
+                        g.get("commence_time_iso_utc")
+                        or g.get("commence_time")
+                        or g.get("commence_time_iso")
+                        or g.get("commence_time_utc")
+                    )
+
+                    filtered_markets = filter_kalshi_game_markets(
+                        league_markets,
+                        commence_for_match,
+                        league_name,
+                        home,
+                        away,
+                        home_code,
+                        away_code,
+                    )
+                    deduped = {m.get("event_ticker") or m.get("ticker"): m for m in filtered_markets}
+                    filtered_markets = list(deduped.values())
+                    filtered_counts.append(len(filtered_markets))
+
+                    winner_reason_override = None
+                    if (idx == 0 and first_game_full_search and not first_game_full_search.get("found_any_winner_market_for_game")):
+                        winner_reason_override = "winner_not_in_fetched_markets"
+
+                    kalshi_matches, candidate_debug = match_kalshi_market(
+                        g, filtered_markets, winner_reason_override
+                    )
+                    candidate_debug["candidate_count"] = len(filtered_markets)
+                    per_game_kalshi_debug.append(candidate_debug)
+                    kalshi_match_results.append({"game": g, "matches": kalshi_matches, "candidate_debug": candidate_debug})
+
+                    kalshi_winner = kalshi_matches.get("winner", {})
+                    kalshi_spread = kalshi_matches.get("spread", {})
+                    kalshi_total = kalshi_matches.get("total", {})
+
+                    # Store Kalshi matched status and probabilities in game_row
+                    game_row["kalshi_matched"] = kalshi_winner.get("kalshi_matched") or kalshi_spread.get("kalshi_matched") or kalshi_total.get("kalshi_matched")
+                    game_row["kalshi_prob_moneyline"] = safe_float(kalshi_winner.get("kalshi_prob")) if kalshi_winner.get("kalshi_matched") else None
+                    game_row["kalshi_prob_spread"] = safe_float(kalshi_spread.get("kalshi_prob")) if kalshi_spread.get("kalshi_matched") else None
+                    game_row["kalshi_prob_total"] = safe_float(kalshi_total.get("kalshi_prob")) if kalshi_total.get("kalshi_matched") else None
+                    game_row["kalshi_prob"] = game_row["kalshi_prob_moneyline"] # Default specific override
+
+                    if game_row["kalshi_matched"]:
+                        master_stats["kalshi_matches"] += 1
+
+                    # --- 3. VERTEX AI (REAL-TIME PREDICTION) ---
+                    vertex_prob_home = 0.5  # Default
+                    vertex_spread_prob = 0.5
+                    vertex_total_prob = 0.5
+
+                    if vertex_endpoint and enriched_lookup:
+                        lookup_key = (str(home), str(away))
+                        enriched_row = enriched_lookup.get(lookup_key)
+                        if enriched_row is not None:
+                            try:
+                                print(f"DEBUG: Calling Vertex for {home} vs {away}...")
+                                # Check stats validity (simple check for non-zero features)
+                                # feature_home_ppg is a good proxy for stats presence
+                                if 'feature_home_ppg' in enriched_row:
+                                     print(f"DEBUG: Stats Found. Home PPG: {enriched_row['feature_home_ppg']}")
+                                else:
+                                     print(f"DEBUG: Stats Missing in Enriched Row!")
+
+                                pred = get_vertex_prediction(vertex_endpoint, enriched_row)
+                                print(f"DEBUG: Vertex Result for {home}: {pred}")
+
+                                if pred is not None:
+                                    vertex_prob_home = pred
+                                    vertex_spread_prob = pred # Proxy
+                                    vertex_total_prob = 0.5   # Placeholder
+                            except Exception as e:
+                                print(f"DEBUG: Vertex Error: {e}")
+                                # Log but don't crash
+                                pass
+                        else:
+                            print(f"DEBUG: No enriched data found for {home} vs {away}")
+
+                    game_row["AI_Prob"] = vertex_prob_home
+                    game_row["vertex_spread_prob"] = vertex_spread_prob
+                    game_row["vertex_total_prob"] = vertex_total_prob
+                    game_row["AI_Edge"] = vertex_prob_home - (american_to_implied_prob(g.get("home_ml_price")) or 0.5)
+
+                    # --- 4. MONEYLINE LOGIC ---
+                    home_ml = g.get("home_ml_price")
+                    away_ml = g.get("away_ml_price")
+                    game_row["Home_ML"] = home_ml
+                    game_row["Away_ML"] = away_ml
+
+                    implied_home = american_to_implied_prob(home_ml)
+                    implied_away = american_to_implied_prob(away_ml)
+
+                    ml_pick = None
+                    ml_implied_prob = None
+                    if implied_home is not None and implied_away is not None:
+                        if implied_home >= implied_away:
+                            ml_pick = home
+                            ml_implied_prob = implied_home
+                        else:
+                            ml_pick = away
+                            ml_implied_prob = implied_away
+                    elif implied_home is not None:
                         ml_pick = home
                         ml_implied_prob = implied_home
-                    else:
+                    elif implied_away is not None:
                         ml_pick = away
                         ml_implied_prob = implied_away
-                elif implied_home is not None:
-                    ml_pick = home
-                    ml_implied_prob = implied_home
-                elif implied_away is not None:
-                    ml_pick = away
-                    ml_implied_prob = implied_away
 
-                game_row["moneyline_pick"] = ml_pick
-                game_row["moneyline_implied_prob"] = ml_implied_prob
+                    game_row["moneyline_pick"] = ml_pick
+                    game_row["moneyline_implied_prob"] = ml_implied_prob
 
-                # If Moneyline is the "Primary" market, set top-level keys
-                game_row["Pick"] = ml_pick
-                game_row["Implied_Prob"] = ml_implied_prob
+                    # If Moneyline is the "Primary" market, set top-level keys
+                    game_row["Pick"] = ml_pick
+                    game_row["Implied_Prob"] = ml_implied_prob
 
-                # --- 5. SPREAD LOGIC ---
-                spread_offers = g.get("spread_offers") or []
-                spread_pick_team, spread_pick_line = parse_spread_pick(g.get("Spread & Pick"), home, away)
+                    # --- 5. SPREAD LOGIC ---
+                    spread_offers = g.get("spread_offers") or []
+                    spread_pick_team, spread_pick_line = parse_spread_pick(g.get("Spread & Pick"), home, away)
 
-                # Fallback logic if Spread & Pick is empty but we have lines
-                if spread_pick_team is None and g.get("home_spread_point") is not None:
-                     # Default to home if no clear signal, or use price logic
-                     home_spread_price = g.get("home_spread_price")
-                     away_spread_price = g.get("away_spread_price")
-                     # Simple logic: Pick better price? Or just pick home?
-                     # Existing logic was complex, simplifying to: Pick favorite or Home
-                     spread_pick_team = home
-                     spread_pick_line = g.get("home_spread_point")
+                    # Fallback logic if Spread & Pick is empty but we have lines
+                    if spread_pick_team is None and g.get("home_spread_point") is not None:
+                         # Default to home if no clear signal, or use price logic
+                         home_spread_price = g.get("home_spread_price")
+                         away_spread_price = g.get("away_spread_price")
+                         # Simple logic: Pick better price? Or just pick home?
+                         # Existing logic was complex, simplifying to: Pick favorite or Home
+                         spread_pick_team = home
+                         spread_pick_line = g.get("home_spread_point")
 
-                game_row["spread_pick"] = f"{spread_pick_team} {spread_pick_line}" if spread_pick_team else None
-                game_row["spread_pick_team"] = spread_pick_team
-                game_row["spread_pick_line"] = spread_pick_line
-                game_row["Spread & Pick"] = game_row["spread_pick"]
+                    game_row["spread_pick"] = f"{spread_pick_team} {spread_pick_line}" if spread_pick_team else None
+                    game_row["spread_pick_team"] = spread_pick_team
+                    game_row["spread_pick_line"] = spread_pick_line
+                    game_row["Spread & Pick"] = game_row["spread_pick"]
 
-                # Calculate Spread Implied Prob
-                spread_implied_prob = None
-                if spread_pick_team == home:
-                    spread_implied_prob = american_to_implied_prob(g.get("home_spread_price"))
-                elif spread_pick_team == away:
-                    spread_implied_prob = american_to_implied_prob(g.get("away_spread_price"))
+                    # Calculate Spread Implied Prob
+                    spread_implied_prob = None
+                    if spread_pick_team == home:
+                        spread_implied_prob = american_to_implied_prob(g.get("home_spread_price"))
+                    elif spread_pick_team == away:
+                        spread_implied_prob = american_to_implied_prob(g.get("away_spread_price"))
 
-                # Use market consensus if available (simplified call)
-                spread_pick_side_key = "home" if spread_pick_team == home else ("away" if spread_pick_team == away else None)
-                if spread_pick_side_key:
-                     market_prob, _, _, _ = compute_market_prob_from_offers(spread_offers, spread_pick_side_key, market_type="spread")
-                     if market_prob:
-                         spread_implied_prob = market_prob
+                    # Use market consensus if available (simplified call)
+                    spread_pick_side_key = "home" if spread_pick_team == home else ("away" if spread_pick_team == away else None)
+                    if spread_pick_side_key:
+                         market_prob, _, _, _ = compute_market_prob_from_offers(spread_offers, spread_pick_side_key, market_type="spread")
+                         if market_prob:
+                             spread_implied_prob = market_prob
 
-                game_row["spread_implied_prob"] = spread_implied_prob
-                game_row["spread_prob_market"] = spread_implied_prob # Market consensus
+                    game_row["spread_implied_prob"] = spread_implied_prob
+                    game_row["spread_prob_market"] = spread_implied_prob # Market consensus
 
-                # --- 6. TOTAL LOGIC ---
-                total_offers = g.get("total_offers") or []
-                total_line = g.get("total_point")
-                total_pick_side = None
+                    # --- 6. TOTAL LOGIC ---
+                    total_offers = g.get("total_offers") or []
+                    total_line = g.get("total_point")
+                    total_pick_side = None
 
-                # Determine Total Pick (Over/Under) based on prices or default
-                over_price = g.get("over_price")
-                under_price = g.get("under_price")
-                if over_price is not None and under_price is not None:
-                     # Pick the one with lower vig? Or higher prob?
-                     # Let's pick the favorite (higher probability, more negative odds)
-                     # Wait, usually you pick the one with better value?
-                     # Let's replicate original logic: Pick the one with higher implied prob (favorite outcome)
-                     p_over = american_to_implied_prob(over_price) or 0
-                     p_under = american_to_implied_prob(under_price) or 0
-                     total_pick_side = "Over" if p_over > p_under else "Under"
-                elif over_price is not None:
-                    total_pick_side = "Over"
-                elif under_price is not None:
-                    total_pick_side = "Under"
+                    # Determine Total Pick (Over/Under) based on prices or default
+                    over_price = g.get("over_price")
+                    under_price = g.get("under_price")
+                    if over_price is not None and under_price is not None:
+                         # Pick the one with lower vig? Or higher prob?
+                         # Let's pick the favorite (higher probability, more negative odds)
+                         # Wait, usually you pick the one with better value?
+                         # Let's replicate original logic: Pick the one with higher implied prob (favorite outcome)
+                         p_over = american_to_implied_prob(over_price) or 0
+                         p_under = american_to_implied_prob(under_price) or 0
+                         total_pick_side = "Over" if p_over > p_under else "Under"
+                    elif over_price is not None:
+                        total_pick_side = "Over"
+                    elif under_price is not None:
+                        total_pick_side = "Under"
 
-                game_row["total_pick"] = f"{total_pick_side} {total_line}" if total_pick_side and total_line else None
-                game_row["total_pick_side"] = total_pick_side
-                game_row["total_pick_line"] = total_line
-                game_row["Total & Pick"] = game_row["total_pick"]
+                    game_row["total_pick"] = f"{total_pick_side} {total_line}" if total_pick_side and total_line else None
+                    game_row["total_pick_side"] = total_pick_side
+                    game_row["total_pick_line"] = total_line
+                    game_row["Total & Pick"] = game_row["total_pick"]
 
-                # Calculate Total Implied Prob
-                total_implied_prob = None
-                if total_pick_side == "Over":
-                    total_implied_prob = american_to_implied_prob(over_price)
-                elif total_pick_side == "Under":
-                    total_implied_prob = american_to_implied_prob(under_price)
+                    # Calculate Total Implied Prob
+                    total_implied_prob = None
+                    if total_pick_side == "Over":
+                        total_implied_prob = american_to_implied_prob(over_price)
+                    elif total_pick_side == "Under":
+                        total_implied_prob = american_to_implied_prob(under_price)
 
-                # Market consensus
-                if total_pick_side:
-                    market_prob, _, _, _ = compute_market_prob_from_offers(total_offers, total_pick_side.lower(), market_type="total")
-                    if market_prob:
-                        total_implied_prob = market_prob
+                    # Market consensus
+                    if total_pick_side:
+                        market_prob, _, _, _ = compute_market_prob_from_offers(total_offers, total_pick_side.lower(), market_type="total")
+                        if market_prob:
+                            total_implied_prob = market_prob
 
-                game_row["total_implied_prob"] = total_implied_prob
-                game_row["total_prob_market"] = total_implied_prob
+                    game_row["total_implied_prob"] = total_implied_prob
+                    game_row["total_prob_market"] = total_implied_prob
 
-                # --- 7. WEIGHTS & FINAL PROBABILITY ---
-                # Calculate separate probabilities for ML, Spread, Total using the ONE set of weights
-                base_weights = {
-                    "odds_weight": 0.30,
-                    "kalshi_weight": 0.30,
-                    "ml_weight": 0.40,
-                    "sentiment_weight": 0.0,
-                }
+                    # --- 7. WEIGHTS & FINAL PROBABILITY ---
+                    # Calculate separate probabilities for ML, Spread, Total using the ONE set of weights
+                    base_weights = {
+                        "odds_weight": 0.30,
+                        "kalshi_weight": 0.30,
+                        "ml_weight": 0.40,
+                        "sentiment_weight": 0.0,
+                    }
 
-                # NOTE: Vertex probability is not available yet (it is 0.5 default).
-                # It will be enriched later.
-                # We calculate a preliminary "final_probability" based on what we have (Odds + Kalshi)
-                # The Batch Prediction step later will update AI_Prob and we might need to re-calc final prob?
-                # Or, we accept that AI_Prob is 0.5 here, and the final_probability in this row is just a placeholder
-                # until the batch update happens?
-                # Actually, the batch update updates 'AI_Prob'. It doesn't re-run 'compute_final_probability'.
-                # CRITICAL: We need to ensure final_probability is updated AFTER batch prediction.
-                # However, the current structure does batch prediction on 'master_df'.
-                # So we should probably defer the final weight blending until after the batch loop?
-                # OR, we can just calculate it here with 0.5 AI, and trust the UI to re-calc or updated it?
-                # The prompt asks for "One Row".
+                    # NOTE: Vertex probability is not available yet (it is 0.5 default).
+                    # It will be enriched later.
+                    # We calculate a preliminary "final_probability" based on what we have (Odds + Kalshi)
+                    # The Batch Prediction step later will update AI_Prob and we might need to re-calc final prob?
+                    # Or, we accept that AI_Prob is 0.5 here, and the final_probability in this row is just a placeholder
+                    # until the batch update happens?
+                    # Actually, the batch update updates 'AI_Prob'. It doesn't re-run 'compute_final_probability'.
+                    # CRITICAL: We need to ensure final_probability is updated AFTER batch prediction.
+                    # However, the current structure does batch prediction on 'master_df'.
+                    # So we should probably defer the final weight blending until after the batch loop?
+                    # OR, we can just calculate it here with 0.5 AI, and trust the UI to re-calc or updated it?
+                    # The prompt asks for "One Row".
 
-                # Let's compute what we can.
+                    # Let's compute what we can.
 
-                # Moneyline Final
-                ml_final, _, _, _, _, _ = compute_final_probability(
-                    "home" if ml_pick == home else "away",
-                    ml_implied_prob,
-                    game_row["kalshi_prob_moneyline"],
-                    kalshi_winner.get("kalshi_yes_side"),
-                    vertex_prob_home, # Updated Real-time Prediction
-                    0.0, # Sentiment Placeholder
-                    base_weights
-                )
-                game_row["final_probability"] = ml_final # Primary Final Prob
+                    # Moneyline Final
+                    ml_final, _, _, _, _, _ = compute_final_probability(
+                        "home" if ml_pick == home else "away",
+                        ml_implied_prob,
+                        game_row["kalshi_prob_moneyline"],
+                        kalshi_winner.get("kalshi_yes_side"),
+                        vertex_prob_home, # Updated Real-time Prediction
+                        0.0, # Sentiment Placeholder
+                        base_weights
+                    )
+                    game_row["final_probability"] = ml_final # Primary Final Prob
 
-                # Spread Final
-                spread_final, _, _, _, _, _ = compute_final_probability(
-                    "home" if spread_pick_team == home else "away",
-                    spread_implied_prob,
-                    game_row["kalshi_prob_spread"],
-                    kalshi_spread.get("kalshi_yes_side") or "home",
-                    vertex_prob_home, # Using Win Prob as proxy
-                    0.0,
-                    base_weights
-                )
-                game_row["spread_prob"] = spread_final
+                    # Spread Final
+                    spread_final, _, _, _, _, _ = compute_final_probability(
+                        "home" if spread_pick_team == home else "away",
+                        spread_implied_prob,
+                        game_row["kalshi_prob_spread"],
+                        kalshi_spread.get("kalshi_yes_side") or "home",
+                        vertex_prob_home, # Using Win Prob as proxy
+                        0.0,
+                        base_weights
+                    )
+                    game_row["spread_prob"] = spread_final
 
-                # Total Final
-                total_final, _, _, _, _, _ = compute_final_probability(
-                    total_pick_side.lower() if total_pick_side else None,
-                    total_implied_prob,
-                    game_row["kalshi_prob_total"],
-                    kalshi_total.get("kalshi_yes_side") or "over",
-                    0.5, # Vertex usually doesn't predict totals directly unless configured, defaulting to neutral
-                    0.0,
-                    base_weights
-                )
-                game_row["total_prob"] = total_final
+                    # Total Final
+                    total_final, _, _, _, _, _ = compute_final_probability(
+                        total_pick_side.lower() if total_pick_side else None,
+                        total_implied_prob,
+                        game_row["kalshi_prob_total"],
+                        kalshi_total.get("kalshi_yes_side") or "over",
+                        0.5, # Vertex usually doesn't predict totals directly unless configured, defaulting to neutral
+                        0.0,
+                        base_weights
+                    )
+                    game_row["total_prob"] = total_final
 
-                # Append the consolidated row
-                rows_out.append(game_row)
-                master_stats["rows_out"] += 1
+                    # Append the consolidated row
+                    rows_out.append(game_row)
+                    master_stats["rows_out"] += 1
 
-            # 1. Create the base Master DataFrame from your processed rows
-            master_df = pd.DataFrame(rows_out)
+                # 1. Create the base Master DataFrame from your processed rows
+                master_df = pd.DataFrame(rows_out)
 
-            # Force de-duplication of columns to prevent TypeError crashes
-            master_df = master_df.loc[:, ~master_df.columns.duplicated()].copy()
+                # Force de-duplication of columns to prevent TypeError crashes
+                master_df = master_df.loc[:, ~master_df.columns.duplicated()].copy()
 
-            # Initialize with default 0.5 to prevent 'Column Missing' error
-            master_df["AI_Prob"] = 0.5
-            # 2. Add 'League' column if missing (required for enrichment lookup)
-            if 'League' not in master_df.columns:
-                master_df['League'] = league
+                # Initialize with default 0.5 to prevent 'Column Missing' error
+                master_df["AI_Prob"] = 0.5
+                # 2. Add 'League' column if missing (required for enrichment lookup)
+                if 'League' not in master_df.columns:
+                    master_df['League'] = league
 
-            # 3. CRITICAL: Enrich the whole batch to fill 'feature_diff' columns
-            # This fixes the 'Missing feature column' warnings in the logs
+                # 3. CRITICAL: Enrich the whole batch to fill 'feature_diff' columns
+                # This fixes the 'Missing feature column' warnings in the logs
 
-            # 4. SHOTGUN ACTIVATION: Use ParlayOptimizer to tier the results
-            if ParlayOptimizer:
-                optimizer = ParlayOptimizer(model_dir="./models")
-                shotgun_picks = optimizer.get_shotgun_picks(master_df)
-                st.session_state["shotgun_data"] = shotgun_picks
+                # 4. SHOTGUN ACTIVATION: Use ParlayOptimizer to tier the results
+                if ParlayOptimizer:
+                    optimizer = ParlayOptimizer(model_dir="./models")
+                    shotgun_picks = optimizer.get_shotgun_picks(master_df)
+                    st.session_state["shotgun_data"] = shotgun_picks
 
-            # Collapse to one row per game (prefer the first generated row, typically moneyline) for Master View
-            # NOTE: master_df now has ALL rows (ML/Spread/Total). We duplicate logic for deduping for the UI view if needed,
-            # but the prompt implies we persist the FULL master_df to session state for tabs to use.
+                # Collapse to one row per game (prefer the first generated row, typically moneyline) for Master View
+                # NOTE: master_df now has ALL rows (ML/Spread/Total). We duplicate logic for deduping for the UI view if needed,
+                # but the prompt implies we persist the FULL master_df to session state for tabs to use.
 
-            # We need to preserve the sentiment metadata enrichment logic
-            sentiment_meta_for_export = sentiment_pack_meta or init_sentiment_meta()
-            # Vectorized or simple loop to fill sentiment meta if missing
-            # (Assuming enrich_with_vertex_features preserves existing cols, which it does)
+                # We need to preserve the sentiment metadata enrichment logic
+                sentiment_meta_for_export = sentiment_pack_meta or init_sentiment_meta()
+                # Vectorized or simple loop to fill sentiment meta if missing
+                # (Assuming enrich_with_vertex_features preserves existing cols, which it does)
 
-            # Deduping logic for "Master View" (one row per game)
-            # We'll create a view for display, but keep master_df full for shotgun/optimizer.
+                # Deduping logic for "Master View" (one row per game)
+                # We'll create a view for display, but keep master_df full for shotgun/optimizer.
 
-            # But wait, the previous code replaced `df` with `deduped_list`.
-            # If we overwrite `st.session_state["master_df"]` with the full `master_df`,
-            # downstream code expecting 1 row per game might break.
-            # However, the user instruction was "Persist to session state for the tabs to use".
-            # The tabs (Shotgun) likely need the full rows.
-            # The "Master Analysis" tab view logic (later in the file) uses `df` (which was deduped).
-            # We should probably assign `df` to the deduped version for the immediate display logic below,
-            # but maybe store `master_df_full` or similar?
-            # Actually, let's follow the pattern but adapt for the existing `df` variable usage.
+                # But wait, the previous code replaced `df` with `deduped_list`.
+                # If we overwrite `st.session_state["master_df"]` with the full `master_df`,
+                # downstream code expecting 1 row per game might break.
+                # However, the user instruction was "Persist to session state for the tabs to use".
+                # The tabs (Shotgun) likely need the full rows.
+                # The "Master Analysis" tab view logic (later in the file) uses `df` (which was deduped).
+                # We should probably assign `df` to the deduped version for the immediate display logic below,
+                # but maybe store `master_df_full` or similar?
+                # Actually, let's follow the pattern but adapt for the existing `df` variable usage.
 
-            # Apply sentiment meta to master_df
-            # (Simulating what the loop did)
-            if not master_df.empty:
-                master_df["sentiment_sample_status"] = str(sentiment_meta_for_export.get("sentiment_sample_status", "NO_CALL") or "NO_CALL")
-                master_df["sentiment_source"] = str(sentiment_meta_for_export.get("sentiment_source", "none") or "none")
-                master_df["sentiment_status_counts"] = json.dumps(sentiment_meta_for_export.get("sentiment_status_counts", {"NO_CALL": 1}))
-                master_df["sentiment_sample_query"] = sentiment_meta_for_export.get("sentiment_sample_query", "") or ""
-                master_df["sentiment_disabled_reason"] = sentiment_meta_for_export.get("sentiment_disabled_reason", "") or ""
-                master_df["sentiment_errors_sample"] = sentiment_meta_for_export.get("sentiment_errors_sample", "") or ""
-                master_df["sentiment_error_count"] = int(sentiment_meta_for_export.get("sentiment_error_count", 0) or 0)
+                # Apply sentiment meta to master_df
+                # (Simulating what the loop did)
+                if not master_df.empty:
+                    master_df["sentiment_sample_status"] = str(sentiment_meta_for_export.get("sentiment_sample_status", "NO_CALL") or "NO_CALL")
+                    master_df["sentiment_source"] = str(sentiment_meta_for_export.get("sentiment_source", "none") or "none")
+                    master_df["sentiment_status_counts"] = json.dumps(sentiment_meta_for_export.get("sentiment_status_counts", {"NO_CALL": 1}))
+                    master_df["sentiment_sample_query"] = sentiment_meta_for_export.get("sentiment_sample_query", "") or ""
+                    master_df["sentiment_disabled_reason"] = sentiment_meta_for_export.get("sentiment_disabled_reason", "") or ""
+                    master_df["sentiment_errors_sample"] = sentiment_meta_for_export.get("sentiment_errors_sample", "") or ""
+                    master_df["sentiment_error_count"] = int(sentiment_meta_for_export.get("sentiment_error_count", 0) or 0)
 
-                # Fill remaining fields if they are missing or null in rows
-                if "sentiment_status" not in master_df.columns:
-                    master_df["sentiment_status"] = None
-                master_df["sentiment_status"] = master_df["sentiment_status"].fillna(sentiment_meta_for_export.get("sentiment_status"))
+                    # Fill remaining fields if they are missing or null in rows
+                    if "sentiment_status" not in master_df.columns:
+                        master_df["sentiment_status"] = None
+                    master_df["sentiment_status"] = master_df["sentiment_status"].fillna(sentiment_meta_for_export.get("sentiment_status"))
 
-                if "sentiment_confidence" not in master_df.columns:
-                    master_df["sentiment_confidence"] = None
-                master_df["sentiment_confidence"] = master_df["sentiment_confidence"].fillna(sentiment_meta_for_export.get("sentiment_confidence"))
+                    if "sentiment_confidence" not in master_df.columns:
+                        master_df["sentiment_confidence"] = None
+                    master_df["sentiment_confidence"] = master_df["sentiment_confidence"].fillna(sentiment_meta_for_export.get("sentiment_confidence"))
 
-                if "sentiment_score" not in master_df.columns:
-                    master_df["sentiment_score"] = None
-                master_df["sentiment_score"] = master_df["sentiment_score"].fillna(sentiment_meta_for_export.get("sentiment_score"))
+                    if "sentiment_score" not in master_df.columns:
+                        master_df["sentiment_score"] = None
+                    master_df["sentiment_score"] = master_df["sentiment_score"].fillna(sentiment_meta_for_export.get("sentiment_score"))
 
-                # Ensure visual columns exist
-                for col in ["spread_sentiment_arrow", "total_sentiment_arrow", "spread_sentiment_note", "total_sentiment_note"]:
-                    if col not in master_df.columns:
-                        master_df[col] = ""
-                    master_df[col] = master_df[col].fillna("")
+                    # Ensure visual columns exist
+                    for col in ["spread_sentiment_arrow", "total_sentiment_arrow", "spread_sentiment_note", "total_sentiment_note"]:
+                        if col not in master_df.columns:
+                            master_df[col] = ""
+                        master_df[col] = master_df[col].fillna("")
 
-            # Re-implement deduping for the `df` variable used by the UI below
-            # Dedupe logic removed to prevent data loss (ML/Spread/Total rows preserved)
-            df = master_df.copy()
+                # Re-implement deduping for the `df` variable used by the UI below
+                # Dedupe logic removed to prevent data loss (ML/Spread/Total rows preserved)
+                df = master_df.copy()
 
-            if st.session_state.get("kalshi_match_only"):
-                df = df[df["kalshi_matched"] == True]
+                if st.session_state.get("kalshi_match_only"):
+                    df = df[df["kalshi_matched"] == True]
 
-            if "Unnamed: 0" in df.columns:
-                df = df.drop(columns=["Unnamed: 0"])
+                if "Unnamed: 0" in df.columns:
+                    df = df.drop(columns=["Unnamed: 0"])
 
-            # 5. UI PERSISTENCE
-            # We persist the DEDUPED df as "master_df" because that's what the UI expects for the "Master Analysis" tab table.
-            # The shotgun data is stored separately.
-            st.session_state["master_df"] = df
-            st.session_state['analysis_run'] = True
-            st.session_state['analysis_results'] = df
-            st.session_state['analysis_complete'] = True
+                # 5. UI PERSISTENCE
+                # We persist the DEDUPED df as "master_df" because that's what the UI expects for the "Master Analysis" tab table.
+                # The shotgun data is stored separately.
+                st.session_state["master_df"] = df
+                st.session_state['analysis_run'] = True
+                st.session_state['analysis_results'] = df
+                st.session_state['analysis_complete'] = True
 
+                st.session_state.run_analysis = False
     # tab_shotgun, tab_master, tab_games, tab_kalshi, tab_sentiment, tab_debug = st.tabs(["🚀 Shotgun Mode", "Master Analysis", "Games & Odds", "Kalshi", "Sentiment", "Debug"])
 
             required_display_cols = [
