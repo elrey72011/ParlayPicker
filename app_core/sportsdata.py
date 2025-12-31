@@ -286,12 +286,12 @@ class SportsDataClientBase:
         away: str,
     ) -> Optional[Dict[str, Any]]:
         if not games:
-            return None
+            return {}
 
         home_norm = self._normalize_name(home)
         away_norm = self._normalize_name(away)
         if not home_norm or not away_norm:
-            return None
+            return {}
 
         for game in games:
             if not isinstance(game, dict):
@@ -300,7 +300,7 @@ class SportsDataClientBase:
             game_away = self._normalize_name(game.get("AwayTeam") or game.get("AwayTeamName"))
             if game_home == home_norm and game_away == away_norm:
                 return game
-        return None
+        return {}
 
     # ------------------------------------------------------------------
     # Insight builders

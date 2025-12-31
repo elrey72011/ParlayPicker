@@ -1,6 +1,10 @@
+import sys
+import os
+# Force discovery of app_core folder
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
 import json
 import logging
-import os
 import re
 import tempfile
 import time
@@ -2156,7 +2160,7 @@ def enrich_game_context(game: Dict[str, Any], league_key: str, api_key: Optional
                 h_api = api_teams.get("home", {}).get("name", "")
                 a_api = api_teams.get("away", {}).get("name", "")
 
-                # Use fuzzy matching as the ONLY logic to bridge naming gaps
+                # Use fuzzy matching as the ONLY logic to bridge naming gaps - FORCED UPDATE
                 if TeamNameMatcher.match_team(home_norm, [h_api], threshold=0.75) and \
                    TeamNameMatcher.match_team(away_norm, [a_api], threshold=0.75):
                     matched = g_api
@@ -2852,6 +2856,8 @@ def any_secret_prefix(prefix: str) -> bool:
 
 def init_data_clients() -> Tuple[Dict[str, Any], Dict[str, Any]]:
     global api_sports_clients, sportsdata_clients
+    api_sports_clients = {}
+    sportsdata_clients = {}
     if api_sports_clients and sportsdata_clients:
         return api_sports_clients, sportsdata_clients
     keys = get_api_keys()
