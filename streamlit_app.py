@@ -19,12 +19,21 @@ import numpy as np
 import streamlit as st
 import warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)
+from rapidfuzz import fuzz, process
 from app_core.kalshi_integrator import (
     KalshiIntegrator,
     LEAGUE_SERIES_MAP,
     league_game_prefix,
     league_series_ticker,
     team_code_for_league,
+)
+from app_core.matching import (
+    get_local_tz,
+    parse_commence_to_utc,
+    kalshi_date_token_from_local,
+    team_code_candidates,
+    normalize_market_text,
+    filter_kalshi_game_markets
 )
 from app_core.llm_assistant import generate_confidence_explanation
 from app_core.reddit_sentiment import fetch_reddit_sentiment_map
@@ -3115,36 +3124,6 @@ def main():
         except Exception:
             return None
 
-    def get_local_tz() -> str:
-        tz_name = None
-        try:
-            tz_name = st.secrets.get("APP_TIMEZONE")
-        except Exception:
-            tz_name = None
-        if not tz_name:
-            tz_name = "America/New_York"
-        return tz_name
-
-    def parse_commence_to_utc(value: Any) -> Optional[datetime]:
-        raw = value
-        if raw is None:
-            return None
-        if isinstance(raw, datetime):
-            dt = raw
-        else:
-            try:
-                s = str(raw)
-                if s.endswith("Z"):
-                    s = s.replace("Z", "+00:00")
-                dt = datetime.fromisoformat(s)
-            except Exception:
-                return None
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
-        try:
-            return dt.astimezone(timezone.utc)
-        except Exception:
-            return None
 
     def normalize_commence_times(games: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
         tz_name = get_local_tz()
@@ -4261,124 +4240,6 @@ def main():
         }
 
 
-    def filter_kalshi_game_markets(
-        markets: List[Dict[str, Any]],
-        game_time_utc: Optional[datetime],
-        league: str,
-        home_team: Any = None,
-        away_team: Any = None,
-        home_code: Optional[str] = None,
-        away_code: Optional[str] = None,
-    ) -> List[Dict[str, Any]]:
-        try:
-            tz_name = get_local_tz()
-            local_tz = None
-            try:
-                local_tz = ZoneInfo(tz_name)
-            except Exception:
-                local_tz = None
-
-            game_dt = game_time_utc
-            if isinstance(game_dt, str):
-                game_dt = parse_commence_to_utc(game_dt)
-            if isinstance(game_dt, datetime) and game_dt.tzinfo is None:
-                game_dt = game_dt.replace(tzinfo=timezone.utc)
-            game_local = game_dt.astimezone(local_tz) if (game_dt and local_tz) else game_dt
-            date_token = game_local.strftime("%y%b%d").upper() if game_local else kalshi_date_token_from_local(game_time_utc)
-            date_token = date_token or "UNKNOWN"
-
-            league_upper = (league or "").upper()
-            winner_prefix = league_game_prefix(league_upper)
-            prefix_overrides = (st.session_state.get("kalshi_game_prefix_map") or {}).get(
-                league_upper
-            )
-            allowed_prefixes = [p for p in [winner_prefix, prefix_overrides] if p]
-
-            # Prefer provided codes; fall back to mapping from team names and extra heuristics.
-            home_codes = []
-            away_codes = []
-            if home_code:
-                home_codes.append(str(home_code).upper())
-            home_codes.extend(team_code_candidates(league, home_team))
-            if away_code:
-                away_codes.append(str(away_code).upper())
-            away_codes.extend(team_code_candidates(league, away_team))
-
-            def ticker_upper(market: Dict[str, Any]) -> str:
-                return str(market.get("event_ticker") or market.get("ticker") or "").upper()
-
-            allowed_date_tokens: List[str] = []
-            if game_local:
-                base_date = game_local.date()
-                for delta in (-1, 0, 1):
-                    allowed_date_tokens.append((base_date + timedelta(days=delta)).strftime("%y%b%d").upper())
-            if date_token and not allowed_date_tokens:
-                allowed_date_tokens.append(date_token)
-
-            matched: List[Dict[str, Any]] = []
-            for m in markets or []:
-                t = ticker_upper(m)
-                if "GAME" not in t:
-                    continue
-
-                prefix_ok = any(t.startswith(pfx) for pfx in allowed_prefixes)
-
-                if not prefix_ok and league_upper in {"NCAAB", "NCAAF"}:
-                    if ("NCAAB" in t or "NCAA" in t or "NCAAF" in t) and "GAME" in t:
-                        prefix_ok = True
-
-                if not prefix_ok:
-                    continue
-                if date_token and date_token not in t:
-                    continue
-                if home_codes and not any(code in t for code in home_codes):
-                    continue
-                if away_codes and not any(code in t for code in away_codes):
-                    continue
-                matched.append(m)
-
-            # Fallback: relax date token filtering while still enforcing team presence to avoid cross-sport contamination.
-            if not matched:
-                fallback_candidates: List[Tuple[float, Dict[str, Any]]] = []
-                fallback_no_date: List[Tuple[float, Dict[str, Any]]] = []
-                for m in markets or []:
-                    t = ticker_upper(m)
-                    if "GAME" not in t:
-                        continue
-                    if not (
-                        any(t.startswith(pfx) for pfx in allowed_prefixes)
-                        or ("NCAAB" in t or "NCAA" in t or "NCAAF" in t)
-                    ):
-                        continue
-                    blob = " ".join(
-                        [
-                            t,
-                            str(m.get("title") or ""),
-                            str(m.get("rules") or m.get("rules_primary") or ""),
-                        ]
-                    ).lower()
-                    blob_tokens = {tok for tok in re.findall(r"[a-z0-9]+", blob)}
-                    team_hit = bool(team_tokens(home_team).intersection(blob_tokens)) and bool(
-                        team_tokens(away_team).intersection(blob_tokens)
-                    )
-                    code_home_hit = home_codes and any(code in t for code in home_codes)
-                    code_away_hit = away_codes and any(code in t for code in away_codes)
-                    code_hit = code_home_hit and code_away_hit
-                    if not (team_hit or code_hit):
-                        continue
-                    date_hit = bool(allowed_date_tokens and any(tok in t for tok in allowed_date_tokens))
-                    score = (2 if team_hit else 0) + (2 if code_hit else 0) + (1 if date_hit else 0)
-                    target_list = fallback_candidates if date_hit else fallback_no_date
-                    target_list.append((score, m))
-
-                chosen = fallback_candidates or fallback_no_date
-                if chosen:
-                    matched = [m for _, m in sorted(chosen, key=lambda kv: kv[0], reverse=True)]
-
-            return matched
-        except Exception:
-            st.session_state["last_exception"] = traceback.format_exc()
-            return []
 
 
     def classify_kalshi_market(market: Dict[str, Any]) -> str:
@@ -4453,51 +4314,6 @@ def main():
                 return code
 
 
-    def team_code_candidates(league: str, team_name: Any) -> List[str]:
-        primary = (team_code_for_league(league, team_name) or "").upper()
-        cleaned = re.sub(r"[^A-Z0-9 ]", " ", str(team_name or "").upper()).strip()
-        tokens = [t for t in cleaned.split() if t]
-
-        candidates: List[str] = []
-        if primary:
-            candidates.append(primary)
-        for tok in tokens:
-            if tok:
-                candidates.extend([tok, tok[:3], tok[:2]])
-        if tokens:
-            initials = "".join(t[0] for t in tokens if t)
-            if len(initials) >= 2:
-                candidates.append(initials)
-                candidates.append(initials[:2])
-            first_two_initials = "".join(t[0] for t in tokens[:2] if t)
-            if len(first_two_initials) >= 2:
-                candidates.append(first_two_initials)
-
-            # Common college-style abbreviations (e.g., ARST, MOSU)
-            if len(tokens) >= 2 and tokens[1] in {"STATE", "ST"}:
-                first = tokens[0]
-                first2 = first[:2]
-                first3 = first[:3]
-                candidates.extend([f"{first2}ST", f"{first3}ST", f"{first2}SU", f"{first3}SU"])
-            if len(tokens) >= 2 and tokens[1] in {"UNIVERSITY", "UNIV", "U"}:
-                first = tokens[0]
-                first2 = first[:2]
-                first3 = first[:3]
-                candidates.extend([f"{first2}U", f"{first3}U"])
-        deduped = [c for c in dict.fromkeys(candidates) if c]
-        return deduped
-        return None
-
-
-    def kalshi_date_token_from_local(date_val: Any) -> Optional[str]:
-        """Return YYMONDD token (e.g., 25DEC16) for local YYYY-MM-DD date strings."""
-        try:
-            if not date_val:
-                return None
-            parsed = datetime.fromisoformat(str(date_val))
-            return parsed.strftime("%y%b%d").upper()
-        except Exception:
-            return None
 
     def kalshi_ticker_team_codes(market: Dict[str, Any]) -> Tuple[Optional[str], Optional[str]]:
         """Extract the two 3-letter team codes from a Kalshi game ticker."""
@@ -5886,6 +5702,7 @@ def main():
                         away,
                         home_code,
                         away_code,
+                        prefix_overrides=(st.session_state.get("kalshi_game_prefix_map") or {}).get(league_name.upper())
                     )
                     deduped = {m.get("event_ticker") or m.get("ticker"): m for m in filtered_markets}
                     filtered_markets = list(deduped.values())
@@ -7356,6 +7173,30 @@ def main():
                     st.text(raw_resp)
             else:
                 st.info("No odds response captured yet.")
+
+        st.subheader("Fuzzy Matching Debug")
+        with st.expander("OddsAPI vs Kalshi Naming", expanded=True):
+            games_debug = st.session_state.get("games", [])
+            kalshi_debug = st.session_state.get("kalshi_all_markets", [])
+
+            col_a, col_b = st.columns(2)
+            with col_a:
+                st.write("**OddsAPI Home Teams (First 5)**")
+                if games_debug:
+                    for g in games_debug[:5]:
+                        st.code(f"{g.get('home_team')} (Norm: {normalize_market_text(g.get('home_team'))})")
+                else:
+                    st.write("No games loaded.")
+
+            with col_b:
+                st.write("**Kalshi Market Titles (First 5)**")
+                if kalshi_debug:
+                    # Filter for game markets to be relevant
+                    game_markets = [m for m in kalshi_debug if "GAME" in str(m.get("ticker"))][:5]
+                    for m in game_markets:
+                        st.code(f"{m.get('title')} (Norm: {normalize_market_text(m.get('title'))})")
+                else:
+                    st.write("No Kalshi markets loaded.")
 
         games = st.session_state.get("games", [])
         st.subheader("Counts")
