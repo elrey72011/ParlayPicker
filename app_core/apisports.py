@@ -329,8 +329,6 @@ class _APISportsBaseClient:
                         payload = {}
                     # Ensure we default to empty list [] if key missing or None
                     games = payload.get("response") or []
-                    if games is None:
-                        games = []
                     self._games_cache[cache_key] = games
 
                 last_games = games
