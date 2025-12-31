@@ -4987,6 +4987,25 @@ def load_games(selected_leagues: Union[str, List[str]]) -> List[Dict[str, Any]]:
     return filtered_games
 
 
+def load_games_callback():
+    """Fetches games and saves to state. Called only when button is clicked."""
+    with st.spinner("Fetching games..."):
+        # Access the current selection from session state with safe fallbacks
+        selected_sports = st.session_state.get("selected_sports")
+        league = st.session_state.get("league", "NBA")
+        leagues_to_load = selected_sports if selected_sports else [league]
+
+        # Invalidate master_df when loading new games
+        if "master_df" in st.session_state:
+            del st.session_state["master_df"]
+
+        games = load_games(leagues_to_load)
+        st.session_state['games_data'] = games
+        # Restore compatibility for legacy views relying on 'games'
+        st.session_state['games'] = games
+        st.session_state['games_loaded'] = True
+
+
 # -----------------
 # Sidebar
 # -----------------
@@ -5365,21 +5384,8 @@ with tab_master:
         st.session_state['games_data'] = None
 
     # 2. Section: Load Games
-    # This button exists independently. When clicked, it saves data to memory and RELOADS the app.
-    if st.button("Load Today's Games", key="btn_load_games"):
-        with st.spinner("Fetching games from API..."):
-            # Call your existing fetch logic here
-            games_loaded_data = load_games(selected_sports or [league])
-
-            # Save to Session State (Critical Step)
-            st.session_state['games_data'] = games_loaded_data
-            # Maintain compatibility
-            st.session_state['games'] = games_loaded_data
-            st.session_state['games_loaded'] = True
-            st.success(f"Successfully loaded {len(games_loaded_data)} games.")
-
-            # Force a rerun so the app realizes 'games_data' is now filled
-            st.rerun()
+    # The on_click parameter guarantees the logic runs BEFORE the app reloads
+    st.button("Load Today's Games", key="btn_load_games", on_click=load_games_callback)
 
     # Determine if we need to run (user clicked button) or just display (cached df exists)
     df_existing = st.session_state.get("master_df")
@@ -5387,11 +5393,11 @@ with tab_master:
     games = st.session_state.get("games_data") or st.session_state.get("games") or []
 
     # 3. Section: Run Analysis
-    # This block runs ONLY if 'games_data' exists in memory.
-    # It is NOT nested under the Load button.
-    if st.session_state['games_data'] is not None:
+    # This block relies purely on the data existing in memory.
+    # CRITICAL: Ensure no code above this resets 'games_data' to None on every run.
+    if st.session_state.get('games_loaded', False) and st.session_state.get('games_data'):
         st.divider()
-        st.write(f"**Games Ready for Analysis:** {len(st.session_state['games_data'])}")
+        st.success(f"Games Loaded: {len(st.session_state['games_data'])}")
 
         if st.button("Run Master Analysis", key="btn_run_analysis"):
              if (not kalshi_status.get("configured")):
@@ -6464,6 +6470,7 @@ with tab_master:
                 model_home_prob = safe_float(row.get("AI_Prob"))
 
                 if market_home_prob is not None and model_home_prob is not None:
+                    # Step 5: Fix Alignment Logic
                     # 1. Agree (If both > 0.50 OR both < 0.50)
                     if (market_home_prob > 0.50 and model_home_prob > 0.50) or \
                        (market_home_prob < 0.50 and model_home_prob < 0.50):
@@ -6474,7 +6481,7 @@ with tab_master:
                     # 2. Neutral (If either is between 0.47 and 0.53)
                     elif (0.47 <= market_home_prob <= 0.53) or (0.47 <= model_home_prob <= 0.53):
                         q_alignment = "NEUTRAL"
-                        q_rationale = "Model or Market is uncertain (near 50%)."
+                        q_rationale = "Model or Market is uncertain (0.47-0.53 range)."
 
                     # 3. Disagree (Else)
                     else:
