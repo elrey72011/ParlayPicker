@@ -5767,19 +5767,39 @@ with tab_master:
 
             # --- 3. VERTEX AI (REAL-TIME PREDICTION) ---
             vertex_prob_home = 0.5  # Default
+            vertex_spread_prob = 0.5
+            vertex_total_prob = 0.5
+
             if vertex_endpoint and enriched_lookup:
                 lookup_key = (str(home), str(away))
                 enriched_row = enriched_lookup.get(lookup_key)
                 if enriched_row is not None:
                     try:
+                        print(f"DEBUG: Calling Vertex for {home} vs {away}...")
+                        # Check stats validity (simple check for non-zero features)
+                        # feature_home_ppg is a good proxy for stats presence
+                        if 'feature_home_ppg' in enriched_row:
+                             print(f"DEBUG: Stats Found. Home PPG: {enriched_row['feature_home_ppg']}")
+                        else:
+                             print(f"DEBUG: Stats Missing in Enriched Row!")
+
                         pred = get_vertex_prediction(vertex_endpoint, enriched_row)
+                        print(f"DEBUG: Vertex Result for {home}: {pred}")
+
                         if pred is not None:
                             vertex_prob_home = pred
+                            vertex_spread_prob = pred # Proxy
+                            vertex_total_prob = 0.5   # Placeholder
                     except Exception as e:
+                        print(f"DEBUG: Vertex Error: {e}")
                         # Log but don't crash
                         pass
+                else:
+                    print(f"DEBUG: No enriched data found for {home} vs {away}")
 
             game_row["AI_Prob"] = vertex_prob_home
+            game_row["vertex_spread_prob"] = vertex_spread_prob
+            game_row["vertex_total_prob"] = vertex_total_prob
             game_row["AI_Edge"] = vertex_prob_home - (american_to_implied_prob(g.get("home_ml_price")) or 0.5)
 
             # --- 4. MONEYLINE LOGIC ---
