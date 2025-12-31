@@ -4997,16 +4997,21 @@ def fetch_and_process_games():
 
 def load_games_callback():
     """Fetches games and saves to state. Called only when button is clicked."""
-    with st.spinner("Fetching games..."):
-        # Invalidate master_df when loading new games
-        if "master_df" in st.session_state:
-            del st.session_state["master_df"]
+    try:
+        with st.spinner("Fetching games..."):
+            # Invalidate master_df when loading new games
+            if "master_df" in st.session_state:
+                del st.session_state["master_df"]
 
-        games = fetch_and_process_games()
-        st.session_state['games_data'] = games
-        # Restore compatibility for legacy views relying on 'games'
-        st.session_state['games'] = games
-        st.session_state['games_loaded'] = True
+            games = fetch_and_process_games()
+            st.session_state['games_data'] = games
+            # Restore compatibility for legacy views relying on 'games'
+            st.session_state['games'] = games
+            st.session_state['games_loaded'] = True
+    except Exception as e:
+        st.error(f"Critical Error loading games: {e}")
+        # Ensure we don't leave the app in a broken state
+        st.session_state['games_loaded'] = False
 
 
 # -----------------
@@ -5392,17 +5397,29 @@ with tab_master:
     games = st.session_state.get("games_data") or st.session_state.get("games") or []
 
     # 3. Section: Run Analysis
-    # This block relies purely on the data existing in memory.
-    # CRITICAL: Ensure no code above this resets 'games_data' to None on every run.
-    if st.session_state.get('games_loaded', False) and st.session_state.get('games_data'):
-        st.divider()
-        st.success(f"Games Loaded: {len(st.session_state['games_data'])}")
+    # We check 'games_loaded' to verify the attempt was made.
+    if st.session_state.get('games_loaded', False):
 
-        if st.button("Run Master Analysis", key="btn_run_analysis"):
-             if (not kalshi_status.get("configured")):
-                st.error("Kalshi is required but unavailable. Fix Kalshi first.")
-                st.stop()
-             should_run = True
+        # Safe retrieval ensuring a list
+        games = st.session_state.get('games_data') or []
+
+        st.divider()
+
+        if not games:
+            # CASE A: Load attempted, but 0 games found.
+            st.warning("⚠️ No games found for the selected leagues/dates.")
+            st.info("Check your 'Selected Sports' in the sidebar or try again later.")
+            # We do NOT show the run button here because there is nothing to analyze.
+
+        else:
+            # CASE B: Games found. Show the button.
+            st.success(f"✅ Loaded {len(games)} games.")
+
+            if st.button("Run Master Analysis", key="btn_run_analysis"):
+                if (not kalshi_status.get("configured")):
+                    st.error("Kalshi is required but unavailable. Fix Kalshi first.")
+                    st.stop()
+                should_run = True
 
     elif df_existing is None:
         st.info("Load games, then run Master Analysis.")
