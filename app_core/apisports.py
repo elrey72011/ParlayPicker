@@ -218,7 +218,7 @@ class _APISportsBaseClient:
         if self._resolved_league_id is not None:
             return self._resolved_league_id
 
-        return None
+        return []
 
     def _request(self, path: str, params: Optional[Dict] = None) -> Optional[Dict]:
         if not self.is_configured():
@@ -534,7 +534,7 @@ class _APISportsBaseClient:
         losses = (games.get("loses") or {}).get("total")
         draws = (games.get("draws") or {}).get("total")
         if wins is None or losses is None:
-            return None
+            return []
         if draws is not None and draws > 0:
             return f"{wins}-{losses}-{draws}"
         return f"{wins}-{losses}"
@@ -542,7 +542,7 @@ class _APISportsBaseClient:
     @staticmethod
     def _determine_trend(form: Optional[str]) -> Optional[str]:
         if not form:
-            return None
+            return []
         wins = form.count("W")
         losses = form.count("L")
         if wins - losses >= 2:
@@ -559,7 +559,7 @@ class _APISportsBaseClient:
             value = avg.get(key)
             if isinstance(value, (int, float)):
                 return float(value)
-        return None
+        return []
 
     def build_game_summary(
         self,
@@ -731,4 +731,4 @@ def get_key(league: Optional[str] = None) -> Optional[str]:
         val = _read_secret(name)
         if val:
             return val
-    return None
+    return []
