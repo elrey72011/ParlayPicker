@@ -2915,6 +2915,9 @@ try:
 except Exception:
     pass
 
+if 'games_loaded' not in st.session_state:
+    st.session_state['games_loaded'] = False
+
 # ------------------------------------------------------------
 # Kalshi globals / shims (must exist before any call sites)
 # ------------------------------------------------------------
@@ -5024,6 +5027,7 @@ if st.sidebar.button("Load Games", use_container_width=True):
     load_games(selected_sports or [league])
     st.session_state["games_loaded"] = True
     st.session_state["games_data"] = st.session_state.get("games", [])
+    st.rerun()
 
 api_sports_present = (
     get_secret_any("APISPORTS_API_KEY", "API_SPORTS_KEY", "API_SPORTS_API_KEY") is not None
@@ -6440,24 +6444,24 @@ with tab_master:
                 model_home_prob = safe_float(row.get("AI_Prob"))
 
                 if market_home_prob is not None and model_home_prob is not None:
-                    # Neutral Zone Check
+                    # 1. Neutral Buffer (Highest Priority - "Force" status)
                     if (0.47 <= market_home_prob <= 0.53) or (0.47 <= model_home_prob <= 0.53):
                         q_alignment = "NEUTRAL"
                         q_rationale = "Model or Market is uncertain (near 50%)."
-                    else:
-                        # Directional Check (Side)
-                        market_side = "Home" if market_home_prob > 0.5 else "Away"
-                        model_side = "Home" if model_home_prob > 0.5 else "Away"
 
-                        if market_side == model_side:
-                            q_alignment = "AGREE"
-                            fav_team = row.get("Home") if market_side == "Home" else row.get("Away")
-                            q_rationale = f"Model and Market both favor {fav_team}."
-                        else:
-                            q_alignment = "DISAGREE"
-                            model_team = row.get("Home") if model_side == "Home" else row.get("Away")
-                            market_team = row.get("Home") if market_side == "Home" else row.get("Away")
-                            q_rationale = f"Model favors {model_team} while Market favors {market_team}."
+                    # 2. Directional Check (If NOT Neutral)
+                    elif (market_home_prob > 0.50 and model_home_prob > 0.50) or \
+                         (market_home_prob < 0.50 and model_home_prob < 0.50):
+                         q_alignment = "AGREE"
+                         fav_team = row.get("Home") if market_home_prob > 0.5 else row.get("Away")
+                         q_rationale = f"Model and Market both favor {fav_team}."
+
+                    # 3. Disagree (Only if not Neutral and not Agree)
+                    else:
+                        q_alignment = "DISAGREE"
+                        model_team = row.get("Home") if model_home_prob > 0.5 else row.get("Away")
+                        market_team = row.get("Home") if market_home_prob > 0.5 else row.get("Away")
+                        q_rationale = f"Model favors {model_team} while Market favors {market_team}."
             except Exception:
                 q_alignment = "NEUTRAL"
                 q_rationale = "Error calculating alignment."
