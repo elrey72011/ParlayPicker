@@ -14,6 +14,8 @@ import pandas as pd
 import requests
 import numpy as np
 import streamlit as st
+import warnings
+warnings.simplefilter(action='ignore', category=FutureWarning)
 from app_core.kalshi_integrator import (
     KalshiIntegrator,
     LEAGUE_SERIES_MAP,
@@ -5405,6 +5407,15 @@ with tab_master:
         # Remove duplicate columns to prevent matrix errors
         df_master = df_master.loc[:, ~df_master.columns.duplicated()]
         df_master = enrich_with_vertex_features(df_master, api_sports_clients)
+
+        # Check for NCAAF Outage
+        if league == "NCAAF" and not df_master.empty:
+             # Check if we have defaults (0.5 win pct) which indicates missing stats
+             if 'feature_home_win_pct' in df_master.columns:
+                 # Check first row
+                 first_val = df_master['feature_home_win_pct'].iloc[0]
+                 if abs(first_val - 0.5) < 0.0001:
+                     st.warning("Notice: NCAAF Data API is currently experiencing a server outage. College football stats may be limited.")
 
         unique_teams = sorted(
             set(df_master.get("home_team", pd.Series([], dtype=str)).dropna().astype(str))
