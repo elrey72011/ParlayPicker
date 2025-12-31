@@ -296,7 +296,11 @@ def fetch_ncaaf_stats(season_year: int) -> List[Dict[str, Any]]:
 
         api_instance = cfbd.StatsApi(cfbd.ApiClient(configuration))
         # Use get_team_season_stats per instruction (replaces get_advanced_season_stats)
-        season_stats = api_instance.get_team_season_stats(year=season_year)
+        try:
+            season_stats = api_instance.get_team_season_stats(year=season_year)
+        except Exception as e:
+            logger.warning(f"NCAAF API Unavailable (Stats): {e}")
+            return []
 
         # To get Win PCT, we still need records or game outcomes.
         # We will use GamesApi to get games and calculate win pct,
