@@ -4987,19 +4987,22 @@ def load_games(selected_leagues: Union[str, List[str]]) -> List[Dict[str, Any]]:
     return filtered_games
 
 
+def fetch_and_process_games():
+    """Helper to fetch games using current session state settings."""
+    selected_sports = st.session_state.get("selected_sports")
+    league = st.session_state.get("league", "NBA")
+    leagues_to_load = selected_sports if selected_sports else [league]
+    return load_games(leagues_to_load)
+
+
 def load_games_callback():
     """Fetches games and saves to state. Called only when button is clicked."""
     with st.spinner("Fetching games..."):
-        # Access the current selection from session state with safe fallbacks
-        selected_sports = st.session_state.get("selected_sports")
-        league = st.session_state.get("league", "NBA")
-        leagues_to_load = selected_sports if selected_sports else [league]
-
         # Invalidate master_df when loading new games
         if "master_df" in st.session_state:
             del st.session_state["master_df"]
 
-        games = load_games(leagues_to_load)
+        games = fetch_and_process_games()
         st.session_state['games_data'] = games
         # Restore compatibility for legacy views relying on 'games'
         st.session_state['games'] = games
