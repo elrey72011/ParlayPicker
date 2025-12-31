@@ -6429,6 +6429,43 @@ with tab_master:
             ]:
                 if col not in row or pd.isna(row.get(col)):
                     row[col] = default
+
+            # --- 1. Calculate Quantitative Alignment (Market vs Model) ---
+            # Using Directional Logic + Neutral Zone (0.47-0.53)
+            q_alignment = "NEUTRAL"
+            q_rationale = "Insufficient data for alignment."
+
+            try:
+                market_home_prob = american_to_implied_prob(row.get("Home_ML"))
+                model_home_prob = safe_float(row.get("AI_Prob"))
+
+                if market_home_prob is not None and model_home_prob is not None:
+                    # Neutral Zone Check
+                    if (0.47 <= market_home_prob <= 0.53) or (0.47 <= model_home_prob <= 0.53):
+                        q_alignment = "NEUTRAL"
+                        q_rationale = "Model or Market is uncertain (near 50%)."
+                    else:
+                        # Directional Check (Side)
+                        market_side = "Home" if market_home_prob > 0.5 else "Away"
+                        model_side = "Home" if model_home_prob > 0.5 else "Away"
+
+                        if market_side == model_side:
+                            q_alignment = "AGREE"
+                            fav_team = row.get("Home") if market_side == "Home" else row.get("Away")
+                            q_rationale = f"Model and Market both favor {fav_team}."
+                        else:
+                            q_alignment = "DISAGREE"
+                            model_team = row.get("Home") if model_side == "Home" else row.get("Away")
+                            market_team = row.get("Home") if market_side == "Home" else row.get("Away")
+                            q_rationale = f"Model favors {model_team} while Market favors {market_team}."
+            except Exception:
+                q_alignment = "NEUTRAL"
+                q_rationale = "Error calculating alignment."
+
+            # Apply Quantitative Result (Default)
+            row["gemini_alignment"] = q_alignment
+            row["gemini_rationale"] = q_rationale
+
             base_overall = row.get("At_a_Glance_Confidence") or row.get("Pick_Confidence")
             base_spread_conf = row.get("spread_confidence")
             base_total_conf = row.get("total_confidence")
@@ -6437,21 +6474,20 @@ with tab_master:
             row["total_confidence"] = base_total_conf
             row["spread_confidence_base"] = base_spread_conf
             row["total_confidence_base"] = base_total_conf
+
             if not use_gemini_explanations:
                 row["gemini_mode"] = "disabled"
-                row["gemini_alignment"] = "NEUTRAL"
-                row["gemini_rationale"] = "Gemini disabled by user."
+                # Keep calculated quantitative alignment
                 row["gemini_flags_short"] = row.get("gemini_flags_short") or ""
                 row["gemini_risk_flags"] = row.get("gemini_risk_flags") or json.dumps([])
-                row["llm_disagreement_flag"] = False
+                row["llm_disagreement_flag"] = (q_alignment == "DISAGREE")
                 return row
             if row.name not in gemini_allowed_idx:
                 row["gemini_mode"] = "guardrail"
-                row["gemini_alignment"] = "NEUTRAL"
-                row["gemini_rationale"] = "Gemini skipped: outside evaluation limit."
+                # Keep calculated quantitative alignment
                 row["gemini_flags_short"] = row.get("gemini_flags_short") or ""
                 row["gemini_risk_flags"] = row.get("gemini_risk_flags") or json.dumps([])
-                row["llm_disagreement_flag"] = False
+                row["llm_disagreement_flag"] = (q_alignment == "DISAGREE")
                 return row
             try:
                 payload = {
@@ -6487,35 +6523,28 @@ with tab_master:
                 if gem_res.get("gemini_error"):
                     row["gemini_error"] = gem_res.get("gemini_error")
                     row["gemini_mode"] = "disabled"
-                    row["llm_disagreement_flag"] = False
-                    row["gemini_alignment"] = "NEUTRAL"
-                    row["gemini_rationale"] = "Gemini disabled: service unavailable."
+                    row["llm_disagreement_flag"] = (q_alignment == "DISAGREE")
+                    # Keep calculated quantitative alignment
                     row["gemini_flags_short"] = row.get("gemini_flags_short") or "gemini_disabled"
                     row["gemini_risk_flags"] = json.dumps(flags_list) if flags_list else json.dumps(["gemini_disabled"])
                     if not row.get("prob_engine"):
                         row["prob_engine"] = "market_only"
                     return row
-                pick_val = (row.get("Pick") or row.get("Spread & Pick") or row.get("Total & Pick") or "").strip()
-                recommended = str(gem_res.get("recommended_bet") or "").strip()
-                if recommended and pick_val and recommended.lower() == pick_val.lower():
-                    row["gemini_alignment"] = "AGREE"
-                elif not recommended:
-                    row["gemini_alignment"] = "NEUTRAL"
-                else:
-                    row["gemini_alignment"] = "DISAGREE"
-                rationale_text = gem_res.get("explanation") or gem_res.get("gemini_rationale") or ""
-                row["gemini_rationale"] = str(rationale_text)[:240]
+
+                # Overwrite Rationale with Quantitative Logic (Requested)
+                row["gemini_alignment"] = q_alignment
+                row["gemini_rationale"] = q_rationale
+
                 row["gemini_risk_flags"] = json.dumps(flags_list) if flags_list else json.dumps([])
                 row["gemini_flags_short"] = ";".join(flags_list[:4])
-                row["llm_disagreement_flag"] = row.get("gemini_alignment") == "DISAGREE"
+                row["llm_disagreement_flag"] = (q_alignment == "DISAGREE")
                 row["gemini_mode"] = "full" if gemini_full_run else "guardrail"
                 row["gemini_error"] = None
             except Exception as exc:
                 row["gemini_mode"] = "error"
                 row["gemini_error"] = str(exc)[:240]
-                row["llm_disagreement_flag"] = False
-                row["gemini_alignment"] = "NEUTRAL"
-                row["gemini_rationale"] = f"Gemini error: {row.get('gemini_error')}"
+                row["llm_disagreement_flag"] = (q_alignment == "DISAGREE")
+                # Keep calculated quantitative alignment
                 existing_flags = str(row.get("gemini_flags_short") or "").strip()
                 if existing_flags:
                     row["gemini_flags_short"] = f"{existing_flags};gemini_error"
