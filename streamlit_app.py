@@ -5376,6 +5376,7 @@ with tab_games:
 
 with tab_master:
     st.header("Master Analysis")
+    st.info(f"DEBUG STATE: Games Loaded: {st.session_state.get('games_loaded')} | Data Count: {len(st.session_state.get('games_data', []) or [])}")
     kalshi_status = kalshi_health_check(league)
     if not kalshi_status.get("configured"):
         error_detail = kalshi_status.get("error") or "Kalshi is required and missing keys."
@@ -5416,33 +5417,22 @@ with tab_master:
 
     # --- DIAGNOSTIC UI BLOCK ---
     st.divider()
+    st.header("3. Master Analysis")
 
-    # 1. Check if the "Load" button was even clicked/processed
-    if not st.session_state.get('games_loaded', False):
-        if df_existing is None:
-            st.info("ℹ️ Status: Games have not been loaded yet. Please click 'Load Today's Games' above.")
+    # Get games safely
+    games = st.session_state.get('games_data', [])
 
+    if not games:
+        st.warning("⚠️ No games data found in memory. Please click 'Load Today's Games' first.")
     else:
-        # 2. The load was attempted. Now check the data.
-        games = st.session_state.get('games_data')
+        st.success(f"✅ Ready to Analyze {len(games)} games.")
 
-        if games is None:
-             st.error("❌ Error: 'games_loaded' is True, but 'games_data' is None. The fetch function likely failed.")
-
-        elif len(games) == 0:
-             # THIS is likely the issue. The list is empty, so the previous code hid the button.
-             st.warning("⚠️ 0 Games Found. The API returned an empty list.")
-             st.write("Troubleshooting: Check 'Selected Sports' in the sidebar or try a different date.")
-
+    # ALWAYS SHOW THE BUTTON (Do not hide it behind an if statement)
+    if st.button("Run Master Analysis", key="btn_run_analysis_force"):
+        if not games:
+            st.error("Cannot run analysis: No games loaded.")
         else:
-             # 3. Success Case: We have games!
-             st.success(f"✅ Ready to Analyze: {len(games)} games loaded.")
-
-             if st.button("Run Master Analysis", key="btn_run_analysis_diagnostic"):
-                 if (not kalshi_status.get("configured")):
-                    st.error("Kalshi is required but unavailable.")
-                    st.stop()
-                 should_run = True
+            should_run = True
 
     if should_run:
         st.session_state["DECISION_TRACE_SAMPLES"] = {}
