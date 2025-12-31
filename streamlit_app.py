@@ -5363,24 +5363,36 @@ with tab_master:
         st.session_state["games_loaded"] = True
         st.session_state["games_data"] = st.session_state["games"]
 
+    # --- Refactored Main UI Logic ---
+    # Button 1: Load Games
+    if st.button("Load Today's Games"):
+        # Call the existing helper to load games
+        # It handles fetching, normalizing, and storing to st.session_state['games']
+        games_loaded_data = load_games(selected_sports or [league])
+
+        st.session_state['games_data'] = games_loaded_data
+        st.session_state['games_loaded'] = True
+        st.rerun()
+
     games = st.session_state.get("games", [])
 
     # Determine if we need to run (user clicked button) or just display (cached df exists)
     df_existing = st.session_state.get("master_df")
     should_run = False
 
-    # FIX: Check session state flag, independent of sidebar button return value
+    # Button 2: Run Analysis (Un-nested)
     if st.session_state.get('games_loaded', False):
-        st.info(f"Games Loaded: {len(st.session_state.get('games', []))}")
+        games_count = len(st.session_state.get('games_data') or st.session_state.get('games') or [])
+        st.success(f"Games Loaded: {games_count}")
 
         if st.button("Run Master Analysis", key="run_master_analysis_btn"):
-            if (not kalshi_status.get("configured")):
+             if (not kalshi_status.get("configured")):
                 st.error("Kalshi is required but unavailable. Fix Kalshi first.")
                 st.stop()
-            should_run = True
+             should_run = True
 
     elif df_existing is None:
-        st.info("Load games from the sidebar, then run Master Analysis.")
+        st.info("Load games, then run Master Analysis.")
 
     if should_run:
         st.session_state["DECISION_TRACE_SAMPLES"] = {}
@@ -6445,18 +6457,20 @@ with tab_master:
 
                 if market_home_prob is not None and model_home_prob is not None:
                     # 1. Neutral Buffer (Highest Priority - "Force" status)
+                    # If EITHER is between 0.47 and 0.53, force Neutral.
                     if (0.47 <= market_home_prob <= 0.53) or (0.47 <= model_home_prob <= 0.53):
                         q_alignment = "NEUTRAL"
                         q_rationale = "Model or Market is uncertain (near 50%)."
 
-                    # 2. Directional Check (If NOT Neutral)
-                    elif (market_home_prob > 0.50 and model_home_prob > 0.50) or \
-                         (market_home_prob < 0.50 and model_home_prob < 0.50):
+                    # 2. Directional Match (If NOT Neutral)
+                    # If both are > 0.53 (Favor Home) OR both are < 0.47 (Favor Away)
+                    elif (market_home_prob > 0.53 and model_home_prob > 0.53) or \
+                         (market_home_prob < 0.47 and model_home_prob < 0.47):
                          q_alignment = "AGREE"
                          fav_team = row.get("Home") if market_home_prob > 0.5 else row.get("Away")
                          q_rationale = f"Model and Market both favor {fav_team}."
 
-                    # 3. Disagree (Only if not Neutral and not Agree)
+                    # 3. Disagree (Only if strictly opposite)
                     else:
                         q_alignment = "DISAGREE"
                         model_team = row.get("Home") if model_home_prob > 0.5 else row.get("Away")
