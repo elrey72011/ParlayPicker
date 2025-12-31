@@ -1,6 +1,5 @@
 import sys
 import os
-# Force discovery of app_core folder
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 import json
@@ -2160,7 +2159,7 @@ def enrich_game_context(game: Dict[str, Any], league_key: str, api_key: Optional
                 h_api = api_teams.get("home", {}).get("name", "")
                 a_api = api_teams.get("away", {}).get("name", "")
 
-                # Use fuzzy matching as the ONLY logic to bridge naming gaps - FORCED UPDATE
+                # Use fuzzy matching as the ONLY logic to bridge naming gaps (Confirmed)
                 if TeamNameMatcher.match_team(home_norm, [h_api], threshold=0.75) and \
                    TeamNameMatcher.match_team(away_norm, [a_api], threshold=0.75):
                     matched = g_api
@@ -2297,6 +2296,7 @@ def init_sentiment_meta() -> Dict[str, Any]:
 
 def ensure_sentiment_loaded(games: List[Dict[str, Any]]) -> None:
     """Compute sentiment for the current slate when enabled and cache in session state."""
+    news_api_key = st.secrets["general"].get("news_api_key")
     if st.button("🧹 Clear Sentiment Cache", key="clear_sentiment_cache"):
         st.cache_data.clear()
         for k in list(st.session_state.keys()):
