@@ -84,6 +84,10 @@ def safe_float(x: Any) -> Optional[float]:
         return None
 
 
+def clean_df(df):
+    return df.loc[:, ~df.columns.duplicated()].copy()
+
+
 def clamp(x: Optional[float], lo: float = 0.0, hi: float = 1.0) -> Optional[float]:
     if x is None:
         return None
@@ -5433,7 +5437,7 @@ with tab_master:
         # --- CLEANED MASTER ANALYSIS LOOP ---
         # --- FIX: Define variables at the start of the loop ---
         for idx, g in enumerate(games):
-            # INITIALIZATION BLOCK
+            # RESET ALL TRACE VARIABLES
             total_pick_side = None
             total_line = None
             total_pick_odds = None
@@ -5441,6 +5445,42 @@ with tab_master:
             total_engine_used = "missing"
             spread_prob_final = 0.5
             total_prob_final = 0.5
+
+            # Additional resets to prevent NameError in fallback_row
+            spread_pick_label = None
+            spread_alt_label = None
+            spread_prob_margin = None
+            spread_prob_pick_market = None
+            spread_prob_alt_market = None
+            spread_prob_pick_kalshi = None
+            spread_prob_alt_kalshi = None
+            spread_decision_metric_used = None
+            spread_decision_score_pick = None
+            spread_decision_score_alt = None
+            spread_decision_score_margin = None
+            spread_trace_json = None
+
+            total_pick_label = None
+            total_alt_label = None
+            total_prob_margin = None
+            total_prob_pick_market = None
+            total_prob_alt_market = None
+            total_prob_pick_kalshi = None
+            total_prob_alt_kalshi = None
+            total_decision_metric_used = None
+            total_decision_score_pick = None
+            total_decision_score_alt = None
+            total_decision_score_margin = None
+            total_trace_json = None
+
+            decision_trace_version = None
+            overall_engine_used = None
+            decision_trace_notes = None
+
+            kalshi_prob_spread = None
+            kalshi_prob_total = None
+            vertex_spread_prob = None
+            vertex_total_prob = None
             spread_prob_market = 0.5
             total_prob_market = 0.5
             total_line = None
@@ -7616,10 +7656,11 @@ with tab_master:
             master_df = enrich_with_vertex_features(master_df, {league: api_sports_clients.get(league)})
 
         # 4. BATCH PREDICTION: Call the endpoint once for the whole sheet
+        master_df = clean_df(master_df)
         if is_vertex_prediction_configured():
             with st.spinner("🔮 Calling Vertex AI Batch Inference..."):
                 # 1. Force de-duplication of columns to prevent TypeError
-                master_df = master_df.loc[:, ~master_df.columns.duplicated()].copy()
+                pass
 
                 # 2. Filter for exactly the columns the model expects
                 from app_core.vertex_ai_endpoint import VERTEX_FEATURE_COLUMNS
@@ -8311,6 +8352,7 @@ with tab_master:
 
         st.subheader("Top Picks / Best Bets")
         include_low_in_top = st.checkbox("Include LOW confidence in Top Picks", value=False, key="include_low_top_picks")
+        df = clean_df(df)
         top_df = df.copy()
         if "Unnamed: 0" in top_df.columns:
             top_df = top_df.drop(columns=["Unnamed: 0"])

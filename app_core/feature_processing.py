@@ -771,7 +771,8 @@ def enrich_with_vertex_features(df: pd.DataFrame, api_clients: Dict[str, Any], s
 
         # FORCE override for totally missing stats to prevent phantom signals
         # If either side is missing (default 0.0 after fillna), diff must be 0.0
-        missing_mask = (s1.abs() < 1e-6) | (s2.abs() < 1e-6)
+        # Expanded check to catch NaN or 0.0 explicitly
+        missing_mask = (s1.abs() < 1e-6) | (s2.abs() < 1e-6) | (s1 != s1) | (s2 != s2)
         diff[missing_mask] = 0.0
 
         return diff
@@ -790,7 +791,7 @@ def enrich_with_vertex_features(df: pd.DataFrame, api_clients: Dict[str, Any], s
     def ml_to_prob(ml):
         try:
             m = float(ml)
-            if pd.isna(m) or m == 0: return 0.5
+            if m != m or m == 0: return 0.5
             if m > 0: return 100/(m+100)
             return abs(m)/(abs(m)+100)
         except:
