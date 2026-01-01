@@ -267,8 +267,10 @@ def predict_win_probabilities(df, feature_cols=None, model_path=None):
                     return [p[0] for p in predictions]
                 return predictions
             else:
-                # If Vertex not configured, re-raise to hit the outer exception handler
-                raise model_err
+                # If Vertex not configured, return None to signal fallback to defaults
+                # instead of crashing the entire app.
+                logger.warning("Vertex not configured and local model failed. Returning None for fallback.")
+                return None
 
     except Exception as e:
         logger.error(f"Vertex Crash Prevented: {e}")
