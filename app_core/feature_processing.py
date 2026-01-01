@@ -775,6 +775,12 @@ def enrich_with_vertex_features(df: pd.DataFrame, api_clients: Dict[str, Any], s
         missing_mask = (s1.abs() < 1e-6) | (s2.abs() < 1e-6) | (s1 != s1) | (s2 != s2)
         diff[missing_mask] = 0.0
 
+        # FORCE override if stats are missing for either team
+        if default_val is not None:
+            # Check if either team is at the default stats level
+            is_default = ((s1 - default_val).abs() < 1e-6) | ((s2 - default_val).abs() < 1e-6)
+            diff[is_default] = 0.0
+
         return diff
 
     features_data['feature_diff_win_pct'] = safe_diff(features_data['feature_home_win_pct'], features_data['feature_away_win_pct'], default_val=defaults['win_pct'])
@@ -790,6 +796,7 @@ def enrich_with_vertex_features(df: pd.DataFrame, api_clients: Dict[str, Any], s
     # --- NEW: Robust ml_to_prob ---
     def ml_to_prob(ml):
         try:
+            if ml is None: return 0.5
             m = float(ml)
             if m != m or m == 0: return 0.5
             if m > 0: return 100/(m+100)

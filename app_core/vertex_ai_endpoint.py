@@ -221,8 +221,12 @@ def is_vertex_prediction_configured() -> bool:
         return False
 
     if not endpoint_id:
-        logger.warning("Vertex prediction not configured: endpoint_id is missing")
-        return False
+        # Fallback to default if endpoint_id is missing but default exists
+        if DEFAULT_ENDPOINT_ID:
+            endpoint_id = DEFAULT_ENDPOINT_ID
+        else:
+            logger.warning("Vertex prediction not configured: endpoint_id is missing")
+            return False
 
     if not location:
         logger.warning("Vertex prediction not configured: location is missing")
@@ -295,15 +299,15 @@ def predict_win_probabilities(df, feature_cols=None, model_path=None):
                 return None
 
             results = []
-            for p in response.predictions:
-                if isinstance(p, dict):
-                    # Try 'scores' index 1, then 'confidences' index 1, then 'value'
-                    val = p.get("scores", [0.5, 0.5])[1] if "scores" in p else \
-                          p.get("confidences", [0.5, 0.5])[1] if "confidences" in p else \
-                          p.get("value", 0.5)
+            for pred in response.predictions:
+                if isinstance(pred, dict):
+                    # Update extraction logic
+                    val = pred.get("scores", [0.5, 0.5])[1] if "scores" in pred else \
+                          pred.get("confidences", [0.5, 0.5])[1] if "confidences" in pred else \
+                          pred.get("value", 0.5)
                     results.append(val)
                 else:
-                    results.append(p)
+                    results.append(pred)
             return results
         else:
             # If Vertex not configured, return None to signal fallback to defaults
