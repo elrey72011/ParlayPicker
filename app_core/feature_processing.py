@@ -769,6 +769,11 @@ def enrich_with_vertex_features(df: pd.DataFrame, api_clients: Dict[str, Any], s
         # Where NOT valid (meaning at least one is 0.0), set diff to 0.0
         diff[~valid_mask] = 0.0
 
+        # FORCE override for totally missing stats to prevent phantom signals
+        # If either side is missing (default 0.0 after fillna), diff must be 0.0
+        missing_mask = (s1.abs() < 1e-6) | (s2.abs() < 1e-6)
+        diff[missing_mask] = 0.0
+
         return diff
 
     features_data['feature_diff_win_pct'] = safe_diff(features_data['feature_home_win_pct'], features_data['feature_away_win_pct'], default_val=defaults['win_pct'])
@@ -784,12 +789,6 @@ def enrich_with_vertex_features(df: pd.DataFrame, api_clients: Dict[str, Any], s
     # --- NEW: Robust ml_to_prob ---
     def ml_to_prob(ml):
         try:
-            # Return exactly 0.5 if input is None/NaN or 0
-            if ml is None: return 0.5
-            if isinstance(ml, str) and ml.strip().lower() in ['none', 'nan', 'null', '']: return 0.5
-            # Explicit 0 check for integer inputs
-            if ml == 0: return 0.5
-
             m = float(ml)
             if pd.isna(m) or m == 0: return 0.5
             if m > 0: return 100/(m+100)

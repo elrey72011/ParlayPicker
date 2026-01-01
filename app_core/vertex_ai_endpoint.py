@@ -297,7 +297,7 @@ def predict_win_probabilities(df, feature_cols=None, model_path=None):
             results = []
             for p in response.predictions:
                 if isinstance(p, dict):
-                    # Extract from 'scores' (Home Win is usually index 1) or 'value'
+                    # Extract Home Win Prob (Usually index 1 in 'scores')
                     val = p.get("scores", [0.5, 0.5])[1] if "scores" in p else p.get("value", 0.5)
                     results.append(val)
                 else:
