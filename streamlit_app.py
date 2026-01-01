@@ -5409,8 +5409,13 @@ with tab_master:
             total_alt_label = None
             spread_prob_final = 0.5
             total_prob_final = 0.5
-            spread_alt_prob_final = None
-            total_alt_prob_final = None
+            spread_alt_prob_final = 0.5
+            spread_prob_alt_final = 0.5
+            total_alt_prob_final = 0.5
+            kalshi_prob_spread = None
+            kalshi_prob_total = None
+            vertex_spread_prob = None
+            vertex_total_prob = None
             spread_prob_margin = None
             total_prob_margin = None
             spread_prob_pick_market = None
