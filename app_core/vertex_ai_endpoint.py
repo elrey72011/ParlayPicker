@@ -35,6 +35,13 @@ from google.oauth2 import service_account  # type: ignore
 
 logger = logging.getLogger(__name__)
 
+# -------------------------------------------------------------------
+# USER REQUEST 1: Robust File Pathing (Global Scope)
+# -------------------------------------------------------------------
+# Get the absolute path to the root of the project
+ROOT_DIR = Path(__file__).resolve().parents[1]
+MODEL_PATH = str(ROOT_DIR / "models" / "model.json")
+
 # Global flag to track local model availability
 USE_LOCAL_MODEL = True
 
@@ -92,6 +99,7 @@ VERTEX_FEATURE_COLUMNS: List[str] = [
 
 DEFAULT_PROJECT_ID = "elite-hangar-479017-m8"
 DEFAULT_LOCATION = "us-central1"
+# USER REQUEST 3: Match Endpoint IDs
 DEFAULT_ENDPOINT_ID = "3242045274427752448"  # numeric endpoint id from your logs
 
 # Cached endpoint client & name so we don't recreate it constantly
@@ -238,9 +246,8 @@ def predict_win_probabilities(df, feature_cols=None, model_path=None):
 
         # Default model path if not provided
         if model_path is None:
-            # Robust File Pathing: Use pathlib to resolve relative to this file
-            root_dir = Path(__file__).resolve().parents[1]
-            model_path = str(root_dir / "models" / "model.json")
+            # User Request 1: Use Global MODEL_PATH
+            model_path = MODEL_PATH
 
         # 2. VALIDATE: Ensure all features exist
         # This handles the User Request to ensure 0.0 initialization
@@ -279,45 +286,57 @@ def predict_win_probabilities(df, feature_cols=None, model_path=None):
                 instances = df[feature_cols].astype(float).values.tolist()
 
                 # DEBUG PRINT as requested for troubleshooting
-                print(f"DEBUG: Instances being sent to Endpoint: {instances}")
+                # print(f"DEBUG: Instances being sent to Endpoint: {instances}")
                 if st:
                     st.write(f"DEBUG: Feature Vector: {instances}")
 
-                resp = endpoint.predict(instances=instances)
-                # Parse response: usually a list of predictions
-                predictions = resp.predictions
-                print(f"DEBUG: Vertex AI Raw Response: {predictions}")
+                response = endpoint.predict(instances=instances)
+
+                # USER REQUEST 2: Fix Parser & Debug
+                print(f"DEBUG: Vertex Raw Prediction: {response.predictions}")
+
+                predictions = response.predictions
 
                 if not predictions:
                     return None
 
-                # Robust parsing for list of floats, list of lists, or list of dicts
+                # USER REQUEST 2 (Improved): Robust parsing handling Dict, List, and protobuf Maps
                 results = []
                 for p in predictions:
-                    if isinstance(p, (float, int)):
-                        results.append(float(p))
-                    elif isinstance(p, list):
-                        # Assuming [prob] or [prob_0, prob_1] -> take prob_1 (home win) if 2 items?
-                        if len(p) == 2:
-                            results.append(p[1])
-                        else:
-                            results.append(p[0])
-                    elif isinstance(p, dict):
-                        # Handle {"scores": [0.55, 0.45]}
-                        if "scores" in p:
-                            scores = p["scores"]
-                            if isinstance(scores, list) and len(scores) >= 2:
-                                results.append(scores[1]) # Home Win Prob
-                            elif isinstance(scores, list) and len(scores) == 1:
-                                results.append(scores[0])
-                            else:
-                                results.append(0.5) # Fallback
-                        elif "value" in p:
-                            results.append(p["value"])
-                        else:
-                            results.append(0.5)
-                    else:
-                        results.append(0.5)
+                    val = None
+                    # 1. Try dictionary access (covers dict and MapComposite)
+                    # We check hasattr(p, 'get') to support protobuf MapComposite without direct isinstance(dict)
+                    if isinstance(p, dict) or hasattr(p, "get"):
+                         # Try 'scores'
+                         scores = p.get("scores") if hasattr(p, "get") else (p["scores"] if "scores" in p else None)
+                         if scores is not None:
+                             if isinstance(scores, list) and len(scores) >= 2:
+                                 val = scores[1] # Home Win Prob (Index 1)
+                             elif isinstance(scores, list) and len(scores) == 1:
+                                 val = scores[0]
+
+                         # Try 'value' if no scores found or valid
+                         if val is None:
+                             v = p.get("value") if hasattr(p, "get") else (p["value"] if "value" in p else None)
+                             if v is not None:
+                                 val = v
+
+                    # 2. Try list access (if not resolved by dict logic)
+                    if val is None and isinstance(p, list):
+                        if len(p) >= 2:
+                            val = p[1]
+                        elif len(p) == 1:
+                            val = p[0]
+
+                    # 3. Try direct float/int
+                    if val is None and isinstance(p, (float, int)):
+                        val = float(p)
+
+                    # 4. Fallback
+                    if val is None:
+                        val = 0.5
+
+                    results.append(val)
 
                 return results
             else:
