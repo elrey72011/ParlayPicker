@@ -269,7 +269,7 @@ def predict_win_probabilities(df, feature_cols=None, model_path=None):
                 booster.load_model(model_path)
                 return booster.predict(dmatrix)
             except Exception as load_err:
-                # Disable local model and proceed (do not raise)
+                # Disable local model and proceed (do not raise - silenced for fallback)
                 USE_LOCAL_MODEL = False
                 logger.warning(f"Local XGBoost model load failed: {load_err}. Disabling USE_LOCAL_MODEL and proceeding to fallback.")
 

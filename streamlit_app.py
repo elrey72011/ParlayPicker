@@ -5413,6 +5413,14 @@ with tab_master:
             spread_prob_market = 0.5
             total_prob_market = 0.5
 
+            # ADD THESE TO THE EXISTING INIT BLOCK
+            spread_prob_alt_final = 0.5
+            total_alt_prob_final = 0.5
+            spread_prob_margin = 0.0
+            total_prob_margin = 0.0
+            spread_decision_score_alt = 0.5
+            total_decision_score_alt = 0.5
+
             # --- 1. SETUP & UTILS ---
 
             # Unpack key variables for easy access
