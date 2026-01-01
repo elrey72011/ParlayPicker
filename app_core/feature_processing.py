@@ -759,9 +759,8 @@ def enrich_with_vertex_features(df: pd.DataFrame, api_clients: Dict[str, Any], s
              # Check if either team is at the default stats level
              # Using small epsilon for float comparison
              is_default = ((s1 - default_val).abs() < 1e-6) | ((s2 - default_val).abs() < 1e-6)
-             # If either is default, we treat it as valid match (0 diff logic applied below if needed?)
-             # User instruction: "Only subtract if both teams have stats greater than 0.0. If either is 0.0, default the differential to 0.0."
-             pass
+             # If either is default, we treat it as invalid to force 0.0 diff
+             valid_mask = valid_mask & (~is_default)
 
         # Calculate diff everywhere first
         diff = s1 - s2
@@ -786,6 +785,7 @@ def enrich_with_vertex_features(df: pd.DataFrame, api_clients: Dict[str, Any], s
         try:
             # Return exactly 0.5 if input is None/NaN
             if ml is None: return 0.5
+            if isinstance(ml, str) and ml.strip().lower() in ['none', 'nan', 'null', '']: return 0.5
 
             m = float(ml)
             if pd.isna(m) or m == 0: return 0.5
