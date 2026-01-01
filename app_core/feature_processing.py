@@ -746,21 +746,29 @@ def enrich_with_vertex_features(df: pd.DataFrame, api_clients: Dict[str, Any], s
 
     # 5. Compute Differentials (Vectorized)
     # Neutralize massive differentials if either side is 0.0 (missing stats)
-    def safe_diff(series1, series2):
+    def safe_diff(series1, series2, default_val=None):
         # Convert to numeric to ensure comparison works
-        s1 = pd.to_numeric(series1, errors='coerce').fillna(0.0)
-        s2 = pd.to_numeric(series2, errors='coerce').fillna(0.0)
+        s1 = pd.to_numeric(pd.Series(series1), errors='coerce').fillna(0.0)
+        s2 = pd.to_numeric(pd.Series(series2), errors='coerce').fillna(0.0)
+
         # If either is 0.0 (or very close), diff is 0.0
         mask = (s1.abs() < 1e-6) | (s2.abs() < 1e-6)
+
+        if default_val is not None:
+             # Check if either team is at the default stats level
+             # Using small epsilon for float comparison
+             is_default = ((s1 - default_val).abs() < 1e-6) | ((s2 - default_val).abs() < 1e-6)
+             mask = mask | is_default
+
         diff = s1 - s2
         # Neutralize massive differentials if either team is missing stats (0.0)
         diff[mask] = 0.0
         return diff
 
-    features_data['feature_diff_win_pct'] = safe_diff(features_data['feature_home_win_pct'], features_data['feature_away_win_pct'])
-    features_data['feature_diff_ppg'] = safe_diff(features_data['feature_home_ppg'], features_data['feature_away_ppg'])
-    features_data['feature_diff_oppg'] = safe_diff(features_data['feature_home_oppg'], features_data['feature_away_oppg'])
-    features_data['feature_diff_last5'] = safe_diff(features_data['feature_home_last5_win_pct'], features_data['feature_away_last5_win_pct'])
+    features_data['feature_diff_win_pct'] = safe_diff(features_data['feature_home_win_pct'], features_data['feature_away_win_pct'], default_val=defaults['win_pct'])
+    features_data['feature_diff_ppg'] = safe_diff(features_data['feature_home_ppg'], features_data['feature_away_ppg'], default_val=defaults['ppg'])
+    features_data['feature_diff_oppg'] = safe_diff(features_data['feature_home_oppg'], features_data['feature_away_oppg'], default_val=defaults['oppg'])
+    features_data['feature_diff_last5'] = safe_diff(features_data['feature_home_last5_win_pct'], features_data['feature_away_last5_win_pct'], default_val=defaults['last5_win_pct'])
     features_data['feature_diff_streak'] = features_data['feature_home_streak'] - features_data['feature_away_streak'] # Streak can be 0 validly
     
     # 6. Map Remaining Features (Existing) using safe_numeric_fill
