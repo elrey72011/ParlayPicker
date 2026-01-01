@@ -271,7 +271,7 @@ def predict_win_probabilities(df, feature_cols=None, model_path=None):
             except Exception as load_err:
                 # Disable local model and proceed (do not raise - silenced for fallback)
                 USE_LOCAL_MODEL = False
-                logger.warning(f"Local XGBoost model load failed: {load_err}. Disabling USE_LOCAL_MODEL and proceeding to fallback.")
+                # logger.warning(f"Local XGBoost model load failed: {load_err}. Disabling USE_LOCAL_MODEL and proceeding to fallback.")
 
         # Fallback: Vertex AI
         if is_vertex_prediction_configured():
@@ -297,8 +297,10 @@ def predict_win_probabilities(df, feature_cols=None, model_path=None):
             results = []
             for p in response.predictions:
                 if isinstance(p, dict):
-                    # Extract Home Win Prob (Usually index 1 in 'scores')
-                    val = p.get("scores", [0.5, 0.5])[1] if "scores" in p else p.get("value", 0.5)
+                    # Try 'scores' index 1, then 'confidences' index 1, then 'value'
+                    val = p.get("scores", [0.5, 0.5])[1] if "scores" in p else \
+                          p.get("confidences", [0.5, 0.5])[1] if "confidences" in p else \
+                          p.get("value", 0.5)
                     results.append(val)
                 else:
                     results.append(p)
