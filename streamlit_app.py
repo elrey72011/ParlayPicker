@@ -5398,6 +5398,19 @@ with tab_master:
         # --- CLEANED MASTER ANALYSIS LOOP ---
         # --- FIX: Define variables at the start of the loop ---
         for idx, g in enumerate(games):
+            # INITIALIZATION BLOCK
+            total_pick_side = None
+            total_line = None
+            total_pick_odds = None
+            spread_engine_used = "missing"
+            total_engine_used = "missing"
+            spread_prob_final = 0.5
+            total_prob_final = 0.5
+            spread_prob_market = 0.5
+            total_prob_market = 0.5
+            total_pick = None
+            spread_pick = None
+
             # --- LOOP INITIALIZATION (Prevent NameError) ---
             # Reset all loop variables to defaults before processing each game
             spread_engine_used = "missing"
