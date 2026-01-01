@@ -5398,7 +5398,6 @@ with tab_master:
         # --- CLEANED MASTER ANALYSIS LOOP ---
         # --- FIX: Define variables at the start of the loop ---
         for idx, g in enumerate(games):
-            # --- Initialization of Loop Variables to Prevent NameError ---
             # INITIALIZATION BLOCK
             total_pick_side = None
             total_line = None
@@ -8112,6 +8111,8 @@ with tab_master:
             else "N/A",
             axis=1,
         )
+        df_master_view_display = df_master_view_display.copy()
+
         def _market_badge(r):
             badges_local = []
             if (pd.notnull(r.get("spread_min")) and pd.notnull(r.get("spread_max")) and abs((r.get("spread_max") or 0) - (r.get("spread_min") or 0)) >= 2):
@@ -8573,6 +8574,7 @@ with tab_shotgun:
             valid_cols = [c for c in cols_to_numeric if c in df_shotgun.columns]
             if valid_cols:
                 df_shotgun[valid_cols] = df_shotgun[valid_cols].apply(pd.to_numeric, errors='coerce')
+                df_shotgun = df_shotgun.copy()
 
         # Ensure all ROI metrics are calculated
         df_shotgun = add_spread_total_confidence(df_shotgun)
