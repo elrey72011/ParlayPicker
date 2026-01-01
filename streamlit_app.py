@@ -3600,15 +3600,10 @@ def _build_vertex_feature_row(game: Dict[str, Any], sentiment_diff: Optional[flo
     # User Request: Ensure all mandatory Vertex features are present and defaulted to 0.0
     for col in VERTEX_FEATURE_COLUMNS:
         if col not in row:
-            # Check if it exists in the raw game dict (e.g. from upstream enrichment)
             val = game.get(col)
-            if val is not None:
-                row[col] = safe_float(val)
-            else:
-                if "prob" in col.lower() or "win_pct" in col.lower():
-                    row[col] = 0.5
-                else:
-                    row[col] = 0.0
+            # PROB keys must default to 0.5, STATS to 0.0
+            default_val = 0.5 if "prob" in col else 0.0
+            row[col] = safe_float(val) if val is not None else default_val
 
     return pd.DataFrame([row])
 
@@ -5437,14 +5432,19 @@ with tab_master:
         # --- CLEANED MASTER ANALYSIS LOOP ---
         # --- FIX: Define variables at the start of the loop ---
         for idx, g in enumerate(games):
+            g = g.copy()
             # RESET ALL TRACE VARIABLES
             total_pick_side = None
             total_line = None
             total_pick_odds = None
-            spread_engine_used = "missing"
-            total_engine_used = "missing"
+            spread_engine_used = "market_only"
+            total_engine_used = "market_only"
+            kalshi_prob_spread = None
             spread_prob_final = 0.5
             total_prob_final = 0.5
+            spread_prob_alt_final = 0.5
+            total_alt_prob_final = 0.5
+            total_prob_market = 0.5
 
             # Additional resets to prevent NameError in fallback_row
             spread_pick_label = None
@@ -7644,7 +7644,7 @@ with tab_master:
         # 1. Create the base Master DataFrame from your processed rows
         # User Action: Use from_records and copy to prevent fragmentation
         master_df = pd.DataFrame.from_records(rows_out)
-        master_df = master_df.copy()
+        master_df = master_df.loc[:, ~master_df.columns.duplicated()].copy()
 
         # 2. Add 'League' column if missing (required for enrichment lookup)
         if 'League' not in master_df.columns:
@@ -8818,7 +8818,7 @@ with tab_shotgun:
         # Create a small DataFrame for the new column to concat
         new_metrics = pd.DataFrame({'active_edge': active_edge_series}, index=df_shotgun.index)
         df_shotgun = pd.concat([df_shotgun, new_metrics], axis=1)
-        df_shotgun = df_shotgun.copy()
+        df_shotgun = df_shotgun.loc[:, ~df_shotgun.columns.duplicated()].copy()
 
         # Filter logic
         # 1. Tight Markets
