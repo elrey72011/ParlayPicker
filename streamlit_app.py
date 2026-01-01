@@ -3598,7 +3598,13 @@ def _build_vertex_feature_row(game: Dict[str, Any], sentiment_diff: Optional[flo
         if col not in row:
             # Check if it exists in the raw game dict (e.g. from upstream enrichment)
             val = game.get(col)
-            row[col] = safe_float(val) if val is not None else 0.0
+            if val is not None:
+                row[col] = safe_float(val)
+            else:
+                if "prob" in col.lower() or "win_pct" in col.lower():
+                    row[col] = 0.5
+                else:
+                    row[col] = 0.0
 
     return pd.DataFrame([row])
 
@@ -4831,6 +4837,22 @@ def load_games(selected_leagues: Union[str, List[str]]) -> List[Dict[str, Any]]:
         commence_stats_total["failed"] += commence_stats.get("failed", 0)
 
         for g in with_times:
+            # INITIALIZATION BLOCK
+            total_pick_side = None
+            total_line = None
+            total_pick_odds = None
+            spread_engine_used = "missing"
+            total_engine_used = "missing"
+            spread_prob_final = 0.5
+            total_prob_final = 0.5
+            spread_prob_market = 0.5
+            total_prob_market = 0.5
+            kalshi_prob_spread = 0.5
+            kalshi_prob_total = 0.5
+            vertex_spread_prob = 0.5
+            vertex_total_prob = 0.5
+            total_pick = None
+            spread_pick = None
             try:
                 best = extract_best_market(g)
                 warnings = list(best.pop("warnings", []))
@@ -5400,6 +5422,14 @@ with tab_master:
         for idx, g in enumerate(games):
             # INITIALIZATION BLOCK
             total_pick_side = None
+            total_line = None
+            total_pick_odds = None
+            spread_engine_used = "missing"
+            total_engine_used = "missing"
+            spread_prob_final = 0.5
+            total_prob_final = 0.5
+            spread_prob_market = 0.5
+            total_prob_market = 0.5
             total_line = None
             total_pick_odds = None
             spread_engine_used = "missing"

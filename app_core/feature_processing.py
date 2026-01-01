@@ -784,9 +784,11 @@ def enrich_with_vertex_features(df: pd.DataFrame, api_clients: Dict[str, Any], s
     # --- NEW: Robust ml_to_prob ---
     def ml_to_prob(ml):
         try:
-            # Return exactly 0.5 if input is None/NaN
+            # Return exactly 0.5 if input is None/NaN or 0
             if ml is None: return 0.5
             if isinstance(ml, str) and ml.strip().lower() in ['none', 'nan', 'null', '']: return 0.5
+            # Explicit 0 check for integer inputs
+            if ml == 0: return 0.5
 
             m = float(ml)
             if pd.isna(m) or m == 0: return 0.5
