@@ -220,10 +220,14 @@ def is_vertex_prediction_configured() -> bool:
         logger.warning("Vertex prediction not configured: project_id is missing/None")
         return False
 
+    # FIX 3: Update is_vertex_prediction_configured to return True if DEFAULT_ENDPOINT_ID is present, even if the secret is missing.
     if not endpoint_id:
         # Fallback to default if endpoint_id is missing but default exists
         if DEFAULT_ENDPOINT_ID:
             endpoint_id = DEFAULT_ENDPOINT_ID
+            # Ensure we can get the config even without explicit secrets
+            # This logic is redundant because _get_vertex_config() already does this fallback
+            # but we explicitly check DEFAULT_ENDPOINT_ID per user request.
         else:
             logger.warning("Vertex prediction not configured: endpoint_id is missing")
             return False
