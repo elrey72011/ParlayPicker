@@ -4,6 +4,7 @@ import os
 import re
 import tempfile
 import time
+import itertools
 import traceback
 from datetime import datetime, timedelta, timezone
 import statistics
@@ -4972,8 +4973,8 @@ render_pipeline_banner()
 # Tabs
 # -----------------
 
-tab_games, tab_master, tab_kalshi, tab_sentiment, tab_debug = st.tabs(
-    ["Games & Odds", "Master Analysis", "Kalshi", "Sentiment", "Debug"]
+tab_master, tab_shotgun, tab_games, tab_kalshi, tab_sentiment, tab_debug = st.tabs(
+    ["Master Analysis", "🚀 Shotgun Mode", "Games & Odds", "Kalshi", "Sentiment", "Debug"]
 )
 
 
@@ -8374,6 +8375,147 @@ with tab_master:
 
     elif not games:
         st.info("Load games from the sidebar, then run Master Analysis.")
+
+
+with tab_shotgun:
+    st.header("🚀 Shotgun Mode: High Value Parlays")
+    st.info("Filters for 'High Value Plays' (Tight market, Edge > 1%) and generates 2-leg parlays.")
+
+    if "master_df" in st.session_state and not st.session_state["master_df"].empty:
+        df_shotgun = st.session_state["master_df"].copy()
+
+        # Ensure numeric columns for edge calc
+        cols_to_numeric = ['final_probability', 'spread_implied_prob', 'total_implied_prob', 'spread_width', 'total_width']
+        for col in cols_to_numeric:
+            if col in df_shotgun.columns:
+                df_shotgun[col] = pd.to_numeric(df_shotgun[col], errors='coerce')
+
+        # Ensure all ROI metrics are calculated
+        df_shotgun = add_spread_total_confidence(df_shotgun)
+        df_shotgun = enrich_picks_with_roi_metrics(df_shotgun)
+
+        # Calculate active_edge if not present
+        if "active_edge" not in df_shotgun.columns:
+            def _get_edge(r):
+                m = str(r.get("Market", "")).lower()
+                if m == "spread":
+                    return r.get("spread_edge")
+                if m == "total":
+                    return r.get("total_edge")
+                # Fallback for ML or other
+                return r.get("edge_vs_odds") or r.get("AI_Edge")
+            df_shotgun["active_edge"] = df_shotgun.apply(_get_edge, axis=1)
+
+        # Filter logic
+        # 1. Tight Markets
+        # Ensure active_edge and spread_width are float
+        df_shotgun["active_edge"] = pd.to_numeric(df_shotgun["active_edge"], errors='coerce').fillna(0.0)
+        df_shotgun["spread_width"] = pd.to_numeric(df_shotgun["spread_width"], errors='coerce').fillna(99.0)
+
+        tight_mask = (df_shotgun["active_edge"] > 0.01) & (df_shotgun["spread_width"] <= 0.5)
+        candidates = df_shotgun[tight_mask].copy()
+
+        filter_mode = "Tight (Width <= 0.5)"
+
+        if len(candidates) < 2:
+            # Fallback
+            normal_mask = (df_shotgun["active_edge"] > 0.01) & (df_shotgun["spread_width"] <= 1.5)
+            candidates = df_shotgun[normal_mask].copy()
+            filter_mode = "Normal (Width <= 1.5)"
+
+        st.write(f"Filter Mode: **{filter_mode}** | Candidates found: {len(candidates)}")
+
+        if not candidates.empty:
+            # Tiered Display
+            col1, col2, col3 = st.columns(3)
+
+            with col1:
+                st.subheader("🎯 $3 Snipers")
+                # High Prob (>60%)
+                snipers = candidates[candidates["final_probability"] > 0.60].sort_values("final_probability", ascending=False).head(5)
+                if not snipers.empty:
+                    for _, row in snipers.iterrows():
+                        st.markdown(f"**{row.get('Pick')}** ({row.get('Market')})")
+                        st.caption(f"Prob: {row.get('final_probability'):.1%} | Edge: {row.get('active_edge'):.1%}")
+                else:
+                    st.write("No Snipers found.")
+
+            with col2:
+                st.subheader("📈 $2 Strategy")
+                # High EV (Edge)
+                strategy = candidates.sort_values("active_edge", ascending=False).head(5)
+                if not strategy.empty:
+                    for _, row in strategy.iterrows():
+                        st.markdown(f"**{row.get('Pick')}** ({row.get('Market')})")
+                        st.caption(f"Edge: {row.get('active_edge'):.1%} | Prob: {row.get('final_probability'):.1%}")
+                else:
+                    st.write("No Strategy plays found.")
+
+            with col3:
+                st.subheader("🎲 $1 Longshots")
+                # Top 10 by Edge
+                longshots = candidates.sort_values("active_edge", ascending=False).head(10)
+                if not longshots.empty:
+                    for _, row in longshots.iterrows():
+                        st.markdown(f"**{row.get('Pick')}** ({row.get('Market')})")
+                        st.caption(f"Edge: {row.get('active_edge'):.1%}")
+                else:
+                    st.write("No Longshots found.")
+
+            st.divider()
+            st.subheader("🔗 2-Leg Parlay Generator")
+
+            # Generate pairs
+            valid_parlays = []
+
+            # Convert to records for iteration
+            recs = candidates.to_dict('records')
+
+            # Use itertools combinations
+            for p1, p2 in itertools.combinations(recs, 2):
+                # Constraint: Different Home teams (approx for different games)
+                if p1.get('Home') == p2.get('Home'):
+                    continue
+
+                edge1 = p1.get('active_edge', 0)
+                edge2 = p2.get('active_edge', 0)
+                combined_edge = edge1 + edge2
+
+                # Combined Prob (assuming independence)
+                prob1 = p1.get('final_probability', 0)
+                prob2 = p2.get('final_probability', 0)
+                combined_prob = prob1 * prob2
+
+                valid_parlays.append({
+                    "Leg 1": f"{p1.get('Pick')} ({p1.get('Market')})",
+                    "Leg 2": f"{p2.get('Pick')} ({p2.get('Market')})",
+                    "Combined Edge": combined_edge,
+                    "Combined Prob": combined_prob,
+                    "Leg 1 Edge": edge1,
+                    "Leg 2 Edge": edge2
+                })
+
+            # Sort by Combined Edge
+            valid_parlays.sort(key=lambda x: x['Combined Edge'], reverse=True)
+
+            if valid_parlays:
+                st.write(f"Top 10 generated parlays (out of {len(valid_parlays)})")
+                parlay_df = pd.DataFrame(valid_parlays).head(10)
+                # Format
+                parlay_df['Combined Edge'] = parlay_df['Combined Edge'].map('{:.1%}'.format)
+                parlay_df['Combined Prob'] = parlay_df['Combined Prob'].map('{:.1%}'.format)
+                parlay_df['Leg 1 Edge'] = parlay_df['Leg 1 Edge'].map('{:.1%}'.format)
+                parlay_df['Leg 2 Edge'] = parlay_df['Leg 2 Edge'].map('{:.1%}'.format)
+
+                st.table(parlay_df)
+            else:
+                st.warning("No valid parlay combinations found (check independence constraints).")
+
+        else:
+            st.warning("No candidates found matching the filters.")
+
+    else:
+        st.info("Run Master Analysis first to unlock Shotgun Mode.")
 
 
 with tab_kalshi:
