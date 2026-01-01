@@ -5403,6 +5403,10 @@ with tab_master:
             total_pick_side = None
             total_line = None
             total_pick_odds = None
+            spread_pick_label = ""
+            spread_alt_label = ""
+            total_pick_label = ""
+            total_alt_label = ""
             spread_engine_used = "missing"
             total_engine_used = "missing"
             spread_prob_final = 0.5
@@ -5410,6 +5414,9 @@ with tab_master:
             spread_prob_market = 0.5
             total_prob_market = 0.5
 
+            # --- 1. SETUP & UTILS ---
+
+            # Unpack key variables for easy access
             spread_pick = None
             spread_line = None
             spread_pick_odds = None
@@ -5417,10 +5424,6 @@ with tab_master:
             overall_engine_used = "missing"
             vertex_spread_prob = None
             vertex_total_prob = None
-            spread_pick_label = None
-            spread_alt_label = None
-            total_pick_label = None
-            total_alt_label = None
             spread_prob_pick_final = None
             spread_prob_alt_final = None
             total_prob_pick_final = None
