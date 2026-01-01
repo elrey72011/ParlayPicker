@@ -4386,50 +4386,44 @@ def main():
         def extract_prob_and_line(
             market: Dict[str, Any], market_type: str
         ) -> Tuple[Optional[float], Optional[float]]:
-            # Reciprocal Probability Logic (Orderbook-based)
-            # Formula:
-            # Best YES Bid: The highest (last) element in the yes array.
-            # Implied YES Ask: 100 - (Highest price in the NO array).
-            # Mid-Price Probability: (Best YES Bid + Implied YES Ask) / 200.
+            # Reciprocal Probability Logic (Fixed per user instruction)
+            # YES Ask = 100 - Best NO Bid
+            # Mid-Price = (Best YES Bid + (100 - Best NO Bid)) / 200
 
             yes_levels = market.get("yes", [])
             no_levels = market.get("no", [])
-
             prob = None
 
-            # Check if yes/no are lists (orderbook format)
+            # 1. Try Orderbook (Reciprocal)
             if isinstance(yes_levels, list) and isinstance(no_levels, list) and yes_levels and no_levels:
                 try:
-                    # Assuming levels are [price, qty] sorted by price ascending
-                    # Best YES Bid = Last element of YES array
-                    best_yes_bid_level = yes_levels[-1]
-                    best_yes_bid = float(best_yes_bid_level[0])
+                    # Best YES Bid is the last element (highest bid)
+                    best_yes_bid = float(yes_levels[-1][0])
+                    # Best NO Bid is the last element (highest bid)
+                    best_no_bid = float(no_levels[-1][0])
 
-                    # Best NO Bid = Last element of NO array
-                    best_no_bid_level = no_levels[-1]
-                    best_no_bid = float(best_no_bid_level[0])
-
-                    # Implied YES Ask
+                    # Reciprocal Formula
                     implied_yes_ask = 100.0 - best_no_bid
-
-                    # Mid-Price
-                    prob = (best_yes_bid + implied_yes_ask) / 200.0
-                    prob = clamp(prob, 0.0, 1.0)
+                    mid_price = (best_yes_bid + implied_yes_ask) / 200.0
+                    prob = clamp(mid_price, 0.0, 1.0)
                 except Exception:
                     prob = None
 
-            # Fallback to top-level keys if orderbook logic fails or isn't present
+            # 2. Fallback to top-level bid/ask if orderbook failed
             if prob is None:
                 yes_bid = safe_float(market.get("yes_bid"))
                 no_bid = safe_float(market.get("no_bid"))
+                # Use reciprocal logic on top-level bids if available
                 if yes_bid is not None and no_bid is not None:
                     implied_yes_ask = 100.0 - float(no_bid)
-                    prob = (float(yes_bid) + implied_yes_ask) / 200.0
-                    prob = clamp(prob, 0.0, 1.0)
+                    mid_price = (float(yes_bid) + implied_yes_ask) / 200.0
+                    prob = clamp(mid_price, 0.0, 1.0)
 
+            # 3. Last resort: last_price
             if prob is None:
                 last_price = safe_float(market.get("last_price"))
-                prob = clamp(last_price / 100.0, 0.0, 1.0) if last_price is not None else None
+                if last_price is not None:
+                    prob = clamp(last_price / 100.0, 0.0, 1.0)
 
             line = market.get("floor_strike") or market.get("cap_strike")
             if line is not None:
@@ -4566,17 +4560,23 @@ def main():
             ):
                 continue
             tokens = market_tokens(m)
-            date_match = bool(allowed_date_tokens and any(tok in ticker_upper for tok in allowed_date_tokens))
+            # Loosened Gating: Trust code match even if date is off
             home_hit = bool(home_tokens.intersection(tokens))
             away_hit = bool(away_tokens.intersection(tokens))
             code_home_hit = home_code_candidates and any(code in ticker_upper for code in home_code_candidates)
             code_away_hit = away_code_candidates and any(code in ticker_upper for code in away_code_candidates)
             code_hit = bool(code_home_hit and code_away_hit)
+
+            # Force date_match to True if we have a solid code hit (User Request)
+            date_match_raw = bool(allowed_date_tokens and any(tok in ticker_upper for tok in allowed_date_tokens))
+            date_match = date_match_raw or code_hit
+
             team_hit = bool(home_hit and away_hit)
             if not (team_hit or code_hit):
                 continue
             candidate_count += 1
-            score = (2 if team_hit else 0) + (2 if code_hit else 0) + (1 if date_match else 0)
+            # Boost score for code_hit to ensure it wins
+            score = (2 if team_hit else 0) + (5 if code_hit else 0) + (1 if date_match else 0)
             debug_row = {
                 "title": m.get("title"),
                 "ticker": m.get("event_ticker") or m.get("ticker"),
@@ -5737,34 +5737,51 @@ def main():
                         or g.get("commence_time_utc")
                     )
 
-                    filtered_markets = filter_kalshi_game_markets(
-                        league_markets,
-                        commence_for_match,
-                        league_name,
-                        home,
-                        away,
-                        home_code,
-                        away_code,
-                        prefix_overrides=(st.session_state.get("kalshi_game_prefix_map") or {}).get(league_name.upper())
-                    )
-                    deduped = {m.get("event_ticker") or m.get("ticker"): m for m in filtered_markets}
-                    filtered_markets = list(deduped.values())
-                    filtered_counts.append(len(filtered_markets))
+                    # --- CIRCUIT BREAKER: KALSHI ---
+                    # Wrap Kalshi matching in a try/except to prevent pipeline crash
+                    try:
+                        filtered_markets = filter_kalshi_game_markets(
+                            league_markets,
+                            commence_for_match,
+                            league_name,
+                            home,
+                            away,
+                            home_code,
+                            away_code,
+                            prefix_overrides=(st.session_state.get("kalshi_game_prefix_map") or {}).get(league_name.upper())
+                        )
+                        deduped = {m.get("event_ticker") or m.get("ticker"): m for m in filtered_markets}
+                        filtered_markets = list(deduped.values())
+                        filtered_counts.append(len(filtered_markets))
 
-                    winner_reason_override = None
-                    if (idx == 0 and first_game_full_search and not first_game_full_search.get("found_any_winner_market_for_game")):
-                        winner_reason_override = "winner_not_in_fetched_markets"
+                        winner_reason_override = None
+                        if (idx == 0 and first_game_full_search and not first_game_full_search.get("found_any_winner_market_for_game")):
+                            winner_reason_override = "winner_not_in_fetched_markets"
 
-                    kalshi_matches, candidate_debug = match_kalshi_market(
-                        g, filtered_markets, winner_reason_override
-                    )
-                    candidate_debug["candidate_count"] = len(filtered_markets)
-                    per_game_kalshi_debug.append(candidate_debug)
-                    kalshi_match_results.append({"game": g, "matches": kalshi_matches, "candidate_debug": candidate_debug})
+                        kalshi_matches, candidate_debug = match_kalshi_market(
+                            g, filtered_markets, winner_reason_override
+                        )
+                        candidate_debug["candidate_count"] = len(filtered_markets)
+                        per_game_kalshi_debug.append(candidate_debug)
+                        kalshi_match_results.append({"game": g, "matches": kalshi_matches, "candidate_debug": candidate_debug})
 
-                    kalshi_winner = kalshi_matches.get("winner", {})
-                    kalshi_spread = kalshi_matches.get("spread", {})
-                    kalshi_total = kalshi_matches.get("total", {})
+                        kalshi_winner = kalshi_matches.get("winner", {})
+                        kalshi_spread = kalshi_matches.get("spread", {})
+                        kalshi_total = kalshi_matches.get("total", {})
+                    except Exception as e:
+                        # Log error but continue pipeline
+                        error_msg = f"Kalshi Match Error ({home} vs {away}): {str(e)}"
+                        print(f"ERROR: {error_msg}")
+                        if "kalshi_errors" not in st.session_state:
+                            st.session_state["kalshi_errors"] = []
+                        st.session_state["kalshi_errors"].append(error_msg)
+
+                        # Fallback to empty/failed state for this game
+                        kalshi_matches = {}
+                        kalshi_winner = {}
+                        kalshi_spread = {}
+                        kalshi_total = {}
+                        # Do not increment counts
 
                     # Store Kalshi matched status and probabilities in game_row
                     game_row["kalshi_matched"] = kalshi_winner.get("kalshi_matched") or kalshi_spread.get("kalshi_matched") or kalshi_total.get("kalshi_matched")

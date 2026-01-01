@@ -143,15 +143,15 @@ KALSHI_TEAM_ABBREVIATIONS: Dict[str, List[str]] = {
 }
 
 NBA_TEAM_CODE_MAP: Dict[str, str] = {
-    "ATLANTA HAWKS": "ATL", "BOSTON CELTICS": "BOS", "BROOKLYN NETS": "BKN",
+    "ATLANTA HAWKS": "ATL", "BOSTON CELTICS": "BOS", "BROOKLYN NETS": "BKN", "BROOKLYN": "BKN",
     "CHARLOTTE HORNETS": "CHA", "CHICAGO BULLS": "CHI", "CLEVELAND CAVALIERS": "CLE",
     "DALLAS MAVERICKS": "DAL", "DENVER NUGGETS": "DEN", "DETROIT PISTONS": "DET",
     "GOLDEN STATE WARRIORS": "GSW", "HOUSTON ROCKETS": "HOU", "INDIANA PACERS": "IND",
     "LOS ANGELES CLIPPERS": "LAC", "LA CLIPPERS": "LAC", "LOS ANGELES LAKERS": "LAL",
     "LA LAKERS": "LAL", "MEMPHIS GRIZZLIES": "MEM", "MIAMI HEAT": "MIA",
     "MILWAUKEE BUCKS": "MIL", "MINNESOTA TIMBERWOLVES": "MIN", "NEW ORLEANS PELICANS": "NOP",
-    "NEW YORK KNICKS": "NYK", "OKLAHOMA CITY THUNDER": "OKC", "ORLANDO MAGIC": "ORL",
-    "PHILADELPHIA 76ERS": "PHI", "PHOENIX SUNS": "PHX", "PORTLAND TRAIL BLAZERS": "POR",
+    "NEW YORK KNICKS": "NYK", "OKLAHOMA CITY THUNDER": "OKC", "OKLAHOMA CITY": "OKC", "ORLANDO MAGIC": "ORL",
+    "PHILADELPHIA 76ERS": "PHI", "PHOENIX SUNS": "PHX", "PHOENIX": "PHX", "PORTLAND TRAIL BLAZERS": "POR",
     "SACRAMENTO KINGS": "SAC", "SAN ANTONIO SPURS": "SAS", "TORONTO RAPTORS": "TOR",
     "UTAH JAZZ": "UTA", "WASHINGTON WIZARDS": "WAS"
 }
@@ -223,7 +223,7 @@ def team_code_for_league(league: str, team_name: str) -> str:
     """
 
     if not team_name:
-        return ""
+        return "UNK"
 
     league_u = (league or "").upper()
     team_upper = str(team_name).strip().upper()
@@ -247,6 +247,7 @@ def team_code_for_league(league: str, team_name: str) -> str:
         if token_clean:
             return token_clean[:3]
 
+    # Fallback to "UNK" if empty to ensure ticker generation never fails
     return (team_upper[:3] or "UNK").upper()
 def price_to_prob(price: Any) -> Optional[float]:
     if price is None: return None
