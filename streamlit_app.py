@@ -5397,20 +5397,22 @@ with tab_master:
         # --- FIX: Define variables at the start of the loop ---
         for idx, g in enumerate(games):
             # --- Initialization of Loop Variables to Prevent NameError ---
+            # INITIALIZATION BLOCK
             total_pick_side = None
             total_line = None
             total_pick_odds = None
+            spread_engine_used = "missing"
+            total_engine_used = "missing"
+            spread_prob_final = 0.5
+            total_prob_final = 0.5
+            spread_prob_market = 0.5
+            total_prob_market = 0.5
+
             spread_pick = None
             spread_line = None
             spread_pick_odds = None
             total_pick = None
-            spread_engine_used = "missing"
-            total_engine_used = "missing"
             overall_engine_used = "missing"
-            spread_prob_final = 0.5
-            total_prob_final = 0.5
-            spread_prob_market = None
-            total_prob_market = None
             vertex_spread_prob = None
             vertex_total_prob = None
             spread_pick_label = None
@@ -7920,9 +7922,30 @@ with tab_master:
                 else:
                     row["gemini_flags_short"] = "gemini_error"
             return row
-        df = df.apply(_apply_gemini, axis=1)
+        # User Request 3: Optimized Column Insertion (Gemini)
+        # Avoid apply() which constructs a new DataFrame for every row.
+        # Instead, iterate, collect new metrics, and concat once.
+        gemini_results = []
+        for idx, row in df.iterrows():
+            new_row = _apply_gemini(row)
+            # We only want the new columns to avoid duplication issues
+            # Identify columns that were added or modified
+            # Since _apply_gemini returns a full row, we can just use the result directly
+            # IF we rebuild the dataframe from the list.
+            gemini_results.append(new_row)
+
+        if gemini_results:
+            # Rebuild dataframe preserving original index
+            df = pd.DataFrame(gemini_results, index=df.index)
+            # Ensure index alignment if needed, though from_records/list usually resets index
+            # or preserves if passed correctly. Iterrows returns index.
+            # But the simplest is to rebuild df from the full row objects returned by _apply_gemini.
+
         if "_gemini_rank_metric" in df.columns:
             df = df.drop(columns=["_gemini_rank_metric"])
+
+        # Reset memory layout
+        df = df.copy()
         # Ensure Gemini columns are never null before export
         for col, default in [
             ("gemini_alignment", "NEUTRAL"),
@@ -8553,9 +8576,16 @@ with tab_shotgun:
         # Calculate active_edge = final_probability - Implied_Prob (Moved inside batch logic if possible, else done here cleanly)
         # Note: enrich_picks_with_roi_metrics already calculates spread_edge/total_edge but maybe not generic active_edge for ML?
         # We ensure it's calculated.
-        df_shotgun["active_edge"] = (
+        # User Request 3: Optimized Column Insertion (Shotgun)
+        # Use pd.concat for new metrics
+        active_edge_series = (
             df_shotgun["final_probability"].fillna(0.0) - pd.to_numeric(df_shotgun.get("Implied_Prob"), errors='coerce').fillna(0.0)
         )
+
+        # Create a small DataFrame for the new column to concat
+        new_metrics = pd.DataFrame({'active_edge': active_edge_series}, index=df_shotgun.index)
+        df_shotgun = pd.concat([df_shotgun, new_metrics], axis=1)
+        df_shotgun = df_shotgun.copy()
 
         # Filter logic
         # 1. Tight Markets

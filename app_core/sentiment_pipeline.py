@@ -298,7 +298,9 @@ def fetch_team_news(news_api_key: str, team: str, league: str, league_query: Opt
             articles = data.get("articles", []) if isinstance(data, dict) else []
             total_results = data.get("totalResults") if isinstance(data, dict) else None
             rate_limited = status == 429
-            auth_error = status in {401} # Removed 403 from auth_error set
+            # User Request 4: Robust NewsAPI/Reddit Transition
+            # Catch 403 and 401 errors explicitly.
+            auth_error = status in {401, 403}
             retry_after_hdr = None
             try:
                 retry_after_hdr = resp.headers.get("Retry-After")
@@ -701,7 +703,8 @@ def build_team_sentiment_map(
 
     missing_teams = [t for t, v in sentiment_map.items() if v is None]
     news_valid_count = len([v for v in sentiment_map.values() if v is not None])
-    need_reddit = debug.get("rate_limited") or news_valid_count == 0 or bool(missing_teams)
+    # User Request 4: Ensure auth_error also triggers need_reddit
+    need_reddit = debug.get("rate_limited") or debug.get("auth_error") or news_valid_count == 0 or bool(missing_teams)
     if need_reddit and missing_teams:
         reddit_results = fetch_reddit_sentiment_map(missing_teams, league)
         for team in missing_teams:
