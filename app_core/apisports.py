@@ -125,7 +125,7 @@ class _APISportsBaseClient:
 
     @classmethod
     def _season_start_year(cls, target: Optional[date] = None) -> int:
-        target = target or datetime.utcnow().date()
+        target = target or datetime.now(timezone.utc).date()
         if target.month >= cls.SEASON_CUTOFF_MONTH:
             return target.year
         return target.year - 1

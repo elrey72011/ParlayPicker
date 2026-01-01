@@ -1475,7 +1475,7 @@ def compute_team_sentiment_map(news_api_key: Optional[str], games: List[Dict[str
         elif not cached:
             _enforce_sentiment_throttle()
             debug["requests_attempted"] = debug.get("requests_attempted", 0) + 1
-            to_date = datetime.utcnow().date()
+            to_date = datetime.now(timezone.utc).date()
             from_date = to_date - timedelta(days=3)
             url = "https://newsapi.org/v2/everything"
             # Attempt a combined query that includes the team and league context to reduce per-team calls
@@ -7334,9 +7334,11 @@ with tab_master:
                 from app_core.vertex_ai_endpoint import VERTEX_FEATURE_COLUMNS
 
                 # User Action: Ensure columns exist before filtering
-                for col in VERTEX_FEATURE_COLUMNS:
-                    if col not in master_df.columns:
-                        master_df[col] = 0.0
+                # Use bulk operation to avoid PerformanceWarning for fragmentation
+                missing_cols = [col for col in VERTEX_FEATURE_COLUMNS if col not in master_df.columns]
+                if missing_cols:
+                    zeros_df = pd.DataFrame(0.0, index=master_df.index, columns=missing_cols)
+                    master_df = pd.concat([master_df, zeros_df], axis=1)
 
                 inference_df = master_df[VERTEX_FEATURE_COLUMNS].copy()
 
@@ -7655,7 +7657,9 @@ with tab_master:
         if "reddit_used" in df.columns:
             df["reddit_used"] = df["reddit_used"].fillna(False)
         df = add_spread_total_confidence(df)
+        df = df.copy()
         df = enrich_picks_with_roi_metrics(df)
+        df = df.copy()
         use_gemini_explanations = st.session_state.get("use_gemini_explanations", True)
         gemini_row_limit = int(st.session_state.get("gemini_row_limit", 50) or 50)
         gemini_full_run = bool(st.session_state.get("gemini_full_run", False))
@@ -8426,19 +8430,23 @@ with tab_shotgun:
 
         # Ensure numeric columns for edge calc
         cols_to_numeric = ['final_probability', 'spread_implied_prob', 'total_implied_prob', 'spread_width', 'total_width']
-        for col in cols_to_numeric:
-            if col in df_shotgun.columns:
-                df_shotgun[col] = pd.to_numeric(df_shotgun[col], errors='coerce')
+        # Bulk convert using apply for efficiency, ensuring cols exist
+        if not df_shotgun.empty:
+            valid_cols = [c for c in cols_to_numeric if c in df_shotgun.columns]
+            if valid_cols:
+                df_shotgun[valid_cols] = df_shotgun[valid_cols].apply(pd.to_numeric, errors='coerce')
 
         # Ensure all ROI metrics are calculated
         df_shotgun = add_spread_total_confidence(df_shotgun)
+        df_shotgun = df_shotgun.copy()
         df_shotgun = enrich_picks_with_roi_metrics(df_shotgun)
+        df_shotgun = df_shotgun.copy()
 
-        # Calculate active_edge = final_probability - Implied_Prob
-        # This overrides previous "edge_vs_odds" or spread_edge/total_edge mixed logic
+        # Calculate active_edge = final_probability - Implied_Prob (Moved inside batch logic if possible, else done here cleanly)
+        # Note: enrich_picks_with_roi_metrics already calculates spread_edge/total_edge but maybe not generic active_edge for ML?
+        # We ensure it's calculated.
         df_shotgun["active_edge"] = (
-            pd.to_numeric(df_shotgun.get("final_probability"), errors='coerce').fillna(0.0)
-            - pd.to_numeric(df_shotgun.get("Implied_Prob"), errors='coerce').fillna(0.0)
+            df_shotgun["final_probability"].fillna(0.0) - pd.to_numeric(df_shotgun.get("Implied_Prob"), errors='coerce').fillna(0.0)
         )
 
         # Filter logic

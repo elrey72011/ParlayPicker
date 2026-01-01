@@ -187,7 +187,7 @@ def fetch_team_newsapi_cached(
         date_bucket = date_bucket or datetime.now(timezone.utc).date().isoformat()
         league_q = league_query or league_label(league)
         q_text = query_override or _newsapi_query(team, league, league_q)
-        to_date = datetime.utcnow().date()
+        to_date = datetime.now(timezone.utc).date()
         from_date = to_date - timedelta(days=3)
         url = "https://newsapi.org/v2/everything"
         params = {
@@ -229,8 +229,12 @@ def fetch_team_news(news_api_key: str, team: str, league: str, league_query: Opt
     # User Request: Ensure we check general secrets if key is missing
     if not news_api_key:
         try:
-            if st and hasattr(st, "secrets") and "general" in st.secrets:
-                news_api_key = st.secrets["general"].get("news_api_key")
+            if st and hasattr(st, "secrets"):
+                # Check top-level secret first
+                news_api_key = st.secrets.get("news_api_key")
+                # Then check general section if still missing
+                if not news_api_key and "general" in st.secrets:
+                    news_api_key = st.secrets["general"].get("news_api_key")
         except Exception:
             pass
 
@@ -246,7 +250,7 @@ def fetch_team_news(news_api_key: str, team: str, league: str, league_query: Opt
             "auth_error": False,
         }
     league_query = league_query or league_label(league)
-    to_date = datetime.utcnow().date()
+    to_date = datetime.now(timezone.utc).date()
     from_date = to_date - timedelta(days=3)
     url = "https://newsapi.org/v2/everything"
     q = _newsapi_query(team, league, league_query)
@@ -269,6 +273,9 @@ def fetch_team_news(news_api_key: str, team: str, league: str, league_query: Opt
 
             # Special Handling for 403/401: Return neutral instead of error to trigger fallback
             if status in [403, 401]:
+                # User Action: Explicitly log this to confirm fallback is triggering
+                if st:
+                    st.warning(f"NewsAPI Auth Error ({status}) for {team}. Triggering Reddit Fallback.")
                 return [], {
                     "error": "auth_error_fallback", # Signal fallback
                     "status": status,
