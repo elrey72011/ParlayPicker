@@ -2687,18 +2687,22 @@ def kalshi_health_check(selected_league: str = "NBA") -> Dict[str, Any]:
 
 def read_secret(name: str, default: Optional[str] = None) -> Optional[str]:
     """Read from st.secrets then env vars."""
-    ci_val = None
+    # 1. Check st.secrets top-level (case-insensitive)
     try:
-        ci_val = next((v for k, v in st.secrets.items() if str(k).lower() == str(name).lower()), None)
-        if isinstance(ci_val, str) and ci_val.strip():
-            return ci_val.strip()
-    except Exception:
-        ci_val = None
-    try:
-        if name in st.secrets:
-            return st.secrets[name]
+        for k, v in st.secrets.items():
+            if str(k).lower() == str(name).lower() and isinstance(v, str) and v.strip():
+                return v.strip()
     except Exception:
         pass
+
+    # 2. Check st.secrets["general"] (common pattern)
+    try:
+        if "general" in st.secrets and name in st.secrets["general"]:
+            return st.secrets["general"][name]
+    except Exception:
+        pass
+
+    # 3. Check os.environ
     return os.getenv(name, default)
 
 
@@ -4468,26 +4472,44 @@ def match_kalshi_market(
     def extract_prob_and_line(
         market: Dict[str, Any], market_type: str
     ) -> Tuple[Optional[float], Optional[float]]:
-        def _avg_price(fields: List[str]) -> Optional[float]:
-            vals = [safe_float(market.get(f)) for f in fields]
-            vals = [v for v in vals if v is not None]
-            if not vals:
-                return None
-            return sum(vals) / len(vals)
-
-        yes_avg = _avg_price(["yes_bid", "yes_ask"])
-        no_avg = _avg_price(["no_bid", "no_ask"])
-        prob = market_prob_from_prices(yes_avg, no_avg)
-        if prob is None:
-            last_price = safe_float(market.get("last_price"))
-            prob = clamp(last_price / 100.0, 0.0, 1.0) if last_price is not None else None
-        line = market.get("floor_strike") or market.get("cap_strike")
+        # 1. Line detection
+        line = safe_float(market.get("floor_strike"))
+        if line is None:
+            line = safe_float(market.get("cap_strike"))
         if line is not None:
             try:
                 line = float(line)
             except Exception:
                 line = None
-        return prob, line
+
+        # 2. Probability (Reciprocal Logic: Implied Ask = 100 - Opposite Bid)
+        yes_bid = safe_float(market.get("yes_bid"))
+        no_bid = safe_float(market.get("no_bid"))
+
+        prob = None
+
+        if yes_bid is not None and no_bid is not None:
+            # Implied Ask for YES = 100 - Bid for NO
+            # Midpoint = (YES_Bid + (100 - NO_Bid)) / 200
+            implied_yes_ask = 100.0 - no_bid
+            mid_cents = (yes_bid + implied_yes_ask) / 2.0
+            prob = mid_cents / 100.0
+
+        elif yes_bid is not None:
+            # Fallback if NO bid missing
+            prob = yes_bid / 100.0
+
+        elif no_bid is not None:
+            # Fallback if YES bid missing (Prob YES = 1 - Prob NO)
+            prob = 1.0 - (no_bid / 100.0)
+
+        # Final fallback to last_price if bids empty
+        if prob is None:
+            lp = safe_float(market.get("last_price"))
+            if lp is not None:
+                prob = lp / 100.0
+
+        return clamp(prob, 0.0, 1.0), line
 
     def winner_score(market: Dict[str, Any]) -> float:
         for key in ["liquidity", "volume", "open_interest", "last_price"]:
@@ -7281,7 +7303,9 @@ with tab_master:
                 master_stats["market_rows_out"] += 1
 
         # 1. Create the base Master DataFrame from your processed rows
-        master_df = pd.DataFrame(rows_out)
+        # User Action: Use from_records and copy to prevent fragmentation
+        master_df = pd.DataFrame.from_records(rows_out)
+        master_df = master_df.copy()
 
         # 2. Add 'League' column if missing (required for enrichment lookup)
         if 'League' not in master_df.columns:
@@ -7300,6 +7324,12 @@ with tab_master:
 
                 # 2. Filter for exactly the columns the model expects
                 from app_core.vertex_ai_endpoint import VERTEX_FEATURE_COLUMNS
+
+                # User Action: Ensure columns exist before filtering
+                for col in VERTEX_FEATURE_COLUMNS:
+                    if col not in master_df.columns:
+                        master_df[col] = 0.0
+
                 inference_df = master_df[VERTEX_FEATURE_COLUMNS].copy()
 
                 # 3. Sanitize feature batch for XGBoost
@@ -7609,9 +7639,11 @@ with tab_master:
             "total_edge",
             "market_stability",
         ]
-        for col in required_display_cols:
-            if col not in df.columns:
-                df[col] = None
+
+        # Batch assign missing columns to avoid fragmentation
+        missing_cols = [col for col in required_display_cols if col not in df.columns]
+        if missing_cols:
+             df = pd.concat([df, pd.DataFrame(columns=missing_cols)], axis=1)
         if "reddit_used" in df.columns:
             df["reddit_used"] = df["reddit_used"].fillna(False)
         df = add_spread_total_confidence(df)
@@ -8394,17 +8426,12 @@ with tab_shotgun:
         df_shotgun = add_spread_total_confidence(df_shotgun)
         df_shotgun = enrich_picks_with_roi_metrics(df_shotgun)
 
-        # Calculate active_edge if not present
-        if "active_edge" not in df_shotgun.columns:
-            def _get_edge(r):
-                m = str(r.get("Market", "")).lower()
-                if m == "spread":
-                    return r.get("spread_edge")
-                if m == "total":
-                    return r.get("total_edge")
-                # Fallback for ML or other
-                return r.get("edge_vs_odds") or r.get("AI_Edge")
-            df_shotgun["active_edge"] = df_shotgun.apply(_get_edge, axis=1)
+        # Calculate active_edge = final_probability - Implied_Prob
+        # This overrides previous "edge_vs_odds" or spread_edge/total_edge mixed logic
+        df_shotgun["active_edge"] = (
+            pd.to_numeric(df_shotgun.get("final_probability"), errors='coerce').fillna(0.0)
+            - pd.to_numeric(df_shotgun.get("Implied_Prob"), errors='coerce').fillna(0.0)
+        )
 
         # Filter logic
         # 1. Tight Markets
@@ -8430,7 +8457,7 @@ with tab_shotgun:
             col1, col2, col3 = st.columns(3)
 
             with col1:
-                st.subheader("🎯 $3 Snipers")
+                st.subheader("🎯 Snipers (Prob > 60%)")
                 # High Prob (>60%)
                 snipers = candidates[candidates["final_probability"] > 0.60].sort_values("final_probability", ascending=False).head(5)
                 if not snipers.empty:
@@ -8441,7 +8468,7 @@ with tab_shotgun:
                     st.write("No Snipers found.")
 
             with col2:
-                st.subheader("📈 $2 Strategy")
+                st.subheader("📈 Strategy (High EV)")
                 # High EV (Edge)
                 strategy = candidates.sort_values("active_edge", ascending=False).head(5)
                 if not strategy.empty:
@@ -8452,7 +8479,7 @@ with tab_shotgun:
                     st.write("No Strategy plays found.")
 
             with col3:
-                st.subheader("🎲 $1 Longshots")
+                st.subheader("🎲 Longshots")
                 # Top 10 by Edge
                 longshots = candidates.sort_values("active_edge", ascending=False).head(10)
                 if not longshots.empty:
@@ -8796,6 +8823,9 @@ with tab_debug:
     if st.session_state.get("last_exception"):
         st.subheader("Last exception")
         st.code(st.session_state["last_exception"])
+
+    if "vertex_last_error" in st.session_state:
+        st.error(f"Vertex Prediction Error: {st.session_state['vertex_last_error']}")
 
 
 if __name__ == "__main__" and os.environ.get("KALSHI_SELF_TEST"):

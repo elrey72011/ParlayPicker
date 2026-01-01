@@ -30,10 +30,9 @@ except Exception:
     aiplatform = None  # type: ignore
     _GCP_AVAILABLE = False
 
-logger = logging.getLogger(__name__)
-
-# add near imports in vertex_ai_endpoint.py
 from google.oauth2 import service_account  # type: ignore
+
+logger = logging.getLogger(__name__)
 
 def _get_gcp_credentials():
     """
@@ -113,26 +112,6 @@ def _get_vertex_config() -> tuple[str, str, str]:
       2. Streamlit secrets
       3. Environment variables
       4. Internal defaults
-
-    Order of precedence (highest → lowest):
-
-        project_id:
-          - st.session_state['gcp_project_id']
-          - st.secrets['gcp_project_id']
-          - $GCP_PROJECT_ID
-          - $GOOGLE_CLOUD_PROJECT
-          - DEFAULT_PROJECT_ID
-
-        location:
-          - st.session_state['gcp_region']
-          - st.secrets['gcp_region']
-          - $GCP_REGION
-          - DEFAULT_LOCATION
-
-        endpoint_id (can be raw id or full resource name):
-          - st.secrets['vertex_endpoint_id']
-          - $VERTEX_ENDPOINT_ID
-          - DEFAULT_ENDPOINT_ID
     """
     # Project
     project_id = (
@@ -169,13 +148,8 @@ def _get_vertex_config() -> tuple[str, str, str]:
 def _build_endpoint_name(project_id: str, location: str, endpoint_id: str) -> str:
     """
     Build full endpoint resource name.
-
-    If endpoint_id is already a full resource path (contains 'projects/'),
-    we return it as-is. Otherwise we build:
-        projects/{project_id}/locations/{location}/endpoints/{endpoint_id}
     """
     if "projects/" in endpoint_id and "/endpoints/" in endpoint_id:
-        # Already full resource name
         return endpoint_id
 
     return f"projects/{project_id}/locations/{location}/endpoints/{endpoint_id}"
@@ -184,11 +158,6 @@ def _build_endpoint_name(project_id: str, location: str, endpoint_id: str) -> st
 def get_vertex_endpoint():
     """
     Get a configured Vertex Endpoint client.
-
-    Ensures:
-      - aiplatform.init(project=..., location=...) is called with a
-        non-None project_id (prevents 'projects/None' bugs).
-      - Endpoint is created only once & cached.
     """
     global _vertex_endpoint_client, _vertex_endpoint_name
 
@@ -224,13 +193,6 @@ def is_vertex_prediction_configured() -> bool:
     """
     Return True if Vertex appears to be configured well enough
     to attempt predictions.
-
-    This checks:
-      - aiplatform import availability
-      - presence of a non-empty project_id
-      - presence of an endpoint id/name
-
-    It does *not* call the endpoint yet – only verifies config.
     """
     if not _GCP_AVAILABLE:
         logger.warning("Vertex prediction not configured: google-cloud-aiplatform missing")
@@ -258,77 +220,44 @@ def is_vertex_prediction_configured() -> bool:
 
 
 def predict_win_probabilities(df, feature_cols=None, model_path=None):
+    """
+    Calls Vertex AI (or local XGBoost) to predict Home Win Probability.
+    Catches exceptions and stores them in st.session_state['vertex_last_error'] for debugging.
+    """
     try:
         import xgboost as xgb
-        # ... existing logic ...
         # Ensure duplicates are stripped here too just in case
         df = df.loc[:, ~df.columns.duplicated()]
         
         if feature_cols is None:
             feature_cols = VERTEX_FEATURE_COLUMNS
 
-        # Default model path if not provided (placeholder to trigger safe fallback if missing)
+        # Default model path if not provided
         if model_path is None:
             model_path = "./models/model.json"
 
         # 2. VALIDATE: Ensure all features exist
+        # This handles the User Request to ensure 0.0 initialization
         missing = [c for c in feature_cols if c not in df.columns]
         if missing:
             logger.warning(f"Vertex Warning: Missing cols {missing}. Filling 0.")
             for c in missing:
                 df[c] = 0.0
 
+        # Attempt prediction
         dmatrix = xgb.DMatrix(df[feature_cols])
         booster = xgb.Booster()
         booster.load_model(model_path)
         return booster.predict(dmatrix)
+
     except Exception as e:
-        print(f"Vertex Crash Prevented: {e}")
+        logger.error(f"Vertex Crash Prevented: {e}")
+        # Expose error to UI if available
+        if st is not None:
+            try:
+                st.session_state["vertex_last_error"] = str(e)
+            except Exception:
+                pass
+
         # Return 50% probabilities so the app FINISHES instead of restarting
         return [0.5] * len(df)
-
-
-# -------------------------------------------------------------------
-# CLI TEST ENTRYPOINT (optional)
-# -------------------------------------------------------------------
-
-if __name__ == "__main__":
-    """
-    Allow quick testing via:
-
-        python -m app_core.vertex_ai_endpoint
-
-    or
-
-        python app_core/vertex_ai_endpoint.py
-    """
-    import sys
-
-    logging.basicConfig(level=logging.INFO)
-
-    try:
-        project_id, location, endpoint_id = _get_vertex_config()
-        print("Resolved config:")
-        print(f"  project_id  = {project_id}")
-        print(f"  location    = {location}")
-        print(f"  endpoint_id = {endpoint_id}")
-    except Exception as e:
-        print(f"Failed to resolve Vertex config: {e}")
-        sys.exit(1)
-
-    if not is_vertex_prediction_configured():
-        print("Vertex prediction is NOT configured correctly.")
-        sys.exit(1)
-
-    # Build a tiny dummy frame for sanity check
-    dummy = pd.DataFrame(
-        [
-            {col: 0.5 for col in VERTEX_FEATURE_COLUMNS},
-            {col: 0.1 for col in VERTEX_FEATURE_COLUMNS},
-        ]
-    )
-
-    print("\nRequesting predictions for dummy data...")
-    probs = predict_win_probabilities(dummy)
-    print("Predictions:", probs)
-    sys.exit(0)
