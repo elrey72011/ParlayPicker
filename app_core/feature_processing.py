@@ -666,14 +666,39 @@ def enrich_with_vertex_features(df: pd.DataFrame, api_clients: Dict[str, Any], s
         # Dropping duplicates to ensure unique mapping
         stats_unique = stats_df.drop_duplicates(subset=['team_norm']).set_index('team_norm')
         
-        # Helper to map a stat column efficiently
-        def map_stat(norm_series, col_name, default_val):
-            # Using map against the series from the indexed dataframe
-            if col_name in stats_unique.columns:
-                return norm_series.map(stats_unique[col_name]).fillna(default_val)
-            return pd.Series(default_val, index=norm_series.index)
+        # --- NEW: Fuzzy Matching Logic ---
+        # Build a mapping from df's normalized teams to stats' normalized teams
 
-        # Populate features_data
+        # Get all unique teams in the current dataframe
+        df_teams_norm = pd.concat([home_norm, away_norm]).unique()
+        stats_teams_norm = stats_unique.index.tolist()
+
+        team_map = {}
+        for t_norm in df_teams_norm:
+             if not t_norm: continue
+
+             # Direct match first
+             if t_norm in stats_unique.index:
+                 team_map[t_norm] = t_norm
+             else:
+                 # Fuzzy match
+                 # We need to map t_norm (from Odds/df) -> best match in stats_teams_norm
+                 match = TeamNameMatcher.match_team(t_norm, stats_teams_norm, threshold=0.75)
+                 if match:
+                     # match_team returns the matched name from the list (which is already normalized here)
+                     team_map[t_norm] = match
+                 else:
+                     # No match found
+                     team_map[t_norm] = None
+
+        # Helper to map a stat column efficiently using the map
+        def map_stat(norm_series, col_name, default_val):
+            # 1. Map df team name -> stats team name (fuzzy)
+            mapped_teams = norm_series.map(team_map)
+            # 2. Map stats team name -> stat value
+            return mapped_teams.map(stats_unique[col_name]).fillna(default_val)
+
+        # Populate features_data using the new fuzzy map_stat
         # Home Stats
         features_data['feature_home_win_pct'] = map_stat(home_norm, 'win_pct', defaults['win_pct'])
         features_data['feature_home_home_win_pct'] = map_stat(home_norm, 'home_win_pct', defaults['win_pct'])
@@ -684,7 +709,6 @@ def enrich_with_vertex_features(df: pd.DataFrame, api_clients: Dict[str, Any], s
         features_data['feature_home_oppg'] = map_stat(home_norm, 'points_allowed_per_game', defaults['oppg'])
 
         features_data['feature_home_streak'] = map_stat(home_norm, 'streak', 0.0)
-        # Add turnovers if available (not in vertex columns yet, but useful for later)
         features_data['feature_home_turnovers'] = map_stat(home_norm, 'turnovers', 0.0)
         
         # Away Stats
@@ -721,10 +745,6 @@ def enrich_with_vertex_features(df: pd.DataFrame, api_clients: Dict[str, Any], s
             logger.warning(f"Used fallback league averages ({league_key}) for ALL games (stats fetch failed)!")
 
     # 5. Compute Differentials (Vectorized)
-    # We can use numpy subtraction on the Series/arrays/scalars in features_data
-    # Note: features_data values might be Series or Scalars. 
-    # If Series, arithmetic works. If scalar, arithmetic works.
-    
     features_data['feature_diff_win_pct'] = features_data['feature_home_win_pct'] - features_data['feature_away_win_pct']
     features_data['feature_diff_ppg'] = features_data['feature_home_ppg'] - features_data['feature_away_ppg']
     features_data['feature_diff_oppg'] = features_data['feature_home_oppg'] - features_data['feature_away_oppg']
@@ -735,9 +755,11 @@ def enrich_with_vertex_features(df: pd.DataFrame, api_clients: Dict[str, Any], s
     features_data['implied_home_prob'] = safe_numeric_fill(df.get('Implied_Prob'), 0.5)
     
     # Try to refine implied prob from ML if available
+    # --- NEW: Robust ml_to_prob ---
     def ml_to_prob(ml):
         try:
             m = float(ml)
+            if pd.isna(m): return 0.5 # Fix for 0.0 prob issue
             if m > 0: return 100/(m+100)
             return abs(m)/(abs(m)+100)
         except:
