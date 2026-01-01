@@ -34,6 +34,9 @@ from google.oauth2 import service_account  # type: ignore
 
 logger = logging.getLogger(__name__)
 
+# Global flag to track local model availability
+USE_LOCAL_MODEL = True
+
 def _get_gcp_credentials():
     """
     Prefer Streamlit secrets: [gcp_service_account] (dict)
@@ -224,6 +227,8 @@ def predict_win_probabilities(df, feature_cols=None, model_path=None):
     Calls Vertex AI (or local XGBoost) to predict Home Win Probability.
     Catches exceptions and stores them in st.session_state['vertex_last_error'] for debugging.
     """
+    global USE_LOCAL_MODEL
+
     try:
         import xgboost as xgb
         # Ensure duplicates are stripped here too just in case
@@ -247,18 +252,34 @@ def predict_win_probabilities(df, feature_cols=None, model_path=None):
 
         # Attempt prediction with Fallback
         try:
+            if not USE_LOCAL_MODEL:
+                raise RuntimeError("Local model disabled by flag.")
+
             dmatrix = xgb.DMatrix(df[feature_cols])
             booster = xgb.Booster()
             # Wrap loading in try/except to handle missing model.json
-            booster.load_model(model_path)
+            try:
+                booster.load_model(model_path)
+            except Exception as load_err:
+                # IMMEDIATE FIX: Kill the local model usage globally if file is missing/bad
+                USE_LOCAL_MODEL = False
+                logger.warning(f"Local XGBoost model load failed: {load_err}. Disabling USE_LOCAL_MODEL.")
+                raise load_err
+
             return booster.predict(dmatrix)
+
         except Exception as model_err:
-            logger.warning(f"Local XGBoost model failed (file missing or corrupt): {model_err}. Attempting Vertex Endpoint fallback.")
+            logger.warning(f"Local XGBoost model failed or disabled: {model_err}. Attempting Vertex Endpoint fallback.")
 
             if is_vertex_prediction_configured():
                 endpoint = get_vertex_endpoint()
                 # Vertex expects list of lists/dicts
+                # Ensure we strictly use the defined feature columns
                 instances = df[feature_cols].astype(float).values.tolist()
+
+                # DEBUG PRINT as requested for troubleshooting
+                print(f"DEBUG: Instances being sent to Endpoint: {instances}")
+
                 resp = endpoint.predict(instances=instances)
                 # Parse response: usually a list of predictions
                 # Adjust parsing based on your model's output format (e.g. list of floats)
