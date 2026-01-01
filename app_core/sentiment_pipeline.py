@@ -225,6 +225,15 @@ def fetch_team_newsapi_cached(
 def fetch_team_news(news_api_key: str, team: str, league: str, league_query: Optional[str] = None, *, max_retries: int = 2, retry_delay: float = 0.75, date_bucket: Optional[str] = None) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
     """Fetch recent articles for a team; returns (articles, info) where info contains status/error."""
     date_bucket = date_bucket or datetime.now(timezone.utc).date().isoformat()
+
+    # User Request: Ensure we check general secrets if key is missing
+    if not news_api_key:
+        try:
+            if st and hasattr(st, "secrets") and "general" in st.secrets:
+                news_api_key = st.secrets["general"].get("news_api_key")
+        except Exception:
+            pass
+
     if not news_api_key:
         return [], {
             "error": "missing_key",
@@ -258,21 +267,20 @@ def fetch_team_news(news_api_key: str, team: str, league: str, league_query: Opt
             resp = requests.get(url, params=params, timeout=8)
             status = resp.status_code
 
-            # Special Handling for 403 (User Request): Return neutral instead of error
-            # This masks the error from the UI but signals empty results to trigger fallback
-            if status == 403:
+            # Special Handling for 403/401: Return neutral instead of error to trigger fallback
+            if status in [403, 401]:
                 return [], {
-                    "error": None, # No error returned to avoid UI error banner
-                    "status": 200, # Mask as 200 success
-                    "status_code": 403, # Keep real code for debug inspection
+                    "error": "auth_error_fallback", # Signal fallback
+                    "status": status,
+                    "status_code": status,
                     "league_query": league_query,
                     "totalResults": 0,
                     "q": q,
                     "attempts": attempts,
                     "rate_limited": False,
-                    "auth_error": False, # Treat as non-fatal
+                    "auth_error": True, # Mark as auth error so we know to fallback
                     "retry_after": None,
-                    "note": "403_masked_as_neutral_trigger_fallback"
+                    "note": "auth_error_trigger_fallback"
                 }
 
             data: Dict[str, Any] = {}

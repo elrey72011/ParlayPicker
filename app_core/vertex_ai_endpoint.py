@@ -227,7 +227,7 @@ def predict_win_probabilities(df, feature_cols=None, model_path=None):
     try:
         import xgboost as xgb
         # Ensure duplicates are stripped here too just in case
-        df = df.loc[:, ~df.columns.duplicated()]
+        df = df.loc[:, ~df.columns.duplicated()].copy()
         
         if feature_cols is None:
             feature_cols = VERTEX_FEATURE_COLUMNS
@@ -241,14 +241,34 @@ def predict_win_probabilities(df, feature_cols=None, model_path=None):
         missing = [c for c in feature_cols if c not in df.columns]
         if missing:
             logger.warning(f"Vertex Warning: Missing cols {missing}. Filling 0.")
-            for c in missing:
-                df[c] = 0.0
+            # Use concat to avoid DataFrame fragmentation from loop insertion
+            zeros = pd.DataFrame(0.0, index=df.index, columns=missing)
+            df = pd.concat([df, zeros], axis=1)
 
-        # Attempt prediction
-        dmatrix = xgb.DMatrix(df[feature_cols])
-        booster = xgb.Booster()
-        booster.load_model(model_path)
-        return booster.predict(dmatrix)
+        # Attempt prediction with Fallback
+        try:
+            dmatrix = xgb.DMatrix(df[feature_cols])
+            booster = xgb.Booster()
+            # Wrap loading in try/except to handle missing model.json
+            booster.load_model(model_path)
+            return booster.predict(dmatrix)
+        except Exception as model_err:
+            logger.warning(f"Local XGBoost model failed (file missing or corrupt): {model_err}. Attempting Vertex Endpoint fallback.")
+
+            if is_vertex_prediction_configured():
+                endpoint = get_vertex_endpoint()
+                # Vertex expects list of lists/dicts
+                instances = df[feature_cols].astype(float).values.tolist()
+                resp = endpoint.predict(instances=instances)
+                # Parse response: usually a list of predictions
+                # Adjust parsing based on your model's output format (e.g. list of floats)
+                predictions = resp.predictions
+                if predictions and isinstance(predictions[0], list):
+                    return [p[0] for p in predictions]
+                return predictions
+            else:
+                # If Vertex not configured, re-raise to hit the outer exception handler
+                raise model_err
 
     except Exception as e:
         logger.error(f"Vertex Crash Prevented: {e}")
