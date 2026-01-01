@@ -3601,7 +3601,7 @@ def _build_vertex_feature_row(game: Dict[str, Any], sentiment_diff: Optional[flo
     for col in VERTEX_FEATURE_COLUMNS:
         if col not in row:
             val = game.get(col)
-            # PROB keys must default to 0.5, STATS to 0.0
+            # PROB keys must default to 0.5 (neutral), STATS/COUNTS to 0.0
             default_val = 0.5 if "prob" in col else 0.0
             row[col] = safe_float(val) if val is not None else default_val
 
@@ -5445,6 +5445,8 @@ with tab_master:
             spread_prob_alt_final = 0.5
             total_alt_prob_final = 0.5
             total_prob_market = 0.5
+            spread_decision_score_alt = 0.5
+            total_decision_score_alt = 0.5
 
             # Additional resets to prevent NameError in fallback_row
             spread_pick_label = None
