@@ -38,7 +38,8 @@ logger = logging.getLogger(__name__)
 # -------------------------------------------------------------------
 # USER REQUEST 1: Robust File Pathing (Global Scope)
 # -------------------------------------------------------------------
-# Get the absolute path to the root of the project
+from pathlib import Path
+# Resolve the root directory regardless of where the script is called
 ROOT_DIR = Path(__file__).resolve().parents[1]
 MODEL_PATH = str(ROOT_DIR / "models" / "model.json")
 
@@ -209,6 +210,7 @@ def is_vertex_prediction_configured() -> bool:
         return False
 
     try:
+        # User Request 2: Use _get_vertex_config() for robust fallback
         project_id, location, endpoint_id = _get_vertex_config()
     except Exception as e:
         logger.warning(f"Vertex config resolution failed: {e}")
@@ -258,92 +260,54 @@ def predict_win_probabilities(df, feature_cols=None, model_path=None):
             zeros = pd.DataFrame(0.0, index=df.index, columns=missing)
             df = pd.concat([df, zeros], axis=1)
 
-        # Attempt prediction with Fallback
-        try:
-            if not USE_LOCAL_MODEL:
-                raise RuntimeError("Local model disabled by flag.")
-
-            dmatrix = xgb.DMatrix(df[feature_cols])
-            booster = xgb.Booster()
-            # Wrap loading in try/except to handle missing model.json
+        # User Request 1: Fix Exception Flow
+        # Try local model first
+        if USE_LOCAL_MODEL:
             try:
+                dmatrix = xgb.DMatrix(df[feature_cols])
+                booster = xgb.Booster()
                 booster.load_model(model_path)
+                return booster.predict(dmatrix)
             except Exception as load_err:
-                # IMMEDIATE FIX: Kill the local model usage globally if file is missing/bad
+                # Disable local model and proceed (do not raise)
                 USE_LOCAL_MODEL = False
-                logger.warning(f"Local XGBoost model load failed: {load_err}. Disabling USE_LOCAL_MODEL.")
-                raise load_err
+                logger.warning(f"Local XGBoost model load failed: {load_err}. Disabling USE_LOCAL_MODEL and proceeding to fallback.")
 
-            return booster.predict(dmatrix)
+        # Fallback: Vertex AI
+        if is_vertex_prediction_configured():
+            endpoint = get_vertex_endpoint()
+            # Vertex expects list of lists/dicts
+            # Ensure we strictly use the defined feature columns
+            instances = df[feature_cols].astype(float).values.tolist()
 
-        except Exception as model_err:
-            logger.warning(f"Local XGBoost model failed or disabled: {model_err}. Attempting Vertex Endpoint fallback.")
+            # DEBUG PRINT as requested for troubleshooting
+            if st:
+                st.write(f"DEBUG: Feature Vector: {instances}")
 
-            if is_vertex_prediction_configured():
-                endpoint = get_vertex_endpoint()
-                # Vertex expects list of lists/dicts
-                # Ensure we strictly use the defined feature columns
-                instances = df[feature_cols].astype(float).values.tolist()
+            response = endpoint.predict(instances=instances)
 
-                # DEBUG PRINT as requested for troubleshooting
-                # print(f"DEBUG: Instances being sent to Endpoint: {instances}")
-                if st:
-                    st.write(f"DEBUG: Feature Vector: {instances}")
+            # USER REQUEST 2: Fix Parser & Debug
+            print(f"DEBUG: Vertex Raw Prediction: {response.predictions}")
 
-                response = endpoint.predict(instances=instances)
+            predictions = response.predictions
 
-                # USER REQUEST 2: Fix Parser & Debug
-                print(f"DEBUG: Vertex Raw Prediction: {response.predictions}")
-
-                predictions = response.predictions
-
-                if not predictions:
-                    return None
-
-                # USER REQUEST 2 (Improved): Robust parsing handling Dict, List, and protobuf Maps
-                results = []
-                for p in predictions:
-                    val = None
-                    # 1. Try dictionary access (covers dict and MapComposite)
-                    # We check hasattr(p, 'get') to support protobuf MapComposite without direct isinstance(dict)
-                    if isinstance(p, dict) or hasattr(p, "get"):
-                         # Try 'scores'
-                         scores = p.get("scores") if hasattr(p, "get") else (p["scores"] if "scores" in p else None)
-                         if scores is not None:
-                             if isinstance(scores, list) and len(scores) >= 2:
-                                 val = scores[1] # Home Win Prob (Index 1)
-                             elif isinstance(scores, list) and len(scores) == 1:
-                                 val = scores[0]
-
-                         # Try 'value' if no scores found or valid
-                         if val is None:
-                             v = p.get("value") if hasattr(p, "get") else (p["value"] if "value" in p else None)
-                             if v is not None:
-                                 val = v
-
-                    # 2. Try list access (if not resolved by dict logic)
-                    if val is None and isinstance(p, list):
-                        if len(p) >= 2:
-                            val = p[1]
-                        elif len(p) == 1:
-                            val = p[0]
-
-                    # 3. Try direct float/int
-                    if val is None and isinstance(p, (float, int)):
-                        val = float(p)
-
-                    # 4. Fallback
-                    if val is None:
-                        val = 0.5
-
-                    results.append(val)
-
-                return results
-            else:
-                # If Vertex not configured, return None to signal fallback to defaults
-                # instead of crashing the entire app.
-                logger.warning("Vertex not configured and local model failed. Returning None for fallback.")
+            if not predictions:
                 return None
+
+            # Inside the fallback extraction
+            results = []
+            for pred in response.predictions:
+                if isinstance(pred, dict):
+                    # Extract from 'scores' if present, otherwise try 'value'
+                    val = pred.get("scores", [0.5])[0] if "scores" in pred else pred.get("value", 0.5)
+                    results.append(val)
+                else:
+                    results.append(pred)
+            return results
+        else:
+            # If Vertex not configured, return None to signal fallback to defaults
+            logger.warning("Vertex not configured and local model failed. Returning None for fallback.")
+            return None
 
     except Exception as e:
         logger.error(f"Vertex Crash Prevented: {e}")
