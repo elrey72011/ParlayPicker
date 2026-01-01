@@ -4386,19 +4386,46 @@ def main():
         def extract_prob_and_line(
             market: Dict[str, Any], market_type: str
         ) -> Tuple[Optional[float], Optional[float]]:
-            # Reciprocal Probability Logic
-            yes_bid = safe_float(market.get("yes_bid"))
-            no_bid = safe_float(market.get("no_bid"))
+            # Reciprocal Probability Logic (Orderbook-based)
+            # Formula:
+            # Best YES Bid: The highest (last) element in the yes array.
+            # Implied YES Ask: 100 - (Highest price in the NO array).
+            # Mid-Price Probability: (Best YES Bid + Implied YES Ask) / 200.
+
+            yes_levels = market.get("yes", [])
+            no_levels = market.get("no", [])
 
             prob = None
-            if yes_bid is not None and no_bid is not None:
-                best_yes_bid = float(yes_bid)
-                best_no_bid = float(no_bid)
-                # Implied YES Ask = 100 - (Highest price in the NO array)
-                implied_yes_ask = 100.0 - best_no_bid
-                # Mid-Price Prob: (best_yes_bid + implied_yes_ask) / 200
-                prob = (best_yes_bid + implied_yes_ask) / 200.0
-                prob = clamp(prob, 0.0, 1.0)
+
+            # Check if yes/no are lists (orderbook format)
+            if isinstance(yes_levels, list) and isinstance(no_levels, list) and yes_levels and no_levels:
+                try:
+                    # Assuming levels are [price, qty] sorted by price ascending
+                    # Best YES Bid = Last element of YES array
+                    best_yes_bid_level = yes_levels[-1]
+                    best_yes_bid = float(best_yes_bid_level[0])
+
+                    # Best NO Bid = Last element of NO array
+                    best_no_bid_level = no_levels[-1]
+                    best_no_bid = float(best_no_bid_level[0])
+
+                    # Implied YES Ask
+                    implied_yes_ask = 100.0 - best_no_bid
+
+                    # Mid-Price
+                    prob = (best_yes_bid + implied_yes_ask) / 200.0
+                    prob = clamp(prob, 0.0, 1.0)
+                except Exception:
+                    prob = None
+
+            # Fallback to top-level keys if orderbook logic fails or isn't present
+            if prob is None:
+                yes_bid = safe_float(market.get("yes_bid"))
+                no_bid = safe_float(market.get("no_bid"))
+                if yes_bid is not None and no_bid is not None:
+                    implied_yes_ask = 100.0 - float(no_bid)
+                    prob = (float(yes_bid) + implied_yes_ask) / 200.0
+                    prob = clamp(prob, 0.0, 1.0)
 
             if prob is None:
                 last_price = safe_float(market.get("last_price"))
