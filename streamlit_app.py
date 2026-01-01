@@ -3590,6 +3590,14 @@ def _build_vertex_feature_row(game: Dict[str, Any], sentiment_diff: Optional[flo
         "injuries_away_count": safe_float(game.get("injuries_away_count")),
         "weather_flag": 1.0 if game.get("weather_summary") else 0.0,
     }
+
+    # User Request: Ensure all mandatory Vertex features are present and defaulted to 0.0
+    for col in VERTEX_FEATURE_COLUMNS:
+        if col not in row:
+            # Check if it exists in the raw game dict (e.g. from upstream enrichment)
+            val = game.get(col)
+            row[col] = safe_float(val) if val is not None else 0.0
+
     return pd.DataFrame([row])
 
 def get_vertex_prob(game: Dict[str, Any], sentiment_diff: Optional[float]) -> Tuple[Optional[float], Optional[str]]:
