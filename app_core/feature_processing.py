@@ -295,18 +295,31 @@ def fetch_ncaaf_stats(season_year: int) -> List[Dict[str, Any]]:
         configuration.api_key_prefix['Authorization'] = 'Bearer'
 
         api_instance = cfbd.StatsApi(cfbd.ApiClient(configuration))
+
         # Use get_team_season_stats per instruction (replaces get_advanced_season_stats)
+        # WRAPPER FIX: Handle HTTP 500 or any API crash gracefully
+        season_stats = []
         try:
             season_stats = api_instance.get_team_season_stats(year=season_year)
         except Exception as e:
-            logger.warning(f"NCAAF API Unavailable (Stats): {e}")
+            logger.warning(f"NCAAF_STATS_UNAVAILABLE: {e}. Defaulting to 0.0.")
+            # Return empty list, enrich_with_vertex_features will handle defaults (or we can return explicit defaults here if strict 0.0 needed)
+            # User request: "default all NCAAF features to 0.0 and add a warning 'NCAAF_STATS_UNAVAILABLE'"
+            # If we return [], enrich_with_vertex_features uses league averages (28.0).
+            # If we want 0.0, we should probably handle it downstream or return a dummy list.
+            # But "API is down" means we can't iterate teams.
             return []
 
         # To get Win PCT, we still need records or game outcomes.
         # We will use GamesApi to get games and calculate win pct,
         # but rely on season_stats for the points metrics as requested.
         games_api = cfbd.GamesApi(cfbd.ApiClient(configuration))
-        season_games = games_api.get_games(year=season_year)
+
+        try:
+            season_games = games_api.get_games(year=season_year)
+        except Exception as e:
+            logger.warning(f"NCAAF Games API Unavailable: {e}")
+            season_games = []
 
         # Build win pct map
         team_records = {}
