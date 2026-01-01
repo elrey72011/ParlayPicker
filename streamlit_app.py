@@ -756,6 +756,7 @@ def enrich_picks_with_roi_metrics(df: pd.DataFrame) -> pd.DataFrame:
 
     if 'Market_Badge' in df.columns:
         df['Market_Badge'] = df.apply(update_badge, axis=1)
+        df = df.copy()
     
     return df
 
@@ -8100,6 +8101,7 @@ with tab_master:
             else "N/A",
             axis=1,
         )
+        df_master_view_display = df_master_view_display.copy()
         df_master_view_display["Total_Range"] = df_master_view_display.apply(
             lambda r: f"{r['total_min']} to {r['total_max']} (med {r['total_med']})"
             if pd.notnull(r.get("total_min")) and pd.notnull(r.get("total_max"))
@@ -8116,6 +8118,7 @@ with tab_master:
                 badges_local.append("THIN MARKET")
             return ";".join(sorted(set(badges_local))) if badges_local else None
         df_master_view_display["Market_Badge"] = df_master_view_display.apply(_market_badge, axis=1)
+        df_master_view_display = df_master_view_display.copy()
         placeholder_count = int((df_master_view_display.get("odds_placeholder_detected") == True).sum()) if "odds_placeholder_detected" in df_master_view_display.columns else 0
         implied_null_count = int(df_master_view_display["Implied_Prob"].isna().sum()) if "Implied_Prob" in df_master_view_display.columns else 0
         st.caption(f"Debug: placeholder odds rows={placeholder_count}; Implied_Prob null rows={implied_null_count}")

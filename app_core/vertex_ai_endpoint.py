@@ -272,6 +272,7 @@ def predict_win_probabilities(df, feature_cols=None, model_path=None):
                 # Disable local model and proceed (do not raise)
                 USE_LOCAL_MODEL = False
                 logger.warning(f"Local XGBoost model load failed: {load_err}. Disabling USE_LOCAL_MODEL and proceeding to fallback.")
+                # raise load_err
 
         # Fallback: Vertex AI
         if is_vertex_prediction_configured():
