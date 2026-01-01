@@ -69,14 +69,10 @@ VERTEX_FEATURE_COLUMNS: List[str] = [
     "injuries_away_count",
     "weather_flag",
     "feature_home_win_pct",
-    "feature_home_home_win_pct",
-    "feature_home_last5_win_pct",
     "feature_home_ppg",
     "feature_home_oppg",
     "feature_home_streak",
     "feature_away_win_pct",
-    "feature_away_away_win_pct",
-    "feature_away_last5_win_pct",
     "feature_away_ppg",
     "feature_away_oppg",
     "feature_away_streak",
@@ -85,8 +81,6 @@ VERTEX_FEATURE_COLUMNS: List[str] = [
     "feature_diff_oppg",
     "feature_diff_last5",
     "feature_diff_streak",
-    "feature_commence_hour",
-    "feature_commence_day_of_week",
     "feature_home_rest_days",
     "feature_away_rest_days",
 ]
@@ -239,7 +233,8 @@ def predict_win_probabilities(df, feature_cols=None, model_path=None):
 
         # Default model path if not provided
         if model_path is None:
-            model_path = "./models/model.json"
+            # IMMEDIATE FIX: Use absolute path relative to this script
+            model_path = os.path.join(os.path.dirname(__file__), '..', 'models', 'model.json')
 
         # 2. VALIDATE: Ensure all features exist
         # This handles the User Request to ensure 0.0 initialization
@@ -279,6 +274,8 @@ def predict_win_probabilities(df, feature_cols=None, model_path=None):
 
                 # DEBUG PRINT as requested for troubleshooting
                 print(f"DEBUG: Instances being sent to Endpoint: {instances}")
+                if st:
+                    st.write(f"DEBUG: Feature Vector: {instances}")
 
                 resp = endpoint.predict(instances=instances)
                 # Parse response: usually a list of predictions

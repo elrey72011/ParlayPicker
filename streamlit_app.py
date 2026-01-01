@@ -3606,6 +3606,17 @@ def get_vertex_prob(game: Dict[str, Any], sentiment_diff: Optional[float]) -> Tu
         return None, "vertex_missing_prob"
     try:
         features_df = _build_vertex_feature_row(game, sentiment_diff)
+
+        # Schema Validation for 21 features
+        if features_df.shape[1] != 21:
+             logger.warning(f"Vertex Schema Mismatch: Expected 21 cols, got {features_df.shape[1]}")
+             return None, "schema_mismatch"
+
+        # Ensure pure numeric float types (no strings, no None)
+        features_df = features_df.apply(pd.to_numeric, errors='coerce').fillna(0.0).astype(float)
+
+        if st:
+            st.write(f"DEBUG: Feature Vector (DF): {features_df}")
         payload_hash = hash(tuple(features_df.to_dict(orient="records")[0].items()))
         preds = predict_win_probabilities(features_df, feature_columns=VERTEX_FEATURE_COLUMNS)
         st.session_state["vertex_last_payload_hash"] = payload_hash

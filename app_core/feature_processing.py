@@ -64,7 +64,7 @@ LEAGUE_AVERAGES = {
     "NFL": {"ppg": 22.0, "oppg": 22.0, "win_pct": 0.5, "last5_win_pct": 0.5},
     "NHL": {"ppg": 3.0, "oppg": 3.0, "win_pct": 0.5, "last5_win_pct": 0.5},
     "NCAAB": {"ppg": 72.0, "oppg": 72.0, "win_pct": 0.5, "last5_win_pct": 0.5},
-    "NCAAF": {"ppg": 28.0, "oppg": 28.0, "win_pct": 0.5, "last5_win_pct": 0.5},
+    "NCAAF": {"ppg": 0.0, "oppg": 0.0, "win_pct": 0.5, "last5_win_pct": 0.5},
     "default": {"ppg": 50.0, "oppg": 50.0, "win_pct": 0.5, "last5_win_pct": 0.5}
 }
 
@@ -302,7 +302,7 @@ def fetch_ncaaf_stats(season_year: int) -> List[Dict[str, Any]]:
         try:
             season_stats = api_instance.get_team_season_stats(year=season_year)
         except Exception as e:
-            logger.warning(f"NCAAF_STATS_UNAVAILABLE: {e}. Defaulting to 0.0.")
+            logger.warning("NCAAF Stats Outage - Using Defaults")
             # Return empty list, enrich_with_vertex_features will handle defaults (or we can return explicit defaults here if strict 0.0 needed)
             # User request: "default all NCAAF features to 0.0 and add a warning 'NCAAF_STATS_UNAVAILABLE'"
             # If we return [], enrich_with_vertex_features uses league averages (28.0).
