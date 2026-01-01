@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import os
 import logging
+from pathlib import Path
 from typing import List, Optional
 
 import pandas as pd
@@ -131,8 +132,12 @@ def _get_vertex_config() -> tuple[str, str, str]:
     endpoint_id = (
         (st and getattr(st, "secrets", {}).get("vertex_endpoint_id", None))
         or os.environ.get("VERTEX_ENDPOINT_ID")
-        or DEFAULT_ENDPOINT_ID
     )
+
+    if not endpoint_id:
+        # Fallback to hardcoded default if secret is missing (User Requirement)
+        logger.info(f"Vertex: No endpoint ID in secrets/env. Using fallback: {DEFAULT_ENDPOINT_ID}")
+        endpoint_id = DEFAULT_ENDPOINT_ID
 
     # Normalize just in case
     project_id = str(project_id).strip()
@@ -233,8 +238,9 @@ def predict_win_probabilities(df, feature_cols=None, model_path=None):
 
         # Default model path if not provided
         if model_path is None:
-            # IMMEDIATE FIX: Use absolute path relative to this script
-            model_path = os.path.join(os.path.dirname(__file__), '..', 'models', 'model.json')
+            # Robust File Pathing: Use pathlib to resolve relative to this file
+            root_dir = Path(__file__).resolve().parents[1]
+            model_path = str(root_dir / "models" / "model.json")
 
         # 2. VALIDATE: Ensure all features exist
         # This handles the User Request to ensure 0.0 initialization
@@ -279,11 +285,41 @@ def predict_win_probabilities(df, feature_cols=None, model_path=None):
 
                 resp = endpoint.predict(instances=instances)
                 # Parse response: usually a list of predictions
-                # Adjust parsing based on your model's output format (e.g. list of floats)
                 predictions = resp.predictions
-                if predictions and isinstance(predictions[0], list):
-                    return [p[0] for p in predictions]
-                return predictions
+                print(f"DEBUG: Vertex AI Raw Response: {predictions}")
+
+                if not predictions:
+                    return None
+
+                # Robust parsing for list of floats, list of lists, or list of dicts
+                results = []
+                for p in predictions:
+                    if isinstance(p, (float, int)):
+                        results.append(float(p))
+                    elif isinstance(p, list):
+                        # Assuming [prob] or [prob_0, prob_1] -> take prob_1 (home win) if 2 items?
+                        if len(p) == 2:
+                            results.append(p[1])
+                        else:
+                            results.append(p[0])
+                    elif isinstance(p, dict):
+                        # Handle {"scores": [0.55, 0.45]}
+                        if "scores" in p:
+                            scores = p["scores"]
+                            if isinstance(scores, list) and len(scores) >= 2:
+                                results.append(scores[1]) # Home Win Prob
+                            elif isinstance(scores, list) and len(scores) == 1:
+                                results.append(scores[0])
+                            else:
+                                results.append(0.5) # Fallback
+                        elif "value" in p:
+                            results.append(p["value"])
+                        else:
+                            results.append(0.5)
+                    else:
+                        results.append(0.5)
+
+                return results
             else:
                 # If Vertex not configured, return None to signal fallback to defaults
                 # instead of crashing the entire app.
