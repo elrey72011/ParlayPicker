@@ -259,11 +259,12 @@ def fetch_team_news(news_api_key: str, team: str, league: str, league_query: Opt
             status = resp.status_code
 
             # Special Handling for 403 (User Request): Return neutral instead of error
+            # This masks the error from the UI but signals empty results to trigger fallback
             if status == 403:
                 return [], {
-                    "error": None,
-                    "status": 200, # Mask as 200 to downstream
-                    "status_code": 403, # Keep real code for debug
+                    "error": None, # No error returned to avoid UI error banner
+                    "status": 200, # Mask as 200 success
+                    "status_code": 403, # Keep real code for debug inspection
                     "league_query": league_query,
                     "totalResults": 0,
                     "q": q,
@@ -271,7 +272,7 @@ def fetch_team_news(news_api_key: str, team: str, league: str, league_query: Opt
                     "rate_limited": False,
                     "auth_error": False, # Treat as non-fatal
                     "retry_after": None,
-                    "note": "403_masked_as_neutral"
+                    "note": "403_masked_as_neutral_trigger_fallback"
                 }
 
             data: Dict[str, Any] = {}
