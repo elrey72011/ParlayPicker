@@ -4392,10 +4392,12 @@ def main():
 
             prob = None
             if yes_bid is not None and no_bid is not None:
-                # Implied YES Ask = 100 - Best NO Bid
-                implied_yes_ask = 100.0 - float(no_bid)
-                # Mid-Price = (Best YES Bid + Implied YES Ask) / 200
-                prob = (float(yes_bid) + implied_yes_ask) / 200.0
+                best_yes_bid = float(yes_bid)
+                best_no_bid = float(no_bid)
+                # Implied YES Ask = 100 - (Highest price in the NO array)
+                implied_yes_ask = 100.0 - best_no_bid
+                # Mid-Price Prob: (best_yes_bid + implied_yes_ask) / 200
+                prob = (best_yes_bid + implied_yes_ask) / 200.0
                 prob = clamp(prob, 0.0, 1.0)
 
             if prob is None:
