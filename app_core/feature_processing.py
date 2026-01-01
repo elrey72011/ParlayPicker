@@ -745,11 +745,22 @@ def enrich_with_vertex_features(df: pd.DataFrame, api_clients: Dict[str, Any], s
             logger.warning(f"Used fallback league averages ({league_key}) for ALL games (stats fetch failed)!")
 
     # 5. Compute Differentials (Vectorized)
-    features_data['feature_diff_win_pct'] = features_data['feature_home_win_pct'] - features_data['feature_away_win_pct']
-    features_data['feature_diff_ppg'] = features_data['feature_home_ppg'] - features_data['feature_away_ppg']
-    features_data['feature_diff_oppg'] = features_data['feature_home_oppg'] - features_data['feature_away_oppg']
-    features_data['feature_diff_last5'] = features_data['feature_home_last5_win_pct'] - features_data['feature_away_last5_win_pct']
-    features_data['feature_diff_streak'] = features_data['feature_home_streak'] - features_data['feature_away_streak']
+    # Neutralize massive differentials if either side is 0.0 (missing stats)
+    def safe_diff(series1, series2):
+        # Convert to numeric to ensure comparison works
+        s1 = pd.to_numeric(series1, errors='coerce').fillna(0.0)
+        s2 = pd.to_numeric(series2, errors='coerce').fillna(0.0)
+        # If either is 0.0 (or very close), diff is 0.0
+        mask = (s1.abs() < 1e-6) | (s2.abs() < 1e-6)
+        diff = s1 - s2
+        diff[mask] = 0.0
+        return diff
+
+    features_data['feature_diff_win_pct'] = safe_diff(features_data['feature_home_win_pct'], features_data['feature_away_win_pct'])
+    features_data['feature_diff_ppg'] = safe_diff(features_data['feature_home_ppg'], features_data['feature_away_ppg'])
+    features_data['feature_diff_oppg'] = safe_diff(features_data['feature_home_oppg'], features_data['feature_away_oppg'])
+    features_data['feature_diff_last5'] = safe_diff(features_data['feature_home_last5_win_pct'], features_data['feature_away_last5_win_pct'])
+    features_data['feature_diff_streak'] = features_data['feature_home_streak'] - features_data['feature_away_streak'] # Streak can be 0 validly
     
     # 6. Map Remaining Features (Existing) using safe_numeric_fill
     features_data['implied_home_prob'] = safe_numeric_fill(df.get('Implied_Prob'), 0.5)
@@ -759,7 +770,7 @@ def enrich_with_vertex_features(df: pd.DataFrame, api_clients: Dict[str, Any], s
     def ml_to_prob(ml):
         try:
             m = float(ml)
-            if pd.isna(m): return 0.5 # Fix for 0.0 prob issue
+            if pd.isna(m) or m == 0: return 0.5
             if m > 0: return 100/(m+100)
             return abs(m)/(abs(m)+100)
         except:
