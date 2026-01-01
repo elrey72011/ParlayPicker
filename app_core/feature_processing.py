@@ -747,11 +747,12 @@ def enrich_with_vertex_features(df: pd.DataFrame, api_clients: Dict[str, Any], s
     # 5. Compute Differentials (Vectorized)
     # Neutralize massive differentials if either side is 0.0 (missing stats)
     def safe_diff(series1, series2, default_val=None):
+        # User Request 2: Neutralize "Zero-Stat" Differentials
         # Convert to numeric to ensure comparison works
         s1 = pd.to_numeric(pd.Series(series1), errors='coerce').fillna(0.0)
         s2 = pd.to_numeric(pd.Series(series2), errors='coerce').fillna(0.0)
 
-        # Only subtract if BOTH teams have stats > 0.0
+        # Only subtract if BOTH teams have stats > 0.0 (valid stats)
         # If either is 0.0 (or very close), default the differential to 0.0
         valid_mask = (s1.abs() > 1e-6) & (s2.abs() > 1e-6)
 
