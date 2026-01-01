@@ -3607,13 +3607,20 @@ def get_vertex_prob(game: Dict[str, Any], sentiment_diff: Optional[float]) -> Tu
     try:
         features_df = _build_vertex_feature_row(game, sentiment_diff)
 
-        # Schema Validation for 21 features
+        # 1. Schema Validation for 21 features
         if features_df.shape[1] != 21:
              logger.warning(f"Vertex Schema Mismatch: Expected 21 cols, got {features_df.shape[1]}")
              return None, "schema_mismatch"
 
-        # Ensure pure numeric float types (no strings, no None)
-        features_df = features_df.apply(pd.to_numeric, errors='coerce').fillna(0.0).astype(float)
+        # 2. Strict Numeric Validation (User Request)
+        # iterate through the feature row and ensure every single value is passed through float() and fillna(0.0)
+        for col in features_df.columns:
+            features_df[col] = pd.to_numeric(features_df[col], errors='coerce').fillna(0.0).astype(float)
+
+        # 3. Final Payload Check
+        instances = features_df.values.tolist()
+        if not instances or len(instances[0]) != 21:
+            return None, "schema_mismatch"
 
         if st:
             st.write(f"DEBUG: Feature Vector (DF): {features_df}")
@@ -5403,7 +5410,20 @@ with tab_master:
             commence_local = fmt_local_time(g.get("commence_time_local"))
             commence_date_local = g.get("commence_date_local") or ""
 
-            enrichment = enrich_game_context(g, league_key, api_sports_key, sportsdata_key)
+            try:
+                enrichment = enrich_game_context(g, league_key, api_sports_key, sportsdata_key)
+            except Exception as exc:
+                if league_key == 'NCAAF':
+                    logger.warning(f"NCAAF Stats Outage - Using Defaults: {exc}")
+                else:
+                    logger.error(f"Enrichment failed for {league_key}: {exc}")
+
+                enrichment = {
+                    "injuries_home_count": 0, "injuries_away_count": 0,
+                    "schedule_warnings": ["STATS_OUTAGE"],
+                    "enrichment_errors_sample": [str(exc)]
+                }
+
             if enrichment.get("api_sports_used"):
                 data_source_stats["api_sports_games"] += 1
             if enrichment.get("sportsdata_used"):
@@ -7378,7 +7398,9 @@ with tab_master:
 
         # 4. SHOTGUN ACTIVATION: Use ParlayOptimizer to tier the results
         if ParlayOptimizer:
-            optimizer = ParlayOptimizer(model_dir="./models")
+            # FIX: Use absolute path for robustness
+            model_dir_abs = os.path.join(os.path.dirname(__file__), "models")
+            optimizer = ParlayOptimizer(model_dir=model_dir_abs)
             shotgun_picks = optimizer.get_shotgun_picks(master_df)
             st.session_state["shotgun_data"] = shotgun_picks
 
