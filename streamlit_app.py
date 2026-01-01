@@ -4386,19 +4386,22 @@ def main():
         def extract_prob_and_line(
             market: Dict[str, Any], market_type: str
         ) -> Tuple[Optional[float], Optional[float]]:
-            def _avg_price(fields: List[str]) -> Optional[float]:
-                vals = [safe_float(market.get(f)) for f in fields]
-                vals = [v for v in vals if v is not None]
-                if not vals:
-                    return None
-                return sum(vals) / len(vals)
+            # Reciprocal Probability Logic
+            yes_bid = safe_float(market.get("yes_bid"))
+            no_bid = safe_float(market.get("no_bid"))
 
-            yes_avg = _avg_price(["yes_bid", "yes_ask"])
-            no_avg = _avg_price(["no_bid", "no_ask"])
-            prob = market_prob_from_prices(yes_avg, no_avg)
+            prob = None
+            if yes_bid is not None and no_bid is not None:
+                # Implied YES Ask = 100 - Best NO Bid
+                implied_yes_ask = 100.0 - float(no_bid)
+                # Mid-Price = (Best YES Bid + Implied YES Ask) / 200
+                prob = (float(yes_bid) + implied_yes_ask) / 200.0
+                prob = clamp(prob, 0.0, 1.0)
+
             if prob is None:
                 last_price = safe_float(market.get("last_price"))
                 prob = clamp(last_price / 100.0, 0.0, 1.0) if last_price is not None else None
+
             line = market.get("floor_strike") or market.get("cap_strike")
             if line is not None:
                 try:

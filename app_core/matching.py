@@ -145,7 +145,14 @@ def filter_kalshi_game_markets(
                 pass
 
             # Date Filter
-            if game_dt:
+            # Check for strong team code match to override date filter
+            code_match_override = False
+            if home_code and away_code:
+                # Check ticker for both codes
+                if home_code in ticker and away_code in ticker:
+                    code_match_override = True
+
+            if game_dt and not code_match_override:
                 # Try to extract date from Open Time or Ticker
                 m_open = m.get("open_time")
                 if m_open:
