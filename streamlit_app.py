@@ -744,6 +744,7 @@ def enrich_picks_with_roi_metrics(df: pd.DataFrame) -> pd.DataFrame:
         return "TIGHT"
     
     df['market_stability'] = df.apply(classify_stability, axis=1)
+    df = df.copy()
     
     # 3. Handle 'Market_Badge' Labeling
     def update_badge(row):
