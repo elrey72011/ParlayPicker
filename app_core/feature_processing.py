@@ -753,6 +753,7 @@ def enrich_with_vertex_features(df: pd.DataFrame, api_clients: Dict[str, Any], s
         # If either is 0.0 (or very close), diff is 0.0
         mask = (s1.abs() < 1e-6) | (s2.abs() < 1e-6)
         diff = s1 - s2
+        # Neutralize massive differentials if either team is missing stats (0.0)
         diff[mask] = 0.0
         return diff
 

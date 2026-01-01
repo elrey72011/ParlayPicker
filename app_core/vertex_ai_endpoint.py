@@ -296,13 +296,13 @@ def predict_win_probabilities(df, feature_cols=None, model_path=None):
 
             # Inside the fallback extraction
             results = []
-            for pred in response.predictions:
-                if isinstance(pred, dict):
-                    # Try 'scores' index 1 (Home Win) or 'value'
-                    val = pred.get("scores", [0.5, 0.5])[1] if "scores" in pred else pred.get("value", 0.5)
+            for p in response.predictions:
+                if isinstance(p, dict):
+                    # Extract Home Win Prob (usually index 1 in 'scores')
+                    val = p.get("scores", [0.5, 0.5])[1] if "scores" in p else p.get("value", 0.5)
                     results.append(val)
                 else:
-                    results.append(pred)
+                    results.append(p)
             return results
         else:
             # If Vertex not configured, return None to signal fallback to defaults
