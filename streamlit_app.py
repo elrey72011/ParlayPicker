@@ -4842,6 +4842,19 @@ def load_games(selected_leagues: Union[str, List[str]]) -> List[Dict[str, Any]]:
             total_line = None
             total_pick_odds = None
             spread_engine_used = "missing"
+            # 3. Initialization Block (Fix Fatal Loop NameError - Extended)
+            total_engine_used = "missing"
+            spread_prob_final = 0.5
+            total_prob_final = 0.5
+            spread_prob_market = 0.5
+            total_prob_market = 0.5
+            total_pick = None
+            spread_pick = None
+            kalshi_prob_spread = 0.5
+            kalshi_prob_total = 0.5
+            vertex_spread_prob = 0.5
+            vertex_total_prob = 0.5
+            game_row = {} # Initialize empty game_row to be safe
             total_engine_used = "missing"
             spread_prob_final = 0.5
             total_prob_final = 0.5
@@ -7725,6 +7738,8 @@ with tab_master:
         # 5. UI PERSISTENCE
         # We persist the DEDUPED df as "master_df" because that's what the UI expects for the "Master Analysis" tab table.
         # The shotgun data is stored separately.
+        # 1. Deduplicate Master DF (Fix Duplicate Column Crash)
+        df = df.loc[:, ~df.columns.duplicated()].copy()
         st.session_state["master_df"] = df
 
         required_display_cols = [
