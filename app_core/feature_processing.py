@@ -751,18 +751,24 @@ def enrich_with_vertex_features(df: pd.DataFrame, api_clients: Dict[str, Any], s
         s1 = pd.to_numeric(pd.Series(series1), errors='coerce').fillna(0.0)
         s2 = pd.to_numeric(pd.Series(series2), errors='coerce').fillna(0.0)
 
-        # If either is 0.0 (or very close), diff is 0.0
-        mask = (s1.abs() < 1e-6) | (s2.abs() < 1e-6)
+        # Only subtract if BOTH teams have stats > 0.0
+        # If either is 0.0 (or very close), default the differential to 0.0
+        valid_mask = (s1.abs() > 1e-6) & (s2.abs() > 1e-6)
 
         if default_val is not None:
              # Check if either team is at the default stats level
              # Using small epsilon for float comparison
              is_default = ((s1 - default_val).abs() < 1e-6) | ((s2 - default_val).abs() < 1e-6)
-             mask = mask | is_default
+             # If either is default, we treat it as valid match (0 diff logic applied below if needed?)
+             # User instruction: "Only subtract if both teams have stats greater than 0.0. If either is 0.0, default the differential to 0.0."
+             pass
 
+        # Calculate diff everywhere first
         diff = s1 - s2
-        # Neutralize massive differentials if either team is missing stats (0.0)
-        diff[mask] = 0.0
+
+        # Where NOT valid (meaning at least one is 0.0), set diff to 0.0
+        diff[~valid_mask] = 0.0
+
         return diff
 
     features_data['feature_diff_win_pct'] = safe_diff(features_data['feature_home_win_pct'], features_data['feature_away_win_pct'], default_val=defaults['win_pct'])
@@ -778,6 +784,9 @@ def enrich_with_vertex_features(df: pd.DataFrame, api_clients: Dict[str, Any], s
     # --- NEW: Robust ml_to_prob ---
     def ml_to_prob(ml):
         try:
+            # Return exactly 0.5 if input is None/NaN
+            if ml is None: return 0.5
+
             m = float(ml)
             if pd.isna(m) or m == 0: return 0.5
             if m > 0: return 100/(m+100)
