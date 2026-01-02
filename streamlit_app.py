@@ -6207,7 +6207,7 @@ with tab_master:
             vertex_spread_prob = None
             vertex_total_prob = None
             vertex_available = is_vertex_prediction_configured()
-
+            
             # Inject Kalshi Prob if available
             if kalshi_winner.get("kalshi_matched") and kalshi_prob_used is not None:
                 g["kalshi_prob"] = kalshi_prob_used
@@ -8268,7 +8268,7 @@ with tab_master:
             "gemini_mode": "guardrail",
             "prob_engine": "market_only",
         }
-
+        
         # 1. Add missing columns efficiently
         cols_to_add = {k: v for k, v in gemini_defaults.items() if k not in df.columns}
         if cols_to_add:
