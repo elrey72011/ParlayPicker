@@ -611,15 +611,19 @@ def enrich_with_vertex_features(df: pd.DataFrame, api_clients: Dict[str, Any], s
     home_norm = df[home_col].apply(lambda x: TeamNameMatcher.normalize(str(x)))
     away_norm = df[away_col].apply(lambda x: TeamNameMatcher.normalize(str(x)))
     
-    # 3. Determine League (for fallbacks)
+    # 3. Determine League (for fallbacks) - Robust & Standardized
     league_key = "default"
-    if 'League' in df.columns and len(df) > 0:
-        first_league = str(df['League'].iloc[0]).upper()
-        if "NBA" in first_league: league_key = "NBA"
+    # Find league column case-insensitively
+    league_col = next((c for c in df.columns if str(c).lower() == 'league'), None)
+
+    if league_col and len(df) > 0:
+        first_league = str(df[league_col].iloc[0]).upper()
+        # Check specific college leagues first to prevent partial matches
+        if "NCAAB" in first_league: league_key = "NCAAB"
+        elif "NCAAF" in first_league: league_key = "NCAAF"
+        elif "NBA" in first_league: league_key = "NBA"
         elif "NFL" in first_league: league_key = "NFL"
         elif "NHL" in first_league: league_key = "NHL"
-        elif "NCAAB" in first_league: league_key = "NCAAB"
-        elif "NCAAF" in first_league: league_key = "NCAAF"
         
     defaults = LEAGUE_AVERAGES.get(league_key, LEAGUE_AVERAGES["default"])
     
@@ -755,22 +759,40 @@ def enrich_with_vertex_features(df: pd.DataFrame, api_clients: Dict[str, Any], s
             return 0.0
         return h_val - a_val
 
+    # Helper to ensure we have iterables
+    def to_iterable(val, length):
+        if isinstance(val, (list, pd.Series, np.ndarray)):
+            return val
+        return [val] * length
+
+    df_len = len(df)
+
     # Use list comprehension for explicit row-by-row processing
-    features_data['feature_diff_win_pct'] = [safe_diff(h, a) for h, a in zip(features_data['feature_home_win_pct'], features_data['feature_away_win_pct'])]
-    features_data['feature_diff_ppg'] = [safe_diff(h, a) for h, a in zip(features_data['feature_home_ppg'], features_data['feature_away_ppg'])]
-    features_data['feature_diff_oppg'] = [safe_diff(h, a) for h, a in zip(features_data['feature_home_oppg'], features_data['feature_away_oppg'])]
-    features_data['feature_diff_last5'] = [safe_diff(h, a) for h, a in zip(features_data['feature_home_last5_win_pct'], features_data['feature_away_last5_win_pct'])]
+    features_data['feature_diff_win_pct'] = [safe_diff(h, a) for h, a in zip(to_iterable(features_data['feature_home_win_pct'], df_len), to_iterable(features_data['feature_away_win_pct'], df_len))]
+    features_data['feature_diff_ppg'] = [safe_diff(h, a) for h, a in zip(to_iterable(features_data['feature_home_ppg'], df_len), to_iterable(features_data['feature_away_ppg'], df_len))]
+    features_data['feature_diff_oppg'] = [safe_diff(h, a) for h, a in zip(to_iterable(features_data['feature_home_oppg'], df_len), to_iterable(features_data['feature_away_oppg'], df_len))]
+    features_data['feature_diff_last5'] = [safe_diff(h, a) for h, a in zip(to_iterable(features_data['feature_home_last5_win_pct'], df_len), to_iterable(features_data['feature_away_last5_win_pct'], df_len))]
 
     # Streak can be 0.0 validly, so we keep simple subtraction, or apply same logic if we want to avoid diffs against missing teams.
     # Assuming missing streak is 0.0, diff against 0.0 is valid for streak (e.g. W3 vs Neutral).
     # But if stats are missing, we probably want 0.0.
     # For failsafe, let's use simple subtraction but fillna 0.0 first.
-    s_home = features_data['feature_home_streak'].fillna(0.0)
-    s_away = features_data['feature_away_streak'].fillna(0.0)
-    features_data['feature_diff_streak'] = s_home - s_away
+    s_home = safe_numeric_fill(features_data['feature_home_streak'], 0.0)
+    s_away = safe_numeric_fill(features_data['feature_away_streak'], 0.0)
+
+    # If scalars, manual subtract
+    if not isinstance(s_home, (pd.Series, np.ndarray, list)) and not isinstance(s_away, (pd.Series, np.ndarray, list)):
+        features_data['feature_diff_streak'] = s_home - s_away
+    else:
+        # If mixed scalar/series, pandas handles it usually, but let's be safe
+        s_home_s = s_home if isinstance(s_home, (pd.Series)) else pd.Series([s_home]*df_len, index=df.index)
+        s_away_s = s_away if isinstance(s_away, (pd.Series)) else pd.Series([s_away]*df_len, index=df.index)
+        features_data['feature_diff_streak'] = s_home_s - s_away_s
     
     # 6. Map Remaining Features (Existing) using safe_numeric_fill
-    features_data['implied_home_prob'] = safe_numeric_fill(df.get('Implied_Prob'), 0.5)
+    # Robust lookup for implied probability (handles case sensitivity and var names)
+    imp_col = next((c for c in df.columns if str(c).lower() in ['implied_prob', 'implied_home_prob', 'implied_prob_home']), None)
+    features_data['implied_home_prob'] = safe_numeric_fill(df.get(imp_col), 0.5) if imp_col else 0.5
     
     # Try to refine implied prob from ML if available
     # --- NEW: Robust ml_to_prob ---
