@@ -3605,7 +3605,9 @@ def _build_vertex_feature_row(game: Dict[str, Any], sentiment_diff: Optional[flo
             default_val = 0.5 if "prob" in col else 0.0
             row[col] = safe_float(val) if val is not None else default_val
 
-    return pd.DataFrame([row])
+    df = pd.DataFrame([row])
+    logger.info("Vertex feature row columns: %s", list(df.columns))
+    return df
 
 def get_vertex_prob(game: Dict[str, Any], sentiment_diff: Optional[float]) -> Tuple[Optional[float], Optional[str]]:
     """Return Vertex home win prob (0-1) and an optional warning code."""
@@ -3614,10 +3616,21 @@ def get_vertex_prob(game: Dict[str, Any], sentiment_diff: Optional[float]) -> Tu
     try:
         features_df = _build_vertex_feature_row(game, sentiment_diff)
 
-        # 1. Schema Validation for 21 features
-        if features_df.shape[1] != 21:
-             logger.warning(f"Vertex Schema Mismatch: Expected 21 cols, got {features_df.shape[1]}")
+        expected_cols = len(VERTEX_FEATURE_COLUMNS)
+
+        # 1. Schema Validation for VERTEX_FEATURE_COLUMNS count
+        if features_df.shape[1] != expected_cols:
+             logger.warning(
+                 "Vertex Schema Mismatch: expected %d cols (%s), got %d (%s)",
+                 expected_cols,
+                 VERTEX_FEATURE_COLUMNS,
+                 features_df.shape[1],
+                 list(features_df.columns),
+             )
              return None, "schema_mismatch"
+
+        # Reindex columns to the exact order Vertex expects, filling missing with 0.0
+        features_df = features_df.reindex(columns=VERTEX_FEATURE_COLUMNS)
 
         # 2. Strict Numeric Validation (User Request)
         # iterate through the feature row and ensure every single value is passed through float() and fillna(0.0)
@@ -3627,26 +3640,38 @@ def get_vertex_prob(game: Dict[str, Any], sentiment_diff: Optional[float]) -> Tu
         # 3. Final Payload Check
         instances = features_df.values.tolist()
         if not instances:
+            logger.warning("Vertex feature instances list is empty")
             return None, "schema_mismatch"
 
         if st:
-            st.write(f"DEBUG: Feature Vector (DF): {features_df}")
+            st.write("DEBUG: Feature Vector (DF):", features_df)
+            st.write("DEBUG: Feature Vector:", instances)
+
         payload_hash = hash(tuple(features_df.to_dict(orient="records")[0].items()))
         preds = predict_win_probabilities(features_df, feature_columns=VERTEX_FEATURE_COLUMNS)
         st.session_state["vertex_last_payload_hash"] = payload_hash
+
         if not preds:
+            logger.error("Vertex prediction returned empty or falsy preds for payload_hash=%s", payload_hash)
             return None, "vertex_predict_failed"
+
         prob = safe_float(preds[0])
         if prob is None:
+            logger.error("Vertex prediction first element not a valid float: %r", preds)
             return None, "vertex_invalid_response"
+
         try:
-            st.session_state["vertex_last_raw_response"] = str(preds[:1])
+            # store raw response for debugging if available
+            raw_resp = preds[1] if len(preds) > 1 else None
+            st.session_state["vertex_last_raw_response"] = str(raw_resp) if raw_resp is not None else None
         except Exception:
             st.session_state["vertex_last_raw_response"] = None
+
         return clamp(prob, 0.01, 0.99), None
     except Exception:
         st.session_state["last_exception"] = traceback.format_exc()
         st.session_state["vertex_last_error"] = st.session_state.get("last_exception")
+        logger.exception("Vertex prediction failed with exception")
         return None, "vertex_predict_failed"
 
 # -----------------
