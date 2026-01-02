@@ -50,11 +50,16 @@ class TeamNameMatcher:
         'Chanticleers', 'Catamounts', 'Anteaters', 'Highlanders', 'Matadors'
     ]
     
-    # State abbreviation normalization
-    STATE_ABBREV = {
+    # Common abbreviations normalization
+    ABBREV_MAP = {
         'St.': 'State',
         'St ': 'State ',
         ' St': ' State',
+        'Univ.': 'University',
+        'Univ ': 'University ',
+        ' Univ': ' University',
+        'Intl': 'International',
+        'A&M': 'Agricultural and Mechanical',
     }
     
     # Special case full replacements
@@ -63,6 +68,32 @@ class TeamNameMatcher:
         'ny': 'new york',
         'l.a.': 'los angeles',
         'n.y.': 'new york',
+        'cal': 'california',
+        'umass': 'massachusetts',
+        'upenn': 'pennsylvania',
+        'nc state': 'north carolina state',
+        'n.c. state': 'north carolina state',
+        'oregon st': 'oregon state',
+        'michigan st': 'michigan state',
+        'florida st': 'florida state',
+        'georgia st': 'georgia state',
+        'mississippi st': 'mississippi state',
+        'washington st': 'washington state',
+        'kansas st': 'kansas state',
+        'iowa st': 'iowa state',
+        'ohio st': 'ohio state',
+        'oklahoma st': 'oklahoma state',
+        'penn st': 'pennsylvania state',
+        'ga tech': 'georgia tech',
+        'va tech': 'virginia tech',
+        'vmi': 'virginia military',
+        'army west point': 'army',
+        'navy midshipmen': 'navy',
+        'air force falcons': 'air force',
+        'loyola chicago': 'loyola il',
+        'st. mary\'s': 'saint marys',
+        'st. joseph\'s': 'saint josephs',
+        'st. john\'s': 'saint johns',
         'sacramento st': 'sacramento state',
         'sam houston st': 'sam houston state',
         'oklahoma st': 'oklahoma state',
@@ -152,9 +183,16 @@ class TeamNameMatcher:
             if team == mascot_lower:
                 team = ""
         
-        # Normalize state abbreviations
-        for abbrev, full in cls.STATE_ABBREV.items():
-            team = team.replace(abbrev.lower(), full.lower())
+        # Normalize abbreviations using regex for safety
+        import re
+        # St. or St -> State
+        team = re.sub(r'\bst\.?\b', 'state', team)
+        # Univ. or Univ -> University
+        team = re.sub(r'\buniv\.?\b', 'university', team)
+        # Intl -> International
+        team = re.sub(r'\bintl\.?\b', 'international', team)
+        # A&M
+        team = team.replace('a&m', 'agricultural and mechanical')
         
         # Apply full replacements
         team = team.strip()

@@ -5480,20 +5480,20 @@ with tab_master:
                 with st.spinner("🚀 PRE-FETCH: Batch Enriching Stats..."):
                     # 1. Convert to DataFrame
                     _df_pre = pd.DataFrame(games)
-                    
+
                     # 2. Ensure League column exists (crucial for enrichment lookup)
                     if "League" not in _df_pre.columns:
                         _df_pre["League"] = league
-                    
+
                     # 3. Call Enrichment (uses TeamNameMatcher and API clients)
                     # Note: We pass the specific client for this league
                     _client_map = {league: api_sports_clients.get(league)} if api_sports_clients else {}
                     _df_enriched = enrich_with_vertex_features(_df_pre, _client_map)
-                    
+
                     # 4. Convert back to list of dicts for the loop
                     # Force numeric conversion where possible to avoid NaN issues
                     games_to_process = _df_enriched.to_dict('records')
-                    
+
                     # Debug: Verify one row
                     if games_to_process:
                         logger.info("Pre-Enrichment Sample Stats: %s", games_to_process[0].get('feature_home_ppg'))
@@ -7838,7 +7838,7 @@ with tab_master:
             if missing_cols:
                 # Add missing as None/NaN first
                 master_df = pd.concat([master_df, pd.DataFrame(columns=missing_cols)], axis=1)
-            
+
             # Fill specified fields
             master_df = master_df.fillna(fill_map)
             # Fill visual cols with empty string
@@ -8687,7 +8687,7 @@ with tab_master:
         if "Unnamed: 0" in export_df.columns:
             export_df = export_df.drop(columns=["Unnamed: 0"])
         export_df = reorder_for_spread_total_focus(export_df)
-        
+
         # Optimization: Bulk add missing columns
         missing_export = [c for c in export_cols if c not in export_df.columns]
         if missing_export:
