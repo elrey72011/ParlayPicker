@@ -44,7 +44,10 @@ class TeamNameMatcher:
         'Seahawks', 'Colonels', 'Bluejays', 'Leathernecks', 'Racers',
         'Beacons', 'Mean Green', 'Green Wave', 'Waves', 'Lions',
         'Rebels', 'Fighting Irish', 'Billikens', 'Sharks', 'Chippewas',
-        'Braves', 'Hornets', 'Black Knights'
+        'Braves', 'Hornets', 'Black Knights', 'Golden Griffins', 'Purple Eagles',
+        'Blue Raiders', 'Ragin Cajuns', 'Thundering Herd', 'Golden Flashes',
+        'RedHawks', 'Gamecocks', 'Mean Green', 'Roadrunners', 'Salukis',
+        'Chanticleers', 'Catamounts', 'Anteaters', 'Highlanders', 'Matadors'
     ]
     
     # State abbreviation normalization
@@ -97,6 +100,30 @@ class TeamNameMatcher:
         'pats': 'new england',
         'niners': 'san francisco',
         '49ers': 'san francisco',
+        # NCAAB/NCAAF specific
+        'ole miss': 'mississippi',
+        'pitt': 'pittsburgh',
+        'canisius golden griffins': 'canisius',
+        'niagara purple': 'niagara',
+        'niagara purple eagles': 'niagara',
+        'middle tennessee blue raiders': 'middle tennessee',
+        'louisiana tech bulldogs': 'louisiana tech',
+        'la tech': 'louisiana tech',
+        'fiu': 'florida international',
+        'fau': 'florida atlantic',
+        'utsa': 'texas san antonio',
+        'utep': 'texas el paso',
+        'uab': 'alabama birmingham',
+        'ucf': 'central florida',
+        'smu': 'southern methodist',
+        'tcu': 'texas christian',
+        'lsu': 'louisiana state',
+        'byu': 'brigham young',
+        'vcu': 'virginia commonwealth',
+        'umbc': 'maryland baltimore county',
+        'uncw': 'north carolina wilmington',
+        'uncg': 'north carolina greensboro',
+        'unco': 'northern colorado',
     }
     
     @classmethod

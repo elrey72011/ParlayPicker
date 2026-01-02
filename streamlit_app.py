@@ -3579,23 +3579,24 @@ def _build_vertex_feature_row(game: Dict[str, Any], sentiment_diff: Optional[flo
     base["implied_home_prob"] = safe_float(implied_home)
     base["sentiment_diff"] = safe_float(sentiment_diff)
 
-    # Kalshi prob logic (copied from existing)
-    kalshi_prob = None
-    try:
-        # Pull any cached matched Kalshi prob for this game if present
-        for entry in st.session_state.get("kalshi_match_results") or []:
-            g = entry.get("game") or {}
-            if (
-                g.get("home_team") == game.get("home_team")
-                and g.get("away_team") == game.get("away_team")
-                and (g.get("commence_time_iso_utc") or g.get("commence_time")) == (game.get("commence_time_iso_utc") or game.get("commence_time"))
-            ):
-                winner = (entry.get("matches") or {}).get("winner", {})
-                if winner.get("kalshi_matched"):
-                    kalshi_prob = winner.get("kalshi_prob")
-                break
-    except Exception:
-        kalshi_prob = None
+    # Kalshi prob logic: Prefer passed-in value, then fallback to session cache
+    kalshi_prob = game.get("kalshi_prob")
+    if kalshi_prob is None:
+        try:
+            # Pull any cached matched Kalshi prob for this game if present
+            for entry in st.session_state.get("kalshi_match_results") or []:
+                g = entry.get("game") or {}
+                if (
+                    g.get("home_team") == game.get("home_team")
+                    and g.get("away_team") == game.get("away_team")
+                    and (g.get("commence_time_iso_utc") or g.get("commence_time")) == (game.get("commence_time_iso_utc") or game.get("commence_time"))
+                ):
+                    winner = (entry.get("matches") or {}).get("winner", {})
+                    if winner.get("kalshi_matched"):
+                        kalshi_prob = winner.get("kalshi_prob")
+                    break
+        except Exception:
+            pass
     base["kalshi_prob"] = safe_float(kalshi_prob)
 
     # Injuries / Weather mapping
@@ -5475,12 +5476,12 @@ with tab_master:
                     _df_pre = pd.DataFrame(games)
                     if "League" not in _df_pre.columns:
                         _df_pre["League"] = league
-                    
+
                     # Enrich (fetches stats once for all teams)
                     _df_enriched = enrich_with_vertex_features(_df_pre, {league: api_sports_clients.get(league)})
-                    
+
                     # Convert back to list of dicts
-                    # to_dict('records') converts NaNs to nan (float). 
+                    # to_dict('records') converts NaNs to nan (float).
                     # Our safefloat handlers deal with nan.
                     games_to_process = _df_enriched.to_dict('records')
             except Exception as e:
@@ -6108,22 +6109,6 @@ with tab_master:
                 "total_sentiment_note": "",
             }
 
-            vertex_prob_home = None
-            vertex_warn = None
-            vertex_mode = "disabled"
-            vertex_spread_prob = None
-            vertex_total_prob = None
-            vertex_available = is_vertex_prediction_configured()
-            if use_vertex_numeric_probs:
-                if vertex_available:
-                    vertex_prob_home, vertex_warn = get_vertex_prob(g, sentiment_diff)
-                    vertex_mode = "enabled" if vertex_prob_home is not None else "error"
-                else:
-                    vertex_warn = "vertex_missing_prob"
-                    vertex_mode = "missing"
-            if vertex_warn and vertex_warn not in warnings:
-                warnings.append(vertex_warn)
-
             home_code: Optional[str] = None
             away_code: Optional[str] = None
             try:
@@ -6200,6 +6185,27 @@ with tab_master:
             ):
                 master_stats["kalshi_matches"] += 1
 
+            # --- MOVED VERTEX PREDICTION (After Kalshi for signal injection) ---
+            vertex_prob_home = None
+            vertex_warn = None
+            vertex_mode = "disabled"
+            vertex_spread_prob = None
+            vertex_total_prob = None
+            vertex_available = is_vertex_prediction_configured()
+
+            # Inject Kalshi Prob if available
+            if kalshi_winner.get("kalshi_matched") and kalshi_prob_used is not None:
+                g["kalshi_prob"] = kalshi_prob_used
+
+            if use_vertex_numeric_probs:
+                if vertex_available:
+                    vertex_prob_home, vertex_warn = get_vertex_prob(g, sentiment_diff)
+                    vertex_mode = "enabled" if vertex_prob_home is not None else "error"
+                else:
+                    vertex_warn = "vertex_missing_prob"
+                    vertex_mode = "missing"
+            if vertex_warn and vertex_warn not in warnings:
+                warnings.append(vertex_warn)
 
             # --- 3. AI & Market Probability Calculations ---
             home_ml = g.get("home_ml_price")
@@ -8233,17 +8239,24 @@ with tab_master:
 
         # Reset memory layout
         df = df.copy()
-        # Ensure Gemini columns are never null before export
-        for col, default in [
-            ("gemini_alignment", "NEUTRAL"),
-            ("gemini_rationale", ""),
-            ("gemini_flags_short", ""),
-            ("gemini_mode", "guardrail"),
-            ("prob_engine", "market_only"),
-        ]:
-            if col not in df.columns:
-                df[col] = default
-            df[col] = df[col].fillna(default)
+        # Ensure Gemini columns are never null before export (Optimized)
+        gemini_defaults = {
+            "gemini_alignment": "NEUTRAL",
+            "gemini_rationale": "",
+            "gemini_flags_short": "",
+            "gemini_mode": "guardrail",
+            "prob_engine": "market_only",
+        }
+
+        # 1. Add missing columns efficiently
+        cols_to_add = {k: v for k, v in gemini_defaults.items() if k not in df.columns}
+        if cols_to_add:
+            # Create a DataFrame for new columns and concat
+            new_cols_df = pd.DataFrame(cols_to_add, index=df.index)
+            df = pd.concat([df, new_cols_df], axis=1)
+
+        # 2. Fill NaNs efficiently
+        df = df.fillna(gemini_defaults)
         try:
             null_counts = df[["gemini_mode", "gemini_alignment", "gemini_rationale", "gemini_flags_short"]].isna().sum()
             if null_counts.sum() > 0 and logger:

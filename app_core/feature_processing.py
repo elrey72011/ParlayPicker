@@ -704,6 +704,12 @@ def enrich_with_vertex_features(df: pd.DataFrame, api_clients: Dict[str, Any], s
             return mapped_teams.map(stats_unique[col_name]).fillna(default_val)
 
         # Populate features_data using the new fuzzy map_stat
+
+        # Track Fallbacks (True if team not matched)
+        home_fallback = home_norm.map(team_map).isna()
+        away_fallback = away_norm.map(team_map).isna()
+        features_data['feature_stats_fallback'] = home_fallback | away_fallback
+
         # Home Stats
         features_data['feature_home_win_pct'] = map_stat(home_norm, 'win_pct', defaults['win_pct'])
         features_data['feature_home_home_win_pct'] = map_stat(home_norm, 'home_win_pct', defaults['win_pct'])
@@ -730,6 +736,7 @@ def enrich_with_vertex_features(df: pd.DataFrame, api_clients: Dict[str, Any], s
     # 4. Fill Defaults if stats_df was empty or map failed (though fillna handles map fail)
     # If keys don't exist (because stats_df was empty), create them
     if 'feature_home_win_pct' not in features_data:
+        features_data['feature_stats_fallback'] = True
         features_data['feature_home_win_pct'] = defaults['win_pct']
         features_data['feature_home_home_win_pct'] = defaults['win_pct']
         features_data['feature_home_last5_win_pct'] = defaults['last5_win_pct']
