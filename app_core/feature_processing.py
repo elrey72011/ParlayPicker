@@ -64,39 +64,12 @@ LEAGUE_AVERAGES = {
     "NFL": {"ppg": 22.0, "oppg": 22.0, "win_pct": 0.5, "last5_win_pct": 0.5},
     "NHL": {"ppg": 3.0, "oppg": 3.0, "win_pct": 0.5, "last5_win_pct": 0.5},
     "NCAAB": {"ppg": 72.0, "oppg": 72.0, "win_pct": 0.5, "last5_win_pct": 0.5},
-    "NCAAF": {"ppg": 0.0, "oppg": 0.0, "win_pct": 0.5, "last5_win_pct": 0.5},
+    "NCAAF": {"ppg": 28.0, "oppg": 28.0, "win_pct": 0.5, "last5_win_pct": 0.5},
     "default": {"ppg": 50.0, "oppg": 50.0, "win_pct": 0.5, "last5_win_pct": 0.5}
 }
 
-TARGET_FEATURE_COLUMNS = [
-    "implied_home_prob",
-    "sentiment_diff",
-    "kalshi_prob",
-    "injuries_home_count",
-    "injuries_away_count",
-    "weather_flag",
-    "feature_home_win_pct",
-    "feature_home_home_win_pct",
-    "feature_home_last5_win_pct",
-    "feature_home_ppg",
-    "feature_home_oppg",
-    "feature_home_streak",
-    "feature_away_win_pct",
-    "feature_away_away_win_pct",
-    "feature_away_last5_win_pct",
-    "feature_away_ppg",
-    "feature_away_oppg",
-    "feature_away_streak",
-    "feature_diff_win_pct",
-    "feature_diff_ppg",
-    "feature_diff_oppg",
-    "feature_diff_last5",
-    "feature_diff_streak",
-    "feature_commence_hour",
-    "feature_commence_day_of_week",
-    "feature_home_rest_days",
-    "feature_away_rest_days",
-]
+# Note: We now rely on VERTEX_FEATURE_COLUMNS from app_core.vertex_ai_endpoint
+# to ensure strict schema compliance.
 
 def _get_secret(key_name: str) -> Optional[str]:
     """Helper to retrieve secrets from Streamlit secrets or env vars."""
@@ -303,11 +276,6 @@ def fetch_ncaaf_stats(season_year: int) -> List[Dict[str, Any]]:
             season_stats = api_instance.get_team_season_stats(year=season_year)
         except Exception as e:
             logger.error(f"NCAAF Stats Outage - Using Defaults: {e}", exc_info=True)
-            # Return empty list, enrich_with_vertex_features will handle defaults (or we can return explicit defaults here if strict 0.0 needed)
-            # User request: "default all NCAAF features to 0.0 and add a warning 'NCAAF_STATS_UNAVAILABLE'"
-            # If we return [], enrich_with_vertex_features uses league averages (28.0).
-            # If we want 0.0, we should probably handle it downstream or return a dummy list.
-            # But "API is down" means we can't iterate teams.
             return []
 
         # To get Win PCT, we still need records or game outcomes.
@@ -605,6 +573,7 @@ def enrich_with_vertex_features(df: pd.DataFrame, api_clients: Dict[str, Any], s
     """
     Enrich the master dataframe with features required for Vertex AI.
     Uses pd.concat for performance to avoid fragmentation.
+    Ensures ALL columns in VERTEX_FEATURE_COLUMNS are present in output.
     """
     if df is None or df.empty:
         return df
@@ -844,39 +813,48 @@ def enrich_with_vertex_features(df: pd.DataFrame, api_clients: Dict[str, Any], s
     features_data['feature_home_rest_days'] = 3.0
     features_data['feature_away_rest_days'] = 3.0
     
-    # Validation: Sanity Checks on Feature Ranges
-    # Win Pct [0, 1], PPG [40, 200]
+    # --- SANITY CHECK LAYER ---
+    # User Request 3: Validate ranges and update fallback flag
 
-    # We validate 'feature_home_ppg' as a proxy for stats health
-    ppg_series = features_data.get('feature_home_ppg')
-    if ppg_series is not None:
-        # Convert to series if list
-        if isinstance(ppg_series, list):
-            ppg_series = pd.Series(ppg_series, index=df.index)
-
-        # Check range (soft limits)
-        # NBA ~110, NCAAB ~70, NFL ~22, NHL ~3
-        # If PPG is 0 (and not NCAAF where default is 0?), flag it.
-        # But defaults might be 0.0 for some leagues.
-        # Use LEAGUE_AVERAGES logic.
-
-        # If fallback is False but PPG is 0, that's suspicious (unless NCAAF).
-        # We can't easily fallback explicitly here without re-running logic,
-        # but we can force 'feature_stats_fallback' to True to warn downstream.
-
-        # Check for absolute zeros where we expect data
-        suspicious_zeros = (ppg_series == 0.0) & (~features_data['feature_stats_fallback'])
-        if suspicious_zeros.any():
-             # Only log if it's a league where 0.0 is definitely wrong (almost all except maybe soccer/hockey if strict?)
-             # NHL PPG is ~3.0. 0.0 is possible if team never scored. But unlikely for whole season.
-             if league_key in ["NBA", "NCAAB", "NFL", "NCAAF", "NHL"]:
-                 logger.warning(f"Validation: Found {suspicious_zeros.sum()} rows with 0.0 PPG despite matching teams. Marking as fallback.")
-                 features_data['feature_stats_fallback'] = features_data['feature_stats_fallback'] | suspicious_zeros
-
-    # 7. Final Concat
     features_df = pd.DataFrame(features_data, index=df.index)
+
+    # Win PCT validation
+    win_pct_cols = ['feature_home_win_pct', 'feature_away_win_pct', 'feature_home_last5_win_pct', 'feature_away_last5_win_pct']
+    for col in win_pct_cols:
+        if col in features_df.columns:
+            # Check bounds [0, 1]
+            invalid_mask = (features_df[col] < 0.0) | (features_df[col] > 1.0)
+            if invalid_mask.any():
+                logger.warning(f"Validation Warning: Found {invalid_mask.sum()} rows with invalid {col} (outside 0-1). Marking as fallback.")
+                if 'feature_stats_fallback' in features_df.columns:
+                    features_df.loc[invalid_mask, 'feature_stats_fallback'] = True
+                # Clamp
+                features_df.loc[invalid_mask, col] = features_df.loc[invalid_mask, col].clip(0.0, 1.0)
+
+    # PPG validation (League dependent)
+    ppg_cols = ['feature_home_ppg', 'feature_away_ppg', 'feature_home_oppg', 'feature_away_oppg']
+    for col in ppg_cols:
+        if col in features_df.columns:
+            if 'feature_stats_fallback' in features_df.columns:
+                zeros_mask = (features_df[col].abs() < 0.001) & (~features_df['feature_stats_fallback'])
+                if zeros_mask.any():
+                    features_df.loc[zeros_mask, 'feature_stats_fallback'] = True
+
+    # --- SCHEMA ENFORCEMENT ---
+    # User Request 1: Ensure exact schema order and existence of all Vertex features
+    for col in VERTEX_FEATURE_COLUMNS:
+        if col not in features_df.columns:
+            # Determine default: 0.5 for probs, 0.0 for others
+            default_val = 0.5 if "prob" in col else 0.0
+            features_df[col] = default_val
+            # Log only if this is unexpected (e.g. not just filling in a newly defined feature)
+            # logger.debug(f"Schema Enforcement: Added missing column {col} with default {default_val}")
+
     result = pd.concat([df, features_df], axis=1)
     
+    # Final cleanup to ensure Vertex columns are accessible if needed immediately
+    # Though usually they are accessed by name later.
+
     return result
 
 def run_roi_pipeline_validation(df: pd.DataFrame):
