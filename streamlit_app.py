@@ -5444,9 +5444,9 @@ with tab_master:
             total_prob_final = 0.5
             spread_prob_alt_final = 0.5
             total_alt_prob_final = 0.5
-            total_prob_market = 0.5
             spread_decision_score_alt = 0.5
             total_decision_score_alt = 0.5
+            total_prob_market = 0.5
 
             # Additional resets to prevent NameError in fallback_row
             spread_pick_label = None
@@ -7683,7 +7683,9 @@ with tab_master:
                     if isinstance(col_data, pd.DataFrame):
                         col_data = col_data.iloc[:, 0]
 
-                    inference_df[col] = pd.to_numeric(col_data, errors='coerce').fillna(0.0).astype(float)
+                    # PROB features must default to 0.5 (Neutral), STATS/COUNTS to 0.0
+                    default_val = 0.5 if "prob" in col else 0.0
+                    inference_df[col] = pd.to_numeric(col_data, errors='coerce').fillna(default_val).astype(float)
 
                 # 6. Call prediction using the sanitized batch
                 # This uses Endpoint ID: 5331759481992773632

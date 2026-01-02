@@ -209,6 +209,10 @@ def is_vertex_prediction_configured() -> bool:
         logger.warning("Vertex prediction not configured: google-cloud-aiplatform missing")
         return False
 
+    # User Request 2: Allow the cloud fallback to run even if secrets are missing by using the hardcoded default.
+    if DEFAULT_ENDPOINT_ID:
+        return True
+
     try:
         # User Request 2: Use _get_vertex_config() for robust fallback
         project_id, location, endpoint_id = _get_vertex_config()
