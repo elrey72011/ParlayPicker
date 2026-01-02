@@ -192,7 +192,7 @@ def fetch_nba_stats(season_year: int) -> List[Dict[str, Any]]:
         logger.info(f"Successfully fetched NBA stats for {len(stats)} teams.")
         return stats
     except Exception as e:
-        logger.warning(f"Failed to fetch NBA stats via nba_api: {e}")
+        logger.error(f"Failed to fetch NBA stats via nba_api: {e}", exc_info=True)
         return []
 
 def fetch_nfl_stats(season_year: int) -> List[Dict[str, Any]]:
@@ -272,7 +272,7 @@ def fetch_nfl_stats(season_year: int) -> List[Dict[str, Any]]:
         logger.info(f"Successfully fetched NFL stats for {len(stats)} teams.")
         return stats
     except Exception as e:
-        logger.warning(f"Failed to fetch NFL stats via nfl_data_py: {e}")
+        logger.error(f"Failed to fetch NFL stats via nfl_data_py: {e}", exc_info=True)
         return []
 
 def fetch_ncaaf_stats(season_year: int) -> List[Dict[str, Any]]:
@@ -302,7 +302,7 @@ def fetch_ncaaf_stats(season_year: int) -> List[Dict[str, Any]]:
         try:
             season_stats = api_instance.get_team_season_stats(year=season_year)
         except Exception as e:
-            logger.warning("NCAAF Stats Outage - Using Defaults")
+            logger.error(f"NCAAF Stats Outage - Using Defaults: {e}", exc_info=True)
             # Return empty list, enrich_with_vertex_features will handle defaults (or we can return explicit defaults here if strict 0.0 needed)
             # User request: "default all NCAAF features to 0.0 and add a warning 'NCAAF_STATS_UNAVAILABLE'"
             # If we return [], enrich_with_vertex_features uses league averages (28.0).
@@ -409,7 +409,7 @@ def fetch_ncaaf_stats(season_year: int) -> List[Dict[str, Any]]:
         return stats
 
     except Exception as e:
-        logger.warning(f"Failed to fetch NCAAF stats: {e}")
+        logger.error(f"Failed to fetch NCAAF stats: {e}", exc_info=True)
         return []
 
 def fetch_nhl_stats(season_year: int) -> List[Dict[str, Any]]:
@@ -472,7 +472,7 @@ def fetch_nhl_stats(season_year: int) -> List[Dict[str, Any]]:
         logger.info(f"Successfully fetched NHL stats for {len(stats)} teams.")
         return stats
     except Exception as e:
-        logger.warning(f"Failed to fetch NHL stats: {e}")
+        logger.error(f"Failed to fetch NHL stats: {e}", exc_info=True)
         return []
 
 def fetch_ncaab_stats(season_year: int) -> List[Dict[str, Any]]:

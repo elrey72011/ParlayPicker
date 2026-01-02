@@ -26,9 +26,11 @@ except Exception:  # Streamlit not always available (e.g., offline tests)
 
 try:
     from google.cloud import aiplatform
+    from google.api_core import exceptions as google_exceptions
     _GCP_AVAILABLE = True
 except Exception:
     aiplatform = None  # type: ignore
+    google_exceptions = None  # type: ignore
     _GCP_AVAILABLE = False
 
 from google.oauth2 import service_account  # type: ignore
@@ -296,7 +298,18 @@ def predict_win_probabilities(df, feature_cols=None, model_path=None):
             if st:
                 st.write(f"DEBUG: Feature Vector: {instances}")
 
-            response = endpoint.predict(instances=instances)
+            try:
+                response = endpoint.predict(instances=instances)
+            except google_exceptions.GoogleAPICallError as e:
+                logger.error(f"Vertex AI API Error: {e}", exc_info=True)
+                if st:
+                     st.session_state["vertex_last_error"] = f"API Error: {e}"
+                return None
+            except Exception as e:
+                logger.error(f"Vertex AI Unknown Error: {e}", exc_info=True)
+                if st:
+                     st.session_state["vertex_last_error"] = f"Unknown Error: {e}"
+                return None
 
             # USER REQUEST 2: Fix Parser & Debug
             print(f"DEBUG: Vertex Raw Prediction: {response.predictions}")
@@ -323,7 +336,7 @@ def predict_win_probabilities(df, feature_cols=None, model_path=None):
             return None
 
     except Exception as e:
-        logger.error(f"Vertex Crash Prevented: {e}")
+        logger.error(f"Vertex Crash Prevented: {e}", exc_info=True)
         # Expose error to UI if available
         if st is not None:
             try:
