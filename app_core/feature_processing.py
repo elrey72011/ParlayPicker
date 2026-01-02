@@ -42,11 +42,38 @@ except ImportError:
     cbb_s = None
     warnings.warn("CBBpy not installed. NCAAB stats fetching will fail.")
 
+try:
+    import rapidfuzz
+    from rapidfuzz import process, fuzz
+except ImportError:
+    rapidfuzz = None
+    warnings.warn("rapidfuzz not installed. Fuzzy matching will be degraded.")
+
 # Streamlit secrets access for API keys
 try:
     import streamlit as st
 except ImportError:
     st = None
+
+# Safety shim for st.cache_data if streamlit is not available (e.g. testing)
+if st is None or not hasattr(st, "cache_data"):
+    def _dummy_cache(**kwargs):
+        def decorator(f):
+            return f
+        return decorator
+
+    class _StShim:
+        def cache_data(self, **kwargs):
+            return _dummy_cache(**kwargs)
+        @property
+        def secrets(self):
+            return {}
+
+    if st is None:
+        st = _StShim()
+    else:
+        # If st exists but cache_data is missing (old version?), shim it
+        st.cache_data = _dummy_cache
 
 
 from app_core.team_name_matcher import TeamNameMatcher
@@ -121,10 +148,59 @@ def _parse_form(form_str: str) -> float:
     total = len(form_str)
     return wins / total if total > 0 else 0.5
 
+def robust_normalize_team(name: str) -> str:
+    """
+    Aggressive team name normalization.
+    Converts to lowercase, removes common suffixes/mascots.
+    """
+    if not name:
+        return ""
+
+    # 1. Lowercase and strip
+    name = str(name).lower().strip()
+
+    # 2. Use TeamNameMatcher's normalization first (handles St -> State, punctuation)
+    name = TeamNameMatcher.normalize(name)
+
+    # 3. Additional aggressive mascot stripping (if not covered by TeamNameMatcher)
+    # Note: TeamNameMatcher.normalize already removes mascots from its internal list.
+    # We can add extra cleanup if needed here.
+
+    # Remove common suffixes that might remain or be specific
+    suffixes = [' bulls', ' tigers', ' mountaineers', ' blue hens', ' university', ' college']
+    for s in suffixes:
+        if name.endswith(s):
+            name = name[:-len(s)].strip()
+
+    return name
+
+def fuzzy_match_team_robust(target: str, choices: List[str], threshold: float = 80.0) -> Optional[str]:
+    """
+    Uses rapidfuzz to find the best match for 'target' in 'choices'.
+    Returns the matched string from 'choices' if score > threshold, else None.
+    """
+    if not target or not choices:
+        return None
+
+    if rapidfuzz:
+        # extraction returns list of (match, score, index)
+        # process.extractOne finds the single best match
+        result = process.extractOne(target, choices, scorer=fuzz.token_sort_ratio)
+        if result:
+            match, score, _ = result
+            if score >= threshold:
+                return match
+    else:
+        # Fallback to TeamNameMatcher (difflib) if rapidfuzz missing
+        return TeamNameMatcher.match_team(target, choices, threshold=threshold/100.0)
+
+    return None
+
 # -------------------------------------------------------------------------
 # New Open-Source Stats Fetching Helpers
 # -------------------------------------------------------------------------
 
+@st.cache_data(ttl=21600)  # Cache for 6 hours
 def fetch_nba_stats(season_year: int) -> List[Dict[str, Any]]:
     """
     Fetch NBA stats using nba_api for the given season year (e.g. 2024 for 2024-25).
@@ -169,7 +245,7 @@ def fetch_nba_stats(season_year: int) -> List[Dict[str, Any]]:
             avg_reb = reb
 
             stats.append({
-                "team_norm": TeamNameMatcher.normalize(team_name),
+                "team_norm": robust_normalize_team(team_name),
                 "league_key": "NBA",
                 "win_pct": w_pct,
                 "home_win_pct": w_pct, # Approximation
@@ -189,6 +265,7 @@ def fetch_nba_stats(season_year: int) -> List[Dict[str, Any]]:
         logger.error(f"Failed to fetch NBA stats via nba_api: {e}", exc_info=True)
         return []
 
+@st.cache_data(ttl=21600)
 def fetch_nfl_stats(season_year: int) -> List[Dict[str, Any]]:
     """
     Fetch NFL stats using nfl_data_py for the given season year.
@@ -251,7 +328,7 @@ def fetch_nfl_stats(season_year: int) -> List[Dict[str, Any]]:
             avg_tov = data['turnovers'] / games
 
             stats.append({
-                "team_norm": TeamNameMatcher.normalize(str(team_code)),
+                "team_norm": robust_normalize_team(str(team_code)),
                 "league_key": "NFL",
                 "win_pct": w_pct,
                 "home_win_pct": w_pct,
@@ -269,10 +346,12 @@ def fetch_nfl_stats(season_year: int) -> List[Dict[str, Any]]:
         logger.error(f"Failed to fetch NFL stats via nfl_data_py: {e}", exc_info=True)
         return []
 
+@st.cache_data(ttl=21600)
 def fetch_ncaaf_stats(season_year: int) -> List[Dict[str, Any]]:
     """
     Fetch NCAAF stats using cfbd.
     Requires CFBD_API_KEY.
+    Tries current season, then previous season if empty.
     """
     if cfbd is None:
         return []
@@ -282,26 +361,38 @@ def fetch_ncaaf_stats(season_year: int) -> List[Dict[str, Any]]:
         logger.warning("CFBD_API_KEY not found. Skipping NCAAF stats.")
         return []
 
+    def _fetch_for_year(yr: int) -> List[Any]:
+        try:
+            logger.info(f"Fetching NCAAF stats for season: {yr}")
+            configuration = cfbd.Configuration()
+            configuration.api_key['Authorization'] = api_key
+            configuration.api_key_prefix['Authorization'] = 'Bearer'
+            api_instance = cfbd.StatsApi(cfbd.ApiClient(configuration))
+            return api_instance.get_team_season_stats(year=yr)
+        except Exception as e:
+            logger.warning(f"NCAAF Stats fetch failed for {yr}: {e}")
+            return []
+
     try:
-        logger.info(f"Fetching NCAAF stats for season: {season_year}")
+        # 1. Try requested season year
+        season_stats = _fetch_for_year(season_year)
+
+        # 2. If empty, try previous year (handling Jan/Feb games for previous season)
+        if not season_stats:
+            logger.warning(f"No NCAAF stats found for {season_year}. Trying {season_year - 1}...")
+            season_stats = _fetch_for_year(season_year - 1)
+            # Update season_year for games fetch below
+            if season_stats:
+                season_year = season_year - 1
+
+        if not season_stats:
+            logger.error("NCAAF Stats Outage - Could not fetch stats for current or previous year.")
+            return []
+
+        # Setup configuration again for GamesApi (using correct year)
         configuration = cfbd.Configuration()
         configuration.api_key['Authorization'] = api_key
         configuration.api_key_prefix['Authorization'] = 'Bearer'
-
-        api_instance = cfbd.StatsApi(cfbd.ApiClient(configuration))
-
-        # Use get_team_season_stats per instruction (replaces get_advanced_season_stats)
-        # WRAPPER FIX: Handle HTTP 500 or any API crash gracefully
-        season_stats = []
-        try:
-            season_stats = api_instance.get_team_season_stats(year=season_year)
-        except Exception as e:
-            logger.error(f"NCAAF Stats Outage - Using Defaults: {e}", exc_info=True)
-            return []
-
-        # To get Win PCT, we still need records or game outcomes.
-        # We will use GamesApi to get games and calculate win pct,
-        # but rely on season_stats for the points metrics as requested.
         games_api = cfbd.GamesApi(cfbd.ApiClient(configuration))
 
         try:
@@ -381,7 +472,7 @@ def fetch_ncaaf_stats(season_year: int) -> List[Dict[str, Any]]:
                 w_pct = 0.5
 
             stats.append({
-                "team_norm": TeamNameMatcher.normalize(team_name),
+                "team_norm": robust_normalize_team(team_name),
                 "league_key": "NCAAF",
                 "win_pct": w_pct,
                 "home_win_pct": w_pct,
@@ -401,6 +492,7 @@ def fetch_ncaaf_stats(season_year: int) -> List[Dict[str, Any]]:
         logger.error(f"Failed to fetch NCAAF stats: {e}", exc_info=True)
         return []
 
+@st.cache_data(ttl=21600)
 def fetch_nhl_stats(season_year: int) -> List[Dict[str, Any]]:
     """
     Fetch NHL stats using nhlpy.
@@ -446,7 +538,7 @@ def fetch_nhl_stats(season_year: int) -> List[Dict[str, Any]]:
             # Turnovers not standard in standings
             
             stats.append({
-                "team_norm": TeamNameMatcher.normalize(team_name),
+                "team_norm": robust_normalize_team(team_name),
                 "league_key": "NHL",
                 "win_pct": win_pct,
                 "home_win_pct": win_pct,
@@ -464,6 +556,7 @@ def fetch_nhl_stats(season_year: int) -> List[Dict[str, Any]]:
         logger.error(f"Failed to fetch NHL stats: {e}", exc_info=True)
         return []
 
+@st.cache_data(ttl=21600)
 def fetch_ncaab_stats(season_year: int) -> List[Dict[str, Any]]:
     """
     Fetch NCAAB stats using CBBpy.
@@ -526,7 +619,7 @@ def fetch_ncaab_stats(season_year: int) -> List[Dict[str, Any]]:
             avg_tov = turnovers / games
 
             stats.append({
-                "team_norm": TeamNameMatcher.normalize(team_name),
+                "team_norm": robust_normalize_team(team_name),
                 "league_key": "NCAAB",
                 "win_pct": win_pct,
                 "home_win_pct": win_pct,
@@ -633,8 +726,8 @@ def enrich_with_vertex_features(df: pd.DataFrame, api_clients: Dict[str, Any], s
         # Return original df to avoid crash, but features will be missing
         return df
 
-    home_norm = df[home_col].apply(lambda x: TeamNameMatcher.normalize(str(x)))
-    away_norm = df[away_col].apply(lambda x: TeamNameMatcher.normalize(str(x)))
+    home_norm = df[home_col].apply(lambda x: robust_normalize_team(str(x)))
+    away_norm = df[away_col].apply(lambda x: robust_normalize_team(str(x)))
     
     # 3. Determine League (Row-by-Row) - Robust & Standardized
     # This prevents the bug where one game's league overwrites all defaults
@@ -679,7 +772,7 @@ def enrich_with_vertex_features(df: pd.DataFrame, api_clients: Dict[str, Any], s
         # Dropping duplicates to ensure unique mapping
         stats_unique = stats_df.drop_duplicates(subset=['team_norm']).set_index('team_norm')
         
-        # --- NEW: Fuzzy Matching Logic ---
+        # --- NEW: Fuzzy Matching Logic using RapidFuzz ---
         # Build a mapping from df's normalized teams to stats' normalized teams
 
         # Get all unique teams in the current dataframe
@@ -705,11 +798,9 @@ def enrich_with_vertex_features(df: pd.DataFrame, api_clients: Dict[str, Any], s
                      continue
                  # If manual target not in stats, still fall through to fuzzy or fail
 
-             # 3. Fuzzy match
-             # We need to map t_norm (from Odds/df) -> best match in stats_teams_norm
-             match = TeamNameMatcher.match_team(t_norm, stats_teams_norm, threshold=0.75)
+             # 3. Fuzzy match (Robust)
+             match = fuzzy_match_team_robust(t_norm, stats_teams_norm, threshold=80.0)
              if match:
-                 # match_team returns the matched name from the list
                  team_map[t_norm] = match
              else:
                  # No match found
