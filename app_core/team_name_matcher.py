@@ -84,6 +84,19 @@ class TeamNameMatcher:
         'unlv': 'nevada las vegas',
         'american u.': 'american university',
         'american u': 'american university',
+        # Common NBA/NFL Nicknames
+        'philly': 'philadelphia',
+        'sixers': 'philadelphia',
+        'cavs': 'cleveland',
+        'mavs': 'dallas',
+        'wolves': 'minnesota',
+        't-wolves': 'minnesota',
+        'blazers': 'portland',
+        'jags': 'jacksonville',
+        'bucs': 'tampa bay',
+        'pats': 'new england',
+        'niners': 'san francisco',
+        '49ers': 'san francisco',
     }
     
     @classmethod
