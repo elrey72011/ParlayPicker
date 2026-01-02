@@ -704,7 +704,7 @@ def enrich_with_vertex_features(df: pd.DataFrame, api_clients: Dict[str, Any], s
             return mapped_teams.map(stats_unique[col_name]).fillna(default_val)
 
         # Populate features_data using the new fuzzy map_stat
-
+        
         # Track Fallbacks (True if team not matched)
         home_fallback = home_norm.map(team_map).isna()
         away_fallback = away_norm.map(team_map).isna()
