@@ -872,3 +872,28 @@ def run_roi_pipeline_validation(df: pd.DataFrame):
         logger.info(f"{label}: {status}")
         
     return validation_results
+
+def build_vertex_feature_row_from_game_record(game_row: Dict[str, Any]) -> Dict[str, float]:
+    """
+    Extracts Vertex features from a game record, applying defaults (0.5 for probs, 0.0 for stats).
+    Ensures consistency between single-row and batch inference.
+    """
+    row = {}
+    for col in VERTEX_FEATURE_COLUMNS:
+        val = game_row.get(col)
+        # PROB features must default to 0.5 (Neutral), STATS/COUNTS to 0.0
+        default_val = 0.5 if "prob" in col else 0.0
+
+        # Use safe logic for scalar
+        try:
+            if val is None:
+                parsed = default_val
+            else:
+                parsed = float(val)
+                if parsed != parsed: # NaN check
+                    parsed = default_val
+        except (ValueError, TypeError):
+            parsed = default_val
+
+        row[col] = parsed
+    return row
