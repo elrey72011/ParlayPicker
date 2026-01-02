@@ -3606,6 +3606,17 @@ def _build_vertex_feature_row(game: Dict[str, Any], sentiment_diff: Optional[flo
     w_summary = str(game.get("weather_summary") or "").lower()
     base["weather_flag"] = 1.0 if any(x in w_summary for x in ['rain', 'snow', 'wind']) else 0.0
 
+    # --- USER REQUESTED DEBUG LOGGING ---
+    logger.info("SINGLE GAME BASE ROW: %r", base)
+    if st:
+        st.write("DEBUG: Single-game base dict:", base)
+
+    # --- USER REQUESTED ALIGNMENT ---
+    # Ensure any pre-enriched stats on 'game' are carried over
+    for col in VERTEX_FEATURE_COLUMNS:
+        if col not in base and col in game:
+            base[col] = game[col]
+
     # 3. Use Shared Helper
     feature_dict = build_vertex_feature_row_from_record(base)
 
