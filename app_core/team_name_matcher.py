@@ -6,7 +6,7 @@ This fixes the 15% → 95%+ match rate issue by properly normalizing team names
 
 from difflib import SequenceMatcher
 from typing import Optional, List, Tuple
-
+import re
 
 # Default fuzzy threshold used across TheOver matching flows
 TEAM_FUZZY_THRESHOLD = 0.80
@@ -30,7 +30,7 @@ class TeamNameMatcher:
         'Red Wings', 'Predators', 'Blues', 'Blackhawks', 'Wild', 'Stars',
         'Golden Knights', 'Kraken', 'Ducks', 'Sharks', 'Kings',
         
-        # NCAAB (expand as needed)
+        # NCAAB/NCAAF (expand as needed)
         'Bearkats', 'Bears', 'Bulldogs', 'Eagles', 'Wildcats', 'Huskies',
         'Ramblers', 'Golden Eagles', 'Blue Devils', 'Tar Heels', 'Jayhawks',
         'Buckeyes', 'Spartans', 'Wolverines', 'Hawkeyes', 'Badgers',
@@ -47,32 +47,29 @@ class TeamNameMatcher:
         'Braves', 'Hornets', 'Black Knights', 'Golden Griffins', 'Purple Eagles',
         'Blue Raiders', 'Ragin Cajuns', 'Thundering Herd', 'Golden Flashes',
         'RedHawks', 'Gamecocks', 'Mean Green', 'Roadrunners', 'Salukis',
-        'Chanticleers', 'Catamounts', 'Anteaters', 'Highlanders', 'Matadors'
+        'Chanticleers', 'Catamounts', 'Anteaters', 'Highlanders', 'Matadors',
+        'Commodores', 'Volunteers', 'Falcons', 'Lobos', 'Mustangs', 'Owls',
+        'Minutemen', 'Rams', 'Broncos', 'Midshipmen', 'Cadets', 'Knights',
+        'Terriers', 'Spiders', 'Dukes', 'Flyers', 'Explorers', 'Bonnies',
+        'Patriots', 'Billikens', 'Griffins', 'Peacocks', 'Stags', 'Jaspers',
+        'Gaels', 'Saints', 'Friars', 'Pirates', 'Hoyas', 'Blue Demons',
+        'Musketeers', 'Bulldogs', 'Hoyas', 'Friars', 'Titans', 'Matadors'
     ]
     
-    # Common abbreviations normalization
-    ABBREV_MAP = {
-        'St.': 'State',
-        'St ': 'State ',
-        ' St': ' State',
-        'Univ.': 'University',
-        'Univ ': 'University ',
-        ' Univ': ' University',
-        'Intl': 'International',
-        'A&M': 'Agricultural and Mechanical',
-    }
-    
     # Special case full replacements
+    # KEYS MUST BE NORMALIZED (lowercase, no punctuation, single spaced)
+    # The normalization regex converts "St." to "State", so "St. John's" becomes "state johns"
     FULL_REPLACEMENTS = {
         'la': 'los angeles',
         'ny': 'new york',
-        'l.a.': 'los angeles',
-        'n.y.': 'new york',
+        'l a': 'los angeles',
+        'n y': 'new york',
         'cal': 'california',
         'umass': 'massachusetts',
         'upenn': 'pennsylvania',
+        'penn': 'pennsylvania',
         'nc state': 'north carolina state',
-        'n.c. state': 'north carolina state',
+        'n c state': 'north carolina state',
         'oregon st': 'oregon state',
         'michigan st': 'michigan state',
         'florida st': 'florida state',
@@ -91,32 +88,34 @@ class TeamNameMatcher:
         'navy midshipmen': 'navy',
         'air force falcons': 'air force',
         'loyola chicago': 'loyola il',
-        'st. mary\'s': 'saint marys',
-        'st. joseph\'s': 'saint josephs',
-        'st. john\'s': 'saint johns',
+        # Handle "St." -> "state" conversion
+        'state marys': 'saint marys',
+        'state josephs': 'saint josephs',
+        'state johns': 'saint johns',
+        'state bonaventure': 'saint bonaventure',
+        'state francis pa': 'saint francis pa',
+        'state francis ny': 'saint francis ny',
+        # Keep old keys just in case no "St" prefix was used or regex changes
+        'st marys': 'saint marys',
+        'st josephs': 'saint josephs',
+        'st johns': 'saint johns',
         'sacramento st': 'sacramento state',
         'sam houston st': 'sam houston state',
-        'oklahoma st': 'oklahoma state',
-        'washington st': 'washington state',
         'fresno st': 'fresno state',
         'san diego st': 'san diego state',
         'montana st': 'montana state',
-        'iowa st': 'iowa state',
-        'kansas st': 'kansas state',
-        'oregon st': 'oregon state',
         'arizona st': 'arizona state',
         'boise st': 'boise state',
         'ut arlington': 'texas arlington',
         'uta': 'texas arlington',
-        'ut-arlington': 'texas arlington',
-        'texas-arlington': 'texas arlington',
+        'ut arlington': 'texas arlington',
+        'texas arlington': 'texas arlington',
         'ucsd': 'uc san diego',
         'uconn': 'connecticut',
         'unc': 'north carolina',
         'usc': 'southern california',
         'ucla': 'california los angeles',
         'unlv': 'nevada las vegas',
-        'american u.': 'american university',
         'american u': 'american university',
         # Common NBA/NFL Nicknames
         'philly': 'philadelphia',
@@ -124,7 +123,7 @@ class TeamNameMatcher:
         'cavs': 'cleveland',
         'mavs': 'dallas',
         'wolves': 'minnesota',
-        't-wolves': 'minnesota',
+        't wolves': 'minnesota',
         'blazers': 'portland',
         'jags': 'jacksonville',
         'bucs': 'tampa bay',
@@ -155,6 +154,39 @@ class TeamNameMatcher:
         'uncw': 'north carolina wilmington',
         'uncg': 'north carolina greensboro',
         'unco': 'northern colorado',
+        'miami fl': 'miami',
+        'miami oh': 'miami ohio',
+        'st bonaventure': 'saint bonaventure',
+        'st francis pa': 'saint francis pa',
+        'st francis ny': 'saint francis ny',
+        'li u': 'long island',
+        'liu': 'long island',
+        'mt st marys': 'mount saint marys',
+        'mt state marys': 'mount saint marys', # Mount St. Mary's -> mount state marys
+        'the citadel': 'citadel',
+        'vmi': 'virginia military',
+        'se missouri st': 'southeast missouri state',
+        'semo': 'southeast missouri state',
+        'siu edwardsville': 'southern illinois edwardsville',
+        'siue': 'southern illinois edwardsville',
+        'ul monroe': 'louisiana monroe',
+        'ulm': 'louisiana monroe',
+        'ul lafayette': 'louisiana',
+        'ull': 'louisiana',
+        'unc asheville': 'north carolina asheville',
+        'gardner webb': 'gardner webb',
+        'bethune cookman': 'bethune cookman',
+        'md eastern shore': 'maryland eastern shore',
+        'umes': 'maryland eastern shore',
+        'prairie view': 'prairie view am',
+        'prairie view am': 'prairie view am',
+        'alabama am': 'alabama am',
+        'florida am': 'florida am',
+        'nc at': 'north carolina at',
+        'n c at': 'north carolina at',
+        'texas am': 'texas am',
+        'corpus christi': 'texas am corpus christi',
+        'tamucc': 'texas am corpus christi',
     }
     
     @classmethod
@@ -173,26 +205,39 @@ class TeamNameMatcher:
         
         # Convert to lowercase
         team = team.lower().strip()
-        
-        # Remove mascots
-        for mascot in cls.MASCOTS:
-            mascot_lower = mascot.lower()
-            # Remove at end with space before
-            team = team.replace(f" {mascot_lower}", "")
-            # Remove if it's the entire string
-            if team == mascot_lower:
-                team = ""
-        
+
+        # Remove 'the ' prefix if present (e.g., 'The Citadel')
+        if team.startswith('the '):
+            team = team[4:]
+
         # Normalize abbreviations using regex for safety
-        import re
-        # St. or St -> State
+        # St. or St -> State (must be careful not to replace St in names like West)
+        # We look for word boundaries
         team = re.sub(r'\bst\.?\b', 'state', team)
         # Univ. or Univ -> University
         team = re.sub(r'\buniv\.?\b', 'university', team)
         # Intl -> International
         team = re.sub(r'\bintl\.?\b', 'international', team)
-        # A&M
-        team = team.replace('a&m', 'agricultural and mechanical')
+
+        # Handle & -> and or empty
+        # If we replace & with 'and', we must match keys.
+        # But most normalization strips punctuation.
+        # User requested aggressive normalization.
+        # Let's replace & with space or nothing.
+        team = team.replace('&', '')
+
+        # Remove punctuation
+        team = re.sub(r'[^\w\s]', '', team)
+        
+        # Remove mascots
+        for mascot in cls.MASCOTS:
+            mascot_lower = mascot.lower()
+            # Remove at end with space before
+            if team.endswith(f" {mascot_lower}"):
+                team = team[:-len(mascot_lower)-1]
+            # Remove if it's the entire string
+            if team == mascot_lower:
+                team = ""
         
         # Apply full replacements
         team = team.strip()
@@ -218,21 +263,6 @@ class TeamNameMatcher:
     ) -> Optional[str]:
         """
         Find best matching team name from app_teams list
-        
-        Args:
-            csv_team: Team name from TheOver.ai CSV (e.g., "Oklahoma City")
-            app_teams: List of team names from your app (e.g., ["Oklahoma City Thunder", ...])
-            threshold: Minimum similarity score to consider a match (0.0 to 1.0)
-        
-        Returns:
-            Best matching team name from app_teams, or None if no match
-        
-        Examples:
-            >>> match_team("Oklahoma City", ["Oklahoma City Thunder", "Golden State Warriors"])
-            "Oklahoma City Thunder"
-            
-            >>> match_team("Sam Houston St.", ["Sam Houston St Bearkats", "Baylor Bears"])
-            "Sam Houston St Bearkats"
         """
         csv_normalized = cls.normalize(csv_team)
         
@@ -271,23 +301,6 @@ class TeamNameMatcher:
     ) -> Optional[Tuple[str, str]]:
         """
         Match a game (home + away) from CSV to app games list
-        
-        Args:
-            csv_home: Home team from CSV
-            csv_away: Away team from CSV
-            app_games: List of (home, away) tuples from app
-            threshold: Minimum similarity for each team
-        
-        Returns:
-            Matching (home, away) tuple from app_games, or None
-        
-        Examples:
-            >>> app_games = [
-            ...     ("Oklahoma City Thunder", "Golden State Warriors"),
-            ...     ("Boston Celtics", "New York Knicks")
-            ... ]
-            >>> match_game("Oklahoma City", "Golden State", app_games)
-            ("Oklahoma City Thunder", "Golden State Warriors")
         """
         csv_home_norm = cls.normalize(csv_home)
         csv_away_norm = cls.normalize(csv_away)
@@ -324,122 +337,3 @@ class TeamNameMatcher:
                     best_match = (app_home, app_away)
 
         return best_match
-
-
-# ============================================================================
-# EXAMPLE USAGE IN YOUR STREAMLIT APP
-# ============================================================================
-
-def integrate_theover_csv(csv_data, app_games):
-    """
-    Integrate TheOver.ai CSV data with your app's game list
-    
-    Args:
-        csv_data: List of dicts from CSV (League, HomeTeam, AwayTeam, Pick, Line)
-        app_games: List of your app's games with full team names
-    
-    Returns:
-        Mapping of app games to TheOver.ai picks
-    """
-    matcher = TeamNameMatcher()
-    results = {}
-    matched_count = 0
-    unmatched_csv = []
-    
-    # Extract app game tuples (for matching)
-    app_game_tuples = [
-        (game['home_team'], game['away_team']) 
-        for game in app_games
-    ]
-    
-    for csv_row in csv_data:
-        csv_home = csv_row['HomeTeam']
-        csv_away = csv_row['AwayTeam']
-        
-        # Try to match this CSV game to an app game
-        match = matcher.match_game(
-            csv_home, 
-            csv_away, 
-            app_game_tuples,
-            threshold=0.75
-        )
-        
-        if match:
-            app_home, app_away = match
-            matched_count += 1
-            
-            # Store the TheOver.ai pick
-            results[(app_home, app_away)] = {
-                'pick': csv_row['Pick'],
-                'line': csv_row['Line'],
-                'league': csv_row['League'],
-                'market': csv_row.get('Market', 'Spread')
-            }
-        else:
-            unmatched_csv.append((csv_home, csv_away))
-    
-    print(f"✅ Matched {matched_count}/{len(csv_data)} games from TheOver.ai CSV")
-    
-    if unmatched_csv:
-        print(f"⚠️  Failed to match {len(unmatched_csv)} games:")
-        for home, away in unmatched_csv[:5]:  # Show first 5
-            print(f"   - {away} @ {home}")
-    
-    return results
-
-
-# ============================================================================
-# TESTING
-# ============================================================================
-
-if __name__ == "__main__":
-    print("="*80)
-    print("TEAM NAME MATCHER TESTS")
-    print("="*80)
-    
-    matcher = TeamNameMatcher()
-    
-    # Test normalization
-    test_cases = [
-        ("Oklahoma City Thunder", "oklahoma city"),
-        ("Sam Houston St Bearkats", "sam houston state"),
-        ("Sacramento St Hornets", "sacramento state"),
-        ("New York Knicks", "new york"),
-        ("Vancouver Canucks", "vancouver"),
-        ("Grand Canyon Antelopes", "grand canyon"),
-    ]
-    
-    print("\n🔍 Normalization Tests:")
-    for original, expected in test_cases:
-        result = matcher.normalize(original)
-        status = "✅" if result == expected else "❌"
-        print(f"{status} '{original}' → '{result}' (expected: '{expected}')")
-    
-    # Test matching
-    app_teams = [
-        "Oklahoma City Thunder",
-        "Golden State Warriors",
-        "Sam Houston St Bearkats",
-        "Baylor Bears",
-        "Sacramento St Hornets",
-        "New York Knicks",
-        "Boston Celtics"
-    ]
-    
-    csv_teams = [
-        "Oklahoma City",
-        "Sam Houston St.",
-        "Sacramento State",
-        "New York",
-        "Random Team"  # Should not match
-    ]
-    
-    print("\n🎯 Matching Tests:")
-    for csv_team in csv_teams:
-        match = matcher.match_team(csv_team, app_teams, threshold=0.75)
-        if match:
-            print(f"✅ '{csv_team}' → '{match}'")
-        else:
-            print(f"❌ '{csv_team}' → No match")
-    
-    print("\n" + "="*80)
