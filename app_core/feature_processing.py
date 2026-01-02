@@ -744,50 +744,33 @@ def enrich_with_vertex_features(df: pd.DataFrame, api_clients: Dict[str, Any], s
         if not FREE_TIER_MODE:
             logger.warning(f"Used fallback league averages ({league_key}) for ALL games (stats fetch failed)!")
 
-    # 5. Compute Differentials (Vectorized)
-    # Neutralize massive differentials if either side is 0.0 (missing stats)
-    def safe_diff(series1, series2, default_val=None):
-        # User Request 2: Neutralize "Zero-Stat" Differentials
-        # Convert to numeric to ensure comparison works
-        s1 = pd.to_numeric(pd.Series(series1), errors='coerce').fillna(0.0)
-        s2 = pd.to_numeric(pd.Series(series2), errors='coerce').fillna(0.0)
+    # 5. Compute Differentials
+    # Logic: Only calculate diff if BOTH teams have non-zero data
+    def safe_diff(h, a):
+        # Convert to float to be safe
+        try:
+            h_val = float(h)
+            a_val = float(a)
+        except Exception:
+            return 0.0
 
-        # Only subtract if BOTH teams have stats > 0.0 (valid stats)
-        # If either is 0.0 (or very close), default the differential to 0.0
-        valid_mask = (s1.abs() > 1e-6) & (s2.abs() > 1e-6)
+        if abs(h_val) < 1e-6 or abs(a_val) < 1e-6:
+            return 0.0
+        return h_val - a_val
 
-        if default_val is not None:
-             # Check if either team is at the default stats level
-             # Using small epsilon for float comparison
-             is_default = ((s1 - default_val).abs() < 1e-6) | ((s2 - default_val).abs() < 1e-6)
-             # If either is default, we treat it as invalid to force 0.0 diff
-             valid_mask = valid_mask & (~is_default)
+    # Use list comprehension for explicit row-by-row processing
+    features_data['feature_diff_win_pct'] = [safe_diff(h, a) for h, a in zip(features_data['feature_home_win_pct'], features_data['feature_away_win_pct'])]
+    features_data['feature_diff_ppg'] = [safe_diff(h, a) for h, a in zip(features_data['feature_home_ppg'], features_data['feature_away_ppg'])]
+    features_data['feature_diff_oppg'] = [safe_diff(h, a) for h, a in zip(features_data['feature_home_oppg'], features_data['feature_away_oppg'])]
+    features_data['feature_diff_last5'] = [safe_diff(h, a) for h, a in zip(features_data['feature_home_last5_win_pct'], features_data['feature_away_last5_win_pct'])]
 
-        # Calculate diff everywhere first
-        diff = s1 - s2
-
-        # Where NOT valid (meaning at least one is 0.0), set diff to 0.0
-        diff[~valid_mask] = 0.0
-
-        # FORCE override for totally missing stats to prevent phantom signals
-        # If either side is missing (default 0.0 after fillna), diff must be 0.0
-        # Expanded check to catch NaN or 0.0 explicitly
-        missing_mask = (s1.abs() < 1e-6) | (s2.abs() < 1e-6) | (s1 != s1) | (s2 != s2)
-        diff[missing_mask] = 0.0
-
-        # FORCE override if stats are missing for either team
-        if default_val is not None:
-            # Check if either team is at the default stats level
-            is_default = ((s1 - default_val).abs() < 1e-6) | ((s2 - default_val).abs() < 1e-6)
-            diff[is_default] = 0.0
-
-        return diff
-
-    features_data['feature_diff_win_pct'] = safe_diff(features_data['feature_home_win_pct'], features_data['feature_away_win_pct'], default_val=defaults['win_pct'])
-    features_data['feature_diff_ppg'] = safe_diff(features_data['feature_home_ppg'], features_data['feature_away_ppg'], default_val=defaults['ppg'])
-    features_data['feature_diff_oppg'] = safe_diff(features_data['feature_home_oppg'], features_data['feature_away_oppg'], default_val=defaults['oppg'])
-    features_data['feature_diff_last5'] = safe_diff(features_data['feature_home_last5_win_pct'], features_data['feature_away_last5_win_pct'], default_val=defaults['last5_win_pct'])
-    features_data['feature_diff_streak'] = features_data['feature_home_streak'] - features_data['feature_away_streak'] # Streak can be 0 validly
+    # Streak can be 0.0 validly, so we keep simple subtraction, or apply same logic if we want to avoid diffs against missing teams.
+    # Assuming missing streak is 0.0, diff against 0.0 is valid for streak (e.g. W3 vs Neutral).
+    # But if stats are missing, we probably want 0.0.
+    # For failsafe, let's use simple subtraction but fillna 0.0 first.
+    s_home = features_data['feature_home_streak'].fillna(0.0)
+    s_away = features_data['feature_away_streak'].fillna(0.0)
+    features_data['feature_diff_streak'] = s_home - s_away
     
     # 6. Map Remaining Features (Existing) using safe_numeric_fill
     features_data['implied_home_prob'] = safe_numeric_fill(df.get('Implied_Prob'), 0.5)
