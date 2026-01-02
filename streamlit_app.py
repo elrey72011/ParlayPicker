@@ -36,7 +36,7 @@ from app_core.apisports import (
     APISportsHockeyClient,
     get_key as get_apisports_key,
 )
-from app_core.feature_processing import enrich_with_vertex_features
+from app_core.feature_processing import enrich_with_vertex_features, build_vertex_feature_row_from_game_record
 from app_core.sportsdata import (
     SportsDataNBAClient,
     SportsDataNFLClient,
@@ -3571,7 +3571,15 @@ def fetch_news() -> List[Dict[str, Any]]:
 # -----------------
 
 def _build_vertex_feature_row(game: Dict[str, Any], sentiment_diff: Optional[float]) -> pd.DataFrame:
+    # 1. Prepare Base Context
+    base = dict(game)
+
+    # 2. Add Override / Calculated fields that might not be in 'game' yet
     implied_home = american_to_implied_prob(game.get("home_ml_price")) or game.get("implied_prob_home")
+    base["implied_home_prob"] = safe_float(implied_home)
+    base["sentiment_diff"] = safe_float(sentiment_diff)
+
+    # Kalshi prob logic (copied from existing)
     kalshi_prob = None
     try:
         # Pull any cached matched Kalshi prob for this game if present
@@ -3588,25 +3596,19 @@ def _build_vertex_feature_row(game: Dict[str, Any], sentiment_diff: Optional[flo
                 break
     except Exception:
         kalshi_prob = None
-    row = {
-        "implied_home_prob": safe_float(implied_home),
-        "sentiment_diff": safe_float(sentiment_diff),
-        "kalshi_prob": safe_float(kalshi_prob),
-        "injuries_home_count": safe_float(game.get("injuries_home_count")),
-        "injuries_away_count": safe_float(game.get("injuries_away_count")),
-        "weather_flag": 1.0 if game.get("weather_summary") else 0.0,
-    }
+    base["kalshi_prob"] = safe_float(kalshi_prob)
 
-    # User Request: Ensure all mandatory Vertex features are present and defaulted to 0.0
-    for col in VERTEX_FEATURE_COLUMNS:
-        if col not in row:
-            val = game.get(col)
-            # PROB keys must default to 0.5 (neutral), STATS/COUNTS to 0.0
-            default_val = 0.5 if "prob" in col else 0.0
-            row[col] = safe_float(val) if val is not None else default_val
+    # Injuries / Weather mapping
+    base["injuries_home_count"] = safe_float(game.get("injuries_home_count"))
+    base["injuries_away_count"] = safe_float(game.get("injuries_away_count"))
+    base["weather_flag"] = 1.0 if game.get("weather_summary") else 0.0
 
-    df = pd.DataFrame([row])
-    logger.info("Vertex feature row columns: %s", list(df.columns))
+    # 3. Use Shared Helper
+    feature_dict = build_vertex_feature_row_from_game_record(base)
+
+    # 4. Return DataFrame
+    df = pd.DataFrame([feature_dict])
+    df = df.reindex(columns=VERTEX_FEATURE_COLUMNS)
     return df
 
 def get_vertex_prob(game: Dict[str, Any], sentiment_diff: Optional[float]) -> Tuple[Optional[float], Optional[str]]:
