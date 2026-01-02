@@ -8239,17 +8239,24 @@ with tab_master:
 
         # Reset memory layout
         df = df.copy()
-        # Ensure Gemini columns are never null before export
-        for col, default in [
-            ("gemini_alignment", "NEUTRAL"),
-            ("gemini_rationale", ""),
-            ("gemini_flags_short", ""),
-            ("gemini_mode", "guardrail"),
-            ("prob_engine", "market_only"),
-        ]:
-            if col not in df.columns:
-                df[col] = default
-            df[col] = df[col].fillna(default)
+        # Ensure Gemini columns are never null before export (Optimized)
+        gemini_defaults = {
+            "gemini_alignment": "NEUTRAL",
+            "gemini_rationale": "",
+            "gemini_flags_short": "",
+            "gemini_mode": "guardrail",
+            "prob_engine": "market_only",
+        }
+
+        # 1. Add missing columns efficiently
+        cols_to_add = {k: v for k, v in gemini_defaults.items() if k not in df.columns}
+        if cols_to_add:
+            # Create a DataFrame for new columns and concat
+            new_cols_df = pd.DataFrame(cols_to_add, index=df.index)
+            df = pd.concat([df, new_cols_df], axis=1)
+
+        # 2. Fill NaNs efficiently
+        df = df.fillna(gemini_defaults)
         try:
             null_counts = df[["gemini_mode", "gemini_alignment", "gemini_rationale", "gemini_flags_short"]].isna().sum()
             if null_counts.sum() > 0 and logger:
