@@ -3626,7 +3626,7 @@ def get_vertex_prob(game: Dict[str, Any], sentiment_diff: Optional[float]) -> Tu
 
         # 3. Final Payload Check
         instances = features_df.values.tolist()
-        if not instances or len(instances[0]) != 21:
+        if not instances:
             return None, "schema_mismatch"
 
         if st:
