@@ -3601,7 +3601,10 @@ def _build_vertex_feature_row(game: Dict[str, Any], sentiment_diff: Optional[flo
     # Injuries / Weather mapping
     base["injuries_home_count"] = safe_float(game.get("injuries_home_count"))
     base["injuries_away_count"] = safe_float(game.get("injuries_away_count"))
-    base["weather_flag"] = 1.0 if game.get("weather_summary") else 0.0
+
+    # Weather flag parity with batch logic (keyword search)
+    w_summary = str(game.get("weather_summary") or "").lower()
+    base["weather_flag"] = 1.0 if any(x in w_summary for x in ['rain', 'snow', 'wind']) else 0.0
 
     # 3. Use Shared Helper
     feature_dict = build_vertex_feature_row_from_record(base)
