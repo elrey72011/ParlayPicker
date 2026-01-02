@@ -68,8 +68,29 @@ LEAGUE_AVERAGES = {
     "default": {"ppg": 50.0, "oppg": 50.0, "win_pct": 0.5, "last5_win_pct": 0.5}
 }
 
-# Note: We now rely on VERTEX_FEATURE_COLUMNS from app_core.vertex_ai_endpoint
-# to ensure strict schema compliance.
+# Manual overrides for team name normalization failures
+# Keys and values should be lowercase normalized forms
+MANUAL_TEAM_OVERRIDES = {
+    "washington state": "washington st",
+    "mississippi state": "mississippi st",
+    "michigan state": "michigan st",
+    "kansas state": "kansas st",
+    "arizona state": "arizona st",
+    "florida state": "florida st",
+    "oregon state": "oregon st",
+    "penn state": "penn st",
+    "nc state": "nc st",
+    "north carolina state": "nc st",
+    "ohio state": "ohio st",
+    "oklahoma state": "oklahoma st",
+    "boise state": "boise st",
+    "fresno state": "fresno st",
+    "san diego state": "san diego st",
+    "san jose state": "san jose st",
+    "utah state": "utah st",
+    "colorado state": "colorado st",
+    "iowa state": "iowa st",
+}
 
 def _get_secret(key_name: str) -> Optional[str]:
     """Helper to retrieve secrets from Streamlit secrets or env vars."""
@@ -595,6 +616,10 @@ def enrich_with_vertex_features(df: pd.DataFrame, api_clients: Dict[str, Any], s
         except Exception:
             return fill_val
 
+    # Standardize 'league' column
+    if 'League' in df.columns:
+        df = df.rename(columns={'League': 'league'})
+
     # 1. Fetch Stats (Using new function)
     stats_df = fetch_team_stats(api_clients, season_year=season_year)
     
@@ -611,21 +636,36 @@ def enrich_with_vertex_features(df: pd.DataFrame, api_clients: Dict[str, Any], s
     home_norm = df[home_col].apply(lambda x: TeamNameMatcher.normalize(str(x)))
     away_norm = df[away_col].apply(lambda x: TeamNameMatcher.normalize(str(x)))
     
-    # 3. Determine League (for fallbacks) - Robust & Standardized
-    league_key = "default"
-    # Find league column case-insensitively
-    league_col = next((c for c in df.columns if str(c).lower() == 'league'), None)
+    # 3. Determine League (Row-by-Row) - Robust & Standardized
+    # This prevents the bug where one game's league overwrites all defaults
 
-    if league_col and len(df) > 0:
-        first_league = str(df[league_col].iloc[0]).upper()
-        # Check specific college leagues first to prevent partial matches
-        if "NCAAB" in first_league: league_key = "NCAAB"
-        elif "NCAAF" in first_league: league_key = "NCAAF"
-        elif "NBA" in first_league: league_key = "NBA"
-        elif "NFL" in first_league: league_key = "NFL"
-        elif "NHL" in first_league: league_key = "NHL"
-        
-    defaults = LEAGUE_AVERAGES.get(league_key, LEAGUE_AVERAGES["default"])
+    league_col = 'league' if 'league' in df.columns else None
+
+    def get_row_league_key(l_val):
+        s = str(l_val).upper()
+        if "NCAAB" in s: return "NCAAB"
+        if "NCAAF" in s: return "NCAAF"
+        if "NBA" in s: return "NBA"
+        if "NFL" in s: return "NFL"
+        if "NHL" in s: return "NHL"
+        return "default"
+
+    # Create Series of keys aligned with DF index
+    if league_col:
+        league_keys = df[league_col].apply(get_row_league_key)
+    else:
+        league_keys = pd.Series(["default"] * len(df), index=df.index)
+
+    # 4. Create Series of Defaults aligned with DF index
+    # We pre-calculate these so we can pass them to map_stat
+
+    def get_default_stat(key, stat_name):
+        return LEAGUE_AVERAGES.get(key, LEAGUE_AVERAGES["default"])[stat_name]
+
+    default_ppg = league_keys.apply(lambda k: get_default_stat(k, 'ppg'))
+    default_oppg = league_keys.apply(lambda k: get_default_stat(k, 'oppg'))
+    default_win_pct = league_keys.apply(lambda k: get_default_stat(k, 'win_pct'))
+    default_last5 = league_keys.apply(lambda k: get_default_stat(k, 'last5_win_pct'))
     
     # Use dict to collect columns to avoid fragmentation
     features_data = {}
@@ -633,7 +673,7 @@ def enrich_with_vertex_features(df: pd.DataFrame, api_clients: Dict[str, Any], s
     if stats_df.empty:
         if not FREE_TIER_MODE:
             logger.warning("No stats fetched. Filling with defaults.")
-        # Fill defaults logic comes later
+        # Logic handles empty stats via map_stat fallback below
     else:
         # Prepare lookup dictionary: team_norm -> stats_series
         # Dropping duplicates to ensure unique mapping
@@ -647,34 +687,43 @@ def enrich_with_vertex_features(df: pd.DataFrame, api_clients: Dict[str, Any], s
         stats_teams_norm = stats_unique.index.tolist()
 
         logger.info(f"Team Stats Available: {len(stats_teams_norm)} teams fetched.")
-        # Optional: Log first 10 for debugging
-        # logger.info(f"Stats Teams Sample: {stats_teams_norm[:10]}")
 
         team_map = {}
         for t_norm in df_teams_norm:
              if not t_norm: continue
 
-             # Direct match first
+             # 1. Direct match
              if t_norm in stats_unique.index:
                  team_map[t_norm] = t_norm
+                 continue
+
+             # 2. Manual Override
+             if t_norm in MANUAL_TEAM_OVERRIDES:
+                 target = MANUAL_TEAM_OVERRIDES[t_norm]
+                 if target in stats_unique.index:
+                     team_map[t_norm] = target
+                     continue
+                 # If manual target not in stats, still fall through to fuzzy or fail
+
+             # 3. Fuzzy match
+             # We need to map t_norm (from Odds/df) -> best match in stats_teams_norm
+             match = TeamNameMatcher.match_team(t_norm, stats_teams_norm, threshold=0.75)
+             if match:
+                 # match_team returns the matched name from the list
+                 team_map[t_norm] = match
              else:
-                 # Fuzzy match
-                 # We need to map t_norm (from Odds/df) -> best match in stats_teams_norm
-                 match = TeamNameMatcher.match_team(t_norm, stats_teams_norm, threshold=0.75)
-                 if match:
-                     # match_team returns the matched name from the list (which is already normalized here)
-                     team_map[t_norm] = match
-                 else:
-                     # No match found
-                     logger.error(f"TEAM MATCH FAILURE: Could not match game team '{t_norm}' to any fetched stats team.")
-                     team_map[t_norm] = None
+                 # No match found
+                 logger.error(f"TEAM MATCH FAILURE: Could not match game team '{t_norm}' to any fetched stats team.")
+                 team_map[t_norm] = None
 
         # Helper to map a stat column efficiently using the map
-        def map_stat(norm_series, col_name, default_val):
-            # 1. Map df team name -> stats team name (fuzzy)
+        def map_stat(norm_series, col_name, default_series):
+            # 1. Map df team name -> stats team name (fuzzy/manual)
             mapped_teams = norm_series.map(team_map)
             # 2. Map stats team name -> stat value
-            return mapped_teams.map(stats_unique[col_name]).fillna(default_val)
+            values = mapped_teams.map(stats_unique[col_name])
+            # 3. Fill NaN with index-aligned default series
+            return values.fillna(default_series)
 
         # Populate features_data using the new fuzzy map_stat
         
@@ -689,7 +738,7 @@ def enrich_with_vertex_features(df: pd.DataFrame, api_clients: Dict[str, Any], s
             fallback_indices = df.index[combined_fallback]
             for idx in fallback_indices:
                 try:
-                    league_str = df.loc[idx, 'League'] if 'League' in df.columns else league_key
+                    league_str = df.loc[idx, league_col] if league_col else "Unknown"
                     h_team = df.loc[idx, home_col]
                     a_team = df.loc[idx, away_col]
                     # Check which one failed
@@ -700,50 +749,49 @@ def enrich_with_vertex_features(df: pd.DataFrame, api_clients: Dict[str, Any], s
                     pass
 
         # Home Stats
-        features_data['feature_home_win_pct'] = map_stat(home_norm, 'win_pct', defaults['win_pct'])
-        features_data['feature_home_home_win_pct'] = map_stat(home_norm, 'home_win_pct', defaults['win_pct'])
-        features_data['feature_home_last5_win_pct'] = map_stat(home_norm, 'last5_win_pct', defaults['last5_win_pct'])
+        features_data['feature_home_win_pct'] = map_stat(home_norm, 'win_pct', default_win_pct)
+        features_data['feature_home_home_win_pct'] = map_stat(home_norm, 'home_win_pct', default_win_pct)
+        features_data['feature_home_last5_win_pct'] = map_stat(home_norm, 'last5_win_pct', default_last5)
 
         # New key mapping for standardized keys
-        features_data['feature_home_ppg'] = map_stat(home_norm, 'points_per_game', defaults['ppg'])
-        features_data['feature_home_oppg'] = map_stat(home_norm, 'points_allowed_per_game', defaults['oppg'])
+        features_data['feature_home_ppg'] = map_stat(home_norm, 'points_per_game', default_ppg)
+        features_data['feature_home_oppg'] = map_stat(home_norm, 'points_allowed_per_game', default_oppg)
 
-        features_data['feature_home_streak'] = map_stat(home_norm, 'streak', 0.0)
-        features_data['feature_home_turnovers'] = map_stat(home_norm, 'turnovers', 0.0)
+        features_data['feature_home_streak'] = map_stat(home_norm, 'streak', pd.Series(0.0, index=df.index))
+        features_data['feature_home_turnovers'] = map_stat(home_norm, 'turnovers', pd.Series(0.0, index=df.index))
         
         # Away Stats
-        features_data['feature_away_win_pct'] = map_stat(away_norm, 'win_pct', defaults['win_pct'])
-        features_data['feature_away_away_win_pct'] = map_stat(away_norm, 'away_win_pct', defaults['win_pct'])
-        features_data['feature_away_last5_win_pct'] = map_stat(away_norm, 'last5_win_pct', defaults['last5_win_pct'])
+        features_data['feature_away_win_pct'] = map_stat(away_norm, 'win_pct', default_win_pct)
+        features_data['feature_away_away_win_pct'] = map_stat(away_norm, 'away_win_pct', default_win_pct)
+        features_data['feature_away_last5_win_pct'] = map_stat(away_norm, 'last5_win_pct', default_last5)
 
-        features_data['feature_away_ppg'] = map_stat(away_norm, 'points_per_game', defaults['ppg'])
-        features_data['feature_away_oppg'] = map_stat(away_norm, 'points_allowed_per_game', defaults['oppg'])
+        features_data['feature_away_ppg'] = map_stat(away_norm, 'points_per_game', default_ppg)
+        features_data['feature_away_oppg'] = map_stat(away_norm, 'points_allowed_per_game', default_oppg)
 
-        features_data['feature_away_streak'] = map_stat(away_norm, 'streak', 0.0)
-        features_data['feature_away_turnovers'] = map_stat(away_norm, 'turnovers', 0.0)
+        features_data['feature_away_streak'] = map_stat(away_norm, 'streak', pd.Series(0.0, index=df.index))
+        features_data['feature_away_turnovers'] = map_stat(away_norm, 'turnovers', pd.Series(0.0, index=df.index))
 
-    # 4. Fill Defaults if stats_df was empty or map failed (though fillna handles map fail)
-    # If keys don't exist (because stats_df was empty), create them
+    # 4. Fill Defaults if stats_df was empty
     if 'feature_home_win_pct' not in features_data:
         features_data['feature_stats_fallback'] = True
-        features_data['feature_home_win_pct'] = defaults['win_pct']
-        features_data['feature_home_home_win_pct'] = defaults['win_pct']
-        features_data['feature_home_last5_win_pct'] = defaults['last5_win_pct']
-        features_data['feature_home_ppg'] = defaults['ppg']
-        features_data['feature_home_oppg'] = defaults['oppg']
+        features_data['feature_home_win_pct'] = default_win_pct
+        features_data['feature_home_home_win_pct'] = default_win_pct
+        features_data['feature_home_last5_win_pct'] = default_last5
+        features_data['feature_home_ppg'] = default_ppg
+        features_data['feature_home_oppg'] = default_oppg
         features_data['feature_home_streak'] = 0.0
         features_data['feature_home_turnovers'] = 0.0
         
-        features_data['feature_away_win_pct'] = defaults['win_pct']
-        features_data['feature_away_away_win_pct'] = defaults['win_pct']
-        features_data['feature_away_last5_win_pct'] = defaults['last5_win_pct']
-        features_data['feature_away_ppg'] = defaults['ppg']
-        features_data['feature_away_oppg'] = defaults['oppg']
+        features_data['feature_away_win_pct'] = default_win_pct
+        features_data['feature_away_away_win_pct'] = default_win_pct
+        features_data['feature_away_last5_win_pct'] = default_last5
+        features_data['feature_away_ppg'] = default_ppg
+        features_data['feature_away_oppg'] = default_oppg
         features_data['feature_away_streak'] = 0.0
         features_data['feature_away_turnovers'] = 0.0
         
         if not FREE_TIER_MODE:
-            logger.warning(f"Used fallback league averages ({league_key}) for ALL games (stats fetch failed)!")
+            logger.warning("Used fallback league averages for ALL games (stats fetch failed)!")
 
     # 5. Compute Differentials
     # Logic: Only calculate diff if BOTH teams have non-zero data
@@ -773,10 +821,7 @@ def enrich_with_vertex_features(df: pd.DataFrame, api_clients: Dict[str, Any], s
     features_data['feature_diff_oppg'] = [safe_diff(h, a) for h, a in zip(to_iterable(features_data['feature_home_oppg'], df_len), to_iterable(features_data['feature_away_oppg'], df_len))]
     features_data['feature_diff_last5'] = [safe_diff(h, a) for h, a in zip(to_iterable(features_data['feature_home_last5_win_pct'], df_len), to_iterable(features_data['feature_away_last5_win_pct'], df_len))]
 
-    # Streak can be 0.0 validly, so we keep simple subtraction, or apply same logic if we want to avoid diffs against missing teams.
-    # Assuming missing streak is 0.0, diff against 0.0 is valid for streak (e.g. W3 vs Neutral).
-    # But if stats are missing, we probably want 0.0.
-    # For failsafe, let's use simple subtraction but fillna 0.0 first.
+    # Streak
     s_home = safe_numeric_fill(features_data['feature_home_streak'], 0.0)
     s_away = safe_numeric_fill(features_data['feature_away_streak'], 0.0)
 
@@ -790,25 +835,37 @@ def enrich_with_vertex_features(df: pd.DataFrame, api_clients: Dict[str, Any], s
         features_data['feature_diff_streak'] = s_home_s - s_away_s
     
     # 6. Map Remaining Features (Existing) using safe_numeric_fill
-    # Robust lookup for implied probability (handles case sensitivity and var names)
-    imp_col = next((c for c in df.columns if str(c).lower() in ['implied_prob', 'implied_home_prob', 'implied_prob_home']), None)
-    features_data['implied_home_prob'] = safe_numeric_fill(df.get(imp_col), 0.5) if imp_col else 0.5
     
-    # Try to refine implied prob from ML if available
     # --- NEW: Robust ml_to_prob ---
     def ml_to_prob(ml):
         try:
-            if ml is None: return 0.5
+            if ml is None: return np.nan # Return NaN instead of 0.5 to signify missing
             m = float(ml)
-            if m != m or m == 0: return 0.5
+            if m != m or m == 0: return np.nan
             if m > 0: return 100/(m+100)
             return abs(m)/(abs(m)+100)
         except:
-            return 0.5
-            
+            return np.nan
+
+    # Identify implied probability column
+    imp_col = next((c for c in df.columns if str(c).lower() in ['implied_prob', 'implied_home_prob', 'implied_prob_home']), None)
+
+    # Step 1: Initialize with existing column or NaNs
+    if imp_col:
+        # Use existing values, coerce errors to NaN
+        prob_series = pd.to_numeric(df[imp_col], errors='coerce')
+    else:
+        prob_series = pd.Series([np.nan]*len(df), index=df.index)
+
+    # Step 2: Calculate from Home_ML if present
     if 'Home_ML' in df.columns:
-        features_data['implied_home_prob'] = df['Home_ML'].apply(ml_to_prob)
-        
+        ml_probs = df['Home_ML'].apply(ml_to_prob)
+        # Fill missing values in prob_series with calculated ML probs
+        prob_series = prob_series.fillna(ml_probs)
+
+    # Step 3: Final fallback to 0.5 only if still NaN
+    features_data['implied_home_prob'] = prob_series.fillna(0.5)
+
     features_data['sentiment_diff'] = safe_numeric_fill(df.get('Sentiment_Diff'), 0.0)
     features_data['kalshi_prob'] = safe_numeric_fill(df.get('kalshi_prob'), 0.5)
     features_data['injuries_home_count'] = safe_numeric_fill(df.get('injuries_home_count'), 0)
@@ -836,8 +893,6 @@ def enrich_with_vertex_features(df: pd.DataFrame, api_clients: Dict[str, Any], s
     features_data['feature_away_rest_days'] = 3.0
     
     # --- SANITY CHECK LAYER ---
-    # User Request 3: Validate ranges and update fallback flag
-
     features_df = pd.DataFrame(features_data, index=df.index)
 
     # Win PCT validation
@@ -863,20 +918,13 @@ def enrich_with_vertex_features(df: pd.DataFrame, api_clients: Dict[str, Any], s
                     features_df.loc[zeros_mask, 'feature_stats_fallback'] = True
 
     # --- SCHEMA ENFORCEMENT ---
-    # User Request 1: Ensure exact schema order and existence of all Vertex features
     for col in VERTEX_FEATURE_COLUMNS:
         if col not in features_df.columns:
             # Determine default: 0.5 for probs, 0.0 for others
             default_val = 0.5 if "prob" in col else 0.0
             features_df[col] = default_val
-            # Log only if this is unexpected (e.g. not just filling in a newly defined feature)
-            # logger.debug(f"Schema Enforcement: Added missing column {col} with default {default_val}")
 
     result = pd.concat([df, features_df], axis=1)
-    
-    # Final cleanup to ensure Vertex columns are accessible if needed immediately
-    # Though usually they are accessed by name later.
-
     return result
 
 def run_roi_pipeline_validation(df: pd.DataFrame):
