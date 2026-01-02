@@ -673,6 +673,10 @@ def enrich_with_vertex_features(df: pd.DataFrame, api_clients: Dict[str, Any], s
         df_teams_norm = pd.concat([home_norm, away_norm]).unique()
         stats_teams_norm = stats_unique.index.tolist()
 
+        logger.info(f"Team Stats Available: {len(stats_teams_norm)} teams fetched.")
+        # Optional: Log first 10 for debugging
+        # logger.info(f"Stats Teams Sample: {stats_teams_norm[:10]}")
+
         team_map = {}
         for t_norm in df_teams_norm:
              if not t_norm: continue
@@ -689,6 +693,7 @@ def enrich_with_vertex_features(df: pd.DataFrame, api_clients: Dict[str, Any], s
                      team_map[t_norm] = match
                  else:
                      # No match found
+                     logger.error(f"TEAM MATCH FAILURE: Could not match game team '{t_norm}' to any fetched stats team.")
                      team_map[t_norm] = None
 
         # Helper to map a stat column efficiently using the map

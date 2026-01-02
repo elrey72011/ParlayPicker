@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import os
 import logging
+import traceback
 from pathlib import Path
 from typing import List, Optional
 
@@ -302,11 +303,13 @@ def predict_win_probabilities(df, feature_cols=None, model_path=None):
                 response = endpoint.predict(instances=instances)
             except google_exceptions.GoogleAPICallError as e:
                 logger.error(f"Vertex AI API Error: {e}", exc_info=True)
+                print(f"VERTEX API ERROR:\n{traceback.format_exc()}")
                 if st:
                      st.session_state["vertex_last_error"] = f"API Error: {e}"
                 return None
             except Exception as e:
                 logger.error(f"Vertex AI Unknown Error: {e}", exc_info=True)
+                print(f"VERTEX UNKNOWN ERROR:\n{traceback.format_exc()}")
                 if st:
                      st.session_state["vertex_last_error"] = f"Unknown Error: {e}"
                 return None
