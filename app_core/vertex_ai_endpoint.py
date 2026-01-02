@@ -299,6 +299,11 @@ def predict_win_probabilities(df, feature_cols=None, model_path=None):
             if st:
                 st.write(f"DEBUG: Feature Vector: {instances}")
 
+            # USER REQUEST: Hard guard for empty instances
+            if not instances:
+                logger.error("Vertex predict called with empty instances list")
+                return []
+
             try:
                 response = endpoint.predict(instances=instances)
             except google_exceptions.GoogleAPICallError as e:
