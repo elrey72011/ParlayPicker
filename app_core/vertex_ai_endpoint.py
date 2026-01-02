@@ -373,6 +373,9 @@ def predict_win_probabilities(df, feature_cols=None, model_path=None):
     except Exception as e:
         logger.error(f"Vertex Crash Prevented: {e}", exc_info=True)
         # Expose error to UI if available
+        # USER REQUEST 4: Print full exception
+        print(f"VERTEX PREDICT FAILED:\n{traceback.format_exc()}")
+
         if st is not None:
             try:
                 st.session_state["vertex_last_error"] = str(e)
