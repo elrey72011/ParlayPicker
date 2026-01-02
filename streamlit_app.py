@@ -36,7 +36,7 @@ from app_core.apisports import (
     APISportsHockeyClient,
     get_key as get_apisports_key,
 )
-from app_core.feature_processing import enrich_with_vertex_features, build_vertex_feature_row_from_game_record
+from app_core.feature_processing import enrich_with_vertex_features, build_vertex_feature_row_from_record
 from app_core.sportsdata import (
     SportsDataNBAClient,
     SportsDataNFLClient,
@@ -3604,7 +3604,7 @@ def _build_vertex_feature_row(game: Dict[str, Any], sentiment_diff: Optional[flo
     base["weather_flag"] = 1.0 if game.get("weather_summary") else 0.0
 
     # 3. Use Shared Helper
-    feature_dict = build_vertex_feature_row_from_game_record(base)
+    feature_dict = build_vertex_feature_row_from_record(base)
 
     # 4. Return DataFrame
     df = pd.DataFrame([feature_dict])
@@ -3612,69 +3612,62 @@ def _build_vertex_feature_row(game: Dict[str, Any], sentiment_diff: Optional[flo
     return df
 
 def get_vertex_prob(game: Dict[str, Any], sentiment_diff: Optional[float]) -> Tuple[Optional[float], Optional[str]]:
-    """Return Vertex home win prob (0-1) and an optional warning code."""
     if not is_vertex_prediction_configured():
-        return None, "vertex_missing_prob"
+        return None, "vertexmissingprob"
     try:
         features_df = _build_vertex_feature_row(game, sentiment_diff)
 
         expected_cols = len(VERTEX_FEATURE_COLUMNS)
-
-        # 1. Schema Validation for VERTEX_FEATURE_COLUMNS count
         if features_df.shape[1] != expected_cols:
-             logger.warning(
-                 "Vertex Schema Mismatch: expected %d cols (%s), got %d (%s)",
-                 expected_cols,
-                 VERTEX_FEATURE_COLUMNS,
-                 features_df.shape[1],
-                 list(features_df.columns),
-             )
-             return None, "schema_mismatch"
+            logger.warning(
+                "Vertex Schema Mismatch: expected %d cols (%s), got %d (%s)",
+                expected_cols,
+                VERTEX_FEATURE_COLUMNS,
+                features_df.shape[1],
+                list(features_df.columns),
+            )
+            return None, "schemamismatch"
 
-        # Reindex columns to the exact order Vertex expects, filling missing with 0.0
         features_df = features_df.reindex(columns=VERTEX_FEATURE_COLUMNS)
-
-        # 2. Strict Numeric Validation (User Request)
-        # iterate through the feature row and ensure every single value is passed through float() and fillna(0.0)
         for col in features_df.columns:
-            features_df[col] = pd.to_numeric(features_df[col], errors='coerce').fillna(0.0).astype(float)
+            features_df[col] = pd.to_numeric(features_df[col], errors="coerce").fillna(0.0).astype(float)
 
-        # 3. Final Payload Check
         instances = features_df.values.tolist()
         if not instances:
             logger.warning("Vertex feature instances list is empty")
-            return None, "schema_mismatch"
+            return None, "schemamismatch"
 
         if st:
-            st.write("DEBUG: Feature Vector (DF):", features_df)
+            st.write("DEBUG: Feature Vector (DF):")
+            st.dataframe(features_df)
             st.write("DEBUG: Feature Vector:", instances)
 
         payload_hash = hash(tuple(features_df.to_dict(orient="records")[0].items()))
-        preds = predict_win_probabilities(features_df, feature_columns=VERTEX_FEATURE_COLUMNS)
+        preds = predict_win_probabilities(features_df, feature_cols=VERTEX_FEATURE_COLUMNS)
         st.session_state["vertex_last_payload_hash"] = payload_hash
 
         if not preds:
-            logger.error("Vertex prediction returned empty or falsy preds for payload_hash=%s", payload_hash)
-            return None, "vertex_predict_failed"
+            logger.error("Vertex prediction returned empty preds for payload_hash=%s", payload_hash)
+            return None, "vertexpredictfailed"
 
         prob = safe_float(preds[0])
         if prob is None:
-            logger.error("Vertex prediction first element not a valid float: %r", preds)
-            return None, "vertex_invalid_response"
+            logger.error("Vertex prediction invalid first element: %r", preds)
+            return None, "vertexinvalidresponse"
 
         try:
-            # store raw response for debugging if available
             raw_resp = preds[1] if len(preds) > 1 else None
             st.session_state["vertex_last_raw_response"] = str(raw_resp) if raw_resp is not None else None
         except Exception:
             st.session_state["vertex_last_raw_response"] = None
 
         return clamp(prob, 0.01, 0.99), None
+
     except Exception:
         st.session_state["last_exception"] = traceback.format_exc()
         st.session_state["vertex_last_error"] = st.session_state.get("last_exception")
         logger.exception("Vertex prediction failed with exception")
-        return None, "vertex_predict_failed"
+        return None, "vertexpredictfailed"
 
 # -----------------
 # Kalshi integration
