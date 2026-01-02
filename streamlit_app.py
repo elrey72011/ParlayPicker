@@ -3607,16 +3607,21 @@ def _build_vertex_feature_row(game: Dict[str, Any], sentiment_diff: Optional[flo
     w_summary = str(game.get("weather_summary") or "").lower()
     base["weather_flag"] = 1.0 if any(x in w_summary for x in ['rain', 'snow', 'wind']) else 0.0
 
-    # --- USER REQUESTED DEBUG LOGGING ---
+    # --- USER REQUESTED ALIGNMENT & DEBUG ---
+    # 1. Ensure any pre-enriched stats on 'game' are carried over to 'base'
+    # This is critical for single-game parity with batch processing
+    for col in VERTEX_FEATURE_COLUMNS:
+        if col in game:
+            base[col] = game[col]
+
+    # 2. Log the final base dictionary to verify content
     logger.info("SINGLE GAME BASE ROW: %r", base)
     if st:
         st.write("DEBUG: Single-game base dict:", base)
 
-    # --- USER REQUESTED ALIGNMENT ---
-    # Ensure any pre-enriched stats on 'game' are carried over
-    for col in VERTEX_FEATURE_COLUMNS:
-        if col not in base and col in game:
-            base[col] = game[col]
+    # 3. Flag fallback if critical stats are missing (e.g. from failed enrichment)
+    if "feature_home_ppg" not in base:
+        base["feature_stats_fallback"] = True
 
     # 3. Use Shared Helper
     feature_dict = build_vertex_feature_row_from_record(base)
@@ -5466,26 +5471,36 @@ with tab_master:
         kalshi_match_results: List[Dict[str, Any]] = []
         # --- CLEANED MASTER ANALYSIS LOOP ---
 
-        # --- PRE-LOOP BATCH ENRICHMENT ---
-        # Ensure 'g' in the loop has stats for single-row prediction
+        # --- PRE-LOOP BATCH ENRICHMENT (PARITY FIX) ---
+        # Ensure 'g' in the loop has stats for single-row prediction.
+        # We must perform batch enrichment on the raw games list BEFORE the loop.
         games_to_process = games
         if games and is_vertex_prediction_configured():
             try:
-                with st.spinner("PRE-FETCH: Enriching stats for all games..."):
-                    # Convert to DataFrame for batch enrichment
+                with st.spinner("🚀 PRE-FETCH: Batch Enriching Stats..."):
+                    # 1. Convert to DataFrame
                     _df_pre = pd.DataFrame(games)
+
+                    # 2. Ensure League column exists (crucial for enrichment lookup)
                     if "League" not in _df_pre.columns:
                         _df_pre["League"] = league
 
-                    # Enrich (fetches stats once for all teams)
-                    _df_enriched = enrich_with_vertex_features(_df_pre, {league: api_sports_clients.get(league)})
+                    # 3. Call Enrichment (uses TeamNameMatcher and API clients)
+                    # Note: We pass the specific client for this league
+                    _client_map = {league: api_sports_clients.get(league)} if api_sports_clients else {}
+                    _df_enriched = enrich_with_vertex_features(_df_pre, _client_map)
 
-                    # Convert back to list of dicts
-                    # to_dict('records') converts NaNs to nan (float).
-                    # Our safefloat handlers deal with nan.
+                    # 4. Convert back to list of dicts for the loop
+                    # Force numeric conversion where possible to avoid NaN issues
                     games_to_process = _df_enriched.to_dict('records')
+
+                    # Debug: Verify one row
+                    if games_to_process:
+                        logger.info("Pre-Enrichment Sample Stats: %s", games_to_process[0].get('feature_home_ppg'))
             except Exception as e:
                 logger.error(f"Pre-loop enrichment failed: {e}", exc_info=True)
+                if st:
+                    st.error(f"Pre-enrichment failed: {e}")
                 games_to_process = games
 
         # --- FIX: Define variables at the start of the loop ---
@@ -7797,32 +7812,38 @@ with tab_master:
         # Apply sentiment meta to master_df
         # (Simulating what the loop did)
         if not master_df.empty:
-            master_df["sentiment_sample_status"] = str(sentiment_meta_for_export.get("sentiment_sample_status", "NO_CALL") or "NO_CALL")
-            master_df["sentiment_source"] = str(sentiment_meta_for_export.get("sentiment_source", "none") or "none")
-            master_df["sentiment_status_counts"] = json.dumps(sentiment_meta_for_export.get("sentiment_status_counts", {"NO_CALL": 1}))
-            master_df["sentiment_sample_query"] = sentiment_meta_for_export.get("sentiment_sample_query", "") or ""
-            master_df["sentiment_disabled_reason"] = sentiment_meta_for_export.get("sentiment_disabled_reason", "") or ""
-            master_df["sentiment_errors_sample"] = sentiment_meta_for_export.get("sentiment_errors_sample", "") or ""
-            master_df["sentiment_error_count"] = int(sentiment_meta_for_export.get("sentiment_error_count", 0) or 0)
+            # Optimized bulk assignment to prevent fragmentation
+            meta_updates = {
+                "sentiment_sample_status": str(sentiment_meta_for_export.get("sentiment_sample_status", "NO_CALL") or "NO_CALL"),
+                "sentiment_source": str(sentiment_meta_for_export.get("sentiment_source", "none") or "none"),
+                "sentiment_status_counts": json.dumps(sentiment_meta_for_export.get("sentiment_status_counts", {"NO_CALL": 1})),
+                "sentiment_sample_query": sentiment_meta_for_export.get("sentiment_sample_query", "") or "",
+                "sentiment_disabled_reason": sentiment_meta_for_export.get("sentiment_disabled_reason", "") or "",
+                "sentiment_errors_sample": sentiment_meta_for_export.get("sentiment_errors_sample", "") or "",
+                "sentiment_error_count": int(sentiment_meta_for_export.get("sentiment_error_count", 0) or 0),
+            }
+            # Create DataFrame for new columns and concat
+            meta_df = pd.DataFrame(meta_updates, index=master_df.index)
+            master_df = pd.concat([master_df, meta_df], axis=1)
 
-            # Fill remaining fields if they are missing or null in rows
-            if "sentiment_status" not in master_df.columns:
-                master_df["sentiment_status"] = None
-            master_df["sentiment_status"] = master_df["sentiment_status"].fillna(sentiment_meta_for_export.get("sentiment_status"))
+            # Fill remaining fields using bulk fillna
+            fill_map = {
+                "sentiment_status": sentiment_meta_for_export.get("sentiment_status"),
+                "sentiment_confidence": sentiment_meta_for_export.get("sentiment_confidence"),
+                "sentiment_score": sentiment_meta_for_export.get("sentiment_score"),
+            }
+            # Ensure columns exist before fillna
+            cols_to_ensure = list(fill_map.keys()) + ["spread_sentiment_arrow", "total_sentiment_arrow", "spread_sentiment_note", "total_sentiment_note"]
+            missing_cols = [c for c in cols_to_ensure if c not in master_df.columns]
+            if missing_cols:
+                # Add missing as None/NaN first
+                master_df = pd.concat([master_df, pd.DataFrame(columns=missing_cols)], axis=1)
 
-            if "sentiment_confidence" not in master_df.columns:
-                master_df["sentiment_confidence"] = None
-            master_df["sentiment_confidence"] = master_df["sentiment_confidence"].fillna(sentiment_meta_for_export.get("sentiment_confidence"))
-
-            if "sentiment_score" not in master_df.columns:
-                master_df["sentiment_score"] = None
-            master_df["sentiment_score"] = master_df["sentiment_score"].fillna(sentiment_meta_for_export.get("sentiment_score"))
-
-            # Ensure visual columns exist
-            for col in ["spread_sentiment_arrow", "total_sentiment_arrow", "spread_sentiment_note", "total_sentiment_note"]:
-                if col not in master_df.columns:
-                    master_df[col] = ""
-                master_df[col] = master_df[col].fillna("")
+            # Fill specified fields
+            master_df = master_df.fillna(fill_map)
+            # Fill visual cols with empty string
+            visual_cols = ["spread_sentiment_arrow", "total_sentiment_arrow", "spread_sentiment_note", "total_sentiment_note"]
+            master_df[visual_cols] = master_df[visual_cols].fillna("")
 
         # Re-implement deduping for the `df` variable used by the UI below
         rows_for_dedupe = master_df.to_dict("records")
@@ -8430,9 +8451,10 @@ with tab_master:
         top_df = df.copy()
         if "Unnamed: 0" in top_df.columns:
             top_df = top_df.drop(columns=["Unnamed: 0"])
-        for col in required_display_cols:
-            if col not in top_df.columns:
-                top_df[col] = None
+        # Optimization: Bulk add missing columns
+        missing_top = [c for c in required_display_cols if c not in top_df.columns]
+        if missing_top:
+            top_df = pd.concat([top_df, pd.DataFrame(columns=missing_top)], axis=1)
         top_df = top_df[top_df["Eligible_Top_Picks"] == True]
         if not include_low_in_top:
             top_df = top_df[top_df["Pick_Confidence"].isin(["HIGH", "MEDIUM"])]
@@ -8665,9 +8687,12 @@ with tab_master:
         if "Unnamed: 0" in export_df.columns:
             export_df = export_df.drop(columns=["Unnamed: 0"])
         export_df = reorder_for_spread_total_focus(export_df)
-        for col in export_cols:
-            if col not in export_df.columns:
-                export_df[col] = None
+
+        # Optimization: Bulk add missing columns
+        missing_export = [c for c in export_cols if c not in export_df.columns]
+        if missing_export:
+            export_df = pd.concat([export_df, pd.DataFrame(columns=missing_export)], axis=1)
+
         export_csv = export_df[export_cols].to_csv(index=False).encode("utf-8")
         st.download_button(
             "Download Master Analysis CSV",
