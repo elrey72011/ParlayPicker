@@ -708,7 +708,23 @@ def enrich_with_vertex_features(df: pd.DataFrame, api_clients: Dict[str, Any], s
         # Track Fallbacks (True if team not matched)
         home_fallback = home_norm.map(team_map).isna()
         away_fallback = away_norm.map(team_map).isna()
-        features_data['feature_stats_fallback'] = home_fallback | away_fallback
+        combined_fallback = home_fallback | away_fallback
+        features_data['feature_stats_fallback'] = combined_fallback
+
+        # LOGGING: Fallbacks
+        if combined_fallback.any():
+            fallback_indices = df.index[combined_fallback]
+            for idx in fallback_indices:
+                try:
+                    league_str = df.loc[idx, 'League'] if 'League' in df.columns else league_key
+                    h_team = df.loc[idx, home_col]
+                    a_team = df.loc[idx, away_col]
+                    # Check which one failed
+                    h_stat = "MISSING" if home_fallback[idx] else "OK"
+                    a_stat = "MISSING" if away_fallback[idx] else "OK"
+                    logger.warning(f"DEBUG Stats Fallback Used: {league_str} {h_team} ({h_stat}) vs {a_team} ({a_stat})")
+                except Exception:
+                    pass
 
         # Home Stats
         features_data['feature_home_win_pct'] = map_stat(home_norm, 'win_pct', defaults['win_pct'])
@@ -828,6 +844,35 @@ def enrich_with_vertex_features(df: pd.DataFrame, api_clients: Dict[str, Any], s
     features_data['feature_home_rest_days'] = 3.0
     features_data['feature_away_rest_days'] = 3.0
     
+    # Validation: Sanity Checks on Feature Ranges
+    # Win Pct [0, 1], PPG [40, 200]
+
+    # We validate 'feature_home_ppg' as a proxy for stats health
+    ppg_series = features_data.get('feature_home_ppg')
+    if ppg_series is not None:
+        # Convert to series if list
+        if isinstance(ppg_series, list):
+            ppg_series = pd.Series(ppg_series, index=df.index)
+
+        # Check range (soft limits)
+        # NBA ~110, NCAAB ~70, NFL ~22, NHL ~3
+        # If PPG is 0 (and not NCAAF where default is 0?), flag it.
+        # But defaults might be 0.0 for some leagues.
+        # Use LEAGUE_AVERAGES logic.
+
+        # If fallback is False but PPG is 0, that's suspicious (unless NCAAF).
+        # We can't easily fallback explicitly here without re-running logic,
+        # but we can force 'feature_stats_fallback' to True to warn downstream.
+
+        # Check for absolute zeros where we expect data
+        suspicious_zeros = (ppg_series == 0.0) & (~features_data['feature_stats_fallback'])
+        if suspicious_zeros.any():
+             # Only log if it's a league where 0.0 is definitely wrong (almost all except maybe soccer/hockey if strict?)
+             # NHL PPG is ~3.0. 0.0 is possible if team never scored. But unlikely for whole season.
+             if league_key in ["NBA", "NCAAB", "NFL", "NCAAF", "NHL"]:
+                 logger.warning(f"Validation: Found {suspicious_zeros.sum()} rows with 0.0 PPG despite matching teams. Marking as fallback.")
+                 features_data['feature_stats_fallback'] = features_data['feature_stats_fallback'] | suspicious_zeros
+
     # 7. Final Concat
     features_df = pd.DataFrame(features_data, index=df.index)
     result = pd.concat([df, features_df], axis=1)
