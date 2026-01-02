@@ -5464,8 +5464,31 @@ with tab_master:
         }
         kalshi_match_results: List[Dict[str, Any]] = []
         # --- CLEANED MASTER ANALYSIS LOOP ---
+
+        # --- PRE-LOOP BATCH ENRICHMENT ---
+        # Ensure 'g' in the loop has stats for single-row prediction
+        games_to_process = games
+        if games and is_vertex_prediction_configured():
+            try:
+                with st.spinner("PRE-FETCH: Enriching stats for all games..."):
+                    # Convert to DataFrame for batch enrichment
+                    _df_pre = pd.DataFrame(games)
+                    if "League" not in _df_pre.columns:
+                        _df_pre["League"] = league
+                    
+                    # Enrich (fetches stats once for all teams)
+                    _df_enriched = enrich_with_vertex_features(_df_pre, {league: api_sports_clients.get(league)})
+                    
+                    # Convert back to list of dicts
+                    # to_dict('records') converts NaNs to nan (float). 
+                    # Our safefloat handlers deal with nan.
+                    games_to_process = _df_enriched.to_dict('records')
+            except Exception as e:
+                logger.error(f"Pre-loop enrichment failed: {e}", exc_info=True)
+                games_to_process = games
+
         # --- FIX: Define variables at the start of the loop ---
-        for idx, g in enumerate(games):
+        for idx, g in enumerate(games_to_process):
             g = g.copy()
             # RESET ALL TRACE VARIABLES
             total_pick_side = None
