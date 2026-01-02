@@ -315,23 +315,50 @@ def predict_win_probabilities(df, feature_cols=None, model_path=None):
                 return None
 
             # USER REQUEST 2: Fix Parser & Debug
-            print(f"DEBUG: Vertex Raw Prediction: {response.predictions}")
+            logger.info("DEBUG: Vertex Raw Prediction: %s", response.predictions)
 
             predictions = response.predictions
 
             if not predictions:
+                logger.error("Vertex response contained no predictions")
                 return None
 
             results = []
-            for pred in response.predictions:
+            for pred in predictions:
                 if isinstance(pred, dict):
-                    # Update extraction logic
-                    val = pred.get("scores", [0.5, 0.5])[1] if "scores" in pred else \
-                          pred.get("confidences", [0.5, 0.5])[1] if "confidences" in pred else \
-                          pred.get("value", 0.5)
-                    results.append(val)
+                    # Handle dictionary response (e.g. from AutoTabular)
+                    val = None
+                    if "scores" in pred:
+                        # scores usually [prob_class_0, prob_class_1]
+                        # assuming class 1 is "home win"
+                        scores = pred["scores"]
+                        if isinstance(scores, list) and len(scores) > 1:
+                            val = scores[1]
+                    elif "confidences" in pred:
+                        conf = pred["confidences"]
+                        if isinstance(conf, list) and len(conf) > 1:
+                            val = conf[1]
+                    elif "value" in pred:
+                        val = pred["value"]
+
+                    if val is None:
+                        # Fallback if structure is unexpected
+                        logger.warning("Vertex pred dict missing known keys: %s", pred.keys())
+                        val = 0.5
+
+                    results.append(float(val))
+                elif isinstance(pred, list):
+                    # Handle list response (e.g. [0.3, 0.7])
+                    val = pred[1] if len(pred) > 1 else pred[0]
+                    results.append(float(val))
                 else:
-                    results.append(pred)
+                    # Handle scalar
+                    try:
+                        results.append(float(pred))
+                    except (ValueError, TypeError):
+                        logger.warning("Vertex pred scalar not float-compatible: %r", pred)
+                        results.append(0.5)
+
             return results
         else:
             # If Vertex not configured, return None to signal fallback to defaults
