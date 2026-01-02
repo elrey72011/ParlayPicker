@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 from datetime import datetime
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Mapping
 import logging
 import warnings
 import os
@@ -873,7 +873,18 @@ def run_roi_pipeline_validation(df: pd.DataFrame):
         
     return validation_results
 
-def build_vertex_feature_row_from_record(record: Dict[str, Any]) -> Dict[str, float]:
+def safefloat(val: Any) -> float:
+    """Safely convert to float, defaulting to 0.0 on error/None."""
+    if val is None:
+        return 0.0
+    try:
+        f = float(val)
+        if f != f: return 0.0 # NaN
+        return f
+    except (ValueError, TypeError):
+        return 0.0
+
+def build_vertex_feature_row_from_record(record: Mapping[str, Any]) -> Dict[str, float]:
     """
     Build one Vertex feature row using the same columns and defaults
     as the batch enrich_with_vertex_features path.
@@ -885,16 +896,9 @@ def build_vertex_feature_row_from_record(record: Dict[str, Any]) -> Dict[str, fl
         # PROB features must default to 0.5 (Neutral), STATS/COUNTS to 0.0
         default_val = 0.5 if "prob" in col else 0.0
 
-        # Use safe logic for scalar
-        try:
-            if val is None:
-                parsed = default_val
-            else:
-                parsed = float(val)
-                if parsed != parsed: # NaN check
-                    parsed = default_val
-        except (ValueError, TypeError):
-            parsed = default_val
+        if val is not None:
+             row[col] = safefloat(val)
+        else:
+             row[col] = default_val
 
-        row[col] = parsed
     return row
