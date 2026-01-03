@@ -8,6 +8,13 @@ from difflib import SequenceMatcher
 from typing import Optional, List, Tuple
 import re
 
+try:
+    from rapidfuzz import process, fuzz, utils
+except ImportError:
+    process = None
+    fuzz = None
+    utils = None
+
 # Default fuzzy threshold used across TheOver matching flows
 TEAM_FUZZY_THRESHOLD = 0.80
 
@@ -252,6 +259,9 @@ class TeamNameMatcher:
     @classmethod
     def similarity_score(cls, str1: str, str2: str) -> float:
         """Calculate similarity between two strings (0.0 to 1.0)"""
+        if process:
+            # rapidfuzz returns 0-100, we want 0.0-1.0
+            return fuzz.ratio(str1, str2) / 100.0
         return SequenceMatcher(None, str1, str2).ratio()
     
     @classmethod
@@ -269,6 +279,18 @@ class TeamNameMatcher:
         if not csv_normalized:
             return None
         
+        if process:
+             # rapidfuzz implementation (faster)
+             app_normalized_map = {cls.normalize(t): t for t in app_teams if cls.normalize(t)}
+             choices = list(app_normalized_map.keys())
+             result = process.extractOne(csv_normalized, choices, scorer=fuzz.ratio)
+             if result:
+                 match, score, _ = result
+                 if (score / 100.0) >= threshold:
+                     return app_normalized_map[match]
+             return None
+
+        # Fallback implementation
         best_match = None
         best_score = 0.0
         

@@ -25,11 +25,7 @@ from app_core.llm_assistant import generate_confidence_explanation
 from app_core.reddit_sentiment import fetch_reddit_sentiment_map
 from app_core.sentiment_pipeline import MAX_SENTIMENT_CALLS, fetch_team_news, league_label, team_sentiment_from_articles
 from app_core.team_name_matcher import TeamNameMatcher
-from app_core.vertex_ai_endpoint import (
-    VERTEX_FEATURE_COLUMNS,
-    is_vertex_prediction_configured,
-    predict_win_probabilities,
-)
+from app_core.prediction_engine import VERTEX_FEATURE_COLUMNS, PredictionEngine
 from app_core.apisports import (
     APISportsBasketballClient,
     APISportsFootballClient,
@@ -2740,21 +2736,11 @@ def _get_secret_ci(name: str) -> Optional[str]:
         return None
     return None
 
-def _get_gcp_sa_from_secrets() -> Optional[Dict[str, Any]]:
-    try:
-        if "gcp_service_account" in st.secrets:
-            return dict(st.secrets["gcp_service_account"])
-    except Exception:
-        pass
-    return None
 
-def ensure_vertex_info_cached() -> Dict[str, Any]:
-    """
-    Legacy wrapper. Local model is always 'ok'.
-    """
-    info = {"ok": True, "project": "local", "location": "local", "auth": "none", "error": None}
-    st.session_state["vertex_info"] = info
-    return info
+# Initialize PredictionEngine
+@st.cache_resource
+def get_prediction_engine():
+    return PredictionEngine()
 
 def get_api_keys() -> Dict[str, Optional[str]]:
     def _find_key(candidates: List[str]) -> Optional[str]:
@@ -2873,8 +2859,7 @@ def init_data_clients() -> Tuple[Dict[str, Any], Dict[str, Any]]:
 
 # Must be the first Streamlit call
 st.set_page_config(page_title="ParlayDesk", layout="wide")
-vertex_info = {"ok": True}
-st.session_state["vertex_info"] = vertex_info
+st.session_state["vertex_info"] = {"ok": True}
 
 # ------------------------------------------------------------
 # Kalshi globals / shims (must exist before any call sites)
@@ -3586,8 +3571,7 @@ def _build_vertex_feature_row(game: Dict[str, Any], sentiment_diff: Optional[flo
     return df
 
 def get_vertex_prob(game: Dict[str, Any], sentiment_diff: Optional[float]) -> Tuple[Optional[float], Optional[str]]:
-    if not is_vertex_prediction_configured():
-        return None, "vertexmissingprob"
+    # Local model is always available (or falls back)
     try:
         features_df = _build_vertex_feature_row(game, sentiment_diff)
 
@@ -3617,7 +3601,8 @@ def get_vertex_prob(game: Dict[str, Any], sentiment_diff: Optional[float]) -> Tu
             st.write("DEBUG: Feature Vector:", instances)
 
         payload_hash = hash(tuple(features_df.to_dict(orient="records")[0].items()))
-        preds = predict_win_probabilities(features_df, feature_cols=VERTEX_FEATURE_COLUMNS)
+        engine = get_prediction_engine()
+        preds = engine.predict_batch(features_df)
         st.session_state["vertex_last_payload_hash"] = payload_hash
 
         if not preds:
@@ -5455,7 +5440,7 @@ with tab_master:
             # Ensure 'g' in the loop has stats for single-row prediction.
             # We must perform batch enrichment on the raw games list BEFORE the loop.
             games_to_process = games
-            if games and is_vertex_prediction_configured():
+            if games:
                 try:
                     with st.spinner("🚀 PRE-FETCH: Batch Enriching Stats..."):
                         # 1. Convert to DataFrame
@@ -6186,7 +6171,7 @@ with tab_master:
                 vertex_mode = "disabled"
                 vertex_spread_prob = None
                 vertex_total_prob = None
-                vertex_available = is_vertex_prediction_configured()
+                vertex_available = True
             
                 # Inject Kalshi Prob if available
                 if kalshi_winner.get("kalshi_matched") and kalshi_prob_used is not None:
@@ -7721,8 +7706,6 @@ with tab_master:
             if True:
                 with st.spinner("🔮 Computing Win Probabilities (Local)..."):
                     # 2. Filter for exactly the columns the model expects
-                    from app_core.vertex_ai_endpoint import VERTEX_FEATURE_COLUMNS
-
                     # User Action: Ensure columns exist before filtering
                     missing_cols = [col for col in VERTEX_FEATURE_COLUMNS if col not in master_df.columns]
                     if missing_cols:
@@ -7754,7 +7737,8 @@ with tab_master:
                         logger.warning(f"Failed to accumulate debug data: {e}")
 
                     # 7. Call local prediction
-                    probs = predict_win_probabilities(inference_df)
+                    engine = get_prediction_engine()
+                    probs = engine.predict_batch(inference_df)
 
                     if probs and len(probs) == len(master_df):
                         master_df["AI_Prob"] = probs

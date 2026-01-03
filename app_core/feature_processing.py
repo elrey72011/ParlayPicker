@@ -77,7 +77,7 @@ if st is None or not hasattr(st, "cache_data"):
 
 
 from app_core.team_name_matcher import TeamNameMatcher
-from app_core.vertex_ai_endpoint import VERTEX_FEATURE_COLUMNS
+from app_core.prediction_engine import VERTEX_FEATURE_COLUMNS
 
 logger = logging.getLogger(__name__)
 
