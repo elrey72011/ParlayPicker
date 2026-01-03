@@ -709,10 +709,20 @@ def enrich_with_vertex_features(df: pd.DataFrame, api_clients: Dict[str, Any], s
         except Exception:
             return fill_val
 
-    # Standardize 'league' column
-    # Use copy instead of rename to preserve 'League' for UI if needed
-    if 'League' in df.columns and 'league' not in df.columns:
+    # 0. Fix Case-Sensitive Overwrite (Ensure 'league' is authoritative)
+    # We strictly use sport_title if available, else league.
+    # We overwrite 'League' to match 'league' to prevent ambiguity downstream.
+    league_col = 'league'
+    if 'sport_title' in df.columns:
+        league_col = 'sport_title'
+    elif 'league' in df.columns:
+        league_col = 'league'
+    elif 'League' in df.columns:
+        # If only 'League' exists, map it to 'league'
         df['league'] = df['League']
+        league_col = 'league'
+    else:
+        league_col = None
 
     # 1. Fetch Stats (Using new function)
     stats_df = fetch_team_stats(api_clients, season_year=season_year)
@@ -733,15 +743,6 @@ def enrich_with_vertex_features(df: pd.DataFrame, api_clients: Dict[str, Any], s
     # 3. Determine League (Row-by-Row) - Robust & Standardized
     # This prevents the bug where one game's league overwrites all defaults
 
-    # Check for sport_title first as it is often more specific
-    league_col = 'league'
-    if 'sport_title' in df.columns:
-        league_col = 'sport_title'
-    elif 'league' in df.columns:
-        league_col = 'league'
-    else:
-        league_col = None
-
     def get_row_league_key(l_val):
         s = str(l_val).upper()
         # Explicit checks for college/other leagues FIRST to avoid partial "NBA" matches
@@ -758,6 +759,9 @@ def enrich_with_vertex_features(df: pd.DataFrame, api_clients: Dict[str, Any], s
     # Create Series of keys aligned with DF index
     if league_col:
         league_keys = df[league_col].apply(get_row_league_key)
+        # Fix: Sync 'League' column to resolved key if 'League' exists, to prevent confusion
+        if 'League' in df.columns:
+             df['League'] = league_keys
     else:
         league_keys = pd.Series(["default"] * len(df), index=df.index)
 
@@ -837,9 +841,9 @@ def enrich_with_vertex_features(df: pd.DataFrame, api_clients: Dict[str, Any], s
                 if match:
                     home_map_local[t_norm] = match
                 else:
-                    # Log only if not "default" league
+                    # Log ERROR as requested for missing team
                     if lg_key != "default":
-                        logger.warning(f"TEAM MATCH FAILURE ({lg_key}): '{t_norm}' not found in stats.")
+                        logger.error(f"TEAM MATCH FAILURE ({lg_key}): '{t_norm}' not found in {lg_key} dictionary.")
                     home_map_local[t_norm] = None
 
             # Apply map to the subset
@@ -863,7 +867,7 @@ def enrich_with_vertex_features(df: pd.DataFrame, api_clients: Dict[str, Any], s
                     away_map_local[t_norm] = match
                 else:
                     if lg_key != "default":
-                        pass # Already logged for home usually, or will show up in fallback counts
+                        logger.error(f"TEAM MATCH FAILURE ({lg_key}): '{t_norm}' not found in {lg_key} dictionary.")
                     away_map_local[t_norm] = None
 
             away_matched_names[lg_mask] = away_norm[lg_mask].map(away_map_local)
@@ -1114,6 +1118,9 @@ def enrich_with_vertex_features(df: pd.DataFrame, api_clients: Dict[str, Any], s
             # Determine default: 0.5 for probs, 0.0 for others
             default_val = 0.5 if "prob" in col else 0.0
             features_df[col] = default_val
+
+        # Force float type for Vertex AI (fixes [0.6, 0, ...] issue)
+        features_df[col] = pd.to_numeric(features_df[col], errors='coerce').astype(float)
 
     result = pd.concat([df, features_df], axis=1)
     return result
