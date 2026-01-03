@@ -27,6 +27,7 @@ from app_core.sentiment_pipeline import MAX_SENTIMENT_CALLS, fetch_team_news, le
 from app_core.team_name_matcher import TeamNameMatcher
 from app_core.vertex_ai_endpoint import (
     VERTEX_FEATURE_COLUMNS,
+    is_vertex_prediction_configured,
     predict_win_probabilities,
 )
 from app_core.apisports import (
