@@ -88,13 +88,10 @@ def is_vertex_prediction_configured() -> bool:
 def predict_win_probabilities(df: pd.DataFrame, feature_cols: Optional[List[str]] = None, model_path: Optional[str] = None) -> List[float]:
     """
     Predict Home Win Probability using local XGBoost model.
+    Falls back to blended statistical probability if model is missing.
     """
     if df is None or df.empty:
         return []
-
-    if xgb is None:
-        logger.critical("XGBoost not installed. Cannot perform local inference.")
-        return [0.5] * len(df)
 
     # 1. Clean Data
     # Deduplicate columns to avoid XGBoost errors
@@ -106,12 +103,17 @@ def predict_win_probabilities(df: pd.DataFrame, feature_cols: Optional[List[str]
     if model_path is None:
         model_path = MODEL_PATH
 
-    # Check model existence
-    if not Path(model_path).exists():
-        logger.critical(f"Local Model Inference CRITICAL: Model file missing at {model_path}")
-        return [0.5] * len(df)
+    # Check model existence and XGBoost availability
+    use_model = False
+    if xgb is not None:
+        if Path(model_path).exists():
+            use_model = True
+        else:
+            logger.warning(f"Local Model Inference: Model file missing at {model_path}. Using fallback.")
+    else:
+        logger.warning("Local Model Inference: XGBoost not installed. Using fallback.")
 
-    # 2. Schema Enforcement: Ensure all features exist
+    # 2. Schema Enforcement: Ensure all features exist (needed for both model and fallback logic)
     missing = [c for c in feature_cols if c not in df.columns]
     if missing:
         # Fill missing with 0.0
@@ -119,30 +121,44 @@ def predict_win_probabilities(df: pd.DataFrame, feature_cols: Optional[List[str]
         df = pd.concat([df, zeros], axis=1)
 
     # 3. Local XGBoost Prediction
-    try:
-        # Strict casting to float to match model expectation and prevent data type errors
-        inference_data = df[feature_cols].apply(pd.to_numeric, errors='coerce').fillna(0.0).astype(float)
-        dmatrix = xgb.DMatrix(inference_data)
+    if use_model:
+        try:
+            # Strict casting to float to match model expectation and prevent data type errors
+            inference_data = df[feature_cols].apply(pd.to_numeric, errors='coerce').fillna(0.0).astype(float)
+            dmatrix = xgb.DMatrix(inference_data)
 
-        booster = xgb.Booster()
-        booster.load_model(model_path)
+            booster = xgb.Booster()
+            booster.load_model(model_path)
 
-        preds = booster.predict(dmatrix)
+            preds = booster.predict(dmatrix)
 
-        logger.info(f"Local Model Inference: Generated {len(preds)} predictions")
+            logger.info(f"Local Model Inference: Generated {len(preds)} predictions")
 
-        # Handle output shape (could be list or numpy array)
-        if isinstance(preds, (list, np.ndarray)):
-            return [float(p) for p in preds]
+            # Handle output shape (could be list or numpy array)
+            if isinstance(preds, (list, np.ndarray)):
+                return [float(p) for p in preds]
 
-        # Should not be reached if predict works
-        return [0.5] * len(df)
+        except Exception as e:
+            logger.error(f"Local Model Inference Failed: {e}. Switching to fallback.", exc_info=True)
+            if st:
+                try:
+                    st.session_state["vertex_last_error"] = f"Local Inference Error: {e}"
+                except:
+                    pass
+            # Fall through to fallback logic below
 
-    except Exception as e:
-        logger.critical(f"Local Model Inference CRITICAL: Prediction failed: {e}", exc_info=True)
-        if st:
-            try:
-                st.session_state["vertex_last_error"] = f"Local Inference Error: {e}"
-            except:
-                pass
-        return [0.5] * len(df)
+    # 4. Statistical Fallback
+    # Formula: (implied_home_prob * 0.5) + (kalshi_prob * 0.5)
+    # Both features are guaranteed to exist in df due to Step 2 schema enforcement
+
+    logger.info("Using Statistical Fallback for predictions.")
+
+    def _fallback_calc(row):
+        try:
+            imp = float(row.get("implied_home_prob", 0.5))
+            kal = float(row.get("kalshi_prob", 0.5))
+            return (imp * 0.5) + (kal * 0.5)
+        except:
+            return 0.5
+
+    return df.apply(_fallback_calc, axis=1).tolist()

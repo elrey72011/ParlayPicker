@@ -759,11 +759,12 @@ def enrich_with_vertex_features(df: pd.DataFrame, api_clients: Dict[str, Any], s
     # Create Series of keys aligned with DF index
     if league_col:
         league_keys = df[league_col].apply(get_row_league_key)
-        # Fix: Sync 'League' column to resolved key if 'League' exists, to prevent confusion
-        if 'League' in df.columns:
-             df['League'] = league_keys
+        # Fix: Sync 'League' column to resolved key to prevent confusion and ensure correctness
+        # This fixes the "NBA Overwrite" bug where League might be missing or incorrect
+        df['League'] = league_keys
     else:
         league_keys = pd.Series(["default"] * len(df), index=df.index)
+        df['League'] = "default"
 
     # 4. Create Series of Defaults aligned with DF index
     # We pre-calculate these so we can pass them to map_stat
