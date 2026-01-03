@@ -774,7 +774,7 @@ def reorder_master_columns(df: pd.DataFrame) -> pd.DataFrame:
         return df
 
     fixed_front = [
-        "League",
+        "league",
         "Home",
         "Away",
         "Commence (UTC)",
@@ -800,7 +800,7 @@ def reorder_for_spread_total_focus(df: pd.DataFrame) -> pd.DataFrame:
         return df
 
     fixed_front = [
-        "League",
+        "league",
         "Home",
         "Away",
         "Commence (UTC)",
@@ -6739,7 +6739,7 @@ with tab_master:
                         warnings_field = ";".join(warnings) if warnings else None
                         implied_prob_reason = "missing_or_placeholder_odds" if odds_placeholder or implied_pick is None else f"from_odds_home_{home_ml}_away_{away_ml}"
                         ml_row = {
-                            "League": league_name,
+                            "league": league_name,
                             "Home": home,
                             "Away": away,
                             "Commence (UTC)": commence_iso,
@@ -7054,7 +7054,7 @@ with tab_master:
                     warnings.append("market_based_spread_prob")
                     warnings_field = ";".join(warnings) if warnings else None
                     spread_row = {
-                        "League": league_name, "Home": home, "Away": away,
+                        "league": league_name, "Home": home, "Away": away,
                         "Commence (UTC)": commence_iso, "Commence (Local)": commence_local,
                         "Market": "Spread", "Book": g.get("best_spread_book"),
                         "Pick": spread_pick, "Implied_Prob": spread_prob_market, "Line": spread_line, "AI_Prob": vertex_spread_prob if vertex_used_for_spread else None,
@@ -7307,7 +7307,7 @@ with tab_master:
                     warnings.append("market_based_total_prob")
                     warnings_field = ";".join(warnings) if warnings else None
                     total_row = {
-                        "League": league_name, "Home": home, "Away": away,
+                        "league": league_name, "Home": home, "Away": away,
                         "Commence (UTC)": commence_iso, "Commence (Local)": commence_local,
                         "Market": "Total", "Book": g.get("best_total_book"),
                         "Pick": total_pick, "Implied_Prob": total_prob_market, "Line": total_line, "AI_Prob": vertex_total_prob if vertex_used_for_total else None,
@@ -7549,7 +7549,7 @@ with tab_master:
                 if not (g.get("home_ml_price") or g.get("home_spread_point") or g.get("total_point")):
                     warnings = list(dict.fromkeys(warnings + ["no_markets"]))
                     fallback_row = {
-                        "League": league_name,
+                        "league": league_name,
                         "Home": home,
                         "Away": away,
                         "Commence (UTC)": commence_iso,
@@ -7730,17 +7730,10 @@ with tab_master:
             # 1. Create the base Master DataFrame from your processed rows
             # User Action: Use from_records and copy to prevent fragmentation
             master_df = pd.DataFrame.from_records(rows_out)
+
+            # FIX: Deduplicate columns immediately to prevent "Duplicate labels" error
             master_df = master_df.loc[:, ~master_df.columns.duplicated()].copy()
             master_df = master_df.reset_index(drop=True)
-
-            # 2. Add 'league' column if missing (required for enrichment lookup)
-            # Ensure we have the lowercase 'league' key for internal logic
-            if 'league' not in master_df.columns:
-                if 'League' in master_df.columns:
-                    master_df['league'] = master_df['League']
-                else:
-                    master_df['league'] = league
-                    master_df['League'] = league  # Ensure UI column exists too
 
             # 3. CRITICAL: Enrich the whole batch to fill 'feature_diff' columns
             # This fixes the 'Missing feature column' warnings in the logs
@@ -7861,7 +7854,7 @@ with tab_master:
             rows_for_dedupe = master_df.to_dict("records")
             deduped_rows: Dict[Tuple[Any, Any, Any, Any], Dict[str, Any]] = {}
             for row in rows_for_dedupe:
-                key = (row.get("League"), row.get("Home"), row.get("Away"), row.get("Commence (UTC)"))
+                key = (row.get("league"), row.get("Home"), row.get("Away"), row.get("Commence (UTC)"))
                 existing = deduped_rows.get(key)
                 if (existing is None) or (
                     not existing.get("kalshi_matched") and row.get("kalshi_matched")
@@ -8743,7 +8736,7 @@ with tab_master:
                 st.info("Run Master Analysis to view market ranges.")
             else:
                 game_options = [
-                    f"{row.get('League')} | {row.get('Home')} vs {row.get('Away')} | {row.get('Commence (UTC)')}"
+                    f"{row.get('league')} | {row.get('Home')} vs {row.get('Away')} | {row.get('Commence (UTC)')}"
                     for _, row in df_master_view.iterrows()
                 ]
                 selected = st.selectbox("Select game", options=game_options, index=0)

@@ -800,7 +800,7 @@ def enrich_with_vertex_features(df: pd.DataFrame, api_clients: Dict[str, Any], s
                  # If manual target not in stats, still fall through to fuzzy or fail
 
              # 3. Fuzzy match (Robust)
-             match = fuzzy_match_team_robust(t_norm, stats_teams_norm, threshold=80.0)
+             match = fuzzy_match_team_robust(t_norm, stats_teams_norm, threshold=70.0)
              if match:
                  team_map[t_norm] = match
              else:
@@ -824,6 +824,9 @@ def enrich_with_vertex_features(df: pd.DataFrame, api_clients: Dict[str, Any], s
         away_fallback = away_norm.map(team_map).isna()
         combined_fallback = home_fallback | away_fallback
         features_data['feature_stats_fallback'] = combined_fallback
+
+        # NEW: stats_quality
+        features_data['stats_quality'] = combined_fallback.apply(lambda x: "Low (Fallback)" if x else "High (Real)")
 
         # LOGGING: Fallbacks
         if combined_fallback.any():
