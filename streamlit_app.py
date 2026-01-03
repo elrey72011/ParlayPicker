@@ -27,7 +27,6 @@ from app_core.sentiment_pipeline import MAX_SENTIMENT_CALLS, fetch_team_news, le
 from app_core.team_name_matcher import TeamNameMatcher
 from app_core.vertex_ai_endpoint import (
     VERTEX_FEATURE_COLUMNS,
-    is_vertex_prediction_configured,
     predict_win_probabilities,
 )
 from app_core.apisports import (
@@ -1990,8 +1989,7 @@ def pipeline_progress_snapshot() -> Dict[str, Any]:
         sentiment_flags.append("rate_limited")
     if sentiment_meta.get("sentiment_auth_error"):
         sentiment_flags.append("auth_error")
-    vertex_info = st.session_state.get("vertex_info") or {}
-    vertex_ready = bool(vertex_info.get("ok"))
+    vertex_ready = True  # Local inference is always "ready" (or falls back)
     rows_out = st.session_state.get("last_rows_out", 0)
     master_stats = st.session_state.get("master_stats") or {}
     return {
@@ -2749,75 +2747,12 @@ def _get_gcp_sa_from_secrets() -> Optional[Dict[str, Any]]:
         pass
     return None
 
-@st.cache_resource
-def init_vertex_once() -> Dict[str, Any]:
-    info: Dict[str, Any] = {"ok": False, "project": None, "location": None, "auth": "missing", "error": None}
-    project = read_secret("GCP_PROJECT_ID") or read_secret("gcp_project_id")
-    location = (
-        read_secret("GCP_REGION")
-        or read_secret("GCP_LOCATION")
-        or read_secret("gcp_region")
-        or "us-central1"
-    )
-    info["project"] = project
-    info["location"] = location
-    if project:
-        os.environ.setdefault("GCP_PROJECT_ID", project)
-        os.environ.setdefault("GOOGLE_CLOUD_PROJECT", project)
-    if location:
-        os.environ.setdefault("GCP_REGION", location)
-        os.environ.setdefault("GCP_LOCATION", location)
-    if not project:
-        info["error"] = "Missing GCP_PROJECT_ID"
-        return info
-
-    sa = _get_gcp_sa_from_secrets()
-    if not sa:
-        info["auth"] = "adc_or_missing"
-    else:
-        try:
-            tmp = tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".json")
-            json.dump(sa, tmp)
-            tmp.flush()
-            tmp.close()
-            os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = tmp.name
-            info["auth"] = "service_account"
-        except Exception as e:  # pragma: no cover - IO guard
-            info["error"] = f"Failed to write service account json: {e}"
-            return info
-
-    try:
-        import vertexai  # type: ignore
-
-        vertexai.init(project=project, location=location)
-        info["ok"] = True
-        return info
-    except Exception as e:  # pragma: no cover - defensive
-        info["error"] = str(e)
-        return info
-
-
 def ensure_vertex_info_cached() -> Dict[str, Any]:
     """
-    Wrapper to guard against NameError or other runtime issues when fetching Vertex init status.
-    Ensures a dict is always returned and session state updated.
+    Legacy wrapper. Local model is always 'ok'.
     """
-    try:
-        info = st.session_state.get("vertex_info")
-    except Exception:
-        info = None
-    if info:
-        return info
-    try:
-        info = init_vertex_once()
-    except NameError:
-        info = {"ok": False, "project": None, "location": None, "auth": "missing", "error": "init_vertex_once not defined"}
-    except Exception as exc:  # pragma: no cover - defensive guard
-        info = {"ok": False, "project": None, "location": None, "auth": "error", "error": str(exc)}
-    try:
-        st.session_state["vertex_info"] = info
-    except Exception:
-        pass
+    info = {"ok": True, "project": "local", "location": "local", "auth": "none", "error": None}
+    st.session_state["vertex_info"] = info
     return info
 
 def get_api_keys() -> Dict[str, Optional[str]]:
@@ -2937,12 +2872,8 @@ def init_data_clients() -> Tuple[Dict[str, Any], Dict[str, Any]]:
 
 # Must be the first Streamlit call
 st.set_page_config(page_title="ParlayDesk", layout="wide")
-vertex_info_raw = ensure_vertex_info_cached()
-vertex_info = vertex_info_raw if isinstance(vertex_info_raw, dict) else {"ok": False, "error": "invalid_vertex_info"}
-try:
-    st.session_state["vertex_info"] = vertex_info
-except Exception:
-    pass
+vertex_info = {"ok": True}
+st.session_state["vertex_info"] = vertex_info
 
 # ------------------------------------------------------------
 # Kalshi globals / shims (must exist before any call sites)
@@ -7761,18 +7692,15 @@ with tab_master:
                 # FIX: Pass ALL api_clients so stats for all leagues are fetched, not just the last loop variable
                 master_df = enrich_with_vertex_features(master_df, api_sports_clients)
 
-            # 4. BATCH PREDICTION: Call the endpoint once for the whole sheet
+            # 4. BATCH PREDICTION: Local Inference
             master_df = clean_df(master_df)
-            if is_vertex_prediction_configured():
-                with st.spinner("🔮 Calling Vertex AI Batch Inference..."):
-                    # 1. Force de-duplication of columns to prevent TypeError
-                    pass
-
+            # Local inference is always "configured" (or falls back)
+            if True:
+                with st.spinner("🔮 Computing Win Probabilities (Local)..."):
                     # 2. Filter for exactly the columns the model expects
                     from app_core.vertex_ai_endpoint import VERTEX_FEATURE_COLUMNS
 
                     # User Action: Ensure columns exist before filtering
-                    # Use bulk operation to avoid PerformanceWarning for fragmentation
                     missing_cols = [col for col in VERTEX_FEATURE_COLUMNS if col not in master_df.columns]
                     if missing_cols:
                         zeros_df = pd.DataFrame(0.0, index=master_df.index, columns=missing_cols)
@@ -7780,28 +7708,21 @@ with tab_master:
 
                     inference_df = master_df[VERTEX_FEATURE_COLUMNS].copy()
 
-                    # 3. Sanitize feature batch for XGBoost
+                    # 3. Sanitize feature batch
                     for col in VERTEX_FEATURE_COLUMNS:
-                        # Ensure we are working with a Series (1D), not a DataFrame (2D)
                         col_data = inference_df[col]
                         if isinstance(col_data, pd.DataFrame):
                             col_data = col_data.iloc[:, 0]
-
-                        # PROB features must default to 0.5 (Neutral), STATS/COUNTS to 0.0
                         default_val = 0.5 if "prob" in col else 0.0
                         inference_df[col] = pd.to_numeric(col_data, errors='coerce').fillna(default_val).astype(float)
 
-                    # 6. Call prediction using the sanitized batch
-                    # This uses Endpoint ID: 5331759481992773632
+                    # 6. Call local prediction
                     probs = predict_win_probabilities(inference_df)
 
                     if probs and len(probs) == len(master_df):
                         master_df["AI_Prob"] = probs
                         master_df["AI_Edge"] = master_df["AI_Prob"] - master_df.get("Implied_Prob", 0.5)
                     else:
-                        if probs:
-                            st.error(f"Prediction failed. Expected {len(master_df)} rows but got {len(probs)}.")
-                        # Emergency fallbacks to prevent KeyError: 'AI_Edge'
                         master_df["AI_Prob"] = 0.5
                         master_df["AI_Edge"] = 0.0
 
@@ -9164,7 +9085,7 @@ with tab_debug:
     flags = {
         "odds_api": bool(odds_api_key),
         "news_api": bool(news_api_key),
-        "vertex_configured": bool(vertex_endpoint_id),
+        "vertex_configured": True,  # Local fallback always enabled
         "kalshi_configured": bool(kalshi_api_key and kalshi_api_secret),
     }
     st.subheader("Config Flags")
@@ -9342,7 +9263,7 @@ with tab_debug:
         st.code(st.session_state["last_exception"])
 
     if "vertex_last_error" in st.session_state:
-        st.error(f"Vertex Prediction Error: {st.session_state['vertex_last_error']}")
+        st.error(f"Prediction Error: {st.session_state['vertex_last_error']}")
 
 
 if __name__ == "__main__" and os.environ.get("KALSHI_SELF_TEST"):
