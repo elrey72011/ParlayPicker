@@ -710,8 +710,9 @@ def enrich_with_vertex_features(df: pd.DataFrame, api_clients: Dict[str, Any], s
             return fill_val
 
     # Standardize 'league' column
-    if 'League' in df.columns:
-        df = df.rename(columns={'League': 'league'})
+    # Use copy instead of rename to preserve 'League' for UI if needed
+    if 'League' in df.columns and 'league' not in df.columns:
+        df['league'] = df['League']
 
     # 1. Fetch Stats (Using new function)
     stats_df = fetch_team_stats(api_clients, season_year=season_year)
@@ -1084,6 +1085,10 @@ def build_vertex_feature_row_from_record(record: Mapping[str, Any]) -> Dict[str,
     row: Dict[str, float] = {}
     for col in VERTEX_FEATURE_COLUMNS:
         val = record.get(col)
+        # Fallback: try removing 'feature_' prefix if exact key missing
+        if val is None and col.startswith("feature_"):
+             val = record.get(col.replace("feature_", ""))
+
         # PROB features must default to 0.5 (Neutral), STATS/COUNTS to 0.0
         default_val = 0.5 if "prob" in col else 0.0
 

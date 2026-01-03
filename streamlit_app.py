@@ -7731,10 +7731,16 @@ with tab_master:
             # User Action: Use from_records and copy to prevent fragmentation
             master_df = pd.DataFrame.from_records(rows_out)
             master_df = master_df.loc[:, ~master_df.columns.duplicated()].copy()
+            master_df = master_df.reset_index(drop=True)
 
-            # 2. Add 'League' column if missing (required for enrichment lookup)
-            if 'League' not in master_df.columns:
-                master_df['League'] = league
+            # 2. Add 'league' column if missing (required for enrichment lookup)
+            # Ensure we have the lowercase 'league' key for internal logic
+            if 'league' not in master_df.columns:
+                if 'League' in master_df.columns:
+                    master_df['league'] = master_df['League']
+                else:
+                    master_df['league'] = league
+                    master_df['League'] = league  # Ensure UI column exists too
 
             # 3. CRITICAL: Enrich the whole batch to fill 'feature_diff' columns
             # This fixes the 'Missing feature column' warnings in the logs
