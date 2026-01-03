@@ -3525,6 +3525,8 @@ def fetch_news() -> List[Dict[str, Any]]:
 def _build_vertex_feature_row(game: Dict[str, Any], sentiment_diff: Optional[float]) -> pd.DataFrame:
     # 1. Prepare Base Context
     base = dict(game)
+    # Fix NBA Overwrite: Explicitly set League from sport_title to avoid hardcoded fallbacks
+    base["League"] = game.get("sport_title", "Unknown")
 
     # 2. Add Override / Calculated fields that might not be in 'game' yet
     implied_home = american_to_implied_prob(game.get("home_ml_price")) or game.get("implied_prob_home")
@@ -7738,8 +7740,8 @@ with tab_master:
                         inference_df[col] = pd.to_numeric(col_data, errors='coerce').fillna(default_val).astype(float)
 
                     # 6. Accumulate Debug Data (Base Dict + Feature Vector)
-                    if "debug_accumulator" not in st.session_state:
-                        st.session_state["debug_accumulator"] = []
+                    if "debug_log_history" not in st.session_state:
+                        st.session_state["debug_log_history"] = []
 
                     try:
                         # Capture base metadata
@@ -7747,7 +7749,7 @@ with tab_master:
                         # Combine with feature vector
                         debug_combined = pd.concat([debug_base, inference_df], axis=1)
                         # Append to session state accumulator
-                        st.session_state["debug_accumulator"].extend(debug_combined.to_dict('records'))
+                        st.session_state["debug_log_history"].extend(debug_combined.to_dict('records'))
                     except Exception as e:
                         logger.warning(f"Failed to accumulate debug data: {e}")
 
@@ -9299,6 +9301,20 @@ with tab_debug:
 
     if "vertex_last_error" in st.session_state:
         st.error(f"Prediction Error: {st.session_state['vertex_last_error']}")
+
+    # Debug Export Button (Sidebar)
+    if "debug_log_history" in st.session_state and st.session_state["debug_log_history"]:
+        try:
+            debug_json = json.dumps(st.session_state["debug_log_history"], default=str, indent=2)
+            st.sidebar.download_button(
+                "Download Debug Log",
+                data=debug_json,
+                file_name="parlay_debug_export.json",
+                mime="application/json",
+                key="debug_log_export_btn"
+            )
+        except Exception:
+            pass
 
 
 if __name__ == "__main__" and os.environ.get("KALSHI_SELF_TEST"):
