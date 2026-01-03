@@ -548,6 +548,13 @@ def compute_final_probability(
         weights_norm.append((name, prob if prob is not None else None, w_norm))
     driver = max(weights_norm, key=lambda tup: tup[2])[0] if weights_norm else "missing"
     base_prob = sum((prob or 0.0) * w for _, prob, w in weights_norm)
+
+    # ENHANCEMENT: Explicitly zero out w_model in return dict if not used, and flag reason
+    if 'model' not in [s[0] for s in sources]:
+        weights_used["w_model"] = 0.0
+        # If we expected model to be used but it wasn't (implied by weights_dict having it),
+        # we might want to flag it. But trace construction happens outside.
+        # This ensures the output reflects reality.
     final_prob = clamp((base_prob or 0.0) + sentiment_adj, 0.0, 1.0)
     if driver == "kalshi" and kalshi_prob_for_pick is not None and kalshi_prob_for_pick < 0.5:
         warnings.append("kalshi_pick_mismatch")
@@ -578,6 +585,18 @@ def build_decision_trace(
     confidence_bucket = confidence
     if final_prob is None:
         confidence_bucket = "UNKNOWN"
+
+    # Check if model weight is 0.0 despite model_prob being present/expected
+    model_weight = safe_float(weights.get("w_model") if "w_model" in weights else weights.get("ml_weight")) or 0.0
+    model_note = ""
+    if model_weight == 0.0:
+        if model_prob is None and vertex_used:
+             model_note = "Model Failed/Missing"
+        elif model_prob is not None:
+             model_note = "Model Zeroed (Safety Valve/Low Weight)"
+        else:
+             model_note = "Model Not Used"
+
     trace_obj = {
         "league": league,
         "kalshi": {
@@ -590,6 +609,7 @@ def build_decision_trace(
         "model": {
             "vertex_used": vertex_used,
             "model_prob": safe_float(model_prob),
+            "status_note": model_note
         },
         "sentiment": {
             "score": safe_float(sentiment_score),
@@ -7738,7 +7758,8 @@ with tab_master:
             # 3. CRITICAL: Enrich the whole batch to fill 'feature_diff' columns
             # This fixes the 'Missing feature column' warnings in the logs
             with st.spinner("🚀 Running Batch Feature Enrichment..."):
-                master_df = enrich_with_vertex_features(master_df, {league: api_sports_clients.get(league)})
+                # FIX: Pass ALL api_clients so stats for all leagues are fetched, not just the last loop variable
+                master_df = enrich_with_vertex_features(master_df, api_sports_clients)
 
             # 4. BATCH PREDICTION: Call the endpoint once for the whole sheet
             master_df = clean_df(master_df)
