@@ -4992,6 +4992,26 @@ if st.sidebar.button("Load Games", use_container_width=True):
         del st.session_state["master_df"]
     load_games(selected_sports or [league])
 
+# --- SYSTEM TOOLS (Debug Export) ---
+st.sidebar.markdown("---")
+st.sidebar.header("System Tools")
+
+if st.sidebar.button("Clear Debug Log"):
+    st.session_state["debug_accumulator"] = []
+    st.success("Debug log cleared.")
+
+if "debug_accumulator" in st.session_state and st.session_state["debug_accumulator"]:
+    try:
+        debug_json = json.dumps(st.session_state["debug_accumulator"], default=str, indent=2)
+        st.sidebar.download_button(
+            "Download Debug Log",
+            data=debug_json,
+            file_name="parlay_debug_export.json",
+            mime="application/json"
+        )
+    except Exception as e:
+        st.sidebar.error(f"Error preparing download: {e}")
+
 api_sports_present = (
     get_secret_any("APISPORTS_API_KEY", "API_SPORTS_KEY", "API_SPORTS_API_KEY") is not None
     or any_secret_prefix("APISPORTS_")
@@ -7717,7 +7737,21 @@ with tab_master:
                         default_val = 0.5 if "prob" in col else 0.0
                         inference_df[col] = pd.to_numeric(col_data, errors='coerce').fillna(default_val).astype(float)
 
-                    # 6. Call local prediction
+                    # 6. Accumulate Debug Data (Base Dict + Feature Vector)
+                    if "debug_accumulator" not in st.session_state:
+                        st.session_state["debug_accumulator"] = []
+
+                    try:
+                        # Capture base metadata
+                        debug_base = master_df[['Home', 'Away', 'league', 'Commence (UTC)']].copy()
+                        # Combine with feature vector
+                        debug_combined = pd.concat([debug_base, inference_df], axis=1)
+                        # Append to session state accumulator
+                        st.session_state["debug_accumulator"].extend(debug_combined.to_dict('records'))
+                    except Exception as e:
+                        logger.warning(f"Failed to accumulate debug data: {e}")
+
+                    # 7. Call local prediction
                     probs = predict_win_probabilities(inference_df)
 
                     if probs and len(probs) == len(master_df):
