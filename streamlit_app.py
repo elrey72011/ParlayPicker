@@ -25,7 +25,7 @@ from app_core.llm_assistant import generate_confidence_explanation
 from app_core.reddit_sentiment import fetch_reddit_sentiment_map
 from app_core.sentiment_pipeline import MAX_SENTIMENT_CALLS, fetch_team_news, league_label, team_sentiment_from_articles
 from app_core.team_name_matcher import TeamNameMatcher
-from app_core.prediction_engine import VERTEX_FEATURE_COLUMNS, PredictionEngine
+from app_core.prediction_engine import VERTEX_FEATURE_COLUMNS, PredictionEngine, get_prediction_prob, match_team_name
 from app_core.apisports import (
     APISportsBasketballClient,
     APISportsFootballClient,
@@ -1517,25 +1517,29 @@ def compute_team_sentiment_map(news_api_key: Optional[str], games: List[Dict[str
             data = cached_fetch.get("data") or {}
             articles = data.get("articles", []) if isinstance(data, dict) else []
 
-            # Fallback: Try mascot-only query if full name failed
-            if not articles and status_val == 200:
-                parts = normalized_name.split()
-                if len(parts) > 1:
-                    mascot = parts[-1]
-                    q_fallback = f'"{mascot}" {league_label(league)}'
-                    params_fallback = {**params, "q": q_fallback}
+            # Fallback: Try mascot-only query if full name failed OR unavailable
+            # Now attempts fallback even if first call failed (e.g. 500) or returned no articles
+            if not articles:
+                try:
+                    parts = normalized_name.split()
+                    if len(parts) > 1:
+                        mascot = parts[-1]
+                        q_fallback = f'"{mascot}" {league_label(league)}'
+                        params_fallback = {**params, "q": q_fallback}
 
-                    cached_fetch_fb = _newsapi_fetch_cached(url, tuple(sorted(params_fallback.items())))
-                    status_val_fb = cached_fetch_fb.get("status")
-                    if status_val_fb == 200:
-                         data_fb = cached_fetch_fb.get("data") or {}
-                         articles_fb = data_fb.get("articles", []) if isinstance(data_fb, dict) else []
-                         if articles_fb:
-                             articles = articles_fb
-                             q = q_fallback
-                             cached_fetch = cached_fetch_fb
-                             status_val = status_val_fb
-                             data = data_fb
+                        cached_fetch_fb = _newsapi_fetch_cached(url, tuple(sorted(params_fallback.items())))
+                        status_val_fb = cached_fetch_fb.get("status")
+                        if status_val_fb == 200:
+                             data_fb = cached_fetch_fb.get("data") or {}
+                             articles_fb = data_fb.get("articles", []) if isinstance(data_fb, dict) else []
+                             if articles_fb:
+                                 articles = articles_fb
+                                 q = q_fallback
+                                 cached_fetch = cached_fetch_fb
+                                 status_val = status_val_fb
+                                 data = data_fb
+                except Exception as e:
+                    logger.warning(f"Sentiment fallback query failed: {e}")
             retry_after_hdr = (cached_fetch.get("headers") or {}).get("Retry-After")
             rate_limited_call = status_val == 429
             auth_error_call = status_val in {401, 403}
@@ -2774,7 +2778,7 @@ def get_api_keys() -> Dict[str, Optional[str]]:
                 return env_val
         return None
 
-    api_sports_key = _find_key(["APISPORTS_API_KEY", "API_SPORTS_KEY", "API_SPORTS_API_KEY"]) or get_apisports_key()
+    api_sports_key = _find_key(["APISPORTS_API_KEY", "API_SPORTS_KEY", "API_SPORTS_API_KEY", "NBA_APISPORTS_API_KEY"]) or get_apisports_key()
     sportsdata_key = _find_key(["SPORTSDATA_API_KEY", "SPORTSDATA_KEY"]) or get_sportsdata_key()
     api_sports_keys = {
         "NFL": _find_key(["APISPORTS_NFL_KEY", "NFL_APISPORTS_API_KEY"]) or api_sports_key or get_apisports_key("NFL"),
@@ -4675,6 +4679,19 @@ def match_kalshi_market(
         code_away_hit = away_code_candidates and any(code in ticker_upper for code in away_code_candidates)
         code_hit = bool(code_home_hit and code_away_hit)
         team_hit = bool(home_hit and away_hit)
+
+        # Enhanced Fuzzy Matching using match_team_name from prediction_engine
+        if not (team_hit or code_hit):
+            # Try fuzzy match on market title vs home/away team names
+            # We assume title_lower contains the team names
+            # If match_team_name returns a non-None value, it's a match
+            # We use a slightly lower threshold for title matching as titles can be messy
+            fuzzy_home = match_team_name(game.get("home_team"), [title_lower], threshold=70.0)
+            fuzzy_away = match_team_name(game.get("away_team"), [title_lower], threshold=70.0)
+
+            if fuzzy_home and fuzzy_away:
+                team_hit = True
+
         if not (team_hit or code_hit):
             continue
         candidate_count += 1
@@ -7713,6 +7730,9 @@ with tab_master:
             with st.spinner("🚀 Running Batch Feature Enrichment..."):
                 # FIX: Pass ALL api_clients so stats for all leagues are fetched, not just the last loop variable
                 master_df = enrich_with_vertex_features(master_df, api_sports_clients)
+
+            # Ensure use_model_numeric_probs is synchronized from session state
+            use_model_numeric_probs = st.session_state.get("use_model_numeric_probs", True)
 
             # 4. BATCH PREDICTION: Local Inference
             master_df = clean_df(master_df)

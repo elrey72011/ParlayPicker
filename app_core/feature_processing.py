@@ -368,7 +368,8 @@ def fetch_ncaaf_stats(season_year: int) -> List[Dict[str, Any]]:
             configuration.api_key['Authorization'] = api_key
             configuration.api_key_prefix['Authorization'] = 'Bearer'
             api_instance = cfbd.StatsApi(cfbd.ApiClient(configuration))
-            return api_instance.get_stats_team_season(year=yr)
+            # Fixed method name for cfbd 5.13.2
+            return api_instance.get_team_stats(year=yr)
         except Exception as e:
             logger.warning(f"NCAAF Stats fetch failed for {yr}: {e}")
             return []
