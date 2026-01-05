@@ -48,9 +48,13 @@ class PredictionEngine:
             model_path = str(root_dir / "models" / "model.json")
 
         if os.path.exists(model_path):
-            self.model.load_model(model_path)
-            self.use_fallback = False
-            logger.info(f"Jules: Loaded local model from {model_path}")
+            try:
+                self.model.load_model(model_path)
+                self.use_fallback = False
+                logger.info(f"Jules: Loaded local model from {model_path}")
+            except Exception as e:
+                self.use_fallback = True
+                logger.error(f"Jules: Failed to load model from {model_path}: {e}. Using statistical fallback.")
         else:
             self.use_fallback = True
             logger.warning(f"Jules: Model file missing at {model_path}. Using statistical fallback.")

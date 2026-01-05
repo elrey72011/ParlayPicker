@@ -41,7 +41,6 @@ from app_core.sportsdata import (
     SportsDataNCAAFClient,
     get_key as get_sportsdata_key,
 )
-from vertex_master_analyzer import blended_win_prob
 
 try:
     from app_core.sentiment import RealSentimentAnalyzer
@@ -1895,10 +1894,7 @@ def gemini_confidence_explain(row_dict: Dict[str, Any]) -> Dict[str, Any]:
         "flags": [],
         "gemini_error": None,
     }
-    vertex_ok = (st.session_state.get("vertex_info") or {}).get("ok")
-    if vertex_ok is False:
-        base["gemini_error"] = "vertex_not_ready"
-        return base
+    # Local model is always available
     if str(row_dict.get("odds_placeholder_detected")).lower() == "true":
         base["gemini_error"] = "placeholder_odds_block"
         return base
@@ -2859,7 +2855,6 @@ def init_data_clients() -> Tuple[Dict[str, Any], Dict[str, Any]]:
 
 # Must be the first Streamlit call
 st.set_page_config(page_title="ParlayDesk", layout="wide")
-st.session_state["vertex_info"] = {"ok": True}
 
 # ------------------------------------------------------------
 # Kalshi globals / shims (must exist before any call sites)
@@ -3444,7 +3439,6 @@ odds_api_key = read_secret("ODDS_API_KEY")
 news_api_key = read_secret("NEWS_API_KEY")
 project_id = read_secret("GCP_PROJECT_ID", "elite-hangar-479017-m8")
 location = read_secret("GCP_LOCATION", "us-central1")
-vertex_endpoint_id = read_secret("VERTEX_ENDPOINT_ID")
 kalshi_api_key = read_secret("KALSHI_API_KEY") or read_secret("kalshi_api_key")
 kalshi_api_secret = read_secret("KALSHI_API_SECRET") or read_secret("kalshi_api_secret")
 keys_resolved = get_api_keys()
@@ -5008,7 +5002,6 @@ sportsdata_present = (
 )
 api_sports_status = "OK" if api_sports_present or any(v for v in api_sports_clients.values() if v) else "MISSING"
 sportsdata_status = "OK" if sportsdata_present or any(v for v in sportsdata_clients.values() if v) else "MISSING"
-vertex_ready = bool(vertex_endpoint_id) and bool(vertex_info.get("ok"))
 gemini_ready = bool(get_secret_any("GEMINI_API_KEY"))
 st.sidebar.markdown("---")
 st.sidebar.subheader("Status")
@@ -5030,7 +5023,7 @@ else:
     sentiment_status_color = "red"
 badges = {
     "OddsAPI": bool(odds_api_key),
-    "Vertex": vertex_ready,
+    "AI Model": True,
     "Gemini": gemini_ready,
     "News": bool(news_api_key),
     "API-Sports": api_sports_status == "OK",
@@ -5043,10 +5036,6 @@ for name, ok in badges.items():
 st.sidebar.markdown(f"**Sentiment:** :{sentiment_status_color}[{sentiment_status_text}]")
 with st.sidebar.expander("Key sources (API-Sports/SportsData)"):
     st.caption("Lookups: API_SPORTS_KEY, APISPORTS_API_KEY, NBA/NFL specific; SPORTSData: SPORTSDATA_API_KEY/KEY variants")
-if not vertex_ready:
-    st.sidebar.warning(f"Vertex not ready: {vertex_info.get('error') or 'not configured'}")
-with st.sidebar.expander("Vertex / Gemini Status", expanded=False):
-    st.json(vertex_info)
 
 render_pipeline_banner()
 
@@ -6164,27 +6153,27 @@ with tab_master:
                 ):
                     master_stats["kalshi_matches"] += 1
 
-                # --- MOVED VERTEX PREDICTION (After Kalshi for signal injection) ---
-                vertex_prob_home = None
-                vertex_warn = None
-                vertex_mode = "disabled"
-                vertex_spread_prob = None
-                vertex_total_prob = None
-                vertex_available = True
+                # --- MOVED PREDICTION (After Kalshi for signal injection) ---
+                model_prob_home = None
+                model_warn = None
+                model_mode = "disabled"
+                model_spread_prob = None
+                model_total_prob = None
+                model_available = True
             
                 # Inject Kalshi Prob if available
                 if kalshi_winner.get("kalshi_matched") and kalshi_prob_used is not None:
                     g["kalshi_prob"] = kalshi_prob_used
 
-                if use_vertex_numeric_probs:
-                    if vertex_available:
-                        vertex_prob_home, vertex_warn = get_vertex_prob(g, sentiment_diff)
-                        vertex_mode = "enabled" if vertex_prob_home is not None else "error"
+                if use_model_numeric_probs:
+                    if model_available:
+                        model_prob_home, model_warn = get_prediction_prob(g, sentiment_diff)
+                        model_mode = "enabled" if model_prob_home is not None else "error"
                     else:
-                        vertex_warn = "vertex_missing_prob"
-                        vertex_mode = "missing"
-                if vertex_warn and vertex_warn not in warnings:
-                    warnings.append(vertex_warn)
+                        model_warn = "model_missing_prob"
+                        model_mode = "missing"
+                if model_warn and model_warn not in warnings:
+                    warnings.append(model_warn)
 
                 # --- 3. AI & Market Probability Calculations ---
                 home_ml = g.get("home_ml_price")
@@ -6657,7 +6646,7 @@ with tab_master:
                         warnings = list(dict.fromkeys(warnings + ["no_implied_prob"]))
 
                     if pick is not None:
-                        prob_engine_moneyline = prob_engine_label(bool(kalshi_winner.get("kalshi_matched")), implied_pick, vertex_used=bool(use_vertex_numeric_probs and vertex_prob_home is not None))
+                        prob_engine_moneyline = prob_engine_label(bool(kalshi_winner.get("kalshi_matched")), implied_pick, vertex_used=bool(use_model_numeric_probs and model_prob_home is not None))
                         ai_prob_base = ai_prob_for_selection(pick, adjusted=False)
                         ai_prob_row = clamp((ai_prob_base or 0.0) + (sentiment_adj or 0.0), 0.01, 0.99) if ai_prob_base is not None else None
 
@@ -6971,7 +6960,7 @@ with tab_master:
                             kalshi_winner.get("kalshi_reason"),
                             ml_row.get("sentiment_score"),
                             ml_row.get("sentiment_label"),
-                            bool(use_vertex_numeric_probs and vertex_prob_home is not None),
+                            bool(use_model_numeric_probs and model_prob_home is not None),
                             reason_short,
                             warnings,
                             kalshi_yes_side,
@@ -7234,7 +7223,7 @@ with tab_master:
                         kalshi_spread.get("kalshi_reason"),
                         spread_row.get("sentiment_score"),
                         spread_row.get("sentiment_label"),
-                        bool(use_vertex_numeric_probs and vertex_prob_home is not None),
+                        bool(use_model_numeric_probs and model_prob_home is not None),
                         reason_short,
                         warnings,
                         kalshi_spread.get("kalshi_yes_side") or "home",
@@ -7479,7 +7468,7 @@ with tab_master:
                         kalshi_total.get("kalshi_reason"),
                         total_row.get("sentiment_score"),
                         total_row.get("sentiment_label"),
-                        bool(use_vertex_numeric_probs and vertex_prob_home is not None),
+                        bool(use_model_numeric_probs and model_prob_home is not None),
                         reason_short,
                         warnings,
                         kalshi_total.get("kalshi_yes_side") or "over",
@@ -7517,7 +7506,7 @@ with tab_master:
                         "Book": None,
                         "Pick": None,
                         "Implied_Prob": None,
-                        "AI_Prob": vertex_prob_home,  # Raw AI score with no market blending
+                        "AI_Prob": model_prob_home,  # Raw AI score with no market blending
                         "Warnings": ";".join(warnings),
                         "kalshi_available": kalshi_winner.get("kalshi_available"),
                         "kalshi_matched": kalshi_winner.get("kalshi_matched"),
