@@ -181,15 +181,11 @@ def filter_kalshi_game_markets(
                 # This is powerful because we preserved spaces!
                 combo_query = f"{home_norm} {away_norm}"
 
-                # token_sort_ratio handles reordering
-                score_sort = fuzz.token_sort_ratio(combo_query, market_title)
+                # token_set_ratio is best for subset matching (e.g. "Tampa Bay" in "Tampa Bay Buccaneers")
+                # Threshold set to 80% as requested
+                score_set = fuzz.token_set_ratio(combo_query, market_title)
 
-                # partial_ratio handles substrings (legacy requirement)
-                # For partial ratio, space-less might be safer if we are unsure of separators
-                # but with spaces, partial_ratio still works if substring exists.
-                score_partial = fuzz.partial_ratio(home_simple + away_simple, market_title.replace(" ", ""))
-
-                if score_sort > 80 or score_partial > 85:
+                if score_set >= 80:
                     is_match = True
 
             if is_match:

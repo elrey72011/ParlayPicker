@@ -1500,7 +1500,8 @@ def compute_team_sentiment_map(news_api_key: Optional[str], games: List[Dict[str
             from_date = to_date - timedelta(days=3)
             url = "https://newsapi.org/v2/everything"
             # Attempt a combined query that includes the team and league context to reduce per-team calls
-            q = f'"{TeamNameMatcher.normalize(team)}" {league_label(league)}'
+            normalized_name = TeamNameMatcher.normalize(team)
+            q = f'"{normalized_name}" {league_label(league)}'
             params = {
                 "q": q,
                 "sortBy": "relevancy",
@@ -1515,6 +1516,26 @@ def compute_team_sentiment_map(news_api_key: Optional[str], games: List[Dict[str
             status_val = cached_fetch.get("status")
             data = cached_fetch.get("data") or {}
             articles = data.get("articles", []) if isinstance(data, dict) else []
+
+            # Fallback: Try mascot-only query if full name failed
+            if not articles and status_val == 200:
+                parts = normalized_name.split()
+                if len(parts) > 1:
+                    mascot = parts[-1]
+                    q_fallback = f'"{mascot}" {league_label(league)}'
+                    params_fallback = {**params, "q": q_fallback}
+
+                    cached_fetch_fb = _newsapi_fetch_cached(url, tuple(sorted(params_fallback.items())))
+                    status_val_fb = cached_fetch_fb.get("status")
+                    if status_val_fb == 200:
+                         data_fb = cached_fetch_fb.get("data") or {}
+                         articles_fb = data_fb.get("articles", []) if isinstance(data_fb, dict) else []
+                         if articles_fb:
+                             articles = articles_fb
+                             q = q_fallback
+                             cached_fetch = cached_fetch_fb
+                             status_val = status_val_fb
+                             data = data_fb
             retry_after_hdr = (cached_fetch.get("headers") or {}).get("Retry-After")
             rate_limited_call = status_val == 429
             auth_error_call = status_val in {401, 403}
@@ -1982,7 +2003,11 @@ def pipeline_progress_snapshot() -> Dict[str, Any]:
         sentiment_flags.append("rate_limited")
     if sentiment_meta.get("sentiment_auth_error"):
         sentiment_flags.append("auth_error")
-    vertex_ready = True  # Local inference is always "ready" (or falls back)
+
+    # Check if local model is loaded
+    engine = get_prediction_engine()
+    model_ready = engine.model is not None
+
     rows_out = st.session_state.get("last_rows_out", 0)
     master_stats = st.session_state.get("master_stats") or {}
     return {
@@ -1990,7 +2015,7 @@ def pipeline_progress_snapshot() -> Dict[str, Any]:
         "kalshi_matched": matched_games,
         "sentiment_ready": sentiment_ready,
         "sentiment_flags": sentiment_flags,
-        "vertex_ready": vertex_ready,
+        "vertex_ready": model_ready,
         "rows_out": rows_out,
         "market_rows_out": master_stats.get("market_rows_out", 0),
     }
@@ -2020,9 +2045,9 @@ def render_pipeline_banner() -> None:
         )
         readiness = []
         if progress["vertex_ready"]:
-            readiness.append("Vertex OK")
+            readiness.append("🟢 AI Model: Ready (XGBoost)")
         else:
-            readiness.append("Vertex missing")
+            readiness.append("🔴 AI Model: Missing")
         st.caption(" | ".join(readiness))
 
 
@@ -5198,10 +5223,11 @@ with tab_master:
         value=st.session_state.get("use_gemini_explanations", True),
         key="use_gemini_explanations",
     )
-    use_vertex_numeric_probs = st.checkbox(
-        "Use Vertex Numeric Probabilities (debug/optional)",
-        value=st.session_state.get("use_vertex_numeric_probs", False),
-        key="use_vertex_numeric_probs",
+    use_model_numeric_probs = st.checkbox(
+        "Use Local Model Numeric Probabilities",
+        value=st.session_state.get("use_model_numeric_probs", True),
+        key="use_model_numeric_probs",
+        help="If checked, the 'AI_Prob' column will use the local XGBoost model output."
     )
     run_master = st.button(
         "Run Master Analysis",
@@ -6344,8 +6370,8 @@ with tab_master:
                 total_prob_market = total_prob_market_based if total_prob_market_based is not None else total_implied
                 kalshi_prob_spread = safe_float(kalshi_spread.get("kalshi_prob"))
                 kalshi_prob_total = safe_float(kalshi_total.get("kalshi_prob"))
-                vertex_used_for_spread = bool(use_vertex_numeric_probs and vertex_spread_prob is not None)
-                vertex_used_for_total = bool(use_vertex_numeric_probs and vertex_total_prob is not None)
+                vertex_used_for_spread = bool(use_model_numeric_probs and vertex_spread_prob is not None)
+                vertex_used_for_total = bool(use_model_numeric_probs and vertex_total_prob is not None)
                 spread_base_weights = {
                     "odds_weight": 0.30,
                     "kalshi_weight": 0.35,
