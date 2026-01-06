@@ -2057,11 +2057,10 @@ def render_pipeline_banner() -> None:
             delta=f"Markets: {progress['market_rows_out']}",
         )
         readiness = []
-        # Updated key from model_ready to model_ready
-        if progress.get("model_ready"):
+        if os.path.exists(os.path.join(os.path.dirname(__file__), "models", "model.json")):
             readiness.append("🟢 AI Model: Ready (XGBoost)")
         else:
-            readiness.append("🔴 AI Model: Missing")
+            readiness.append("🟡 AI Model: Fallback Mode")
         st.caption(" | ".join(readiness))
 
 
@@ -5266,7 +5265,7 @@ with tab_master:
         key="use_gemini_explanations",
     )
     use_model_numeric_probs = st.checkbox(
-        "Use Local Model Numeric Probabilities",
+        "Local Model Predictions",
         value=st.session_state.get("use_model_numeric_probs", True),
         key="use_model_numeric_probs",
         help="If checked, the 'AI_Prob' column will use the local XGBoost model output."
@@ -6633,7 +6632,6 @@ with tab_master:
 
                 # AI probability (null-safe, no defaults)
                 def ai_prob_for_selection(selection_team: str, adjusted: bool = True) -> Optional[float]:
-                    # Fix: vertex_prob_home renamed to model_prob_home
                     base = prob_for_selection(model_prob_home, selection_team)
                     if base is None:
                         return None
