@@ -283,7 +283,8 @@ class TeamNameMatcher:
              # rapidfuzz implementation (faster)
              app_normalized_map = {cls.normalize(t): t for t in app_teams if cls.normalize(t)}
              choices = list(app_normalized_map.keys())
-             result = process.extractOne(csv_normalized, choices, scorer=fuzz.ratio)
+             # Use token_set_ratio to handle subset matches like "Lions" vs "Detroit Lions"
+             result = process.extractOne(csv_normalized, choices, scorer=fuzz.token_set_ratio)
              if result:
                  match, score, _ = result
                  if (score / 100.0) >= threshold:

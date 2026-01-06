@@ -48,6 +48,13 @@ except Exception:  # pragma: no cover - optional import
     RealSentimentAnalyzer = None
 
 try:
+    import rapidfuzz
+    from rapidfuzz import fuzz
+except ImportError:
+    rapidfuzz = None
+    fuzz = None
+
+try:
     from parlay_optimizer import ParlayOptimizer
 except ImportError:
     ParlayOptimizer = None
@@ -831,7 +838,7 @@ def reorder_for_spread_total_focus(df: pd.DataFrame) -> pd.DataFrame:
         "gemini_flags_short",
         "prob_engine",
         "gemini_mode",
-        "vertex_mode",
+        "model_mode",
         "Spread & Pick",
         "Spread_Glance_Clean",
         "spread_prob_adj",
@@ -1521,7 +1528,9 @@ def compute_team_sentiment_map(news_api_key: Optional[str], games: List[Dict[str
             # Now attempts fallback even if first call failed (e.g. 500) or returned no articles
             if not articles:
                 try:
-                    parts = normalized_name.split()
+                    # Fallback to team mascot from raw team name
+                    # normalized_name strips mascots, so we use 'team' which preserves them
+                    parts = team.split()
                     if len(parts) > 1:
                         mascot = parts[-1]
                         q_fallback = f'"{mascot}" {league_label(league)}'
@@ -2885,6 +2894,9 @@ def init_data_clients() -> Tuple[Dict[str, Any], Dict[str, Any]]:
 
 # Must be the first Streamlit call
 st.set_page_config(page_title="ParlayDesk", layout="wide")
+
+if 'model_mode' not in st.session_state:
+    st.session_state.model_mode = "Local XGBoost"
 
 # ------------------------------------------------------------
 # Kalshi globals / shims (must exist before any call sites)
@@ -4683,15 +4695,25 @@ def match_kalshi_market(
 
         # Enhanced Fuzzy Matching using match_team_name from prediction_engine
         if not (team_hit or code_hit):
-            # Try fuzzy match on market title vs home/away team names
-            # We assume title_lower contains the team names
-            # If match_team_name returns a non-None value, it's a match
-            # We use a slightly lower threshold for title matching as titles can be messy
+            # 1. Try fuzzy match on market title vs home/away team names (Legacy)
             fuzzy_home = match_team_name(game.get("home_team"), [title_lower], threshold=70.0)
             fuzzy_away = match_team_name(game.get("away_team"), [title_lower], threshold=70.0)
 
             if fuzzy_home and fuzzy_away:
                 team_hit = True
+
+            # 2. Try RapidFuzz direct token set match (New Fallback)
+            # Helps with "Lions" vs "Detroit Lions" where 'Lions' is subset
+            if not team_hit and fuzz:
+                home_raw = str(game.get("home_team") or "").lower()
+                away_raw = str(game.get("away_team") or "").lower()
+
+                # token_set_ratio handles subset matching well (e.g. "Lions" in "Detroit Lions")
+                score_h = fuzz.token_set_ratio(home_raw, title_lower)
+                score_a = fuzz.token_set_ratio(away_raw, title_lower)
+
+                if score_h >= 80 and score_a >= 80:
+                    team_hit = True
 
         if not (team_hit or code_hit):
             continue
@@ -6809,7 +6831,7 @@ with tab_master:
                             "sentiment_used_cached": sentiment_used_cached,
                             "sentiment_disabled_reason": sentiment_disabled_reason,
                             "prob_engine": prob_engine_moneyline,
-                            "vertex_mode": vertex_mode,
+                            "model_mode": st.session_state.model_mode,
                             "gemini_mode": "pending" if use_gemini_explanations else "disabled",
                             "vertex_spread_prob": vertex_spread_prob,
                             "vertex_total_prob": vertex_total_prob,
@@ -7099,7 +7121,7 @@ with tab_master:
                         "vertex_spread_prob": vertex_spread_prob,
                         "vertex_total_prob": vertex_total_prob,
                         "prob_engine": spread_prob_engine,
-                        "vertex_mode": vertex_mode,
+                        "model_mode": st.session_state.model_mode,
                         "gemini_mode": "pending" if use_gemini_explanations else "disabled",
                         "overall_confidence": None,
                         "spread_confidence_gemini": None,
@@ -7327,7 +7349,7 @@ with tab_master:
                         "vertex_spread_prob": vertex_spread_prob,
                         "vertex_total_prob": vertex_total_prob,
                         "prob_engine": total_prob_engine,
-                        "vertex_mode": vertex_mode,
+                        "model_mode": st.session_state.model_mode,
                         "gemini_mode": "pending" if use_gemini_explanations else "disabled",
                         "overall_confidence": None,
                         "spread_confidence_gemini": None,
@@ -7666,7 +7688,7 @@ with tab_master:
                         "vertex_spread_prob": vertex_spread_prob,
                         "vertex_total_prob": vertex_total_prob,
                         "prob_engine": prob_engine_label(bool(kalshi_winner.get("kalshi_matched")), None, vertex_used=False),
-                        "vertex_mode": vertex_mode,
+                        "model_mode": st.session_state.model_mode,
                         "gemini_mode": "pending" if use_gemini_explanations else "disabled",
                         "overall_confidence": None,
                         "spread_confidence_gemini": None,
@@ -7932,7 +7954,7 @@ with tab_master:
             "gemini_error",
             "llm_disagreement_flag",
             "prob_engine",
-            "vertex_mode",
+            "model_mode",
             "vertex_spread_prob",
             "vertex_total_prob",
             "spread_engine_used",
@@ -8631,7 +8653,7 @@ with tab_master:
             "gemini_error",
             "decision_trace",
             "prob_engine",
-            "vertex_mode",
+            "model_mode",
             "vertex_spread_prob",
             "vertex_total_prob",
             "kalshi_prob_spread",

@@ -366,13 +366,10 @@ def fetch_ncaaf_stats(season_year: int) -> List[Dict[str, Any]]:
             logger.info(f"Fetching NCAAF stats for season: {yr}")
             configuration = cfbd.Configuration()
             # User requirement: Ensure header is exactly "Authorization": f"Bearer {your_api_key}"
-            # cfbd client handles prefix if set, but to be explicit/robust per instruction:
-            configuration.api_key['Authorization'] = api_key
-            configuration.api_key_prefix['Authorization'] = 'Bearer'
-
-            # Additional check: if api_key already has 'Bearer', don't double it
-            if api_key.lower().startswith("bearer "):
-                configuration.api_key['Authorization'] = api_key
+            # Per instruction: Force strict header format
+            configuration.api_key['Authorization'] = f"Bearer {api_key}"
+            # Clear prefix to ensure no double-bearer
+            if 'Authorization' in configuration.api_key_prefix:
                 del configuration.api_key_prefix['Authorization']
 
             api_instance = cfbd.StatsApi(cfbd.ApiClient(configuration))
