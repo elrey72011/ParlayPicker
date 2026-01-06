@@ -49,10 +49,10 @@ def safefloat(val: Any) -> float:
     except (ValueError, TypeError):
         return 0.0
 
-def build_vertex_feature_row_from_record(record: Mapping[str, Any]) -> Dict[str, float]:
+def build_model_feature_row_from_record(record: Mapping[str, Any]) -> Dict[str, float]:
     """
     Build one Vertex feature row using the same columns and defaults
-    as the batch enrich_with_vertex_features path.
+    as the batch enrich_with_model_features path.
     PROB features -> default 0.5, others -> default 0.0.
     """
     row: Dict[str, float] = {}
@@ -153,7 +153,7 @@ def get_prediction_prob(game_row: Dict[str, Any], sentiment_diff: float = 0.0) -
     try:
         engine = PredictionEngine()
         # Ensure features are extracted/formatted correctly
-        features = build_vertex_feature_row_from_record(game_row)
+        features = build_model_feature_row_from_record(game_row)
 
         # Inject sentiment_diff if needed
         if 'sentiment_diff' not in features and sentiment_diff is not None:

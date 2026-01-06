@@ -4,7 +4,6 @@ import datetime
 from datetime import datetime, timezone, timedelta
 from zoneinfo import ZoneInfo
 from typing import Any, Dict, List, Optional, Tuple
-from rapidfuzz import fuzz, process
 import streamlit as st
 
 # Import dependency from existing app_core module
@@ -12,6 +11,15 @@ from app_core.kalshi_integrator import (
     league_game_prefix,
     team_code_for_league,
 )
+
+# Fail-safe import for rapidfuzz
+try:
+    import rapidfuzz
+    from rapidfuzz import fuzz, process
+except ImportError:
+    rapidfuzz = None
+    fuzz = None
+    # We will log a warning or handle missing fuzz below if needed
 
 def get_local_tz() -> str:
     """Return configured or system local timezone string."""
@@ -181,12 +189,16 @@ def filter_kalshi_game_markets(
                 # This is powerful because we preserved spaces!
                 combo_query = f"{home_norm} {away_norm}"
 
-                # token_set_ratio is best for subset matching (e.g. "Tampa Bay" in "Tampa Bay Buccaneers")
-                # Threshold set to 80% as requested
-                score_set = fuzz.token_set_ratio(combo_query, market_title)
-
-                if score_set >= 80:
-                    is_match = True
+                if rapidfuzz:
+                    # token_set_ratio is best for subset matching (e.g. "Tampa Bay" in "Tampa Bay Buccaneers")
+                    # Threshold set to 80% as requested
+                    score_set = fuzz.token_set_ratio(combo_query, market_title)
+                    if score_set >= 80:
+                        is_match = True
+                else:
+                     # Fallback if rapidfuzz missing (simple partial matching)
+                     if home_norm in market_title and away_norm in market_title:
+                         is_match = True
 
             if is_match:
                 matched.append(m)
