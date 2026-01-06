@@ -32,7 +32,7 @@ from app_core.apisports import (
     APISportsHockeyClient,
     get_key as get_apisports_key,
 )
-from app_core.feature_processing import enrich_with_vertex_features, build_vertex_feature_row_from_record
+from app_core.feature_processing import enrich_with_model_features, build_model_feature_row_from_record
 from app_core.sportsdata import (
     SportsDataNBAClient,
     SportsDataNFLClient,
@@ -578,7 +578,7 @@ def build_decision_trace(
     kalshi_market: Optional[str],
     sentiment_score: Optional[float],
     sentiment_label: Optional[str],
-    vertex_used: bool,
+    model_used: bool,
     final_pick_reason: Optional[str],
     warnings: Optional[List[str]],
     kalshi_yes_side: Optional[str],
@@ -592,7 +592,7 @@ def build_decision_trace(
     model_weight = safe_float(weights.get("w_model") if "w_model" in weights else weights.get("ml_weight")) or 0.0
     model_note = ""
     if model_weight == 0.0:
-        if model_prob is None and vertex_used:
+        if model_prob is None and model_used:
              model_note = "Model Failed/Missing"
         elif model_prob is not None:
              model_note = "Model Zeroed (Safety Valve/Low Weight)"
@@ -609,7 +609,7 @@ def build_decision_trace(
             "prob_for_pick": safe_float(kalshi_prob_for_pick),
         },
         "model": {
-            "vertex_used": vertex_used,
+            "model_used": model_used,
             "model_prob": safe_float(model_prob),
             "status_note": model_note
         },
@@ -677,9 +677,9 @@ def blend_kalshi_market(kalshi_p: Optional[float], market_p: Optional[float]) ->
     return clamp(0.55 * kp + 0.45 * mp, 0.0, 1.0)
 
 
-def prob_engine_label(kalshi_matched: bool, market_prob: Optional[float], *, vertex_used: bool = False) -> str:
-    if vertex_used:
-        return "vertex_enabled"
+def prob_engine_label(kalshi_matched: bool, market_prob: Optional[float], *, model_used: bool = False) -> str:
+    if model_used:
+        return "model_enabled"
     if kalshi_matched and market_prob is not None:
         return "kalshi+market"
     if kalshi_matched and market_prob is None:
@@ -1036,7 +1036,7 @@ def add_spread_total_confidence(df: pd.DataFrame) -> pd.DataFrame:
         spread_books_count = row.get("spread_books_count")
         total_books_count = row.get("total_books_count")
         mixed_side_flag = "spread_range_mixed_sides_detected" in warnings_text
-        proxy_flag = "vertex_proxy_for_spread_total" in warnings_text
+        proxy_flag = "model_proxy_for_spread_total" in warnings_text
 
         spread_conf, spread_reason = confidence_from_market(
             spread_books_count, spread_width_val, spread_odds_valid, mixed_side_flag, proxy_flag, market_kind="spread"
@@ -2057,8 +2057,8 @@ def render_pipeline_banner() -> None:
             delta=f"Markets: {progress['market_rows_out']}",
         )
         readiness = []
-        # Updated key from vertex_ready to model_ready
-        if progress.get("model_ready") or progress.get("vertex_ready"):
+        # Updated key from model_ready to model_ready
+        if progress.get("model_ready"):
             readiness.append("🟢 AI Model: Ready (XGBoost)")
         else:
             readiness.append("🔴 AI Model: Missing")
@@ -2894,9 +2894,11 @@ def init_data_clients() -> Tuple[Dict[str, Any], Dict[str, Any]]:
 
 # Must be the first Streamlit call
 st.set_page_config(page_title="ParlayDesk", layout="wide")
+if "model_mode" not in st.session_state:
+    st.session_state["model_mode"] = "Local XGBoost"
+if "model_ready" not in st.session_state:
+    st.session_state["model_ready"] = False
 
-if 'model_mode' not in st.session_state:
-    st.session_state.model_mode = "Local XGBoost"
 
 # ------------------------------------------------------------
 # Kalshi globals / shims (must exist before any call sites)
@@ -3542,7 +3544,7 @@ def fetch_news() -> List[Dict[str, Any]]:
 # Vertex prediction
 # -----------------
 
-def _build_vertex_feature_row(game: Dict[str, Any], sentiment_diff: Optional[float]) -> pd.DataFrame:
+def _build_model_feature_row(game: Dict[str, Any], sentiment_diff: Optional[float]) -> pd.DataFrame:
     # 1. Prepare Base Context
     base = dict(game)
     # Fix NBA Overwrite: Explicitly set League from sport_title to avoid hardcoded fallbacks
@@ -3598,17 +3600,17 @@ def _build_vertex_feature_row(game: Dict[str, Any], sentiment_diff: Optional[flo
         base["feature_stats_fallback"] = True
 
     # 3. Use Shared Helper
-    feature_dict = build_vertex_feature_row_from_record(base)
+    feature_dict = build_model_feature_row_from_record(base)
 
     # 4. Return DataFrame
     df = pd.DataFrame([feature_dict])
     df = df.reindex(columns=VERTEX_FEATURE_COLUMNS)
     return df
 
-def get_vertex_prob(game: Dict[str, Any], sentiment_diff: Optional[float]) -> Tuple[Optional[float], Optional[str]]:
+def get_model_prob(game: Dict[str, Any], sentiment_diff: Optional[float]) -> Tuple[Optional[float], Optional[str]]:
     # Local model is always available (or falls back)
     try:
-        features_df = _build_vertex_feature_row(game, sentiment_diff)
+        features_df = _build_model_feature_row(game, sentiment_diff)
 
         expected_cols = len(VERTEX_FEATURE_COLUMNS)
         if features_df.shape[1] != expected_cols:
@@ -3638,7 +3640,7 @@ def get_vertex_prob(game: Dict[str, Any], sentiment_diff: Optional[float]) -> Tu
         payload_hash = hash(tuple(features_df.to_dict(orient="records")[0].items()))
         engine = get_prediction_engine()
         preds = engine.predict_batch(features_df)
-        st.session_state["vertex_last_payload_hash"] = payload_hash
+        st.session_state["model_last_payload_hash"] = payload_hash
 
         if not preds:
             logger.error("Vertex prediction returned empty preds for payload_hash=%s", payload_hash)
@@ -3651,15 +3653,15 @@ def get_vertex_prob(game: Dict[str, Any], sentiment_diff: Optional[float]) -> Tu
 
         try:
             raw_resp = preds[1] if len(preds) > 1 else None
-            st.session_state["vertex_last_raw_response"] = str(raw_resp) if raw_resp is not None else None
+            st.session_state["model_last_raw_response"] = str(raw_resp) if raw_resp is not None else None
         except Exception:
-            st.session_state["vertex_last_raw_response"] = None
+            st.session_state["model_last_raw_response"] = None
 
         return clamp(prob, 0.01, 0.99), None
 
     except Exception:
         st.session_state["last_exception"] = traceback.format_exc()
-        st.session_state["vertex_last_error"] = st.session_state.get("last_exception")
+        st.session_state["model_last_error"] = st.session_state.get("last_exception")
         logger.exception("Vertex prediction failed with exception")
         return None, "vertexpredictfailed"
 
@@ -4888,8 +4890,8 @@ def load_games(selected_leagues: Union[str, List[str]]) -> List[Dict[str, Any]]:
             spread_pick = None
             kalshi_prob_spread = 0.5
             kalshi_prob_total = 0.5
-            vertex_spread_prob = 0.5
-            vertex_total_prob = 0.5
+            model_spread_prob = 0.5
+            model_total_prob = 0.5
             game_row = {} # Initialize empty game_row to be safe
             total_engine_used = "missing"
             spread_prob_final = 0.5
@@ -4898,8 +4900,8 @@ def load_games(selected_leagues: Union[str, List[str]]) -> List[Dict[str, Any]]:
             total_prob_market = 0.5
             kalshi_prob_spread = 0.5
             kalshi_prob_total = 0.5
-            vertex_spread_prob = 0.5
-            vertex_total_prob = 0.5
+            model_spread_prob = 0.5
+            model_total_prob = 0.5
             total_pick = None
             spread_pick = None
             try:
@@ -5331,7 +5333,7 @@ with tab_master:
 
             # Inject real-time stats for Vertex
             api_sports_clients, _ = init_data_clients()
-            df_master = enrich_with_vertex_features(df_master, api_sports_clients)
+            df_master = enrich_with_model_features(df_master, api_sports_clients)
 
             unique_teams = sorted(
                 set(df_master.get("home_team", pd.Series([], dtype=str)).dropna().astype(str))
@@ -5507,7 +5509,7 @@ with tab_master:
                         # 3. Call Enrichment (uses TeamNameMatcher and API clients)
                         # Note: We pass the specific client for this league
                         _client_map = {league: api_sports_clients.get(league)} if api_sports_clients else {}
-                        _df_enriched = enrich_with_vertex_features(_df_pre, _client_map)
+                        _df_enriched = enrich_with_model_features(_df_pre, _client_map)
 
                         # 4. Convert back to list of dicts for the loop
                         # Force numeric conversion where possible to avoid NaN issues
@@ -5573,8 +5575,8 @@ with tab_master:
 
                 kalshi_prob_spread = None
                 kalshi_prob_total = None
-                vertex_spread_prob = None
-                vertex_total_prob = None
+                model_spread_prob = None
+                model_total_prob = None
                 spread_prob_market = 0.5
                 total_prob_market = 0.5
                 total_line = None
@@ -5604,8 +5606,8 @@ with tab_master:
                 total_alt_prob_final = 0.5
                 kalshi_prob_spread = None
                 kalshi_prob_total = None
-                vertex_spread_prob = None
-                vertex_total_prob = None
+                model_spread_prob = None
+                model_total_prob = None
                 spread_prob_margin = None
                 total_prob_margin = None
                 spread_prob_pick_market = None
@@ -5735,8 +5737,8 @@ with tab_master:
                 spread_pick_odds = None
                 total_pick = None
                 overall_engine_used = "missing"
-                vertex_spread_prob = None
-                vertex_total_prob = None
+                model_spread_prob = None
+                model_total_prob = None
                 spread_prob_pick_final = None
                 spread_prob_alt_final = None
                 total_prob_pick_final = None
@@ -6265,8 +6267,8 @@ with tab_master:
                 total_pick_side = None
                 total_pick_odds = None
                 best_total_price = None
-                vertex_spread_prob = None
-                vertex_total_prob = None
+                model_spread_prob = None
+                model_total_prob = None
                 if g.get("total_point") is not None:
                     over_prob = american_to_implied(g.get("over_price"))
                     under_prob = american_to_implied(g.get("under_price"))
@@ -6418,8 +6420,8 @@ with tab_master:
                 total_prob_market = total_prob_market_based if total_prob_market_based is not None else total_implied
                 kalshi_prob_spread = safe_float(kalshi_spread.get("kalshi_prob"))
                 kalshi_prob_total = safe_float(kalshi_total.get("kalshi_prob"))
-                vertex_used_for_spread = bool(use_model_numeric_probs and vertex_spread_prob is not None)
-                vertex_used_for_total = bool(use_model_numeric_probs and vertex_total_prob is not None)
+                model_used_for_spread = bool(use_model_numeric_probs and model_spread_prob is not None)
+                model_used_for_total = bool(use_model_numeric_probs and model_total_prob is not None)
                 spread_base_weights = {
                     "odds_weight": 0.30,
                     "kalshi_weight": 0.35,
@@ -6431,14 +6433,14 @@ with tab_master:
                     spread_prob_market,
                     kalshi_prob_spread if kalshi_spread.get("kalshi_matched") else None,
                     kalshi_spread.get("kalshi_yes_side") or "home",
-                    vertex_spread_prob if vertex_used_for_spread else None,
+                    model_spread_prob if model_used_for_spread else None,
                     spread_sentiment_adj,
                     spread_base_weights,
                 )
                 if spread_prob_final is None:
                     spread_prob_final = blend_kalshi_market(kalshi_prob_spread, spread_prob_market) if kalshi_spread.get("kalshi_matched") else spread_prob_market
-                    if vertex_used_for_spread and vertex_spread_prob is not None:
-                        spread_prob_final = clamp(vertex_spread_prob)
+                    if model_used_for_spread and model_spread_prob is not None:
+                        spread_prob_final = clamp(model_spread_prob)
                     spread_base_prob = spread_prob_final
                     spread_weights_used = {"w_implied": 1.0 if spread_prob_final is not None else 0.0, "w_kalshi": 0.0, "w_model": 0.0, "w_sentiment": 0.0}
                 spread_prob = spread_prob_final
@@ -6453,14 +6455,14 @@ with tab_master:
                     total_prob_market,
                     kalshi_prob_total if kalshi_total.get("kalshi_matched") else None,
                     kalshi_total.get("kalshi_yes_side") or "over",
-                    vertex_total_prob if vertex_used_for_total else None,
+                    model_total_prob if model_used_for_total else None,
                     total_sentiment_adj,
                     total_base_weights,
                 )
                 if total_prob_final is None:
                     total_prob_final = blend_kalshi_market(kalshi_prob_total, total_prob_market) if kalshi_total.get("kalshi_matched") else total_prob_market
-                    if vertex_used_for_total and vertex_total_prob is not None:
-                        total_prob_final = clamp(vertex_total_prob)
+                    if model_used_for_total and model_total_prob is not None:
+                        total_prob_final = clamp(model_total_prob)
                     total_base_prob = total_prob_final
                     total_weights_used = {"w_implied": 1.0 if total_prob_final is not None else 0.0, "w_kalshi": 0.0, "w_model": 0.0, "w_sentiment": 0.0}
                 total_prob = total_prob_final
@@ -6471,8 +6473,8 @@ with tab_master:
                 spread_odds_valid = bool(spread_odds_method == "book_price")
                 total_odds_valid = bool(total_odds_method == "book_price")
                 odds_placeholder_overall = bool(overall_odds_placeholder)
-                spread_prob_engine = prob_engine_label(bool(kalshi_spread.get("kalshi_matched")), spread_prob_market, vertex_used=vertex_used_for_spread)
-                total_prob_engine = prob_engine_label(bool(kalshi_total.get("kalshi_matched")), total_prob_market, vertex_used=vertex_used_for_total)
+                spread_prob_engine = prob_engine_label(bool(kalshi_spread.get("kalshi_matched")), spread_prob_market, model_used=model_used_for_spread)
+                total_prob_engine = prob_engine_label(bool(kalshi_total.get("kalshi_matched")), total_prob_market, model_used=model_used_for_total)
 
                 # --- Decision trace (Spread) ---
                 spread_alt_team = None
@@ -6721,7 +6723,7 @@ with tab_master:
                         warnings = list(dict.fromkeys(warnings + ["no_implied_prob"]))
 
                     if pick is not None:
-                        prob_engine_moneyline = prob_engine_label(bool(kalshi_winner.get("kalshi_matched")), implied_pick, vertex_used=bool(use_model_numeric_probs and model_prob_home is not None))
+                        prob_engine_moneyline = prob_engine_label(bool(kalshi_winner.get("kalshi_matched")), implied_pick, model_used=bool(use_model_numeric_probs and model_prob_home is not None))
                         ai_prob_base = ai_prob_for_selection(pick, adjusted=False)
                         ai_prob_row = clamp((ai_prob_base or 0.0) + (sentiment_adj or 0.0), 0.01, 0.99) if ai_prob_base is not None else None
 
@@ -6833,8 +6835,8 @@ with tab_master:
                             "prob_engine": prob_engine_moneyline,
                             "model_mode": st.session_state.model_mode,
                             "gemini_mode": "pending" if use_gemini_explanations else "disabled",
-                            "vertex_spread_prob": vertex_spread_prob,
-                            "vertex_total_prob": vertex_total_prob,
+                            "model_spread_prob": model_spread_prob,
+                            "model_total_prob": model_total_prob,
                             "kalshi_prob_spread": kalshi_prob_spread,
                             "kalshi_prob_total": kalshi_prob_total,
                             "spread_prob_market": spread_prob_market,
@@ -6942,8 +6944,8 @@ with tab_master:
                             "decision_trace_version": decision_trace_version,
                             "overall_engine_used": overall_engine_used,
                             "decision_trace_notes": decision_trace_notes,
-                            "Vertex Spread Prob": vertex_spread_prob,
-                            "Vertex Total Prob": vertex_total_prob,
+                            "Model Spread Prob": model_spread_prob,
+                            "Model Total Prob": model_total_prob,
                             "spread_implied_prob": spread_implied,
                             "spread_prob_market_based": spread_prob_market_based,
                             "spread_prob_reason": spread_prob_reason,
@@ -7072,14 +7074,14 @@ with tab_master:
                 if g.get("home_spread_point") is not None and spread_pick is not None:
                     ai_prob_base = None
                     ai_prob_row = None
-                    vertex_spread_prob = None
+                    model_spread_prob = None
                     warnings.append("market_based_spread_prob")
                     warnings_field = ";".join(warnings) if warnings else None
                     spread_row = {
                         "league": league_name, "Home": home, "Away": away,
                         "Commence (UTC)": commence_iso, "Commence (Local)": commence_local,
                         "Market": "Spread", "Book": g.get("best_spread_book"),
-                        "Pick": spread_pick, "Implied_Prob": spread_prob_market, "Line": spread_line, "AI_Prob": vertex_spread_prob if vertex_used_for_spread else None,
+                        "Pick": spread_pick, "Implied_Prob": spread_prob_market, "Line": spread_line, "AI_Prob": model_spread_prob if model_used_for_spread else None,
                         "ai_prob_adj": ai_prob_row, "consensus_prob": spread_base_prob, "consensus_prob_adj": spread_prob_final,
                         "final_probability": spread_prob_final,
                         "decision_driver": spread_decision_driver or spread_engine_used,
@@ -7117,9 +7119,9 @@ with tab_master:
                         "sentiment_available_count": sentiment_available_count,
                         "sentiment_used_cached": sentiment_used_cached,
                         "sentiment_disabled_reason": sentiment_disabled_reason,
-                        "Vertex Spread Prob": vertex_spread_prob,
-                        "vertex_spread_prob": vertex_spread_prob,
-                        "vertex_total_prob": vertex_total_prob,
+                        "Model Spread Prob": model_spread_prob,
+                        "model_spread_prob": model_spread_prob,
+                        "model_total_prob": model_total_prob,
                         "prob_engine": spread_prob_engine,
                         "model_mode": st.session_state.model_mode,
                         "gemini_mode": "pending" if use_gemini_explanations else "disabled",
@@ -7332,7 +7334,7 @@ with tab_master:
                         "league": league_name, "Home": home, "Away": away,
                         "Commence (UTC)": commence_iso, "Commence (Local)": commence_local,
                         "Market": "Total", "Book": g.get("best_total_book"),
-                        "Pick": total_pick, "Implied_Prob": total_prob_market, "Line": total_line, "AI_Prob": vertex_total_prob if vertex_used_for_total else None,
+                        "Pick": total_pick, "Implied_Prob": total_prob_market, "Line": total_line, "AI_Prob": model_total_prob if model_used_for_total else None,
                         "ai_prob_adj": ai_prob_row, "consensus_prob": total_base_prob, "consensus_prob_adj": total_prob_final,
                         "final_probability": total_prob_final,
                         "decision_driver": total_decision_driver or total_engine_used,
@@ -7345,9 +7347,9 @@ with tab_master:
                         "sentiment_source_count": sentiment_articles_used,
                         "sentiment_direction": None,
                         "sentiment_impact_applied": False,
-                        "Vertex Total Prob": None,
-                        "vertex_spread_prob": vertex_spread_prob,
-                        "vertex_total_prob": vertex_total_prob,
+                        "Model Total Prob": None,
+                        "model_spread_prob": model_spread_prob,
+                        "model_total_prob": model_total_prob,
                         "prob_engine": total_prob_engine,
                         "model_mode": st.session_state.model_mode,
                         "gemini_mode": "pending" if use_gemini_explanations else "disabled",
@@ -7685,9 +7687,9 @@ with tab_master:
                         "total_prob_method": total_prob_method,
                         "kalshi_prob_spread": kalshi_prob_spread,
                         "kalshi_prob_total": kalshi_prob_total,
-                        "vertex_spread_prob": vertex_spread_prob,
-                        "vertex_total_prob": vertex_total_prob,
-                        "prob_engine": prob_engine_label(bool(kalshi_winner.get("kalshi_matched")), None, vertex_used=False),
+                        "model_spread_prob": model_spread_prob,
+                        "model_total_prob": model_total_prob,
+                        "prob_engine": prob_engine_label(bool(kalshi_winner.get("kalshi_matched")), None, model_used=False),
                         "model_mode": st.session_state.model_mode,
                         "gemini_mode": "pending" if use_gemini_explanations else "disabled",
                         "overall_confidence": None,
@@ -7761,7 +7763,7 @@ with tab_master:
             # This fixes the 'Missing feature column' warnings in the logs
             with st.spinner("🚀 Running Batch Feature Enrichment..."):
                 # FIX: Pass ALL api_clients so stats for all leagues are fetched, not just the last loop variable
-                master_df = enrich_with_vertex_features(master_df, api_sports_clients)
+                master_df = enrich_with_model_features(master_df, api_sports_clients)
 
             # Ensure use_model_numeric_probs is synchronized from session state
             use_model_numeric_probs = st.session_state.get("use_model_numeric_probs", True)
@@ -7828,7 +7830,7 @@ with tab_master:
             # We need to preserve the sentiment metadata enrichment logic
             sentiment_meta_for_export = sentiment_pack_meta or init_sentiment_meta()
             # Vectorized or simple loop to fill sentiment meta if missing
-            # (Assuming enrich_with_vertex_features preserves existing cols, which it does)
+            # (Assuming enrich_with_model_features preserves existing cols, which it does)
 
             # Deduping logic for "Master View" (one row per game)
             # We'll create a view for display, but keep master_df full for shotgun/optimizer.
@@ -7955,8 +7957,8 @@ with tab_master:
             "llm_disagreement_flag",
             "prob_engine",
             "model_mode",
-            "vertex_spread_prob",
-            "vertex_total_prob",
+            "model_spread_prob",
+            "model_total_prob",
             "spread_engine_used",
             "spread_pick_label",
             "spread_alt_label",
@@ -8654,8 +8656,8 @@ with tab_master:
             "decision_trace",
             "prob_engine",
             "model_mode",
-            "vertex_spread_prob",
-            "vertex_total_prob",
+            "model_spread_prob",
+            "model_total_prob",
             "kalshi_prob_spread",
             "kalshi_prob_total",
             "spread_prob_market",
@@ -8798,7 +8800,7 @@ with tab_master:
 
                     proxy_badge = None
                     warnings_text = selected_row.get("Warnings") or ""
-                    if "vertex_proxy_for_spread_total" in str(warnings_text):
+                    if "model_proxy_for_spread_total" in str(warnings_text):
                         proxy_badge = "Proxy (low confidence)"
                     render_range(
                         "Spread",
@@ -9172,7 +9174,7 @@ with tab_debug:
     flags = {
         "odds_api": bool(odds_api_key),
         "news_api": bool(news_api_key),
-        "vertex_configured": True,  # Local fallback always enabled
+        "model_configured": True,  # Local fallback always enabled
         "kalshi_configured": bool(kalshi_api_key and kalshi_api_secret),
     }
     st.subheader("Config Flags")
@@ -9349,8 +9351,8 @@ with tab_debug:
         st.subheader("Last exception")
         st.code(st.session_state["last_exception"])
 
-    if "vertex_last_error" in st.session_state:
-        st.error(f"Prediction Error: {st.session_state['vertex_last_error']}")
+    if "model_last_error" in st.session_state:
+        st.error(f"Prediction Error: {st.session_state['model_last_error']}")
 
     # Debug Export Button (Sidebar)
     if "debug_log_history" in st.session_state and st.session_state["debug_log_history"]:

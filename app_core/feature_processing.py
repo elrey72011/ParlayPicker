@@ -256,7 +256,7 @@ def fetch_nba_stats(season_year: int) -> List[Dict[str, Any]]:
                 "rebounds_per_game": avg_reb,
                 "turnovers": avg_tov,
                 "streak": 0.0, # Not in base view easily
-                "last5_win_pct": w_pct # Approximation
+                "last5_win_pct": win_pct # Approximation
             })
 
         logger.info(f"Successfully fetched NBA stats for {len(stats)} teams.")
@@ -337,7 +337,7 @@ def fetch_nfl_stats(season_year: int) -> List[Dict[str, Any]]:
                 "points_allowed_per_game": oppg,
                 "turnovers": avg_tov,
                 "streak": 0.0,
-                "last5_win_pct": w_pct
+                "last5_win_pct": win_pct
             })
 
         logger.info(f"Successfully fetched NFL stats for {len(stats)} teams.")
@@ -364,8 +364,11 @@ def fetch_ncaaf_stats(season_year: int) -> List[Dict[str, Any]]:
     def _fetch_for_year(yr: int) -> List[Any]:
         try:
             logger.info(f"Fetching NCAAF stats for season: {yr}")
-            # User requirement: Ensure header uses Bearer token correctly via access_token
-            configuration = cfbd.Configuration(access_token=api_key)
+            # User requirement: Ensure header uses Bearer token correctly via configuration setup
+            configuration = cfbd.Configuration()
+            configuration.api_key['Authorization'] = api_key
+            configuration.api_key_prefix['Authorization'] = 'Bearer'
+
             api_instance = cfbd.StatsApi(cfbd.ApiClient(configuration))
             # Fixed method name for cfbd 5.13.2
             return api_instance.get_team_stats(year=yr)
@@ -390,7 +393,9 @@ def fetch_ncaaf_stats(season_year: int) -> List[Dict[str, Any]]:
             return []
 
         # Setup configuration again for GamesApi (using correct year)
-        configuration = cfbd.Configuration(access_token=api_key)
+        configuration = cfbd.Configuration()
+        configuration.api_key['Authorization'] = api_key
+        configuration.api_key_prefix['Authorization'] = 'Bearer'
         games_api = cfbd.GamesApi(cfbd.ApiClient(configuration))
 
         try:
@@ -480,7 +485,7 @@ def fetch_ncaaf_stats(season_year: int) -> List[Dict[str, Any]]:
                 "yards_per_game": ypg, # Added per instructions
                 "turnovers": avg_tov,
                 "streak": 0.0,
-                "last5_win_pct": w_pct
+                "last5_win_pct": win_pct
             })
             
         logger.info(f"Successfully fetched NCAAF stats for {len(stats)} teams.")
@@ -681,7 +686,7 @@ def fetch_team_stats(api_clients: Dict[str, Any], season_year: Optional[int] = N
 
     return pd.DataFrame(all_stats)
 
-def enrich_with_vertex_features(df: pd.DataFrame, api_clients: Dict[str, Any], season_year: Optional[int] = None) -> pd.DataFrame:
+def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], season_year: Optional[int] = None) -> pd.DataFrame:
     """
     Enrich the master dataframe with features required for Vertex AI.
     Uses pd.concat for performance to avoid fragmentation.
@@ -1127,7 +1132,7 @@ def enrich_with_vertex_features(df: pd.DataFrame, api_clients: Dict[str, Any], s
 def run_roi_pipeline_validation(df: pd.DataFrame):
     """Checks if the data bridge is actually functioning before export."""
     critical_checks = {
-        "Vertex Prediction": "vertex_spread_prob",
+        "Vertex Prediction": "model_spread_prob",
         "Kalshi Probability": "kalshi_prob",
         "Team Stats (PPG)": "feature_home_ppg",
         "Team Stats (Win %)": "feature_home_win_pct"
@@ -1181,10 +1186,10 @@ def safefloat(val: Any) -> float:
     except (ValueError, TypeError):
         return 0.0
 
-def build_vertex_feature_row_from_record(record: Mapping[str, Any]) -> Dict[str, float]:
+def build_model_feature_row_from_record(record: Mapping[str, Any]) -> Dict[str, float]:
     """
     Build one Vertex feature row using the same columns and defaults
-    as the batch enrich_with_vertex_features path.
+    as the batch enrich_with_model_features path.
     PROB features -> default 0.5, others -> default 0.0.
     """
     row: Dict[str, float] = {}
