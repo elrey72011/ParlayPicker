@@ -364,14 +364,8 @@ def fetch_ncaaf_stats(season_year: int) -> List[Dict[str, Any]]:
     def _fetch_for_year(yr: int) -> List[Any]:
         try:
             logger.info(f"Fetching NCAAF stats for season: {yr}")
-            configuration = cfbd.Configuration()
-            # User requirement: Ensure header is exactly "Authorization": f"Bearer {your_api_key}"
-            # Per instruction: Force strict header format
-            configuration.api_key['Authorization'] = f"Bearer {api_key}"
-            # Clear prefix to ensure no double-bearer
-            if 'Authorization' in configuration.api_key_prefix:
-                del configuration.api_key_prefix['Authorization']
-
+            # User requirement: Ensure header uses Bearer token correctly via access_token
+            configuration = cfbd.Configuration(access_token=api_key)
             api_instance = cfbd.StatsApi(cfbd.ApiClient(configuration))
             # Fixed method name for cfbd 5.13.2
             return api_instance.get_team_stats(year=yr)
@@ -396,9 +390,7 @@ def fetch_ncaaf_stats(season_year: int) -> List[Dict[str, Any]]:
             return []
 
         # Setup configuration again for GamesApi (using correct year)
-        configuration = cfbd.Configuration()
-        configuration.api_key['Authorization'] = api_key
-        configuration.api_key_prefix['Authorization'] = 'Bearer'
+        configuration = cfbd.Configuration(access_token=api_key)
         games_api = cfbd.GamesApi(cfbd.ApiClient(configuration))
 
         try:
