@@ -5053,7 +5053,9 @@ if not selected_sports:
 if ALL_SPORTS_LABEL in selected_sports:
     selected_sports = [s for s in sport_options if s != ALL_SPORTS_LABEL]
 st.session_state["selected_sports"] = selected_sports
-league = selected_sports[0] if selected_sports else list(SPORT_KEYS.keys())[0]
+# Safe access for league selection
+_all_keys = list(SPORT_KEYS.keys())
+league = selected_sports[0] if selected_sports else (_all_keys[0] if _all_keys else "NBA")
 
 # Detect if selection changed to invalidate cache
 last_selection = st.session_state.get("_last_selected_sports")
@@ -8424,7 +8426,16 @@ with tab_master:
         except Exception:
             pass
 
+        # User Action: Enforce specific column order: Home, Away, Implied_Prob, AI_Prob
         df_master_view = reorder_for_spread_total_focus(df_master_view)
+
+        # Explicit column ordering override
+        forced_cols = ["league", "Home", "Away", "Implied_Prob", "AI_Prob", "Pick"]
+        cols_present = [c for c in forced_cols if c in df_master_view.columns]
+        other_cols = [c for c in df_master_view.columns if c not in cols_present]
+        df_master_view = df_master_view[cols_present + other_cols]
+
+        df_master_view_display = df_master_view.copy()
         df_master_view_full = df_master_view.copy()
         trace_cols = [
             "spread_engine_used",
@@ -8989,148 +9000,156 @@ with tab_shotgun:
     st.info("Filters for 'High Value Plays' (Tight market, Edge > 1%) and generates 2-leg parlays.")
 
     if "master_df" in st.session_state and not st.session_state["master_df"].empty:
-        try:
-            df_shotgun = st.session_state["master_df"].copy()
+        with st.spinner("Analyzing Shotgun Candidates..."):
+            try:
+                df_shotgun = st.session_state["master_df"].copy()
 
-            # Ensure numeric columns for edge calc and display
-            cols_to_numeric = [
-                'final_probability', 'spread_implied_prob', 'total_implied_prob',
-                'spread_width', 'total_width', 'model_prob_home', 'ai_prob_base', 'AI_Prob'
-            ]
-            # Bulk convert using apply for efficiency, ensuring cols exist
-            if not df_shotgun.empty:
-                valid_cols = [c for c in cols_to_numeric if c in df_shotgun.columns]
-                if valid_cols:
-                    df_shotgun[valid_cols] = df_shotgun[valid_cols].apply(pd.to_numeric, errors='coerce').fillna(0.0)
-                    df_shotgun = df_shotgun.copy()
+                # Ensure numeric columns for edge calc and display
+                cols_to_numeric = [
+                    'final_probability', 'spread_implied_prob', 'total_implied_prob',
+                    'spread_width', 'total_width', 'model_prob_home', 'ai_prob_base', 'AI_Prob'
+                ]
+                # Bulk convert using apply for efficiency, ensuring cols exist
+                if not df_shotgun.empty:
+                    valid_cols = [c for c in cols_to_numeric if c in df_shotgun.columns]
+                    if valid_cols:
+                        df_shotgun[valid_cols] = df_shotgun[valid_cols].apply(pd.to_numeric, errors='coerce').fillna(0.0)
+                        df_shotgun = df_shotgun.copy()
 
-            # Ensure all ROI metrics are calculated
-            df_shotgun = add_spread_total_confidence(df_shotgun)
-            df_shotgun = df_shotgun.copy()
-            df_shotgun = enrich_picks_with_roi_metrics(df_shotgun)
-            df_shotgun = df_shotgun.copy()
+                # Filter: Remove rows with invalid probabilities (Fail-safe)
+                # Ensure we don't process "broken" rows with 0/null AI probs
+                if 'AI_Prob' in df_shotgun.columns:
+                    df_shotgun = df_shotgun[df_shotgun['AI_Prob'] > 0.0]
+                if 'final_probability' in df_shotgun.columns:
+                    df_shotgun = df_shotgun[df_shotgun['final_probability'] > 0.0]
 
-            # Calculate active_edge = final_probability - Implied_Prob
-            active_edge_series = (
-                df_shotgun["final_probability"].fillna(0.0) - pd.to_numeric(df_shotgun.get("Implied_Prob"), errors='coerce').fillna(0.0)
-            )
+                # Ensure all ROI metrics are calculated
+                df_shotgun = add_spread_total_confidence(df_shotgun)
+                df_shotgun = df_shotgun.copy()
+                df_shotgun = enrich_picks_with_roi_metrics(df_shotgun)
+                df_shotgun = df_shotgun.copy()
 
-            # Create a small DataFrame for the new column to concat
-            new_metrics = pd.DataFrame({'active_edge': active_edge_series}, index=df_shotgun.index)
-            df_shotgun = pd.concat([df_shotgun, new_metrics], axis=1)
-            df_shotgun = df_shotgun.loc[:, ~df_shotgun.columns.duplicated()].copy()
+                # Calculate active_edge = final_probability - Implied_Prob
+                active_edge_series = (
+                    df_shotgun["final_probability"].fillna(0.0) - pd.to_numeric(df_shotgun.get("Implied_Prob"), errors='coerce').fillna(0.0)
+                )
 
-            # Filter logic
-            # 1. Tight Markets
-            # Ensure active_edge and spread_width are float
-            df_shotgun["active_edge"] = pd.to_numeric(df_shotgun["active_edge"], errors='coerce').fillna(0.0)
-            df_shotgun["spread_width"] = pd.to_numeric(df_shotgun["spread_width"], errors='coerce').fillna(99.0)
+                # Create a small DataFrame for the new column to concat
+                new_metrics = pd.DataFrame({'active_edge': active_edge_series}, index=df_shotgun.index)
+                df_shotgun = pd.concat([df_shotgun, new_metrics], axis=1)
+                df_shotgun = df_shotgun.loc[:, ~df_shotgun.columns.duplicated()].copy()
 
-            tight_mask = (df_shotgun["active_edge"] > 0.01) & (df_shotgun["spread_width"] <= 0.5)
-            candidates = df_shotgun[tight_mask].copy()
+                # Filter logic
+                # 1. Tight Markets
+                # Ensure active_edge and spread_width are float
+                df_shotgun["active_edge"] = pd.to_numeric(df_shotgun["active_edge"], errors='coerce').fillna(0.0)
+                df_shotgun["spread_width"] = pd.to_numeric(df_shotgun["spread_width"], errors='coerce').fillna(99.0)
 
-            filter_mode = "Tight (Width <= 0.5)"
+                tight_mask = (df_shotgun["active_edge"] > 0.01) & (df_shotgun["spread_width"] <= 0.5)
+                candidates = df_shotgun[tight_mask].copy()
 
-            if len(candidates) < 2:
-                # Fallback
-                normal_mask = (df_shotgun["active_edge"] > 0.01) & (df_shotgun["spread_width"] <= 1.5)
-                candidates = df_shotgun[normal_mask].copy()
-                filter_mode = "Normal (Width <= 1.5)"
+                filter_mode = "Tight (Width <= 0.5)"
 
-            st.write(f"Filter Mode: **{filter_mode}** | Candidates found: {len(candidates)}")
-        except Exception as e:
-            st.warning("Data mismatch in Shotgun results. Defaulting to neutral values.")
-            logger.error(f"Shotgun logic error: {e}", exc_info=True)
-            candidates = pd.DataFrame()
+                if len(candidates) < 2:
+                    # Fallback
+                    normal_mask = (df_shotgun["active_edge"] > 0.01) & (df_shotgun["spread_width"] <= 1.5)
+                    candidates = df_shotgun[normal_mask].copy()
+                    filter_mode = "Normal (Width <= 1.5)"
 
-        if not candidates.empty:
-            # Tiered Display
-            col1, col2, col3 = st.columns(3)
+                st.write(f"Filter Mode: **{filter_mode}** | Candidates found: {len(candidates)}")
+            except Exception as e:
+                st.warning("Data mismatch in Shotgun results. Defaulting to neutral values.")
+                logger.error(f"Shotgun logic error: {e}", exc_info=True)
+                candidates = pd.DataFrame()
 
-            with col1:
-                st.subheader("🎯 Snipers (Prob > 60%)")
-                # High Prob (>60%)
-                snipers = candidates[candidates["final_probability"] > 0.60].sort_values("final_probability", ascending=False).head(5)
-                if not snipers.empty:
-                    for _, row in snipers.iterrows():
-                        st.markdown(f"**{row.get('Pick')}** ({row.get('Market')})")
-                        st.caption(f"Prob: {row.get('final_probability'):.1%} | Edge: {row.get('active_edge'):.1%}")
+            if not candidates.empty:
+                # Tiered Display
+                col1, col2, col3 = st.columns(3)
+
+                with col1:
+                    st.subheader("🎯 Snipers (Prob > 60%)")
+                    # High Prob (>60%)
+                    snipers = candidates[candidates["final_probability"] > 0.60].sort_values("final_probability", ascending=False).head(5)
+                    if not snipers.empty:
+                        for _, row in snipers.iterrows():
+                            st.markdown(f"**{row.get('Pick')}** ({row.get('Market')})")
+                            st.caption(f"Prob: {row.get('final_probability'):.1%} | Edge: {row.get('active_edge'):.1%}")
+                    else:
+                        st.write("No Snipers found.")
+
+                with col2:
+                    st.subheader("📈 Strategy (High EV)")
+                    # High EV (Edge)
+                    strategy = candidates.sort_values("active_edge", ascending=False).head(5)
+                    if not strategy.empty:
+                        for _, row in strategy.iterrows():
+                            st.markdown(f"**{row.get('Pick')}** ({row.get('Market')})")
+                            st.caption(f"Edge: {row.get('active_edge'):.1%} | Prob: {row.get('final_probability'):.1%}")
+                    else:
+                        st.write("No Strategy plays found.")
+
+                with col3:
+                    st.subheader("🎲 Longshots")
+                    # Top 10 by Edge
+                    longshots = candidates.sort_values("active_edge", ascending=False).head(10)
+                    if not longshots.empty:
+                        for _, row in longshots.iterrows():
+                            st.markdown(f"**{row.get('Pick')}** ({row.get('Market')})")
+                            st.caption(f"Edge: {row.get('active_edge'):.1%}")
+                    else:
+                        st.write("No Longshots found.")
+
+                st.divider()
+                st.subheader("🔗 2-Leg Parlay Generator")
+
+                # Generate pairs
+                valid_parlays = []
+
+                # Convert to records for iteration
+                recs = candidates.to_dict('records')
+
+                # Use itertools combinations
+                for p1, p2 in itertools.combinations(recs, 2):
+                    # Constraint: Different Home teams (approx for different games)
+                    if p1.get('Home') == p2.get('Home'):
+                        continue
+
+                    edge1 = p1.get('active_edge', 0)
+                    edge2 = p2.get('active_edge', 0)
+                    combined_edge = edge1 + edge2
+
+                    # Combined Prob (assuming independence)
+                    prob1 = p1.get('final_probability', 0)
+                    prob2 = p2.get('final_probability', 0)
+                    combined_prob = prob1 * prob2
+
+                    valid_parlays.append({
+                        "Leg 1": f"{p1.get('Pick')} ({p1.get('Market')})",
+                        "Leg 2": f"{p2.get('Pick')} ({p2.get('Market')})",
+                        "Combined Edge": combined_edge,
+                        "Combined Prob": combined_prob,
+                        "Leg 1 Edge": edge1,
+                        "Leg 2 Edge": edge2
+                    })
+
+                # Sort by Combined Edge
+                valid_parlays.sort(key=lambda x: x['Combined Edge'], reverse=True)
+
+                if valid_parlays:
+                    st.write(f"Top 10 generated parlays (out of {len(valid_parlays)})")
+                    parlay_df = pd.DataFrame(valid_parlays).head(10)
+                    # Format
+                    parlay_df['Combined Edge'] = parlay_df['Combined Edge'].map('{:.1%}'.format)
+                    parlay_df['Combined Prob'] = parlay_df['Combined Prob'].map('{:.1%}'.format)
+                    parlay_df['Leg 1 Edge'] = parlay_df['Leg 1 Edge'].map('{:.1%}'.format)
+                    parlay_df['Leg 2 Edge'] = parlay_df['Leg 2 Edge'].map('{:.1%}'.format)
+
+                    st.table(parlay_df)
                 else:
-                    st.write("No Snipers found.")
+                    st.warning("No valid parlay combinations found (check independence constraints).")
 
-            with col2:
-                st.subheader("📈 Strategy (High EV)")
-                # High EV (Edge)
-                strategy = candidates.sort_values("active_edge", ascending=False).head(5)
-                if not strategy.empty:
-                    for _, row in strategy.iterrows():
-                        st.markdown(f"**{row.get('Pick')}** ({row.get('Market')})")
-                        st.caption(f"Edge: {row.get('active_edge'):.1%} | Prob: {row.get('final_probability'):.1%}")
-                else:
-                    st.write("No Strategy plays found.")
-
-            with col3:
-                st.subheader("🎲 Longshots")
-                # Top 10 by Edge
-                longshots = candidates.sort_values("active_edge", ascending=False).head(10)
-                if not longshots.empty:
-                    for _, row in longshots.iterrows():
-                        st.markdown(f"**{row.get('Pick')}** ({row.get('Market')})")
-                        st.caption(f"Edge: {row.get('active_edge'):.1%}")
-                else:
-                    st.write("No Longshots found.")
-
-            st.divider()
-            st.subheader("🔗 2-Leg Parlay Generator")
-
-            # Generate pairs
-            valid_parlays = []
-
-            # Convert to records for iteration
-            recs = candidates.to_dict('records')
-
-            # Use itertools combinations
-            for p1, p2 in itertools.combinations(recs, 2):
-                # Constraint: Different Home teams (approx for different games)
-                if p1.get('Home') == p2.get('Home'):
-                    continue
-
-                edge1 = p1.get('active_edge', 0)
-                edge2 = p2.get('active_edge', 0)
-                combined_edge = edge1 + edge2
-
-                # Combined Prob (assuming independence)
-                prob1 = p1.get('final_probability', 0)
-                prob2 = p2.get('final_probability', 0)
-                combined_prob = prob1 * prob2
-
-                valid_parlays.append({
-                    "Leg 1": f"{p1.get('Pick')} ({p1.get('Market')})",
-                    "Leg 2": f"{p2.get('Pick')} ({p2.get('Market')})",
-                    "Combined Edge": combined_edge,
-                    "Combined Prob": combined_prob,
-                    "Leg 1 Edge": edge1,
-                    "Leg 2 Edge": edge2
-                })
-
-            # Sort by Combined Edge
-            valid_parlays.sort(key=lambda x: x['Combined Edge'], reverse=True)
-
-            if valid_parlays:
-                st.write(f"Top 10 generated parlays (out of {len(valid_parlays)})")
-                parlay_df = pd.DataFrame(valid_parlays).head(10)
-                # Format
-                parlay_df['Combined Edge'] = parlay_df['Combined Edge'].map('{:.1%}'.format)
-                parlay_df['Combined Prob'] = parlay_df['Combined Prob'].map('{:.1%}'.format)
-                parlay_df['Leg 1 Edge'] = parlay_df['Leg 1 Edge'].map('{:.1%}'.format)
-                parlay_df['Leg 2 Edge'] = parlay_df['Leg 2 Edge'].map('{:.1%}'.format)
-
-                st.table(parlay_df)
             else:
-                st.warning("No valid parlay combinations found (check independence constraints).")
-
-        else:
-            st.warning("No candidates found matching the filters.")
+                st.warning("No candidates found matching the filters.")
 
     else:
         st.info("Run Master Analysis first to unlock Shotgun Mode.")
@@ -9157,8 +9176,12 @@ with tab_kalshi:
     if games_for_debug:
         with st.expander("Search first game markets", expanded=False):
             fg = games_for_debug[0]
-            home_code_dbg = (team_code_candidates(fg.get("league"), fg.get("home_team")) or [None])[0]
-            away_code_dbg = (team_code_candidates(fg.get("league"), fg.get("away_team")) or [None])[0]
+            # Safe access for team codes
+            hc_cands = team_code_candidates(fg.get("league"), fg.get("home_team")) or []
+            home_code_dbg = hc_cands[0] if hc_cands else None
+
+            ac_cands = team_code_candidates(fg.get("league"), fg.get("away_team")) or []
+            away_code_dbg = ac_cands[0] if ac_cands else None
             search_results = debug_search_markets_for_game(
                 st.session_state.get("kalshi_all_markets") or [],
                 fg.get("home_team"),
@@ -9300,7 +9323,8 @@ with tab_debug:
 
     if games:
         st.subheader("Sample normalized game")
-        st.code(json.dumps(games[0], indent=2, default=str))
+        # Safe access for games[0]
+        st.code(json.dumps(games[0], indent=2, default=str) if games else "{}")
 
     st.subheader("Kalshi health")
     kalshi_health = kalshi_health_check(league)
@@ -9351,8 +9375,13 @@ with tab_debug:
     all_markets_debug = st.session_state.get("kalshi_all_markets") or []
     if games and all_markets_debug:
         fg = games[0]
-        home_code_dbg = (team_code_candidates(fg.get("league"), fg.get("home_team")) or [None])[0]
-        away_code_dbg = (team_code_candidates(fg.get("league"), fg.get("away_team")) or [None])[0]
+        # Safe access for team codes
+        hc_cands = team_code_candidates(fg.get("league"), fg.get("home_team")) or []
+        home_code_dbg = hc_cands[0] if hc_cands else None
+
+        ac_cands = team_code_candidates(fg.get("league"), fg.get("away_team")) or []
+        away_code_dbg = ac_cands[0] if ac_cands else None
+
         search_results = debug_search_markets_for_game(
             all_markets_debug,
             fg.get("home_team"),
