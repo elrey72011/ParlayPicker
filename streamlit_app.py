@@ -1399,7 +1399,9 @@ def compute_team_sentiment_map(news_api_key: Optional[str], games: List[Dict[str
 
     kalshi_matched_teams: set = set()
     try:
-        for entry in st.session_state.get("kalshi_match_results") or []:
+        _entries_raw = st.session_state.get("kalshi_match_results") or {}
+        entries = _entries_raw.values() if isinstance(_entries_raw, dict) else (_entries_raw or [])
+        for entry in entries:
             winner = (entry.get("matches") or {}).get("winner", {})
             if not winner.get("kalshi_matched"):
                 continue
@@ -2003,7 +2005,8 @@ def cached_gemini_confidence(signature: str, payload: Dict[str, Any]) -> Dict[st
 
 def pipeline_progress_snapshot() -> Dict[str, Any]:
     games_loaded = len(st.session_state.get("games") or [])
-    matches = st.session_state.get("kalshi_match_results") or []
+    _matches_raw = st.session_state.get("kalshi_match_results") or {}
+    matches = _matches_raw.values() if isinstance(_matches_raw, dict) else (_matches_raw or [])
     matched_games = len([m for m in matches if (m.get("matches") or {}).get("winner", {}).get("kalshi_matched")])
     sentiment_meta = st.session_state.get("sentiment_meta") or {}
     sentiment_ready = bool(
@@ -3561,7 +3564,9 @@ def _build_model_feature_row(game: Dict[str, Any], sentiment_diff: Optional[floa
     if kalshi_prob is None:
         try:
             # Pull any cached matched Kalshi prob for this game if present
-            for entry in st.session_state.get("kalshi_match_results") or []:
+            _entries_raw = st.session_state.get("kalshi_match_results") or {}
+            entries = _entries_raw.values() if isinstance(_entries_raw, dict) else (_entries_raw or [])
+            for entry in entries:
                 g = entry.get("game") or {}
                 if (
                     g.get("home_team") == game.get("home_team")
@@ -4859,7 +4864,17 @@ def match_kalshi_market(
         }
 
     try:
-        return _match_kalshi_market_impl(game, kalshi_markets, winner_reason_override)
+        res, debug = _match_kalshi_market_impl(game, kalshi_markets, winner_reason_override)
+        if not isinstance(res, dict):
+             return {
+                "winner": base_result("invalid_return_type", "winner"),
+                "spread": base_result("invalid_return_type", "spread"),
+                "total": base_result("invalid_return_type", "total"),
+            }, {}
+        # Enforce defaults for winner if missing
+        if "winner" not in res:
+             res["winner"] = base_result("missing_winner_key", "winner")
+        return res, debug
     except Exception as exc:
         logger.error(f"match_kalshi_market failed: {exc}", exc_info=True)
         return {
@@ -5169,7 +5184,9 @@ with tab_games:
     games = st.session_state.get("games", [])
     sent_map = st.session_state.get("sentiment_map") or {}
     match_lookup: Dict[Tuple[Any, Any, Any, Any], Dict[str, Any]] = {}
-    for entry in st.session_state.get("kalshi_match_results") or []:
+    _entries_raw = st.session_state.get("kalshi_match_results") or {}
+    entries = _entries_raw.values() if isinstance(_entries_raw, dict) else (_entries_raw or [])
+    for entry in entries:
         game = entry.get("game") or {}
         matches = entry.get("matches") or {}
         winner = matches.get("winner") or {}
@@ -5537,7 +5554,8 @@ with tab_master:
                 "weather_pulls": 0,
                 "errors": [],
             }
-            kalshi_match_results: List[Dict[str, Any]] = []
+            # Dictionary mapping for robust access (User Request: "Switch to Dictionary Mapping")
+            kalshi_match_results: Dict[str, Dict[str, Any]] = {}
             # --- CLEANED MASTER ANALYSIS LOOP ---
 
             # --- PRE-LOOP BATCH ENRICHMENT (PARITY FIX) ---
@@ -6268,17 +6286,12 @@ with tab_master:
                     sentiment_diff = 0.0
 
                 per_game_kalshi_debug.append(candidate_debug)
-                # Safe Append: Explicit check for corresponding index
-                if idx == len(kalshi_match_results):
-                    kalshi_match_results.append(
-                        {"game": g, "matches": kalshi_matches, "candidate_debug": candidate_debug}
-                    )
-                else:
-                    # Fallback if indices desync (should not happen in linear loop)
-                    logger.error(f"Index mismatch in Master Loop: idx={idx}, len={len(kalshi_match_results)}")
-                    kalshi_match_results.append(
-                        {"game": g, "matches": kalshi_matches, "candidate_debug": candidate_debug}
-                    )
+                # Dictionary Store: Use unique game key
+                # Robust against list index errors (User Request: "Eliminate IndexError")
+                _k_id = f"{league_name}::{home}::{away}::{commence_iso}"
+                kalshi_match_results[_k_id] = {
+                    "game": g, "matches": kalshi_matches, "candidate_debug": candidate_debug
+                }
 
                 # Null-safe Kalshi fields used downstream
                 kalshi_prob_used = (
@@ -6703,14 +6716,17 @@ with tab_master:
 
                 # AI probability (null-safe, no defaults)
                 def ai_prob_for_selection(selection_team: str, adjusted: bool = True) -> Optional[float]:
-                    base = prob_for_selection(model_prob_home, selection_team)
-                    if base is None:
-                        return None
-                    base = clamp(base, 0.0, 1.0)
-                    if not adjusted or sentiment_adj is None:
-                        return base
-                    adj = sentiment_adj if selection_team == home else -sentiment_adj
-                    return clamp((base or 0.0) + adj, 0.01, 0.99)
+                    try:
+                        base = prob_for_selection(model_prob_home, selection_team)
+                        if base is None:
+                            return None
+                        base = clamp(base, 0.0, 1.0)
+                        if not adjusted or sentiment_adj is None:
+                            return float(base) if base is not None else 0.5
+                        adj = sentiment_adj if selection_team == home else -sentiment_adj
+                        return clamp((float(base) if base is not None else 0.0) + adj, 0.01, 0.99)
+                    except Exception:
+                        return 0.5
 
                 # Consensus blending for the selection
                 def consensus_for_selection(
@@ -9067,6 +9083,11 @@ with tab_shotgun:
                 # Fix Shotgun DataFrame Types: explicit cast with specific defaults
                 if 'ai_prob_base' in df_shotgun.columns:
                     df_shotgun['ai_prob_base'] = pd.to_numeric(df_shotgun['ai_prob_base'], errors='coerce').fillna(0.0)
+
+                # User Request: Force sentiment_diff to numeric
+                if 'sentiment_diff' in df_shotgun.columns:
+                    df_shotgun['sentiment_diff'] = pd.to_numeric(df_shotgun['sentiment_diff'], errors='coerce').fillna(0.0)
+
                 if 'model_prob_home' in df_shotgun.columns:
                     df_shotgun['model_prob_home'] = pd.to_numeric(df_shotgun['model_prob_home'], errors='coerce').fillna(0.5)
 
@@ -9481,7 +9502,8 @@ with tab_debug:
             }
         )
     if st.session_state.get("kalshi_match_results"):
-        matches = st.session_state.get("kalshi_match_results")
+        _matches_raw = st.session_state.get("kalshi_match_results")
+        matches = _matches_raw.values() if isinstance(_matches_raw, dict) else (_matches_raw or [])
         matched = []
         non_match_reasons: List[str] = []
         for m in matches:
