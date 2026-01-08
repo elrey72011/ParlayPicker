@@ -2897,6 +2897,8 @@ if "model_mode" not in st.session_state:
     st.session_state["model_mode"] = "Local XGBoost"
 if "model_ready" not in st.session_state:
     st.session_state["model_ready"] = False
+if "use_model_numeric_probs" not in st.session_state:
+    st.session_state["use_model_numeric_probs"] = True
 
 
 # ------------------------------------------------------------
@@ -4481,6 +4483,13 @@ def match_kalshi_market(
     kalshi_markets: List[Dict[str, Any]],
     winner_reason_override: Optional[str] = None,
 ) -> Tuple[Dict[str, Dict[str, Any]], Dict[str, List[Dict[str, Any]]]]:
+    # Use fuzzy matching for team names
+    if rapidfuzz is not None:
+        fuzz_scorer = fuzz.token_set_ratio
+    else:
+        # Fallback if rapidfuzz missing
+        fuzz_scorer = lambda s1, s2: 100 if s1 in s2 or s2 in s1 else 0
+
     def base_result(reason: str, market_type: str) -> Dict[str, Any]:
         return {
             "kalshi_available": bool(kalshi_integrator),
@@ -4710,8 +4719,8 @@ def match_kalshi_market(
                 away_raw = str(game.get("away_team") or "").lower()
 
                 # token_set_ratio handles subset matching well (e.g. "Lions" in "Detroit Lions")
-                score_h = fuzz.token_set_ratio(home_raw, title_lower)
-                score_a = fuzz.token_set_ratio(away_raw, title_lower)
+                score_h = fuzz_scorer(home_raw, title_lower)
+                score_a = fuzz_scorer(away_raw, title_lower)
 
                 if score_h >= 80 and score_a >= 80:
                     team_hit = True

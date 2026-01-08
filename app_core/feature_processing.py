@@ -256,7 +256,7 @@ def fetch_nba_stats(season_year: int) -> List[Dict[str, Any]]:
                 "rebounds_per_game": avg_reb,
                 "turnovers": avg_tov,
                 "streak": 0.0, # Not in base view easily
-                "last5_win_pct": win_pct # Approximation
+                "last5_win_pct": w_pct # Approximation
             })
 
         logger.info(f"Successfully fetched NBA stats for {len(stats)} teams.")
@@ -337,7 +337,7 @@ def fetch_nfl_stats(season_year: int) -> List[Dict[str, Any]]:
                 "points_allowed_per_game": oppg,
                 "turnovers": avg_tov,
                 "streak": 0.0,
-                "last5_win_pct": win_pct
+                "last5_win_pct": w_pct
             })
 
         logger.info(f"Successfully fetched NFL stats for {len(stats)} teams.")
@@ -366,7 +366,7 @@ def fetch_ncaaf_stats(season_year: int) -> List[Dict[str, Any]]:
             logger.info(f"Fetching NCAAF stats for season: {yr}")
             # User requirement: Ensure header uses Bearer token correctly via configuration setup
             configuration = cfbd.Configuration()
-            configuration.api_key['Authorization'] = f"Bearer {api_key}"
+            configuration.api_key = {"Authorization": f"Bearer {api_key}"}
 
             api_instance = cfbd.StatsApi(cfbd.ApiClient(configuration))
             # Fixed method name for cfbd 5.13.2

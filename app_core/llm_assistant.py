@@ -12,14 +12,9 @@ logger = logging.getLogger(__name__)
 # -------------------------------------------------------------------
 # GEMINI (VERTEX AI) SETUP
 # -------------------------------------------------------------------
-try:
-    from vertexai.generative_models import GenerativeModel  # type: ignore
-    import vertexai
-    _GEMINI_AVAILABLE = True
-except ImportError:
-    GenerativeModel = None  # type: ignore
-    _GEMINI_AVAILABLE = False
-    logger.warning("Vertex AI SDK not installed.")
+# Vertex AI dependencies removed per local-only constraint
+GenerativeModel = None
+_GEMINI_AVAILABLE = False
 
 # Global holding the currently active model name
 ACTIVE_MODEL = "gemini-1.5-flash-001"
