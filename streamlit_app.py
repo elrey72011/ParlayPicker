@@ -5533,8 +5533,17 @@ with tab_master:
                     games_to_process = games
 
             # --- FIX: Define variables at the start of the loop ---
+            # Ensure use_model_numeric_probs is available in local scope
+            use_model_numeric_probs = st.session_state.get("use_model_numeric_probs", True)
+            # Ensure model_mode is available
+            model_mode = st.session_state.get("model_mode", "Local XGBoost")
+
             for idx, g in enumerate(games_to_process):
                 g = g.copy()
+                # Initialize loop-local variables to prevent NameError
+                model_prob_home = None
+                model_warn = None
+
                 # RESET ALL TRACE VARIABLES
                 total_pick_side = None
                 total_line = None
