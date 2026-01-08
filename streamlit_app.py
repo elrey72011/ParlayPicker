@@ -4858,8 +4858,13 @@ def match_kalshi_market(
         return _match_kalshi_market_impl(game, kalshi_markets, winner_reason_override)
     except Exception as e:
         logger.error(f"Error in match_kalshi_market: {e}", exc_info=True)
-        fallback = {t: base_result(f"error_exception_{str(e)}", t) for t in ["total", "spread", "winner"]}
-        return fallback, {"total": [], "spread": [], "winner": []}
+        # Return neutral structure to prevent unpacking errors and maintain integrity
+        neutral_match = {
+            "winner": {"kalshi_matched": False, "kalshi_reason": "exception"},
+            "spread": {"kalshi_matched": False},
+            "total": {"kalshi_matched": False},
+        }
+        return neutral_match, {"error": str(e)}
 
 
 # -----------------
@@ -6255,10 +6260,23 @@ with tab_master:
                 kalshi_winner = kalshi_matches.get("winner", {})
                 kalshi_spread = kalshi_matches.get("spread", {})
                 kalshi_total = kalshi_matches.get("total", {})
+
+                # Default sentiment_diff if match fails (Requirement: "default the sentiment_diff to 0.0... if team names do not match")
+                if not kalshi_winner.get("kalshi_matched"):
+                    sentiment_diff = 0.0
+
                 per_game_kalshi_debug.append(candidate_debug)
-                kalshi_match_results.append(
-                    {"game": g, "matches": kalshi_matches, "candidate_debug": candidate_debug}
-                )
+                # Safe Append: Explicit check for corresponding index
+                if idx == len(kalshi_match_results):
+                    kalshi_match_results.append(
+                        {"game": g, "matches": kalshi_matches, "candidate_debug": candidate_debug}
+                    )
+                else:
+                    # Fallback if indices desync (should not happen in linear loop)
+                    logger.error(f"Index mismatch in Master Loop: idx={idx}, len={len(kalshi_match_results)}")
+                    kalshi_match_results.append(
+                        {"game": g, "matches": kalshi_matches, "candidate_debug": candidate_debug}
+                    )
 
                 # Null-safe Kalshi fields used downstream
                 kalshi_prob_used = (
@@ -8950,7 +8968,18 @@ with tab_master:
             st.warning("No games loaded. Use the sidebar to load games first.")
         else:
             st.success(f"Produced {len(df_master_view)} rows from {len(games)} games")
-            st.dataframe(df_master_view_display)
+            # Explicitly format key columns
+            st.dataframe(
+                df_master_view_display,
+                column_config={
+                    "AI_Prob": st.column_config.NumberColumn(format="%.1f%%"),
+                    "model_prob_home": st.column_config.NumberColumn(format="%.1f%%"),
+                    "final_probability": st.column_config.NumberColumn(format="%.1f%%"),
+                    "Implied_Prob": st.column_config.NumberColumn(format="%.1f%%"),
+                    "spread_edge": st.column_config.NumberColumn(format="%.1f%%"),
+                },
+                column_order=["league", "Home", "Away", "Implied_Prob", "AI_Prob", "Pick"] + [c for c in df_master_view_display.columns if c not in ["league", "Home", "Away", "Implied_Prob", "AI_Prob", "Pick"]]
+            )
             st.caption(
                 f"rows_out/games_in = {master_stats['rows_out']} / {master_stats['games_in']}"
             )
@@ -9005,9 +9034,15 @@ with tab_shotgun:
                 df_shotgun = st.session_state["master_df"].copy()
 
                 # Ensure numeric columns for edge calc and display
+                # Fix Shotgun DataFrame Types: explicit cast with specific defaults
+                if 'ai_prob_base' in df_shotgun.columns:
+                    df_shotgun['ai_prob_base'] = pd.to_numeric(df_shotgun['ai_prob_base'], errors='coerce').fillna(0.0)
+                if 'model_prob_home' in df_shotgun.columns:
+                    df_shotgun['model_prob_home'] = pd.to_numeric(df_shotgun['model_prob_home'], errors='coerce').fillna(0.5)
+
                 cols_to_numeric = [
                     'final_probability', 'spread_implied_prob', 'total_implied_prob',
-                    'spread_width', 'total_width', 'model_prob_home', 'ai_prob_base', 'AI_Prob'
+                    'spread_width', 'total_width', 'AI_Prob'
                 ]
                 # Bulk convert using apply for efficiency, ensuring cols exist
                 if not df_shotgun.empty:
