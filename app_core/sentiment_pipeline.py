@@ -275,7 +275,24 @@ def fetch_team_news(news_api_key: str, team: str, league: str, league_query: Opt
             if status in [403, 401]:
                 # User Action: Explicitly log this to confirm fallback is triggering
                 if st:
-                    st.warning(f"NewsAPI Auth Error ({status}) for {team}. Triggering Reddit Fallback.")
+                    st.warning(f"NewsAPI Auth Error ({status}) for {team}. Triggering Fallback.")
+
+                # Try mascot-only bypass query if not already tried
+                # Normalized name logic might strip mascot, so 'team' might still have it
+                # If q doesn't look like mascot-only, try it.
+                parts = team.split()
+                mascot = parts[-1] if len(parts) > 1 else team
+                fallback_q = f'"{mascot}"'
+
+                if q != fallback_q and "fallback_tried" not in params:
+                    if st:
+                        st.info(f"Retrying with mascot-only query: {fallback_q}")
+                    q = fallback_q
+                    params["q"] = q
+                    params["fallback_tried"] = "true"
+                    time.sleep(retry_delay)
+                    continue
+
                 return [], {
                     "error": "auth_error_fallback", # Signal fallback
                     "status": status,
@@ -328,6 +345,7 @@ def fetch_team_news(news_api_key: str, team: str, league: str, league_query: Opt
             return articles, {
                 "error": None,
                 "status": status,
+                "sentiment_status": "Local_Mascot_Fallback" if params.get("fallback_tried") else "ok",
                 "status_code": status,
                 "league_query": league_query,
                 "totalResults": total_results,
