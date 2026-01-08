@@ -4852,19 +4852,21 @@ def match_kalshi_market(
             "kalshi_ticker": None,
             "kalshi_line": None,
             "kalshi_title": None,
+            "kalshi_yes_side": None,
+            # Fallback keys for strict dictionary return
+            "sentiment_diff": 0.0,
+            "status": "Neutral"
         }
 
     try:
         return _match_kalshi_market_impl(game, kalshi_markets, winner_reason_override)
-    except Exception as e:
-        logger.error(f"Error in match_kalshi_market: {e}", exc_info=True)
-        # Return neutral structure to prevent unpacking errors and maintain integrity
-        neutral_match = {
-            "winner": {"kalshi_matched": False, "kalshi_reason": "exception"},
-            "spread": {"kalshi_matched": False},
-            "total": {"kalshi_matched": False},
-        }
-        return neutral_match, {"error": str(e)}
+    except Exception as exc:
+        logger.error(f"match_kalshi_market failed: {exc}", exc_info=True)
+        return {
+            "winner": base_result(f"error: {str(exc)}", "winner"),
+            "spread": base_result(f"error: {str(exc)}", "spread"),
+            "total": base_result(f"error: {str(exc)}", "total"),
+        }, {}
 
 
 # -----------------
@@ -7875,16 +7877,28 @@ with tab_master:
                     engine = get_prediction_engine()
                     probs = engine.predict_batch(inference_df)
 
-                    if probs and len(probs) == len(master_df):
-                        master_df["AI_Prob"] = probs
-                        master_df["AI_Edge"] = master_df["AI_Prob"] - master_df.get("Implied_Prob", 0.5)
+                    # Safe Access Implementation (Step 1)
+                    # Handle list/df mismatch robustly rather than all-or-nothing fallback
+                    safe_probs = []
+                    if probs:
+                        for i in range(len(master_df)):
+                            if i < len(probs):
+                                val = probs[i]
+                                # Ensure safe float
+                                try:
+                                    safe_probs.append(float(val))
+                                except (ValueError, TypeError):
+                                    safe_probs.append(0.5)
+                            else:
+                                safe_probs.append(0.5)
                     else:
-                        # Fallback logic: Ensure AI_Prob is populated via Local XGBoost logic even if batch prediction returns mismatch
-                        logger.warning("Batch prediction returned mismatch/empty. Applying default fallback (0.5).")
-                        master_df["AI_Prob"] = 0.5
-                        master_df["AI_Edge"] = 0.0
-                        # Note: Local XGBoost is the primary model. If it fails, we fall back to 0.5 (neutral).
-                        # This ensures the 'AI Prob' column is never empty as requested.
+                        safe_probs = [0.5] * len(master_df)
+
+                    master_df["AI_Prob"] = safe_probs
+
+                    # Safe Edge Calculation
+                    implied_probs = pd.to_numeric(master_df.get("Implied_Prob"), errors='coerce').fillna(0.5)
+                    master_df["AI_Edge"] = master_df["AI_Prob"] - implied_probs
 
             # 4. SHOTGUN ACTIVATION: Use ParlayOptimizer to tier the results
             if ParlayOptimizer:
@@ -8615,7 +8629,17 @@ with tab_master:
                 "model_minus_market",
             ]
             top_df_display = top_df_display.drop(columns=[c for c in ml_detail_cols if c in top_df_display.columns], errors="ignore")
-        st.dataframe(top_df_display)
+
+        # Enforce column order for Shotgun/Top Picks
+        desired_order = ["league", "Home", "Away", "Implied_Prob", "AI_Prob", "Pick", "spread_edge"]
+        available_cols = [c for c in desired_order if c in top_df_display.columns]
+        other_cols = [c for c in top_df_display.columns if c not in available_cols]
+        top_df_display = top_df_display[available_cols + other_cols]
+
+        st.dataframe(
+            top_df_display,
+            column_order=available_cols + other_cols
+        )
 
         export_cols = [
             "AI_Prob",
@@ -8969,6 +8993,12 @@ with tab_master:
         else:
             st.success(f"Produced {len(df_master_view)} rows from {len(games)} games")
             # Explicitly format key columns
+            # Ensure numeric typing before display to avoid Arrow errors
+            cols_to_force_numeric = ["AI_Prob", "model_prob_home", "final_probability", "Implied_Prob", "spread_edge", "total_edge"]
+            valid_force_cols = [c for c in cols_to_force_numeric if c in df_master_view_display.columns]
+            if valid_force_cols:
+                df_master_view_display[valid_force_cols] = df_master_view_display[valid_force_cols].apply(pd.to_numeric, errors='coerce').fillna(0.0)
+
             st.dataframe(
                 df_master_view_display,
                 column_config={
@@ -9042,7 +9072,7 @@ with tab_shotgun:
 
                 cols_to_numeric = [
                     'final_probability', 'spread_implied_prob', 'total_implied_prob',
-                    'spread_width', 'total_width', 'AI_Prob'
+                    'spread_width', 'total_width', 'AI_Prob', 'Implied_Prob', 'active_edge', 'total_edge', 'spread_edge'
                 ]
                 # Bulk convert using apply for efficiency, ensuring cols exist
                 if not df_shotgun.empty:
@@ -9179,7 +9209,14 @@ with tab_shotgun:
                     parlay_df['Leg 1 Edge'] = parlay_df['Leg 1 Edge'].map('{:.1%}'.format)
                     parlay_df['Leg 2 Edge'] = parlay_df['Leg 2 Edge'].map('{:.1%}'.format)
 
-                    st.table(parlay_df)
+                    st.dataframe(
+                        parlay_df,
+                        column_config={
+                            "Combined Edge": st.column_config.TextColumn("Combined Edge"),
+                            "Combined Prob": st.column_config.TextColumn("Combined Prob"),
+                        },
+                        use_container_width=True
+                    )
                 else:
                     st.warning("No valid parlay combinations found (check independence constraints).")
 
