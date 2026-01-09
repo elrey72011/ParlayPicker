@@ -1100,17 +1100,29 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
                     # Check which one failed
                     h_stat = "MISSING" if home_fallback[idx] else "OK"
                     a_stat = "MISSING" if away_fallback[idx] else "OK"
-                    global _FALLBACK_LOG_COUNT
+                    if combined_fallback.any():
+    fallback_indices = df.index[combined_fallback]
+    for idx in fallback_indices:
+        try:
+            league_str = df.loc[idx, league_col] if league_col else "Unknown"
+            h_team = df.loc[idx, home_col]
+            a_team = df.loc[idx, away_col]
 
-                    if _FALLBACK_LOG_COUNT < _FALLBACK_LOG_LIMIT:
-                        logger.warning(
-                            f"DEBUG Stats Fallback Used: {league} {home_team} ({home_status}) vs {away_team} ({away_status})"
-                        )
+            h_stat = "MISSING" if bool(home_fallback.loc[idx]) else "OK"
+            a_stat = "MISSING" if bool(away_fallback.loc[idx]) else "OK"
 
-                        _FALLBACK_LOG_COUNT += 1
-                    elif _FALLBACK_LOG_COUNT == _FALLBACK_LOG_LIMIT:
-                        logger.warning("DEBUG Stats Fallback Used: (further messages suppressed)")
-                        _FALLBACK_LOG_COUNT += 1
+            global _FALLBACK_LOG_COUNT
+                if _FALLBACK_LOG_COUNT < _FALLBACK_LOG_LIMIT:
+                    logger.warning(
+                        f"DEBUG Stats Fallback Used: {league_str} {h_team} ({h_stat}) vs {a_team} ({a_stat})"
+                    )
+                    _FALLBACK_LOG_COUNT += 1
+                elif _FALLBACK_LOG_COUNT == _FALLBACK_LOG_LIMIT:
+                    logger.warning("DEBUG Stats Fallback Used: (further messages suppressed)")
+                    _FALLBACK_LOG_COUNT += 1
+
+        except Exception:
+            pass
 
                 except Exception:
                     pass
