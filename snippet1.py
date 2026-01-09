@@ -12,7 +12,7 @@ enable_sentiment = st.sidebar.checkbox(
     "Enable Sentiment", value=st.session_state.get("enable_sentiment", True)
 )
 st.session_state["enable_sentiment"] = enable_sentiment
-if st.sidebar.button("Load Games", use_container_width=True):
+if st.sidebar.button("Load Games", width="stretch"):
     # Invalidate master_df when loading new games
     if "master_df" in st.session_state:
         del st.session_state["master_df"]

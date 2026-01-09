@@ -137,7 +137,7 @@ def show_complete_analysis_workflow():
         with st.expander("📊 Preview Vertex AI Results"):
             st.dataframe(
                 vertex_status[['home_team', 'away_team', 'ai_probability', 'ev_percentage', 'confidence_level']].head(10),
-                use_container_width=True
+                width="stretch"
             )
     
     st.markdown("---")
@@ -233,7 +233,7 @@ def show_complete_analysis_workflow():
             with st.expander("📊 Preview Master Analysis Results"):
                 preview_cols = ['home_team', 'away_team', 'consensus_prob', 'confidence_level', 'expected_value']
                 available_cols = [col for col in preview_cols if col in master_status.columns]
-                st.dataframe(master_status[available_cols].head(10), use_container_width=True)
+                st.dataframe(master_status[available_cols].head(10), width="stretch")
     
     st.markdown("---")
     
