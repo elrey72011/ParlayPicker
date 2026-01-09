@@ -4287,10 +4287,10 @@ def filter_kalshi_game_markets(
             if not prefix_ok:
                 continue
             if date_token and date_token not in t:
-            # Check if we have strong team code matches as fallback
-            if not (home_codes and any(code in t for code in home_codes) and 
-                    away_codes and any(code in t for code in away_codes)):
-                continue
+                # Check if we have strong team code matches as fallback
+                if not (home_codes and any(code in t for code in home_codes) and 
+                        away_codes and any(code in t for code in away_codes)):
+                    continue
             if home_codes and not any(code in t for code in home_codes):
                 continue
             if away_codes and not any(code in t for code in away_codes):
