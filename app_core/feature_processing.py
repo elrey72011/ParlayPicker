@@ -870,7 +870,7 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
     # 0. Fix Case-Sensitive Overwrite (Ensure 'league' is authoritative)
     # We strictly use sport_title if available, else league.
     # We overwrite 'League' to match 'league' to prevent ambiguity downstream.
-   league_col = None
+    league_col = None
     if 'sport_title' in df.columns:
         league_col = 'sport_title'
     elif 'league' in df.columns:
