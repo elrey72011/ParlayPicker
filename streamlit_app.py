@@ -9079,17 +9079,31 @@ with tab_master:
                 if 'kalshi_wanted_tokens' in df_master_view_display.columns:
                     df_master_view_display = df_master_view_display.drop(columns=['kalshi_wanted_tokens'])
 
-                st.dataframe(
-                    df_master_view_display,
-                    column_config={
-                        "AI_Prob": st.column_config.NumberColumn(format="%.1f%%"),
-                        "model_prob_home": st.column_config.NumberColumn(format="%.1f%%"),
-                        "final_probability": st.column_config.NumberColumn(format="%.1f%%"),
-                        "Implied_Prob": st.column_config.NumberColumn(format="%.1f%%"),
-                        "spread_edge": st.column_config.NumberColumn(format="%.1f%%"),
-                    },
-                    column_order=["league", "Home", "Away", "Implied_Prob", "AI_Prob", "Pick"] + [c for c in df_master_view_display.columns if c not in ["league", "Home", "Away", "Implied_Prob", "AI_Prob", "Pick"]]
-                )
+                # --- UNIVERSAL TYPE-GUARD (REPLACES LINE 8946) ---
+                # 1. Define only display-safe columns
+                ui_whitelist = ['league', 'Home', 'Away', 'Pick', 'AI_Prob', 'Implied_Prob', 'Sentiment_Diff', 'spread_edge', 'status']
+                
+                # 2. Filter the dataframe to ONLY include these columns
+                safe_cols = [c for c in ui_whitelist if c in df_master_view_display.columns]
+                top_df_ui = df_master_view_display[safe_cols].copy()
+                
+                # 3. Force Numeric Consistency
+                numeric_fields = ['AI_Prob', 'Implied_Prob', 'spread_edge', 'Sentiment_Diff']
+                for col in numeric_fields:
+                    if col in top_df_ui.columns:
+                        top_df_ui[col] = pd.to_numeric(top_df_ui[col], errors='coerce').fillna(0.0)
+                
+                # 4. Force String Consistency
+                for col in ['league', 'Home', 'Away', 'Pick', 'status']:
+                    if col in top_df_ui.columns:
+                        top_df_ui[col] = top_df_ui[col].astype(str).replace('None', 'N/A')
+                
+                # 5. FINAL SANITIZED DISPLAY
+                try:
+                    st.dataframe(top_df_ui, use_container_width=True, hide_index=True)
+                except Exception as e:
+                    st.error(f"Table display failed: {e}")
+                    st.table(top_df_ui.head(10)) # Safe fallback
             except Exception as e:
                  st.error(f"Display Error (Master Table): {e}")
             st.caption(
