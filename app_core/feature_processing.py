@@ -1451,18 +1451,21 @@ def build_model_feature_row_from_record(record: Mapping[str, Any]) -> Dict[str, 
     PROB features -> default 0.5, others -> default 0.0.
     """
     row: Dict[str, float] = {}
+
     for col in VERTEX_FEATURE_COLUMNS:
         val = record.get(col)
+
         # Fallback: try removing 'feature_' prefix if exact key missing
         if val is None and col.startswith("feature_"):
-             val = record.get(col.replace("feature_", ""))
+            val = record.get(col.replace("feature_", ""))
 
         # PROB features must default to 0.5 (Neutral), STATS/COUNTS to 0.0
         default_val = 0.5 if "prob" in col else 0.0
 
         if val is not None:
-             row[col] = safefloat(val)
+            row[col] = safefloat(val)
         else:
-             row[col] = default_val
+            row[col] = default_val
 
     return row
+
