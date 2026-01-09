@@ -290,7 +290,7 @@ def _parse_form(form_str: str) -> float:
     total = len(form_str)
     return wins / total if total > 0 else 0.5
 
-def robust_normalize_team(name: str) -> str:
+def robust_normalize_team(name: str, league: Optional[str] = None) -> str:
     """
     Aggressive team name normalization.
     Converts to lowercase, removes common suffixes/mascots.
@@ -304,6 +304,13 @@ def robust_normalize_team(name: str) -> str:
     # 2. Use TeamNameMatcher's normalization first (handles St -> State, punctuation)
     name = TeamNameMatcher.normalize(name)
 
+    # 2.5 League-aware stripping: ONLY strip mascots for college leagues
+    if league:
+        lg = str(league).strip().upper()
+        if lg in ("NCAAB", "NCAAF", "NCAAW", "NCAABW"):
+            # keeps "state", "st", "saint", "mount" but removes trailing mascots
+            name = _strip_mascot_words(name)
+    
     # 3. Additional aggressive mascot stripping (if not covered by TeamNameMatcher)
     # Note: TeamNameMatcher.normalize already removes mascots from its internal list.
     # We can add extra cleanup if needed here.
