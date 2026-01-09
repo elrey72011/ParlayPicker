@@ -8678,22 +8678,37 @@ with tab_master:
             ]
             top_df_display = top_df_display.drop(columns=[c for c in ml_detail_cols if c in top_df_display.columns], errors="ignore")
 
-        # --- SURGICAL FIX FOR LINE 8691 ---
-        # 1. Drop non-serializable columns (lists/objects) that crash PyArrow
-        unsafe_cols = ['kalshi_wanted_tokens', 'candidate_debug', 'winner_meta', 'raw_response']
-        top_df_display = top_df_display.drop(columns=[c for c in unsafe_cols if c in top_df_display.columns], errors='ignore')
+        # --- FINAL WHITELIST FIX (REPLACES 8681-8692) ---
+        
+        # 1. Define the ONLY columns allowed to be seen in the table
+        # This automatically ignores 'kalshi_wanted_tokens' and other hidden lists
+        ui_whitelist = [
+            'league', 'Home', 'Away', 'Pick', 'AI_Prob', 
+            'Implied_Prob', 'Sentiment_Diff', 'spread_edge', 'status'
+        ]
+        
+        # 2. Filter the dataframe to ONLY include these columns
+        safe_cols = [c for c in ui_whitelist if c in top_df_display.columns]
+        top_df_ui = top_df_display[safe_cols].copy()
 
-        # 2. STRICT WHITELIST: Only allow simple types to reach the UI
-        ui_whitelist = ['league', 'Home', 'Away', 'Pick', 'AI_Prob', 'Implied_Prob', 'Sentiment_Diff', 'spread_edge', 'status']
-        final_display_cols = [c for c in ui_whitelist if c in top_df_display.columns]
+        # 3. Force Numeric: Clean any numeric columns to prevent Arrow errors
+        numeric_fields = ['AI_Prob', 'Implied_Prob', 'spread_edge', 'Sentiment_Diff']
+        for col in numeric_fields:
+            if col in top_df_ui.columns:
+                # 'coerce' turns text like "Unavailable" into NaN, then fill with 0.0
+                top_df_ui[col] = pd.to_numeric(top_df_ui[col], errors='coerce').fillna(0.0)
 
-        # 3. FORCE NUMERIC: Convert any leftover strings in numeric columns
-        for col in ['AI_Prob', 'Implied_Prob', 'spread_edge', 'Sentiment_Diff']:
-            if col in top_df_display.columns:
-                top_df_display[col] = pd.to_numeric(top_df_display[col], errors='coerce').fillna(0.0)
+        # 4. Force String: Clean text columns to ensure no hidden objects remain
+        for col in ['league', 'Home', 'Away', 'Pick', 'status']:
+            if col in top_df_ui.columns:
+                top_df_ui[col] = top_df_ui[col].astype(str).replace('None', 'N/A')
 
-        # 4. SANITIZED DISPLAY CALL
-        st.dataframe(top_df_display[final_display_cols], use_container_width=True, hide_index=True)
+        # 5. SANITIZED DISPLAY
+        try:
+            st.dataframe(top_df_ui, use_container_width=True, hide_index=True)
+        except Exception as e:
+            st.error(f"Display failed due to data types: {e}")
+            st.table(top_df_ui.head(20)) # Safe fallback
 
         export_cols = [
             "AI_Prob",
