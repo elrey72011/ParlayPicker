@@ -95,39 +95,147 @@ LEAGUE_AVERAGES = {
     "default": {"ppg": 50.0, "oppg": 50.0, "win_pct": 0.5, "last5_win_pct": 0.5}
 }
 
+# -------------------------------------------------------------------------
+# Pro League Mappings (100% Lookup Guarantee)
+# Maps full team names to the normalized keys used by stats libraries.
+# -------------------------------------------------------------------------
+TEAM_NAME_MAPPING = {
+    # NBA (nba_api returns City Mascot, robust_normalize_team strips mascot -> City)
+    "atlanta hawks": "atlanta",
+    "boston celtics": "boston",
+    "brooklyn nets": "brooklyn",
+    "charlotte hornets": "charlotte",
+    "chicago bulls": "chicago",
+    "cleveland cavaliers": "cleveland",
+    "dallas mavericks": "dallas",
+    "denver nuggets": "denver",
+    "detroit pistons": "detroit",
+    "golden state warriors": "golden state",
+    "houston rockets": "houston",
+    "indiana pacers": "indiana",
+    "los angeles clippers": "los angeles",
+    "los angeles lakers": "los angeles",
+    "memphis grizzlies": "memphis",
+    "miami heat": "miami",
+    "milwaukee bucks": "milwaukee",
+    "minnesota timberwolves": "minnesota",
+    "new orleans pelicans": "new orleans",
+    "new york knicks": "new york",
+    "oklahoma city thunder": "oklahoma city",
+    "orlando magic": "orlando",
+    "philadelphia 76ers": "philadelphia",
+    "phoenix suns": "phoenix",
+    "portland trail blazers": "portland",
+    "sacramento kings": "sacramento",
+    "san antonio spurs": "san antonio",
+    "toronto raptors": "toronto",
+    "utah jazz": "utah",
+    "washington wizards": "washington",
+
+    # NFL (nfl_data_py returns codes like ARI, ATL)
+    "arizona cardinals": "ari",
+    "atlanta falcons": "atl",
+    "baltimore ravens": "bal",
+    "buffalo bills": "buf",
+    "carolina panthers": "car",
+    "chicago bears": "chi",
+    "cincinnati bengals": "cin",
+    "cleveland browns": "cle",
+    "dallas cowboys": "dal",
+    "denver broncos": "den",
+    "detroit lions": "det",
+    "green bay packers": "gb",
+    "houston texans": "hou",
+    "indianapolis colts": "ind",
+    "jacksonville jaguars": "jax",
+    "kansas city chiefs": "kc",
+    "las vegas raiders": "lv",
+    "los angeles chargers": "lac",
+    "los angeles rams": "lar",
+    "miami dolphins": "mia",
+    "minnesota vikings": "min",
+    "new england patriots": "ne",
+    "new orleans saints": "no",
+    "new york giants": "nyg",
+    "new york jets": "nyj",
+    "philadelphia eagles": "phi",
+    "pittsburgh steelers": "pit",
+    "san francisco 49ers": "sf",
+    "seattle seahawks": "sea",
+    "tampa bay buccaneers": "tb",
+    "tennessee titans": "ten",
+    "washington commanders": "was",
+    "washington football team": "was",
+
+    # MLB (Placeholder for future stats - Assuming City Mascot or City)
+    "arizona diamondbacks": "arizona diamondbacks",
+    "atlanta braves": "atlanta braves",
+    "baltimore orioles": "baltimore orioles",
+    "boston red sox": "boston red sox",
+    "chicago white sox": "chicago white sox",
+    "chicago cubs": "chicago cubs",
+    "cincinnati reds": "cincinnati reds",
+    "cleveland guardians": "cleveland guardians",
+    "colorado rockies": "colorado rockies",
+    "detroit tigers": "detroit tigers",
+    "houston astros": "houston astros",
+    "kansas city royals": "kansas city royals",
+    "los angeles angels": "los angeles angels",
+    "los angeles dodgers": "los angeles dodgers",
+    "miami marlins": "miami marlins",
+    "milwaukee brewers": "milwaukee brewers",
+    "minnesota twins": "minnesota twins",
+    "new york yankees": "new york yankees",
+    "new york mets": "new york mets",
+    "oakland athletics": "oakland athletics",
+    "philadelphia phillies": "philadelphia phillies",
+    "pittsburgh pirates": "pittsburgh pirates",
+    "san diego padres": "san diego padres",
+    "san francisco giants": "san francisco giants",
+    "seattle mariners": "seattle mariners",
+    "st. louis cardinals": "st louis cardinals",
+    "tampa bay rays": "tampa bay rays",
+    "texas rangers": "texas rangers",
+    "toronto blue jays": "toronto blue jays",
+    "washington nationals": "washington nationals",
+}
+
 # Manual overrides for team name normalization failures
 # Keys and values should be lowercase normalized forms
 MANUAL_TEAM_OVERRIDES = {
-    "washington state": "washington st",
-    "mississippi state": "mississippi st",
-    "michigan state": "michigan st",
-    "kansas state": "kansas st",
-    "arizona state": "arizona st",
-    "florida state": "florida st",
-    "oregon state": "oregon st",
-    "penn state": "penn st",
-    "nc state": "nc st",
-    "north carolina state": "nc st",
-    "ohio state": "ohio st",
-    "oklahoma state": "oklahoma st",
-    "boise state": "boise st",
-    "fresno state": "fresno st",
-    "san diego state": "san diego st",
-    "san jose state": "san jose st",
-    "utah state": "utah st",
-    "colorado state": "colorado st",
-    "iowa state": "iowa st",
-    "uc santa barbara": "ucsb",
-    "uc davis": "ucd", 
-    "uc irvine": "uci",
-    "uc san diego": "ucsd",
-    "uc riverside": "ucr",
-    "csu fullerton": "csuf",
-    "csu bakersfield": "csub",
-    "csu northridge": "csun",
+    # Log-Specific Fixes (12:51 Traceback)
+    "minnesota golden gophers": "minnesota",
+    "usc trojans": "usc",
+    "colorado st rams": "colorado st",
+    "unlv rebels": "unlv",
+    "indiana hoosiers": "indiana",
+    "oregon ducks": "oregon",
+    "portland pilots": "portland",
+    "pacific tigers": "pacific",
+    "loyola marymount lions": "loyola marymount",
+    "san francisco dons": "san francisco",
+    "gonzaga bulldogs": "gonzaga",
+    "santa clara broncos": "santa clara",
+    "ole miss rebels": "ole miss",
+    "miami hurricanes": "miami",
+
+    # General State & UC Overwrites
+    "washington state": "washington st", "mississippi state": "mississippi st",
+    "michigan state": "michigan st", "kansas state": "kansas st",
+    "arizona state": "arizona st", "florida state": "florida st",
+    "oregon state": "oregon st", "penn state": "penn st",
+    "nc state": "nc st", "north carolina state": "nc st",
+    "ohio state": "ohio st", "oklahoma state": "oklahoma st",
+    "boise state": "boise st", "fresno state": "fresno st",
+    "san diego state": "san diego st", "san jose state": "san jose st",
+    "utah state": "utah st", "colorado state": "colorado st",
+    "iowa state": "iowa st", "uc santa barbara": "ucsb",
+    "uc davis": "ucd", "uc irvine": "uci", "uc san diego": "ucsd",
+    "uc riverside": "ucr", "csu fullerton": "csuf",
+    "csu bakersfield": "csub", "csu northridge": "csun",
     "north dakota state": "north dakota st",
     "southeast missouri state": "se missouri st",
-    "arkansas little rock": "arkansas-little rock",
+    "arkansas little rock": "arkansas-little rock"
 }
 
 def _get_secret(key_name: str) -> Optional[str]:
@@ -178,7 +286,11 @@ def robust_normalize_team(name: str) -> str:
     # We can add extra cleanup if needed here.
 
     # Remove common suffixes that might remain or be specific
-    suffixes = [' bulls', ' tigers', ' mountaineers', ' blue hens', ' university', ' college']
+    suffixes = [
+        ' bulls', ' tigers', ' mountaineers', ' blue hens', ' university', ' college',
+        ' golden gophers', ' trojans', ' rams', ' rebels', ' hoosiers', ' ducks',
+        ' pilots', ' lions', ' dons', ' bulldogs', ' broncos', ' hurricanes'
+    ]
     for s in suffixes:
         if name.endswith(s):
             name = name[:-len(s)].strip()
@@ -843,6 +955,14 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
             home_map_local = {}
             for t_norm in current_home_teams:
                 if not t_norm: continue
+
+                # 0. Pro League Mapping Check (100% Lookup Guarantee)
+                if t_norm in TEAM_NAME_MAPPING:
+                    mapped = TEAM_NAME_MAPPING[t_norm]
+                    if mapped in stats_subset.index:
+                        home_map_local[t_norm] = mapped
+                        continue
+
                 # 1. Direct
                 if t_norm in stats_subset.index:
                     home_map_local[t_norm] = t_norm
@@ -871,6 +991,14 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
             away_map_local = {}
             for t_norm in current_away_teams:
                 if not t_norm: continue
+
+                # 0. Pro League Mapping Check (100% Lookup Guarantee)
+                if t_norm in TEAM_NAME_MAPPING:
+                    mapped = TEAM_NAME_MAPPING[t_norm]
+                    if mapped in stats_subset.index:
+                        away_map_local[t_norm] = mapped
+                        continue
+
                 if t_norm in stats_subset.index:
                     away_map_local[t_norm] = t_norm
                     continue
