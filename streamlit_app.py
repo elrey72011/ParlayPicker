@@ -5348,6 +5348,32 @@ with tab_master:
             st.warning(warn_detail)
         if kalshi_status.get("warning"):
             st.warning(kalshi_status.get("warning"))
+    # === DEBUG: Show Kalshi Market Fetch Results ===
+    with st.expander("🔍 Kalshi Debug Info", expanded=False):
+        st.write("**Kalshi Markets Fetched:**")
+        kalshi_markets_by_league = st.session_state.get("kalshi_markets_by_league", {})
+        if kalshi_markets_by_league:
+            for league_key, markets in kalshi_markets_by_league.items():
+                st.write(f"- **{league_key}**: {len(markets)} markets")
+                if markets:
+                    sample = markets[0]
+                    st.write(f"  - Sample ticker: `{sample.get('event_ticker') or sample.get('ticker')}`")
+                    st.write(f"  - Sample title: {sample.get('title', 'N/A')}")
+        else:
+            st.warning("No Kalshi markets in session state")
+        
+        # Show what the filter is looking for
+        if games:
+            first_game = games[0]
+            st.write("**First Game Filter Criteria:**")
+            st.json({
+                "home": first_game.get("home_team"),
+                "away": first_game.get("away_team"),
+                "commence_utc": first_game.get("commence_time_iso_utc"),
+                "league": first_game.get("league")
+            })
+    # === END DEBUG ===
+    
     st.session_state.setdefault("kalshi_match_only", False)
     kalshi_match_only = st.checkbox(
         "Show only games with a Kalshi match",
