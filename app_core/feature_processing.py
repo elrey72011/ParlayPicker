@@ -1094,7 +1094,7 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
             fallback_indices = df.index[combined_fallback]
             for idx in fallback_indices:
                 try:
-                    league_str = df.loc[idx, league_col] if league_col else "Unknown"
+                    league_str = league_keys.at[idx] if league_col else "Unknown"
                     h_team = df.loc[idx, home_col]
                     a_team = df.loc[idx, away_col]
                     # Check which one failed
