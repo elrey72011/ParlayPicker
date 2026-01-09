@@ -117,6 +117,17 @@ MANUAL_TEAM_OVERRIDES = {
     "utah state": "utah st",
     "colorado state": "colorado st",
     "iowa state": "iowa st",
+    "uc santa barbara": "ucsb",
+    "uc davis": "ucd", 
+    "uc irvine": "uci",
+    "uc san diego": "ucsd",
+    "uc riverside": "ucr",
+    "csu fullerton": "csuf",
+    "csu bakersfield": "csub",
+    "csu northridge": "csun",
+    "north dakota state": "north dakota st",
+    "southeast missouri state": "se missouri st",
+    "arkansas little rock": "arkansas-little rock",
 }
 
 def _get_secret(key_name: str) -> Optional[str]:
