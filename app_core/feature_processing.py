@@ -203,14 +203,13 @@ TEAM_NAME_MAPPING = {
 # Manual overrides for team name normalization failures
 # Keys and values should be lowercase normalized forms
 MANUAL_TEAM_OVERRIDES = {
-    # NBA/NHL
-    "phoenix suns": "phoenix", "winnipeg jets": "winnipeg",
+    # NBA/NHL Fixes
+    "phoenix suns": "phoenix", "chicago blackhawks": "chicago",
+    "washington capitals": "washington", "winnipeg jets": "winnipeg",
     "los angeles kings": "los angeles", "utah mammoth": "utah",
-    "st louis blues": "st louis", "chicago blackhawks": "chicago",
-    "washington capitals": "washington",
-
-    # NCAAB/NCAAF Log Fixes (13:14 - 14:17)
-    "toledo rockets": "toledo", "miami (oh) redhawks": "miami ohio",
+    "st louis blues": "st louis",
+    # NCAAB/NCAAF Log Fixes (14:42)
+    "toledo rockets": "toledo", "miami (oh) redhawks": "miami oh",
     "manhattan jaspers": "manhattan", "canisius golden griffins": "canisius",
     "oakland golden grizzlies": "oakland", "cleveland st vikings": "cleveland state",
     "detroit mercy titans": "detroit mercy", "wright st raiders": "wright state",
@@ -221,7 +220,7 @@ MANUAL_TEAM_OVERRIDES = {
     "siena saints": "siena", "merrimack warriors": "merrimack",
     "mt. st. mary's mountaineers": "mount st marys", "saint peter's peacocks": "saint peters",
     "bowling green falcons": "bowling green", "akron zips": "akron",
-    "milwaukee panthers": "milwaukee", "northern kentucky norse": "northern kentucky",
+    "milwaukee panthers": "milwaukee", "northern Adaptive norse": "northern kentucky",
     "minnesota golden gophers": "minnesota", "usc trojans": "usc",
     "colorado st rams": "colorado state", "unlv rebels": "unlv",
     "indiana hoosiers": "indiana", "oregon ducks": "oregon",
@@ -484,13 +483,12 @@ def fetch_ncaaf_stats(season_year: int) -> List[Dict[str, Any]]:
 
     def _fetch_for_year(yr: int) -> List[Any]:
         try:
-            # Standard CFBD python client configuration
-            configuration = cfbd.Configuration()
+            # Step 1: Clean the token to ensure NO 'Bearer' or extra spaces
+            clean_key = api_key.replace("Bearer", "").strip()
 
-            # Use the dictionary setter to ensure Bearer is applied correctly
-            # This prevents the 'Bearer Bearer' or missing Bearer errors
-            api_key_clean = api_key.replace("Bearer", "").strip()
-            configuration.api_key['Authorization'] = api_key_clean
+            # Step 2: Configure the CFBD Client correctly
+            configuration = cfbd.Configuration()
+            configuration.api_key['Authorization'] = clean_key
             configuration.api_key_prefix['Authorization'] = 'Bearer'
 
             api_instance = cfbd.StatsApi(cfbd.ApiClient(configuration))

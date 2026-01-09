@@ -348,7 +348,7 @@ def show_csv_enrichment_ui():
                 st.write("### 📋 Preview")
                 preview_cols = ['Game', 'Market', 'AI Prob %', 'theover.ai %', 'theover Δ pp', 'ML Prob %']
                 available_cols = [col for col in preview_cols if col in enriched_df.columns]
-                st.dataframe(enriched_df[available_cols].head(10), use_container_width=True)
+                st.dataframe(enriched_df[available_cols].head(10), width="stretch")
                 
                 # Download
                 csv_output = enriched_df.to_csv(index=False, encoding='utf-8-sig')

@@ -22,6 +22,7 @@ class TeamNameMatcher:
     """Handles fuzzy matching between TheOver.ai CSV names and app team names"""
     
     # Common mascots to strip (expand this list as needed)
+    # Explicitly updated to include user-requested mascots
     MASCOTS = [
         # NBA
         'Thunder', 'Warriors', 'Celtics', 'Knicks', 'Lakers', 'Clippers',
