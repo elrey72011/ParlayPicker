@@ -4844,6 +4844,7 @@ def match_kalshi_market(
     """
     Safely finds a Kalshi market match.
     Guarantees a dictionary return to prevent TypeError.
+    MANDATORY RETURN: {"sentiment_diff": 0.0, "status": "Neutral"} on error.
     """
     # Helper to build a safe fallback dictionary
     def base_result(reason: str, market_type: str) -> Dict[str, Any]:
@@ -4865,8 +4866,16 @@ def match_kalshi_market(
         }
 
     try:
+        # Check if helper exists in scope, otherwise define fallback or import
+        if '_match_kalshi_market_impl' not in globals():
+             # If impl is missing, return safe default immediately
+             return {
+                "winner": base_result("impl_missing", "winner"),
+                "spread": base_result("impl_missing", "spread"),
+                "total": base_result("impl_missing", "total"),
+            }, {}
+
         # Use existing implementation logic if available
-        # Note: _match_kalshi_market_impl handles the complex fuzzy matching
         res, debug = _match_kalshi_market_impl(game, kalshi_markets, winner_reason_override)
 
         # Validation: Ensure result is a dictionary
@@ -4881,11 +4890,14 @@ def match_kalshi_market(
         for k in ["winner", "spread", "total"]:
             if k not in res or not isinstance(res[k], dict):
                 res[k] = base_result(f"missing_{k}_key", k)
-            # Ensure critical keys exist in sub-dictionaries
-            if "sentiment_diff" not in res[k]:
+
+            # MANDATORY FIELDS FORCE
+            if "sentiment_diff" not in res[k] or res[k]["sentiment_diff"] is None:
                 res[k]["sentiment_diff"] = 0.0
             if "status" not in res[k]:
                 res[k]["status"] = "Neutral"
+            if "market_found" not in res[k]: # Ensure boolean flag if downstream needs it (though usually implied by matched)
+                 res[k]["market_found"] = bool(res[k].get("kalshi_matched"))
 
         return res, debug
 
@@ -7905,24 +7917,25 @@ with tab_master:
 
                     # 7. Call local prediction
                     engine = get_prediction_engine()
-                    probs = engine.predict_batch(inference_df)
+                    try:
+                        probs = engine.predict_batch(inference_df)
+                    except Exception as e:
+                        logger.error(f"Prediction batch failed: {e}")
+                        st.warning(f"AI Data Unavailable (using defaults): {e}")
+                        probs = [0.5] * len(inference_df)
 
-                    # Safe Access Implementation (Strict Validation)
+                    # FIX: Stop Using Indexing for AI Results (Safe Map Approach)
                     if probs and len(probs) == len(inference_df):
-                        # Ensure strict index alignment in Pandas
-                        clean_probs = []
-                        for p in probs:
-                             try:
-                                 clean_probs.append(float(p))
-                             except (ValueError, TypeError):
-                                 clean_probs.append(0.5)
-
-                        predictions_series = pd.Series(clean_probs, index=inference_df.index)
+                        # Wrap in Series to match index explicitly (convert to list to drop any upstream index)
+                        predictions_series = pd.Series(list(probs), index=inference_df.index)
+                        # Assign using loc to ensure alignment
                         master_df.loc[inference_df.index, 'AI_Prob'] = predictions_series
+                        master_df.loc[inference_df.index, 'ai_prob_base'] = predictions_series # Persist base if needed
                     else:
-                        if probs:
-                             logger.warning(f"Prediction length mismatch: got {len(probs)}, expected {len(inference_df)}")
-                        master_df["AI_Prob"] = 0.5
+                        logger.warning(f"Prediction length mismatch: got {len(probs) if probs else 0}, expected {len(inference_df)}")
+                        st.warning("AI Prediction length mismatch - defaulting to 0.5")
+                        master_df.loc[inference_df.index, 'AI_Prob'] = 0.5
+                        master_df.loc[inference_df.index, 'ai_prob_base'] = 0.5
 
                     # Safe Edge Calculation
                     implied_probs = pd.to_numeric(master_df.get("Implied_Prob"), errors='coerce').fillna(0.5)
@@ -8666,6 +8679,13 @@ with tab_master:
 
         # Final "Shotgun" Cleanup: Sanitization
         if not top_df_display.empty:
+            # Bulletproof: Force numeric columns to numeric types
+            target_numeric_cols = ['AI_Prob', 'Implied_Prob', 'final_probability', 'spread_edge', 'total_edge', 'active_edge', 'sentiment_score', 'model_prob_home']
+            for c in target_numeric_cols:
+                if c in top_df_display.columns:
+                    top_df_display[c] = pd.to_numeric(top_df_display[c], errors='coerce').fillna(0.0)
+
+            # General cleanup for others
             top_df_display = top_df_display.apply(lambda x: pd.to_numeric(x, errors='ignore')).fillna(0.0)
 
         st.dataframe(
