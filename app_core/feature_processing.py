@@ -331,6 +331,23 @@ def robust_normalize_team(name: str, league: Optional[str] = None) -> str:
 
     return name
 
+def normalize_team_by_league(name: str, league_key: str) -> str:
+    """
+    League-aware normalization to prevent incorrect mascot stripping
+    across leagues.
+    """
+    if not name:
+        return ""
+
+    base = robust_normalize_team(name)
+
+    # NCAA leagues: aggressive mascot stripping is OK
+    if league_key in ("NCAAB", "NCAAF"):
+        return _strip_mascot_words(base)
+
+    # Pro leagues: DO NOT strip mascots (Celtics, Lakers, etc.)
+    return base
+
 def fuzzy_match_team_robust(target: str, choices: List[str], threshold: float = 80.0) -> Optional[str]:
     """
     Uses rapidfuzz to find the best match for 'target' in 'choices'.
@@ -932,9 +949,16 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
         # Return original df to avoid crash, but features will be missing
         return df
 
-    home_norm = df[home_col].apply(lambda x: robust_normalize_team(str(x)))
-    away_norm = df[away_col].apply(lambda x: robust_normalize_team(str(x)))
+    home_norm = df.apply(
+        lambda r: normalize_team_by_league(str(r[home_col]), league_keys.at[r.name]),
+        axis=1
+    )
     
+    away_norm = df.apply(
+        lambda r: normalize_team_by_league(str(r[away_col]), league_keys.at[r.name]),
+        axis=1
+    )
+
     # 3. Determine League (Row-by-Row) - Robust & Standardized
     # This prevents the bug where one game's league overwrites all defaults
 
