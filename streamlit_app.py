@@ -8678,28 +8678,24 @@ with tab_master:
             ]
             top_df_display = top_df_display.drop(columns=[c for c in ml_detail_cols if c in top_df_display.columns], errors="ignore")
 
-        # Define only the columns we WANT the user to see
-        # Jules: Added actual column names to ensure display is not empty while respecting strict filter
-        display_columns = [
-            'league', 'Home', 'Away', 'Implied_Prob', 'AI_Prob', 'Pick', 'spread_edge',
-            'home_team', 'away_team', 'odds_home', 'odds_away', 'ai_prob_base', 'model_prob_home', 'sentiment_diff', 'Sentiment_Diff'
-        ]
+        # STRICT WHITELIST: No other columns allowed in the UI
+        ui_whitelist = ['home_team', 'away_team', 'odds_home', 'odds_away', 'ai_prob_base', 'model_prob_home', 'sentiment_diff', 'status', 'Home', 'Away', 'league', 'Pick', 'AI_Prob', 'Implied_Prob', 'Sentiment_Diff', 'spread_edge']
 
-        # Filter for existing columns only to avoid KeyError
-        existing_cols = [c for c in display_columns if c in top_df_display.columns]
-        safe_display_df = top_df_display[existing_cols].copy()
+        # Filter for columns that actually exist to avoid KeyError
+        existing_whitelist = [c for c in ui_whitelist if c in top_df_display.columns]
+        ui_display_df = top_df_display[existing_whitelist].copy()
 
-        numeric_fields = ['ai_prob_base', 'model_prob_home', 'odds_home', 'odds_away', 'sentiment_diff', 'AI_Prob', 'Implied_Prob', 'spread_edge', 'Sentiment_Diff']
-        for col in numeric_fields:
-            if col in safe_display_df.columns:
-                safe_display_df[col] = pd.to_numeric(safe_display_df[col], errors='coerce').fillna(0.0)
+        # Force Numeric
+        for col in ['ai_prob_base', 'model_prob_home', 'odds_home', 'odds_away', 'sentiment_diff', 'AI_Prob', 'Implied_Prob', 'Sentiment_Diff', 'spread_edge']:
+            if col in ui_display_df.columns:
+                ui_display_df[col] = pd.to_numeric(ui_display_df[col], errors='coerce').fillna(0.0)
 
-        try:
-            st.dataframe(safe_display_df, use_container_width=True, hide_index=True)
-        except Exception as e:
-            st.error(f"UI Rendering Error: {e}")
-            # Fallback to a basic table if the dataframe still fails
-            st.table(safe_display_df.head(10))
+        # Force String
+        for col in ['home_team', 'away_team', 'status', 'Home', 'Away', 'league', 'Pick']:
+            if col in ui_display_df.columns:
+                ui_display_df[col] = ui_display_df[col].astype(str).replace('None', 'N/A')
+
+        st.dataframe(ui_display_df, use_container_width=True, hide_index=True)
 
         export_cols = [
             "AI_Prob",
