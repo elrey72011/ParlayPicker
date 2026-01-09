@@ -1080,10 +1080,10 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
         # Populate features_data using the new fuzzy map_stat
         
                 # Track Fallbacks (True if team not matched)
-        home_fallback = home_matched_names.isna()
-        away_fallback = away_matched_names.isna()
-        combined_fallback = home_fallback | away_fallback
-        features_data["feature_stats_fallback"] = combined_fallback
+                home_fallback = home_matched_names.isna()
+                away_fallback = away_matched_names.isna()
+                combined_fallback = home_fallback | away_fallback
+                features_data["feature_stats_fallback"] = combined_fallback
 
         # NEW: stats_quality
         features_data["stats_quality"] = combined_fallback.apply(
