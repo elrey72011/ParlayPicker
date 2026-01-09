@@ -8688,10 +8688,19 @@ with tab_master:
             # General cleanup for others
             top_df_display = top_df_display.apply(lambda x: pd.to_numeric(x, errors='ignore')).fillna(0.0)
 
-        st.dataframe(
-            top_df_display,
-            column_order=available_cols + other_cols
-        )
+        # Force all numeric columns to be floats to prevent ArrowInvalid crash
+        numeric_cols = ['ai_prob_base', 'model_prob_home', 'odds_home', 'odds_away', 'sentiment_diff']
+        for col in numeric_cols:
+            if col in top_df_display.columns:
+                top_df_display[col] = pd.to_numeric(top_df_display[col], errors='coerce').fillna(0.0)
+
+        # Only pass columns that actually exist in the final dataframe
+        final_display_cols = [c for c in (available_cols + other_cols) if c in top_df_display.columns]
+
+        try:
+            st.dataframe(top_df_display, column_order=final_display_cols)
+        except Exception as e:
+            st.error(f"Display Error: Please check data types. {e}")
 
         export_cols = [
             "AI_Prob",
