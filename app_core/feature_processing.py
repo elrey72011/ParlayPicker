@@ -952,48 +952,48 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
     # 1. Fetch Stats (Using new function)
     stats_df = fetch_team_stats(api_clients, season_year=season_year)
     
-    # 2. Normalize Names in Master DF (league-aware)
-    home_norm = df.apply(
-        lambda r: normalize_team_by_league(str(r[home_col]), league_keys.at[r.name]),
-        axis=1
-    )
-    
-    away_norm = df.apply(
-        lambda r: normalize_team_by_league(str(r[away_col]), league_keys.at[r.name]),
-        axis=1
-    )
-    
+    # 2. Identify home/away columns FIRST
+    home_col = 'Home' if 'Home' in df.columns else 'home_team'
+    away_col = 'Away' if 'Away' in df.columns else 'away_team'
+
     if home_col not in df.columns or away_col not in df.columns:
         logger.error(f"Missing home/away columns in dataframe. Columns: {list(df.columns)}")
-        # Return original df to avoid crash, but features will be missing
         return df
 
-    # 3. Determine League (Row-by-Row) - Robust & Standardized
-    # This prevents the bug where one game's league overwrites all defaults
+    # 3. Determine League (Row-by-Row) BEFORE name normalization
+    def get_row_league_key(l_val):
+        s = str(l_val).upper()
+        if "NCAAB" in s: return "NCAAB"
+        if "NCAAF" in s: return "NCAAF"
+        if "COLLEGE FOOTBALL" in s: return "NCAAF"
+        if "COLLEGE BASKETBALL" in s: return "NCAAB"
+        if "NHL" in s: return "NHL"
+        if "ICE HOCKEY" in s: return "NHL"
+        if "NFL" in s: return "NFL"
+        if "NBA" in s: return "NBA"
+        return "default"
 
-    # Create Series of keys aligned with DF index
     if league_col:
         league_keys = df[league_col].apply(get_row_league_key)
-        # Fix: Sync 'League' column to resolved key to prevent confusion and ensure correctness
-        # This fixes the "NBA Overwrite" bug where League might be missing or incorrect
         df['League'] = league_keys
     else:
         league_keys = pd.Series(["default"] * len(df), index=df.index)
         df['League'] = "default"
 
-    # 4. Create Series of Defaults aligned with DF index
-    # We pre-calculate these so we can pass them to map_stat
+    # 4. Normalize names (league-aware) AFTER league_keys exists
+    # Bind locals into lambda defaults to avoid closure/scope surprises
+    _hc, _ac, _lk = home_col, away_col, league_keys
 
-    def get_default_stat(key, stat_name):
-        return LEAGUE_AVERAGES.get(key, LEAGUE_AVERAGES["default"])[stat_name]
+    home_norm = df.apply(
+        lambda r, hc=_hc, lk=_lk: normalize_team_by_league(str(r[hc]), lk.at[r.name]),
+        axis=1
+    )
 
-    default_ppg = league_keys.apply(lambda k: get_default_stat(k, 'ppg'))
-    default_oppg = league_keys.apply(lambda k: get_default_stat(k, 'oppg'))
-    default_win_pct = league_keys.apply(lambda k: get_default_stat(k, 'win_pct'))
-    default_last5 = league_keys.apply(lambda k: get_default_stat(k, 'last5_win_pct'))
-    
-    # Use dict to collect columns to avoid fragmentation
-    features_data = {}
+    away_norm = df.apply(
+        lambda r, ac=_ac, lk=_lk: normalize_team_by_league(str(r[ac]), lk.at[r.name]),
+        axis=1
+    )
+
     
     if stats_df.empty:
         if not FREE_TIER_MODE:
