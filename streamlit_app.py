@@ -5336,18 +5336,6 @@ with tab_games:
 with tab_master:
     st.header("Master Analysis")
     kalshi_status = kalshi_health_check(league)
-    if not kalshi_status.get("configured"):
-        error_detail = kalshi_status.get("error") or "Kalshi is required and missing keys."
-        if kalshi_status.get("status_code"):
-            error_detail = f"{error_detail} (status {kalshi_status.get('status_code')}: {kalshi_status.get('response_text_snippet')})"
-        st.error(error_detail)
-        st.info("Master Analysis is disabled until Kalshi is available.")
-    else:
-        if kalshi_status.get("error") and not kalshi_status.get("ok"):
-            warn_detail = kalshi_status.get("error") or "Kalshi reachable but returned no markets; proceeding without Kalshi data."
-            st.warning(warn_detail)
-        if kalshi_status.get("warning"):
-            st.warning(kalshi_status.get("warning"))
     # === DEBUG: Show Kalshi Market Fetch Results ===
     with st.expander("🔍 Kalshi Debug Info", expanded=False):
         st.write("**Kalshi Markets Fetched:**")
@@ -5373,7 +5361,18 @@ with tab_master:
                 "league": first_game.get("league")
             })
     # === END DEBUG ===
-    
+    if not kalshi_status.get("configured"):
+        error_detail = kalshi_status.get("error") or "Kalshi is required and missing keys."
+        if kalshi_status.get("status_code"):
+            error_detail = f"{error_detail} (status {kalshi_status.get('status_code')}: {kalshi_status.get('response_text_snippet')})"
+        st.error(error_detail)
+        st.info("Master Analysis is disabled until Kalshi is available.")
+    else:
+        if kalshi_status.get("error") and not kalshi_status.get("ok"):
+            warn_detail = kalshi_status.get("error") or "Kalshi reachable but returned no markets; proceeding without Kalshi data."
+            st.warning(warn_detail)
+        if kalshi_status.get("warning"):
+            st.warning(kalshi_status.get("warning"))
     st.session_state.setdefault("kalshi_match_only", False)
     kalshi_match_only = st.checkbox(
         "Show only games with a Kalshi match",
