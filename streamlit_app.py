@@ -8003,7 +8003,7 @@ with tab_master:
                     "sentiment_score": float(sentiment_meta_for_export.get("sentiment_score") or 0.0),
                 }
                 
-                # Check for existing columns and fill only those to avoid Arrow/Type conflicts
+                # Apply each fill individually to avoid dictionary-fillna errors
                 for col, val in fill_map.items():
                     if col in master_df.columns:
                         master_df[col] = master_df[col].fillna(val)
@@ -8680,35 +8680,30 @@ with tab_master:
 
         # --- FINAL WHITELIST FIX (REPLACES 8681-8692) ---
         
-        # 1. Define the ONLY columns allowed to be seen in the table
-        # This automatically ignores 'kalshi_wanted_tokens' and other hidden lists
-        ui_whitelist = [
-            'league', 'Home', 'Away', 'Pick', 'AI_Prob', 
-            'Implied_Prob', 'Sentiment_Diff', 'spread_edge', 'status'
-        ]
+        # --- ROBUST TYPE-GUARD FIX FOR LINE 8681 ---
+        # 1. Define only display-safe columns (automatically drops token lists)
+        ui_whitelist = ['league', 'Home', 'Away', 'Pick', 'AI_Prob', 'Implied_Prob', 'Sentiment_Diff', 'spread_edge', 'status']
         
-        # 2. Filter the dataframe to ONLY include these columns
-        safe_cols = [c for c in ui_whitelist if c in top_df_display.columns]
-        top_df_ui = top_df_display[safe_cols].copy()
+        # 2. Filter the display dataframe
+        safe_cols_top = [c for c in ui_whitelist if c in top_df_display.columns]
+        top_df_ui = top_df_display[safe_cols_top].copy()
 
-        # 3. Force Numeric: Clean any numeric columns to prevent Arrow errors
-        numeric_fields = ['AI_Prob', 'Implied_Prob', 'spread_edge', 'Sentiment_Diff']
-        for col in numeric_fields:
+        # 3. Force Numeric consistency (Kills the Arrow crash)
+        for col in ['AI_Prob', 'Implied_Prob', 'spread_edge', 'Sentiment_Diff']:
             if col in top_df_ui.columns:
-                # 'coerce' turns text like "Unavailable" into NaN, then fill with 0.0
                 top_df_ui[col] = pd.to_numeric(top_df_ui[col], errors='coerce').fillna(0.0)
 
-        # 4. Force String: Clean text columns to ensure no hidden objects remain
+        # 4. Force String consistency
         for col in ['league', 'Home', 'Away', 'Pick', 'status']:
             if col in top_df_ui.columns:
                 top_df_ui[col] = top_df_ui[col].astype(str).replace('None', 'N/A')
 
-        # 5. SANITIZED DISPLAY
+        # 5. FINAL SANITIZED DISPLAY
         try:
             st.dataframe(top_df_ui, use_container_width=True, hide_index=True)
         except Exception as e:
-            st.error(f"Display failed due to data types: {e}")
-            st.table(top_df_ui.head(20)) # Safe fallback
+            st.error(f"Table display failed: {e}")
+            st.table(top_df_ui.head(10))
 
         export_cols = [
             "AI_Prob",
