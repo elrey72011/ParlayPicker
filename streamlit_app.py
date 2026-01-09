@@ -8678,21 +8678,21 @@ with tab_master:
             ]
             top_df_display = top_df_display.drop(columns=[c for c in ml_detail_cols if c in top_df_display.columns], errors="ignore")
 
-        # CRITICAL: Prevent PyArrow crash by removing non-serializable objects
-        cols_to_drop = ['kalshi_wanted_tokens', 'candidate_debug', 'winner_meta']
-        top_df_display = top_df_display.drop(columns=[c for c in cols_to_drop if c in top_df_display.columns], errors='ignore')
+        # --- SURGICAL FIX FOR LINE 8691 ---
+        # 1. Drop non-serializable columns (lists/objects) that crash PyArrow
+        unsafe_cols = ['kalshi_wanted_tokens', 'candidate_debug', 'winner_meta', 'raw_response']
+        top_df_display = top_df_display.drop(columns=[c for c in unsafe_cols if c in top_df_display.columns], errors='ignore')
 
-        # FORCE STRING: Convert any remaining objects to strings to be safe
-        for col in top_df_display.select_dtypes(include=['object']).columns:
-            top_df_display[col] = top_df_display[col].astype(str).replace('None', 'N/A')
+        # 2. STRICT WHITELIST: Only allow simple types to reach the UI
+        ui_whitelist = ['league', 'Home', 'Away', 'Pick', 'AI_Prob', 'Implied_Prob', 'Sentiment_Diff', 'spread_edge', 'status']
+        final_display_cols = [c for c in ui_whitelist if c in top_df_display.columns]
 
-        # Update Deprecated to_numeric Call (Safely)
-        for col in ['AI_Prob', 'Implied_Prob', 'Sentiment_Diff']:
+        # 3. FORCE NUMERIC: Convert any leftover strings in numeric columns
+        for col in ['AI_Prob', 'Implied_Prob', 'spread_edge', 'Sentiment_Diff']:
             if col in top_df_display.columns:
                 top_df_display[col] = pd.to_numeric(top_df_display[col], errors='coerce').fillna(0.0)
 
-        ui_whitelist = ['league', 'Home', 'Away', 'Pick', 'AI_Prob', 'Implied_Prob', 'Sentiment_Diff', 'spread_edge', 'status']
-        final_display_cols = [c for c in ui_whitelist if c in top_df_display.columns]
+        # 4. SANITIZED DISPLAY CALL
         st.dataframe(top_df_display[final_display_cols], use_container_width=True, hide_index=True)
 
         export_cols = [
@@ -9274,7 +9274,7 @@ with tab_shotgun:
                     # Final "Shotgun" Cleanup: Sanitization
                     if not parlay_df.empty:
                         # Convert to numeric where possible, fill NaN
-                        parlay_df = parlay_df.apply(lambda x: pd.to_numeric(x, errors='ignore')).fillna(0.0)
+                        parlay_df = parlay_df.apply(lambda x: pd.to_numeric(x, errors='coerce')).fillna(0.0)
 
                     try:
                         st.dataframe(
