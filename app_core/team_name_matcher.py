@@ -65,7 +65,8 @@ class TeamNameMatcher:
         'Vikings', 'Titans', 'Raiders', 'Stags', 'Broncs', 'Phoenix', 'Jaguars',
         'Gaels', 'Purple Eagles', 'Pioneers', 'Red Foxes', 'Saints', 'Warriors',
         'Peacocks', 'Falcons', 'Zips', 'Panthers', 'Norse', 'Golden Gophers',
-        'Trojans', 'Rams', 'Rebels', 'Hoosiers', 'Ducks', 'Buckeyes', 'Mammoth'
+        'Trojans', 'Rams', 'Rebels', 'Hoosiers', 'Ducks', 'Buckeyes', 'Mammoth',
+        'Blackhawks', 'Capitals', 'Jets', 'Kings', 'Blues', 'Suns'
     ]
     
     # Special case full replacements
