@@ -922,78 +922,82 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
         except Exception:
             return fill_val
 
-    # 0. Fix Case-Sensitive Overwrite (Ensure 'league' is authoritative)
-    # We strictly use sport_title if available, else league.
-    # We overwrite 'League' to match 'league' to prevent ambiguity downstream.
-    league_col = None
-    if 'sport_title' in df.columns:
-        league_col = 'sport_title'
-    elif 'league' in df.columns:
-        league_col = 'league'
-    elif 'League' in df.columns:
-        df['league'] = df['League']
-        league_col = 'league'
-    else:
-        league_col = None
+    # ------------------------------------------------------------
+    # INIT: defaults + feature container (MUST exist even if stats_df is empty)
+    # ------------------------------------------------------------
+    features_data: Dict[str, Any] = {}
 
-    def get_row_league_key(l_val):
-            s = str(l_val).upper()
-            # Explicit checks for college/other leagues FIRST to avoid partial "NBA" matches
-            if "NCAAB" in s: return "NCAAB"
-            if "NCAAF" in s: return "NCAAF"
-            if "COLLEGE FOOTBALL" in s: return "NCAAF"
-            if "COLLEGE BASKETBALL" in s: return "NCAAB"
-            if "NHL" in s: return "NHL"
-            if "ICE HOCKEY" in s: return "NHL"
-            if "NFL" in s: return "NFL"
-            if "NBA" in s: return "NBA"
-            return "default"
-    
-    # 1. Fetch Stats (Using new function)
-    stats_df = fetch_team_stats(api_clients, season_year=season_year)
-    
-    # 2. Identify home/away columns FIRST
-    home_col = 'Home' if 'Home' in df.columns else 'home_team'
-    away_col = 'Away' if 'Away' in df.columns else 'away_team'
+    # Defaults as Series aligned to df.index (so downstream concat works)
+    default_win_pct = pd.Series(0.50, index=df.index)
+    default_last5   = pd.Series(0.50, index=df.index)
+    default_ppg     = pd.Series(110.0, index=df.index)
+    default_oppg    = pd.Series(110.0, index=df.index)
+
+    # ------------------------------------------------------------
+    # 0) Determine league column (prefer sport_title, then league)
+    # ------------------------------------------------------------
+    league_col = None
+    if "sport_title" in df.columns:
+        league_col = "sport_title"
+    elif "league" in df.columns:
+        league_col = "league"
+    elif "League" in df.columns:
+        # normalize legacy capitalized column
+        df["league"] = df["League"]
+        league_col = "league"
+
+    # 1) Identify home/away columns early (used in logging + normalization)
+    home_col = "Home" if "Home" in df.columns else "home_team"
+    away_col = "Away" if "Away" in df.columns else "away_team"
 
     if home_col not in df.columns or away_col not in df.columns:
         logger.error(f"Missing home/away columns in dataframe. Columns: {list(df.columns)}")
         return df
 
-    # 3. Determine League (Row-by-Row) BEFORE name normalization
-    def get_row_league_key(l_val):
+    # ------------------------------------------------------------
+    # 2) Row-by-row league_key inference (single correct definition)
+    # ------------------------------------------------------------
+    def get_row_league_key(l_val: Any) -> str:
         s = str(l_val).upper()
-        if "NCAAB" in s: return "NCAAB"
-        if "NCAAF" in s: return "NCAAF"
-        if "COLLEGE FOOTBALL" in s: return "NCAAF"
-        if "COLLEGE BASKETBALL" in s: return "NCAAB"
-        if "NHL" in s: return "NHL"
-        if "ICE HOCKEY" in s: return "NHL"
-        if "NFL" in s: return "NFL"
-        if "NBA" in s: return "NBA"
+        # Explicit checks FIRST to avoid partial matches
+        if "NCAAB" in s or "COLLEGE BASKETBALL" in s:
+            return "NCAAB"
+        if "NCAAF" in s or "COLLEGE FOOTBALL" in s:
+            return "NCAAF"
+        if "NHL" in s or "ICE HOCKEY" in s:
+            return "NHL"
+        if "NFL" in s:
+            return "NFL"
+        if "NBA" in s:
+            return "NBA"
         return "default"
 
     if league_col:
         league_keys = df[league_col].apply(get_row_league_key)
-        df['League'] = league_keys
     else:
         league_keys = pd.Series(["default"] * len(df), index=df.index)
-        df['League'] = "default"
 
-    # 4. Normalize names (league-aware) AFTER league_keys exists
-    # Bind locals into lambda defaults to avoid closure/scope surprises
+    # Make sure we always have a stable League column for downstream use
+    df["League"] = league_keys
+
+    # ------------------------------------------------------------
+    # 3) Fetch stats AFTER league_keys exists (ok if empty)
+    # ------------------------------------------------------------
+    stats_df = fetch_team_stats(api_clients, season_year=season_year)
+
+    # ------------------------------------------------------------
+    # 4) Normalize team names league-aware (bind locals to avoid closure issues)
+    # ------------------------------------------------------------
     _hc, _ac, _lk = home_col, away_col, league_keys
 
     home_norm = df.apply(
         lambda r, hc=_hc, lk=_lk: normalize_team_by_league(str(r[hc]), lk.at[r.name]),
         axis=1
     )
-
     away_norm = df.apply(
         lambda r, ac=_ac, lk=_lk: normalize_team_by_league(str(r[ac]), lk.at[r.name]),
         axis=1
     )
-
     
     if stats_df.empty:
         if not FREE_TIER_MODE:
