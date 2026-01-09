@@ -226,7 +226,7 @@ MANUAL_TEAM_OVERRIDES = {
     "siena saints": "siena", "merrimack warriors": "merrimack",
     "mt. st. mary's mountaineers": "mount st marys", "saint peter's peacocks": "saint peters",
     "bowling green falcons": "bowling green", "akron zips": "akron",
-    "milwaukee panthers": "milwaukee", "northern Adaptive norse": "northern kentucky",
+    "milwaukee panthers": "milwaukee", "northern kentucky norse": "northern kentucky",
     "minnesota golden gophers": "minnesota", "usc trojans": "usc",
     "colorado st rams": "colorado state", "unlv rebels": "unlv",
     "indiana hoosiers": "indiana", "oregon ducks": "oregon",
