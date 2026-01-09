@@ -597,7 +597,7 @@ def fetch_ncaab_stats(season_year: int) -> List[Dict[str, Any]]:
             future = executor.submit(_scrape_worker)
             try:
                 # 5 Second Timeout
-                df = future.result(timeout=5)
+                df = future.result(timeout=15)
             except concurrent.futures.TimeoutError:
                 logger.warning("NCAAB stats fetch timed out (5s limit).")
                 return []
