@@ -8,6 +8,12 @@ import os
 import threading
 import concurrent.futures
 
+# -------------------------------------------------------------------
+# DEBUG FALLBACK LOG THROTTLING
+# -------------------------------------------------------------------
+_FALLBACK_LOG_COUNT = 0
+_FALLBACK_LOG_LIMIT = 15  # max number of fallback logs to emit
+
 # -------------------------------------------------------------------------
 # Library Imports with Fail-Safe Wrappers
 # -------------------------------------------------------------------------
@@ -1094,7 +1100,17 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
                     # Check which one failed
                     h_stat = "MISSING" if home_fallback[idx] else "OK"
                     a_stat = "MISSING" if away_fallback[idx] else "OK"
-                    logger.warning(f"DEBUG Stats Fallback Used: {league_str} {h_team} ({h_stat}) vs {a_team} ({a_stat})")
+                    global _FALLBACK_LOG_COUNT
+
+                    if _FALLBACK_LOG_COUNT < _FALLBACK_LOG_LIMIT:
+                        logger.warning(
+                            f"DEBUG Stats Fallback Used: {league} {home_team} ({home_status}) vs {away_team} ({away_status})"
+                        )
+                        _FALLBACK_LOG_COUNT += 1
+                    elif _FALLBACK_LOG_COUNT == _FALLBACK_LOG_LIMIT:
+                        logger.warning("DEBUG Stats Fallback Used: (further messages suppressed)")
+                        _FALLBACK_LOG_COUNT += 1
+
                 except Exception:
                     pass
 
