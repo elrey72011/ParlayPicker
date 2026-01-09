@@ -4842,8 +4842,10 @@ def match_kalshi_market(
     winner_reason_override: Optional[str] = None,
 ) -> Tuple[Dict[str, Dict[str, Any]], Dict[str, List[Dict[str, Any]]]]:
     """
-    Wrapper for strict return types and error safety.
+    Safely finds a Kalshi market match.
+    Guarantees a dictionary return to prevent TypeError.
     """
+    # Helper to build a safe fallback dictionary
     def base_result(reason: str, market_type: str) -> Dict[str, Any]:
         return {
             "kalshi_available": bool(kalshi_integrator),
@@ -4858,23 +4860,35 @@ def match_kalshi_market(
             "kalshi_line": None,
             "kalshi_title": None,
             "kalshi_yes_side": None,
-            # Fallback keys for strict dictionary return
             "sentiment_diff": 0.0,
             "status": "Neutral"
         }
 
     try:
+        # Use existing implementation logic if available
+        # Note: _match_kalshi_market_impl handles the complex fuzzy matching
         res, debug = _match_kalshi_market_impl(game, kalshi_markets, winner_reason_override)
+
+        # Validation: Ensure result is a dictionary
         if not isinstance(res, dict):
              return {
                 "winner": base_result("invalid_return_type", "winner"),
                 "spread": base_result("invalid_return_type", "spread"),
                 "total": base_result("invalid_return_type", "total"),
             }, {}
-        # Enforce defaults for winner if missing
-        if "winner" not in res:
-             res["winner"] = base_result("missing_winner_key", "winner")
+
+        # Enforce defaults for keys if missing
+        for k in ["winner", "spread", "total"]:
+            if k not in res or not isinstance(res[k], dict):
+                res[k] = base_result(f"missing_{k}_key", k)
+            # Ensure critical keys exist in sub-dictionaries
+            if "sentiment_diff" not in res[k]:
+                res[k]["sentiment_diff"] = 0.0
+            if "status" not in res[k]:
+                res[k]["status"] = "Neutral"
+
         return res, debug
+
     except Exception as exc:
         logger.error(f"match_kalshi_market failed: {exc}", exc_info=True)
         return {
@@ -7893,24 +7907,22 @@ with tab_master:
                     engine = get_prediction_engine()
                     probs = engine.predict_batch(inference_df)
 
-                    # Safe Access Implementation (Step 1)
-                    # Handle list/df mismatch robustly rather than all-or-nothing fallback
-                    safe_probs = []
-                    if probs:
-                        for i in range(len(master_df)):
-                            if i < len(probs):
-                                val = probs[i]
-                                # Ensure safe float
-                                try:
-                                    safe_probs.append(float(val))
-                                except (ValueError, TypeError):
-                                    safe_probs.append(0.5)
-                            else:
-                                safe_probs.append(0.5)
-                    else:
-                        safe_probs = [0.5] * len(master_df)
+                    # Safe Access Implementation (Strict Validation)
+                    if probs and len(probs) == len(inference_df):
+                        # Ensure strict index alignment in Pandas
+                        clean_probs = []
+                        for p in probs:
+                             try:
+                                 clean_probs.append(float(p))
+                             except (ValueError, TypeError):
+                                 clean_probs.append(0.5)
 
-                    master_df["AI_Prob"] = safe_probs
+                        predictions_series = pd.Series(clean_probs, index=inference_df.index)
+                        master_df.loc[inference_df.index, 'AI_Prob'] = predictions_series
+                    else:
+                        if probs:
+                             logger.warning(f"Prediction length mismatch: got {len(probs)}, expected {len(inference_df)}")
+                        master_df["AI_Prob"] = 0.5
 
                     # Safe Edge Calculation
                     implied_probs = pd.to_numeric(master_df.get("Implied_Prob"), errors='coerce').fillna(0.5)
@@ -8652,6 +8664,10 @@ with tab_master:
         other_cols = [c for c in top_df_display.columns if c not in available_cols]
         top_df_display = top_df_display[available_cols + other_cols]
 
+        # Final "Shotgun" Cleanup: Sanitization
+        if not top_df_display.empty:
+            top_df_display = top_df_display.apply(lambda x: pd.to_numeric(x, errors='ignore')).fillna(0.0)
+
         st.dataframe(
             top_df_display,
             column_order=available_cols + other_cols
@@ -9079,28 +9095,18 @@ with tab_shotgun:
             try:
                 df_shotgun = st.session_state["master_df"].copy()
 
-                # Ensure numeric columns for edge calc and display
-                # Fix Shotgun DataFrame Types: explicit cast with specific defaults
-                if 'ai_prob_base' in df_shotgun.columns:
-                    df_shotgun['ai_prob_base'] = pd.to_numeric(df_shotgun['ai_prob_base'], errors='coerce').fillna(0.0)
-
-                # User Request: Force sentiment_diff to numeric
-                if 'sentiment_diff' in df_shotgun.columns:
-                    df_shotgun['sentiment_diff'] = pd.to_numeric(df_shotgun['sentiment_diff'], errors='coerce').fillna(0.0)
-
-                if 'model_prob_home' in df_shotgun.columns:
-                    df_shotgun['model_prob_home'] = pd.to_numeric(df_shotgun['model_prob_home'], errors='coerce').fillna(0.5)
-
-                cols_to_numeric = [
+                # FIX: Sanitize ALL numeric columns early to prevent Arrow serialization crashes
+                numeric_cols = [
+                    'ai_prob_base', 'sentiment_diff', 'model_prob_home',
                     'final_probability', 'spread_implied_prob', 'total_implied_prob',
-                    'spread_width', 'total_width', 'AI_Prob', 'Implied_Prob', 'active_edge', 'total_edge', 'spread_edge'
+                    'spread_width', 'total_width', 'AI_Prob', 'Implied_Prob',
+                    'active_edge', 'total_edge', 'spread_edge'
                 ]
-                # Bulk convert using apply for efficiency, ensuring cols exist
-                if not df_shotgun.empty:
-                    valid_cols = [c for c in cols_to_numeric if c in df_shotgun.columns]
-                    if valid_cols:
-                        df_shotgun[valid_cols] = df_shotgun[valid_cols].apply(pd.to_numeric, errors='coerce').fillna(0.0)
-                        df_shotgun = df_shotgun.copy()
+
+                # Bulk convert ensuring existence
+                valid_numeric = [c for c in numeric_cols if c in df_shotgun.columns]
+                if valid_numeric:
+                    df_shotgun[valid_numeric] = df_shotgun[valid_numeric].apply(pd.to_numeric, errors='coerce').fillna(0.0)
 
                 # Filter: Remove rows with invalid probabilities (Fail-safe)
                 # Ensure we don't process "broken" rows with 0/null AI probs
@@ -9229,6 +9235,11 @@ with tab_shotgun:
                     parlay_df['Combined Prob'] = parlay_df['Combined Prob'].map('{:.1%}'.format)
                     parlay_df['Leg 1 Edge'] = parlay_df['Leg 1 Edge'].map('{:.1%}'.format)
                     parlay_df['Leg 2 Edge'] = parlay_df['Leg 2 Edge'].map('{:.1%}'.format)
+
+                    # Final "Shotgun" Cleanup: Sanitization
+                    if not parlay_df.empty:
+                        # Convert to numeric where possible, fill NaN
+                        parlay_df = parlay_df.apply(lambda x: pd.to_numeric(x, errors='ignore')).fillna(0.0)
 
                     st.dataframe(
                         parlay_df,
