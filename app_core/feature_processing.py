@@ -1098,8 +1098,8 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
                     h_team = df.loc[idx, home_col]
                     a_team = df.loc[idx, away_col]
                     # Check which one failed
-                    h_stat = "MISSING" if home_fallback[idx] else "OK"
-                    a_stat = "MISSING" if away_fallback[idx] else "OK"
+                    h_stat = "MISSING" if bool(home_fallback.loc[idx]) else "OK"
+                    a_stat = "MISSING" if bool(away_fallback.loc[idx]) else "OK"
                     if combined_fallback.any():
     fallback_indices = df.index[combined_fallback]
     for idx in fallback_indices:
@@ -1116,6 +1116,7 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
                     logger.warning(
                         f"DEBUG Stats Fallback Used: {league_str} {h_team} ({h_stat}) vs {a_team} ({a_stat})"
                     )
+
                     _FALLBACK_LOG_COUNT += 1
                 elif _FALLBACK_LOG_COUNT == _FALLBACK_LOG_LIMIT:
                     logger.warning("DEBUG Stats Fallback Used: (further messages suppressed)")
@@ -1128,7 +1129,7 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
                     pass
 
         # Home Stats
-        features_data['feature_home_win_pct'] = map_stat(home_norm, 'win_pct', default_win_pct)
+        features_data['feature_home_win_pct'] = map_stat(home_matched_names, 'win_pct', default_win_pct)
         features_data['feature_home_home_win_pct'] = map_stat(home_norm, 'home_win_pct', default_win_pct)
         features_data['feature_home_last5_win_pct'] = map_stat(home_norm, 'last5_win_pct', default_last5)
 
