@@ -1085,11 +1085,11 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
         away_fallback = away_matched_names.isna()
         combined_fallback = home_fallback | away_fallback
         features_data['feature_stats_fallback'] = combined_fallback
-
+        
         # NEW: stats_quality
         features_data['stats_quality'] = combined_fallback.apply(lambda x: "Low (Fallback)" if x else "High (Real)")
-
-       # inside enrich_with_model_features, where you log fallback rows:
+        
+        # LOGGING: cap spam (this should NOT contain feature computation)
         if combined_fallback.any():
             fallback_indices = df.index[combined_fallback]
             for idx in fallback_indices:
@@ -1109,10 +1109,13 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
                     elif _FALLBACK_LOG_COUNT == _FALLBACK_LOG_LIMIT:
                         logger.warning("DEBUG Stats Fallback Used: (further messages suppressed)")
                         _FALLBACK_LOG_COUNT += 1
-        
                 except Exception:
                     pass
-
+        
+        # ---------------------------------------------------
+        # FEATURE COMPUTATION (must run ONCE, not in loop)
+        # ---------------------------------------------------
+        
         # Home Stats (use matched names)
         features_data['feature_home_win_pct'] = map_stat(home_matched_names, 'win_pct', default_win_pct)
         features_data['feature_home_home_win_pct'] = map_stat(home_matched_names, 'home_win_pct', default_win_pct)
@@ -1121,7 +1124,7 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
         features_data['feature_home_oppg'] = map_stat(home_matched_names, 'points_allowed_per_game', default_oppg)
         features_data['feature_home_streak'] = map_stat(home_matched_names, 'streak', pd.Series(0.0, index=df.index))
         features_data['feature_home_turnovers'] = map_stat(home_matched_names, 'turnovers', pd.Series(0.0, index=df.index))
-    
+        
         # Away Stats (use matched names)
         features_data['feature_away_win_pct'] = map_stat(away_matched_names, 'win_pct', default_win_pct)
         features_data['feature_away_away_win_pct'] = map_stat(away_matched_names, 'away_win_pct', default_win_pct)
@@ -1130,7 +1133,7 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
         features_data['feature_away_oppg'] = map_stat(away_matched_names, 'points_allowed_per_game', default_oppg)
         features_data['feature_away_streak'] = map_stat(away_matched_names, 'streak', pd.Series(0.0, index=df.index))
         features_data['feature_away_turnovers'] = map_stat(away_matched_names, 'turnovers', pd.Series(0.0, index=df.index))
-    
+        
         # SCALING: NHL stats are ~3.0, model expects ~110.0. Scale by 35x if league is NHL.
         is_nhl = league_keys == "NHL"
         if is_nhl.any():
