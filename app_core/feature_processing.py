@@ -464,6 +464,28 @@ def fetch_nfl_stats(season_year: int) -> List[Dict[str, Any]]:
 
 @st.cache_data(ttl=21600)
 def fetch_ncaaf_stats(season_year: int) -> List[Dict[str, Any]]:
+    def _normalize_cfbd_token(raw: Any) -> str:
+        """Normalize CFBD token from Streamlit secrets.
+
+        Accepts:
+          - "Bearer <token>"
+          - "<token>"
+          - strings with leading/trailing whitespace (including accidental leading space before Bearer)
+
+        Returns:
+          - "<token>" (no 'Bearer', trimmed), or "" if empty.
+        """
+        if raw is None:
+            return ""
+        s = str(raw).strip()
+        if not s:
+            return ""
+        # Remove Bearer prefix (case-insensitive) if present
+        if s.lower().startswith("bearer"):
+            parts = s.split(None, 1)
+            s = parts[1].strip() if len(parts) == 2 else ""
+        return s.strip()
+
     """
     Fetch NCAAF stats using cfbd.
     Requires CFBD_API_KEY.
@@ -471,29 +493,33 @@ def fetch_ncaaf_stats(season_year: int) -> List[Dict[str, Any]]:
     """
     if cfbd is None:
         return []
-    
-    api_key = _get_secret("CFBD_API_KEY")
-    if not api_key:
+
+    raw_key = _get_secret("CFBD_API_KEY")
+    token = _normalize_cfbd_token(raw_key)
+    if not token:
         logger.warning("CFBD_API_KEY not found. Skipping NCAAF stats.")
         return []
 
-    # Ensure clean key (no double Bearer)
-    if api_key.startswith("Bearer "):
-        api_key = api_key.replace("Bearer ", "").strip()
+    # Configure CFBD client ONCE and reuse for both StatsApi and GamesApi
+    configuration = cfbd.Configuration()
+    configuration.api_key["Authorization"] = token
+    configuration.api_key_prefix["Authorization"] = "Bearer"
+    api_client = cfbd.ApiClient(configuration)
+    logger.info(f"CFBD auth prepared (token_length={len(token)})")
 
     def _fetch_for_year(yr: int) -> List[Any]:
         try:
-            # Step 1: Clean the token to ensure NO 'Bearer' or extra spaces
-            clean_key = api_key.replace("Bearer", "").strip()
-
-            # Step 2: Configure the CFBD Client correctly
-            configuration = cfbd.Configuration()
-            configuration.api_key['Authorization'] = clean_key
-            configuration.api_key_prefix['Authorization'] = 'Bearer'
-
-            api_instance = cfbd.StatsApi(cfbd.ApiClient(configuration))
+            api_instance = cfbd.StatsApi(api_client)
             return api_instance.get_team_stats(year=yr)
         except Exception as e:
+            status = getattr(e, "status", None)
+            msg = str(e)
+            if status == 401 or "401" in msg or "Unauthorized" in msg:
+                logger.warning(
+                    "CFBD unauthorized (401) when fetching NCAAF stats. "
+                    "Check CFBD_API_KEY format/value in Streamlit secrets."
+                )
+                return []
             logger.warning(f"NCAAF Stats fetch failed for {yr}: {e}")
             return []
 
@@ -503,111 +529,130 @@ def fetch_ncaaf_stats(season_year: int) -> List[Dict[str, Any]]:
 
         # 2. If empty, try previous year (handling Jan/Feb games for previous season)
         if not season_stats:
-            logger.warning(f"No NCAAF stats found for {season_year}. Trying {season_year - 1}...")
+            logger.warning(
+                f"No NCAAF stats found for {season_year}. Trying {season_year - 1}..."
+            )
             season_stats = _fetch_for_year(season_year - 1)
             # Update season_year for games fetch below
             if season_stats:
                 season_year = season_year - 1
 
         if not season_stats:
-            logger.error("NCAAF Stats Outage - Could not fetch stats for current or previous year.")
+            logger.error(
+                "NCAAF Stats Outage - Could not fetch stats for current or previous year."
+            )
             return []
 
-        # Setup configuration again for GamesApi (using correct year)
-        configuration = cfbd.Configuration()
-        configuration.api_key['Authorization'] = f"Bearer {api_key}"
-        games_api = cfbd.GamesApi(cfbd.ApiClient(configuration))
+        # Reuse SAME authenticated client for GamesApi (avoid mismatched/double-Bearer headers)
+        games_api = cfbd.GamesApi(api_client)
 
         try:
             season_games = games_api.get_games(year=season_year)
         except Exception as e:
+            status = getattr(e, "status", None)
+            msg = str(e)
+            if status == 401 or "401" in msg or "Unauthorized" in msg:
+                logger.warning(
+                    "CFBD unauthorized (401) when fetching NCAAF games. "
+                    "Check CFBD_API_KEY format/value in Streamlit secrets."
+                )
+                return []
             logger.warning(f"NCAAF Games API Unavailable: {e}")
             season_games = []
 
         # Build win pct map
         team_records = {}
-        for g in season_games:
-            if not g.home_team or not g.away_team: continue
+        for g in season_games or []:
+            try:
+                home = getattr(g, "home_team", None)
+                away = getattr(g, "away_team", None)
+                home_pts = getattr(g, "home_points", None)
+                away_pts = getattr(g, "away_points", None)
 
-            # Init if needed
-            for t in [g.home_team, g.away_team]:
-                if t not in team_records:
-                    team_records[t] = {'games': 0, 'wins': 0}
+                if not home or not away:
+                    continue
 
-            h_pts = g.home_points if g.home_points is not None else 0
-            a_pts = g.away_points if g.away_points is not None else 0
+                if home not in team_records:
+                    team_records[home] = {"wins": 0, "losses": 0}
+                if away not in team_records:
+                    team_records[away] = {"wins": 0, "losses": 0}
 
-            team_records[g.home_team]['games'] += 1
-            team_records[g.away_team]['games'] += 1
+                if home_pts is None or away_pts is None:
+                    continue  # game not played yet
 
-            if h_pts > a_pts:
-                team_records[g.home_team]['wins'] += 1
-            elif a_pts > h_pts:
-                team_records[g.away_team]['wins'] += 1
+                if home_pts > away_pts:
+                    team_records[home]["wins"] += 1
+                    team_records[away]["losses"] += 1
+                elif away_pts > home_pts:
+                    team_records[away]["wins"] += 1
+                    team_records[home]["losses"] += 1
+            except Exception:
+                continue
 
-        stats = []
-        for item in season_stats:
-            team_name = getattr(item, 'team', None)
-            if not team_name: continue
+        stats: List[Dict[str, Any]] = []
+        for offense in season_stats:
+            try:
+                team = getattr(offense, "team", None) or getattr(offense, "school", None)
+                if not team:
+                    continue
 
-            offense = getattr(item, 'offense', None)
-            defense = getattr(item, 'defense', None)
+                wins = team_records.get(team, {}).get("wins", 0)
+                losses = team_records.get(team, {}).get("losses", 0)
+                games_played = wins + losses
+                win_pct = (wins / games_played) if games_played > 0 else 0.0
 
-            if not offense: continue
+                # Common cfbd stat fields (best-effort)
+                ppg = getattr(offense, "points", None)
+                if ppg is None:
+                    ppg = getattr(offense, "points_per_game", 0.0) or 0.0
 
-            # Map stat.offense.points -> points_per_game
-            # Need games count to average if points is Total.
-            # 'games' is usually on the item itself for TeamSeasonStat
-            games = getattr(item, 'games', 0)
-            # If not there, try offense (handles older versions too)
-            if not games and hasattr(offense, 'games'):
-                games = getattr(offense, 'games', 0)
+                oppg = getattr(offense, "points_allowed", None)
+                if oppg is None:
+                    oppg = getattr(offense, "points_allowed_per_game", 0.0) or 0.0
 
-            # If still not found, check our team_records map
-            if not games and team_name in team_records:
-                games = team_records[team_name]['games']
+                ypg = getattr(offense, "yards_per_game", None)
+                if ypg is None:
+                    ypg = getattr(offense, "yards", 0.0) or 0.0
 
-            pts = getattr(offense, 'points', 0)
-            pts_allowed = getattr(defense, 'points', 0) if defense else 0
+                avg_tov = getattr(offense, "turnovers", None)
+                if avg_tov is None:
+                    avg_tov = getattr(offense, "turnovers_per_game", 0.0) or 0.0
 
-            # Additional metrics if available (yards etc)
-            total_yards = getattr(offense, 'total_yards', 0)
+                # Normalize to floats where possible
+                try:
+                    ppg = float(ppg)
+                except Exception:
+                    ppg = 0.0
+                try:
+                    oppg = float(oppg)
+                except Exception:
+                    oppg = 0.0
+                try:
+                    ypg = float(ypg)
+                except Exception:
+                    ypg = 0.0
+                try:
+                    avg_tov = float(avg_tov)
+                except Exception:
+                    avg_tov = 0.0
 
-            # Calculate PPG / OPPG / YPG
-            if games and games > 0:
-                ppg = pts / games
-                oppg = pts_allowed / games
-                # yards_per_game logic as requested
-                ypg = total_yards / games
-                tov = getattr(offense, 'turnovers', 0)
-                avg_tov = tov / games
-            else:
-                ppg = 0.0
-                oppg = 0.0
-                ypg = 0.0
-                avg_tov = 0.0
+                stats.append(
+                    {
+                        "team": team,
+                        "wins": wins,
+                        "losses": losses,
+                        "win_pct": win_pct,
+                        "points_per_game": ppg,
+                        "points_allowed_per_game": oppg,
+                        "yards_per_game": ypg,
+                        "turnovers": avg_tov,
+                        "streak": 0.0,
+                        "last5_win_pct": win_pct,
+                    }
+                )
+            except Exception:
+                continue
 
-            # Win PCT from map or default
-            if team_name in team_records and team_records[team_name]['games'] > 0:
-                rec = team_records[team_name]
-                w_pct = rec['wins'] / rec['games']
-            else:
-                w_pct = 0.5
-
-            stats.append({
-                "team_norm": robust_normalize_team(team_name),
-                "league_key": "NCAAF",
-                "win_pct": w_pct,
-                "home_win_pct": w_pct,
-                "away_win_pct": w_pct,
-                "points_per_game": ppg,
-                "points_allowed_per_game": oppg,
-                "yards_per_game": ypg, # Added per instructions
-                "turnovers": avg_tov,
-                "streak": 0.0,
-                "last5_win_pct": win_pct
-            })
-            
         logger.info(f"Successfully fetched NCAAF stats for {len(stats)} teams.")
         return stats
 
