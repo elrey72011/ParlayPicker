@@ -18,6 +18,34 @@ _FALLBACK_LOG_LIMIT = 15  # max number of fallback logs to emit
 # Library Imports with Fail-Safe Wrappers
 # -------------------------------------------------------------------------
 
+import re
+
+_MASCOT_WORDS = {
+    # common NCAA mascots/labels that appear in matchup feeds but not in stats keys
+    "rockets","jaspers","golden","grizzlies","raiders","vikings","rams","peacocks",
+    "mountaineers","stags","terriers","seawolves","hawks","eagles","tigers","bears",
+    "bulldogs","wildcats","panthers","lions","wolves","knights","spartans","bruins",
+    "aztecs","dons","titans","trojans","gators","utes","aggies","lobos","cowboys",
+    "rebels","cougars","hornets","blue","devils","tar","heels","boilermakers",
+    "illini","hoosiers","buckeyes","wolverines","badgers","gophers","nittany",
+    "lions","longhorns","sooners","jayhawks","cyclones","hurricanes","seminoles",
+    "crimson","tide","volunteers","razorbacks","gamecocks"
+}
+
+def _strip_mascot_words(name_norm: str) -> str:
+    """
+    Turn 'toledo rockets' -> 'toledo'
+    Keep things like 'state', 'st', 'saint', 'mount', etc.
+    """
+    parts = name_norm.split()
+    # remove trailing mascot-like words (and occasional two-word mascots like "golden grizzlies")
+    while parts and parts[-1] in _MASCOT_WORDS:
+        parts.pop()
+    while len(parts) >= 2 and f"{parts[-2]} {parts[-1]}" in { "golden grizzlies", "tar heels", "crimson tide", "blue devils", "nittany lions", "boilermakers" }:
+        parts = parts[:-2]
+    return " ".join(parts).strip()
+
+
 try:
     from nba_api.stats.endpoints import leaguedashteamstats
 except ImportError:
