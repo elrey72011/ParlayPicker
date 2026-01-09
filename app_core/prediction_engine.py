@@ -10,6 +10,11 @@ from app_core.team_name_matcher import TeamNameMatcher
 logger = logging.getLogger(__name__)
 
 # -------------------------------------------------------------------
+# LOG-ONCE GUARDS
+# -------------------------------------------------------------------
+_LOGGED_MODEL_MISSING = False
+
+# -------------------------------------------------------------------
 # MODEL INPUT SCHEMA
 # -------------------------------------------------------------------
 
@@ -98,7 +103,12 @@ class PredictionEngine:
                 logger.error(f"Jules: Failed to load model from {model_path}: {e}. Using statistical fallback.")
         else:
             self.use_fallback = True
-            logger.warning(f"Jules: Model file missing at {model_path}. Using statistical fallback.")
+            global _LOGGED_MODEL_MISSING
+            if not _LOGGED_MODEL_MISSING:
+                logger.warning(
+                    f"Jules: Model file missing at {model_path}. Using statistical fallback."
+                )
+                _LOGGED_MODEL_MISSING = True
 
     def get_prediction(self, features):
         """
