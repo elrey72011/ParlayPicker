@@ -5125,7 +5125,7 @@ enable_sentiment = st.sidebar.checkbox(
     "Enable Sentiment", value=st.session_state.get("enable_sentiment", True)
 )
 st.session_state["enable_sentiment"] = enable_sentiment
-if st.sidebar.button("Load Games", use_container_width=True):
+if st.sidebar.button("Load Games", width="stretch"):
     # Invalidate master_df when loading new games
     if "master_df" in st.session_state:
         del st.session_state["master_df"]
@@ -8714,7 +8714,7 @@ with tab_master:
             else:
                 top_df_ui[col] = top_df_ui[col].astype(str).replace('None', 'N/A')
 
-        st.dataframe(top_df_ui, use_container_width=True, hide_index=True)
+        st.dataframe(top_df_ui, width="stretch", hide_index=True)
 
         export_cols = [
             "AI_Prob",
@@ -9097,7 +9097,7 @@ with tab_master:
                     else:
                         top_df_ui[col] = top_df_ui[col].astype(str).replace('None', 'N/A')
 
-                st.dataframe(top_df_ui, use_container_width=True, hide_index=True)
+                st.dataframe(top_df_ui, width="stretch", hide_index=True)
             except Exception as e:
                  st.error(f"Display Error (Master Table): {e}")
             st.caption(
@@ -9306,7 +9306,7 @@ with tab_shotgun:
                                 "Combined Edge": st.column_config.TextColumn("Combined Edge"),
                                 "Combined Prob": st.column_config.TextColumn("Combined Prob"),
                             },
-                            use_container_width=True
+                            width="stretch"
                         )
                     except Exception as e:
                         st.error(f"Display Error (Shotgun Parlays): {e}")

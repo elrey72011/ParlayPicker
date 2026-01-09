@@ -203,23 +203,29 @@ TEAM_NAME_MAPPING = {
 # Manual overrides for team name normalization failures
 # Keys and values should be lowercase normalized forms
 MANUAL_TEAM_OVERRIDES = {
-    "miami oh redhawks": "miami ohio",
-    "miami oh": "miami ohio",
-    "usc trojans": "usc",
-    "unlv rebels": "unlv",
-    "ohio state buckeyes": "ohio state",
-    "indiana hoosiers": "indiana",
-    "oregon ducks": "oregon",
-    "st louis blues": "st louis",
-    "utah mammoth": "utah",
-    "washington state": "washington st",
-    "mississippi state": "mississippi st",
-    "michigan state": "michigan st",
-    "kansas state": "kansas st",
-    "arizona state": "arizona st",
-    "florida state": "florida st",
-    "oregon state": "oregon st",
-    "penn state": "penn st"
+    # NBA Fixes
+    "phoenix suns": "phoenix",
+    # NHL Fixes
+    "utah mammoth": "utah", "chicago blackhawks": "chicago",
+    "washington capitals": "washington", "winnipeg jets": "winnipeg",
+    "los angeles kings": "los angeles", "st louis blues": "st louis",
+    # NCAAB/NCAAF Log Fixes (13:42)
+    "toledo rockets": "toledo", "miami (oh) redhawks": "miami (oh)",
+    "manhattan jaspers": "manhattan", "canisius golden griffins": "canisius",
+    "oakland golden grizzlies": "oakland", "cleveland st vikings": "cleveland st",
+    "detroit mercy titans": "detroit mercy", "wright st raiders": "wright st",
+    "fairfield stags": "fairfield", "rider broncs": "rider",
+    "green bay phoenix": "green bay", "iupui jaguars": "iupui",
+    "iona gaels": "iona", "niagara purple eagles": "niagara",
+    "sacred heart pioneers": "sacred heart", "marist red foxes": "marist",
+    "siena saints": "siena", "merrimack warriors": "merrimack",
+    "mt. st. mary's mountaineers": "mt st marys", "saint peter's peacocks": "saint peters",
+    "bowling green falcons": "bowling green", "akron zips": "akron",
+    "milwaukee panthers": "milwaukee", "northern kentucky norse": "northern kentucky",
+    "minnesota golden gophers": "minnesota", "usc trojans": "usc",
+    "colorado st rams": "colorado st", "unlv rebels": "unlv",
+    "indiana hoosiers": "indiana", "oregon ducks": "oregon",
+    "ohio state buckeyes": "ohio state"
 }
 
 def _get_secret(key_name: str) -> Optional[str]:
@@ -478,15 +484,14 @@ def fetch_ncaaf_stats(season_year: int) -> List[Dict[str, Any]]:
 
     def _fetch_for_year(yr: int) -> List[Any]:
         try:
-            logger.info(f"Fetching NCAAF stats for season: {yr}")
-            # User requirement: Ensure header uses Bearer token correctly via configuration setup
+            # CLEAN TOKEN: Remove any existing "Bearer " or spaces to prevent double-prefixing
+            clean_key = api_key.replace("Bearer", "").strip()
+
             configuration = cfbd.Configuration()
-            # Standard CFBD python client authentication
-            configuration.api_key['Authorization'] = api_key
+            configuration.api_key['Authorization'] = clean_key
             configuration.api_key_prefix['Authorization'] = 'Bearer'
 
             api_instance = cfbd.StatsApi(cfbd.ApiClient(configuration))
-            # Fixed method name for cfbd 5.13.2
             return api_instance.get_team_stats(year=yr)
         except Exception as e:
             logger.warning(f"NCAAF Stats fetch failed for {yr}: {e}")

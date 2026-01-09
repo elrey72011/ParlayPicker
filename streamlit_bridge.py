@@ -311,7 +311,7 @@ sport = None if sport_filter == 'All' else sport_filter
 predictions_df = format_for_streamlit_table(sport=sport)
 
 if not predictions_df.empty:
-    st.dataframe(predictions_df, use_container_width=True)
+    st.dataframe(predictions_df, width="stretch")
     
     # Show summary
     st.subheader("Summary")
