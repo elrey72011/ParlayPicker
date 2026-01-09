@@ -1078,40 +1078,39 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
             return pd.Series(values, index=df.index).fillna(default_series)
 
         # Populate features_data using the new fuzzy map_stat
-        
                 # Track Fallbacks (True if team not matched)
                 home_fallback = home_matched_names.isna()
                 away_fallback = away_matched_names.isna()
                 combined_fallback = home_fallback | away_fallback
                 features_data["feature_stats_fallback"] = combined_fallback
-
-        # NEW: stats_quality
-        features_data["stats_quality"] = combined_fallback.apply(
-            lambda x: "Low (Fallback)" if x else "High (Real)"
-        )
-
-        # Log fallback rows (throttled so logs don't spam)
-        if combined_fallback.any():
-            fallback_indices = df.index[combined_fallback]
-            for idx in fallback_indices:
-                try:
-                    league_str = df.loc[idx, league_col] if league_col else "Unknown"
-                    h_team = df.loc[idx, home_col]
-                    a_team = df.loc[idx, away_col]
-                    h_stat = "MISSING" if bool(home_fallback.loc[idx]) else "OK"
-                    a_stat = "MISSING" if bool(away_fallback.loc[idx]) else "OK"
-
-                    global _FALLBACK_LOG_COUNT
-                    if _FALLBACK_LOG_COUNT < _FALLBACK_LOG_LIMIT:
-                        logger.warning(
-                            f"DEBUG Stats Fallback Used: {league_str} {h_team} ({h_stat}) vs {a_team} ({a_stat})"
-                        )
-                        _FALLBACK_LOG_COUNT += 1
-                    elif _FALLBACK_LOG_COUNT == _FALLBACK_LOG_LIMIT:
-                        logger.warning("DEBUG Stats Fallback Used: (further messages suppressed)")
-                        _FALLBACK_LOG_COUNT += 1
-                except Exception:
-                    pass
+        
+                # Stats quality label
+                features_data["stats_quality"] = combined_fallback.apply(
+                    lambda x: "Low (Fallback)" if x else "High (Real)"
+                )
+        
+                # Log fallback rows (throttled)
+                if combined_fallback.any():
+                    fallback_indices = df.index[combined_fallback]
+                    for idx in fallback_indices:
+                        try:
+                            league_str = df.loc[idx, league_col] if league_col else "Unknown"
+                            h_team = df.loc[idx, home_col]
+                            a_team = df.loc[idx, away_col]
+                            h_stat = "MISSING" if bool(home_fallback.loc[idx]) else "OK"
+                            a_stat = "MISSING" if bool(away_fallback.loc[idx]) else "OK"
+        
+                            global _FALLBACK_LOG_COUNT
+                            if _FALLBACK_LOG_COUNT < _FALLBACK_LOG_LIMIT:
+                                logger.warning(
+                                    f"DEBUG Stats Fallback Used: {league_str} {h_team} ({h_stat}) vs {a_team} ({a_stat})"
+                                )
+                                _FALLBACK_LOG_COUNT += 1
+                            elif _FALLBACK_LOG_COUNT == _FALLBACK_LOG_LIMIT:
+                                logger.warning("DEBUG Stats Fallback Used: (further messages suppressed)")
+                                _FALLBACK_LOG_COUNT += 1
+                        except Exception:
+                            pass
 
         # Home Stats (use matched names)
         features_data["feature_home_win_pct"] = map_stat(home_matched_names, "win_pct", default_win_pct)
