@@ -936,19 +936,23 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
     else:
         league_col = None
 
+    def get_row_league_key(l_val):
+            s = str(l_val).upper()
+            # Explicit checks for college/other leagues FIRST to avoid partial "NBA" matches
+            if "NCAAB" in s: return "NCAAB"
+            if "NCAAF" in s: return "NCAAF"
+            if "COLLEGE FOOTBALL" in s: return "NCAAF"
+            if "COLLEGE BASKETBALL" in s: return "NCAAB"
+            if "NHL" in s: return "NHL"
+            if "ICE HOCKEY" in s: return "NHL"
+            if "NFL" in s: return "NFL"
+            if "NBA" in s: return "NBA"
+            return "default"
+    
     # 1. Fetch Stats (Using new function)
     stats_df = fetch_team_stats(api_clients, season_year=season_year)
     
-    # 2. Normalize Names in Master DF (create temporary series)
-    # Handle variable column names (Home vs home_team)
-    home_col = 'Home' if 'Home' in df.columns else 'home_team'
-    away_col = 'Away' if 'Away' in df.columns else 'away_team'
-    
-    if home_col not in df.columns or away_col not in df.columns:
-        logger.error(f"Missing home/away columns in dataframe. Columns: {list(df.columns)}")
-        # Return original df to avoid crash, but features will be missing
-        return df
-
+    # 2. Normalize Names in Master DF (league-aware)
     home_norm = df.apply(
         lambda r: normalize_team_by_league(str(r[home_col]), league_keys.at[r.name]),
         axis=1
@@ -958,22 +962,14 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
         lambda r: normalize_team_by_league(str(r[away_col]), league_keys.at[r.name]),
         axis=1
     )
+    
+    if home_col not in df.columns or away_col not in df.columns:
+        logger.error(f"Missing home/away columns in dataframe. Columns: {list(df.columns)}")
+        # Return original df to avoid crash, but features will be missing
+        return df
 
     # 3. Determine League (Row-by-Row) - Robust & Standardized
     # This prevents the bug where one game's league overwrites all defaults
-
-    def get_row_league_key(l_val):
-        s = str(l_val).upper()
-        # Explicit checks for college/other leagues FIRST to avoid partial "NBA" matches
-        if "NCAAB" in s: return "NCAAB"
-        if "NCAAF" in s: return "NCAAF"
-        if "COLLEGE FOOTBALL" in s: return "NCAAF"
-        if "COLLEGE BASKETBALL" in s: return "NCAAB"
-        if "NHL" in s: return "NHL"
-        if "ICE HOCKEY" in s: return "NHL"
-        if "NFL" in s: return "NFL"
-        if "NBA" in s: return "NBA"
-        return "default"
 
     # Create Series of keys aligned with DF index
     if league_col:
