@@ -203,21 +203,28 @@ TEAM_NAME_MAPPING = {
 # Manual overrides for team name normalization failures
 # Keys and values should be lowercase normalized forms
 MANUAL_TEAM_OVERRIDES = {
-    # Log-Specific Fixes (12:51 Traceback)
-    "minnesota golden gophers": "minnesota",
-    "usc trojans": "usc",
-    "colorado st rams": "colorado st",
-    "unlv rebels": "unlv",
-    "indiana hoosiers": "indiana",
-    "oregon ducks": "oregon",
-    "portland pilots": "portland",
-    "pacific tigers": "pacific",
-    "loyola marymount lions": "loyola marymount",
-    "san francisco dons": "san francisco",
-    "gonzaga bulldogs": "gonzaga",
-    "santa clara broncos": "santa clara",
-    "ole miss rebels": "ole miss",
-    "miami hurricanes": "miami",
+    # College Basketball/Football Overwrites from 13:14 Logs
+    "toledo rockets": "toledo", "miami (oh) redhawks": "miami (oh)",
+    "manhattan jaspers": "manhattan", "canisius golden griffins": "canisius",
+    "oakland golden grizzlies": "oakland", "cleveland st vikings": "cleveland st",
+    "detroit mercy titans": "detroit mercy", "wright st raiders": "wright st",
+    "fairfield stags": "fairfield", "rider broncs": "rider",
+    "green bay phoenix": "green bay", "iupui jaguars": "iupui",
+    "iona gaels": "iona", "niagara purple eagles": "niagara",
+    "sacred heart pioneers": "sacred heart", "marist red foxes": "marist",
+    "siena saints": "siena", "merrimack warriors": "merrimack",
+    "mt. st. mary's mountaineers": "mt st marys", "saint peter's peacocks": "saint peters",
+    "bowling green falcons": "bowling green", "akron zips": "akron",
+    "milwaukee panthers": "milwaukee", "northern kentucky norse": "northern kentucky",
+    "minnesota golden gophers": "minnesota", "usc trojans": "usc",
+    "colorado st rams": "colorado st", "unlv rebels": "unlv",
+    "indiana hoosiers": "indiana", "oregon ducks": "oregon",
+    "ohio state buckeyes": "ohio state",
+
+    # NHL Overwrites from 13:14 Logs
+    "chicago blackhawks": "chicago", "washington capitals": "washington",
+    "winnipeg jets": "winnipeg", "los angeles kings": "los angeles",
+    "utah mammoth": "utah", "st louis blues": "st louis",
 
     # General State & UC Overwrites
     "washington state": "washington st", "mississippi state": "mississippi st",
@@ -233,8 +240,7 @@ MANUAL_TEAM_OVERRIDES = {
     "uc davis": "ucd", "uc irvine": "uci", "uc san diego": "ucsd",
     "uc riverside": "ucr", "csu fullerton": "csuf",
     "csu bakersfield": "csub", "csu northridge": "csun",
-    "north dakota state": "north dakota st",
-    "southeast missouri state": "se missouri st",
+    "north dakota state": "north dakota st", "southeast missouri state": "se missouri st",
     "arkansas little rock": "arkansas-little rock"
 }
 
@@ -288,8 +294,12 @@ def robust_normalize_team(name: str) -> str:
     # Remove common suffixes that might remain or be specific
     suffixes = [
         ' bulls', ' tigers', ' mountaineers', ' blue hens', ' university', ' college',
-        ' golden gophers', ' trojans', ' rams', ' rebels', ' hoosiers', ' ducks',
-        ' pilots', ' lions', ' dons', ' bulldogs', ' broncos', ' hurricanes'
+        ' rockets', ' redhawks', ' jaspers', ' golden griffins', ' golden grizzlies',
+        ' vikings', ' titans', ' raiders', ' stags', ' broncs', ' phoenix', ' jaguars',
+        ' gaels', ' purple eagles', ' pioneers', ' red foxes', ' saints', ' warriors',
+        ' peacocks', ' falcons', ' zips', ' panthers', ' norse', ' golden gophers',
+        ' trojans', ' rams', ' rebels', ' hoosiers', ' ducks', ' buckeyes',
+        ' blackhawks', ' capitals', ' jets', ' kings', ' mammoth', ' blues'
     ]
     for s in suffixes:
         if name.endswith(s):
