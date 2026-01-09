@@ -1114,8 +1114,8 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
             global _FALLBACK_LOG_COUNT
                 if _FALLBACK_LOG_COUNT < _FALLBACK_LOG_LIMIT:
                     logger.warning(
-                        f"DEBUG Stats Fallback Used: {league_str} {h_team} ({h_stat}) vs {a_team} ({a_stat})"
-                    )
+                            f"DEBUG Stats Fallback Used: {league_str} {h_team} ({h_stat}) vs {a_team} ({a_stat})"
+                        )
 
                     _FALLBACK_LOG_COUNT += 1
                 elif _FALLBACK_LOG_COUNT == _FALLBACK_LOG_LIMIT:
@@ -1128,10 +1128,14 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
                 except Exception:
                     pass
 
-        # Home Stats
+        # Home Stats (use matched names)
         features_data['feature_home_win_pct'] = map_stat(home_matched_names, 'win_pct', default_win_pct)
-        features_data['feature_home_home_win_pct'] = map_stat(home_norm, 'home_win_pct', default_win_pct)
-        features_data['feature_home_last5_win_pct'] = map_stat(home_norm, 'last5_win_pct', default_last5)
+        features_data['feature_home_home_win_pct'] = map_stat(home_matched_names, 'home_win_pct', default_win_pct)
+        features_data['feature_home_last5_win_pct'] = map_stat(home_matched_names, 'last5_win_pct', default_last5)
+        features_data['feature_home_ppg'] = map_stat(home_matched_names, 'points_per_game', default_ppg)
+        features_data['feature_home_oppg'] = map_stat(home_matched_names, 'points_allowed_per_game', default_oppg)
+        features_data['feature_home_streak'] = map_stat(home_matched_names, 'streak', pd.Series(0.0, index=df.index))
+        features_data['feature_home_turnovers'] = map_stat(home_matched_names, 'turnovers', pd.Series(0.0, index=df.index))
 
         # New key mapping for standardized keys
         features_data['feature_home_ppg'] = map_stat(home_norm, 'points_per_game', default_ppg)
@@ -1148,10 +1152,14 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
         features_data['feature_home_streak'] = map_stat(home_norm, 'streak', pd.Series(0.0, index=df.index))
         features_data['feature_home_turnovers'] = map_stat(home_norm, 'turnovers', pd.Series(0.0, index=df.index))
         
-        # Away Stats
-        features_data['feature_away_win_pct'] = map_stat(away_norm, 'win_pct', default_win_pct)
-        features_data['feature_away_away_win_pct'] = map_stat(away_norm, 'away_win_pct', default_win_pct)
-        features_data['feature_away_last5_win_pct'] = map_stat(away_norm, 'last5_win_pct', default_last5)
+        # Away Stats (use matched names)
+        features_data['feature_away_win_pct'] = map_stat(away_matched_names, 'win_pct', default_win_pct)
+        features_data['feature_away_away_win_pct'] = map_stat(away_matched_names, 'away_win_pct', default_win_pct)
+        features_data['feature_away_last5_win_pct'] = map_stat(away_matched_names, 'last5_win_pct', default_last5)
+        features_data['feature_away_ppg'] = map_stat(away_matched_names, 'points_per_game', default_ppg)
+        features_data['feature_away_oppg'] = map_stat(away_matched_names, 'points_allowed_per_game', default_oppg)
+        features_data['feature_away_streak'] = map_stat(away_matched_names, 'streak', pd.Series(0.0, index=df.index))
+        features_data['feature_away_turnovers'] = map_stat(away_matched_names, 'turnovers', pd.Series(0.0, index=df.index))
 
         features_data['feature_away_ppg'] = map_stat(away_norm, 'points_per_game', default_ppg)
         features_data['feature_away_oppg'] = map_stat(away_norm, 'points_allowed_per_game', default_oppg)
