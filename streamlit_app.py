@@ -7996,17 +7996,17 @@ with tab_master:
                 master_df = pd.concat([master_df, meta_df], axis=1)
 
                 # Fill remaining fields using bulk fillna
+                # bulk fillna fix: Ensure no 'None' values in the dictionary
                 fill_map = {
-                    "sentiment_status": sentiment_meta_for_export.get("sentiment_status"),
-                    "sentiment_confidence": sentiment_meta_for_export.get("sentiment_confidence"),
-                    "sentiment_score": sentiment_meta_for_export.get("sentiment_score"),
+                    "sentiment_status": str(sentiment_meta_for_export.get("sentiment_status") or "ok"),
+                    "sentiment_confidence": float(sentiment_meta_for_export.get("sentiment_confidence") or 0.0),
+                    "sentiment_score": float(sentiment_meta_for_export.get("sentiment_score") or 0.0),
                 }
-                # Ensure columns exist before fillna
-                cols_to_ensure = list(fill_map.keys()) + ["spread_sentiment_arrow", "total_sentiment_arrow", "spread_sentiment_note", "total_sentiment_note"]
-                missing_cols = [c for c in cols_to_ensure if c not in master_df.columns]
-                if missing_cols:
-                    # Add missing as None/NaN first
-                    master_df = pd.concat([master_df, pd.DataFrame(columns=missing_cols)], axis=1)
+                
+                # Check for existing columns and fill only those to avoid Arrow/Type conflicts
+                for col, val in fill_map.items():
+                    if col in master_df.columns:
+                        master_df[col] = master_df[col].fillna(val)
 
                 # Fill specified fields
                 master_df = master_df.fillna(fill_map)
