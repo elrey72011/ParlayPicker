@@ -1089,21 +1089,18 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
         # NEW: stats_quality
         features_data['stats_quality'] = combined_fallback.apply(lambda x: "Low (Fallback)" if x else "High (Real)")
 
-       # LOGGING: Fallbacks (cap spam)
+       # inside enrich_with_model_features, where you log fallback rows:
         if combined_fallback.any():
             fallback_indices = df.index[combined_fallback]
-        
-            global _FALLBACK_LOG_COUNT
             for idx in fallback_indices:
                 try:
-                    league_str = df.loc[idx, league_col] if league_col else str(league_keys.at[idx])
+                    league_str = df.loc[idx, league_col] if league_col else "Unknown"
                     h_team = df.loc[idx, home_col]
                     a_team = df.loc[idx, away_col]
-        
-                    # Check which one failed
                     h_stat = "MISSING" if bool(home_fallback.loc[idx]) else "OK"
                     a_stat = "MISSING" if bool(away_fallback.loc[idx]) else "OK"
         
+                    global _FALLBACK_LOG_COUNT
                     if _FALLBACK_LOG_COUNT < _FALLBACK_LOG_LIMIT:
                         logger.warning(
                             f"DEBUG Stats Fallback Used: {league_str} {h_team} ({h_stat}) vs {a_team} ({a_stat})"
@@ -1112,7 +1109,7 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
                     elif _FALLBACK_LOG_COUNT == _FALLBACK_LOG_LIMIT:
                         logger.warning("DEBUG Stats Fallback Used: (further messages suppressed)")
                         _FALLBACK_LOG_COUNT += 1
-                        # after this, keep looping silently without logging
+        
                 except Exception:
                     pass
 
