@@ -372,6 +372,10 @@ def fetch_ncaaf_stats(season_year: int) -> List[Dict[str, Any]]:
         logger.warning("CFBD_API_KEY not found. Skipping NCAAF stats.")
         return []
 
+    # Ensure clean key (no double Bearer)
+    if api_key.startswith("Bearer "):
+        api_key = api_key.replace("Bearer ", "").strip()
+
     def _fetch_for_year(yr: int) -> List[Any]:
         try:
             logger.info(f"Fetching NCAAF stats for season: {yr}")

@@ -4286,7 +4286,7 @@ def filter_kalshi_game_markets(
 
             if not prefix_ok:
                 continue
-            if date_token and date_token not in t:
+            if date_token and not any(tok in t for tok in allowed_date_tokens):
                 # Check if we have strong team code matches as fallback
                 if not (home_codes and any(code in t for code in home_codes) and 
                         away_codes and any(code in t for code in away_codes)):
@@ -8024,20 +8024,16 @@ with tab_master:
                 master_df = pd.concat([master_df, meta_df], axis=1)
 
                 # Fill remaining fields using bulk fillna
-                # bulk fillna fix: Ensure no 'None' values in the dictionary
+                # Fix: Ensure no 'None' values are passed to fillna
                 fill_map = {
                     "sentiment_status": str(sentiment_meta_for_export.get("sentiment_status") or "ok"),
                     "sentiment_confidence": float(sentiment_meta_for_export.get("sentiment_confidence") or 0.0),
                     "sentiment_score": float(sentiment_meta_for_export.get("sentiment_score") or 0.0),
                 }
-                
-                # Apply each fill individually to avoid dictionary-fillna errors
+                # Apply individually to avoid ValueError
                 for col, val in fill_map.items():
                     if col in master_df.columns:
                         master_df[col] = master_df[col].fillna(val)
-
-                # Fill specified fields
-                master_df = master_df.fillna(fill_map)
                 # Fill visual cols with empty string
                 visual_cols = ["spread_sentiment_arrow", "total_sentiment_arrow", "spread_sentiment_note", "total_sentiment_note"]
                 master_df[visual_cols] = master_df[visual_cols].fillna("")
@@ -8706,32 +8702,19 @@ with tab_master:
             ]
             top_df_display = top_df_display.drop(columns=[c for c in ml_detail_cols if c in top_df_display.columns], errors="ignore")
 
-        # --- FINAL WHITELIST FIX (REPLACES 8681-8692) ---
-        
-        # --- ROBUST TYPE-GUARD FIX FOR LINE 8681 ---
-        # 1. Define only display-safe columns (automatically drops token lists)
+        # --- FINAL WHITELIST FIX ---
         ui_whitelist = ['league', 'Home', 'Away', 'Pick', 'AI_Prob', 'Implied_Prob', 'Sentiment_Diff', 'spread_edge', 'status']
-        
-        # 2. Filter the display dataframe
-        safe_cols_top = [c for c in ui_whitelist if c in top_df_display.columns]
-        top_df_ui = top_df_display[safe_cols_top].copy()
+        safe_cols = [c for c in ui_whitelist if c in top_df_display.columns] # or df_master_view_display at line 8946
+        top_df_ui = top_df_display[safe_cols].copy()
 
-        # 3. Force Numeric consistency (Kills the Arrow crash)
-        for col in ['AI_Prob', 'Implied_Prob', 'spread_edge', 'Sentiment_Diff']:
-            if col in top_df_ui.columns:
+        # Force Numeric and String consistency
+        for col in top_df_ui.columns:
+            if col in ['AI_Prob', 'Implied_Prob', 'spread_edge', 'Sentiment_Diff']:
                 top_df_ui[col] = pd.to_numeric(top_df_ui[col], errors='coerce').fillna(0.0)
-
-        # 4. Force String consistency
-        for col in ['league', 'Home', 'Away', 'Pick', 'status']:
-            if col in top_df_ui.columns:
+            else:
                 top_df_ui[col] = top_df_ui[col].astype(str).replace('None', 'N/A')
 
-        # 5. FINAL SANITIZED DISPLAY
-        try:
-            st.dataframe(top_df_ui, use_container_width=True, hide_index=True)
-        except Exception as e:
-            st.error(f"Table display failed: {e}")
-            st.table(top_df_ui.head(10))
+        st.dataframe(top_df_ui, use_container_width=True, hide_index=True)
 
         export_cols = [
             "AI_Prob",
@@ -9102,31 +9085,19 @@ with tab_master:
                 if 'kalshi_wanted_tokens' in df_master_view_display.columns:
                     df_master_view_display = df_master_view_display.drop(columns=['kalshi_wanted_tokens'])
 
-                # --- UNIVERSAL TYPE-GUARD (REPLACES LINE 8946) ---
-                # 1. Define only display-safe columns
+                # --- FINAL WHITELIST FIX ---
                 ui_whitelist = ['league', 'Home', 'Away', 'Pick', 'AI_Prob', 'Implied_Prob', 'Sentiment_Diff', 'spread_edge', 'status']
-                
-                # 2. Filter the dataframe to ONLY include these columns
-                safe_cols = [c for c in ui_whitelist if c in df_master_view_display.columns]
+                safe_cols = [c for c in ui_whitelist if c in df_master_view_display.columns] # or df_master_view_display at line 8946
                 top_df_ui = df_master_view_display[safe_cols].copy()
-                
-                # 3. Force Numeric Consistency
-                numeric_fields = ['AI_Prob', 'Implied_Prob', 'spread_edge', 'Sentiment_Diff']
-                for col in numeric_fields:
-                    if col in top_df_ui.columns:
+
+                # Force Numeric and String consistency
+                for col in top_df_ui.columns:
+                    if col in ['AI_Prob', 'Implied_Prob', 'spread_edge', 'Sentiment_Diff']:
                         top_df_ui[col] = pd.to_numeric(top_df_ui[col], errors='coerce').fillna(0.0)
-                
-                # 4. Force String Consistency
-                for col in ['league', 'Home', 'Away', 'Pick', 'status']:
-                    if col in top_df_ui.columns:
+                    else:
                         top_df_ui[col] = top_df_ui[col].astype(str).replace('None', 'N/A')
-                
-                # 5. FINAL SANITIZED DISPLAY
-                try:
-                    st.dataframe(top_df_ui, use_container_width=True, hide_index=True)
-                except Exception as e:
-                    st.error(f"Table display failed: {e}")
-                    st.table(top_df_ui.head(10)) # Safe fallback
+
+                st.dataframe(top_df_ui, use_container_width=True, hide_index=True)
             except Exception as e:
                  st.error(f"Display Error (Master Table): {e}")
             st.caption(
