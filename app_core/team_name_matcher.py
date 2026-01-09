@@ -60,7 +60,12 @@ class TeamNameMatcher:
         'Terriers', 'Spiders', 'Dukes', 'Flyers', 'Explorers', 'Bonnies',
         'Patriots', 'Billikens', 'Griffins', 'Peacocks', 'Stags', 'Jaspers',
         'Gaels', 'Saints', 'Friars', 'Pirates', 'Hoyas', 'Blue Demons',
-        'Musketeers', 'Bulldogs', 'Hoyas', 'Friars', 'Titans', 'Matadors'
+        'Musketeers', 'Bulldogs', 'Hoyas', 'Friars', 'Titans', 'Matadors',
+        'Rockets', 'RedHawks', 'Jaspers', 'Golden Griffins', 'Golden Grizzlies',
+        'Vikings', 'Titans', 'Raiders', 'Stags', 'Broncs', 'Phoenix', 'Jaguars',
+        'Gaels', 'Purple Eagles', 'Pioneers', 'Red Foxes', 'Saints', 'Warriors',
+        'Peacocks', 'Falcons', 'Zips', 'Panthers', 'Norse', 'Golden Gophers',
+        'Trojans', 'Rams', 'Rebels', 'Hoosiers', 'Ducks', 'Buckeyes', 'Mammoth'
     ]
     
     # Special case full replacements
@@ -194,6 +199,13 @@ class TeamNameMatcher:
         'texas am': 'texas am',
         'corpus christi': 'texas am corpus christi',
         'tamucc': 'texas am corpus christi',
+        'miami oh': 'miami ohio',
+        'mt st marys': 'mount st marys',
+        'st peters': 'saint peters',
+        'utah mammoth': 'utah',
+        'ohio state buckeyes': 'ohio state',
+        'cleveland st': 'cleveland state',
+        'wright st': 'wright state',
     }
     
     @classmethod

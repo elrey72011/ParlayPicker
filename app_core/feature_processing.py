@@ -203,45 +203,23 @@ TEAM_NAME_MAPPING = {
 # Manual overrides for team name normalization failures
 # Keys and values should be lowercase normalized forms
 MANUAL_TEAM_OVERRIDES = {
-    # College Basketball/Football Overwrites from 13:14 Logs
-    "toledo rockets": "toledo", "miami (oh) redhawks": "miami (oh)",
-    "manhattan jaspers": "manhattan", "canisius golden griffins": "canisius",
-    "oakland golden grizzlies": "oakland", "cleveland st vikings": "cleveland st",
-    "detroit mercy titans": "detroit mercy", "wright st raiders": "wright st",
-    "fairfield stags": "fairfield", "rider broncs": "rider",
-    "green bay phoenix": "green bay", "iupui jaguars": "iupui",
-    "iona gaels": "iona", "niagara purple eagles": "niagara",
-    "sacred heart pioneers": "sacred heart", "marist red foxes": "marist",
-    "siena saints": "siena", "merrimack warriors": "merrimack",
-    "mt. st. mary's mountaineers": "mt st marys", "saint peter's peacocks": "saint peters",
-    "bowling green falcons": "bowling green", "akron zips": "akron",
-    "milwaukee panthers": "milwaukee", "northern kentucky norse": "northern kentucky",
-    "minnesota golden gophers": "minnesota", "usc trojans": "usc",
-    "colorado st rams": "colorado st", "unlv rebels": "unlv",
-    "indiana hoosiers": "indiana", "oregon ducks": "oregon",
+    "miami oh redhawks": "miami ohio",
+    "miami oh": "miami ohio",
+    "usc trojans": "usc",
+    "unlv rebels": "unlv",
     "ohio state buckeyes": "ohio state",
-
-    # NHL Overwrites from 13:14 Logs
-    "chicago blackhawks": "chicago", "washington capitals": "washington",
-    "winnipeg jets": "winnipeg", "los angeles kings": "los angeles",
-    "utah mammoth": "utah", "st louis blues": "st louis",
-
-    # General State & UC Overwrites
-    "washington state": "washington st", "mississippi state": "mississippi st",
-    "michigan state": "michigan st", "kansas state": "kansas st",
-    "arizona state": "arizona st", "florida state": "florida st",
-    "oregon state": "oregon st", "penn state": "penn st",
-    "nc state": "nc st", "north carolina state": "nc st",
-    "ohio state": "ohio st", "oklahoma state": "oklahoma st",
-    "boise state": "boise st", "fresno state": "fresno st",
-    "san diego state": "san diego st", "san jose state": "san jose st",
-    "utah state": "utah st", "colorado state": "colorado st",
-    "iowa state": "iowa st", "uc santa barbara": "ucsb",
-    "uc davis": "ucd", "uc irvine": "uci", "uc san diego": "ucsd",
-    "uc riverside": "ucr", "csu fullerton": "csuf",
-    "csu bakersfield": "csub", "csu northridge": "csun",
-    "north dakota state": "north dakota st", "southeast missouri state": "se missouri st",
-    "arkansas little rock": "arkansas-little rock"
+    "indiana hoosiers": "indiana",
+    "oregon ducks": "oregon",
+    "st louis blues": "st louis",
+    "utah mammoth": "utah",
+    "washington state": "washington st",
+    "mississippi state": "mississippi st",
+    "michigan state": "michigan st",
+    "kansas state": "kansas st",
+    "arizona state": "arizona st",
+    "florida state": "florida st",
+    "oregon state": "oregon st",
+    "penn state": "penn st"
 }
 
 def _get_secret(key_name: str) -> Optional[str]:
@@ -503,7 +481,9 @@ def fetch_ncaaf_stats(season_year: int) -> List[Dict[str, Any]]:
             logger.info(f"Fetching NCAAF stats for season: {yr}")
             # User requirement: Ensure header uses Bearer token correctly via configuration setup
             configuration = cfbd.Configuration()
-            configuration.api_key = {"Authorization": f"Bearer {api_key}"}
+            # Standard CFBD python client authentication
+            configuration.api_key['Authorization'] = api_key
+            configuration.api_key_prefix['Authorization'] = 'Bearer'
 
             api_instance = cfbd.StatsApi(cfbd.ApiClient(configuration))
             # Fixed method name for cfbd 5.13.2
