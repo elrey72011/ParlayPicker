@@ -476,10 +476,13 @@ def fetch_ncaaf_stats(season_year: int) -> List[Dict[str, Any]]:
         s = str(raw).strip()
         if not s:
             return ""
+        # Remove Bearer prefix (case-insensitive) if present
         if s.lower().startswith("bearer"):
             parts = s.split(None, 1)
             s = parts[1].strip() if len(parts) == 2 else ""
-        return s.strip()
+        # CRITICAL: remove ALL whitespace/newlines from multiline secrets
+        s = "".join(s.split())
+        return s
 
     if cfbd is None:
         return []
