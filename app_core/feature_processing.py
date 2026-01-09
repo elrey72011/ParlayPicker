@@ -465,32 +465,16 @@ def fetch_nfl_stats(season_year: int) -> List[Dict[str, Any]]:
 @st.cache_data(ttl=21600)
 def fetch_ncaaf_stats(season_year: int) -> List[Dict[str, Any]]:
     def _normalize_cfbd_token(raw: Any) -> str:
-        """Normalize CFBD token from Streamlit secrets.
-
-        Accepts:
-          - "Bearer <token>"
-          - "<token>"
-          - strings with leading/trailing whitespace (including accidental leading space before Bearer)
-
-        Returns:
-          - "<token>" (no 'Bearer', trimmed), or "" if empty.
-        """
         if raw is None:
             return ""
         s = str(raw).strip()
         if not s:
             return ""
-        # Remove Bearer prefix (case-insensitive) if present
         if s.lower().startswith("bearer"):
             parts = s.split(None, 1)
             s = parts[1].strip() if len(parts) == 2 else ""
         return s.strip()
 
-    """
-    Fetch NCAAF stats using cfbd.
-    Requires CFBD_API_KEY.
-    Tries current season, then previous season if empty.
-    """
     if cfbd is None:
         return []
 
@@ -500,85 +484,98 @@ def fetch_ncaaf_stats(season_year: int) -> List[Dict[str, Any]]:
         logger.warning("CFBD_API_KEY not found. Skipping NCAAF stats.")
         return []
 
-    # Configure CFBD client ONCE and reuse for both StatsApi and GamesApi
-    configuration = cfbd.Configuration()
-    configuration.api_key["Authorization"] = token
-    configuration.api_key_prefix["Authorization"] = "Bearer"
-    api_client = cfbd.ApiClient(configuration)
+    def _make_client(primary: bool) -> "cfbd.ApiClient":
+        """
+        primary=True  -> api_key + api_key_prefix (Bearer)
+        primary=False -> access_token (Bearer token)
+        """
+        cfg = cfbd.Configuration()
+        if primary:
+            cfg.api_key["Authorization"] = token
+            cfg.api_key_prefix["Authorization"] = "Bearer"
+        else:
+            # Alternate method: many OpenAPI clients treat access_token as Bearer automatically
+            cfg.access_token = token
+        return cfbd.ApiClient(cfg)
+
+    # Primary client first
+    api_client_primary = _make_client(primary=True)
+    api_client_fallback = _make_client(primary=False)
+
     logger.info(f"CFBD auth prepared (token_length={len(token)})")
 
-    def _fetch_for_year(yr: int) -> List[Any]:
-        try:
-            api_instance = cfbd.StatsApi(api_client)
-            return api_instance.get_team_stats(year=yr)
-        except Exception as e:
-            status = getattr(e, "status", None)
-            msg = str(e)
-            if status == 401 or "401" in msg or "Unauthorized" in msg:
-                logger.warning(
-                    "CFBD unauthorized (401) when fetching NCAAF stats. "
-                    "Check CFBD_API_KEY format/value in Streamlit secrets."
-                )
+    def _is_unauthorized(e: Exception) -> bool:
+        status = getattr(e, "status", None)
+        msg = str(e)
+        return status == 401 or "401" in msg or "Unauthorized" in msg
+
+    def _fetch_stats_for_year(yr: int) -> List[Any]:
+        # Try primary auth, then fallback auth
+        for attempt_name, api_client in (("primary", api_client_primary), ("fallback", api_client_fallback)):
+            try:
+                api_instance = cfbd.StatsApi(api_client)
+                return api_instance.get_team_stats(year=yr)
+            except Exception as e:
+                if _is_unauthorized(e):
+                    logger.warning(
+                        f"CFBD unauthorized (401) when fetching NCAAF stats ({attempt_name}). "
+                        "Check CFBD_API_KEY value in Streamlit secrets."
+                    )
+                    continue
+                logger.warning(f"NCAAF Stats fetch failed for {yr} ({attempt_name}): {e}")
                 return []
-            logger.warning(f"NCAAF Stats fetch failed for {yr}: {e}")
-            return []
+        return []
+
+    def _fetch_games_for_year(yr: int) -> List[Any]:
+        for attempt_name, api_client in (("primary", api_client_primary), ("fallback", api_client_fallback)):
+            try:
+                games_api = cfbd.GamesApi(api_client)
+                return games_api.get_games(year=yr)
+            except Exception as e:
+                if _is_unauthorized(e):
+                    logger.warning(
+                        f"CFBD unauthorized (401) when fetching NCAAF games ({attempt_name}). "
+                        "Check CFBD_API_KEY value in Streamlit secrets."
+                    )
+                    continue
+                logger.warning(f"NCAAF Games API Unavailable for {yr} ({attempt_name}): {e}")
+                return []
+        return []
 
     try:
-        # 1. Try requested season year
-        season_stats = _fetch_for_year(season_year)
+        # 1) requested year
+        season_stats = _fetch_stats_for_year(season_year)
 
-        # 2. If empty, try previous year (handling Jan/Feb games for previous season)
+        # 2) fallback to prior year if empty
         if not season_stats:
-            logger.warning(
-                f"No NCAAF stats found for {season_year}. Trying {season_year - 1}..."
-            )
-            season_stats = _fetch_for_year(season_year - 1)
-            # Update season_year for games fetch below
+            logger.warning(f"No NCAAF stats found for {season_year}. Trying {season_year - 1}...")
+            season_stats = _fetch_stats_for_year(season_year - 1)
             if season_stats:
                 season_year = season_year - 1
 
+        # If still empty, do NOT treat as outage; just return []
         if not season_stats:
-            logger.error(
-                "NCAAF Stats Outage - Could not fetch stats for current or previous year."
-            )
+            logger.warning("NCAAF stats unavailable (CFBD auth failed or no data). Continuing without NCAAF stats.")
             return []
 
-        # Reuse SAME authenticated client for GamesApi (avoid mismatched/double-Bearer headers)
-        games_api = cfbd.GamesApi(api_client)
+        season_games = _fetch_games_for_year(season_year)
 
-        try:
-            season_games = games_api.get_games(year=season_year)
-        except Exception as e:
-            status = getattr(e, "status", None)
-            msg = str(e)
-            if status == 401 or "401" in msg or "Unauthorized" in msg:
-                logger.warning(
-                    "CFBD unauthorized (401) when fetching NCAAF games. "
-                    "Check CFBD_API_KEY format/value in Streamlit secrets."
-                )
-                return []
-            logger.warning(f"NCAAF Games API Unavailable: {e}")
-            season_games = []
-
-        # Build win pct map
-        team_records = {}
+        # Build win pct map (same logic as before)
+        team_records: Dict[str, Dict[str, int]] = {}
         for g in season_games or []:
             try:
                 home = getattr(g, "home_team", None)
                 away = getattr(g, "away_team", None)
                 home_pts = getattr(g, "home_points", None)
                 away_pts = getattr(g, "away_points", None)
-
                 if not home or not away:
                     continue
 
-                if home not in team_records:
-                    team_records[home] = {"wins": 0, "losses": 0}
-                if away not in team_records:
-                    team_records[away] = {"wins": 0, "losses": 0}
+                team_records.setdefault(home, {"wins": 0, "losses": 0})
+                team_records.setdefault(away, {"wins": 0, "losses": 0})
 
                 if home_pts is None or away_pts is None:
-                    continue  # game not played yet
+                    continue
 
                 if home_pts > away_pts:
                     team_records[home]["wins"] += 1
@@ -601,7 +598,6 @@ def fetch_ncaaf_stats(season_year: int) -> List[Dict[str, Any]]:
                 games_played = wins + losses
                 win_pct = (wins / games_played) if games_played > 0 else 0.0
 
-                # Common cfbd stat fields (best-effort)
                 ppg = getattr(offense, "points", None)
                 if ppg is None:
                     ppg = getattr(offense, "points_per_game", 0.0) or 0.0
@@ -618,36 +614,24 @@ def fetch_ncaaf_stats(season_year: int) -> List[Dict[str, Any]]:
                 if avg_tov is None:
                     avg_tov = getattr(offense, "turnovers_per_game", 0.0) or 0.0
 
-                # Normalize to floats where possible
-                try:
-                    ppg = float(ppg)
-                except Exception:
-                    ppg = 0.0
-                try:
-                    oppg = float(oppg)
-                except Exception:
-                    oppg = 0.0
-                try:
-                    ypg = float(ypg)
-                except Exception:
-                    ypg = 0.0
-                try:
-                    avg_tov = float(avg_tov)
-                except Exception:
-                    avg_tov = 0.0
+                def _to_float(x: Any) -> float:
+                    try:
+                        return float(x)
+                    except Exception:
+                        return 0.0
 
                 stats.append(
                     {
                         "team": team,
                         "wins": wins,
                         "losses": losses,
-                        "win_pct": win_pct,
-                        "points_per_game": ppg,
-                        "points_allowed_per_game": oppg,
-                        "yards_per_game": ypg,
-                        "turnovers": avg_tov,
+                        "win_pct": float(win_pct),
+                        "points_per_game": _to_float(ppg),
+                        "points_allowed_per_game": _to_float(oppg),
+                        "yards_per_game": _to_float(ypg),
+                        "turnovers": _to_float(avg_tov),
                         "streak": 0.0,
-                        "last5_win_pct": win_pct,
+                        "last5_win_pct": float(win_pct),
                     }
                 )
             except Exception:
