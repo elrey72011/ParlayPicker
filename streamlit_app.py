@@ -8678,40 +8678,28 @@ with tab_master:
             ]
             top_df_display = top_df_display.drop(columns=[c for c in ml_detail_cols if c in top_df_display.columns], errors="ignore")
 
-        # Enforce column order for Shotgun/Top Picks
-        desired_order = ["league", "Home", "Away", "Implied_Prob", "AI_Prob", "Pick", "spread_edge"]
-        available_cols = [c for c in desired_order if c in top_df_display.columns]
-        other_cols = [c for c in top_df_display.columns if c not in available_cols]
-        top_df_display = top_df_display[available_cols + other_cols]
+        # Define only the columns we WANT the user to see
+        # Jules: Added actual column names to ensure display is not empty while respecting strict filter
+        display_columns = [
+            'league', 'Home', 'Away', 'Implied_Prob', 'AI_Prob', 'Pick', 'spread_edge',
+            'home_team', 'away_team', 'odds_home', 'odds_away', 'ai_prob_base', 'model_prob_home', 'sentiment_diff', 'Sentiment_Diff'
+        ]
 
-        # Final "Shotgun" Cleanup: Sanitization
-        if not top_df_display.empty:
-            # Bulletproof: Force numeric columns to numeric types
-            target_numeric_cols = ['AI_Prob', 'Implied_Prob', 'final_probability', 'spread_edge', 'total_edge', 'active_edge', 'sentiment_score', 'model_prob_home']
-            for c in target_numeric_cols:
-                if c in top_df_display.columns:
-                    top_df_display[c] = pd.to_numeric(top_df_display[c], errors='coerce').fillna(0.0)
+        # Filter for existing columns only to avoid KeyError
+        existing_cols = [c for c in display_columns if c in top_df_display.columns]
+        safe_display_df = top_df_display[existing_cols].copy()
 
-            # General cleanup for others
-            top_df_display = top_df_display.apply(lambda x: pd.to_numeric(x, errors='ignore')).fillna(0.0)
-
-        # Mandatory type-guard for Arrow serialization
-        numeric_cols = ['ai_prob_base', 'model_prob_home', 'odds_home', 'odds_away', 'sentiment_diff']
-        for col in numeric_cols:
-            if col in top_df_display.columns:
-                top_df_display[col] = pd.to_numeric(top_df_display[col], errors='coerce').fillna(0.0)
-
-        # Only pass columns that actually exist in the final dataframe
-        final_display_cols = [c for c in (available_cols + other_cols) if c in top_df_display.columns]
-
-        # Drop the internal token column to prevent PyArrow crash
-        if 'kalshi_wanted_tokens' in top_df_display.columns:
-            top_df_display = top_df_display.drop(columns=['kalshi_wanted_tokens'])
+        numeric_fields = ['ai_prob_base', 'model_prob_home', 'odds_home', 'odds_away', 'sentiment_diff', 'AI_Prob', 'Implied_Prob', 'spread_edge', 'Sentiment_Diff']
+        for col in numeric_fields:
+            if col in safe_display_df.columns:
+                safe_display_df[col] = pd.to_numeric(safe_display_df[col], errors='coerce').fillna(0.0)
 
         try:
-            st.dataframe(top_df_display, column_order=final_display_cols)
+            st.dataframe(safe_display_df, use_container_width=True, hide_index=True)
         except Exception as e:
-            st.error(f"Display Error: Please check data types. {e}")
+            st.error(f"UI Rendering Error: {e}")
+            # Fallback to a basic table if the dataframe still fails
+            st.table(safe_display_df.head(10))
 
         export_cols = [
             "AI_Prob",
