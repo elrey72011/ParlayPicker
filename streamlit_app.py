@@ -8678,24 +8678,22 @@ with tab_master:
             ]
             top_df_display = top_df_display.drop(columns=[c for c in ml_detail_cols if c in top_df_display.columns], errors="ignore")
 
-        # STRICT WHITELIST: No other columns allowed in the UI
-        ui_whitelist = ['home_team', 'away_team', 'odds_home', 'odds_away', 'ai_prob_base', 'model_prob_home', 'sentiment_diff', 'status', 'Home', 'Away', 'league', 'Pick', 'AI_Prob', 'Implied_Prob', 'Sentiment_Diff', 'spread_edge']
+        # CRITICAL: Prevent PyArrow crash by removing non-serializable objects
+        cols_to_drop = ['kalshi_wanted_tokens', 'candidate_debug', 'winner_meta']
+        top_df_display = top_df_display.drop(columns=[c for c in cols_to_drop if c in top_df_display.columns], errors='ignore')
 
-        # Filter for columns that actually exist to avoid KeyError
-        existing_whitelist = [c for c in ui_whitelist if c in top_df_display.columns]
-        ui_display_df = top_df_display[existing_whitelist].copy()
+        # FORCE STRING: Convert any remaining objects to strings to be safe
+        for col in top_df_display.select_dtypes(include=['object']).columns:
+            top_df_display[col] = top_df_display[col].astype(str).replace('None', 'N/A')
 
-        # Force Numeric
-        for col in ['ai_prob_base', 'model_prob_home', 'odds_home', 'odds_away', 'sentiment_diff', 'AI_Prob', 'Implied_Prob', 'Sentiment_Diff', 'spread_edge']:
-            if col in ui_display_df.columns:
-                ui_display_df[col] = pd.to_numeric(ui_display_df[col], errors='coerce').fillna(0.0)
+        # Update Deprecated to_numeric Call (Safely)
+        for col in ['AI_Prob', 'Implied_Prob', 'Sentiment_Diff']:
+            if col in top_df_display.columns:
+                top_df_display[col] = pd.to_numeric(top_df_display[col], errors='coerce').fillna(0.0)
 
-        # Force String
-        for col in ['home_team', 'away_team', 'status', 'Home', 'Away', 'league', 'Pick']:
-            if col in ui_display_df.columns:
-                ui_display_df[col] = ui_display_df[col].astype(str).replace('None', 'N/A')
-
-        st.dataframe(ui_display_df, use_container_width=True, hide_index=True)
+        ui_whitelist = ['league', 'Home', 'Away', 'Pick', 'AI_Prob', 'Implied_Prob', 'Sentiment_Diff', 'spread_edge', 'status']
+        final_display_cols = [c for c in ui_whitelist if c in top_df_display.columns]
+        st.dataframe(top_df_display[final_display_cols], use_container_width=True, hide_index=True)
 
         export_cols = [
             "AI_Prob",
