@@ -203,13 +203,13 @@ TEAM_NAME_MAPPING = {
 # Manual overrides for team name normalization failures
 # Keys and values should be lowercase normalized forms
 MANUAL_TEAM_OVERRIDES = {
-    # NBA/NHL Fixes (13:58 Logs)
-    "phoenix suns": "phoenix", "chicago blackhawks": "chicago",
-    "washington capitals": "washington", "winnipeg jets": "winnipeg",
+    # NBA/NHL
+    "phoenix suns": "phoenix", "winnipeg jets": "winnipeg",
     "los angeles kings": "los angeles", "utah mammoth": "utah",
-    "st louis blues": "st louis",
+    "st louis blues": "st louis", "chicago blackhawks": "chicago",
+    "washington capitals": "washington",
 
-    # NCAAB/NCAAF Fixes (13:58 Logs)
+    # NCAAB/NCAAF Log Fixes (13:14 - 14:17)
     "toledo rockets": "toledo", "miami (oh) redhawks": "miami ohio",
     "manhattan jaspers": "manhattan", "canisius golden griffins": "canisius",
     "oakland golden grizzlies": "oakland", "cleveland st vikings": "cleveland state",
@@ -484,10 +484,13 @@ def fetch_ncaaf_stats(season_year: int) -> List[Dict[str, Any]]:
 
     def _fetch_for_year(yr: int) -> List[Any]:
         try:
-            # Standard CFBD client configuration
+            # Standard CFBD python client configuration
             configuration = cfbd.Configuration()
-            # Set the key and the prefix separately
-            configuration.api_key['Authorization'] = api_key.replace("Bearer", "").strip()
+
+            # Use the dictionary setter to ensure Bearer is applied correctly
+            # This prevents the 'Bearer Bearer' or missing Bearer errors
+            api_key_clean = api_key.replace("Bearer", "").strip()
+            configuration.api_key['Authorization'] = api_key_clean
             configuration.api_key_prefix['Authorization'] = 'Bearer'
 
             api_instance = cfbd.StatsApi(cfbd.ApiClient(configuration))
