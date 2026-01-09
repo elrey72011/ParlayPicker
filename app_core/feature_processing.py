@@ -1104,8 +1104,9 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
 
                     if _FALLBACK_LOG_COUNT < _FALLBACK_LOG_LIMIT:
                         logger.warning(
-                            f"DEBUG Stats Fallback Used: {league} {home_team} ({home_status}) vs {away_team} ({away_status})"
+                            f"DEBUG Stats Fallback Used: {league_str} {h_team} ({h_stat}) vs {a_team} ({a_stat})"
                         )
+
                         _FALLBACK_LOG_COUNT += 1
                     elif _FALLBACK_LOG_COUNT == _FALLBACK_LOG_LIMIT:
                         logger.warning("DEBUG Stats Fallback Used: (further messages suppressed)")
