@@ -7924,16 +7924,23 @@ with tab_master:
                         st.warning(f"AI Data Unavailable (using defaults): {e}")
                         probs = [0.5] * len(inference_df)
 
-                    # FIX: Stop Using Indexing for AI Results (Safe Map Approach)
-                    if probs and len(probs) == len(inference_df):
+                    # FIX: Stop Using Indexing for AI Results (Safe Map Approach) - Logic Update: Pad with 0.5 instead of fail
+                    if probs:
+                        # Handle length mismatch by padding or truncating
+                        if len(probs) < len(inference_df):
+                            logger.warning(f"Prediction length mismatch (short): got {len(probs)}, expected {len(inference_df)}. Padding with 0.5.")
+                            probs = list(probs) + [0.5] * (len(inference_df) - len(probs))
+                        elif len(probs) > len(inference_df):
+                            logger.warning(f"Prediction length mismatch (long): got {len(probs)}, expected {len(inference_df)}. Truncating.")
+                            probs = list(probs)[:len(inference_df)]
+
                         # Wrap in Series to match index explicitly (convert to list to drop any upstream index)
                         predictions_series = pd.Series(list(probs), index=inference_df.index)
                         # Assign using loc to ensure alignment
                         master_df.loc[inference_df.index, 'AI_Prob'] = predictions_series
                         master_df.loc[inference_df.index, 'ai_prob_base'] = predictions_series # Persist base if needed
                     else:
-                        logger.warning(f"Prediction length mismatch: got {len(probs) if probs else 0}, expected {len(inference_df)}")
-                        st.warning("AI Prediction length mismatch - defaulting to 0.5")
+                        logger.warning("No predictions returned. Defaulting to 0.5.")
                         master_df.loc[inference_df.index, 'AI_Prob'] = 0.5
                         master_df.loc[inference_df.index, 'ai_prob_base'] = 0.5
 
@@ -8688,7 +8695,7 @@ with tab_master:
             # General cleanup for others
             top_df_display = top_df_display.apply(lambda x: pd.to_numeric(x, errors='ignore')).fillna(0.0)
 
-        # Force all numeric columns to be floats to prevent ArrowInvalid crash
+        # Mandatory type-guard for Arrow serialization
         numeric_cols = ['ai_prob_base', 'model_prob_home', 'odds_home', 'odds_away', 'sentiment_diff']
         for col in numeric_cols:
             if col in top_df_display.columns:
@@ -8696,6 +8703,10 @@ with tab_master:
 
         # Only pass columns that actually exist in the final dataframe
         final_display_cols = [c for c in (available_cols + other_cols) if c in top_df_display.columns]
+
+        # Drop the internal token column to prevent PyArrow crash
+        if 'kalshi_wanted_tokens' in top_df_display.columns:
+            top_df_display = top_df_display.drop(columns=['kalshi_wanted_tokens'])
 
         try:
             st.dataframe(top_df_display, column_order=final_display_cols)
@@ -9060,17 +9071,30 @@ with tab_master:
             if valid_force_cols:
                 df_master_view_display[valid_force_cols] = df_master_view_display[valid_force_cols].apply(pd.to_numeric, errors='coerce').fillna(0.0)
 
-            st.dataframe(
-                df_master_view_display,
-                column_config={
-                    "AI_Prob": st.column_config.NumberColumn(format="%.1f%%"),
-                    "model_prob_home": st.column_config.NumberColumn(format="%.1f%%"),
-                    "final_probability": st.column_config.NumberColumn(format="%.1f%%"),
-                    "Implied_Prob": st.column_config.NumberColumn(format="%.1f%%"),
-                    "spread_edge": st.column_config.NumberColumn(format="%.1f%%"),
-                },
-                column_order=["league", "Home", "Away", "Implied_Prob", "AI_Prob", "Pick"] + [c for c in df_master_view_display.columns if c not in ["league", "Home", "Away", "Implied_Prob", "AI_Prob", "Pick"]]
-            )
+            try:
+                # Mandatory type-guard for Arrow serialization (Main Table)
+                numeric_cols_main = ['AI_Prob', 'model_prob_home', 'final_probability', 'Implied_Prob', 'spread_edge', 'ai_prob_base', 'sentiment_diff']
+                for col in numeric_cols_main:
+                    if col in df_master_view_display.columns:
+                        df_master_view_display[col] = pd.to_numeric(df_master_view_display[col], errors='coerce').fillna(0.0)
+
+                # Drop the internal token column to prevent PyArrow crash
+                if 'kalshi_wanted_tokens' in df_master_view_display.columns:
+                    df_master_view_display = df_master_view_display.drop(columns=['kalshi_wanted_tokens'])
+
+                st.dataframe(
+                    df_master_view_display,
+                    column_config={
+                        "AI_Prob": st.column_config.NumberColumn(format="%.1f%%"),
+                        "model_prob_home": st.column_config.NumberColumn(format="%.1f%%"),
+                        "final_probability": st.column_config.NumberColumn(format="%.1f%%"),
+                        "Implied_Prob": st.column_config.NumberColumn(format="%.1f%%"),
+                        "spread_edge": st.column_config.NumberColumn(format="%.1f%%"),
+                    },
+                    column_order=["league", "Home", "Away", "Implied_Prob", "AI_Prob", "Pick"] + [c for c in df_master_view_display.columns if c not in ["league", "Home", "Away", "Implied_Prob", "AI_Prob", "Pick"]]
+                )
+            except Exception as e:
+                 st.error(f"Display Error (Master Table): {e}")
             st.caption(
                 f"rows_out/games_in = {master_stats['rows_out']} / {master_stats['games_in']}"
             )
@@ -9270,14 +9294,17 @@ with tab_shotgun:
                         # Convert to numeric where possible, fill NaN
                         parlay_df = parlay_df.apply(lambda x: pd.to_numeric(x, errors='ignore')).fillna(0.0)
 
-                    st.dataframe(
-                        parlay_df,
-                        column_config={
-                            "Combined Edge": st.column_config.TextColumn("Combined Edge"),
-                            "Combined Prob": st.column_config.TextColumn("Combined Prob"),
-                        },
-                        use_container_width=True
-                    )
+                    try:
+                        st.dataframe(
+                            parlay_df,
+                            column_config={
+                                "Combined Edge": st.column_config.TextColumn("Combined Edge"),
+                                "Combined Prob": st.column_config.TextColumn("Combined Prob"),
+                            },
+                            use_container_width=True
+                        )
+                    except Exception as e:
+                        st.error(f"Display Error (Shotgun Parlays): {e}")
                 else:
                     st.warning("No valid parlay combinations found (check independence constraints).")
 
