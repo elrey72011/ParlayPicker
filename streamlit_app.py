@@ -25,7 +25,7 @@ from app_core.kalshi_integrator import (
 from app_core.llm_assistant import generate_confidence_explanation
 from app_core.reddit_sentiment import fetch_reddit_sentiment_map
 from app_core.sentiment_pipeline import MAX_SENTIMENT_CALLS, fetch_team_news, league_label, team_sentiment_from_articles
-from app_core.theover_ingest import parse_theover_public_betting_text
+from app_core.theover_ingest import process_theover_inputs, parse_theover_public_betting_text
 from app_core.team_name_matcher import TeamNameMatcher
 from app_core.prediction_engine import VERTEX_FEATURE_COLUMNS, PredictionEngine, get_prediction_prob, match_team_name
 from app_core.apisports import (
@@ -5316,11 +5316,12 @@ st.sidebar.header("Controls")
 
 # TheOver Public Betting Input
 with st.sidebar.expander("TheOver.ai Public Betting"):
-    theover_input_text = st.text_area(
-        "Paste TheOver Public Betting Picks",
-        height=150,
-        help="Paste raw text from TheOver.ai (e.g. lines with 'Over', 'Under', team names, percentages)."
-    )
+    theover_file_totals = st.file_uploader("Upload TheOver Totals (.xlsx)", type=["xlsx"])
+    theover_file_sides = st.file_uploader("Upload TheOver Sides (.xlsx)", type=["xlsx"])
+
+    st.caption("Paste Fallback (if no file)")
+    theover_paste_totals = st.text_area("Totals Paste", height=80, key="theover_paste_totals")
+    theover_paste_sides = st.text_area("Sides Paste", height=80, key="theover_paste_sides")
 
 sport_options = [ALL_SPORTS_LABEL] + list(SPORT_KEYS.keys())
 default_sports = st.session_state.get("selected_sports") or [st.session_state.get("league", "NBA")]
@@ -5643,14 +5644,19 @@ with tab_master:
     if should_run:
         try:
             # 0. Parse TheOver text input if present
-            theover_totals_df = pd.DataFrame()
-            theover_sides_df = pd.DataFrame()
-            if theover_input_text:
-                try:
-                    theover_totals_df, theover_sides_df = parse_theover_public_betting_text(theover_input_text)
-                    st.success(f"Parsed TheOver: {len(theover_totals_df)} Totals, {len(theover_sides_df)} Sides")
-                except Exception as e:
-                    st.warning(f"Failed to parse TheOver text: {e}")
+            try:
+                theover_totals_df, theover_sides_df = process_theover_inputs(
+                    totals_file=theover_file_totals,
+                    sides_file=theover_file_sides,
+                    totals_paste=theover_paste_totals,
+                    sides_paste=theover_paste_sides
+                )
+                if not theover_totals_df.empty or not theover_sides_df.empty:
+                    st.sidebar.success(f"Parsed TheOver: Totals={len(theover_totals_df)}, Sides={len(theover_sides_df)}")
+            except Exception as e:
+                st.sidebar.error(f"TheOver Parse Error: {e}")
+                theover_totals_df = pd.DataFrame()
+                theover_sides_df = pd.DataFrame()
 
             st.session_state["DECISION_TRACE_SAMPLES"] = {}
 
@@ -5999,6 +6005,21 @@ with tab_master:
                         theover_total_pick_side = to_pick_side # OVER or UNDER
 
                         theover_matched_count_totals += 1
+
+                # --- TheOver.ai Consensus Logic ---
+                # Lightweight decision engine update: +/- 0.03 to final prob
+                # We calculate adjustments here but apply them inside the compute_final_probability calls or after.
+                # Since compute_final_probability takes 'theover_prob', we rely on that.
+                # However, the user requested explicit: "If theover_pick aligns with our best_pick_type AND direction: +0.03... else -0.03"
+                # This requires knowing "our best pick". But we are calculating the pick NOW.
+                # Strategy: We inject 'theover_prob' into the mix (already doing that).
+                # But the user wants a SPECIFIC logic: "+0.03 to final_prob".
+                # We can add a 'theover_adj' term to the weights/logic or post-process.
+                # Given the complexity, let's trust the 'theover_weight' in compute_final_probability to handle influence,
+                # BUT we can force a small boost if alignment is detected.
+                # Let's add 'theover_adjustment' variables to be used later.
+                theover_adjustment_side = 0.0
+                theover_adjustment_total = 0.0
 
                 # RESET ALL TRACE VARIABLES
                 total_pick_side = None
@@ -6950,8 +6971,21 @@ with tab_master:
                     model_spread_prob if model_used_for_spread else None,
                     theover_prob_final_spread,
                     spread_sentiment_adj,
-                    spread_base_weights,
+                    spread_weights,
                 )
+
+                # Apply TheOver Decision Engine Adjustment (Spread)
+                if theover_prob_final_spread is not None and spread_prob_final is not None:
+                    # Directional check: if both > 0.5 or both < 0.5
+                    agree = (theover_prob_final_spread > 0.5 and spread_prob_final > 0.5) or \
+                            (theover_prob_final_spread < 0.5 and spread_prob_final < 0.5)
+
+                    if agree:
+                        spread_prob_final = clamp(spread_prob_final + 0.03, 0.01, 0.95)
+                        spread_warnings_new.append("theover_agrees")
+                    else:
+                        spread_prob_final = clamp(spread_prob_final - 0.03, 0.05, 0.99)
+                        spread_warnings_new.append("theover_disagrees")
                 if spread_prob_final is None:
                     spread_prob_final = blend_kalshi_market(kalshi_prob_spread, spread_prob_market) if kalshi_spread.get("kalshi_matched") else spread_prob_market
                     if model_used_for_spread and model_spread_prob is not None:
@@ -6986,8 +7020,21 @@ with tab_master:
                     model_total_prob if model_used_for_total else None,
                     theover_prob_final_total,
                     total_sentiment_adj,
-                    total_base_weights,
+                    total_weights,
                 )
+
+                # Apply TheOver Decision Engine Adjustment (Total)
+                if theover_prob_final_total is not None and total_prob_final is not None:
+                    # Directional check: if both > 0.5 or both < 0.5
+                    agree = (theover_prob_final_total > 0.5 and total_prob_final > 0.5) or \
+                            (theover_prob_final_total < 0.5 and total_prob_final < 0.5)
+
+                    if agree:
+                        total_prob_final = clamp(total_prob_final + 0.03, 0.01, 0.95)
+                        total_warnings_new.append("theover_agrees")
+                    else:
+                        total_prob_final = clamp(total_prob_final - 0.03, 0.05, 0.99)
+                        total_warnings_new.append("theover_disagrees")
                 if total_prob_final is None:
                     total_prob_final = blend_kalshi_market(kalshi_prob_total, total_prob_market) if kalshi_total.get("kalshi_matched") else total_prob_market
                     if model_used_for_total and model_total_prob is not None:
@@ -9354,6 +9401,9 @@ with tab_master:
             "theover_source_model",
             "theover_prob_used",
             "theover_matched",
+            "theover_available",
+            "theover_line",
+            "theover_status",
         ]
         export_df = df_master_view_full.copy()
         if "Unnamed: 0" in export_df.columns:
@@ -9413,7 +9463,8 @@ with tab_master:
                 "theover_pick_type",
                 "theover_hit_rate",
                 "theover_prob_used",
-                "theover_matched"
+                "theover_matched",
+                "theover_source_model"
             ]
 
             final_picks_df = pd.DataFrame()
