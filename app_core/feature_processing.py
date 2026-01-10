@@ -1085,31 +1085,57 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
             stats_subset = stats_by_league[lg_key]
             stats_teams_norm = stats_subset.index.tolist()
 
+            # Build normalized->raw index mapping for this league (CRITICAL)
+            stats_index_norm_map = {
+                robust_normalize_team(str(raw), lg_key): raw
+                for raw in stats_subset.index
+            }
+            stats_index_norm_keys = list(stats_index_norm_map.keys())
+
+            # Track match statistics
+            stats_log = {"direct": 0, "override": 0, "fuzzy": 0, "miss": 0}
+
             # Process Home Teams
             current_home_teams = home_norm[lg_mask].unique()
             home_map_local = {}
             for t_norm in current_home_teams:
                 if not t_norm: continue
+
+                # 1. Try Mapping (TEAM_NAME_MAPPING)
                 if t_norm in TEAM_NAME_MAPPING:
                     mapped = TEAM_NAME_MAPPING[t_norm]
-                    if mapped in stats_subset.index:
-                        home_map_local[t_norm] = mapped
+                    mapped_norm = robust_normalize_team(mapped, lg_key)
+                    if mapped_norm in stats_index_norm_map:
+                        home_map_local[t_norm] = stats_index_norm_map[mapped_norm]
+                        stats_log["override"] += 1
                         continue
-                if t_norm in stats_subset.index:
-                    home_map_local[t_norm] = t_norm
+
+                # 2. Try Direct Match (Normalized)
+                if t_norm in stats_index_norm_map:
+                    home_map_local[t_norm] = stats_index_norm_map[t_norm]
+                    stats_log["direct"] += 1
                     continue
+
+                # 3. Try Manual Overrides
                 if t_norm in MANUAL_TEAM_OVERRIDES:
                     target = MANUAL_TEAM_OVERRIDES[t_norm]
-                    if target in stats_subset.index:
-                        home_map_local[t_norm] = target
+                    target_norm = robust_normalize_team(target, lg_key)
+                    if target_norm in stats_index_norm_map:
+                        home_map_local[t_norm] = stats_index_norm_map[target_norm]
+                        stats_log["override"] += 1
                         continue
-                match = fuzzy_match_team_robust(t_norm, stats_teams_norm, threshold=70.0)
-                if match:
-                    home_map_local[t_norm] = match
+
+                # 4. Fuzzy Match (Normalized Space)
+                match_norm = fuzzy_match_team_robust(t_norm, stats_index_norm_keys, threshold=70.0)
+                if match_norm:
+                    # Map back to raw key
+                    home_map_local[t_norm] = stats_index_norm_map[match_norm]
+                    stats_log["fuzzy"] += 1
                 else:
                     if lg_key != "default":
                         logger.error(f"TEAM MATCH FAILURE ({lg_key}): '{t_norm}' not found in {lg_key} dictionary.")
                     home_map_local[t_norm] = None
+                    stats_log["miss"] += 1
 
             home_matched_names[lg_mask] = home_norm[lg_mask].map(home_map_local)
 
@@ -1118,28 +1144,47 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
             away_map_local = {}
             for t_norm in current_away_teams:
                 if not t_norm: continue
+
+                # 1. Try Mapping (TEAM_NAME_MAPPING)
                 if t_norm in TEAM_NAME_MAPPING:
                     mapped = TEAM_NAME_MAPPING[t_norm]
-                    if mapped in stats_subset.index:
-                        away_map_local[t_norm] = mapped
+                    mapped_norm = robust_normalize_team(mapped, lg_key)
+                    if mapped_norm in stats_index_norm_map:
+                        away_map_local[t_norm] = stats_index_norm_map[mapped_norm]
+                        stats_log["override"] += 1
                         continue
-                if t_norm in stats_subset.index:
-                    away_map_local[t_norm] = t_norm
+
+                # 2. Try Direct Match (Normalized)
+                if t_norm in stats_index_norm_map:
+                    away_map_local[t_norm] = stats_index_norm_map[t_norm]
+                    stats_log["direct"] += 1
                     continue
+
+                # 3. Try Manual Overrides
                 if t_norm in MANUAL_TEAM_OVERRIDES:
                     target = MANUAL_TEAM_OVERRIDES[t_norm]
-                    if target in stats_subset.index:
-                        away_map_local[t_norm] = target
+                    target_norm = robust_normalize_team(target, lg_key)
+                    if target_norm in stats_index_norm_map:
+                        away_map_local[t_norm] = stats_index_norm_map[target_norm]
+                        stats_log["override"] += 1
                         continue
-                match = fuzzy_match_team_robust(t_norm, stats_teams_norm, threshold=70.0)
-                if match:
-                    away_map_local[t_norm] = match
+
+                # 4. Fuzzy Match (Normalized Space)
+                match_norm = fuzzy_match_team_robust(t_norm, stats_index_norm_keys, threshold=70.0)
+                if match_norm:
+                    # Map back to raw key
+                    away_map_local[t_norm] = stats_index_norm_map[match_norm]
+                    stats_log["fuzzy"] += 1
                 else:
                     if lg_key != "default":
                         logger.error(f"TEAM MATCH FAILURE ({lg_key}): '{t_norm}' not found in {lg_key} dictionary.")
                     away_map_local[t_norm] = None
+                    stats_log["miss"] += 1
 
             away_matched_names[lg_mask] = away_norm[lg_mask].map(away_map_local)
+
+            if lg_key != "default" and (stats_log["direct"] > 0 or stats_log["miss"] > 0):
+                logger.info(f"Stats Match Report [{lg_key}]: Direct={stats_log['direct']}, Override={stats_log['override']}, Fuzzy={stats_log['fuzzy']}, Miss={stats_log['miss']}")
     else:
         if not FREE_TIER_MODE:
             logger.warning("No stats fetched. Filling with defaults.")
