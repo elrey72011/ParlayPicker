@@ -1157,11 +1157,15 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
             stats_teams_norm = stats_subset.index.tolist()
 
             # Build normalized->raw index mapping for this league (CRITICAL)
+            # Ensure keys are strictly lowercased for lookup reliability
             stats_index_norm_map = {
-                robust_normalize_team(str(raw), lg_key): raw
+                robust_normalize_team(str(raw), lg_key).strip().lower(): raw
                 for raw in stats_subset.index
             }
             stats_index_norm_keys = list(stats_index_norm_map.keys())
+
+            if lg_key == "NFL":
+                logger.debug(f"NFL stats index keys (sample): {list(stats_index_norm_map.keys())[:5]}")
 
             # Track match statistics
             stats_log = {"direct": 0, "override": 0, "fuzzy": 0, "miss": 0}
@@ -1176,27 +1180,30 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
                 key = str(t_norm).strip().lower()
 
                 if lg_key == "NFL":
-                    logger.debug(f"NFL match raw={t_norm!r} norm_key={key!r}")
+                    logger.debug(f"NFL match t_norm={t_norm!r} key={key!r}")
+
+                if lg_key == "NCAAB" and "florida" in key:
+                    logger.debug(f"NCAAB Debug: norm_key={key!r} in index? {key in stats_index_norm_map}")
 
                 # 1. Try Mapping (TEAM_NAME_MAPPING)
                 if key in TEAM_NAME_MAPPING:
                     mapped = TEAM_NAME_MAPPING[key]
-                    mapped_norm = robust_normalize_team(mapped, lg_key)
+                    mapped_norm = robust_normalize_team(mapped, lg_key).strip().lower()
                     if mapped_norm in stats_index_norm_map:
                         home_map_local[t_norm] = stats_index_norm_map[mapped_norm]
                         stats_log["override"] += 1
                         continue
 
                 # 2. Try Direct Match (Normalized)
-                if t_norm in stats_index_norm_map:
-                    home_map_local[t_norm] = stats_index_norm_map[t_norm]
+                if key in stats_index_norm_map:
+                    home_map_local[t_norm] = stats_index_norm_map[key]
                     stats_log["direct"] += 1
                     continue
 
                 # 3. Try Manual Overrides
                 if key in MANUAL_TEAM_OVERRIDES:
                     target = MANUAL_TEAM_OVERRIDES[key]
-                    target_norm = robust_normalize_team(target, lg_key)
+                    target_norm = robust_normalize_team(target, lg_key).strip().lower()
                     if target_norm in stats_index_norm_map:
                         home_map_local[t_norm] = stats_index_norm_map[target_norm]
                         stats_log["override"] += 1
@@ -1226,27 +1233,27 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
                 key = str(t_norm).strip().lower()
 
                 if lg_key == "NFL":
-                    logger.debug(f"NFL match raw={t_norm!r} norm_key={key!r}")
+                    logger.debug(f"NFL match t_norm={t_norm!r} key={key!r}")
 
                 # 1. Try Mapping (TEAM_NAME_MAPPING)
                 if key in TEAM_NAME_MAPPING:
                     mapped = TEAM_NAME_MAPPING[key]
-                    mapped_norm = robust_normalize_team(mapped, lg_key)
+                    mapped_norm = robust_normalize_team(mapped, lg_key).strip().lower()
                     if mapped_norm in stats_index_norm_map:
                         away_map_local[t_norm] = stats_index_norm_map[mapped_norm]
                         stats_log["override"] += 1
                         continue
 
                 # 2. Try Direct Match (Normalized)
-                if t_norm in stats_index_norm_map:
-                    away_map_local[t_norm] = stats_index_norm_map[t_norm]
+                if key in stats_index_norm_map:
+                    away_map_local[t_norm] = stats_index_norm_map[key]
                     stats_log["direct"] += 1
                     continue
 
                 # 3. Try Manual Overrides
                 if key in MANUAL_TEAM_OVERRIDES:
                     target = MANUAL_TEAM_OVERRIDES[key]
-                    target_norm = robust_normalize_team(target, lg_key)
+                    target_norm = robust_normalize_team(target, lg_key).strip().lower()
                     if target_norm in stats_index_norm_map:
                         away_map_local[t_norm] = stats_index_norm_map[target_norm]
                         stats_log["override"] += 1
