@@ -896,15 +896,10 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
     def safe_numeric_fill(val, fill_val=0.0):
         """Safely converts scalars or Series to numeric and fills NaNs."""
         try:
-            # If it's already a pandas Series/Index
             if isinstance(val, (pd.Series, pd.Index)):
                 return pd.to_numeric(val, errors='coerce').fillna(fill_val)
-            
-            # If it's a list or array
             if isinstance(val, (list, tuple, np.ndarray)):
                 return pd.to_numeric(pd.Series(val), errors='coerce').fillna(fill_val)
-                
-            # If it's a scalar (single number)
             parsed = pd.to_numeric(val, errors='coerce')
             return fill_val if pd.isna(parsed) else parsed
         except Exception:
@@ -915,7 +910,7 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
     # ------------------------------------------------------------
     features_data: Dict[str, Any] = {}
 
-    # Defaults as Series aligned to df.index (so downstream concat works)
+    # Defaults as Series aligned to df.index
     default_win_pct = pd.Series(0.50, index=df.index)
     default_last5   = pd.Series(0.50, index=df.index)
     default_ppg     = pd.Series(110.0, index=df.index)
@@ -930,7 +925,6 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
     elif "league" in df.columns:
         league_col = "league"
     elif "League" in df.columns:
-        # normalize legacy capitalized column
         df["league"] = df["League"]
         league_col = "league"
 
@@ -947,7 +941,6 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
     # ------------------------------------------------------------
     def get_row_league_key(l_val: Any) -> str:
         s = str(l_val).upper()
-        # Explicit checks FIRST to avoid partial matches
         if "NCAAB" in s or "COLLEGE BASKETBALL" in s:
             return "NCAAB"
         if "NCAAF" in s or "COLLEGE FOOTBALL" in s:
@@ -960,6 +953,7 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
             return "NBA"
         return "default"
 
+    # Explicit assignment to local variable
     if league_col:
         league_keys = df[league_col].apply(get_row_league_key)
     else:
@@ -974,117 +968,93 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
     stats_df = fetch_team_stats(api_clients, season_year=season_year)
 
     # ------------------------------------------------------------
-    # 4) Normalize team names league-aware (bind locals to avoid closure issues)
+    # 4) Normalize team names league-aware
     # ------------------------------------------------------------
-    _hc, _ac, _lk = home_col, away_col, league_keys
+    # Explicit definition of locals for lambda safety
+    _hc = home_col
+    _ac = away_col
+    _lk = league_keys
 
     home_norm = df.apply(
-        lambda r: robust_normalize_team(
-            str(r[home_col]),
-            league_keys.at[r.name]
-        ),
+        lambda r: robust_normalize_team(str(r[_hc]), _lk.at[r.name]),
         axis=1
     )
     
     away_norm = df.apply(
-        lambda r: robust_normalize_team(
-            str(r[away_col]),
-            league_keys.at[r.name]
-        ),
+        lambda r: robust_normalize_team(str(r[_ac]), _lk.at[r.name]),
         axis=1
     )
     
-    if stats_df.empty:
-        if not FREE_TIER_MODE:
-            logger.warning("No stats fetched. Filling with defaults.")
-        # Logic handles empty stats via map_stat fallback below
-    else:
-        # Prepare lookup dictionaries by league: league_key -> (team_norm -> stats_row)
+    # ------------------------------------------------------------
+    # 5) Fuzzy Matching and Feature Population
+    # ------------------------------------------------------------
+    home_matched_names = pd.Series([None] * len(df), index=df.index)
+    away_matched_names = pd.Series([None] * len(df), index=df.index)
+    global_stats_lookup = {}
+
+    if not stats_df.empty:
         # Group stats_df by league_key
         stats_by_league = {}
         for lg in stats_df['league_key'].unique():
             subset = stats_df[stats_df['league_key'] == lg]
             stats_by_league[lg] = subset.drop_duplicates(subset=['team_norm']).set_index('team_norm')
 
-        # --- NEW: Composite Key (League + Team) Fuzzy Matching ---
-        # Build a mapping from (row_index) -> stats_row_index (team_norm in stats_by_league)
-        # Since vectorized map is hard with composite, we'll iterate or use a composite key series.
+        # Build global lookup dict: (league, team_norm) -> value
+        for lg, s_df in stats_by_league.items():
+            d = s_df.to_dict(orient='index')
+            for t_norm, cols in d.items():
+                global_stats_lookup[(lg, t_norm)] = cols
 
-        # We need to map each game's team to the correct stat entry IN THE CORRECT LEAGUE.
-        # team_map will now store: (row_index, side) -> matched_team_norm
-
-        # Pre-compute fuzzy matches PER LEAGUE to avoid cross-league pollution
-        # stats_teams_per_league = {lg: df.index.tolist() for lg, df in stats_by_league.items()}
-
-        # We'll create a Series of matched team names aligned with the master DF
-        home_matched_names = pd.Series([None] * len(df), index=df.index)
-        away_matched_names = pd.Series([None] * len(df), index=df.index)
-
-        # Iterate over unique leagues in the master DF to batch process
         unique_leagues_in_games = league_keys.unique()
 
         for lg_key in unique_leagues_in_games:
             if lg_key not in stats_by_league:
-                # No stats for this league (e.g. "default" or missing)
                 continue
 
-            # Get subset of games for this league
             lg_mask = league_keys == lg_key
             if not lg_mask.any(): continue
 
-            # Get subset of stats
             stats_subset = stats_by_league[lg_key]
             stats_teams_norm = stats_subset.index.tolist()
 
-            # Process Home Teams for this league
+            # Process Home Teams
             current_home_teams = home_norm[lg_mask].unique()
             home_map_local = {}
             for t_norm in current_home_teams:
                 if not t_norm: continue
-
-                # 0. Pro League Mapping Check (100% Lookup Guarantee)
                 if t_norm in TEAM_NAME_MAPPING:
                     mapped = TEAM_NAME_MAPPING[t_norm]
                     if mapped in stats_subset.index:
                         home_map_local[t_norm] = mapped
                         continue
-
-                # 1. Direct
                 if t_norm in stats_subset.index:
                     home_map_local[t_norm] = t_norm
                     continue
-                # 2. Manual
                 if t_norm in MANUAL_TEAM_OVERRIDES:
                     target = MANUAL_TEAM_OVERRIDES[t_norm]
                     if target in stats_subset.index:
                         home_map_local[t_norm] = target
                         continue
-                # 3. Fuzzy
                 match = fuzzy_match_team_robust(t_norm, stats_teams_norm, threshold=70.0)
                 if match:
                     home_map_local[t_norm] = match
                 else:
-                    # Log ERROR as requested for missing team
                     if lg_key != "default":
                         logger.error(f"TEAM MATCH FAILURE ({lg_key}): '{t_norm}' not found in {lg_key} dictionary.")
                     home_map_local[t_norm] = None
 
-            # Apply map to the subset
             home_matched_names[lg_mask] = home_norm[lg_mask].map(home_map_local)
 
-            # Process Away Teams for this league
+            # Process Away Teams
             current_away_teams = away_norm[lg_mask].unique()
             away_map_local = {}
             for t_norm in current_away_teams:
                 if not t_norm: continue
-
-                # 0. Pro League Mapping Check (100% Lookup Guarantee)
                 if t_norm in TEAM_NAME_MAPPING:
                     mapped = TEAM_NAME_MAPPING[t_norm]
                     if mapped in stats_subset.index:
                         away_map_local[t_norm] = mapped
                         continue
-
                 if t_norm in stats_subset.index:
                     away_map_local[t_norm] = t_norm
                     continue
@@ -1102,118 +1072,78 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
                     away_map_local[t_norm] = None
 
             away_matched_names[lg_mask] = away_norm[lg_mask].map(away_map_local)
+    else:
+        if not FREE_TIER_MODE:
+            logger.warning("No stats fetched. Filling with defaults.")
 
-        # Helper to map a stat column using the matched names AND league key
-        # Since we have matched names, we need to pull the value from the correct league's stats DF.
-        # We can construct a global lookup dict: (league, team_norm) -> value
+    # Helper function moved to top level logic within enrich_with_model_features
+    # Now explicitly uses arguments instead of closures where possible
+    def _map_stat_impl(matched_name_series, col_name, default_series, l_keys, g_lookup, df_idx):
+        values = []
+        for idx, name in matched_name_series.items():
+            lg = l_keys.at[idx]
+            if pd.notna(name) and (lg, name) in g_lookup:
+                val = g_lookup[(lg, name)].get(col_name)
+                values.append(val if val is not None else np.nan)
+            else:
+                values.append(np.nan)
+        return pd.Series(values, index=df_idx).fillna(default_series)
 
-        # Build global lookup
-        # (league_key, team_norm) -> row dict
-        global_stats_lookup = {}
-        for lg, s_df in stats_by_league.items():
-            # Convert to dict of dicts: team_norm -> {col: val}
-            # oriented index gives {team: {col: val, ...}}
-            d = s_df.to_dict(orient='index')
-            for t_norm, cols in d.items():
-                global_stats_lookup[(lg, t_norm)] = cols
+    # Populate features_data
+    home_fallback = home_matched_names.isna()
+    away_fallback = away_matched_names.isna()
+    combined_fallback = home_fallback | away_fallback
+    features_data["feature_stats_fallback"] = combined_fallback
+    features_data["stats_quality"] = combined_fallback.apply(lambda x: "Low (Fallback)" if x else "High (Real)")
 
-        def map_stat(matched_name_series, col_name, default_series):
-            # Create tuple index (league_key, matched_name)
-            # aligned with df index
-            # Use list comprehension for speed?
+    if combined_fallback.any():
+        fallback_indices = df.index[combined_fallback]
+        for idx in fallback_indices:
+            if _FALLBACK_LOG_COUNT < _FALLBACK_LOG_LIMIT:
+                try:
+                    league_str = df.loc[idx, league_col] if league_col else "Unknown"
+                    h_team = df.loc[idx, home_col]
+                    a_team = df.loc[idx, away_col]
+                    h_stat = "MISSING" if bool(home_fallback.loc[idx]) else "OK"
+                    a_stat = "MISSING" if bool(away_fallback.loc[idx]) else "OK"
+                    logger.warning(f"DEBUG Stats Fallback Used: {league_str} {h_team} ({h_stat}) vs {a_team} ({a_stat})")
+                except Exception:
+                    pass
+                _FALLBACK_LOG_COUNT += 1
+            elif _FALLBACK_LOG_COUNT == _FALLBACK_LOG_LIMIT:
+                logger.warning("DEBUG Stats Fallback Used: (further messages suppressed)")
+                _FALLBACK_LOG_COUNT += 1
+            else:
+                break
 
-            # We iterate rows to lookup in global_stats_lookup
-            values = []
-            for idx, name in matched_name_series.items():
-                lg = league_keys.at[idx]
-                if pd.notna(name) and (lg, name) in global_stats_lookup:
-                    val = global_stats_lookup[(lg, name)].get(col_name)
-                    values.append(val if val is not None else np.nan)
-                else:
-                    values.append(np.nan)
+    # Mapping calls
+    # Note: passing league_keys and global_stats_lookup explicitly
+    features_data["feature_home_win_pct"] = _map_stat_impl(home_matched_names, "win_pct", default_win_pct, league_keys, global_stats_lookup, df.index)
+    features_data["feature_home_home_win_pct"] = _map_stat_impl(home_matched_names, "home_win_pct", default_win_pct, league_keys, global_stats_lookup, df.index)
+    features_data["feature_home_last5_win_pct"] = _map_stat_impl(home_matched_names, "last5_win_pct", default_last5, league_keys, global_stats_lookup, df.index)
+    features_data["feature_home_ppg"] = _map_stat_impl(home_matched_names, "points_per_game", default_ppg, league_keys, global_stats_lookup, df.index)
+    features_data["feature_home_oppg"] = _map_stat_impl(home_matched_names, "points_allowed_per_game", default_oppg, league_keys, global_stats_lookup, df.index)
+    features_data["feature_home_streak"] = _map_stat_impl(home_matched_names, "streak", pd.Series(0.0, index=df.index), league_keys, global_stats_lookup, df.index)
+    features_data["feature_home_turnovers"] = _map_stat_impl(home_matched_names, "turnovers", pd.Series(0.0, index=df.index), league_keys, global_stats_lookup, df.index)
 
-            return pd.Series(values, index=df.index).fillna(default_series)
+    features_data["feature_away_win_pct"] = _map_stat_impl(away_matched_names, "win_pct", default_win_pct, league_keys, global_stats_lookup, df.index)
+    features_data["feature_away_away_win_pct"] = _map_stat_impl(away_matched_names, "away_win_pct", default_win_pct, league_keys, global_stats_lookup, df.index)
+    features_data["feature_away_last5_win_pct"] = _map_stat_impl(away_matched_names, "last5_win_pct", default_last5, league_keys, global_stats_lookup, df.index)
+    features_data["feature_away_ppg"] = _map_stat_impl(away_matched_names, "points_per_game", default_ppg, league_keys, global_stats_lookup, df.index)
+    features_data["feature_away_oppg"] = _map_stat_impl(away_matched_names, "points_allowed_per_game", default_oppg, league_keys, global_stats_lookup, df.index)
+    features_data["feature_away_streak"] = _map_stat_impl(away_matched_names, "streak", pd.Series(0.0, index=df.index), league_keys, global_stats_lookup, df.index)
+    features_data["feature_away_turnovers"] = _map_stat_impl(away_matched_names, "turnovers", pd.Series(0.0, index=df.index), league_keys, global_stats_lookup, df.index)
 
-        # Populate features_data using the new fuzzy map_stat
-        # Track Fallbacks (True if team not matched)
-        home_fallback = home_matched_names.isna()
-        away_fallback = away_matched_names.isna()
-        combined_fallback = home_fallback | away_fallback
-        features_data["feature_stats_fallback"] = combined_fallback
+    # SCALING: NHL stats are ~3.0, model expects ~110.0. Scale by 35x if league is NHL.
+    is_nhl = league_keys == "NHL"
+    if is_nhl.any():
+        nhl_scale_factor = 35.0
+        features_data['feature_home_ppg'] = features_data['feature_home_ppg'].mask(is_nhl, features_data['feature_home_ppg'] * nhl_scale_factor)
+        features_data['feature_home_oppg'] = features_data['feature_home_oppg'].mask(is_nhl, features_data['feature_home_oppg'] * nhl_scale_factor)
+        features_data['feature_away_ppg'] = features_data['feature_away_ppg'].mask(is_nhl, features_data['feature_away_ppg'] * nhl_scale_factor)
+        features_data['feature_away_oppg'] = features_data['feature_away_oppg'].mask(is_nhl, features_data['feature_away_oppg'] * nhl_scale_factor)
 
-        # Stats quality label
-        features_data["stats_quality"] = combined_fallback.apply(
-            lambda x: "Low (Fallback)" if x else "High (Real)"
-        )
-
-        # ------------------------------------------------------------
-        # LOGGING: Stats fallback rows (THROTTLED)
-        # ------------------------------------------------------------
-
-        if combined_fallback.any():
-            fallback_indices = df.index[combined_fallback]
-
-            for idx in fallback_indices:
-                if _FALLBACK_LOG_COUNT < _FALLBACK_LOG_LIMIT:
-                    try:
-                        league_str = df.loc[idx, league_col] if league_col else "Unknown"
-                        h_team = df.loc[idx, home_col]
-                        a_team = df.loc[idx, away_col]
-                        h_stat = "MISSING" if bool(home_fallback.loc[idx]) else "OK"
-                        a_stat = "MISSING" if bool(away_fallback.loc[idx]) else "OK"
-
-                        logger.warning(
-                            f"DEBUG Stats Fallback Used: {league_str} "
-                            f"{h_team} ({h_stat}) vs {a_team} ({a_stat})"
-                        )
-                    except Exception:
-                        pass
-
-                    _FALLBACK_LOG_COUNT += 1
-
-                elif _FALLBACK_LOG_COUNT == _FALLBACK_LOG_LIMIT:
-                    logger.warning("DEBUG Stats Fallback Used: (further messages suppressed)")
-                    _FALLBACK_LOG_COUNT += 1
-                else:
-                    break
-        
-        # Home Stats (use matched names)
-        features_data["feature_home_win_pct"] = map_stat(home_matched_names, "win_pct", default_win_pct)
-        features_data["feature_home_home_win_pct"] = map_stat(home_matched_names, "home_win_pct", default_win_pct)
-        features_data["feature_home_last5_win_pct"] = map_stat(home_matched_names, "last5_win_pct", default_last5)
-        features_data["feature_home_ppg"] = map_stat(home_matched_names, "points_per_game", default_ppg)
-        features_data["feature_home_oppg"] = map_stat(home_matched_names, "points_allowed_per_game", default_oppg)
-        features_data["feature_home_streak"] = map_stat(home_matched_names, "streak", pd.Series(0.0, index=df.index))
-        features_data["feature_home_turnovers"] = map_stat(home_matched_names, "turnovers", pd.Series(0.0, index=df.index))
-
-        # Away Stats (use matched names)
-        features_data["feature_away_win_pct"] = map_stat(away_matched_names, "win_pct", default_win_pct)
-        features_data["feature_away_away_win_pct"] = map_stat(away_matched_names, "away_win_pct", default_win_pct)
-        features_data["feature_away_last5_win_pct"] = map_stat(away_matched_names, "last5_win_pct", default_last5)
-        features_data["feature_away_ppg"] = map_stat(away_matched_names, "points_per_game", default_ppg)
-        features_data["feature_away_oppg"] = map_stat(away_matched_names, "points_allowed_per_game", default_oppg)
-        features_data["feature_away_streak"] = map_stat(away_matched_names, "streak", pd.Series(0.0, index=df.index))
-        features_data["feature_away_turnovers"] = map_stat(away_matched_names, "turnovers", pd.Series(0.0, index=df.index))
-
-        
-        # SCALING: NHL stats are ~3.0, model expects ~110.0. Scale by 35x if league is NHL.
-        is_nhl = league_keys == "NHL"
-        if is_nhl.any():
-            nhl_scale_factor = 35.0
-            features_data['feature_home_ppg'] = features_data['feature_home_ppg'].mask(
-                is_nhl, features_data['feature_home_ppg'] * nhl_scale_factor
-            )
-            features_data['feature_home_oppg'] = features_data['feature_home_oppg'].mask(
-                is_nhl, features_data['feature_home_oppg'] * nhl_scale_factor
-            )
-            features_data['feature_away_ppg'] = features_data['feature_away_ppg'].mask(
-                is_nhl, features_data['feature_away_ppg'] * nhl_scale_factor
-            )
-            features_data['feature_away_oppg'] = features_data['feature_away_oppg'].mask(
-                is_nhl, features_data['feature_away_oppg'] * nhl_scale_factor
-            )
-
-    # 4. Fill Defaults if stats_df was empty
+    # 4. Fill Defaults if stats_df was empty or incomplete
     if 'feature_home_win_pct' not in features_data:
         features_data['feature_stats_fallback'] = True
         features_data['feature_home_win_pct'] = default_win_pct
