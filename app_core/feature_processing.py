@@ -258,8 +258,50 @@ MANUAL_TEAM_OVERRIDES = {
     "minnesota golden gophers": "minnesota", "usc trojans": "usc",
     "colorado st rams": "colorado state", "unlv rebels": "unlv",
     "indiana hoosiers": "indiana", "oregon ducks": "oregon",
-    "ohio state buckeyes": "ohio state"
+    "ohio state buckeyes": "ohio state",
+
+    # --- NEW NFL city-only fixes ---
+    "carolina": "carolina panthers",
+    "chicago": "chicago bears",
 }
+
+# NFL Aliases: City-only -> Full Canonical Name
+# Used when the input is just "Carolina" or "Chicago" but stats are keyed by "Carolina Panthers"
+NFL_TEAM_ALIASES = {
+    "arizona": "arizona cardinals",
+    "atlanta": "atlanta falcons",
+    "baltimore": "baltimore ravens",
+    "buffalo": "buffalo bills",
+    "carolina": "carolina panthers",
+    "chicago": "chicago bears",
+    "cincinnati": "cincinnati bengals",
+    "cleveland": "cleveland browns",
+    "dallas": "dallas cowboys",
+    "denver": "denver broncos",
+    "detroit": "detroit lions",
+    "green bay": "green bay packers",
+    "houston": "houston texans",
+    "indianapolis": "indianapolis colts",
+    "jacksonville": "jacksonville jaguars",
+    "kansas city": "kansas city chiefs",
+    "las vegas": "las vegas raiders",
+    "miami": "miami dolphins",
+    "minnesota": "minnesota vikings",
+    "new england": "new england patriots",
+    "new orleans": "new orleans saints",
+    "philadelphia": "philadelphia eagles",
+    "pittsburgh": "pittsburgh steelers",
+    "san francisco": "san francisco 49ers",
+    "seattle": "seattle seahawks",
+    "tampa bay": "tampa bay buccaneers",
+    "tennessee": "tennessee titans",
+    "washington": "washington commanders",
+    # "los angeles" and "new york" are intentionally excluded as they are ambiguous (Rams/Chargers, Giants/Jets).
+    # Inputs like "new york" should fail lookup rather than silently mapping to the wrong team.
+}
+
+_NFL_ALIAS_LOG_COUNT = 0
+_NFL_ALIAS_LOG_LIMIT = 10
 
 def _get_secret(key_name: str) -> Optional[str]:
     """Helper to retrieve secrets from Streamlit secrets or env vars."""
@@ -294,40 +336,66 @@ def robust_normalize_team(name: str, league: Optional[str] = None) -> str:
     """
     Aggressive team name normalization.
     Converts to lowercase, removes common suffixes/mascots.
+    LEAGUE-AWARE: Only strips mascots for NCAA. Preserves full names for NFL/NBA/etc.
     """
+    global _NFL_ALIAS_LOG_COUNT
     if not name:
         return ""
 
     # 1. Lowercase and strip
     name = str(name).lower().strip()
 
-    # 2. Use TeamNameMatcher's normalization first (handles St -> State, punctuation)
-    name = TeamNameMatcher.normalize(name)
-
-    # 2.5 League-aware stripping: ONLY strip mascots for college leagues
+    # Check if league implies college (aggressive stripping)
+    is_college = False
+    is_nfl = False
+    is_pro = False
     if league:
         lg = str(league).strip().upper()
         if lg in ("NCAAB", "NCAAF", "NCAAW", "NCAABW"):
-            # keeps "state", "st", "saint", "mount" but removes trailing mascots
-            name = _strip_mascot_words(name)
-    
-    # 3. Additional aggressive mascot stripping (if not covered by TeamNameMatcher)
-    # Note: TeamNameMatcher.normalize already removes mascots from its internal list.
-    # We can add extra cleanup if needed here.
+            is_college = True
+        if lg == "NFL":
+            is_nfl = True
+        if lg in ("NBA", "NFL", "NHL", "MLB", "WNBA"):
+            is_pro = True
 
-    # Remove common suffixes that might remain or be specific
-    suffixes = [
-        ' bulls', ' tigers', ' mountaineers', ' blue hens', ' university', ' college',
-        ' rockets', ' redhawks', ' jaspers', ' golden griffins', ' golden grizzlies',
-        ' vikings', ' titans', ' raiders', ' stags', ' broncs', ' phoenix', ' jaguars',
-        ' gaels', ' purple eagles', ' pioneers', ' red foxes', ' saints', ' warriors',
-        ' peacocks', ' falcons', ' zips', ' panthers', ' norse', ' golden gophers',
-        ' trojans', ' rams', ' rebels', ' hoosiers', ' ducks', ' buckeyes',
-        ' blackhawks', ' capitals', ' jets', ' kings', ' mammoth', ' blues'
-    ]
-    for s in suffixes:
-        if name.endswith(s):
-            name = name[:-len(s)].strip()
+    # 2. Use TeamNameMatcher's normalization
+    # Disable mascot stripping for Pro leagues to preserve full names (e.g. "Phoenix Suns")
+    name = TeamNameMatcher.normalize(name, strip_mascots=not is_pro)
+
+    # 2.5 League-aware stripping: ONLY strip mascots for college leagues
+    if is_college:
+        # keeps "state", "st", "saint", "mount" but removes trailing mascots
+        name = _strip_mascot_words(name)
+    
+        # 3. Additional aggressive mascot stripping (if not covered by TeamNameMatcher)
+        # Note: TeamNameMatcher.normalize already removes mascots from its internal list.
+        # We can add extra cleanup if needed here.
+
+        # Remove common suffixes that might remain or be specific
+        suffixes = [
+            ' bulls', ' tigers', ' mountaineers', ' blue hens', ' university', ' college',
+            ' rockets', ' redhawks', ' jaspers', ' golden griffins', ' golden grizzlies',
+            ' vikings', ' titans', ' raiders', ' stags', ' broncs', ' phoenix', ' jaguars',
+            ' gaels', ' purple eagles', ' pioneers', ' red foxes', ' saints', ' warriors',
+            ' peacocks', ' falcons', ' zips', ' panthers', ' norse', ' golden gophers',
+            ' trojans', ' rams', ' rebels', ' hoosiers', ' ducks', ' buckeyes',
+            ' blackhawks', ' capitals', ' jets', ' kings', ' mammoth', ' blues'
+        ]
+        for s in suffixes:
+            if name.endswith(s):
+                name = name[:-len(s)].strip()
+
+    # Apply manual overrides last
+    if name in MANUAL_TEAM_OVERRIDES:
+        return MANUAL_TEAM_OVERRIDES[name]
+
+    # NFL Alias Fallback (for City-Only inputs)
+    if is_nfl and name in NFL_TEAM_ALIASES:
+        resolved = NFL_TEAM_ALIASES[name]
+        if _NFL_ALIAS_LOG_COUNT < _NFL_ALIAS_LOG_LIMIT:
+            logger.info(f"NFL Alias Applied: '{name}' -> '{resolved}'")
+            _NFL_ALIAS_LOG_COUNT += 1
+        return resolved
 
     return name
 
