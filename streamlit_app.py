@@ -7221,6 +7221,9 @@ with tab_master:
                         "Commence (UTC)": commence_iso, "Commence (Local)": commence_local,
                         "Market": "Spread", "Book": g.get("best_spread_book"),
                         "Pick": spread_pick, "Implied_Prob": spread_prob_market, "Line": spread_line, "AI_Prob": model_spread_prob if model_used_for_spread else None,
+                        "ml_home_implied": american_to_implied_prob(g.get("home_ml_price")),
+                        "ml_away_implied": american_to_implied_prob(g.get("away_ml_price")),
+                        "spread_pick_side": spread_pick_side_key,
                         "ai_prob_adj": ai_prob_row, "consensus_prob": spread_base_prob, "consensus_prob_adj": spread_prob_final,
                         "final_probability": spread_prob_final,
                         "decision_driver": spread_decision_driver or spread_engine_used,
@@ -7474,6 +7477,9 @@ with tab_master:
                         "Commence (UTC)": commence_iso, "Commence (Local)": commence_local,
                         "Market": "Total", "Book": g.get("best_total_book"),
                         "Pick": total_pick, "Implied_Prob": total_prob_market, "Line": total_line, "AI_Prob": model_total_prob if model_used_for_total else None,
+                        "ml_home_implied": american_to_implied_prob(g.get("home_ml_price")),
+                        "ml_away_implied": american_to_implied_prob(g.get("away_ml_price")),
+                        "spread_pick_side": spread_pick_side_key,
                         "ai_prob_adj": ai_prob_row, "consensus_prob": total_base_prob, "consensus_prob_adj": total_prob_final,
                         "final_probability": total_prob_final,
                         "decision_driver": total_decision_driver or total_engine_used,
@@ -8902,6 +8908,9 @@ with tab_master:
             "best_total_median_point",
             "best_total_mode_point",
             "enrichment_errors_sample",
+            "ml_home_implied",
+            "ml_away_implied",
+            "spread_pick_side",
         ]
         export_df = df_master_view_full.copy()
         if "Unnamed: 0" in export_df.columns:
@@ -8936,74 +8945,167 @@ with tab_master:
             picks_df = export_df.copy()
 
             def _get_best_pick_row(row):
-                # Helper to extract safe float
-                def _get_f(k):
-                    v = row.get(k)
+                # Weights for Score Calculation
+                W_MODEL = 0.40
+                W_SENT = 0.15
+                W_KALSHI = 0.30
+                W_ML = 0.15
+
+                # Thresholds
+                MIN_MARKET_PROB = 0.52
+                THRESHOLD_SCORE = 0.05
+
+                # Helpers
+                def _safe(k):
                     try:
+                        v = row.get(k)
+                        if pd.isna(v) or v == "": return None
                         return float(v)
-                    except Exception:
+                    except (ValueError, TypeError):
                         return None
 
-                # Spread Data
-                s_pick = row.get("Spread & Pick")
-                s_prob = _get_f("spread_prob_adj")
-                if s_prob is None:
-                    s_prob = _get_f("spread_prob")
-                s_edge = _get_f("spread_edge")
+                def _safe_str(k):
+                    v = row.get(k)
+                    if pd.isna(v): return None
+                    return str(v).strip()
 
-                # Total Data
-                t_pick = row.get("Total & Pick")
-                t_prob = _get_f("total_prob_adj")
-                if t_prob is None:
-                    t_prob = _get_f("total_prob")
-                t_edge = _get_f("total_edge")
+                # --- 1. SPREAD CANDIDATE ---
+                s_pick = _safe_str("Spread & Pick")
+                s_market_prob = _safe("spread_prob_pick_market")
+                if s_market_prob is None:
+                    s_market_prob = _safe("spread_prob_market")
+                s_final_prob = _safe("spread_prob_pick_final") or s_market_prob
 
-                # Determine Best
-                # Criteria: Probability > Edge.
-                # If one is missing pick, choose the other.
+                s_score = -99.0
+                if s_pick and s_market_prob:
+                    # Determine Pick Side (home/away)
+                    # Use explicit column spread_pick_side if available, else infer
+                    s_side = _safe_str("spread_pick_side")
+                    if not s_side:
+                        # Fallback inference
+                        pick_team = _safe_str("spread_pick_team")
+                        home_team = _safe_str("Home")
+                        if pick_team and home_team:
+                            # Normalize check
+                            if pick_team.lower() in home_team.lower():
+                                s_side = "home"
+                            else:
+                                s_side = "away"
 
-                s_valid = pd.notnull(s_pick) and (s_prob is not None or s_edge is not None)
-                t_valid = pd.notnull(t_pick) and (t_prob is not None or t_edge is not None)
+                    # Model Edge
+                    # Assuming model_spread_prob is Home Win/Cover prob.
+                    model_p = _safe("model_spread_prob")
+                    s_model_edge = 0.0
+                    if model_p is not None and s_side:
+                        if s_side == "home":
+                            model_prob_pick = model_p
+                        else:
+                            model_prob_pick = 1.0 - model_p
+                        s_model_edge = model_prob_pick - s_market_prob
 
+                    # Sentiment Edge
+                    s_sent_edge = _safe("spread_sentiment_adj") or 0.0
+
+                    # Kalshi Edge
+                    k_p = _safe("spread_prob_pick_kalshi")
+                    s_kalshi_edge = 0.0
+                    if k_p is not None:
+                        s_kalshi_edge = k_p - s_market_prob
+
+                    # Moneyline Alignment (Modifier)
+                    # Uses explicit ml_home_implied from export columns
+                    s_ml_align = 0.0
+                    ml_home = _safe("ml_home_implied")
+                    if ml_home and s_side:
+                        # If pick is Home, we want Home ML > 0.5. Alignment = ML_Home - 0.5
+                        # If pick is Away, we want Home ML < 0.5 (Away > 0.5). Alignment = -(ML_Home - 0.5)
+                        # (Because ML_Home - 0.5 is positive if Home is fav)
+                        if s_side == "home":
+                            s_ml_align = ml_home - 0.5
+                        else:
+                            s_ml_align = -(ml_home - 0.5)
+
+                    # Calculate Score
+                    s_score = (s_market_prob - 0.50) + \
+                              (W_MODEL * s_model_edge) + \
+                              (W_SENT * s_sent_edge) + \
+                              (W_KALSHI * s_kalshi_edge) + \
+                              (W_ML * s_ml_align)
+
+                # --- 2. TOTAL CANDIDATE ---
+                t_pick = _safe_str("Total & Pick")
+                t_market_prob = _safe("total_prob_pick_market")
+                if t_market_prob is None:
+                    t_market_prob = _safe("total_prob_market")
+                t_final_prob = _safe("total_prob_pick_final") or t_market_prob
+
+                t_score = -99.0
+                if t_pick and t_market_prob:
+                    # Model Edge (Currently no total model, so 0)
+                    t_model_edge = 0.0
+
+                    # Sentiment Edge
+                    t_sent_edge = _safe("total_sentiment_adj") or 0.0
+
+                    # Kalshi Edge
+                    kt_p = _safe("total_prob_pick_kalshi")
+                    t_kalshi_edge = 0.0
+                    if kt_p is not None:
+                        t_kalshi_edge = kt_p - t_market_prob
+
+                    # ML Alignment (None for Total)
+                    t_ml_align = 0.0
+
+                    # Calculate Score
+                    t_score = (t_market_prob - 0.50) + \
+                              (W_MODEL * t_model_edge) + \
+                              (W_SENT * t_sent_edge) + \
+                              (W_KALSHI * t_kalshi_edge) + \
+                              (W_ML * t_ml_align)
+
+                # --- 3. DECISION LOGIC ---
                 best_type = "NO_BET"
                 best_pick = None
-                best_prob = None
-                best_edge = None
+                best_prob = 0.0
+                decision = "No valid markets"
 
-                if s_valid and not t_valid:
-                    best_type = "SPREAD"
-                elif t_valid and not s_valid:
-                    best_type = "TOTAL"
-                elif s_valid and t_valid:
-                    # Compare
-                    sp = s_prob if s_prob is not None else -1.0
-                    tp = t_prob if t_prob is not None else -1.0
-                    if sp > tp:
+                s_qualifies = (s_market_prob and s_market_prob >= MIN_MARKET_PROB) or (s_score >= THRESHOLD_SCORE)
+                t_qualifies = (t_market_prob and t_market_prob >= MIN_MARKET_PROB) or (t_score >= THRESHOLD_SCORE)
+
+                if s_qualifies and t_qualifies:
+                    if s_score >= t_score:
                         best_type = "SPREAD"
-                    elif tp > sp:
-                        best_type = "TOTAL"
+                        best_pick = s_pick
+                        best_prob = s_final_prob
+                        decision = f"Spread Score ({s_score:.3f}) > Total ({t_score:.3f})"
                     else:
-                        # Tie on prob, check edge
-                        se = s_edge if s_edge is not None else -99.0
-                        te = t_edge if t_edge is not None else -99.0
-                        if se >= te:
-                            best_type = "SPREAD"
-                        else:
-                            best_type = "TOTAL"
-
-                # Populate based on best_type
-                if best_type == "SPREAD":
+                        best_type = "TOTAL"
+                        best_pick = t_pick
+                        best_prob = t_final_prob
+                        decision = f"Total Score ({t_score:.3f}) > Spread ({s_score:.3f})"
+                elif s_qualifies:
+                    best_type = "SPREAD"
                     best_pick = s_pick
-                    best_prob = s_prob
-                    best_edge = s_edge
-                elif best_type == "TOTAL":
+                    best_prob = s_final_prob
+                    decision = f"Spread Qualifies (Score {s_score:.3f})"
+                elif t_qualifies:
+                    best_type = "TOTAL"
                     best_pick = t_pick
-                    best_prob = t_prob
-                    best_edge = t_edge
+                    best_prob = t_final_prob
+                    decision = f"Total Qualifies (Score {t_score:.3f})"
+                else:
+                    decision = f"No Qualifiers (S:{s_score:.3f}, T:{t_score:.3f})"
 
-                return pd.Series([best_type, best_pick, best_prob, best_edge])
+                # 4. EDGE CALCULATION (Restored for downstream compat)
+                best_edge = 0.0
+                if best_type == "SPREAD" and s_market_prob:
+                    best_edge = (best_prob or 0.0) - s_market_prob
+                elif best_type == "TOTAL" and t_market_prob:
+                    best_edge = (best_prob or 0.0) - t_market_prob
 
-            picks_cols_added = ["Best_ST_Type", "Best_ST_Pick", "Best_ST_Prob", "Best_ST_Edge"]
+                return pd.Series([best_type, best_pick, best_prob, decision, best_edge])
+
+            picks_cols_added = ["Best_ST_Type", "Best_ST_Pick", "Best_ST_Prob", "Best_ST_Reason", "Best_ST_Edge"]
             picks_df[picks_cols_added] = picks_df.apply(_get_best_pick_row, axis=1)
 
             # Map intended output columns to DataFrame columns
@@ -9015,6 +9117,7 @@ with tab_master:
                 "Best_ST_Type": "Best_ST_Type",
                 "Best_ST_Pick": "Best_ST_Pick",
                 "Best_ST_Prob": "Best_ST_Prob",
+                "Best_ST_Reason": "Best_ST_Reason",
                 "Best_ST_Edge": "Best_ST_Edge",
                 "Spread": "spread_pick_line",
                 "Spread & Pick": "Spread & Pick",
