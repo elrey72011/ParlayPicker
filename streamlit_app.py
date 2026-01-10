@@ -6345,7 +6345,13 @@ with tab_master:
                 sentiment_debug_global = st.session_state.get("sentiment_debug") or {}
                 league_debug = st.session_state.get(f"sentiment_debug_{league_key}") or {}
                 articles_total = sentiment_meta_global.get("sentiment_articles_total") or league_debug.get("articles_total") or 0
-                sentiment_diff = (home_sent - away_sent) if (home_sent is not None and away_sent is not None) else 0.0
+
+                # JULES-FIX: Compute Sentiment_Diff ONLY if both valid (else None)
+                if home_sent is not None and away_sent is not None:
+                    sentiment_diff = home_sent - away_sent
+                else:
+                    sentiment_diff = None
+
                 rate_limited_flag = bool(
                     sentiment_meta_global.get("sentiment_rate_limited")
                     or sentiment_debug_global.get("rate_limited")
@@ -6486,8 +6492,21 @@ with tab_master:
                 sentiment_status_counts_field = sentiment_status_counts_field or ""
                 sentiment_disabled_reason = sentiment_disabled_reason or ""
                 sentiment_defaults_base = {
+                    "sentiment_score": 0.0,
+                    "sentiment_confidence": 0.0,
+                    "sentiment_source": sentiment_meta_global.get("sentiment_source") or "none",
+                    "sentiment_status": "ok",
+                    "sentiment_error_count": 0,
+                    "sentiment_articles_total": 0,
+                    "sentiment_cached_teams_count": 0,
+                    "sentiment_used_cached": False,
+                    "sentiment_available_count": 0,
                     "sentiment_sample_status": sentiment_sample_status,
                     "sentiment_sample_query": sentiment_sample_query,
+                    "sentiment_sample_totalResults": 0,
+                    "sentiment_rate_limited": False,
+                    "sentiment_auth_error": False,
+                    "sentiment_cooldown_until": "",
                     "sentiment_status_counts": sentiment_status_counts_field,
                     "sentiment_disabled_reason": sentiment_disabled_reason,
                     "spread_sentiment_arrow": "",
@@ -8954,7 +8973,7 @@ with tab_master:
             'Bet_Confidence', 'Bet_Lean',
             'Spread & Pick', 'Total & Pick',
             'spread_edge', 'total_edge',
-            'Pick', 'AI_Prob', 'Implied_Prob', 'Sentiment_Diff', 'status', 'best_pick_prob', 'best_pick_edge'
+            'Pick', 'AI_Prob', 'Implied_Prob', 'Home_Sentiment', 'Away_Sentiment', 'Sentiment_Diff', 'sentiment_status', 'status', 'best_pick_prob', 'best_pick_edge'
         ]
         safe_cols = [c for c in ui_whitelist if c in top_df_display.columns]
         top_df_ui = top_df_display[safe_cols].copy()
@@ -8981,6 +9000,9 @@ with tab_master:
             "ml_weight",
             "sentiment_weight",
             "sentiment_score",
+            "Home_Sentiment",
+            "Away_Sentiment",
+            "sentiment_status",
             "sentiment_direction",
             "sentiment_impact_applied",
             "confidence_reason",
@@ -9201,14 +9223,17 @@ with tab_master:
                 "total_edge",
                 "At_a_Glance_Confidence",
                 "At_a_Glance_Reason",
+                "Home_Sentiment",
+                "Away_Sentiment",
                 "Sentiment_Diff",
+                "sentiment_status",
                 "kalshi_prob_used",
                 "kalshi_matched",
                 "AI_Prob",
                 "Implied_Prob",
                 "ml_eligible",
                 "ml_suppressed_reason",
-                "candidate_types_available"
+            "candidate_types_available"
             ]
 
             final_picks_df = pd.DataFrame()
@@ -9405,7 +9430,7 @@ with tab_master:
                     df_master_view_display = df_master_view_display.drop(columns=['kalshi_wanted_tokens'])
 
                 # --- FINAL WHITELIST FIX ---
-                ui_whitelist = ['league', 'Home', 'Away', 'Pick', 'AI_Prob', 'Implied_Prob', 'Sentiment_Diff', 'spread_edge', 'status']
+                ui_whitelist = ['league', 'Home', 'Away', 'Pick', 'AI_Prob', 'Implied_Prob', 'Home_Sentiment', 'Away_Sentiment', 'Sentiment_Diff', 'sentiment_status', 'spread_edge', 'status']
                 safe_cols = [c for c in ui_whitelist if c in df_master_view_display.columns] # or df_master_view_display at line 8946
                 top_df_ui = df_master_view_display[safe_cols].copy()
 
