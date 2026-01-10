@@ -1144,9 +1144,15 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
             for t_norm in current_home_teams:
                 if not t_norm: continue
 
+                # FIX: Force strict normalization key for lookup
+                key = str(t_norm).strip().lower()
+
+                if lg_key == "NFL":
+                    logger.debug(f"NFL match raw={t_norm!r} norm_key={key!r}")
+
                 # 1. Try Mapping (TEAM_NAME_MAPPING)
-                if t_norm in TEAM_NAME_MAPPING:
-                    mapped = TEAM_NAME_MAPPING[t_norm]
+                if key in TEAM_NAME_MAPPING:
+                    mapped = TEAM_NAME_MAPPING[key]
                     mapped_norm = robust_normalize_team(mapped, lg_key)
                     if mapped_norm in stats_index_norm_map:
                         home_map_local[t_norm] = stats_index_norm_map[mapped_norm]
@@ -1160,8 +1166,8 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
                     continue
 
                 # 3. Try Manual Overrides
-                if t_norm in MANUAL_TEAM_OVERRIDES:
-                    target = MANUAL_TEAM_OVERRIDES[t_norm]
+                if key in MANUAL_TEAM_OVERRIDES:
+                    target = MANUAL_TEAM_OVERRIDES[key]
                     target_norm = robust_normalize_team(target, lg_key)
                     if target_norm in stats_index_norm_map:
                         home_map_local[t_norm] = stats_index_norm_map[target_norm]
@@ -1188,9 +1194,15 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
             for t_norm in current_away_teams:
                 if not t_norm: continue
 
+                # FIX: Force strict normalization key for lookup
+                key = str(t_norm).strip().lower()
+
+                if lg_key == "NFL":
+                    logger.debug(f"NFL match raw={t_norm!r} norm_key={key!r}")
+
                 # 1. Try Mapping (TEAM_NAME_MAPPING)
-                if t_norm in TEAM_NAME_MAPPING:
-                    mapped = TEAM_NAME_MAPPING[t_norm]
+                if key in TEAM_NAME_MAPPING:
+                    mapped = TEAM_NAME_MAPPING[key]
                     mapped_norm = robust_normalize_team(mapped, lg_key)
                     if mapped_norm in stats_index_norm_map:
                         away_map_local[t_norm] = stats_index_norm_map[mapped_norm]
@@ -1204,8 +1216,8 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
                     continue
 
                 # 3. Try Manual Overrides
-                if t_norm in MANUAL_TEAM_OVERRIDES:
-                    target = MANUAL_TEAM_OVERRIDES[t_norm]
+                if key in MANUAL_TEAM_OVERRIDES:
+                    target = MANUAL_TEAM_OVERRIDES[key]
                     target_norm = robust_normalize_team(target, lg_key)
                     if target_norm in stats_index_norm_map:
                         away_map_local[t_norm] = stats_index_norm_map[target_norm]
