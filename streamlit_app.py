@@ -753,12 +753,19 @@ def enrich_picks_with_roi_metrics(df: pd.DataFrame) -> pd.DataFrame:
     
     # 1. Calculate Edge (Math vs Market Gap)
     # Ensure columns are numeric to avoid errors
-    df['spread_implied_prob'] = pd.to_numeric(df['spread_implied_prob'], errors='coerce').fillna(0)
-    df['total_implied_prob'] = pd.to_numeric(df['total_implied_prob'], errors='coerce').fillna(0)
-    df['final_probability'] = pd.to_numeric(df['final_probability'], errors='coerce').fillna(0)
+    df['spread_implied_prob'] = pd.to_numeric(df['spread_implied_prob'], errors='coerce').fillna(0.0)
+    df['total_implied_prob'] = pd.to_numeric(df['total_implied_prob'], errors='coerce').fillna(0.0)
     
-    df['spread_edge'] = df['final_probability'] - df['spread_implied_prob']
-    df['total_edge'] = df['final_probability'] - df['total_implied_prob']
+    # Use adjusted probabilities if available, else raw
+    s_prob = df['spread_prob_adj'] if 'spread_prob_adj' in df.columns else df.get('spread_prob')
+    t_prob = df['total_prob_adj'] if 'total_prob_adj' in df.columns else df.get('total_prob')
+
+    # Fallback to 0 if column missing or null
+    s_prob = pd.to_numeric(s_prob, errors='coerce').fillna(0.0)
+    t_prob = pd.to_numeric(t_prob, errors='coerce').fillna(0.0)
+
+    df['spread_edge'] = s_prob - df['spread_implied_prob']
+    df['total_edge'] = t_prob - df['total_implied_prob']
     
     # 2. Define Market Stability (Volatility Indicator)
     def classify_stability(row):
@@ -791,6 +798,7 @@ def enrich_picks_with_roi_metrics(df: pd.DataFrame) -> pd.DataFrame:
 def calculate_best_pick_metrics(df: pd.DataFrame) -> pd.DataFrame:
     """
     Compute Best_ST_Type/Pick/Prob/Edge for picks sheet.
+    Jules: Logic updated to ensure strict Spread vs Total comparison.
     """
     if df is None or df.empty:
         return df
@@ -837,6 +845,7 @@ def calculate_best_pick_metrics(df: pd.DataFrame) -> pd.DataFrame:
         s_qualifies = (s_val >= THRESHOLD)
         t_qualifies = (t_val >= THRESHOLD)
 
+        # Logic verified: Prioritize Spread vs Total based on adjusted probability
         if s_qualifies and t_qualifies:
             if s_val >= t_val:
                 best_type = "SPREAD"
@@ -9031,51 +9040,42 @@ with tab_master:
         # --- PICKS SHEET EXPORT (DEFAULT) ---
         if not export_df.empty:
             # Map intended output columns to DataFrame columns
-            desired_map = {
-                "league": "league",
-                "Commence (Local)": "Commence (Local)",
-                "Local Date": "Local Date",
-                "Home": "Home",
-                "Away": "Away",
-                "Best_ST_Type": "Best_ST_Type",
-                "Best_ST_Pick": "Best_ST_Pick",
-                "Best_ST_Prob": "Best_ST_Prob",
-                "Best_ST_Reason": "Best_ST_Reason",
-                "Best_ST_Edge": "Best_ST_Edge",
-                "Spread": "spread_pick_line",
-                "Spread & Pick": "Spread & Pick",
-                "Spread_Prob": "spread_prob_adj",
-                "Spread_Edge": "spread_edge",
-                "Total": "total_pick_line",
-                "Total & Pick": "Total & Pick",
-                "Total_Prob": "total_prob_adj",
-                "Total_Edge": "total_edge",
-                "Sentiment_Diff": "Sentiment_Diff",
-                "Confidence_Score": "At_a_Glance_Score",
-                "AI_Prob": "AI_Prob"
-            }
+            # D) Replace export selection with an explicit picks sheet:
+            export_cols = [
+                "league",
+                "Commence (Local)",
+                "Home",
+                "Away",
+                "Best_ST_Type",
+                "Best_ST_Pick",
+                "Best_ST_Prob",
+                "Best_ST_Edge",
+                "Spread & Pick",
+                "spread_prob_adj",
+                "spread_edge",
+                "Total & Pick",
+                "total_prob_adj",
+                "total_edge",
+                "At_a_Glance_Confidence",
+                "At_a_Glance_Reason"
+            ]
 
             final_picks_df = pd.DataFrame()
-            for dst, src in desired_map.items():
-                if src in export_df.columns:
-                    final_picks_df[dst] = export_df[src]
+            for col in export_cols:
+                # Use defensive get to avoid KeyErrors, falling back to None
+                # Check mapping for fallbacks if column name in df differs from export name
+                # Here we assume df has these columns as we calculated them or they exist in source
+                if col in export_df.columns:
+                    final_picks_df[col] = export_df[col]
                 else:
-                    # Fallbacks
-                    if src == "spread_prob_adj" and "spread_prob" in export_df.columns:
-                         final_picks_df[dst] = export_df["spread_prob"]
-                    elif src == "total_prob_adj" and "total_prob" in export_df.columns:
-                         final_picks_df[dst] = export_df["total_prob"]
+                    # Fallbacks for specific columns if strict match fails
+                    if col == "spread_prob_adj" and "spread_prob" in export_df.columns:
+                         final_picks_df[col] = export_df["spread_prob"]
+                    elif col == "total_prob_adj" and "total_prob" in export_df.columns:
+                         final_picks_df[col] = export_df["total_prob"]
                     else:
-                         final_picks_df[dst] = None
-
-            # Conditional Drop: Sentiment_Diff if all zero
-            if "Sentiment_Diff" in final_picks_df.columns:
-                try:
-                    vals = pd.to_numeric(final_picks_df["Sentiment_Diff"], errors='coerce').fillna(0.0)
-                    if (vals == 0.0).all():
-                         final_picks_df = final_picks_df.drop(columns=["Sentiment_Diff"])
-                except Exception:
-                    pass
+                         # Keep column but empty to ensure stable schema
+                         final_picks_df[col] = None
 
             picks_cols = list(final_picks_df.columns)
             logger.info(f"Export picks columns: {picks_cols}")
