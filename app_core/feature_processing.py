@@ -326,6 +326,21 @@ MANUAL_TEAM_OVERRIDES = {
 
     # NHL accent + city-only fixes
     "montréal canadiens": "montreal canadiens",
+    "st louis": "st louis blues",
+
+    # NCAAB Short Name / Normalized Overrides
+    "uconn": "connecticut",
+    "depaul": "depaul",
+    "coastal carolina": "coastal carolina",
+    "western michigan": "western michigan",
+    "new haven": "new haven",
+    "baylor": "baylor",
+    "michigan": "michigan",
+    "wisconsin": "wisconsin",
+    "fiu": "florida intl",
+    "middle tennessee": "middle tennessee",
+    "kansas st": "kansas state",
+    "kansas state": "kansas state",
     
     # --- NEW NFL city-only fixes ---
     "carolina": "carolina panthers",
