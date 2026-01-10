@@ -339,10 +339,6 @@ NFL_TEAM_ALIASES = {
     # Inputs like "new york" should fail lookup rather than silently mapping to the wrong team.
 }
 
-    if name in MANUAL_TEAM_OVERRIDES:
-        return MANUAL_TEAM_OVERRIDES[name]
-    return name
-
 _NFL_ALIAS_LOG_COUNT = 0
 _NFL_ALIAS_LOG_LIMIT = 10
 
@@ -384,6 +380,10 @@ def robust_normalize_team(name: str, league: Optional[str] = None) -> str:
     global _NFL_ALIAS_LOG_COUNT
     if not name:
         return ""
+
+    if name in MANUAL_TEAM_OVERRIDES:
+        return MANUAL_TEAM_OVERRIDES[name]
+    return name
 
     # 1. Lowercase and strip
     name = str(name).lower().strip()
