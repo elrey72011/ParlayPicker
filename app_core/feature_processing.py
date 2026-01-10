@@ -1155,11 +1155,8 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
                     a_stat = "MISSING" if bool(away_fallback.loc[idx]) else "OK"
 
                             # LOGGING: Fallbacks (capped)
-        # Log fallback rows (throttled)
-        global _FALLBACK_LOG_COUNT
-        
                 # ------------------------------------------------------------
-                # LOGGING: Stats fallback rows (THROTTLED, SYNTAX-SAFE)
+                # LOGGING: Stats fallback rows (THROTTLED)
                 # ------------------------------------------------------------
                 global _FALLBACK_LOG_COUNT
         
@@ -1175,6 +1172,21 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
                                 h_stat = "MISSING" if bool(home_fallback.loc[idx]) else "OK"
                                 a_stat = "MISSING" if bool(away_fallback.loc[idx]) else "OK"
         
+                                logger.warning(
+                                    f"DEBUG Stats Fallback Used: "
+                                    f"{league_str} {h_team} ({h_stat}) vs {a_team} ({a_stat})"
+                                )
+                            except Exception:
+                                pass
+        
+                            _FALLBACK_LOG_COUNT += 1
+        
+                        elif _FALLBACK_LOG_COUNT == _FALLBACK_LOG_LIMIT:
+                            logger.warning("DEBUG Stats Fallback Used: (further messages suppressed)")
+                            _FALLBACK_LOG_COUNT += 1
+                        else:
+                            break
+
                                 logger.warning(
                                     f"DEBUG Stats Fallback Used: "
                                     f"{league_str} {h_team} ({h_stat}) vs {a_team} ({a_stat})"
