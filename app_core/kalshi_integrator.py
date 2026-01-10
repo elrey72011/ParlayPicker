@@ -167,18 +167,149 @@ KALSHI_TEAM_ABBREVIATIONS: Dict[str, List[str]] = {
     "SEATTLE KRAKEN": ["SEA"]
 }
 
-NBA_TEAM_CODE_MAP: Dict[str, str] = {
-    "ATLANTA HAWKS": "ATL", "BOSTON CELTICS": "BOS", "BROOKLYN NETS": "BKN", "BROOKLYN": "BKN",
-    "CHARLOTTE HORNETS": "CHA", "CHICAGO BULLS": "CHI", "CLEVELAND CAVALIERS": "CLE",
-    "DALLAS MAVERICKS": "DAL", "DENVER NUGGETS": "DEN", "DETROIT PISTONS": "DET",
-    "GOLDEN STATE WARRIORS": "GSW", "HOUSTON ROCKETS": "HOU", "INDIANA PACERS": "IND",
-    "LOS ANGELES CLIPPERS": "LAC", "LA CLIPPERS": "LAC", "LOS ANGELES LAKERS": "LAL",
-    "LA LAKERS": "LAL", "MEMPHIS GRIZZLIES": "MEM", "MIAMI HEAT": "MIA",
-    "MILWAUKEE BUCKS": "MIL", "MINNESOTA TIMBERWOLVES": "MIN", "NEW ORLEANS PELICANS": "NOP",
-    "NEW YORK KNICKS": "NYK", "OKLAHOMA CITY THUNDER": "OKC", "OKLAHOMA CITY": "OKC", "ORLANDO MAGIC": "ORL",
-    "PHILADELPHIA 76ERS": "PHI", "PHOENIX SUNS": "PHX", "PHOENIX": "PHX", "PORTLAND TRAIL BLAZERS": "POR",
-    "SACRAMENTO KINGS": "SAC", "SAN ANTONIO SPURS": "SAS", "TORONTO RAPTORS": "TOR",
-    "UTAH JAZZ": "UTA", "WASHINGTON WIZARDS": "WAS"
+# NBA: full name -> 3-letter code
+NBA_TEAM_CODE_MAP = {
+    "ATLANTA HAWKS": "ATL",
+    "BOSTON CELTICS": "BOS",
+    "BROOKLYN NETS": "BKN",
+    "CHARLOTTE HORNETS": "CHA",
+    "CHICAGO BULLS": "CHI",
+    "CLEVELAND CAVALIERS": "CLE",
+    "DALLAS MAVERICKS": "DAL",
+    "DENVER NUGGETS": "DEN",
+    "DETROIT PISTONS": "DET",
+    "GOLDEN STATE WARRIORS": "GSW",
+    "HOUSTON ROCKETS": "HOU",
+    "INDIANA PACERS": "IND",
+    "LOS ANGELES CLIPPERS": "LAC",
+    "LOS ANGELES LAKERS": "LAL",
+    "MEMPHIS GRIZZLIES": "MEM",
+    "MIAMI HEAT": "MIA",
+    "MILWAUKEE BUCKS": "MIL",
+    "MINNESOTA TIMBERWOLVES": "MIN",
+    "NEW ORLEANS PELICANS": "NOP",
+    "NEW YORK KNICKS": "NYK",
+    "OKLAHOMA CITY THUNDER": "OKC",
+    "ORLANDO MAGIC": "ORL",
+    "PHILADELPHIA 76ERS": "PHI",
+    "PHOENIX SUNS": "PHX",
+    "PORTLAND TRAIL BLAZERS": "POR",
+    "SACRAMENTO KINGS": "SAC",
+    "SAN ANTONIO SPURS": "SAS",
+    "TORONTO RAPTORS": "TOR",
+    "UTAH JAZZ": "UTA",
+    "WASHINGTON WIZARDS": "WAS",
+}
+
+# NFL: full name -> 2–3 letter code
+NFL_TEAM_CODE_MAP = {
+    "ARIZONA CARDINALS": "ARI",
+    "ATLANTA FALCONS": "ATL",
+    "BALTIMORE RAVENS": "BAL",
+    "BUFFALO BILLS": "BUF",
+    "CAROLINA PANTHERS": "CAR",
+    "CHICAGO BEARS": "CHI",
+    "CINCINNATI BENGALS": "CIN",
+    "CLEVELAND BROWNS": "CLE",
+    "DALLAS COWBOYS": "DAL",
+    "DENVER BRONCOS": "DEN",
+    "DETROIT LIONS": "DET",
+    "GREEN BAY PACKERS": "GB",
+    "HOUSTON TEXANS": "HOU",
+    "INDIANAPOLIS COLTS": "IND",
+    "JACKSONVILLE JAGUARS": "JAX",
+    "KANSAS CITY CHIEFS": "KC",
+    "LAS VEGAS RAIDERS": "LV",
+    "LOS ANGELES CHARGERS": "LAC",
+    "LOS ANGELES RAMS": "LAR",
+    "MIAMI DOLPHINS": "MIA",
+    "MINNESOTA VIKINGS": "MIN",
+    "NEW ENGLAND PATRIOTS": "NE",
+    "NEW ORLEANS SAINTS": "NO",
+    "NEW YORK GIANTS": "NYG",
+    "NEW YORK JETS": "NYJ",
+    "PHILADELPHIA EAGLES": "PHI",
+    "PITTSBURGH STEELERS": "PIT",
+    "SAN FRANCISCO 49ERS": "SF",
+    "SEATTLE SEAHAWKS": "SEA",
+    "TAMPA BAY BUCCANEERS": "TB",
+    "TENNESSEE TITANS": "TEN",
+    "WASHINGTON COMMANDERS": "WAS",
+}
+
+# NHL: full name -> 3-letter-ish code
+NHL_TEAM_CODE_MAP = {
+    "ANAHEIM DUCKS": "ANA",
+    "ARIZONA COYOTES": "ARI",
+    "BOSTON BRUINS": "BOS",
+    "BUFFALO SABRES": "BUF",
+    "CALGARY FLAMES": "CGY",
+    "CAROLINA HURRICANES": "CAR",
+    "CHICAGO BLACKHAWKS": "CHI",
+    "COLORADO AVALANCHE": "COL",
+    "COLUMBUS BLUE JACKETS": "CBJ",
+    "DALLAS STARS": "DAL",
+    "DETROIT RED WINGS": "DET",
+    "EDMONTON OILERS": "EDM",
+    "FLORIDA PANTHERS": "FLA",
+    "LOS ANGELES KINGS": "LAK",
+    "MINNESOTA WILD": "MIN",
+    "MONTREAL CANADIENS": "MTL",
+    "NASHVILLE PREDATORS": "NSH",
+    "NEW JERSEY DEVILS": "NJD",
+    "NEW YORK ISLANDERS": "NYI",
+    "NEW YORK RANGERS": "NYR",
+    "OTTAWA SENATORS": "OTT",
+    "PHILADELPHIA FLYERS": "PHI",
+    "PITTSBURGH PENGUINS": "PIT",
+    "SAN JOSE SHARKS": "SJS",
+    "SEATTLE KRAKEN": "SEA",
+    "ST LOUIS BLUES": "STL",
+    "TAMPA BAY LIGHTNING": "TBL",
+    "TORONTO MAPLE LEAFS": "TOR",
+    "VANCOUVER CANUCKS": "VAN",
+    "VEGAS GOLDEN KNIGHTS": "VGK",
+    "WINNIPEG JETS": "WPG",
+}
+
+# MLB: full name -> 3-letter-ish code
+MLB_TEAM_CODE_MAP = {
+    "ARIZONA DIAMONDBACKS": "ARI",
+    "ATLANTA BRAVES": "ATL",
+    "BALTIMORE ORIOLES": "BAL",
+    "BOSTON RED SOX": "BOS",
+    "CHICAGO CUBS": "CHC",
+    "CHICAGO WHITE SOX": "CWS",
+    "CINCINNATI REDS": "CIN",
+    "CLEVELAND GUARDIANS": "CLE",
+    "COLORADO ROCKIES": "COL",
+    "DETROIT TIGERS": "DET",
+    "HOUSTON ASTROS": "HOU",
+    "KANSAS CITY ROYALS": "KC",
+    "LOS ANGELES ANGELS": "LAA",
+    "LOS ANGELES DODGERS": "LAD",
+    "MIAMI MARLINS": "MIA",
+    "MILWAUKEE BREWERS": "MIL",
+    "MINNESOTA TWINS": "MIN",
+    "NEW YORK METS": "NYM",
+    "NEW YORK YANKEES": "NYY",
+    "OAKLAND ATHLETICS": "OAK",
+    "PHILADELPHIA PHILLIES": "PHI",
+    "PITTSBURGH PIRATES": "PIT",
+    "SAN DIEGO PADRES": "SD",
+    "SAN FRANCISCO GIANTS": "SF",
+    "SEATTLE MARINERS": "SEA",
+    "ST LOUIS CARDINALS": "STL",
+    "TAMPA BAY RAYS": "TB",
+    "TEXAS RANGERS": "TEX",
+    "TORONTO BLUE JAYS": "TOR",
+    "WASHINGTON NATIONALS": "WSH",
+}
+
+# Skeletons for college – fill with your existing mappings and new schools from logs
+NCAAF_TEAM_CODE_MAP: Dict[str, str] = {
+    # "ALABAMA CRIMSON TIDE": "ALA",
+    # "GEORGIA BULLDOGS": "UGA",
 }
 
 NCAAB_TEAM_CODE_MAP: Dict[str, str] = {
@@ -210,7 +341,15 @@ NCAAB_TEAM_CODE_MAP: Dict[str, str] = {
     "OREGON": "ORE", "OREGON STATE": "OSU", "USC": "USC", "WASHINGTON": "WAS",
     "WASHINGTON STATE": "WSU", "COLORADO": "COL", "UTAH": "UTA", "ARIZONA STATE": "ASU",
     "CALIFORNIA": "CAL", "STANFORD": "STA", "RUTGERS": "RUT", "PENN STATE": "PSU",
-    "MINNESOTA": "MIN", "NORTHWESTERN": "NOR", "NEBRASKA": "NEB"
+    "MINNESOTA": "MIN", "NORTHWESTERN": "NOR", "NEBRASKA": "NEB",
+    # New additions from logs/user
+    "LOUISVILLE CARDINALS": "LOU",
+    "BOSTON COLLEGE EAGLES": "BC",
+    "FLORIDA STATE SEMINOLES": "FSU",
+    "NC STATE WOLFPACK": "NCS",
+    "ST BONAVENTURE BONNIES": "SBU",
+    "MIAMI HURRICANES": "MIA",
+    "GEORGIA TECH YELLOW JACKETS": "GAT",
 }
 
 
@@ -222,23 +361,39 @@ def team_name_to_code(league: str, team_name: str) -> Optional[str]:
     league_u = (league or "").upper()
     team_clean = clean_team_name(team_name)
 
+    map_to_use = None
     if league_u == "NBA":
-        # Direct lookup (keys in map should be uppercase)
-        if team_clean in NBA_TEAM_CODE_MAP:
-            return NBA_TEAM_CODE_MAP[team_clean]
+        map_to_use = NBA_TEAM_CODE_MAP
+    elif league_u == "NFL":
+        map_to_use = NFL_TEAM_CODE_MAP
+    elif league_u == "NHL":
+        map_to_use = NHL_TEAM_CODE_MAP
+    elif league_u == "MLB":
+        map_to_use = MLB_TEAM_CODE_MAP
+    elif league_u == "NCAAF":
+        map_to_use = NCAAF_TEAM_CODE_MAP
+    elif league_u == "NCAAB":
+        map_to_use = NCAAB_TEAM_CODE_MAP
 
-        # Fuzzy / Subset lookup
-        for key, code in NBA_TEAM_CODE_MAP.items():
+    if map_to_use:
+        # 1. Direct lookup
+        if team_clean in map_to_use:
+            return map_to_use[team_clean]
+
+        # 2. Fuzzy / Subset lookup
+        # Iterate keys sorted by length descending to match longest specific keys first
+        # (e.g. match "IOWA STATE" before "IOWA")
+        sorted_keys = sorted(map_to_use.keys(), key=len, reverse=True)
+        for key in sorted_keys:
+            # Check if map key is substring of input OR input is substring of map key
             if key in team_clean or team_clean in key:
-                return code
+                return map_to_use[key]
 
-    if league_u == "NCAAB":
-        if team_clean in NCAAB_TEAM_CODE_MAP:
-            return NCAAB_TEAM_CODE_MAP[team_clean]
-        # Try without 'State' -> 'St'
-        alt = team_clean.replace("STATE", "ST").replace("SAINT", "ST")
-        if alt in NCAAB_TEAM_CODE_MAP:
-            return NCAAB_TEAM_CODE_MAP[alt]
+        # 3. Special handling for College (State -> St, Saint -> St)
+        if league_u in ["NCAAB", "NCAAF"]:
+            alt = team_clean.replace("STATE", "ST").replace("SAINT", "ST")
+            if alt in map_to_use:
+                return map_to_use[alt]
 
     return None
 
