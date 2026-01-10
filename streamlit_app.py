@@ -950,13 +950,15 @@ def compute_at_a_glance(spread_conf: str, spread_reason: str, total_conf: str, t
     overall = sc if sc_rank <= tc_rank else tc
     score = rank.get(overall, 1)
 
+    reason = None
     if overall == "HIGH":
         reason = "spread+total strong"
     else:
         parts: List[str] = []
-        for part in [spread_reason, total_reason]:
-            if part:
-                parts.extend([p for p in str(part).split(";") if p])
+        for part_str in [spread_reason, total_reason]:
+            if part_str:
+                parts.extend([p for p in str(part_str).split(";") if p])
+
         if overall == "LOW":
             priority_tokens = {"missing_odds", "thin_market", "mixed_side_range", "proxy_warning"}
             priority = [p for p in parts if any(tok in p for tok in priority_tokens)]
@@ -965,8 +967,11 @@ def compute_at_a_glance(spread_conf: str, spread_reason: str, total_conf: str, t
             reason = ";".join(ordered)
         else:
             reason = ";".join(parts)
-        reason = reason[:120] if reason else None
-    return overall, score, reason or None
+
+        if reason:
+            reason = reason[:120]
+
+    return overall, score, reason
 
 
 def fmt_prob(p: Any) -> str:
@@ -8949,7 +8954,7 @@ with tab_master:
                 W_MODEL = 0.40
                 W_SENT = 0.15
                 W_KALSHI = 0.30
-                W_ML = 0.15
+                W_ML = 0.00  # Disabled Moneyline alignment for Spread/Total export focus
 
                 # Thresholds
                 MIN_MARKET_PROB = 0.52
@@ -8974,7 +8979,11 @@ with tab_master:
                 s_market_prob = _safe("spread_prob_pick_market")
                 if s_market_prob is None:
                     s_market_prob = _safe("spread_prob_market")
-                s_final_prob = _safe("spread_prob_pick_final") or s_market_prob
+
+                # Use adjusted probability if available, else final/market
+                s_final_prob = _safe("spread_prob_adj")
+                if s_final_prob is None:
+                    s_final_prob = _safe("spread_prob_pick_final") or s_market_prob
 
                 s_score = -99.0
                 if s_pick and s_market_prob:
@@ -9037,7 +9046,11 @@ with tab_master:
                 t_market_prob = _safe("total_prob_pick_market")
                 if t_market_prob is None:
                     t_market_prob = _safe("total_prob_market")
-                t_final_prob = _safe("total_prob_pick_final") or t_market_prob
+
+                # Use adjusted probability if available, else final/market
+                t_final_prob = _safe("total_prob_adj")
+                if t_final_prob is None:
+                    t_final_prob = _safe("total_prob_pick_final") or t_market_prob
 
                 t_score = -99.0
                 if t_pick and t_market_prob:
