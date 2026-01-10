@@ -8931,6 +8931,125 @@ with tab_master:
             key="master_analysis_csv",
         )
 
+        # --- Picks Sheet Export ---
+        if not export_df.empty:
+            picks_df = export_df.copy()
+
+            def _get_best_pick_row(row):
+                # Helper to extract safe float
+                def _get_f(k):
+                    v = row.get(k)
+                    try:
+                        return float(v)
+                    except Exception:
+                        return None
+
+                # Spread Data
+                s_pick = row.get("Spread & Pick")
+                s_prob = _get_f("spread_prob_adj")
+                if s_prob is None:
+                    s_prob = _get_f("spread_prob")
+                s_edge = _get_f("spread_edge")
+
+                # Total Data
+                t_pick = row.get("Total & Pick")
+                t_prob = _get_f("total_prob_adj")
+                if t_prob is None:
+                    t_prob = _get_f("total_prob")
+                t_edge = _get_f("total_edge")
+
+                # Determine Best
+                # Criteria: Probability > Edge.
+                # If one is missing pick, choose the other.
+
+                s_valid = pd.notnull(s_pick) and (s_prob is not None or s_edge is not None)
+                t_valid = pd.notnull(t_pick) and (t_prob is not None or t_edge is not None)
+
+                best_type = "NO_BET"
+                best_pick = None
+                best_prob = None
+                best_edge = None
+
+                if s_valid and not t_valid:
+                    best_type = "SPREAD"
+                elif t_valid and not s_valid:
+                    best_type = "TOTAL"
+                elif s_valid and t_valid:
+                    # Compare
+                    sp = s_prob if s_prob is not None else -1.0
+                    tp = t_prob if t_prob is not None else -1.0
+                    if sp > tp:
+                        best_type = "SPREAD"
+                    elif tp > sp:
+                        best_type = "TOTAL"
+                    else:
+                        # Tie on prob, check edge
+                        se = s_edge if s_edge is not None else -99.0
+                        te = t_edge if t_edge is not None else -99.0
+                        if se >= te:
+                            best_type = "SPREAD"
+                        else:
+                            best_type = "TOTAL"
+
+                # Populate based on best_type
+                if best_type == "SPREAD":
+                    best_pick = s_pick
+                    best_prob = s_prob
+                    best_edge = s_edge
+                elif best_type == "TOTAL":
+                    best_pick = t_pick
+                    best_prob = t_prob
+                    best_edge = t_edge
+
+                return pd.Series([best_type, best_pick, best_prob, best_edge])
+
+            picks_cols_added = ["Best_ST_Type", "Best_ST_Pick", "Best_ST_Prob", "Best_ST_Edge"]
+            picks_df[picks_cols_added] = picks_df.apply(_get_best_pick_row, axis=1)
+
+            # Map intended output columns to DataFrame columns
+            desired_map = {
+                "league": "league",
+                "Commence (Local)": "Commence (Local)",
+                "Home": "Home",
+                "Away": "Away",
+                "Best_ST_Type": "Best_ST_Type",
+                "Best_ST_Pick": "Best_ST_Pick",
+                "Best_ST_Prob": "Best_ST_Prob",
+                "Best_ST_Edge": "Best_ST_Edge",
+                "Spread": "spread_pick_line",
+                "Spread & Pick": "Spread & Pick",
+                "Spread_Prob": "spread_prob_adj",
+                "Spread_Edge": "spread_edge",
+                "Total": "total_pick_line",
+                "Total & Pick": "Total & Pick",
+                "Total_Prob": "total_prob_adj",
+                "Total_Edge": "total_edge",
+                "Sentiment_Diff": "Sentiment_Diff",
+                "Confidence_Score": "At_a_Glance_Score"
+            }
+
+            final_picks_df = pd.DataFrame()
+            for dst, src in desired_map.items():
+                if src in picks_df.columns:
+                    final_picks_df[dst] = picks_df[src]
+                else:
+                    # Fallbacks
+                    if src == "spread_prob_adj" and "spread_prob" in picks_df.columns:
+                         final_picks_df[dst] = picks_df["spread_prob"]
+                    elif src == "total_prob_adj" and "total_prob" in picks_df.columns:
+                         final_picks_df[dst] = picks_df["total_prob"]
+                    else:
+                         final_picks_df[dst] = None
+
+            picks_csv = final_picks_df.to_csv(index=False).encode("utf-8")
+            st.download_button(
+                "Download Picks Sheet CSV",
+                data=picks_csv,
+                file_name="picks_sheet.csv",
+                mime="text/csv",
+                key="picks_sheet_csv",
+            )
+
         with st.expander("Sentiment Debug", expanded=False):
             meta_view = st.session_state.get("sentiment_meta", {})
             meta_map_view = st.session_state.get("sentiment_meta_map", {})
