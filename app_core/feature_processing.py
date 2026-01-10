@@ -339,10 +339,6 @@ NFL_TEAM_ALIASES = {
     # Inputs like "new york" should fail lookup rather than silently mapping to the wrong team.
 }
 
-    if name in MANUAL_TEAM_OVERRIDES:
-        return MANUAL_TEAM_OVERRIDES[name]
-    return name
-
 _NFL_ALIAS_LOG_COUNT = 0
 _NFL_ALIAS_LOG_LIMIT = 10
 

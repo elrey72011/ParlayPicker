@@ -798,11 +798,15 @@ def enrich_picks_with_roi_metrics(df: pd.DataFrame) -> pd.DataFrame:
 
 def calculate_best_pick_metrics(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Compute Best_ST_Type/Pick/Prob/Edge for picks sheet.
-    Jules: Logic updated to consider Spread, Total, AND Moneyline.
-    Filters ML if odds are extreme (>300).
-    Final pick must be SPREAD or TOTAL.
-    NEVER returns NO_BET. Includes Confidence + Lean.
+    Compute Best Pick (best_pick_type, best_pick, final_prob, edge) with updated priority.
+
+    Priority Logic:
+      1. Spread or Total (if valid/strong).
+      2. Moneyline (only if Spread/Total weak/missing AND ML eligible).
+      3. Fallback (avoid NO_BET).
+
+    Moneyline Suppression:
+      - If abs(ML) > 300, ML is NOT eligible for best pick (unless forced fallback).
     """
     if df is None or df.empty:
         return df
@@ -823,7 +827,8 @@ def calculate_best_pick_metrics(df: pd.DataFrame) -> pd.DataFrame:
         def _safe_str(k):
             v = row.get(k)
             if pd.isna(v): return None
-            return str(v).strip()
+            s = str(v).strip()
+            return s if s.lower() != "none" else None
 
         # 2. Extract Data
         # Spread
@@ -838,97 +843,156 @@ def calculate_best_pick_metrics(df: pd.DataFrame) -> pd.DataFrame:
         if t_prob is None: t_prob = _safe("total_prob")
         t_edge = _safe("total_edge") or 0.0
 
-        # Moneyline Check (Signal Only)
+        # Moneyline
+        # Assuming the row itself is the ML row, or has ML fields populated
+        ml_pick = _safe_str("Pick")
+        ml_prob = _safe("final_probability") # Using final_probability which is usually ML prob in ML row
+        if ml_prob is None: ml_prob = _safe("AI_Prob")
+        ml_implied = _safe("Implied_Prob")
+        ml_edge = (ml_prob - ml_implied) if (ml_prob is not None and ml_implied is not None) else 0.0
+
+        # Moneyline Suppression Check
         ml_home_price = _safe("Home_ML")
         ml_away_price = _safe("Away_ML")
 
-        ml_extreme = False
-        if ml_home_price is not None and abs(ml_home_price) > 300:
-            ml_extreme = True
-        if ml_away_price is not None and abs(ml_away_price) > 300:
-            ml_extreme = True
+        ml_eligible = True
+        ml_suppressed_reason = ""
 
-        # Selection Logic: Compare Spread vs Total
-        # Score = Prob + Edge (scaled up slightly to break ties)
+        # Rule: If abs(Home_ML) > 300 or abs(Away_ML) > 300, ML is NOT eligible
+        if (ml_home_price is not None and abs(ml_home_price) > 300) or \
+           (ml_away_price is not None and abs(ml_away_price) > 300):
+            ml_eligible = False
+            ml_suppressed_reason = "abs(ML)>300"
+
+        # If no pick or prob, ML is not a candidate
+        if not ml_pick or ml_prob is None:
+            ml_eligible = False # Or just unavailable
+            if not ml_suppressed_reason: ml_suppressed_reason = "missing_data"
+
+        # 3. Calculate Scores
+        # Score = (Prob - 0.5) + Edge * 2.0 (favors higher edge)
         def _score(prob, edge):
             p = prob if prob is not None else 0.5
             e = edge if edge is not None else 0.0
-            return p + (e * 2.0)
+            return (p - 0.5) + (e * 2.0) + 0.5 # Base offset to keep positive
 
         s_score = _score(s_prob, s_edge)
         t_score = _score(t_prob, t_edge)
+        ml_score = _score(ml_prob, ml_edge)
 
-        # Default to Spread if close
-        best_type = "SPREAD"
+        # Valid Flags (Prob > 0.0 check is mostly to avoid default zeros if they slipped in)
+        s_valid = (s_prob is not None and s_pick is not None)
+        t_valid = (t_prob is not None and t_pick is not None)
+        ml_valid = (ml_prob is not None and ml_pick is not None)
+
+        # 4. Selection Logic
+        best_type = "SPREAD" # Default
         best_pick = s_pick
-        best_prob = s_prob if s_prob is not None else 0.5
+        best_prob = s_prob
         best_edge = s_edge
-        reason = "Default (Spread)"
+        reason = "Default"
 
-        s_valid = (s_prob is not None)
-        t_valid = (t_prob is not None)
+        # Priority: Prefer Spread/Total if "Available" (Valid)
+        # "Only consider Moneyline if: a) Spread and Total are missing/unavailable OR both are extremely weak"
+        # We define "Extremely Weak" as Score < Threshold? Or just prioritize S/T always if valid.
+        # User Requirement: "Prefer Total or Spread if either is available (has a valid probability/edge/confidence)."
 
+        candidates = []
+        if s_valid: candidates.append("SPREAD")
+        if t_valid: candidates.append("TOTAL")
+        if ml_valid: candidates.append("ML")
+
+        candidate_types_str = "|".join(candidates)
+
+        # Compare S vs T first
+        st_best_type = None
         if s_valid and t_valid:
             if t_score > s_score:
-                best_type = "TOTAL"
-                best_pick = t_pick
-                best_prob = t_prob
-                best_edge = t_edge
-                reason = "Total Score > Spread"
+                st_best_type = "TOTAL"
             else:
+                st_best_type = "SPREAD"
+        elif s_valid:
+            st_best_type = "SPREAD"
+        elif t_valid:
+            st_best_type = "TOTAL"
+
+        # Decision
+        if st_best_type:
+            # S/T available. Pick the best of them.
+            if st_best_type == "SPREAD":
                 best_type = "SPREAD"
                 best_pick = s_pick
                 best_prob = s_prob
                 best_edge = s_edge
-                reason = "Spread Score >= Total"
-        elif t_valid:
-            best_type = "TOTAL"
-            best_pick = t_pick
-            best_prob = t_prob
-            best_edge = t_edge
-            reason = "Only Total Valid"
-        elif s_valid:
-            best_type = "SPREAD"
-            best_pick = s_pick
-            best_prob = s_prob
-            best_edge = s_edge
-            reason = "Only Spread Valid"
-        else:
-            # Fallback if both missing probs, use edges
-            if abs(t_edge) > abs(s_edge):
+                reason = "Spread > Total" if t_valid else "Only Spread Valid"
+            else:
                 best_type = "TOTAL"
                 best_pick = t_pick
-                best_prob = 0.5
+                best_prob = t_prob
                 best_edge = t_edge
-                reason = "Fallback Edge (Total)"
+                reason = "Total > Spread" if s_valid else "Only Total Valid"
+
+        else:
+            # S and T both missing/invalid.
+            # Fallback to ML if available and eligible
+            if ml_valid and ml_eligible:
+                best_type = "ML"
+                best_pick = ml_pick
+                best_prob = ml_prob
+                best_edge = ml_edge
+                reason = "S/T Missing, ML Eligible"
+            elif ml_valid:
+                # ML Valid but Suppressed (Extreme Odds).
+                # User: "if none present, still output something but label LOW confidence and include reason."
+                # We output ML but tag it
+                best_type = "ML"
+                best_pick = ml_pick
+                best_prob = ml_prob
+                best_edge = ml_edge
+                reason = f"Forced ML ({ml_suppressed_reason})"
             else:
+                # Nothing valid at all. Fallback to existing logic (edges or None)
+                # If we have raw edges but no probs? (Already handled by _score using 0.5)
+                # Just default to SPREAD placeholders
                 best_type = "SPREAD"
-                best_pick = s_pick
+                best_pick = s_pick # Might be None
                 best_prob = 0.5
                 best_edge = s_edge
-                reason = "Fallback Edge (Spread)"
+                reason = "No Valid Markets"
 
-        # 3. Confidence Logic
+        # 5. Confidence Logic
         # Bands: HIGH (>= 0.56 or Edge >= 0.035), MEDIUM (>= 0.53 or Edge >= 0.015), LOW (Otherwise)
+        p_val = best_prob if best_prob is not None else 0.5
+        e_val = best_edge if best_edge is not None else 0.0
+
         conf_label = "LOW"
-        if best_prob >= 0.56 or abs(best_edge) >= 0.035:
+        if p_val >= 0.56 or abs(e_val) >= 0.035:
             conf_label = "HIGH"
-        elif best_prob >= 0.53 or abs(best_edge) >= 0.015:
+        elif p_val >= 0.53 or abs(e_val) >= 0.015:
             conf_label = "MEDIUM"
 
-        # ML Extreme Modifier: If ML is extreme, maybe cap confidence if picking underdog spread?
-        # For now, just logging it in reason
-        if ml_extreme:
-            reason += " | ML_Extreme"
+        # Force LOW if ML was suppressed but selected (Fallback scenario)
+        if best_type == "ML" and not ml_eligible:
+            conf_label = "LOW"
+            reason += " [Suppressed]"
+
+        # Force LOW if Pick is None (No Bet)
+        if best_pick is None:
+            conf_label = "LOW"
+            reason = "NO_BET_POSSIBLE"
 
         bet_lean = (conf_label == "LOW")
+        conf_score = (p_val - 0.5) + e_val
 
-        # Confidence Score
-        conf_score = (best_prob - 0.5) + best_edge
-
-        return pd.Series([best_type, best_pick, best_prob, reason, best_edge, conf_label, bet_lean, conf_score],
-                         index=["best_pick_type", "best_pick", "final_prob", "Best_ST_Reason", "edge",
-                                "Bet_Confidence", "Bet_Lean", "Bet_Confidence_Score"])
+        return pd.Series([
+            best_type, best_pick, p_val, reason, e_val,
+            conf_label, bet_lean, conf_score,
+            ml_eligible, ml_suppressed_reason, candidate_types_str
+        ], index=[
+            "best_pick_type", "best_pick", "final_prob", "Best_ST_Reason", "edge",
+            "Bet_Confidence", "Bet_Lean", "Bet_Confidence_Score",
+            "ml_eligible", "ml_suppressed_reason", "candidate_types_available"
+        ])
 
     # Batch apply
     new_cols = df.apply(_apply, axis=1)
@@ -9141,7 +9205,10 @@ with tab_master:
                 "kalshi_prob_used",
                 "kalshi_matched",
                 "AI_Prob",
-                "Implied_Prob"
+                "Implied_Prob",
+                "ml_eligible",
+                "ml_suppressed_reason",
+                "candidate_types_available"
             ]
 
             final_picks_df = pd.DataFrame()
