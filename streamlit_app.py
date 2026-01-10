@@ -788,6 +788,89 @@ def enrich_picks_with_roi_metrics(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def calculate_best_pick_metrics(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Compute Best_ST_Type/Pick/Prob/Edge for picks sheet.
+    """
+    if df is None or df.empty:
+        return df
+
+    # Avoid fragmentation by working on a copy
+    df = df.copy()
+
+    def _apply(row):
+        # 1. Helpers
+        def _safe(k):
+            try:
+                v = row.get(k)
+                if pd.isna(v) or v == "": return None
+                return float(v)
+            except (ValueError, TypeError):
+                return None
+
+        def _safe_str(k):
+            v = row.get(k)
+            if pd.isna(v): return None
+            return str(v).strip()
+
+        # 2. Extract Data
+        s_pick = _safe_str("Spread & Pick")
+        s_prob = _safe("spread_prob_adj")
+        if s_prob is None: s_prob = _safe("spread_prob")
+        s_edge = _safe("spread_edge") or 0.0
+
+        t_pick = _safe_str("Total & Pick")
+        t_prob = _safe("total_prob_adj")
+        if t_prob is None: t_prob = _safe("total_prob")
+        t_edge = _safe("total_edge") or 0.0
+
+        THRESHOLD = 0.52
+        best_type = "NO_BET"
+        best_pick = None
+        best_prob = 0.0
+        best_edge = 0.0
+        reason = "Below Threshold"
+
+        s_val = s_prob if s_prob is not None else 0.0
+        t_val = t_prob if t_prob is not None else 0.0
+
+        s_qualifies = (s_val >= THRESHOLD)
+        t_qualifies = (t_val >= THRESHOLD)
+
+        if s_qualifies and t_qualifies:
+            if s_val >= t_val:
+                best_type = "SPREAD"
+                best_pick = s_pick
+                best_prob = s_val
+                best_edge = s_edge
+                reason = "Spread Prob > Total"
+            else:
+                best_type = "TOTAL"
+                best_pick = t_pick
+                best_prob = t_val
+                best_edge = t_edge
+                reason = "Total Prob > Spread"
+        elif s_qualifies:
+            best_type = "SPREAD"
+            best_pick = s_pick
+            best_prob = s_val
+            best_edge = s_edge
+            reason = "Spread Qualifies"
+        elif t_qualifies:
+            best_type = "TOTAL"
+            best_pick = t_pick
+            best_prob = t_val
+            best_edge = t_edge
+            reason = "Total Qualifies"
+
+        return pd.Series([best_type, best_pick, best_prob, reason, best_edge],
+                         index=["Best_ST_Type", "Best_ST_Pick", "Best_ST_Prob", "Best_ST_Reason", "Best_ST_Edge"])
+
+    # Batch apply
+    new_cols = df.apply(_apply, axis=1)
+    return pd.concat([df, new_cols], axis=1)
+
+
 def reorder_master_columns(df: pd.DataFrame) -> pd.DataFrame:
     """
     Ensure fixed front columns then pick columns; preserve remaining order.
@@ -8518,7 +8601,10 @@ with tab_master:
         
         if market_stability_filter:
             df_master_view = df_master_view[df_master_view['market_stability'].isin(market_stability_filter)]
-            
+
+        # Enrich with Best Picks for Export/Display
+        df_master_view = calculate_best_pick_metrics(df_master_view)
+
         counts = confidence_stats.get("counts") or {}
         st.caption(
             f"Confidence counts (post-filter): HIGH={counts.get('HIGH', 0)}, "
@@ -8713,14 +8799,20 @@ with tab_master:
             ]
             top_df_display = top_df_display.drop(columns=[c for c in ml_detail_cols if c in top_df_display.columns], errors="ignore")
 
-        # --- FINAL WHITELIST FIX ---
-        ui_whitelist = ['league', 'Home', 'Away', 'Pick', 'AI_Prob', 'Implied_Prob', 'Sentiment_Diff', 'spread_edge', 'status']
-        safe_cols = [c for c in ui_whitelist if c in top_df_display.columns] # or df_master_view_display at line 8946
+        # --- FINAL WHITELIST FIX (Enhanced with Picks Sheet Columns) ---
+        ui_whitelist = [
+            'league', 'Home', 'Away',
+            'Best_ST_Pick', 'Best_ST_Prob', 'Best_ST_Edge', 'Best_ST_Type',
+            'Spread & Pick', 'Total & Pick',
+            'spread_edge', 'total_edge',
+            'Pick', 'AI_Prob', 'Implied_Prob', 'Sentiment_Diff', 'status'
+        ]
+        safe_cols = [c for c in ui_whitelist if c in top_df_display.columns]
         top_df_ui = top_df_display[safe_cols].copy()
 
         # Force Numeric and String consistency
         for col in top_df_ui.columns:
-            if col in ['AI_Prob', 'Implied_Prob', 'spread_edge', 'Sentiment_Diff']:
+            if col in ['AI_Prob', 'Implied_Prob', 'spread_edge', 'total_edge', 'Sentiment_Diff', 'Best_ST_Prob', 'Best_ST_Edge']:
                 top_df_ui[col] = pd.to_numeric(top_df_ui[col], errors='coerce').fillna(0.0)
             else:
                 top_df_ui[col] = top_df_ui[col].astype(str).replace('None', 'N/A')
@@ -8936,94 +9028,8 @@ with tab_master:
             if col in export_df.columns:
                 export_df[col] = pd.to_numeric(export_df[col], errors='coerce').fillna(0.0)
 
-        export_csv = export_df[export_cols].to_csv(index=False).encode("utf-8")
-        st.download_button(
-            "Download Master Analysis CSV",
-            data=export_csv,
-            file_name="master_analysis.csv",
-            mime="text/csv",
-            key="master_analysis_csv",
-        )
-
-        # --- Picks Sheet Export ---
+        # --- PICKS SHEET EXPORT (DEFAULT) ---
         if not export_df.empty:
-            picks_df = export_df.copy()
-
-            def _get_best_pick_row(row):
-                # 1. Helpers
-                def _safe(k):
-                    try:
-                        v = row.get(k)
-                        if pd.isna(v) or v == "": return None
-                        return float(v)
-                    except (ValueError, TypeError):
-                        return None
-
-                def _safe_str(k):
-                    v = row.get(k)
-                    if pd.isna(v): return None
-                    return str(v).strip()
-
-                # 2. Extract Data
-                # Spread
-                s_pick = _safe_str("Spread & Pick")
-                # Prefer adjusted prob (with sentiment), else final/base
-                s_prob = _safe("spread_prob_adj")
-                if s_prob is None: s_prob = _safe("spread_prob")
-                s_edge = _safe("spread_edge") or 0.0
-
-                # Total
-                t_pick = _safe_str("Total & Pick")
-                t_prob = _safe("total_prob_adj")
-                if t_prob is None: t_prob = _safe("total_prob")
-                t_edge = _safe("total_edge") or 0.0
-
-                # 3. Logic: Max Prob, Threshold 0.52
-                THRESHOLD = 0.52
-
-                best_type = "NO_BET"
-                best_pick = None
-                best_prob = 0.0
-                best_edge = 0.0
-                reason = "Below Threshold"
-
-                s_val = s_prob if s_prob is not None else 0.0
-                t_val = t_prob if t_prob is not None else 0.0
-
-                s_qualifies = (s_val >= THRESHOLD)
-                t_qualifies = (t_val >= THRESHOLD)
-
-                if s_qualifies and t_qualifies:
-                    if s_val >= t_val:
-                        best_type = "SPREAD"
-                        best_pick = s_pick
-                        best_prob = s_val
-                        best_edge = s_edge
-                        reason = "Spread Prob > Total"
-                    else:
-                        best_type = "TOTAL"
-                        best_pick = t_pick
-                        best_prob = t_val
-                        best_edge = t_edge
-                        reason = "Total Prob > Spread"
-                elif s_qualifies:
-                    best_type = "SPREAD"
-                    best_pick = s_pick
-                    best_prob = s_val
-                    best_edge = s_edge
-                    reason = "Spread Qualifies"
-                elif t_qualifies:
-                    best_type = "TOTAL"
-                    best_pick = t_pick
-                    best_prob = t_val
-                    best_edge = t_edge
-                    reason = "Total Qualifies"
-
-                return pd.Series([best_type, best_pick, best_prob, reason, best_edge])
-
-            picks_cols_added = ["Best_ST_Type", "Best_ST_Pick", "Best_ST_Prob", "Best_ST_Reason", "Best_ST_Edge"]
-            picks_df[picks_cols_added] = picks_df.apply(_get_best_pick_row, axis=1)
-
             # Map intended output columns to DataFrame columns
             desired_map = {
                 "league": "league",
@@ -9051,14 +9057,14 @@ with tab_master:
 
             final_picks_df = pd.DataFrame()
             for dst, src in desired_map.items():
-                if src in picks_df.columns:
-                    final_picks_df[dst] = picks_df[src]
+                if src in export_df.columns:
+                    final_picks_df[dst] = export_df[src]
                 else:
                     # Fallbacks
-                    if src == "spread_prob_adj" and "spread_prob" in picks_df.columns:
-                         final_picks_df[dst] = picks_df["spread_prob"]
-                    elif src == "total_prob_adj" and "total_prob" in picks_df.columns:
-                         final_picks_df[dst] = picks_df["total_prob"]
+                    if src == "spread_prob_adj" and "spread_prob" in export_df.columns:
+                         final_picks_df[dst] = export_df["spread_prob"]
+                    elif src == "total_prob_adj" and "total_prob" in export_df.columns:
+                         final_picks_df[dst] = export_df["total_prob"]
                     else:
                          final_picks_df[dst] = None
 
@@ -9071,9 +9077,12 @@ with tab_master:
                 except Exception:
                     pass
 
+            picks_cols = list(final_picks_df.columns)
+            logger.info(f"Export picks columns: {picks_cols}")
+
             picks_csv = final_picks_df.to_csv(index=False).encode("utf-8")
             st.download_button(
-                "Download Picks Sheet CSV",
+                "Download Picks Sheet CSV (Default)",
                 data=picks_csv,
                 file_name="picks_sheet.csv",
                 mime="text/csv",
