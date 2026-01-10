@@ -294,6 +294,11 @@ MANUAL_TEAM_OVERRIDES = {
     "indiana hoosiers": "indiana", "oregon ducks": "oregon",
     "ohio state buckeyes": "ohio state",
 
+    # ...existing overrides...
+
+    # NHL accent + city-only fixes
+    "montréal canadiens": "montreal canadiens",
+    
     # --- NEW NFL city-only fixes ---
     "carolina": "carolina panthers",
     "chicago": "chicago bears",
@@ -333,6 +338,10 @@ NFL_TEAM_ALIASES = {
     # "los angeles" and "new york" are intentionally excluded as they are ambiguous (Rams/Chargers, Giants/Jets).
     # Inputs like "new york" should fail lookup rather than silently mapping to the wrong team.
 }
+
+    if name in MANUAL_TEAM_OVERRIDES:
+        return MANUAL_TEAM_OVERRIDES[name]
+    return name
 
 _NFL_ALIAS_LOG_COUNT = 0
 _NFL_ALIAS_LOG_LIMIT = 10
