@@ -901,7 +901,7 @@ def calculate_best_pick_metrics(df: pd.DataFrame) -> pd.DataFrame:
         conf_score = (best_prob - 0.5) + best_edge
 
         return pd.Series([best_type, best_pick, best_prob, reason, best_edge, conf_label, bet_lean, conf_score],
-                         index=["Best_ST_Type", "Best_ST_Pick", "Best_ST_Prob", "Best_ST_Reason", "Best_ST_Edge",
+                         index=["best_pick_type", "best_pick", "final_prob", "Best_ST_Reason", "edge",
                                 "Bet_Confidence", "Bet_Lean", "Bet_Confidence_Score"])
 
     # Batch apply
@@ -8846,7 +8846,7 @@ with tab_master:
         # --- FINAL WHITELIST FIX (Enhanced with Picks Sheet Columns) ---
         ui_whitelist = [
             'league', 'Home', 'Away',
-            'Best_ST_Pick', 'Best_ST_Prob', 'Best_ST_Edge', 'Best_ST_Type',
+            'best_pick', 'final_prob', 'edge', 'best_pick_type',
             'Bet_Confidence', 'Bet_Lean',
             'Spread & Pick', 'Total & Pick',
             'spread_edge', 'total_edge',
@@ -8857,7 +8857,7 @@ with tab_master:
 
         # Force Numeric and String consistency
         for col in top_df_ui.columns:
-            if col in ['AI_Prob', 'Implied_Prob', 'spread_edge', 'total_edge', 'Sentiment_Diff', 'Best_ST_Prob', 'Best_ST_Edge']:
+            if col in ['AI_Prob', 'Implied_Prob', 'spread_edge', 'total_edge', 'Sentiment_Diff', 'final_prob', 'edge']:
                 top_df_ui[col] = pd.to_numeric(top_df_ui[col], errors='coerce').fillna(0.0)
             else:
                 top_df_ui[col] = top_df_ui[col].astype(str).replace('None', 'N/A')
@@ -9082,10 +9082,10 @@ with tab_master:
                 "Commence (Local)",
                 "Home",
                 "Away",
-                "Best_ST_Type",
-                "Best_ST_Pick",
-                "Best_ST_Prob",
-                "Best_ST_Edge",
+                "best_pick_type",
+                "best_pick",
+                "final_prob",
+                "edge",
                 "Bet_Confidence",
                 "Bet_Lean",
                 "Bet_Confidence_Score",
@@ -9096,7 +9096,12 @@ with tab_master:
                 "total_prob_adj",
                 "total_edge",
                 "At_a_Glance_Confidence",
-                "At_a_Glance_Reason"
+                "At_a_Glance_Reason",
+                "Sentiment_Diff",
+                "kalshi_prob_used",
+                "kalshi_matched",
+                "AI_Prob",
+                "Implied_Prob"
             ]
 
             final_picks_df = pd.DataFrame()

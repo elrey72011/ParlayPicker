@@ -36,6 +36,10 @@ __all__ = [
     "team_code_for_league",
 ]
 
+# Timezone for NBA date buckets (games are bucketed by their US/Eastern date usually, or strict UTC date tokens)
+# Kalshi NBA Date Tokens (YYMONDD) often align with UTC, but game times are local.
+# We need consistent handling.
+NBA_TZ = pytz.timezone("US/Eastern")
 
 class KalshiAPIError(Exception):
     """Base error for Kalshi API issues."""
@@ -58,6 +62,14 @@ class KalshiMatchResult:
     yes_ask: Optional[int] = None
     mid_prob: Optional[float] = None
     reason: Optional[str] = None
+    market_type: Optional[str] = None
+    game_date: Optional[datetime] = None
+    kalshi_available: bool = True
+    label: str = ""
+    probability: Optional[float] = None
+    raw_event_id: Optional[str] = None
+    debug: Optional[Dict[str, Any]] = None
+
 
 # ---------------------------------------------------------------------------
 # Constants & Mappings
@@ -109,7 +121,13 @@ def league_game_prefix(league: str) -> str:
     return f"{series}GAME"
 
 
+def clean_team_name(name: str) -> str:
+    """Robust cleaning preserving spaces for map lookup."""
+    return re.sub(r"[^A-Z0-9 ]", " ", str(name or "").upper()).strip()
+
+
 def normalize_name(name: str) -> str:
+    """Legacy normalize - strips everything non-alpha. Kept for back-compat but generally avoided now."""
     return re.sub(r"[^A-Z]", "", (name or "").upper())
 
 
@@ -195,60 +213,57 @@ def team_name_to_code(league: str, team_name: str) -> Optional[str]:
         return None
 
     league_u = (league or "").upper()
-    team_upper = str(team_name).strip().upper()
+    team_clean = clean_team_name(team_name)
 
     if league_u == "NBA":
-        mapping = globals().get("NBA_TEAM_CODE_MAP") or {}
-        if team_upper in mapping:
-            return mapping[team_upper]
+        # Direct lookup (keys in map should be uppercase)
+        if team_clean in NBA_TEAM_CODE_MAP:
+            return NBA_TEAM_CODE_MAP[team_clean]
+
+        # Fuzzy / Subset lookup
+        for key, code in NBA_TEAM_CODE_MAP.items():
+            if key in team_clean or team_clean in key:
+                return code
 
     if league_u == "NCAAB":
-        mapping = globals().get("NCAAB_TEAM_CODE_MAP") or {}
-        if team_upper in mapping:
-            return mapping[team_upper]
+        if team_clean in NCAAB_TEAM_CODE_MAP:
+            return NCAAB_TEAM_CODE_MAP[team_clean]
         # Try without 'State' -> 'St'
-        alt = team_upper.replace("STATE", "ST").replace("SAINT", "ST")
-        if alt in mapping:
-            return mapping[alt]
+        alt = team_clean.replace("STATE", "ST").replace("SAINT", "ST")
+        if alt in NCAAB_TEAM_CODE_MAP:
+            return NCAAB_TEAM_CODE_MAP[alt]
 
-    cleaned = team_upper.replace(".", "").replace(",", "")
     return None
 
 
 def team_code_for_league(league: str, team_name: str) -> str:
-    """Return a non-empty ticker-friendly code for a team within a league.
-
-    Prefers league-specific maps, then broader abbreviation lists, and finally
-    a sanitized three-letter fallback so callers never receive ``None``.
-    """
-
+    """Return a non-empty ticker-friendly code for a team within a league."""
     if not team_name:
         return "UNK"
 
     league_u = (league or "").upper()
-    team_upper = str(team_name).strip().upper()
 
-    mapped = team_name_to_code(league_u, team_upper)
+    # 1. Try explicit mapping
+    mapped = team_name_to_code(league_u, team_name)
     if mapped:
         return mapped
 
-    if team_upper in KALSHI_TEAM_ABBREVIATIONS:
-        codes = KALSHI_TEAM_ABBREVIATIONS.get(team_upper) or []
+    cleaned = clean_team_name(team_name)
+
+    # 2. Check general abbreviations list
+    if cleaned in KALSHI_TEAM_ABBREVIATIONS:
+        codes = KALSHI_TEAM_ABBREVIATIONS.get(cleaned) or []
         if codes:
             return str(codes[0]).upper()
 
-    cleaned = re.sub(r"[^A-Z]", "", team_upper)
-    if cleaned:
-        return cleaned[:3]
+    # 3. Heuristic generation
+    # Keep only letters for fallback
+    letters = re.sub(r"[^A-Z]", "", cleaned)
+    if letters:
+        return letters[:3]
 
-    tokens = [t for t in re.split(r"\s+", team_upper) if t]
-    if tokens:
-        token_clean = re.sub(r"[^A-Z]", "", tokens[0].upper())
-        if token_clean:
-            return token_clean[:3]
+    return "UNK"
 
-    # Fallback to "UNK" if empty to ensure ticker generation never fails
-    return (team_upper[:3] or "UNK").upper()
 def price_to_prob(price: Any) -> Optional[float]:
     if price is None: return None
     try:
@@ -307,28 +322,62 @@ def _parse_market_metadata(mkt: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     return {"title": title, "market_date": market_dt, "teams": teams, "probability": prob, "market_type": market_type}
 
 def _build_team_codes(team_name: str) -> List[str]:
-    norm = normalize_name(team_name)
+    """Generate potential ticker codes from a team name."""
+    cleaned = clean_team_name(team_name)
     codes: List[str] = []
-    for full_name, abbrs in KALSHI_TEAM_ABBREVIATIONS.items():
-        if normalize_name(full_name) == norm:
-            codes.extend(abbrs)
-    tokens = norm.split()
+
+    # 1. Full matches in abbrev list
+    if cleaned in KALSHI_TEAM_ABBREVIATIONS:
+        codes.extend(KALSHI_TEAM_ABBREVIATIONS[cleaned])
+
+    # 2. Token based codes
+    tokens = [t for t in cleaned.split() if t]
+
+    # Add full tokens
     for t in tokens:
         if len(t) >= 2 and t not in codes:
             codes.append(t)
-    return list(dict.fromkeys(codes))
 
-def _team_score(team_code: str, target_norm: str, target_codes: List[str]) -> float:
+    # Add first 3 chars of tokens
+    for t in tokens:
+        if len(t) >= 3:
+            sub = t[:3]
+            if sub not in codes:
+                codes.append(sub)
+
+    # Add first 2 chars
+    for t in tokens:
+        if len(t) >= 2:
+            sub = t[:2]
+            if sub not in codes:
+                codes.append(sub)
+
+    # 3. Initials (e.g. GSW from Golden State Warriors)
+    if tokens:
+        initials = "".join(t[0] for t in tokens)
+        if len(initials) >= 2 and initials not in codes:
+            codes.append(initials)
+        if len(initials) >= 3:
+            if initials[:2] not in codes:
+                codes.append(initials[:2])
+
+    return list(dict.fromkeys(codes))  # Dedup
+
+def _team_score(team_code: str, target_clean: str, target_codes: List[str]) -> float:
     if not team_code: return 0.0
-    clean_code = team_code.strip().upper()
+    clean_code = clean_team_name(team_code)
+
     if clean_code in target_codes: return 2.0
     
-    norm_code = normalize_name(team_code)
-    if norm_code == target_norm: return 2.0
-    if norm_code in target_norm or target_norm in norm_code: return 1.5
+    # Check normalized full name
+    if clean_code == target_clean: return 2.0
+
+    # Check containment
+    if clean_code in target_clean or target_clean in clean_code: return 1.5
     
-    words_code = set(norm_code.split())
-    words_target = set(target_norm.split())
+    # Check word overlap
+    words_code = set(clean_code.split())
+    words_target = set(target_clean.split())
     if words_code & words_target: return 1.0
     
     return 0.0
@@ -340,9 +389,22 @@ def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time:
     if not kalshi or not kalshi.api_key:
         return KalshiMatchResult(matched=False, kalshi_available=False, label="", probability=None, raw_event_id=None, reason="no_integrator")
 
-    def _nba_code(team: str) -> Optional[str]:
-        norm = normalize_name(team)
-        return NBA_TEAM_CODE_MAP.get(norm)
+    # Use robust candidate generation
+    home_clean = clean_team_name(home_team)
+    away_clean = clean_team_name(away_team)
+
+    # Generate extended candidates including league-specific mappings
+    home_codes = _build_team_codes(home_team)
+    away_codes = _build_team_codes(away_team)
+
+    # Inject mapped codes if available
+    mapped_home = team_code_for_league(league_key, home_team)
+    if mapped_home and mapped_home != "UNK" and mapped_home not in home_codes:
+        home_codes.insert(0, mapped_home)
+
+    mapped_away = team_code_for_league(league_key, away_team)
+    if mapped_away and mapped_away != "UNK" and mapped_away not in away_codes:
+        away_codes.insert(0, mapped_away)
 
     def _nba_date_token(dt: datetime) -> str:
         """Kalshi winner tickers use the UTC date token (YYMONDD)."""
@@ -361,39 +423,35 @@ def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time:
                 reason="missing_game_time",
                 debug={"note": "no datetime for NBA match"},
             )
+
+        # Determine strict NBA date token
+        # NBA games usually map to a single daily slate bucket
         game_dt = game_time
         if game_dt.tzinfo is None:
+             # Assume NBA_TZ (US/Eastern) if naive, as games are listed in local time in most feeds used here
             game_dt = NBA_TZ.localize(game_dt)
+
         game_dt_utc = game_dt.astimezone(pytz.UTC)
         date_token = _nba_date_token(game_dt_utc)
-        away_code = _nba_code(away_team)
-        home_code = _nba_code(home_team)
-        if not away_code or not home_code:
-            return KalshiMatchResult(
-                matched=False,
-                kalshi_available=True,
-                label="",
-                probability=None,
-                raw_event_id=None,
-                league=league_key,
-                reason="missing_team_code",
-                debug={
-                    "date_token": date_token,
-                    "away_code": away_code,
-                    "home_code": home_code,
-                },
-            )
+
+        # Primary lookup codes
+        home_code = mapped_home
+        away_code = mapped_away
+
+        if not home_code or not away_code:
+             return KalshiMatchResult(matched=False, reason="missing_team_code")
 
         matchup_code = f"{away_code}{home_code}"
         alt_matchup_code = f"{home_code}{away_code}"
+
         bucket_info = kalshi.get_markets_for_date_token(
             league_key, date_token, status=status
         )
-        # Use all markets to allow fallback when the date bucket is missing but still require the matchup code
+
         all_markets = bucket_info.get("all_markets") or []
         meta = bucket_info.get("meta", {})
 
-        # De-dupe by event_ticker and enforce strict UTC date + matchup code
+        # De-dupe by event_ticker
         deduped: Dict[str, Dict[str, Any]] = {}
         for m in all_markets:
             et = str(m.get("event_ticker") or m.get("ticker") or "")
@@ -401,15 +459,15 @@ def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time:
                 deduped[et] = m
         markets = list(deduped.values())
 
+        # Strict Prefix Filtering
         strict_prefix = f"KXNBAGAME-{date_token}"
         matchup_candidates: List[Dict[str, Any]] = []
         for m in markets:
             et_upper = str(m.get("event_ticker") or "").upper()
             if not et_upper.startswith(strict_prefix):
                 continue
-            if matchup_code not in et_upper and alt_matchup_code not in et_upper:
-                continue
-            matchup_candidates.append(m)
+            if matchup_code in et_upper or alt_matchup_code in et_upper:
+                matchup_candidates.append(m)
 
         debug_info = {
             "date_token": date_token,
@@ -426,6 +484,8 @@ def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time:
         }
 
         if not matchup_candidates:
+            # Fallback: Fuzzy scan of ALL markets in bucket if specific matchup code failed
+            # Sometimes tickers might differ slightly? Unlikely for NBA.
             return KalshiMatchResult(
                 matched=False,
                 kalshi_available=True,
@@ -433,10 +493,11 @@ def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time:
                 probability=None,
                 raw_event_id=None,
                 league=league_key,
-                reason="no_strict_kalshi_game_match_for_utc_date",
+                reason="no_strict_kalshi_game_match",
                 debug=debug_info,
             )
 
+        # Time Window Filtering
         window_lower = game_dt_utc - timedelta(hours=12)
         window_upper = game_dt_utc + timedelta(hours=36)
         timed_candidates: List[Tuple[float, Dict[str, Any]]] = []
@@ -469,6 +530,7 @@ def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time:
         yes_ask = exact_match.get("yes_ask")
         probability = None
         try:
+            # Use midpoint if possible
             vals = [v for v in [yes_bid, yes_ask] if v is not None]
             if len(vals) == 2:
                 probability = max(0.0, min(1.0, ((float(vals[0]) + float(vals[1])) / 2) / 100))
@@ -480,8 +542,6 @@ def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time:
             probability = price_to_prob(exact_match.get("last_price"))
 
         debug_info["matched_event_ticker"] = exact_match.get("event_ticker")
-        debug_info["matched_side_ticker"] = exact_match.get("ticker")
-        debug_info["matched_close_time"] = str(exact_match.get("close_time"))
         return KalshiMatchResult(
             matched=True,
             kalshi_available=True,
@@ -498,11 +558,7 @@ def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time:
     if league_key == "NBA":
         return _nba_bucket_and_match()
 
-    home_norm = normalize_name(home_team)
-    away_norm = normalize_name(away_team)
-    home_codes = _build_team_codes(home_team)
-    away_codes = _build_team_codes(away_team)
-
+    # GENERIC MATCHING (Non-NBA or Fallback)
     markets = kalshi.get_markets(status=status)
     if not markets:
         return KalshiMatchResult(matched=False, kalshi_available=False, label="", probability=None, raw_event_id=None, reason="no_markets_found")
@@ -518,6 +574,12 @@ def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time:
     best_market = None
     best_score = 0.0
 
+    # Constants for fuzzy logic
+    DATE_TOLERANCE_DAYS = 1
+    DATE_SOFT_PENALTY = 0.2
+    TEAM_FUZZY_THRESHOLD = 3.0  # Sum of scores (approx 1.5 per team)
+
+    # Scan
     for m in markets:
         meta = _parse_market_metadata(m)
         if not meta:
@@ -531,9 +593,19 @@ def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time:
         if len(teams) < 2:
             continue
 
-        score_home_first = _team_score(teams[0], home_norm, home_codes) + _team_score(teams[1], away_norm, away_codes)
-        score_away_first = _team_score(teams[0], away_norm, away_codes) + _team_score(teams[1], home_norm, home_codes)
-        score = max(score_home_first, score_away_first)
+        # Score matching
+        # Check Home vs Team A/B
+        score_home_A = _team_score(teams[0], home_clean, home_codes)
+        score_away_B = _team_score(teams[1], away_clean, away_codes)
+
+        # Check Home vs Team B/A (swap)
+        score_home_B = _team_score(teams[1], home_clean, home_codes)
+        score_away_A = _team_score(teams[0], away_clean, away_codes)
+
+        score_direct = score_home_A + score_away_B
+        score_swap = score_home_B + score_away_A
+
+        score = max(score_direct, score_swap)
 
         m_date = meta.get("market_date")
         if game_dt_utc and m_date:
@@ -553,6 +625,12 @@ def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time:
             best_market["__meta"] = meta
 
     if not best_market or best_score < TEAM_FUZZY_THRESHOLD:
+        # Debug Logging for Failure
+        if league_key in ["NBA", "NFL", "NCAAB"]: # Reduce spam
+             logger.info(f"Kalshi Match Failed [{league_key}]: {home_clean} vs {away_clean}. Best Score: {best_score}")
+             logger.debug(f"Home Candidates: {home_codes}")
+             logger.debug(f"Away Candidates: {away_codes}")
+
         return KalshiMatchResult(matched=False, kalshi_available=True, label="", probability=None, raw_event_id=None, reason=f"low_score_{best_score:.1f}")
 
     meta = best_market["__meta"]
@@ -563,7 +641,7 @@ def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time:
         probability=meta["probability"],
         raw_event_id=best_market.get("ticker"),
         league=league_key,
-        reason="matched",
+        reason="matched_fuzzy",
         market_type=meta["market_type"],
         game_date=meta["market_date"],
     )
@@ -1533,6 +1611,33 @@ def self_test() -> Dict[str, Any]:
         result["status_code"] = integ.last_status_code
     return result
 
+def _sanity_check():
+    """Manual self-test for deployment verification."""
+    print("--- Sanity Check: Kalshi Integrator ---")
 
-if __name__ == "__main__" and os.environ.get("KALSHI_SELF_TEST"):
-    print(json.dumps(self_test(), indent=2))
+    # 1. Check Normalization
+    cases = [
+        ("Los Angeles Lakers", "LAL", "NBA"),
+        ("New York Knicks", "NYK", "NBA"),
+        ("Golden State Warriors", "GSW", "NBA"),
+    ]
+    for team, expected_code, league in cases:
+        code = team_code_for_league(league, team)
+        status = "PASS" if code == expected_code else f"FAIL (Got {code})"
+        print(f"Code Lookup: {team} -> {code} [{status}]")
+
+    # 2. Check Tokenization
+    test_team = "Golden State Warriors"
+    tokens = _build_team_codes(test_team)
+    has_initials = "GSW" in tokens
+    has_parts = "GOLDEN" in tokens and "STATE" in tokens
+    print(f"Tokenization '{test_team}': {tokens}")
+    print(f"Token Check: Initials={has_initials}, Parts={has_parts}")
+
+    print("--- Sanity Check Complete ---")
+
+if __name__ == "__main__":
+    if os.environ.get("KALSHI_SELF_TEST"):
+        print(json.dumps(self_test(), indent=2))
+    else:
+        _sanity_check()
