@@ -217,11 +217,11 @@ TEAM_NAME_MAPPING = {
     "florida panthers": "florida",
     "los angeles kings": "los angeles",
     "minnesota wild": "minnesota",
-    "montreal canadiens": "montreal",
+    "montreal canadiens": "montreal canadiens",
     "nashville predators": "nashville",
     "new jersey devils": "new jersey",
-    "new york islanders": "ny islanders",
-    "new york rangers": "ny rangers",
+    "new york islanders": "new york islanders",
+    "new york rangers": "new york rangers",
     "ottawa senators": "ottawa",
     "philadelphia flyers": "philadelphia",
     "pittsburgh penguins": "pittsburgh",
@@ -409,11 +409,13 @@ def robust_normalize_team(name: str, league: Optional[str] = None) -> str:
     if not name:
         return ""
 
-    if name in MANUAL_TEAM_OVERRIDES:
-        return MANUAL_TEAM_OVERRIDES[name]
+    # Check overrides case-insensitively FIRST
+    name_lower = str(name).lower().strip()
+    if name_lower in MANUAL_TEAM_OVERRIDES:
+        return MANUAL_TEAM_OVERRIDES[name_lower]
 
     # 1. Lowercase and strip
-    name = str(name).lower().strip()
+    name = name_lower
 
     # Check if league implies college (aggressive stripping)
     is_college = False
@@ -434,8 +436,15 @@ def robust_normalize_team(name: str, league: Optional[str] = None) -> str:
 
     # 2.5 League-aware stripping: ONLY strip mascots for college leagues
     if is_college:
+        # Debug logging for problematic NCAAB teams
+        if "florida" in name or "tennessee" in name or "kansas" in name:
+            logger.info(f"NCAAB Norm Debug: '{name}' (Before Strip)")
+
         # keeps "state", "st", "saint", "mount" but removes trailing mascots
         name = _strip_mascot_words(name)
+
+        if "florida" in name or "tennessee" in name or "kansas" in name:
+            logger.info(f"NCAAB Norm Debug: '{name}' (After Strip)")
     
         # 3. Additional aggressive mascot stripping (if not covered by TeamNameMatcher)
         # Note: TeamNameMatcher.normalize already removes mascots from its internal list.
@@ -807,7 +816,7 @@ def fetch_ncaaf_stats(season_year: int) -> List[Dict[str, Any]]:
 
                 stats.append(
                     {
-                        "team": team,
+                        "team_norm": robust_normalize_team(team, league="NCAAF"),
                         "wins": wins,
                         "losses": losses,
                         "win_pct": float(win_pct),
@@ -875,7 +884,7 @@ def fetch_nhl_stats(season_year: int) -> List[Dict[str, Any]]:
             # Turnovers not standard in standings
             
             stats.append({
-                "team_norm": robust_normalize_team(team_name),
+                "team_norm": robust_normalize_team(team_name, league="NHL"),
                 "league_key": "NHL",
                 "win_pct": win_pct,
                 "home_win_pct": win_pct,
@@ -956,7 +965,7 @@ def fetch_ncaab_stats(season_year: int) -> List[Dict[str, Any]]:
             avg_tov = turnovers / games
 
             stats.append({
-                "team_norm": robust_normalize_team(team_name),
+                "team_norm": robust_normalize_team(team_name, league="NCAAB"),
                 "league_key": "NCAAB",
                 "win_pct": win_pct,
                 "home_win_pct": win_pct,
