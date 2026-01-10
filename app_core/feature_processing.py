@@ -1154,54 +1154,54 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
                     h_stat = "MISSING" if bool(home_fallback.loc[idx]) else "OK"
                     a_stat = "MISSING" if bool(away_fallback.loc[idx]) else "OK"
 
-        # ------------------------------------------------------------
-        # LOGGING: Stats fallback rows (THROTTLED)
-        # ------------------------------------------------------------
-        global _FALLBACK_LOG_COUNT
-
-        if combined_fallback.any():
-            fallback_indices = df.index[combined_fallback]
-
-            for idx in fallback_indices:
-                if _FALLBACK_LOG_COUNT < _FALLBACK_LOG_LIMIT:
-                    try:
-                        league_str = df.loc[idx, league_col] if league_col else "Unknown"
-                        h_team = df.loc[idx, home_col]
-                        a_team = df.loc[idx, away_col]
-                        h_stat = "MISSING" if bool(home_fallback.loc[idx]) else "OK"
-                        a_stat = "MISSING" if bool(away_fallback.loc[idx]) else "OK"
-
+            # ------------------------------------------------------------
+            # LOGGING: Stats fallback rows (THROTTLED)
+            # ------------------------------------------------------------
+            global _FALLBACK_LOG_COUNT
+    
+            if combined_fallback.any():
+                fallback_indices = df.index[combined_fallback]
+    
+                for idx in fallback_indices:
+                    if _FALLBACK_LOG_COUNT < _FALLBACK_LOG_LIMIT:
+                        try:
+                            league_str = df.loc[idx, league_col] if league_col else "Unknown"
+                            h_team = df.loc[idx, home_col]
+                            a_team = df.loc[idx, away_col]
+                            h_stat = "MISSING" if bool(home_fallback.loc[idx]) else "OK"
+                            a_stat = "MISSING" if bool(away_fallback.loc[idx]) else "OK"
+    
+                            logger.warning(
+                                f"DEBUG Stats Fallback Used: "
+                                f"{league_str} {h_team} ({h_stat}) vs {a_team} ({a_stat})"
+                            )
+                        except Exception:
+                            pass
+    
+                        _FALLBACK_LOG_COUNT += 1
+    
+                    elif _FALLBACK_LOG_COUNT == _FALLBACK_LOG_LIMIT:
+                        logger.warning("DEBUG Stats Fallback Used: (further messages suppressed)")
+                        _FALLBACK_LOG_COUNT += 1
+                    else:
+                        break
+    
+                            logger.warning(
+                                f"DEBUG Stats Fallback Used: "
+                                f"{league_str} {h_team} ({h_stat}) vs {a_team} ({a_stat})"
+                            )
+                        except Exception:
+                            pass
+    
+                        _FALLBACK_LOG_COUNT += 1
+    
+                    elif _FALLBACK_LOG_COUNT == _FALLBACK_LOG_LIMIT:
                         logger.warning(
-                            f"DEBUG Stats Fallback Used: "
-                            f"{league_str} {h_team} ({h_stat}) vs {a_team} ({a_stat})"
+                            "DEBUG Stats Fallback Used: (further messages suppressed)"
                         )
-                    except Exception:
-                        pass
-
-                    _FALLBACK_LOG_COUNT += 1
-
-                elif _FALLBACK_LOG_COUNT == _FALLBACK_LOG_LIMIT:
-                    logger.warning("DEBUG Stats Fallback Used: (further messages suppressed)")
-                    _FALLBACK_LOG_COUNT += 1
-                else:
-                    break
-
-                        logger.warning(
-                            f"DEBUG Stats Fallback Used: "
-                            f"{league_str} {h_team} ({h_stat}) vs {a_team} ({a_stat})"
-                        )
-                    except Exception:
-                        pass
-
-                    _FALLBACK_LOG_COUNT += 1
-
-                elif _FALLBACK_LOG_COUNT == _FALLBACK_LOG_LIMIT:
-                    logger.warning(
-                        "DEBUG Stats Fallback Used: (further messages suppressed)"
-                    )
-                    _FALLBACK_LOG_COUNT += 1
-                else:
-                    break
+                        _FALLBACK_LOG_COUNT += 1
+                    else:
+                        break
         
         # Home Stats (use matched names)
         features_data["feature_home_win_pct"] = map_stat(home_matched_names, "win_pct", default_win_pct)
