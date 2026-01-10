@@ -518,6 +518,7 @@ def fetch_ncaaf_stats(season_year: int) -> List[Dict[str, Any]]:
             parts = s.split(None, 1)
             s = parts[1].strip() if len(parts) == 2 else ""
         # CRITICAL: remove ALL whitespace/newlines from multiline secrets
+        # (Handles cases where secrets have leading/trailing newlines or spaces)
         s = "".join(s.split())
         return s
 
@@ -887,6 +888,8 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
     Uses pd.concat for performance to avoid fragmentation.
     Ensures ALL columns in VERTEX_FEATURE_COLUMNS are present in output.
     """
+    global _FALLBACK_LOG_COUNT
+
     if df is None or df.empty:
         return df
         
@@ -1146,7 +1149,6 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
         # ------------------------------------------------------------
         # LOGGING: Stats fallback rows (THROTTLED)
         # ------------------------------------------------------------
-        global _FALLBACK_LOG_COUNT
 
         if combined_fallback.any():
             fallback_indices = df.index[combined_fallback]
