@@ -19,6 +19,13 @@ import pytz
 import requests
 import streamlit as st
 
+try:
+    import rapidfuzz
+    from rapidfuzz import fuzz
+except ImportError:
+    rapidfuzz = None
+    fuzz = None
+
 # Cryptography for RSA Signing (Required for Kalshi v2)
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
@@ -322,7 +329,8 @@ def _parse_market_metadata(mkt: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     return {"title": title, "market_date": market_dt, "teams": teams, "probability": prob, "market_type": market_type}
 
 def _build_team_codes(team_name: str) -> List[str]:
-    """Generate potential ticker codes from a team name."""
+    """Generate potential ticker codes from a team name, preserving spaces."""
+    # Ensure spaces are preserved by clean_team_name (it replaces non-alphanum with space)
     cleaned = clean_team_name(team_name)
     codes: List[str] = []
 
@@ -333,7 +341,7 @@ def _build_team_codes(team_name: str) -> List[str]:
     # 2. Token based codes
     tokens = [t for t in cleaned.split() if t]
 
-    # Add full tokens
+    # Add full tokens (e.g. "GOLDEN", "STATE", "WARRIORS")
     for t in tokens:
         if len(t) >= 2 and t not in codes:
             codes.append(t)
@@ -367,18 +375,28 @@ def _team_score(team_code: str, target_clean: str, target_codes: List[str]) -> f
     if not team_code: return 0.0
     clean_code = clean_team_name(team_code)
 
-    if clean_code in target_codes: return 2.0
-    
-    # Check normalized full name
-    if clean_code == target_clean: return 2.0
+    # 1. Exact or Code Match (Highest)
+    if clean_code in target_codes: return 100.0
+    if clean_code == target_clean: return 100.0
 
-    # Check containment
-    if clean_code in target_clean or target_clean in clean_code: return 1.5
-    
-    # Check word overlap
+    # 2. Token overlap / Containment
     words_code = set(clean_code.split())
     words_target = set(target_clean.split())
-    if words_code & words_target: return 1.0
+
+    # "LAKERS" in "LOS ANGELES LAKERS"
+    if clean_code in target_clean: return 90.0
+    if target_clean in clean_code: return 90.0
+
+    if words_code & words_target:
+        return 80.0
+
+    # 3. Fuzzy Match (Fallback)
+    if rapidfuzz:
+        # Simple ratio
+        ratio = fuzz.ratio(clean_code, target_clean)
+        # Partial ratio (good for "Lakers" vs "LA Lakers")
+        partial = fuzz.partial_ratio(clean_code, target_clean)
+        return max(ratio, partial)
     
     return 0.0
 
@@ -410,6 +428,12 @@ def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time:
         """Kalshi winner tickers use the UTC date token (YYMONDD)."""
         dt_utc = dt.astimezone(pytz.UTC)
         return dt_utc.strftime("%y%b%d").upper()
+
+    def _nba_code(name_input: str) -> str:
+        """Lookup strict NBA team code from normalized name."""
+        # Ensure we use space-preserving clean name for lookup
+        c = clean_team_name(name_input)
+        return NBA_TEAM_CODE_MAP.get(c, "UNK")
 
     def _nba_bucket_and_match() -> KalshiMatchResult:
         if not isinstance(game_time, datetime):
@@ -576,8 +600,13 @@ def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time:
 
     # Constants for fuzzy logic
     DATE_TOLERANCE_DAYS = 1
-    DATE_SOFT_PENALTY = 0.2
-    TEAM_FUZZY_THRESHOLD = 3.0  # Sum of scores (approx 1.5 per team)
+    # If using rapidfuzz (0-100 scale), threshold needs to be high.
+    # We sum two scores (Home + Away), so max is 200.
+    # Accept if sum > 130 (avg 65 per team) to be safe but permissive.
+    TEAM_FUZZY_THRESHOLD = 130.0
+
+    # Coverage Debug
+    markets_considered = 0
 
     # Scan
     for m in markets:
@@ -588,6 +617,8 @@ def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time:
         ticker = (m.get("ticker") or "").upper()
         if series_prefix and not ticker.startswith(series_prefix):
             continue
+
+        markets_considered += 1
 
         teams = meta.get("teams") or []
         if len(teams) < 2:
@@ -613,9 +644,12 @@ def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time:
                 if m_date.tzinfo is None:
                     m_date = pytz.utc.localize(m_date)
                 diff = abs((m_date.date() - game_dt_utc.date()).days)
+
+                # Hard Date Cutoff
                 if diff > DATE_TOLERANCE_DAYS:
                     continue
-                score -= (diff * DATE_SOFT_PENALTY)
+
+                # No penalty for date diff within tolerance in new logic
             except Exception:
                 pass
 
@@ -626,12 +660,25 @@ def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time:
 
     if not best_market or best_score < TEAM_FUZZY_THRESHOLD:
         # Debug Logging for Failure
+        debug_fail = {
+            "markets_considered": markets_considered,
+            "best_score": best_score,
+            "home_candidates": home_codes,
+            "away_candidates": away_codes,
+            "best_candidate_ticker": best_market.get("ticker") if best_market else None
+        }
         if league_key in ["NBA", "NFL", "NCAAB"]: # Reduce spam
              logger.info(f"Kalshi Match Failed [{league_key}]: {home_clean} vs {away_clean}. Best Score: {best_score}")
-             logger.debug(f"Home Candidates: {home_codes}")
-             logger.debug(f"Away Candidates: {away_codes}")
 
-        return KalshiMatchResult(matched=False, kalshi_available=True, label="", probability=None, raw_event_id=None, reason=f"low_score_{best_score:.1f}")
+        return KalshiMatchResult(
+            matched=False,
+            kalshi_available=True,
+            label="",
+            probability=None,
+            raw_event_id=None,
+            reason=f"low_score_{best_score:.1f}",
+            debug=debug_fail
+        )
 
     meta = best_market["__meta"]
     return KalshiMatchResult(

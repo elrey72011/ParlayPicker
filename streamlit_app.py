@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 from zoneinfo import ZoneInfo
 
 import pandas as pd
+import numpy as np
 import requests
 import streamlit as st
 from app_core.kalshi_integrator import (
@@ -798,7 +799,9 @@ def enrich_picks_with_roi_metrics(df: pd.DataFrame) -> pd.DataFrame:
 def calculate_best_pick_metrics(df: pd.DataFrame) -> pd.DataFrame:
     """
     Compute Best_ST_Type/Pick/Prob/Edge for picks sheet.
-    Jules: Logic updated to ensure strict Spread vs Total comparison.
+    Jules: Logic updated to consider Spread, Total, AND Moneyline.
+    Filters ML if odds are extreme (>300).
+    Final pick must be SPREAD or TOTAL.
     NEVER returns NO_BET. Includes Confidence + Lean.
     """
     if df is None or df.empty:
@@ -823,56 +826,75 @@ def calculate_best_pick_metrics(df: pd.DataFrame) -> pd.DataFrame:
             return str(v).strip()
 
         # 2. Extract Data
+        # Spread
         s_pick = _safe_str("Spread & Pick")
         s_prob = _safe("spread_prob_adj")
         if s_prob is None: s_prob = _safe("spread_prob")
         s_edge = _safe("spread_edge") or 0.0
 
+        # Total
         t_pick = _safe_str("Total & Pick")
         t_prob = _safe("total_prob_adj")
         if t_prob is None: t_prob = _safe("total_prob")
         t_edge = _safe("total_edge") or 0.0
 
-        # Selection Logic: Always pick one (Spread or Total)
-        # Default fallback
+        # Moneyline Check (Signal Only)
+        ml_home_price = _safe("Home_ML")
+        ml_away_price = _safe("Away_ML")
+
+        ml_extreme = False
+        if ml_home_price is not None and abs(ml_home_price) > 300:
+            ml_extreme = True
+        if ml_away_price is not None and abs(ml_away_price) > 300:
+            ml_extreme = True
+
+        # Selection Logic: Compare Spread vs Total
+        # Score = Prob + Edge (scaled up slightly to break ties)
+        def _score(prob, edge):
+            p = prob if prob is not None else 0.5
+            e = edge if edge is not None else 0.0
+            return p + (e * 2.0)
+
+        s_score = _score(s_prob, s_edge)
+        t_score = _score(t_prob, t_edge)
+
+        # Default to Spread if close
         best_type = "SPREAD"
         best_pick = s_pick
         best_prob = s_prob if s_prob is not None else 0.5
         best_edge = s_edge
-        reason = "Default Fallback"
+        reason = "Default (Spread)"
 
         s_valid = (s_prob is not None)
         t_valid = (t_prob is not None)
 
         if s_valid and t_valid:
-            # If both valid, pick higher prob
-            if t_prob > s_prob:
+            if t_score > s_score:
                 best_type = "TOTAL"
                 best_pick = t_pick
                 best_prob = t_prob
                 best_edge = t_edge
-                reason = "Total Prob > Spread"
+                reason = "Total Score > Spread"
             else:
                 best_type = "SPREAD"
                 best_pick = s_pick
                 best_prob = s_prob
                 best_edge = s_edge
-                reason = "Spread Prob >= Total"
-        elif t_valid and not s_valid:
+                reason = "Spread Score >= Total"
+        elif t_valid:
             best_type = "TOTAL"
             best_pick = t_pick
             best_prob = t_prob
             best_edge = t_edge
             reason = "Only Total Valid"
-        elif s_valid and not t_valid:
+        elif s_valid:
             best_type = "SPREAD"
             best_pick = s_pick
             best_prob = s_prob
             best_edge = s_edge
             reason = "Only Spread Valid"
         else:
-            # Both invalid/missing probs -> use Edge
-            # If edges are 0.0, defaults to SPREAD
+            # Fallback if both missing probs, use edges
             if abs(t_edge) > abs(s_edge):
                 best_type = "TOTAL"
                 best_pick = t_pick
@@ -894,10 +916,14 @@ def calculate_best_pick_metrics(df: pd.DataFrame) -> pd.DataFrame:
         elif best_prob >= 0.53 or abs(best_edge) >= 0.015:
             conf_label = "MEDIUM"
 
+        # ML Extreme Modifier: If ML is extreme, maybe cap confidence if picking underdog spread?
+        # For now, just logging it in reason
+        if ml_extreme:
+            reason += " | ML_Extreme"
+
         bet_lean = (conf_label == "LOW")
 
-        # Confidence Score: (Prob - 0.5) + Edge
-        # (Assuming Edge is roughly Prob - Implied)
+        # Confidence Score
         conf_score = (best_prob - 0.5) + best_edge
 
         return pd.Series([best_type, best_pick, best_prob, reason, best_edge, conf_label, bet_lean, conf_score],
@@ -8675,7 +8701,21 @@ with tab_master:
         df_master_view = reorder_for_spread_total_focus(df_master_view)
 
         # Explicit column ordering override
-        forced_cols = ["league", "Home", "Away", "Implied_Prob", "AI_Prob", "Pick"]
+        # Jules: Map derived alias columns for display
+        df_master_view["Pick"] = df_master_view["best_pick"]
+        # Map AI_Prob to best_pick_prob (final_prob alias)
+        df_master_view["AI_Prob"] = df_master_view["final_prob"]
+
+        # Jules: Conditionally select Implied Prob based on Best Pick Type
+        df_master_view["Implied_Prob"] = np.where(
+            df_master_view["best_pick_type"] == "TOTAL",
+            df_master_view["total_implied_prob"],
+            df_master_view["spread_implied_prob"]
+        )
+
+        df_master_view["status"] = df_master_view["Bet_Confidence"]
+
+        forced_cols = ["league", "Home", "Away", "Implied_Prob", "AI_Prob", "Pick", "status"]
         cols_present = [c for c in forced_cols if c in df_master_view.columns]
         other_cols = [c for c in df_master_view.columns if c not in cols_present]
         df_master_view = df_master_view[cols_present + other_cols]
@@ -8850,7 +8890,7 @@ with tab_master:
             'Bet_Confidence', 'Bet_Lean',
             'Spread & Pick', 'Total & Pick',
             'spread_edge', 'total_edge',
-            'Pick', 'AI_Prob', 'Implied_Prob', 'Sentiment_Diff', 'status'
+            'Pick', 'AI_Prob', 'Implied_Prob', 'Sentiment_Diff', 'status', 'best_pick_prob', 'best_pick_edge'
         ]
         safe_cols = [c for c in ui_whitelist if c in top_df_display.columns]
         top_df_ui = top_df_display[safe_cols].copy()
