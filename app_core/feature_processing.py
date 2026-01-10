@@ -227,7 +227,7 @@ TEAM_NAME_MAPPING = {
     "pittsburgh penguins": "pittsburgh",
     "san jose sharks": "san jose",
     "seattle kraken": "seattle",
-    "st louis blues": "st louis",
+    "st louis blues": "st louis blues",
     "tampa bay lightning": "tampa bay",
     "toronto maple leafs": "toronto",
     "vancouver canucks": "vancouver",
@@ -275,7 +275,6 @@ MANUAL_TEAM_OVERRIDES = {
     "phoenix suns": "phoenix", "chicago blackhawks": "chicago",
     "washington capitals": "washington", "winnipeg jets": "winnipeg",
     "los angeles kings": "los angeles", "utah mammoth": "utah",
-    "st louis blues": "st louis",
     # NCAAB/NCAAF Log Fixes (14:42)
     "toledo rockets": "toledo", "miami (oh) redhawks": "miami oh",
     "manhattan jaspers": "manhattan", "canisius golden griffins": "canisius",
@@ -327,6 +326,7 @@ MANUAL_TEAM_OVERRIDES = {
     # NHL accent + city-only fixes
     "montréal canadiens": "montreal canadiens",
     "st louis": "st louis blues",
+    "st. louis": "st louis blues",
 
     # NCAAB Short Name / Normalized Overrides
     "uconn": "connecticut",
@@ -347,6 +347,11 @@ MANUAL_TEAM_OVERRIDES = {
     "central arkansas": "central arkansas",
     "arkansaslittle rock": "arkansas little rock",
     "tennessee state": "tennessee state",
+    "tennessee tech": "tennessee tech",
+    "arkansaspine bluff": "arkansas pine bluff",
+    "east tennessee state buccaneers": "east tennessee state",
+    "arkansas state red": "arkansas state",
+    "florida am rattlers": "florida a&m",
     
     # --- NEW NFL city-only fixes ---
     "carolina": "carolina panthers",
