@@ -25,6 +25,7 @@ from app_core.kalshi_integrator import (
 from app_core.llm_assistant import generate_confidence_explanation
 from app_core.reddit_sentiment import fetch_reddit_sentiment_map
 from app_core.sentiment_pipeline import MAX_SENTIMENT_CALLS, fetch_team_news, league_label, team_sentiment_from_articles
+from app_core.theover_ingest import parse_theover_public_betting_text
 from app_core.team_name_matcher import TeamNameMatcher
 from app_core.prediction_engine import VERTEX_FEATURE_COLUMNS, PredictionEngine, get_prediction_prob, match_team_name
 from app_core.apisports import (
@@ -517,6 +518,7 @@ def compute_final_probability(
     kalshi_prob_yes: Optional[float],
     kalshi_side_yes: Optional[str],
     model_prob: Optional[float],
+    theover_prob: Optional[float],
     sentiment_adj: Optional[float],
     weights_dict: Dict[str, Any],
 ) -> Tuple[Optional[float], Optional[float], Dict[str, float], str, List[str], Optional[float]]:
@@ -526,14 +528,18 @@ def compute_final_probability(
     """
     warnings: List[str] = []
     sources: List[Tuple[str, Optional[float], float]] = []
-    weights_used: Dict[str, float] = {"w_implied": 0.0, "w_kalshi": 0.0, "w_model": 0.0, "w_sentiment": 0.0}
+    weights_used: Dict[str, float] = {"w_implied": 0.0, "w_kalshi": 0.0, "w_model": 0.0, "w_sentiment": 0.0, "w_theover": 0.0}
     kalshi_prob_for_pick = map_kalshi_prob_for_pick(kalshi_prob_yes, kalshi_side_yes, pick_side)
+
     if implied_prob is not None:
         sources.append(("implied", clamp(implied_prob), float(weights_dict.get("odds_weight") or 0.0)))
     if kalshi_prob_for_pick is not None:
         sources.append(("kalshi", clamp(kalshi_prob_for_pick), float(weights_dict.get("kalshi_weight") or 0.0)))
     if model_prob is not None:
         sources.append(("model", clamp(model_prob), float(weights_dict.get("ml_weight") or 0.0)))
+    if theover_prob is not None:
+        sources.append(("theover", clamp(theover_prob), float(weights_dict.get("theover_weight") or 0.0)))
+
     if sentiment_adj is None:
         sentiment_adj = 0.0
     if not sources:
@@ -630,6 +636,7 @@ def build_decision_trace(
             "w_kalshi": safe_float(weights.get("w_kalshi") if "w_kalshi" in weights else weights.get("kalshi_weight")) or 0.0,
             "w_model": safe_float(weights.get("w_model") if "w_model" in weights else weights.get("ml_weight")) or 0.0,
             "w_sentiment": safe_float(weights.get("w_sentiment") if "w_sentiment" in weights else weights.get("sentiment_weight")) or 0.0,
+            "w_theover": safe_float(weights.get("w_theover") if "w_theover" in weights else weights.get("theover_weight")) or 0.0,
         },
         "final_prob": safe_float(final_prob),
         "confidence_bucket": confidence_bucket,
@@ -934,30 +941,23 @@ def calculate_best_pick_metrics(df: pd.DataFrame) -> pd.DataFrame:
 
         else:
             # S and T both missing/invalid.
-            # Fallback to ML if available and eligible
-            if ml_valid and ml_eligible:
-                best_type = "ML"
-                best_pick = ml_pick
-                best_prob = ml_prob
-                best_edge = ml_edge
-                reason = "S/T Missing, ML Eligible"
-            elif ml_valid:
-                # ML Valid but Suppressed (Extreme Odds).
-                # User: "if none present, still output something but label LOW confidence and include reason."
-                # We output ML but tag it
-                best_type = "ML"
-                best_pick = ml_pick
-                best_prob = ml_prob
-                best_edge = ml_edge
-                reason = f"Forced ML ({ml_suppressed_reason})"
+            # Updated Logic: "Moneyline should NOT be the final recommendation."
+            # We must force a Spread or Total even if invalid/missing, unless absolutely nothing exists.
+
+            # If we have ML data, we can try to hint at a Spread/Total direction or just return ML as a helper but TYPE is forced to SPREAD/TOTAL.
+            # But the user said "Moneyline should NOT be the final recommendation."
+            # So if we only have ML valid, we can't pick it as type ML.
+            # We will fallback to SPREAD and label as "Low Confidence - Forced".
+
+            # Fallback to Spread
+            best_type = "SPREAD"
+            best_pick = s_pick # Might be None
+            best_prob = s_prob if s_prob is not None else 0.5
+            best_edge = s_edge
+
+            if ml_valid:
+                reason = f"Forced Spread (ML Valid but suppressed)"
             else:
-                # Nothing valid at all. Fallback to existing logic (edges or None)
-                # If we have raw edges but no probs? (Already handled by _score using 0.5)
-                # Just default to SPREAD placeholders
-                best_type = "SPREAD"
-                best_pick = s_pick # Might be None
-                best_prob = 0.5
-                best_edge = s_edge
                 reason = "No Valid Markets"
 
         # 5. Confidence Logic
@@ -5313,6 +5313,15 @@ def load_games(selected_leagues: Union[str, List[str]]) -> List[Dict[str, Any]]:
 # -----------------
 
 st.sidebar.header("Controls")
+
+# TheOver Public Betting Input
+with st.sidebar.expander("TheOver.ai Public Betting"):
+    theover_input_text = st.text_area(
+        "Paste TheOver Public Betting Picks",
+        height=150,
+        help="Paste raw text from TheOver.ai (e.g. lines with 'Over', 'Under', team names, percentages)."
+    )
+
 sport_options = [ALL_SPORTS_LABEL] + list(SPORT_KEYS.keys())
 default_sports = st.session_state.get("selected_sports") or [st.session_state.get("league", "NBA")]
 valid_defaults = [s for s in default_sports if s in sport_options]
@@ -5633,6 +5642,16 @@ with tab_master:
     
     if should_run:
         try:
+            # 0. Parse TheOver text input if present
+            theover_totals_df = pd.DataFrame()
+            theover_sides_df = pd.DataFrame()
+            if theover_input_text:
+                try:
+                    theover_totals_df, theover_sides_df = parse_theover_public_betting_text(theover_input_text)
+                    st.success(f"Parsed TheOver: {len(theover_totals_df)} Totals, {len(theover_sides_df)} Sides")
+                except Exception as e:
+                    st.warning(f"Failed to parse TheOver text: {e}")
+
             st.session_state["DECISION_TRACE_SAMPLES"] = {}
 
             def store_decision_trace_sample(
@@ -5872,11 +5891,114 @@ with tab_master:
             # Ensure model_mode is available
             model_mode = st.session_state.get("model_mode", "Local XGBoost")
 
+            # TheOver Match Counters
+            theover_matched_count_sides = 0
+            theover_matched_count_totals = 0
+
             for idx, g in enumerate(games_to_process):
                 g = g.copy()
                 # Initialize loop-local variables to prevent NameError
                 model_prob_home = None
                 model_warn = None
+
+                # THEOVER VARIABLES
+                theover_prob_spread = None
+                theover_prob_total = None
+                theover_matched_side = None # dict or row
+                theover_matched_total = None # dict or row
+
+                # Match TheOver if available
+                # Logic: Check df_sides for this game
+                if not theover_sides_df.empty:
+                    # Match game
+                    to_match = TeamNameMatcher.match_game(
+                        g.get("home_team"),
+                        g.get("away_team"),
+                        [(r.get("home_team_norm"), r.get("away_team_norm")) for r in theover_sides_df.to_dict('records')]
+                    )
+                    if to_match:
+                        # Find the row(s)
+                        # We matched (home_norm, away_norm)
+                        # We need to find the row in theover_sides_df
+                        for _, row in theover_sides_df.iterrows():
+                            if (row['home_team_norm'], row['away_team_norm']) == to_match or \
+                               (row['away_team_norm'], row['home_team_norm']) == to_match:
+                                theover_matched_side = row.to_dict()
+                                break
+
+                if not theover_totals_df.empty:
+                    to_match = TeamNameMatcher.match_game(
+                        g.get("home_team"),
+                        g.get("away_team"),
+                        [(r.get("home_team_norm"), r.get("away_team_norm")) for r in theover_totals_df.to_dict('records')]
+                    )
+                    if to_match:
+                        for _, row in theover_totals_df.iterrows():
+                            if (row['home_team_norm'], row['away_team_norm']) == to_match or \
+                               (row['away_team_norm'], row['home_team_norm']) == to_match:
+                                theover_matched_total = row.to_dict()
+                                break
+
+                # Calculate TheOver Probs & Signal Alignment
+                if theover_matched_side:
+                    hr = safe_float(theover_matched_side.get("source_hit_rate"))
+                    if hr:
+                        p = clamp(hr, 0.50, 0.75) # Clamp to reasonable range
+                        if theover_matched_side.get("star_rating"):
+                            p = min(0.75, p + 0.02)
+
+                        # ALIGNMENT CHECK: Is the pick against our target (Spread uses Home usually, or we match loop side?)
+                        # The 'compute_final_probability' calls below for Spread generally anchor to 'spread_pick_side_key' or similar.
+                        # Wait, spread_pick logic is further down.
+                        # We need to map TheOver pick to Home/Away side.
+
+                        to_pick_team = theover_matched_side.get("pick_team", "")
+                        home_team_norm = TeamNameMatcher.normalize(g.get("home_team"))
+                        # away_team_norm = TeamNameMatcher.normalize(g.get("away_team"))
+
+                        # Fuzzy match the pick team to Home team
+                        # If match score high -> Pick is Home. Else -> Pick is Away.
+                        match_score = TeamNameMatcher.similarity_score(
+                            TeamNameMatcher.normalize(to_pick_team),
+                            home_team_norm
+                        )
+
+                        # We store the raw probability here.
+                        # BUT, when passing to 'compute_final_probability', we must align it to the 'pick_side' being analyzed.
+                        # Since 'compute_final_probability' is called LATER with specific sides (e.g. spread_pick_side_key),
+                        # we can't fully invert it here without knowing which side that function will choose as "Yes".
+
+                        # ACTUALLY, 'compute_final_probability' logic uses:
+                        # spread_pick_side_key (derived from market odds favorites usually).
+
+                        # To support this, let's store the "Pick Side" (Home/Away) here in the loop variable.
+                        if match_score > 0.65: # Threshold for "Pick is Home"
+                            theover_side_pick = "home"
+                        else:
+                            theover_side_pick = "away"
+
+                        # We'll inject this alignment logic right before calling compute_final_probability below.
+                        # Store tuple or separate variable?
+                        theover_prob_spread = p
+                        theover_spread_pick_side = theover_side_pick
+
+                        theover_matched_count_sides += 1
+
+                if theover_matched_total:
+                    hr = safe_float(theover_matched_total.get("source_hit_rate"))
+                    if hr:
+                        p = clamp(hr, 0.50, 0.75)
+                        if theover_matched_total.get("star_rating"):
+                            p = min(0.75, p + 0.02)
+
+                        # ALIGNMENT CHECK: Over vs Under
+                        # 'pick_side' in matched_total is 'OVER' or 'UNDER'.
+                        to_pick_side = str(theover_matched_total.get("pick_side") or "").upper()
+
+                        theover_prob_total = p
+                        theover_total_pick_side = to_pick_side # OVER or UNDER
+
+                        theover_matched_count_totals += 1
 
                 # RESET ALL TRACE VARIABLES
                 total_pick_side = None
@@ -6806,12 +6928,27 @@ with tab_master:
                     "ml_weight": 0.35,
                     "sentiment_weight": abs(spread_sentiment_adj or 0.0),
                 }
+                # Inject TheOver prob if available
+                theover_prob_final_spread = None
+                if theover_prob_spread is not None:
+                    # Check alignment: spread_pick_side_key (home/away) vs theover_spread_pick_side
+                    if theover_spread_pick_side == spread_pick_side_key:
+                        theover_prob_final_spread = theover_prob_spread
+                    else:
+                        theover_prob_final_spread = 1.0 - theover_prob_spread
+
+                    spread_weights["theover_weight"] = 0.15
+                    # Reduce model weight slightly if model is used, else rely on normalization
+                    if spread_weights.get("ml_weight", 0) > 0.15:
+                        spread_weights["ml_weight"] -= 0.10
+
                 spread_prob_final, spread_base_prob, spread_weights_used, spread_decision_driver, spread_warnings_new, spread_kalshi_prob_for_pick = compute_final_probability(
                     spread_pick_side_key,
                     spread_prob_market,
                     kalshi_prob_spread if kalshi_spread.get("kalshi_matched") else None,
                     kalshi_spread.get("kalshi_yes_side") or "home",
                     model_spread_prob if model_used_for_spread else None,
+                    theover_prob_final_spread,
                     spread_sentiment_adj,
                     spread_base_weights,
                 )
@@ -6828,12 +6965,26 @@ with tab_master:
                     "ml_weight": 0.35,
                     "sentiment_weight": abs(total_sentiment_adj or 0.0),
                 }
+                # Inject TheOver prob if available
+                theover_prob_final_total = None
+                if theover_prob_total is not None:
+                    # Check alignment: total_pick_side_key (over/under) vs theover_total_pick_side
+                    if str(theover_total_pick_side).upper() == str(total_pick_side_key).upper():
+                        theover_prob_final_total = theover_prob_total
+                    else:
+                        theover_prob_final_total = 1.0 - theover_prob_total
+
+                    total_weights["theover_weight"] = 0.15
+                    if total_weights.get("ml_weight", 0) > 0.15:
+                        total_weights["ml_weight"] -= 0.10
+
                 total_prob_final, total_base_prob, total_weights_used, total_decision_driver, total_warnings_new, total_kalshi_prob_for_pick = compute_final_probability(
                     total_pick_side_key,
                     total_prob_market,
                     kalshi_prob_total if kalshi_total.get("kalshi_matched") else None,
                     kalshi_total.get("kalshi_yes_side") or "over",
                     model_total_prob if model_used_for_total else None,
+                    theover_prob_final_total,
                     total_sentiment_adj,
                     total_base_weights,
                 )
@@ -7110,8 +7261,13 @@ with tab_master:
                         pick_side = "home" if pick == home else "away"
                         implied_pick = implied_prob_for_pick(home_ml, away_ml, pick_side)
                         kalshi_yes_side = kalshi_winner.get("kalshi_yes_side")
+                        # ML Suppression for extreme odds
+                        ml_odds_weight = 0.30
+                        if (home_ml is not None and abs(home_ml) > 300) or (away_ml is not None and abs(away_ml) > 300):
+                            ml_odds_weight = 0.10 # Strongly downweight implied probability contribution for ML row
+
                         base_weights = {
-                            "odds_weight": 0.30,
+                            "odds_weight": ml_odds_weight,
                             "kalshi_weight": 0.35,
                             "ml_weight": 0.35,
                             "sentiment_weight": abs(sentiment_adj or 0.0),
@@ -7122,6 +7278,7 @@ with tab_master:
                             kalshi_prob_used if kalshi_winner.get("kalshi_matched") else None,
                             kalshi_yes_side,
                             ai_prob_base,
+                            None, # No TheOver for Moneyline yet
                             sentiment_adj,
                             base_weights,
                         )
@@ -7599,6 +7756,12 @@ with tab_master:
                         "best_total_mode_point": g.get("best_total_mode_point"),
                         "best_total_price": best_total_price,
                         "Warnings": warnings_field,
+                        "theover_pick": (theover_matched_side or {}).get("pick_team"),
+                        "theover_pick_type": "SIDE" if theover_matched_side else None,
+                        "theover_hit_rate": (theover_matched_side or {}).get("source_hit_rate"),
+                        "theover_source_model": (theover_matched_side or {}).get("source_model"),
+                        "theover_prob_used": theover_prob_spread,
+                        "theover_matched": bool(theover_matched_side),
                             "spread_implied_prob": spread_implied,
                             "spread_prob_market_based": spread_prob_market_based,
                             "spread_prob_reason": spread_prob_reason,
@@ -7853,6 +8016,12 @@ with tab_master:
                         "best_total_mode_point": g.get("best_total_mode_point"),
                         "best_total_price": best_total_price,
                         "Warnings": warnings_field,
+                        "theover_pick": (theover_matched_total or {}).get("pick_side"), # Over/Under
+                        "theover_pick_type": "TOTAL" if theover_matched_total else None,
+                        "theover_hit_rate": (theover_matched_total or {}).get("source_hit_rate"),
+                        "theover_source_model": (theover_matched_total or {}).get("source_model"),
+                        "theover_prob_used": theover_prob_total,
+                        "theover_matched": bool(theover_matched_total),
                         "spread_implied_prob": spread_implied,
                         "spread_prob_market_based": spread_prob_market_based,
                         "spread_prob_reason": spread_prob_reason,
@@ -9179,6 +9348,12 @@ with tab_master:
             "ml_home_implied",
             "ml_away_implied",
             "spread_pick_side",
+            "theover_pick",
+            "theover_pick_type",
+            "theover_hit_rate",
+            "theover_source_model",
+            "theover_prob_used",
+            "theover_matched",
         ]
         export_df = df_master_view_full.copy()
         if "Unnamed: 0" in export_df.columns:
@@ -9233,7 +9408,12 @@ with tab_master:
                 "Implied_Prob",
                 "ml_eligible",
                 "ml_suppressed_reason",
-            "candidate_types_available"
+                "candidate_types_available",
+                "theover_pick",
+                "theover_pick_type",
+                "theover_hit_rate",
+                "theover_prob_used",
+                "theover_matched"
             ]
 
             final_picks_df = pd.DataFrame()
@@ -9365,6 +9545,9 @@ with tab_master:
                 st.info("Enable line movement by saving periodic snapshots to data/line_history.csv")
 
         master_stats["rows_out"] = len(deduped_list)
+        master_stats["theover_matched_sides"] = theover_matched_count_sides
+        master_stats["theover_matched_totals"] = theover_matched_count_totals
+
         st.session_state["last_rows_out"] = len(deduped_list)
         st.session_state["master_stats"] = master_stats
         st.session_state["kalshi_match_results"] = kalshi_match_results
@@ -9401,7 +9584,8 @@ with tab_master:
         matches = master_stats.get("kalshi_matches", 0)
         total_games = master_stats.get("kalshi_total", 0) or 1
         st.caption(
-            f"Kalshi matches: {matches}/{total_games} ({matches/total_games:.1%})"
+            f"Kalshi matches: {matches}/{total_games} ({matches/total_games:.1%}) | "
+            f"TheOver matches: {master_stats.get('theover_matched_sides', 0)} sides, {master_stats.get('theover_matched_totals', 0)} totals"
         )
 
         if master_stats["games_in"] > 0 and master_stats["rows_out"] == 0:
