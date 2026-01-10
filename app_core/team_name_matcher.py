@@ -211,7 +211,7 @@ class TeamNameMatcher:
     }
     
     @classmethod
-    def normalize(cls, team: str) -> str:
+    def normalize(cls, team: str, strip_mascots: bool = True) -> str:
         """
         Normalize team name for matching
         
@@ -251,14 +251,15 @@ class TeamNameMatcher:
         team = re.sub(r'[^\w\s]', '', team)
         
         # Remove mascots
-        for mascot in cls.MASCOTS:
-            mascot_lower = mascot.lower()
-            # Remove at end with space before
-            if team.endswith(f" {mascot_lower}"):
-                team = team[:-len(mascot_lower)-1]
-            # Remove if it's the entire string
-            if team == mascot_lower:
-                team = ""
+        if strip_mascots:
+            for mascot in cls.MASCOTS:
+                mascot_lower = mascot.lower()
+                # Remove at end with space before
+                if team.endswith(f" {mascot_lower}"):
+                    team = team[:-len(mascot_lower)-1]
+                # Remove if it's the entire string
+                if team == mascot_lower:
+                    team = ""
         
         # Apply full replacements
         team = team.strip()

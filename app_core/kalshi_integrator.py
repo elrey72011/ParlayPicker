@@ -41,6 +41,9 @@ __all__ = [
     "league_game_prefix",
     "league_series_ticker",
     "team_code_for_league",
+    "parse_event_ticker_codes",
+    "resolve_team_code",
+    "NCAAB_CODE_ALIASES",
 ]
 
 # Timezone for NBA date buckets (games are bucketed by their US/Eastern date usually, or strict UTC date tokens)
@@ -101,8 +104,57 @@ LEAGUE_SERIES_MAP: Dict[str, Any] = {
     "MLB": ["KXMLBGAME", "KXMLB"],
     "NHL": ["KXNHLGAME", "KXNHL"],
     "NCAAF": ["KXNCAAFGAME", "KXNCAAF"],
-    "NCAAB": ["KXNCAABGAME", "KXNCAAB"],
+    "NCAAB": ["KXNCAAMBGAME", "KXNCAABGAME", "KXNCAAB"],
 }
+
+
+def parse_event_ticker_codes(event_ticker: str) -> Dict[str, str]:
+    """
+    Extracts away/home codes from Kalshi’s event_ticker.
+    Examples:
+      KXNBAGAME-26JAN09NYKPHX -> away=NYK, home=PHX
+      KXNCAAMBGAME-26JAN10NCSTFSU -> away/home are the trailing 6–8 chars after date token.
+    """
+    if not event_ticker:
+        return {}
+
+    parts = event_ticker.split('-')
+    if len(parts) < 2:
+        return {}
+
+    # parts[0] is like KXNBAGAME
+    # parts[1] is like 26JAN09NYKPHX
+
+    suffix = parts[-1]
+
+    # Regex to find date token at start of suffix
+    # Date token: 2 digits, 3 letters, 2 digits.
+    match = re.match(r"^(\d{2}[A-Z]{3}\d{2})([A-Z0-9]+)$", suffix)
+    if not match:
+        return {}
+
+    date_token = match.group(1)
+    team_block = match.group(2)
+
+    length = len(team_block)
+    away = ""
+    home = ""
+
+    if length == 6:
+        # 3+3
+        away = team_block[:3]
+        home = team_block[3:]
+    elif length == 8:
+        # 4+4
+        away = team_block[:4]
+        home = team_block[4:]
+    else:
+        # Fallback: 3/3 from end as requested
+        if length >= 3:
+            home = team_block[-3:]
+            away = team_block[:-3]
+
+    return {"away": away, "home": home, "date_token": date_token}
 
 
 def league_series_ticker(league: str) -> Optional[str]:
@@ -352,6 +404,61 @@ NCAAB_TEAM_CODE_MAP: Dict[str, str] = {
     "GEORGIA TECH YELLOW JACKETS": "GAT",
 }
 
+# Alias Maps: Kalshi Variant -> Canonical Internal Code
+NCAAB_CODE_ALIASES: Dict[str, str] = {
+    "NCST": "NCS",
+    "MICH": "MIC",
+    "MISS": "MIS",
+    "TENN": "TEN",
+    "PITT": "PIT",
+    "CONN": "CON",
+    "MINN": "MIN",
+    "WISC": "WIS",
+    "ARIZ": "ARI",
+    "CINC": "CIN",
+    "GONZ": "GON",
+    "VILL": "VIL",
+    "PROV": "PRO",
+    "MARQ": "MAR",
+    "CREI": "CRE",
+    "XAVI": "XAV",
+    "BUTL": "BUT",
+    "SETO": "SET",
+    "GEOR": "GEO",
+    "DEPA": "DEP",
+}
+
+NCAAF_CODE_ALIASES: Dict[str, str] = {
+    "NCST": "NCS",
+    "MICH": "MIC",
+    "MISS": "MIS",
+    "TENN": "TEN",
+    "PITT": "PIT",
+    "CONN": "CON",
+    "MINN": "MIN",
+    "WISC": "WIS",
+    "ARIZ": "ARI",
+    "CINC": "CIN",
+}
+
+def resolve_team_code(code: str, league: str) -> str:
+    """
+    Resolve a team code (from event ticker or map) to its canonical form
+    using alias maps if applicable.
+    """
+    if not code:
+        return ""
+
+    c = code.upper().strip()
+    l = (league or "").upper()
+
+    if l == "NCAAB":
+        return NCAAB_CODE_ALIASES.get(c, c)
+    elif l == "NCAAF":
+        return NCAAF_CODE_ALIASES.get(c, c)
+
+    return c
+
 
 def team_name_to_code(league: str, team_name: str) -> Optional[str]:
     """Translate a full team name into its Kalshi ticker code when available."""
@@ -555,6 +662,160 @@ def _team_score(team_code: str, target_clean: str, target_codes: List[str]) -> f
     
     return 0.0
 
+def _match_via_events(
+    integrator: KalshiIntegrator,
+    league: str,
+    home_codes: List[str],
+    away_codes: List[str],
+    game_dt_utc: datetime,
+    status: Optional[str]
+) -> Optional[KalshiMatchResult]:
+    """
+    Attempt to match a game to an event by scanning the /events endpoint first.
+    This is more efficient and accurate for leagues with structured tickers (NBA/NFL/NCAA).
+    """
+    # 1. Determine series ticker
+    series_ticker = None
+    if league == "NBA": series_ticker = "KXNBAGAME"
+    elif league == "NFL": series_ticker = "KXNFLGAME"
+    elif league == "NCAAB": series_ticker = "KXNCAAMBGAME"
+    elif league == "NCAAF": series_ticker = "KXNCAAFGAME"
+    elif league == "MLB": series_ticker = "KXMLBGAME"
+    elif league == "NHL": series_ticker = "KXNHLGAME"
+
+    if not series_ticker:
+        return None
+
+    # 2. Fetch events (using cache inside get_events)
+    # Use a safe lookback window (e.g., event close time >= game_time - buffer)
+    # But get_events min_close_ts filters events that close AFTER this time.
+    # We want events that close around game time.
+    # If we use status="active", we get current ones.
+    # If we want to catch games that might have just started or are about to, "active" is good.
+    # For robust matching, we just fetch active + cache.
+    try:
+        events_resp = integrator.get_events(series_ticker, status=status)
+    except Exception:
+        return None
+
+    events = events_resp.get("events", [])
+    if not events:
+        return None
+
+    best_event = None
+    best_score = 0.0
+
+    # Time window for matching (hours)
+    TIME_WINDOW_HOURS = 36 # Generous window
+
+    for evt in events:
+        ticker = evt.get("ticker")
+        parsed = parse_event_ticker_codes(ticker)
+        if not parsed:
+            continue
+
+        evt_away_code = resolve_team_code(parsed.get("away"), league)
+        evt_home_code = resolve_team_code(parsed.get("home"), league)
+
+        # Resolve our candidates too
+        resolved_home = {resolve_team_code(c, league) for c in home_codes}
+        resolved_away = {resolve_team_code(c, league) for c in away_codes}
+
+        # Check codes against our candidates
+        # Orientation 1: Event Away == Game Away, Event Home == Game Home
+        score_1 = 0
+        if evt_away_code in resolved_away: score_1 += 50
+        if evt_home_code in resolved_home: score_1 += 50
+
+        # Orientation 2: Swap (unlikely but possible)
+        score_2 = 0
+        if evt_away_code in resolved_home: score_2 += 50
+        if evt_home_code in resolved_away: score_2 += 50
+
+        match_score = max(score_1, score_2)
+
+        if match_score < 50:
+            continue
+
+        # Time check
+        close_ts = evt.get("close_time") # ISO string
+        if close_ts:
+            try:
+                dt = datetime.fromisoformat(str(close_ts).replace("Z", "+00:00"))
+                if dt.tzinfo is None: dt = pytz.utc.localize(dt)
+
+                diff_hours = abs((dt - game_dt_utc).total_seconds()) / 3600.0
+                if diff_hours > TIME_WINDOW_HOURS:
+                    match_score -= 20 # Penalty for time mismatch
+            except:
+                pass
+
+        if match_score > best_score:
+            best_score = match_score
+            best_event = evt
+
+    if best_event and best_score >= 90: # High confidence match
+        # Now fetch markets for this event
+        evt_ticker = best_event.get("ticker")
+
+        # We need the markets for this event to get the probability.
+        # We can use get_markets with event_ticker param if supported, or filter from broad list.
+        # But wait, get_markets allows filtering by event_ticker?
+        # Typically yes, or we can use the "markets" field if nested (but we set with_nested_markets=False).
+        # Let's fetch markets for this specific event ticker.
+
+        # Efficient way: call get_markets with event_ticker param?
+        # Kalshi API usually supports event_ticker filter on /markets.
+        try:
+            markets_resp = integrator._request("GET", "/markets", params={"event_ticker": evt_ticker})
+            markets = markets_resp.get("markets", [])
+        except Exception:
+            markets = []
+
+        if not markets:
+            return None
+
+        # Find the main game market (Winner)
+        # Usually checking "Winner" title or market type
+        target_market = None
+        for m in markets:
+            # We prefer the main line.
+            # Usually generic game winner.
+            # Avoid spread/total if we just want the main prob, but function returns a generic result.
+            # match_game_to_kalshi usually returns the "Winner" market or best fit.
+            t = (m.get("title") or "").lower()
+            if "winner" in t:
+                target_market = m
+                break
+
+        if not target_market and markets:
+            target_market = markets[0] # Fallback
+
+        if target_market:
+             # Calculate prob
+            yes_bid = target_market.get("yes_bid")
+            yes_ask = target_market.get("yes_ask")
+            prob = None
+            if yes_bid and yes_ask:
+                 prob = ((yes_bid + yes_ask) / 2) / 100.0
+            elif target_market.get("last_price"):
+                 prob = target_market.get("last_price") / 100.0
+
+            return KalshiMatchResult(
+                matched=True,
+                kalshi_available=True,
+                label=target_market.get("title"),
+                probability=prob if prob is not None else 0.5, # Default if missing
+                raw_event_id=evt_ticker,
+                league=league,
+                reason="matched_via_events_api",
+                market_type="winner",
+                game_date=game_dt_utc,
+                debug={"score": best_score, "event": evt_ticker}
+            )
+
+    return None
+
 def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time: Optional[datetime], integrator: "KalshiIntegrator" = None, status: Optional[str] = None) -> KalshiMatchResult:
     league_key = (league or "").upper()
     kalshi = integrator or KalshiIntegrator()
@@ -579,163 +840,26 @@ def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time:
     if mapped_away and mapped_away != "UNK" and mapped_away not in away_codes:
         away_codes.insert(0, mapped_away)
 
-    def _nba_date_token(dt: datetime) -> str:
-        """Kalshi winner tickers use the UTC date token (YYMONDD)."""
-        dt_utc = dt.astimezone(pytz.UTC)
-        return dt_utc.strftime("%y%b%d").upper()
+    # NEW: Try Event-Based Matching First
+    if game_time and league_key in ["NBA", "NFL", "NCAAB", "NCAAF", "MLB", "NHL"]:
+        # Normalize game_time to UTC
+        if game_time.tzinfo is None:
+            # Assume UTC if naive? Or try to match without TZ.
+            # Best practice: ensure it has timezone.
+            gt_utc = pytz.utc.localize(game_time)
+        else:
+            gt_utc = game_time.astimezone(pytz.UTC)
 
-    def _nba_code(name_input: str) -> str:
-        """Lookup strict NBA team code from normalized name."""
-        # Ensure we use space-preserving clean name for lookup
-        c = clean_team_name(name_input)
-        return NBA_TEAM_CODE_MAP.get(c, "UNK")
-
-    def _nba_bucket_and_match() -> KalshiMatchResult:
-        if not isinstance(game_time, datetime):
-            return KalshiMatchResult(
-                matched=False,
-                kalshi_available=True,
-                label="",
-                probability=None,
-                raw_event_id=None,
-                league=league_key,
-                reason="missing_game_time",
-                debug={"note": "no datetime for NBA match"},
-            )
-
-        # Determine strict NBA date token
-        # NBA games usually map to a single daily slate bucket
-        game_dt = game_time
-        if game_dt.tzinfo is None:
-             # Assume NBA_TZ (US/Eastern) if naive, as games are listed in local time in most feeds used here
-            game_dt = NBA_TZ.localize(game_dt)
-
-        game_dt_utc = game_dt.astimezone(pytz.UTC)
-        date_token = _nba_date_token(game_dt_utc)
-
-        # Primary lookup codes
-        home_code = mapped_home
-        away_code = mapped_away
-
-        if not home_code or not away_code:
-             return KalshiMatchResult(matched=False, reason="missing_team_code")
-
-        matchup_code = f"{away_code}{home_code}"
-        alt_matchup_code = f"{home_code}{away_code}"
-
-        bucket_info = kalshi.get_markets_for_date_token(
-            league_key, date_token, status=status
+        event_match = _match_via_events(
+            kalshi,
+            league_key,
+            home_codes,
+            away_codes,
+            gt_utc,
+            status=status
         )
-
-        all_markets = bucket_info.get("all_markets") or []
-        meta = bucket_info.get("meta", {})
-
-        # De-dupe by event_ticker
-        deduped: Dict[str, Dict[str, Any]] = {}
-        for m in all_markets:
-            et = str(m.get("event_ticker") or m.get("ticker") or "")
-            if et and et not in deduped:
-                deduped[et] = m
-        markets = list(deduped.values())
-
-        # Strict Prefix Filtering
-        strict_prefix = f"KXNBAGAME-{date_token}"
-        matchup_candidates: List[Dict[str, Any]] = []
-        for m in markets:
-            et_upper = str(m.get("event_ticker") or "").upper()
-            if not et_upper.startswith(strict_prefix):
-                continue
-            if matchup_code in et_upper or alt_matchup_code in et_upper:
-                matchup_candidates.append(m)
-
-        debug_info = {
-            "date_token": date_token,
-            "away_code": away_code,
-            "home_code": home_code,
-            "matchup_code": matchup_code,
-            "kalshi_date_token_used": date_token,
-            "candidate_event_tickers": [
-                f"KXNBAGAME-{date_token}{away_code}{home_code}",
-                f"KXNBAGAME-{date_token}{home_code}{away_code}",
-            ],
-            "bucket_meta": meta,
-            "matchup_candidate_count": len(matchup_candidates),
-        }
-
-        if not matchup_candidates:
-            # Fallback: Fuzzy scan of ALL markets in bucket if specific matchup code failed
-            # Sometimes tickers might differ slightly? Unlikely for NBA.
-            return KalshiMatchResult(
-                matched=False,
-                kalshi_available=True,
-                label="",
-                probability=None,
-                raw_event_id=None,
-                league=league_key,
-                reason="no_strict_kalshi_game_match",
-                debug=debug_info,
-            )
-
-        # Time Window Filtering
-        window_lower = game_dt_utc - timedelta(hours=12)
-        window_upper = game_dt_utc + timedelta(hours=36)
-        timed_candidates: List[Tuple[float, Dict[str, Any]]] = []
-        for m in matchup_candidates:
-            mt = kalshi._best_market_time(m)
-            if not mt:
-                continue
-            if not (window_lower <= mt <= window_upper):
-                continue
-            diff_hours = abs((mt - game_dt_utc).total_seconds()) / 3600.0
-            timed_candidates.append((diff_hours, m))
-
-        debug_info["candidates_in_window"] = len(timed_candidates)
-        if not timed_candidates:
-            return KalshiMatchResult(
-                matched=False,
-                kalshi_available=True,
-                label="",
-                probability=None,
-                raw_event_id=None,
-                league=league_key,
-                reason="no_candidate_in_time_window",
-                debug=debug_info,
-            )
-
-        timed_candidates.sort(key=lambda x: x[0])
-        exact_match = timed_candidates[0][1]
-
-        yes_bid = exact_match.get("yes_bid")
-        yes_ask = exact_match.get("yes_ask")
-        probability = None
-        try:
-            # Use midpoint if possible
-            vals = [v for v in [yes_bid, yes_ask] if v is not None]
-            if len(vals) == 2:
-                probability = max(0.0, min(1.0, ((float(vals[0]) + float(vals[1])) / 2) / 100))
-            elif len(vals) == 1:
-                probability = max(0.0, min(1.0, float(vals[0]) / 100))
-            else:
-                probability = price_to_prob(exact_match.get("last_price"))
-        except Exception:
-            probability = price_to_prob(exact_match.get("last_price"))
-
-        debug_info["matched_event_ticker"] = exact_match.get("event_ticker")
-        return KalshiMatchResult(
-            matched=True,
-            kalshi_available=True,
-            label=str(exact_match.get("title") or ""),
-            probability=probability,
-            raw_event_id=exact_match.get("event_ticker") or exact_match.get("ticker"),
-            league=league_key,
-            reason="matched_exact_event_ticker",
-            market_type="winner",
-            game_date=game_dt.astimezone(pytz.UTC),
-            debug=debug_info,
-        )
-
-    if league_key == "NBA":
-        return _nba_bucket_and_match()
+        if event_match:
+            return event_match
 
     # GENERIC MATCHING (Non-NBA or Fallback)
     markets = kalshi.get_markets(status=status)
@@ -872,6 +996,8 @@ class KalshiIntegrator:
         self.cache_ttl_seconds: int = 120
         self._markets_cache_by_key: Dict[Tuple[str, str], Dict[str, Any]] = {}
         self._markets_cache_ttl_seconds: int = 600
+        self._events_cache: Dict[str, Dict[str, Any]] = {}  # Cache for /events by series_ticker
+        self._events_cache_ttl: int = 300
         self.last_error: Optional[str] = None
         self._league_cache: Dict[str, Dict[str, Any]] = {}
         self._league_cache_ttl: int = 300
@@ -1127,6 +1253,119 @@ class KalshiIntegrator:
     @staticmethod
     def normalize_status(status: Optional[str]) -> Optional[str]:
         return globals()["normalize_status"](status)
+
+    def get_events(
+        self,
+        series_ticker: str,
+        status: Optional[str] = None,
+        min_close_ts: Optional[int] = None,
+        limit: int = 200,
+        cursor: Optional[str] = None,
+        use_cache: bool = True,
+    ) -> Dict[str, Any]:
+        """
+        Fetch events for a series with optional caching.
+        """
+        cache_key = f"{series_ticker}:{status}:{min_close_ts}"
+        now = time.time()
+
+        if use_cache and not cursor:
+            cached = self._events_cache.get(cache_key)
+            if cached and (now - cached.get("ts", 0)) < self._events_cache_ttl:
+                return cached.get("payload", {})
+
+        params = {
+            "limit": limit,
+            "cursor": cursor,
+            "with_nested_markets": False,
+            "series_ticker": series_ticker,
+        }
+        if status:
+            params["status"] = normalize_status(status)
+        if min_close_ts:
+            params["min_close_ts"] = int(min_close_ts)
+
+        params = {k: v for k, v in params.items() if v is not None}
+
+        try:
+            resp = self._request("GET", "/events", params=params)
+        except Exception:
+            # If rate limited or error, return cached if available
+            cached = self._events_cache.get(cache_key)
+            if use_cache and cached:
+                 logger.warning(f"Kalshi get_events failed for {series_ticker}, using cache.")
+                 return cached.get("payload", {})
+            raise
+
+        if use_cache and not cursor and resp:
+            self._events_cache[cache_key] = {"ts": now, "payload": resp}
+
+        return resp
+
+    def scan_and_verify_team_codes(self, league: str) -> Dict[str, Any]:
+        """
+        Scans events for the given league and verifies if extracted codes exist in our maps.
+        """
+        series_ticker = LEAGUE_SERIES_MAP.get(league)
+        if isinstance(series_ticker, list):
+            series_ticker = series_ticker[0]
+
+        if league == "NCAAB":
+            series_ticker = "KXNCAAMBGAME"
+
+        if not series_ticker:
+            return {"error": f"No series ticker for {league}"}
+
+        # Fetch active events
+        try:
+            events_resp = self.get_events(series_ticker, status="active", limit=100)
+        except Exception as e:
+            return {"error": f"Failed to fetch events: {e}"}
+
+        events = events_resp.get("events", [])
+
+        unknown_codes = set()
+        known_codes = set()
+
+        map_to_use = None
+        if league == "NBA": map_to_use = NBA_TEAM_CODE_MAP
+        elif league == "NFL": map_to_use = NFL_TEAM_CODE_MAP
+        elif league == "NHL": map_to_use = NHL_TEAM_CODE_MAP
+        elif league == "MLB": map_to_use = MLB_TEAM_CODE_MAP
+        elif league == "NCAAF": map_to_use = NCAAF_TEAM_CODE_MAP
+        elif league == "NCAAB": map_to_use = NCAAB_TEAM_CODE_MAP
+
+        valid_codes = set(map_to_use.values()) if map_to_use else set()
+        sample_unknowns = {}
+
+        for evt in events:
+            ticker = evt.get("ticker")
+            parsed = parse_event_ticker_codes(ticker)
+            if not parsed:
+                continue
+
+            for side in ["home", "away"]:
+                raw_code = parsed.get(side)
+                if not raw_code:
+                    continue
+
+                # Use resolved code for verification
+                code = resolve_team_code(raw_code, league)
+
+                if code in valid_codes:
+                    known_codes.add(code)
+                else:
+                    unknown_codes.add(raw_code) # Store raw code as unknown to prompt alias
+                    if raw_code not in sample_unknowns:
+                        sample_unknowns[raw_code] = ticker
+
+        return {
+            "series_ticker": series_ticker,
+            "events_scanned": len(events),
+            "unknown_codes": sorted(list(unknown_codes)),
+            "known_codes_count": len(known_codes),
+            "sample_unknowns": sample_unknowns
+        }
 
     @staticmethod
     def _status_param(status: Optional[str]) -> Dict[str, Any]:
