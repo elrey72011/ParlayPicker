@@ -337,10 +337,16 @@ MANUAL_TEAM_OVERRIDES = {
     "baylor": "baylor",
     "michigan": "michigan",
     "wisconsin": "wisconsin",
-    "fiu": "florida intl",
+    "fiu": "florida international",
+    "florida intl": "florida international",
+    "florida gulf coast": "florida gulf coast",
+    "south florida": "south florida",
     "middle tennessee": "middle tennessee",
     "kansas st": "kansas state",
     "kansas state": "kansas state",
+    "central arkansas": "central arkansas",
+    "arkansaslittle rock": "arkansas little rock",
+    "tennessee state": "tennessee state",
     
     # --- NEW NFL city-only fixes ---
     "carolina": "carolina panthers",
