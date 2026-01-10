@@ -411,7 +411,6 @@ def robust_normalize_team(name: str, league: Optional[str] = None) -> str:
 
     if name in MANUAL_TEAM_OVERRIDES:
         return MANUAL_TEAM_OVERRIDES[name]
-    return name
 
     # 1. Lowercase and strip
     name = str(name).lower().strip()
