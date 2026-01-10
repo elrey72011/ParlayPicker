@@ -799,6 +799,7 @@ def calculate_best_pick_metrics(df: pd.DataFrame) -> pd.DataFrame:
     """
     Compute Best_ST_Type/Pick/Prob/Edge for picks sheet.
     Jules: Logic updated to ensure strict Spread vs Total comparison.
+    NEVER returns NO_BET. Includes Confidence + Lean.
     """
     if df is None or df.empty:
         return df
@@ -832,51 +833,85 @@ def calculate_best_pick_metrics(df: pd.DataFrame) -> pd.DataFrame:
         if t_prob is None: t_prob = _safe("total_prob")
         t_edge = _safe("total_edge") or 0.0
 
-        THRESHOLD = 0.52
-        best_type = "NO_BET"
-        best_pick = None
-        best_prob = 0.0
-        best_edge = 0.0
-        reason = "Below Threshold"
+        # Selection Logic: Always pick one (Spread or Total)
+        # Default fallback
+        best_type = "SPREAD"
+        best_pick = s_pick
+        best_prob = s_prob if s_prob is not None else 0.5
+        best_edge = s_edge
+        reason = "Default Fallback"
 
-        s_val = s_prob if s_prob is not None else 0.0
-        t_val = t_prob if t_prob is not None else 0.0
+        s_valid = (s_prob is not None)
+        t_valid = (t_prob is not None)
 
-        s_qualifies = (s_val >= THRESHOLD)
-        t_qualifies = (t_val >= THRESHOLD)
-
-        # Logic verified: Prioritize Spread vs Total based on adjusted probability
-        if s_qualifies and t_qualifies:
-            if s_val >= t_val:
-                best_type = "SPREAD"
-                best_pick = s_pick
-                best_prob = s_val
-                best_edge = s_edge
-                reason = "Spread Prob > Total"
-            else:
+        if s_valid and t_valid:
+            # If both valid, pick higher prob
+            if t_prob > s_prob:
                 best_type = "TOTAL"
                 best_pick = t_pick
-                best_prob = t_val
+                best_prob = t_prob
                 best_edge = t_edge
                 reason = "Total Prob > Spread"
-        elif s_qualifies:
-            best_type = "SPREAD"
-            best_pick = s_pick
-            best_prob = s_val
-            best_edge = s_edge
-            reason = "Spread Qualifies"
-        elif t_qualifies:
+            else:
+                best_type = "SPREAD"
+                best_pick = s_pick
+                best_prob = s_prob
+                best_edge = s_edge
+                reason = "Spread Prob >= Total"
+        elif t_valid and not s_valid:
             best_type = "TOTAL"
             best_pick = t_pick
-            best_prob = t_val
+            best_prob = t_prob
             best_edge = t_edge
-            reason = "Total Qualifies"
+            reason = "Only Total Valid"
+        elif s_valid and not t_valid:
+            best_type = "SPREAD"
+            best_pick = s_pick
+            best_prob = s_prob
+            best_edge = s_edge
+            reason = "Only Spread Valid"
+        else:
+            # Both invalid/missing probs -> use Edge
+            # If edges are 0.0, defaults to SPREAD
+            if abs(t_edge) > abs(s_edge):
+                best_type = "TOTAL"
+                best_pick = t_pick
+                best_prob = 0.5
+                best_edge = t_edge
+                reason = "Fallback Edge (Total)"
+            else:
+                best_type = "SPREAD"
+                best_pick = s_pick
+                best_prob = 0.5
+                best_edge = s_edge
+                reason = "Fallback Edge (Spread)"
 
-        return pd.Series([best_type, best_pick, best_prob, reason, best_edge],
-                         index=["Best_ST_Type", "Best_ST_Pick", "Best_ST_Prob", "Best_ST_Reason", "Best_ST_Edge"])
+        # 3. Confidence Logic
+        # Bands: HIGH (>= 0.56 or Edge >= 0.035), MEDIUM (>= 0.53 or Edge >= 0.015), LOW (Otherwise)
+        conf_label = "LOW"
+        if best_prob >= 0.56 or abs(best_edge) >= 0.035:
+            conf_label = "HIGH"
+        elif best_prob >= 0.53 or abs(best_edge) >= 0.015:
+            conf_label = "MEDIUM"
+
+        bet_lean = (conf_label == "LOW")
+
+        # Confidence Score: (Prob - 0.5) + Edge
+        # (Assuming Edge is roughly Prob - Implied)
+        conf_score = (best_prob - 0.5) + best_edge
+
+        return pd.Series([best_type, best_pick, best_prob, reason, best_edge, conf_label, bet_lean, conf_score],
+                         index=["Best_ST_Type", "Best_ST_Pick", "Best_ST_Prob", "Best_ST_Reason", "Best_ST_Edge",
+                                "Bet_Confidence", "Bet_Lean", "Bet_Confidence_Score"])
 
     # Batch apply
     new_cols = df.apply(_apply, axis=1)
+
+    # Drop columns if they exist to allow overwrite
+    cols_to_drop = [c for c in new_cols.columns if c in df.columns]
+    if cols_to_drop:
+        df = df.drop(columns=cols_to_drop)
+
     return pd.concat([df, new_cols], axis=1)
 
 
@@ -8812,6 +8847,7 @@ with tab_master:
         ui_whitelist = [
             'league', 'Home', 'Away',
             'Best_ST_Pick', 'Best_ST_Prob', 'Best_ST_Edge', 'Best_ST_Type',
+            'Bet_Confidence', 'Bet_Lean',
             'Spread & Pick', 'Total & Pick',
             'spread_edge', 'total_edge',
             'Pick', 'AI_Prob', 'Implied_Prob', 'Sentiment_Diff', 'status'
@@ -9050,6 +9086,9 @@ with tab_master:
                 "Best_ST_Pick",
                 "Best_ST_Prob",
                 "Best_ST_Edge",
+                "Bet_Confidence",
+                "Bet_Lean",
+                "Bet_Confidence_Score",
                 "Spread & Pick",
                 "spread_prob_adj",
                 "spread_edge",
