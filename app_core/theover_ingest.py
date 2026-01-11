@@ -95,6 +95,7 @@ def _read_excel_safe(path: Union[str, Any], sheet_name: str) -> pd.DataFrame:
 
 def load_theover_sides(path: Union[str, Any]) -> pd.DataFrame:
     df = _read_excel_safe(path, sheet_name="Table1")
+    logger.info(f"TheOver Table1 shape: {df.shape}")
     if df.empty:
         return df
 
@@ -112,6 +113,7 @@ def load_theover_sides(path: Union[str, Any]) -> pd.DataFrame:
 
 def load_theover_totals(path: Union[str, Any]) -> pd.DataFrame:
     df = _read_excel_safe(path, sheet_name="TotalsRaw")
+    logger.info(f"TheOver TotalsRaw shape: {df.shape}")
     if df.empty:
         return df
 
@@ -136,7 +138,11 @@ def _transform_theover_df(df: pd.DataFrame, pick_type_default: str) -> pd.DataFr
         return pd.DataFrame()
 
     records = []
-    today_str = datetime.now().strftime("%Y-%m-%d")
+    # Use the current slate date from the system, or today's date if not passed.
+    # The application code generally assumes "today" for the slate being analyzed.
+    slate_date = datetime.now().strftime("%Y-%m-%d")
+
+    logger.info(f"Transforming TheOver DataFrame ({pick_type_default}) with {len(df)} rows.")
 
     for _, row in df.iterrows():
         # League normalization
@@ -150,11 +156,14 @@ def _transform_theover_df(df: pd.DataFrame, pick_type_default: str) -> pd.DataFr
         else: league = raw_league
 
         # Date - usually not in Excel, default to today
-        date_val = today_str
+        date_val = slate_date
 
         # Teams
         raw_home = str(row.get("HomeTeam", "")).strip()
         raw_away = str(row.get("AwayTeam", "")).strip()
+
+        if not raw_home or not raw_away:
+            continue
 
         home_norm = normalize_theover_team_for_ingest(raw_home, league)
         away_norm = normalize_theover_team_for_ingest(raw_away, league)
@@ -210,6 +219,10 @@ def _transform_theover_df(df: pd.DataFrame, pick_type_default: str) -> pd.DataFr
             "theover_hit_rate": hit_rate,
             "raw_text": str(row.to_dict())
         })
+
+    logger.info(f"TheOver {pick_type_default} rows parsed: {len(records)}")
+    if records:
+        logger.info(f"Sample keys: {[r['theover_key'] for r in records[:3]]}")
 
     return pd.DataFrame(records)
 
