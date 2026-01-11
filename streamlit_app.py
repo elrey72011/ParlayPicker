@@ -5907,6 +5907,31 @@ with tab_master:
                 model_prob_home = None
                 model_warn = None
 
+                # 1) Define Weights (Fix NameError)
+                spread_weights = {
+                    "ml_weight": 0.35,
+                    "kalshi_weight": 0.35,
+                    "odds_weight": 0.30,
+                    "sentiment_weight": 0.00,
+                    "theover_weight": 0.00,
+                }
+                total_weights = {
+                    "ml_weight": 0.35,
+                    "kalshi_weight": 0.35,
+                    "odds_weight": 0.30,
+                    "sentiment_weight": 0.00,
+                    "theover_weight": 0.00,
+                }
+                moneyline_weights = {
+                    "ml_weight": 0.25,
+                    "kalshi_weight": 0.45,
+                    "odds_weight": 0.30,
+                    "sentiment_weight": 0.00,
+                    "theover_weight": 0.00,
+                }
+                # Debug log
+                logger.info(f"Weight sets active: spread={spread_weights}, total={total_weights}, ml={moneyline_weights}")
+
                 # THEOVER VARIABLES
                 theover_prob_spread = None
                 theover_prob_total = None
@@ -6943,12 +6968,6 @@ with tab_master:
                 kalshi_prob_total = safe_float(kalshi_total.get("kalshi_prob"))
                 model_used_for_spread = bool(use_model_numeric_probs and model_spread_prob is not None)
                 model_used_for_total = bool(use_model_numeric_probs and model_total_prob is not None)
-                spread_base_weights = {
-                    "odds_weight": 0.30,
-                    "kalshi_weight": 0.35,
-                    "ml_weight": 0.35,
-                    "sentiment_weight": abs(spread_sentiment_adj or 0.0),
-                }
                 # Inject TheOver prob if available
                 theover_prob_final_spread = None
                 if theover_prob_spread is not None:
@@ -6962,6 +6981,9 @@ with tab_master:
                     # Reduce model weight slightly if model is used, else rely on normalization
                     if spread_weights.get("ml_weight", 0) > 0.15:
                         spread_weights["ml_weight"] -= 0.10
+
+                # Update sentiment weight dynamically
+                spread_weights["sentiment_weight"] = abs(spread_sentiment_adj or 0.0)
 
                 spread_prob_final, spread_base_prob, spread_weights_used, spread_decision_driver, spread_warnings_new, spread_kalshi_prob_for_pick = compute_final_probability(
                     spread_pick_side_key,
@@ -6993,12 +7015,6 @@ with tab_master:
                     spread_base_prob = spread_prob_final
                     spread_weights_used = {"w_implied": 1.0 if spread_prob_final is not None else 0.0, "w_kalshi": 0.0, "w_model": 0.0, "w_sentiment": 0.0}
                 spread_prob = spread_prob_final
-                total_base_weights = {
-                    "odds_weight": 0.30,
-                    "kalshi_weight": 0.35,
-                    "ml_weight": 0.35,
-                    "sentiment_weight": abs(total_sentiment_adj or 0.0),
-                }
                 # Inject TheOver prob if available
                 theover_prob_final_total = None
                 if theover_prob_total is not None:
@@ -7313,12 +7329,10 @@ with tab_master:
                         if (home_ml is not None and abs(home_ml) > 300) or (away_ml is not None and abs(away_ml) > 300):
                             ml_odds_weight = 0.10 # Strongly downweight implied probability contribution for ML row
 
-                        base_weights = {
-                            "odds_weight": ml_odds_weight,
-                            "kalshi_weight": 0.35,
-                            "ml_weight": 0.35,
-                            "sentiment_weight": abs(sentiment_adj or 0.0),
-                        }
+                        # Update base moneyline weights
+                        moneyline_weights["odds_weight"] = ml_odds_weight
+                        moneyline_weights["sentiment_weight"] = abs(sentiment_adj or 0.0)
+
                         final_prob_blend, base_prob_blend, weights_used, decision_driver, warnings_new, kalshi_prob_for_pick = compute_final_probability(
                             pick_side,
                             implied_pick,
@@ -7327,7 +7341,7 @@ with tab_master:
                             ai_prob_base,
                             None, # No TheOver for Moneyline yet
                             sentiment_adj,
-                            base_weights,
+                            moneyline_weights,
                         )
                         sentiment_info = sentiment_impact_for_pick(sentiment_adj, pick, home, away)
                         sentiment_direction = sentiment_info.get("sentiment_direction")
