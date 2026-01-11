@@ -123,6 +123,17 @@ def load_theover_sides(path: Union[str, Any]) -> pd.DataFrame:
         df["AwayTeam"] = df["AwayTeam"].astype(str).str.strip()
     return df
 
+def debug_load_theover_totals(totals_path: Union[str, Any]) -> pd.DataFrame:
+    try:
+        # Direct read using openpyxl, bypassing other checks
+        df = pd.read_excel(totals_path, sheet_name="TotalsRaw", engine="openpyxl")
+        logger.info("DEBUG TheOver TotalsRaw shape: %s | columns: %s",
+                    df.shape, list(df.columns))
+        return df
+    except Exception as e:
+        logger.error(f"DEBUG TheOver load failed: {e}")
+        return pd.DataFrame()
+
 def load_theover_totals(path: Union[str, Any]) -> pd.DataFrame:
     df = _read_excel_safe(path, sheet_name="TotalsRaw")
     logger.info("TheOver TotalsRaw raw shape: %s | columns: %s",
@@ -376,9 +387,16 @@ def process_theover_inputs(
 
     # 1. Excel Ingestion (Strict Sheets)
     if totals_file:
+        logger.info("TheOver totals path: %s", totals_file)
         try:
-            raw_totals = load_theover_totals(totals_file)
-            stats["raw_totals_rows"] += len(raw_totals)
+            # Replaced load_theover_totals with debug_load_theover_totals
+            raw_totals = debug_load_theover_totals(totals_file)
+
+            total_rows_parsed = len(raw_totals)
+            # Log requested by user
+            logger.info("TheOver Matching Debug\nTotal Rows Parsed: %d\nMatched Games: 0 (Pending matching logic)", total_rows_parsed)
+
+            stats["raw_totals_rows"] += total_rows_parsed
             stats["files_processed"].append("totals_file")
 
             if not raw_totals.empty:
