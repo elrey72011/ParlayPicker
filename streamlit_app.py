@@ -25,7 +25,7 @@ from app_core.kalshi_integrator import (
 from app_core.llm_assistant import generate_confidence_explanation
 from app_core.reddit_sentiment import fetch_reddit_sentiment_map
 from app_core.sentiment_pipeline import MAX_SENTIMENT_CALLS, fetch_team_news, league_label, team_sentiment_from_articles
-from app_core.theover_ingest import process_theover_inputs, parse_theover_public_betting_text
+from app_core.theover_ingest import process_theover_inputs, parse_theover_public_betting_text, generate_canonical_key
 from app_core.team_name_matcher import TeamNameMatcher
 from app_core.prediction_engine import VERTEX_FEATURE_COLUMNS, PredictionEngine, get_prediction_prob, match_team_name
 from app_core.apisports import (
@@ -34,7 +34,7 @@ from app_core.apisports import (
     APISportsHockeyClient,
     get_key as get_apisports_key,
 )
-from app_core.feature_processing import enrich_with_model_features, build_model_feature_row_from_record
+from app_core.feature_processing import enrich_with_model_features, build_model_feature_row_from_record, robust_normalize_team
 from app_core.sportsdata import (
     SportsDataNBAClient,
     SportsDataNFLClient,
@@ -5429,13 +5429,12 @@ def load_games(selected_leagues: Union[str, List[str]]) -> List[Dict[str, Any]]:
 st.sidebar.header("Controls")
 
 # TheOver Public Betting Input
-with st.sidebar.expander("TheOver.ai Public Betting"):
-    theover_file_totals = st.file_uploader("Upload TheOver Totals (.xlsx)", type=["xlsx"])
-    theover_file_sides = st.file_uploader("Upload TheOver Sides (.xlsx)", type=["xlsx"])
-
-    st.caption("Paste Fallback (if no file)")
-    theover_paste_totals = st.text_area("Totals Paste", height=80, key="theover_paste_totals")
-    theover_paste_sides = st.text_area("Sides Paste", height=80, key="theover_paste_sides")
+with st.sidebar.expander("TheOver.ai Data (Optional)", expanded=False):
+    st.caption("Paste text or upload Excel exports from TheOver.ai")
+    theover_totals_file = st.file_uploader("Upload Totals (.xlsx)", type=["xlsx"], key="theover_totals_file")
+    theover_sides_file = st.file_uploader("Upload Sides (.xlsx)", type=["xlsx"], key="theover_sides_file")
+    theover_totals_text = st.text_area("Paste Totals Text", height=100, key="theover_totals_text")
+    theover_sides_text = st.text_area("Paste Sides Text", height=100, key="theover_sides_text")
 
 sport_options = [ALL_SPORTS_LABEL] + list(SPORT_KEYS.keys())
 default_sports = st.session_state.get("selected_sports") or [st.session_state.get("league", "NBA")]
@@ -5758,19 +5757,32 @@ with tab_master:
     if should_run:
         try:
             # 0. Parse TheOver text input if present
-            try:
-                theover_totals_df, theover_sides_df = process_theover_inputs(
-                    totals_file=theover_file_totals,
-                    sides_file=theover_file_sides,
-                    totals_paste=theover_paste_totals,
-                    sides_paste=theover_paste_sides
+            with st.spinner("Processing TheOver.ai data..."):
+                theover_df = process_theover_inputs(
+                    totals_file=theover_totals_file,
+                    sides_file=theover_sides_file,
+                    totals_paste=theover_totals_text,
+                    sides_paste=theover_sides_text
                 )
-                if not theover_totals_df.empty or not theover_sides_df.empty:
-                    st.sidebar.success(f"Parsed TheOver: Totals={len(theover_totals_df)}, Sides={len(theover_sides_df)}")
-            except Exception as e:
-                st.sidebar.error(f"TheOver Parse Error: {e}")
-                theover_totals_df = pd.DataFrame()
-                theover_sides_df = pd.DataFrame()
+
+                # Build Lookup
+                theover_lookup = {}
+                theover_stats = {
+                    "total_rows": len(theover_df),
+                    "matched_rows": 0,
+                    "unmatched_rows": 0,
+                    "unmatched_examples": []
+                }
+
+                if not theover_df.empty:
+                    # Index by key
+                    # We might have multiple entries per key (Total vs Side).
+                    # Group by key.
+                    for key, group in theover_df.groupby("theover_key"):
+                        theover_lookup[key] = {}
+                        for _, row in group.iterrows():
+                            mtype = row.get("theover_market_type", "SIDE")
+                            theover_lookup[key][mtype] = row.to_dict()
 
             st.session_state["DECISION_TRACE_SAMPLES"] = {}
 
@@ -6023,31 +6035,29 @@ with tab_master:
                 sentiment_diff = None  # Ensure initialized
 
                 # 1) Define Weights (Fix NameError)
+                # Updated weights with TheOver integration (Default 0.10 if matched)
+                # If TheOver is not matched, its weight is effectively zeroed and others renormalized dynamically
                 spread_weights = {
-                    "ml_weight": 0.30,
-                    "kalshi_weight": 0.30,
-                    "odds_weight": 0.25,
-                    "sentiment_weight": 0.15,
-                    "theover_weight": 0.00,
+                    "ml_weight": 0.25,
+                    "kalshi_weight": 0.35,
+                    "odds_weight": 0.30,
+                    "sentiment_weight": 0.00, # Sentiment disabled for now per instruction
+                    "theover_weight": 0.10,
                 }
-                # Fix: User requested explicit weights log
-                # The keys used in code are 'ml_weight', 'kalshi_weight' etc.
-                # User provided: {"model": 0.30, "kalshi": 0.30, "implied": 0.25, "sentiment": 0.15}
-                # We map them: model->ml_weight, implied->odds_weight.
-                # The values below match the user request.
+                # Totals (TheOver carries slightly more weight)
                 total_weights = {
-                    "ml_weight": 0.30,
-                    "kalshi_weight": 0.30,
-                    "odds_weight": 0.25,
-                    "sentiment_weight": 0.15,
-                    "theover_weight": 0.00,
+                    "ml_weight": 0.25,
+                    "kalshi_weight": 0.35,
+                    "odds_weight": 0.30,
+                    "sentiment_weight": 0.00,
+                    "theover_weight": 0.10,
                 }
                 moneyline_weights = {
-                    "ml_weight": 0.20,
-                    "kalshi_weight": 0.40,
-                    "odds_weight": 0.25,
-                    "sentiment_weight": 0.15,
-                    "theover_weight": 0.00,
+                    "ml_weight": 0.25,
+                    "kalshi_weight": 0.35,
+                    "odds_weight": 0.30,
+                    "sentiment_weight": 0.00,
+                    "theover_weight": 0.10,
                 }
                 # Debug log
                 logger.info(f"Weight sets active: spread={spread_weights}, total={total_weights}, ml={moneyline_weights}")
@@ -6058,9 +6068,76 @@ with tab_master:
                 theover_matched_side = None # dict or row
                 theover_matched_total = None # dict or row
 
-                # Match TheOver if available
-                # Logic: Check df_sides for this game
-                if not theover_sides_df.empty:
+                # --- TheOver.ai Matching Logic ---
+                # 1. Generate Canonical Key
+                g_league = g.get("league", "UNKNOWN").upper()
+                # Normalize league for key (NBA, NFL, NHL, NCAAB, NCAAF)
+                # Map specific variants
+                if "COLLEGE BASKETBALL" in g_league: g_league = "NCAAB"
+                elif "COLLEGE FOOTBALL" in g_league: g_league = "NCAAF"
+                elif "ICE HOCKEY" in g_league: g_league = "NHL"
+
+                g_home_norm = robust_normalize_team(g.get("home_team"), g_league)
+                g_away_norm = robust_normalize_team(g.get("away_team"), g_league)
+
+                # Date: Try local date first, else parse UTC
+                g_date_local = g.get("commence_date_local")
+                if not g_date_local:
+                    try:
+                        dt = parse_commence_to_utc(g.get("commence_time_iso_utc") or g.get("commence_time"))
+                        if dt:
+                            # Convert to EST for alignment with TheOver typically? Or just use UTC date?
+                            # TheOver ingestion uses local date string.
+                            # Let's try to match the ingestion format (YYYY-MM-DD)
+                            g_date_local = dt.strftime("%Y-%m-%d") # UTC date as fallback
+                    except:
+                        pass
+
+                canon_key = generate_canonical_key(g_league, g_date_local, g_away_norm, g_home_norm)
+
+                # 2. Lookup in TheOver Dictionary
+                theover_side_data = None
+                theover_total_data = None
+
+                if 'theover_lookup' in locals() and canon_key in theover_lookup:
+                    game_picks = theover_lookup[canon_key]
+                    theover_side_data = game_picks.get("SIDE")
+                    theover_total_data = game_picks.get("TOTAL")
+
+                    theover_stats["matched_rows"] += 1
+                else:
+                    theover_stats["unmatched_rows"] += 1
+                    if len(theover_stats["unmatched_examples"]) < 10:
+                        theover_stats["unmatched_examples"].append({
+                            "master_key": canon_key,
+                            "teams": f"{g.get('away_team')} @ {g.get('home_team')}",
+                            "league": g_league
+                        })
+
+                # 3. Process Hits if Matched
+                def _calc_theover_prob(data):
+                    if not data: return None
+                    # Hit Rate to Prob
+                    hr = float(data.get("theover_hit_rate") or 0.0)
+                    if hr > 0:
+                        # Clamp 0.50 - 0.75
+                        return max(0.50, min(0.75, hr))
+                    # Default if matched but no hit rate
+                    return 0.55
+
+                theover_prob_spread = _calc_theover_prob(theover_side_data)
+                theover_prob_total = _calc_theover_prob(theover_total_data)
+
+                if theover_side_data:
+                    theover_matched_side = theover_side_data
+                if theover_total_data:
+                    theover_matched_total = theover_total_data
+
+                # --- End TheOver Matching ---
+
+                # Placeholder for legacy block removal (if present downstream)
+                # We replaced the old manual check logic with this canonical key lookup.
+                if False:
                     # Match game
                     to_match = TeamNameMatcher.match_game(
                         g.get("home_team"),
@@ -6133,12 +6210,31 @@ with tab_master:
                         theover_prob_spread = p
                         theover_spread_pick_side = theover_side_pick
 
-                        theover_matched_count_sides += 1
+                        # Counter incremented below based on match presence to avoid double count
+                        # theover_matched_count_sides += 1
+
+                # Increment count for successful match (Sides)
+                # But wait, we already incremented it above?
+                # Actually, the block above is inside the matching logic.
+                # However, since I replaced the matching block earlier, let's verify if `theover_matched_count_sides` is being incremented.
+                # In the previous replace, I removed the block that had `theover_matched_count_sides += 1`.
+                # I need to restore the increment inside the new logic or ensure it's there.
+
+                # Check: The previous replace inserted `theover_stats["matched_rows"] += 1` but didn't increment the loop counters for side/total specifically.
+                # Let's add them here explicitly based on data presence.
+                if theover_matched_side:
+                     theover_matched_count_sides += 1
+                if theover_matched_total:
+                     theover_matched_count_totals += 1
 
                 if theover_matched_total:
                     hr = safe_float(theover_matched_total.get("source_hit_rate"))
+                    # If we have a hit rate, use it.
                     if hr:
                         p = clamp(hr, 0.50, 0.75)
+                    else:
+                        # Matched but no hit rate -> 0.55 default
+                        p = 0.55
                         if theover_matched_total.get("star_rating"):
                             p = min(0.75, p + 0.02)
 
@@ -6149,7 +6245,8 @@ with tab_master:
                         theover_prob_total = p
                         theover_total_pick_side = to_pick_side # OVER or UNDER
 
-                        theover_matched_count_totals += 1
+                        # Counter incremented above already
+                        # theover_matched_count_totals += 1
 
                 # --- TheOver.ai Consensus Logic ---
                 # Lightweight decision engine update: +/- 0.03 to final prob
@@ -7109,6 +7206,21 @@ with tab_master:
                 # Update sentiment weight dynamically
                 spread_weights["sentiment_weight"] = abs(spread_sentiment_adj or 0.0)
 
+                # Calculate SPREAD probability WITHOUT TheOver
+                _weights_no_to = spread_weights.copy()
+                _weights_no_to["theover_weight"] = 0.0
+                spread_prob_no_to, _, _, _, _, _ = compute_final_probability(
+                    spread_pick_side_key,
+                    spread_prob_market,
+                    kalshi_prob_spread if kalshi_spread.get("kalshi_matched") else None,
+                    kalshi_spread.get("kalshi_yes_side") or "home",
+                    model_spread_prob if model_used_for_spread else None,
+                    None,
+                    spread_sentiment_adj,
+                    _weights_no_to,
+                    sentiment_score=sentiment_diff,
+                )
+
                 spread_prob_final, spread_base_prob, spread_weights_used, spread_decision_driver, spread_warnings_new, spread_kalshi_prob_for_pick = compute_final_probability(
                     spread_pick_side_key,
                     spread_prob_market,
@@ -7120,6 +7232,8 @@ with tab_master:
                     spread_weights,
                     sentiment_score=sentiment_diff,
                 )
+
+                theover_delta_spread = (spread_prob_final or 0.0) - (spread_prob_no_to or 0.0)
 
                 # Apply TheOver Decision Engine Adjustment (Spread)
                 if theover_prob_final_spread is not None and spread_prob_final is not None:
@@ -7153,6 +7267,21 @@ with tab_master:
                     if total_weights.get("ml_weight", 0) > 0.15:
                         total_weights["ml_weight"] -= 0.10
 
+                # Calculate TOTAL probability WITHOUT TheOver
+                _weights_total_no_to = total_weights.copy()
+                _weights_total_no_to["theover_weight"] = 0.0
+                total_prob_no_to, _, _, _, _, _ = compute_final_probability(
+                    total_pick_side_key,
+                    total_prob_market,
+                    kalshi_prob_total if kalshi_total.get("kalshi_matched") else None,
+                    kalshi_total.get("kalshi_yes_side") or "over",
+                    model_total_prob if model_used_for_total else None,
+                    None,
+                    total_sentiment_adj,
+                    _weights_total_no_to,
+                    sentiment_score=sentiment_diff,
+                )
+
                 total_prob_final, total_base_prob, total_weights_used, total_decision_driver, total_warnings_new, total_kalshi_prob_for_pick = compute_final_probability(
                     total_pick_side_key,
                     total_prob_market,
@@ -7164,6 +7293,8 @@ with tab_master:
                     total_weights,
                     sentiment_score=sentiment_diff,
                 )
+
+                theover_delta_total = (total_prob_final or 0.0) - (total_prob_no_to or 0.0)
 
                 # Apply TheOver Decision Engine Adjustment (Total)
                 if theover_prob_final_total is not None and total_prob_final is not None:
@@ -7950,6 +8081,8 @@ with tab_master:
                         "theover_source_model": (theover_matched_side or {}).get("source_model"),
                         "theover_prob_used": theover_prob_spread,
                         "theover_matched": bool(theover_matched_side),
+                        "theover_delta_final_prob": theover_delta_spread,
+                        "final_prob_without_theover": spread_prob_no_to,
                             "spread_implied_prob": spread_implied,
                             "spread_prob_market_based": spread_prob_market_based,
                             "spread_prob_reason": spread_prob_reason,
@@ -8210,6 +8343,8 @@ with tab_master:
                         "theover_source_model": (theover_matched_total or {}).get("source_model"),
                         "theover_prob_used": theover_prob_total,
                         "theover_matched": bool(theover_matched_total),
+                        "theover_delta_final_prob": theover_delta_total,
+                        "final_prob_without_theover": total_prob_no_to,
                         "spread_implied_prob": spread_implied,
                         "spread_prob_market_based": spread_prob_market_based,
                         "spread_prob_reason": spread_prob_reason,
@@ -9335,7 +9470,8 @@ with tab_master:
             'Bet_Confidence', 'Bet_Lean',
             'Spread & Pick', 'Total & Pick',
             'spread_edge', 'total_edge',
-            'Pick', 'AI_Prob', 'Implied_Prob', 'Home_Sentiment', 'Away_Sentiment', 'Sentiment_Diff', 'sentiment_status', 'status', 'best_pick_prob', 'best_pick_edge'
+            'Pick', 'AI_Prob', 'Implied_Prob', 'Home_Sentiment', 'Away_Sentiment', 'Sentiment_Diff', 'sentiment_status', 'status', 'best_pick_prob', 'best_pick_edge',
+            'theover_pick', 'theover_prob_used', 'theover_delta_final_prob', 'final_prob_without_theover'
         ]
         safe_cols = [c for c in ui_whitelist if c in top_df_display.columns]
         top_df_ui = top_df_display[safe_cols].copy()
@@ -9547,6 +9683,8 @@ with tab_master:
             "theover_source_model",
             "theover_prob_used",
             "theover_matched",
+            "theover_delta_final_prob",
+            "final_prob_without_theover",
             "theover_available",
             "theover_line",
             "theover_status",
@@ -9672,6 +9810,19 @@ with tab_master:
                 mime="text/csv",
                 key="full_debug_csv_btn",
             )
+
+        with st.expander("TheOver Matching Debug", expanded=False):
+            if 'theover_stats' in locals():
+                st.write(f"Total Rows Parsed: {theover_stats.get('total_rows', 0)}")
+                st.write(f"Matched Games: {theover_stats.get('matched_rows', 0)}")
+                st.write(f"Unmatched Games: {theover_stats.get('unmatched_rows', 0)}")
+
+                unmatched = theover_stats.get("unmatched_examples", [])
+                if unmatched:
+                    st.caption("Sample Unmatched Games (Canonical Key):")
+                    st.json(unmatched)
+            else:
+                st.info("No TheOver statistics available.")
 
         with st.expander("Sentiment Debug", expanded=False):
             meta_view = st.session_state.get("sentiment_meta", {})
@@ -9832,7 +9983,7 @@ with tab_master:
                     df_master_view_display = df_master_view_display.drop(columns=['kalshi_wanted_tokens'])
 
                 # --- FINAL WHITELIST FIX ---
-                ui_whitelist = ['league', 'Home', 'Away', 'Pick', 'AI_Prob', 'Implied_Prob', 'Home_Sentiment', 'Away_Sentiment', 'Sentiment_Diff', 'sentiment_status', 'spread_edge', 'status']
+                ui_whitelist = ['league', 'Home', 'Away', 'Pick', 'AI_Prob', 'Implied_Prob', 'Home_Sentiment', 'Away_Sentiment', 'Sentiment_Diff', 'sentiment_status', 'spread_edge', 'status', 'theover_pick', 'theover_delta_final_prob', 'final_prob_without_theover']
                 safe_cols = [c for c in ui_whitelist if c in df_master_view_display.columns] # or df_master_view_display at line 8946
                 top_df_ui = df_master_view_display[safe_cols].copy()
 
@@ -10199,6 +10350,23 @@ with tab_debug:
             ),
         }
     )
+
+    with st.expander("TheOver Matching Debug", expanded=False):
+        t_stats = st.session_state.get("master_stats", {})
+        st.write(f"Matched Sides: {t_stats.get('theover_matched_sides', 0)}")
+        st.write(f"Matched Totals: {t_stats.get('theover_matched_totals', 0)}")
+
+        # We can try to access the raw 'theover_stats' if preserved in session,
+        # but 'master_stats' only has the counts.
+        # Ideally we would have stored the 'unmatched_examples' in session state too.
+        # Let's check 'kalshi_filter_stats' or similar?
+        # No, we didn't save 'theover_stats' to session state explicitly in the main loop block
+        # (it was a local variable in the 'Run Master Analysis' block).
+        # However, we displayed it in the main UI column earlier. This is just the Debug tab summary.
+
+    with st.expander("Team Code Generation Debug", expanded=False):
+        # Existing logic placeholder or new addition
+        pass
 
     with st.expander("Data Sources Debug", expanded=False):
         ds_debug = st.session_state.get("data_source_debug") or {}

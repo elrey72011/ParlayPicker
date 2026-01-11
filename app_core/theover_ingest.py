@@ -3,34 +3,85 @@ TheOver.ai Public Betting Ingestion Module
 
 Parses raw text from TheOver.ai public betting picks and normalizes it for integration.
 Supports parsing from Excel uploads (Totals/Sides) and text paste fallbacks.
+Now uses Canonical Keys for reliable matching.
 """
 import pandas as pd
 import re
 import logging
 from typing import Tuple, Optional, Dict, List, Any
 from datetime import datetime
-from app_core.team_name_matcher import TeamNameMatcher
+from app_core.feature_processing import robust_normalize_team
 
 logger = logging.getLogger(__name__)
 
-def normalize_theover_team_name(team: str, league: str = "") -> str:
-    """
-    Normalize team name using TeamNameMatcher.
+# User-specified Alias Map for TheOver input specifically
+THEOVER_LEAGUE_ALIASES = {
+    "NFL": {
+        "carolina": "carolina panthers",
+        "chicago": "chicago bears",
+        "green bay": "green bay packers",
+        "l.a. rams": "los angeles rams",
+        "la rams": "los angeles rams",
+        "l.a. chargers": "los angeles chargers",
+        "la chargers": "los angeles chargers",
+        "new york giants": "new york giants",
+        "new york jets": "new york jets",
+        "ny giants": "new york giants",
+        "ny jets": "new york jets",
+        "washington": "washington commanders",
+        "kc": "kansas city chiefs",
+        "sf": "san francisco 49ers",
+        "ne": "new england patriots",
+        "tb": "tampa bay buccaneers",
+        "lv": "las vegas raiders",
+        "no": "new orleans saints",
+    },
+    "NHL": {
+        "carolina": "carolina hurricanes",
+        "vegas": "vegas golden knights",
+        "ny rangers": "new york rangers",
+        "n.y. rangers": "new york rangers",
+        "st. louis": "st louis blues",
+        "st louis": "st louis blues",
+        "montreal": "montreal canadiens",
+        "florida": "florida panthers",
+        "tampa bay": "tampa bay lightning",
+        "colorado": "colorado avalanche",
+    },
+    "NBA": {
+        "ny knicks": "new york knicks",
+        "la lakers": "los angeles lakers",
+        "la clippers": "los angeles clippers",
+        "gs warriors": "golden state warriors",
+    }
+}
 
-    Args:
-        team: Raw team name
-        league: League identifier (optional, for context if needed later)
-
-    Returns:
-        Normalized team string
+def normalize_theover_team_for_ingest(team_raw: str, league: str) -> str:
     """
-    # Use robust normalization from TeamNameMatcher
-    # We strip mascots for cleaner matching against our internal DB
-    # However, if stripping results in empty string (e.g. "Lakers" -> ""), fallback to original
-    normalized = TeamNameMatcher.normalize(team, strip_mascots=True)
-    if not normalized:
-        normalized = TeamNameMatcher.normalize(team, strip_mascots=False)
-    return normalized
+    Wrapper around robust_normalize_team that applies TheOver-specific aliases first.
+    """
+    if not team_raw:
+        return ""
+
+    clean_raw = str(team_raw).strip()
+    lower_raw = clean_raw.lower()
+
+    # 1. Apply TheOver Specific Aliases (City -> Full Name)
+    if league in THEOVER_LEAGUE_ALIASES:
+        aliases = THEOVER_LEAGUE_ALIASES[league]
+        if lower_raw in aliases:
+            clean_raw = aliases[lower_raw]
+        # Also check for exact keys in aliases (sometimes casing matters less, but we lowered it)
+
+    # 2. Use the system standard normalizer
+    # robust_normalize_team handles lowercase, strip, mascot stripping (if college), etc.
+    return robust_normalize_team(clean_raw, league=league)
+
+def generate_canonical_key(league: str, date_str: str, away_norm: str, home_norm: str) -> str:
+    """
+    {league}|{local_date}|{away_norm}|{home_norm}
+    """
+    return f"{league}|{date_str}|{away_norm}|{home_norm}"
 
 def parse_theover_excel(file_buffer, pick_type_hint: str = "UNKNOWN") -> pd.DataFrame:
     """
@@ -44,71 +95,72 @@ def parse_theover_excel(file_buffer, pick_type_hint: str = "UNKNOWN") -> pd.Data
         pd.DataFrame: Normalized DataFrame ready for merging.
     """
     try:
-        # Read the first sheet
         df = pd.read_excel(file_buffer)
     except Exception as e:
         logger.error(f"Failed to read Excel file: {e}")
         return pd.DataFrame()
 
-    # Clean column names: lower, strip, spaces to underscores
+    # Clean column names
     df.columns = [str(c).strip().lower().replace(" ", "_") for c in df.columns]
 
-    # Map flexible columns to canonical names
-    # Canonical schema: league, away_team, home_team, pick, line, status, source_model, hit_rate
-
-    # 1. League
+    # Map flexible columns
     league_cols = [c for c in df.columns if c in ("league", "sport")]
     col_league = league_cols[0] if league_cols else None
 
-    # 2. Teams (Matchup or Home/Away)
-    # Check for split columns first
+    # Date
+    date_candidates = ["date", "game_date", "time"]
+    col_date = next((c for c in date_candidates if c in df.columns), None)
+
+    # Teams
     away_candidates = ["away", "away_team", "visitor", "road"]
     home_candidates = ["home", "home_team"]
-
     col_away = next((c for c in away_candidates if c in df.columns), None)
     col_home = next((c for c in home_candidates if c in df.columns), None)
 
     col_matchup = None
     if not (col_away and col_home):
-        # Look for matchup column
         matchup_candidates = ["matchup", "game", "teams", "match"]
         col_matchup = next((c for c in matchup_candidates if c in df.columns), None)
 
-    # 3. Pick
+    # Pick Info
     pick_candidates = ["pick", "selection", "play", "team", "side", "total_pick"]
     col_pick = next((c for c in pick_candidates if c in df.columns), None)
 
-    # 4. Line/Total
     line_candidates = ["line", "total", "points", "number", "odds", "spread"]
     col_line = next((c for c in line_candidates if c in df.columns), None)
 
-    # 5. Metadata
-    status_candidates = ["status"]
-    col_status = next((c for c in status_candidates if c in df.columns), None)
-
-    model_candidates = ["source_model", "model", "source", "capper"]
+    # Metadata
+    model_candidates = ["source_model", "model", "source", "capper", "backed_by"]
     col_model = next((c for c in model_candidates if c in df.columns), None)
 
-    hit_rate_candidates = ["hit_rate", "win_pct", "rate", "accuracy", "history"]
+    hit_rate_candidates = ["hit_rate", "win_pct", "rate", "accuracy", "history", "confidence"]
     col_hit_rate = next((c for c in hit_rate_candidates if c in df.columns), None)
 
-    star_candidates = ["star", "featured", "best_bet"]
-    col_star = next((c for c in star_candidates if c in df.columns), None)
-
-    # Processing Rows
     records = []
 
+    # Default Date if missing = Today
+    today_str = datetime.now().strftime("%Y-%m-%d")
+
     for _, row in df.iterrows():
-        # League Normalization
+        # League
         raw_league = str(row[col_league]) if col_league else "UNKNOWN"
         league = raw_league.upper().strip()
-        # Map common variants
         if "NBA" in league: league = "NBA"
         elif "NFL" in league: league = "NFL"
         elif "NHL" in league: league = "NHL"
         elif "MLB" in league: league = "MLB"
         elif any(x in league for x in ["NCAAB", "CBB", "COLLEGE BASKETBALL"]): league = "NCAAB"
         elif any(x in league for x in ["NCAAF", "CFB", "COLLEGE FOOTBALL"]): league = "NCAAF"
+
+        # Date
+        date_val = today_str
+        if col_date:
+            try:
+                # Try to parse date
+                d = pd.to_datetime(row[col_date])
+                date_val = d.strftime("%Y-%m-%d")
+            except:
+                pass
 
         # Teams
         raw_away = ""
@@ -119,7 +171,6 @@ def parse_theover_excel(file_buffer, pick_type_hint: str = "UNKNOWN") -> pd.Data
             raw_home = str(row[col_home])
         elif col_matchup:
             val = str(row[col_matchup])
-            # Split logic
             if " @ " in val:
                 parts = val.split(" @ ")
                 raw_away, raw_home = parts[0], parts[1]
@@ -127,26 +178,25 @@ def parse_theover_excel(file_buffer, pick_type_hint: str = "UNKNOWN") -> pd.Data
                 parts = val.split(" at ")
                 raw_away, raw_home = parts[0], parts[1]
             elif " vs " in val:
-                # "Home vs Away" is ambiguous but usually means that order?
-                # Or "Away vs Home"?
-                # Convention: usually neutral or specific league style.
-                # We'll assume Away vs Home for consistency unless we know better,
-                # or rely on simple split.
                 parts = val.split(" vs ")
                 if len(parts) == 2:
-                    raw_away, raw_home = parts[0], parts[1] # Guess
+                    raw_away, raw_home = parts[0], parts[1]
 
-        # Pick Type Detection
-        # If we passed a hint, start with that.
+        # Normalization
+        away_norm = normalize_theover_team_for_ingest(raw_away, league)
+        home_norm = normalize_theover_team_for_ingest(raw_home, league)
+
+        # Pick
+        raw_pick = str(row[col_pick]) if col_pick else ""
         pick_type = pick_type_hint
 
-        # Refine based on content?
-        # If pick column says "Over..." or "Under...", force TOTAL
-        raw_pick = str(row[col_pick]) if col_pick else ""
-        if "OVER" in raw_pick.upper() or "UNDER" in raw_pick.upper():
-            pick_type = "TOTAL"
+        # Heuristic for pick type if UNKNOWN
+        if pick_type == "UNKNOWN":
+            if "OVER" in raw_pick.upper() or "UNDER" in raw_pick.upper():
+                pick_type = "TOTAL"
+            else:
+                pick_type = "SIDE"
 
-        # Line Parsing
         line_val = None
         if col_line:
             try:
@@ -154,23 +204,16 @@ def parse_theover_excel(file_buffer, pick_type_hint: str = "UNKNOWN") -> pd.Data
             except:
                 pass
 
-        # Always try to clean raw_pick if it contains Over/Under info, even if line_val exists
+        # If TOTAL, try to extract line from pick if line_val is missing
         if pick_type == "TOTAL":
             match = re.search(r'(Over|Under)\s+([0-9]+\.?[0-9]*)', raw_pick, re.IGNORECASE)
             if match:
                 if line_val is None:
                     line_val = float(match.group(2))
-                # Normalize pick to just OVER/UNDER
-                raw_pick = match.group(1).upper()
-            elif "OVER" in raw_pick.upper():
-                raw_pick = "OVER"
-            elif "UNDER" in raw_pick.upper():
-                raw_pick = "UNDER"
+                raw_pick = match.group(1).upper() # OVER or UNDER
 
-        # Metadata extraction
+        # Model & Hit Rate
         source_model = str(row[col_model]) if col_model else "TheOver"
-        status = str(row[col_status]) if col_status else None
-
         hit_rate = 0.0
         if col_hit_rate:
             try:
@@ -180,251 +223,194 @@ def parse_theover_excel(file_buffer, pick_type_hint: str = "UNKNOWN") -> pd.Data
             except:
                 pass
 
-        is_star = False
-        if col_star:
-            val = str(row[col_star]).lower()
-            if val in ["true", "1", "yes", "star"]:
-                is_star = True
+        canon_key = generate_canonical_key(league, date_val, away_norm, home_norm)
 
-        # Construct Record
         rec = {
+            "theover_key": canon_key,
             "league": league,
-            "date_local": datetime.now().strftime("%Y-%m-%d"),
-            "raw_text": str(row.to_dict()),
-            "source_model": source_model,
-            "source_hit_rate": hit_rate,
-            "star_rating": is_star,
-            "status": status,
-            "pick_type": pick_type,
-            "away_team_raw": raw_away,
-            "home_team_raw": raw_home,
-            "away_team_norm": normalize_theover_team_name(raw_away, league),
-            "home_team_norm": normalize_theover_team_name(raw_home, league),
+            "date_local": date_val,
+            "away_norm": away_norm,
+            "home_norm": home_norm,
+            "theover_pick": raw_pick,
+            "theover_market_type": pick_type,
+            "theover_line": line_val,
+            "theover_model": source_model,
+            "theover_hit_rate": hit_rate,
+            "raw_text": str(row.to_dict())
         }
-
-        if pick_type == "TOTAL":
-            rec["pick_side"] = raw_pick.upper() # Should be OVER or UNDER
-            rec["total_points"] = line_val
-            rec["pick_team"] = None
-        else:
-            rec["pick_team"] = raw_pick # Team Name or indicator
-            rec["pick_line"] = line_val
-            rec["pick_side"] = None
-
-        # Calculate Sort Score (Quality)
-        # Priority: Star (1000) + Hit Rate (0-1) + 1 if recent?
-        score = 0.0
-        if is_star: score += 1000.0
-        if hit_rate: score += (hit_rate * 100.0)
-        rec["quality_score"] = score
-
         records.append(rec)
 
     return pd.DataFrame(records)
 
-def parse_theover_public_betting_text(raw_text: str) -> Tuple[pd.DataFrame, pd.DataFrame]:
+def parse_theover_public_betting_text(raw_text: str, pick_type_hint: str = "UNKNOWN") -> pd.DataFrame:
     """
-    Parse raw text paste from TheOver.ai Public Betting section.
-
-    ... (Existing Implementation Kept for Fallback) ...
+    Parse raw text paste from TheOver.ai.
+    Lines often look like:
+    "NBA • Today • 7:00 PM" (League/Time line)
+    "Team A @ Team B" (Matchup)
+    "Over 220.5" or "Team A -5" (Pick)
+    "Backed by Atom (68%)" (Model info)
     """
-    totals_rows = []
-    sides_rows = []
+    rows = []
 
-    lines = raw_text.strip().split('\n')
+    lines = [l.strip() for l in raw_text.split('\n') if l.strip()]
 
-    # Regex patterns
-    pct_pattern = re.compile(r'(\d+(?:\.\d+)?)%')
-    total_pattern = re.compile(r'(Over|Under)\s+([0-9]+\.?[0-9]*)', re.IGNORECASE)
-    star_pattern = re.compile(r'⭐')
+    current_league = "UNKNOWN"
+    current_date = datetime.now().strftime("%Y-%m-%d")
+    current_away = ""
+    current_home = ""
 
-    for line in lines:
-        line = line.strip()
-        if not line or len(line) < 5:
+    # State tracking
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+
+        # 1. League/Date detection
+        # e.g. "NBA • Today • 7:00 PM" or just "NBA"
+        # Heuristics:
+        if any(x in line.upper() for x in ["NBA", "NFL", "NHL", "NCAAB", "NCAAF", "CBB", "CFB"]):
+            upper = line.upper()
+            if "NBA" in upper: current_league = "NBA"
+            elif "NFL" in upper: current_league = "NFL"
+            elif "NHL" in upper: current_league = "NHL"
+            elif "NCAAB" in upper or "CBB" in upper: current_league = "NCAAB"
+            elif "NCAAF" in upper or "CFB" in upper: current_league = "NCAAF"
+
+            # TODO: Parse date from "Today", "Tomorrow", or specific date if present?
+            # For now, assume Today matches the Master slate date usually.
+            i += 1
             continue
 
-        # 1. Extract Hit Rate
-        hit_rate_match = pct_pattern.search(line)
-        hit_rate = None
-        if hit_rate_match:
-            try:
-                hit_rate = float(hit_rate_match.group(1)) / 100.0
-            except ValueError:
-                pass
+        # 2. Matchup detection
+        # "Team A @ Team B" or "Team A vs Team B"
+        if " @ " in line or " vs " in line:
+            splitter = " @ " if " @ " in line else " vs "
+            parts = line.split(splitter)
+            if len(parts) >= 2:
+                current_away = parts[0].strip()
+                current_home = parts[1].strip()
+                # Clean up if there are odds attached (e.g. "Team A (+100) @ Team B (-120)")
+                # Usually TheOver headers are just names
+                i += 1
+                continue
 
-        # 2. Extract Star
-        has_star = bool(star_pattern.search(line))
-
-        # 3. Detect Pick Type (Total vs Side)
-        total_match = total_pattern.search(line)
-
-        # 4. Extract League (Basic heuristic, optional)
-        league = "UNKNOWN"
-        line_upper = line.upper()
-        if "NBA" in line_upper: league = "NBA"
-        elif "NFL" in line_upper: league = "NFL"
-        elif "NCAAB" in line_upper or "CBB" in line_upper: league = "NCAAB"
-        elif "NCAAF" in line_upper or "CFB" in line_upper: league = "NCAAF"
-        elif "NHL" in line_upper: league = "NHL"
-
-        # 5. Extract Model Name
-        source_model = "TheOver"
-        if "(" in line and ")" in line:
-            parens_content = line[line.find("(")+1:line.rfind(")")]
-            if "-" in parens_content:
-                parts = parens_content.split("-")
-                for p in parts:
-                    if "%" not in p:
-                        source_model = p.strip()
-
-        # 6. Parse Teams & Pick
-        clean_line = line.replace("\t", " ").replace("|", " ")
+        # 3. Pick detection
+        # "Over 46.5 (-110)" or "Chiefs -3 (-110)"
+        # Regex for total
+        total_match = re.search(r'^(Over|Under)\s+([0-9]+\.?[0-9]*)', line, re.IGNORECASE)
         pick_type = "UNKNOWN"
         pick_val = None
-        pick_side = None
+        pick_line = None
 
         if total_match:
             pick_type = "TOTAL"
-            pick_side = total_match.group(1).upper()
-            try:
-                pick_val = float(total_match.group(2))
-            except ValueError:
-                pick_val = 0.0
-            teams_part = clean_line.replace(total_match.group(0), "")
+            pick_val = total_match.group(1).upper()
+            pick_line = float(total_match.group(2))
         else:
-            pick_type = "SIDE"
-            teams_part = clean_line
+            # Maybe Side?
+            # Check for spread/odds patterns?
+            # Or assume if it's not metadata, it's a pick.
+            # But we need to distinguish from "Backed by..."
+            if not line.startswith("Backed by") and not line.startswith("Analyze"):
+                pick_type = "SIDE"
+                pick_val = line # e.g. "Chiefs -3 (-110)"
+                # Clean it
+                pick_val = pick_val.split("(")[0].strip()
 
-        separator = None
-        if " @ " in teams_part: separator = " @ "
-        elif " vs " in teams_part: separator = " vs "
-        elif " v " in teams_part: separator = " v "
+        if pick_type != "UNKNOWN":
+            # Look ahead for "Backed by..."
+            model_name = "TheOver"
+            hit_rate = 0.0
 
-        home_team = "Unknown"
-        away_team = "Unknown"
-        pick_team = "Unknown"
-
-        if separator:
-            parts = teams_part.split(separator)
-            if len(parts) >= 2:
-                t1 = parts[0].strip()
-                t2 = parts[1].strip()
-
-                if ":" in t1: t1 = t1.split(":")[-1].strip()
-
-                t2_clean = []
-                for word in t2.split():
-                    if any(c.isdigit() for c in word) and word not in ['76ers', '49ers']:
-                        break
-                    if word.startswith("(") or word.startswith("-") or word.startswith("+"):
-                        break
-                    t2_clean.append(word)
-
-                away_team = t1
-                home_team = " ".join(t2_clean)
-
-                if pick_type == "SIDE":
-                    matchup_str = f"{t1}{separator}{t2}"
-                    remainder = clean_line.replace(matchup_str, "")
-                    t1_norm = TeamNameMatcher.normalize(t1, strip_mascots=True)
-                    t2_norm = TeamNameMatcher.normalize(t2, strip_mascots=True)
-
-                    if t1_norm and t1_norm in TeamNameMatcher.normalize(remainder, strip_mascots=True):
-                        pick_team = t1
-                    elif t2_norm and t2_norm in TeamNameMatcher.normalize(remainder, strip_mascots=True):
-                        pick_team = t2
+            # Check next line
+            if i + 1 < len(lines):
+                next_line = lines[i+1]
+                if next_line.startswith("Backed by"):
+                    # "Backed by Atom (68%)"
+                    m = re.search(r'Backed by (.*?) \((\d+)%\)', next_line)
+                    if m:
+                        model_name = m.group(1).strip()
+                        hit_rate = float(m.group(2)) / 100.0
                     else:
-                        words = []
-                        for w in clean_line.split():
-                            if any(c.isdigit() for c in w) and w not in ['76ers', '49ers']: break
-                            words.append(w)
-                        pick_team = " ".join(words)
-        else:
-            if pick_type == "SIDE":
-                words = []
-                for w in clean_line.split():
-                    if any(c.isdigit() for c in w) and w not in ['76ers', '49ers']: break
-                    words.append(w)
-                pick_team = " ".join(words)
+                        # Maybe "Backed by Atom"
+                        model_name = next_line.replace("Backed by ", "").strip()
+                    i += 1 # Consume this line
 
-        row = {
-            "league": league,
-            "date_local": datetime.now().strftime("%Y-%m-%d"),
-            "raw_text": line,
-            "source_model": source_model,
-            "source_hit_rate": hit_rate,
-            "star_rating": has_star,
-            "away_team_raw": away_team,
-            "home_team_raw": home_team,
-            "away_team_norm": normalize_theover_team_name(away_team),
-            "home_team_norm": normalize_theover_team_name(home_team),
-            "quality_score": (1000.0 if has_star else 0.0) + ((hit_rate or 0.0) * 100.0)
-        }
+            # Determine implied market type if hint provided
+            if pick_type_hint != "UNKNOWN":
+                market_type = pick_type_hint
+            else:
+                market_type = pick_type
 
-        if pick_type == "TOTAL":
-            row["pick_type"] = "TOTAL"
-            row["pick_side"] = pick_side
-            row["total_points"] = pick_val
-            totals_rows.append(row)
-        else:
-            row["pick_type"] = "SIDE"
-            row["pick_team"] = pick_team
-            sides_rows.append(row)
+            # Normalization
+            away_norm = normalize_theover_team_for_ingest(current_away, current_league)
+            home_norm = normalize_theover_team_for_ingest(current_home, current_league)
 
-    df_totals = pd.DataFrame(totals_rows)
-    df_sides = pd.DataFrame(sides_rows)
+            canon_key = generate_canonical_key(current_league, current_date, away_norm, home_norm)
 
-    return df_totals, df_sides
+            rows.append({
+                "theover_key": canon_key,
+                "league": current_league,
+                "date_local": current_date,
+                "away_norm": away_norm,
+                "home_norm": home_norm,
+                "theover_pick": pick_val,
+                "theover_market_type": market_type,
+                "theover_line": pick_line,
+                "theover_model": model_name,
+                "theover_hit_rate": hit_rate,
+                "raw_text": line
+            })
+
+        i += 1
+
+    return pd.DataFrame(rows)
 
 def process_theover_inputs(
-    totals_file: Optional[Any] = None,
-    sides_file: Optional[Any] = None,
-    totals_paste: Optional[str] = None,
-    sides_paste: Optional[str] = None
-) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    totals_file=None,
+    sides_file=None,
+    totals_paste=None,
+    sides_paste=None
+) -> pd.DataFrame:
     """
-    Main ingestion entry point. Prioritizes Excel files, falls back to text.
-    Deduplicates and returns normalized DataFrames for Totals and Sides.
-
-    Returns:
-        (df_totals, df_sides)
+    Main ingestion entry point.
+    Merges all inputs into a single dataframe indexed by 'theover_key'.
+    Handles multiple picks per game (e.g. Total AND Side).
     """
-    df_totals = pd.DataFrame()
-    df_sides = pd.DataFrame()
+    dfs = []
 
     # 1. Totals Ingestion
     if totals_file:
-        df_totals = parse_theover_excel(totals_file, pick_type_hint="TOTAL")
+        dfs.append(parse_theover_excel(totals_file, pick_type_hint="TOTAL"))
     elif totals_paste and totals_paste.strip():
-        df_totals, _ = parse_theover_public_betting_text(totals_paste)
-        # discard unused sides return from text parser for this slot if strictly totals
-        # but text parser returns both. We should probably merge if mixed?
-        # For now, assume user pastes Totals into Totals box.
+        dfs.append(parse_theover_public_betting_text(totals_paste, pick_type_hint="TOTAL"))
 
     # 2. Sides Ingestion
     if sides_file:
-        df_sides = parse_theover_excel(sides_file, pick_type_hint="SIDE")
+        dfs.append(parse_theover_excel(sides_file, pick_type_hint="SIDE"))
     elif sides_paste and sides_paste.strip():
-        _, df_s = parse_theover_public_betting_text(sides_paste)
-        df_sides = df_s
+        dfs.append(parse_theover_public_betting_text(sides_paste, pick_type_hint="SIDE"))
 
-    # 3. Deduplication and Ranking
-    # Rule: Keep BEST record per Game (League + Home + Away)
-    def _dedupe(df: pd.DataFrame) -> pd.DataFrame:
-        if df.empty: return df
-        # Sort by Quality Score Descending
-        df = df.sort_values(by="quality_score", ascending=False)
-        # Drop duplicates on Key (League, AwayNorm, HomeNorm)
-        # Note: If Home/Away are unknown, we might drop useful rows?
-        # But we need to match them to Master Analysis anyway.
-        df["match_key"] = df["league"] + "_" + df["away_team_norm"] + "_" + df["home_team_norm"]
-        # Filter out empty keys (unparsed teams)
-        valid_df = df[df["match_key"].str.contains("Unknown") == False]
-        # Dedupe
-        deduped = valid_df.drop_duplicates(subset=["match_key"], keep="first")
-        return deduped.drop(columns=["match_key"])
+    if not dfs:
+        return pd.DataFrame()
 
-    final_totals = _dedupe(df_totals)
-    final_sides = _dedupe(df_sides)
+    combined = pd.concat(dfs, ignore_index=True)
 
-    return final_totals, final_sides
+    if combined.empty:
+        return combined
+
+    # Deduplication strategy:
+    # We might have multiple picks for the same game (Total and Side).
+    # We want to keep them distinct.
+    # But if we have duplicates for the SAME market type (e.g. 2 totals for same game), pick best hit rate.
+
+    combined = combined.sort_values(by="theover_hit_rate", ascending=False)
+
+    # We need to return a structure that can be easily queried by Master Analysis.
+    # Master Analysis iterates by Game.
+    # So we want to find all TheOver picks for a given Key.
+
+    # Let's drop exact duplicates of (key, market_type)
+    deduped = combined.drop_duplicates(subset=["theover_key", "theover_market_type"], keep="first")
+
+    return deduped
