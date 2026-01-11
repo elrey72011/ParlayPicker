@@ -10,29 +10,45 @@ from typing import Any, Dict, List
 logger = logging.getLogger(__name__)
 
 # -------------------------------------------------------------------
-# GEMINI (VERTEX AI) SETUP
+# GEMINI (GOOGLE GENERATIVE AI) SETUP
 # -------------------------------------------------------------------
-# Vertex AI dependencies removed per local-only constraint
-GenerativeModel = None
-_GEMINI_AVAILABLE = False
+try:
+    import google.generativeai as genai
+    from google.generativeai import GenerativeModel
+    _GEMINI_AVAILABLE = True
+except ImportError:
+    GenerativeModel = None
+    _GEMINI_AVAILABLE = False
+    logger.warning("google.generativeai not found. Gemini features disabled.")
+
 
 # Global holding the currently active model name
 ACTIVE_MODEL = "gemini-1.5-flash-001"
 
 # Fallback list as requested (Updated for stability)
-MODEL_FALLBACKS = ["gemini-1.5-flash-001", "gemini-1.5-pro-001", "gemini-2.0-flash-exp"]
+MODEL_FALLBACKS = ["gemini-1.5-flash-001", "gemini-1.5-pro", "gemini-1.5-flash"]
 
 def initialize_gemini():
-    """Initializes Vertex AI."""
+    """Initializes Google Generative AI with API Key."""
     if not _GEMINI_AVAILABLE:
         return
-    project_id = os.getenv("GCP_PROJECT_ID") or os.getenv("GOOGLE_CLOUD_PROJECT")
-    location = os.getenv("GCP_REGION") or os.getenv("GCP_LOCATION") or "us-central1"
-    if project_id:
+
+    # Try to find API key in environment or Streamlit secrets (if available via env var injection)
+    api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+    if not api_key:
+        # Check if we can get it from streamlit secrets via a helper if it was injected into env
+        # Note: In Streamlit Cloud, secrets are often loaded into env or accessed via st.secrets.
+        # Here we assume the calling app might have set the env var from st.secrets.
+        pass
+
+    if api_key:
         try:
-            vertexai.init(project=project_id, location=location)
+            genai.configure(api_key=api_key)
         except Exception as e:
-            logger.error(f"Failed to initialize Vertex AI: {e}")
+            logger.error(f"Failed to initialize Gemini: {e}")
+    else:
+        # logger.warning("GEMINI_API_KEY or GOOGLE_API_KEY not found.")
+        pass
 
 def _safe_json_extract(text: str) -> Dict[str, Any]:
     text = (text or "").strip()

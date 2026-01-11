@@ -126,6 +126,7 @@ MAX_SENTIMENT_TEAMS_PER_RUN = 15
 NEWSAPI_COOLDOWN_HOURS = 12
 REDDIT_CACHE_TTL = timedelta(hours=12)
 DECISION_TRACE_SAMPLE_LEAGUES = {"NFL", "NBA", "NCAAB"}
+MAX_GEMINI_CALLS_PER_RUN = 20
 
 
 def _parse_cooldown_ts(raw: Any) -> Optional[datetime]:
@@ -851,6 +852,129 @@ def enrich_picks_with_roi_metrics(df: pd.DataFrame) -> pd.DataFrame:
     
     return df
 
+
+def get_best_ml_picks(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Return a DataFrame with one row per game representing the Best Overall Pick (Moneyline focused).
+    """
+    if df is None or df.empty:
+        return pd.DataFrame()
+
+    # Filter to Moneyline rows only
+    df_ml = df[df["Market"] == "Moneyline"].copy()
+    if df_ml.empty:
+        return pd.DataFrame()
+
+    summary_rows = []
+    # Group by Game Key
+    grouped = df_ml.groupby(["league", "Home", "Away", "Commence (UTC)"])
+
+    for name, group in grouped:
+        if group.empty:
+            continue
+
+        # Pick the row with highest final_probability
+        # Ensure final_probability is numeric
+        group["final_probability"] = pd.to_numeric(group["final_probability"], errors='coerce').fillna(-1.0)
+        best_row = group.loc[group["final_probability"].idxmax()]
+
+        # Construct summary row
+        summary = {
+            "league": best_row.get("league"),
+            "Home": best_row.get("Home"),
+            "Away": best_row.get("Away"),
+            "Commence (UTC)": best_row.get("Commence (UTC)"),
+            "Commence (Local)": best_row.get("Commence (Local)"),
+            "Best Overall Pick": best_row.get("Pick"),
+            "Best Overall Prob": best_row.get("final_probability"),
+            "Best Overall Confidence": best_row.get("Pick_Confidence"),
+            "Implied Prob": best_row.get("Implied_Prob"),
+            "AI Prob": best_row.get("AI_Prob"),
+        }
+        summary_rows.append(summary)
+
+    return pd.DataFrame(summary_rows)
+
+def build_game_summary(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Aggregates ML, Spread, and Total rows into a single row per game.
+    """
+    if df is None or df.empty:
+        return pd.DataFrame()
+
+    summary_rows = []
+    # Group by game key: League, Home, Away, Commence (UTC)
+    # We assume 'df' is the full master_df with all market rows
+
+    # Ensure necessary columns exist
+    for col in ["spread_prob_adj", "spread_prob", "total_prob_adj", "total_prob", "final_probability"]:
+        if col not in df.columns:
+            df[col] = None
+
+    grouped = df.groupby(["league", "Home", "Away", "Commence (UTC)"])
+
+    for name, group in grouped:
+        league, home, away, commence = name
+
+        # Initialize summary row
+        summary = {
+            "League": league,
+            "Home": home,
+            "Away": away,
+            "Commence UTC": commence,
+            "Commence (Local)": group["Commence (Local)"].iloc[0] if "Commence (Local)" in group.columns else None,
+        }
+
+        # Extract ML info
+        ml_rows = group[group["Market"] == "Moneyline"]
+        if not ml_rows.empty:
+            # Pick best ML row if multiple? Usually one per game.
+            best_ml = ml_rows.iloc[0]
+            # If multiple, take max prob?
+            if len(ml_rows) > 1:
+                ml_rows["final_probability"] = pd.to_numeric(ml_rows["final_probability"], errors='coerce').fillna(-1.0)
+                best_ml = ml_rows.loc[ml_rows["final_probability"].idxmax()]
+
+            summary["ML Pick"] = best_ml.get("Pick")
+            summary["ML Prob"] = best_ml.get("final_probability")
+        else:
+            summary["ML Pick"] = None
+            summary["ML Prob"] = None
+
+        # Extract Spread info
+        spread_rows = group[group["Market"] == "Spread"]
+        if not spread_rows.empty:
+            best_spread = spread_rows.iloc[0]
+            summary["Spread Pick"] = best_spread.get("Pick") or best_spread.get("Spread & Pick")
+            # Prefer adjusted prob, then raw
+            summary["Spread Prob"] = best_spread.get("spread_prob_adj") or best_spread.get("spread_prob")
+        else:
+             summary["Spread Pick"] = None
+             summary["Spread Prob"] = None
+
+        # Extract Total info
+        total_rows = group[group["Market"] == "Total"]
+        if not total_rows.empty:
+            best_total = total_rows.iloc[0]
+            summary["Total Pick"] = best_total.get("Pick") or best_total.get("Total & Pick")
+            summary["Total Prob"] = best_total.get("total_prob_adj") or best_total.get("total_prob")
+        else:
+             summary["Total Pick"] = None
+             summary["Total Prob"] = None
+
+        # Best Overall Pick (ML focused as per Task 2, or general?)
+        # Task 3 says "Best Overall Pick, Best Overall Prob" in this summary.
+        # Task 2 defined Best Overall as ML.
+        # Let's use the ML pick if available, or fallback to Spread/Total if ML missing?
+        # User said "A “Best Overall Picks” view shows one row per game with the ML pick".
+        # So here we populate it with ML.
+
+        summary["Best Overall Pick"] = summary["ML Pick"]
+        summary["Best Overall Prob"] = summary["ML Prob"]
+
+        summary_rows.append(summary)
+
+    return pd.DataFrame(summary_rows)
 
 def calculate_best_pick_metrics(df: pd.DataFrame) -> pd.DataFrame:
     """
@@ -2270,6 +2394,23 @@ def gemini_confidence_explain(row_dict: Dict[str, Any]) -> Dict[str, Any]:
     if str(row_dict.get("odds_placeholder_detected")).lower() == "true":
         base["gemini_error"] = "placeholder_odds_block"
         return base
+
+    # Validation: Only call Gemini if final probability exists
+    # Check spread/total/ML final probs if available in payload
+    # row_dict usually has 'spread_prob_final', 'total_prob_final' or just 'final_probability' if it's the processed row
+    # The payload construction in _apply_gemini maps "spread_prob_final" -> row.get("spread_prob")
+
+    has_valid_prob = False
+    for prob_key in ["spread_prob_final", "total_prob_final", "final_probability"]:
+        val = safe_float(row_dict.get(prob_key))
+        if val is not None and val > 0:
+            has_valid_prob = True
+            break
+
+    if not has_valid_prob:
+        base["gemini_error"] = "missing_final_probability"
+        return base
+
     allowed_fields = {
         "league",
         "home",
@@ -3825,6 +3966,12 @@ project_id = read_secret("GCP_PROJECT_ID", "elite-hangar-479017-m8")
 location = read_secret("GCP_LOCATION", "us-central1")
 kalshi_api_key = read_secret("KALSHI_API_KEY") or read_secret("kalshi_api_key")
 kalshi_api_secret = read_secret("KALSHI_API_SECRET") or read_secret("kalshi_api_secret")
+
+# Initialize Gemini API Key if available
+gemini_api_key = read_secret("GEMINI_API_KEY") or read_secret("GOOGLE_API_KEY")
+if gemini_api_key:
+    os.environ["GEMINI_API_KEY"] = gemini_api_key
+    os.environ["GOOGLE_API_KEY"] = gemini_api_key
 keys_resolved = get_api_keys()
 api_sports_key = keys_resolved.get("api_sports_key")
 sportsdata_key = keys_resolved.get("sportsdata_key")
@@ -9046,7 +9193,7 @@ with tab_master:
         df = enrich_picks_with_roi_metrics(df)
         df = df.copy()
         use_gemini_explanations = st.session_state.get("use_gemini_explanations", True)
-        gemini_row_limit = int(st.session_state.get("gemini_row_limit", 50) or 50)
+        gemini_row_limit = int(st.session_state.get("gemini_row_limit", MAX_GEMINI_CALLS_PER_RUN) or MAX_GEMINI_CALLS_PER_RUN)
         gemini_full_run = bool(st.session_state.get("gemini_full_run", False))
         if use_gemini_explanations:
             col_limit, col_full = st.columns([3, 2])
@@ -9183,8 +9330,9 @@ with tab_master:
                 row["gemini_risk_flags"] = json.dumps(flags_list) if flags_list else json.dumps([])
                 row["gemini_flags_short"] = ";".join(flags_list[:4])
                 row["llm_disagreement_flag"] = row.get("gemini_alignment") == "DISAGREE"
-                row["gemini_mode"] = "full" if gemini_full_run else "guardrail"
+                row["gemini_mode"] = "active"
                 row["gemini_error"] = None
+
             except Exception as exc:
                 row["gemini_mode"] = "error"
                 row["gemini_error"] = str(exc)[:240]
@@ -9431,6 +9579,65 @@ with tab_master:
         placeholder_count = int((df_master_view_display.get("odds_placeholder_detected") == True).sum()) if "odds_placeholder_detected" in df_master_view_display.columns else 0
         implied_null_count = int(df_master_view_display["Implied_Prob"].isna().sum()) if "Implied_Prob" in df_master_view_display.columns else 0
         st.caption(f"Debug: placeholder odds rows={placeholder_count}; Implied_Prob null rows={implied_null_count}")
+
+        # --- NEW: GAME SUMMARY VIEW ---
+        st.subheader("Game Summary View")
+        game_summary_df = build_game_summary(st.session_state["master_df"])
+
+        if not game_summary_df.empty:
+            # Reorder columns as requested
+            summary_cols = [
+                "League", "Home", "Away", "Commence UTC", "Commence (Local)",
+                "Best Overall Pick", "Best Overall Prob",
+                "Spread Pick", "Spread Prob",
+                "Total Pick", "Total Prob",
+                "ML Pick", "ML Prob"
+            ]
+            # Ensure columns exist
+            summary_cols = [c for c in summary_cols if c in game_summary_df.columns]
+
+            # Formatting
+            format_cols = {
+                "Best Overall Prob": st.column_config.NumberColumn(format="%.1f%%"),
+                "Spread Prob": st.column_config.NumberColumn(format="%.1f%%"),
+                "Total Prob": st.column_config.NumberColumn(format="%.1f%%"),
+                "ML Prob": st.column_config.NumberColumn(format="%.1f%%")
+            }
+
+            st.dataframe(
+                game_summary_df[summary_cols],
+                column_config=format_cols,
+                width="stretch",
+                hide_index=True
+            )
+        else:
+            st.info("No game summary data available.")
+
+        # --- NEW: BEST OVERALL PICKS (ML Focused) ---
+        st.subheader("Best Overall Picks (Moneyline)")
+        best_ml_df = get_best_ml_picks(st.session_state["master_df"])
+        if not best_ml_df.empty:
+            # Sort by Best Overall Prob descending
+            best_ml_df = best_ml_df.sort_values(by="Best Overall Prob", ascending=False)
+
+            ml_cols = [
+                "league", "Home", "Away", "Commence (Local)",
+                "Best Overall Pick", "Best Overall Prob", "Best Overall Confidence",
+                "Implied Prob", "AI Prob"
+            ]
+
+            st.dataframe(
+                best_ml_df[ml_cols],
+                column_config={
+                    "Best Overall Prob": st.column_config.NumberColumn(format="%.1f%%"),
+                    "Implied Prob": st.column_config.NumberColumn(format="%.1f%%"),
+                    "AI Prob": st.column_config.NumberColumn(format="%.1f%%"),
+                },
+                width="stretch",
+                hide_index=True
+            )
+        else:
+            st.info("No Moneyline picks available.")
 
         st.subheader("Top Picks / Best Bets")
         include_low_in_top = st.checkbox("Include LOW confidence in Top Picks", value=False, key="include_low_top_picks")
