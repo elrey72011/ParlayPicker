@@ -5754,6 +5754,18 @@ with tab_master:
     # We still need to define the helper functions because they are called during the DataFrame construction block
     # Actually, the entire block below constructs the DataFrame. We need to restructure this.
     
+    # Initialize variables to avoid NameError if skipped or failed
+    theover_df = pd.DataFrame()
+    theover_totals_df = pd.DataFrame()
+    theover_sides_df = pd.DataFrame()
+    theover_lookup = {}
+    theover_stats = {
+        "total_rows": 0,
+        "matched_rows": 0,
+        "unmatched_rows": 0,
+        "unmatched_examples": []
+    }
+
     if should_run:
         try:
             # 0. Parse TheOver text input if present
@@ -5764,6 +5776,13 @@ with tab_master:
                     totals_paste=theover_totals_text,
                     sides_paste=theover_sides_text
                 )
+
+                if not theover_df.empty:
+                    try:
+                        theover_totals_df = theover_df[theover_df["theover_market_type"] == "TOTAL"].copy()
+                        theover_sides_df = theover_df[theover_df["theover_market_type"] == "SIDE"].copy()
+                    except Exception as e:
+                        logger.warning(f"Error splitting TheOver DF: {e}")
 
                 # Build Lookup
                 theover_lookup = {}
