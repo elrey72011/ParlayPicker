@@ -530,6 +530,7 @@ def compute_final_probability(
     theover_prob: Optional[float],
     sentiment_adj: Optional[float],
     weights_dict: Dict[str, Any],
+    sentiment_score: Optional[float] = None,
 ) -> Tuple[Optional[float], Optional[float], Dict[str, float], str, List[str], Optional[float]]:
     """
     Blend available probabilities with weight re-normalization.
@@ -540,6 +541,7 @@ def compute_final_probability(
     weights_used: Dict[str, float] = {"w_implied": 0.0, "w_kalshi": 0.0, "w_model": 0.0, "w_sentiment": 0.0, "w_theover": 0.0}
     kalshi_prob_for_pick = map_kalshi_prob_for_pick(kalshi_prob_yes, kalshi_side_yes, pick_side)
 
+    # 1. Standard Sources
     if implied_prob is not None:
         sources.append(("implied", clamp(implied_prob), float(weights_dict.get("odds_weight") or 0.0)))
     if kalshi_prob_for_pick is not None:
@@ -549,33 +551,71 @@ def compute_final_probability(
     if theover_prob is not None:
         sources.append(("theover", clamp(theover_prob), float(weights_dict.get("theover_weight") or 0.0)))
 
+    # 2. Sentiment as a Probability Source
+    # Convert raw score (-1 to 1) into a probability (0 to 1)
+    # 0.0 score -> 0.50 prob. 1.0 score -> 0.65 prob (conservative scaling)
+    sentiment_weight = float(weights_dict.get("sentiment_weight") or 0.0)
+    sentiment_prob_val = None
+    if sentiment_score is not None and sentiment_weight > 0.0:
+        # Base conversion: home_advantage_prob = 0.5 + (score * 0.15)
+        # If score is Sentiment_Diff (Home - Away), then >0 favors Home.
+        # We need to map this to the pick_side.
+        try:
+            raw_score = float(sentiment_score)
+            # Cap impact to +/- 0.15
+            impact = max(-0.15, min(0.15, raw_score * 0.15))
+            home_prob = 0.50 + impact
+
+            p_side = str(pick_side or "").lower()
+            if p_side in {"home", "over"}:
+                # For totals, we assume sentiment_score tracks 'positive' outcome or home strength correlation
+                sentiment_prob_val = home_prob
+            elif p_side in {"away", "under"}:
+                sentiment_prob_val = 1.0 - home_prob
+
+            if sentiment_prob_val is not None:
+                sources.append(("sentiment", clamp(sentiment_prob_val), sentiment_weight))
+        except Exception as e:
+            logger.warning(f"Sentiment Prob Calculation Error: {e}")
+
     if sentiment_adj is None:
         sentiment_adj = 0.0
+
     if not sources:
         return None, None, weights_used, "missing", warnings, kalshi_prob_for_pick
+
     if all((w or 0.0) <= 0.0 for _, _, w in sources):
+        # Fallback: Equal weighting if all zero
         sources = [(name, prob, 1.0) for name, prob, _ in sources]
+
     total_w = sum(max(w, 0.0) for _, _, w in sources)
     if total_w <= 0:
         total_w = float(len(sources))
         sources = [(name, prob, 1.0) for name, prob, _ in sources]
+
     weights_norm: List[Tuple[str, float, float]] = []
     for name, prob, weight in sources:
         w_norm = max(weight, 0.0) / total_w
         weights_used[f"w_{name}"] = w_norm
         weights_norm.append((name, prob if prob is not None else None, w_norm))
+
     driver = max(weights_norm, key=lambda tup: tup[2])[0] if weights_norm else "missing"
     base_prob = sum((prob or 0.0) * w for _, prob, w in weights_norm)
 
     # ENHANCEMENT: Explicitly zero out w_model in return dict if not used, and flag reason
     if 'model' not in [s[0] for s in sources]:
         weights_used["w_model"] = 0.0
-        # If we expected model to be used but it wasn't (implied by weights_dict having it),
-        # we might want to flag it. But trace construction happens outside.
-        # This ensures the output reflects reality.
-    final_prob = clamp((base_prob or 0.0) + sentiment_adj, 0.0, 1.0)
+
+    # Apply additive adjustment (legacy or fine-tuning) only if sentiment NOT used as source
+    # If we used sentiment as a source, we don't double count with adj
+    final_adj = sentiment_adj
+    if any(s[0] == "sentiment" for s in sources):
+        final_adj = 0.0
+
+    final_prob = clamp((base_prob or 0.0) + final_adj, 0.0, 1.0)
     if driver == "kalshi" and kalshi_prob_for_pick is not None and kalshi_prob_for_pick < 0.5:
         warnings.append("kalshi_pick_mismatch")
+
     return final_prob, base_prob, weights_used, driver, warnings, kalshi_prob_for_pick
 
 
@@ -5926,32 +5966,33 @@ with tab_master:
                 # Initialize loop-local variables to prevent NameError
                 model_prob_home = None
                 model_warn = None
+                sentiment_diff = None  # Ensure initialized
 
                 # 1) Define Weights (Fix NameError)
                 spread_weights = {
-                    "ml_weight": 0.35,
-                    "kalshi_weight": 0.35,
-                    "odds_weight": 0.30,
-                    "sentiment_weight": 0.00,
+                    "ml_weight": 0.30,
+                    "kalshi_weight": 0.30,
+                    "odds_weight": 0.25,
+                    "sentiment_weight": 0.15,
                     "theover_weight": 0.00,
                 }
                 # Fix: User requested explicit weights log
                 # The keys used in code are 'ml_weight', 'kalshi_weight' etc.
-                # User provided: {"model": 0.35, "kalshi": 0.35, "implied": 0.30, "sentiment": 0.00}
+                # User provided: {"model": 0.30, "kalshi": 0.30, "implied": 0.25, "sentiment": 0.15}
                 # We map them: model->ml_weight, implied->odds_weight.
                 # The values below match the user request.
                 total_weights = {
-                    "ml_weight": 0.35,
-                    "kalshi_weight": 0.35,
-                    "odds_weight": 0.30,
-                    "sentiment_weight": 0.00,
+                    "ml_weight": 0.30,
+                    "kalshi_weight": 0.30,
+                    "odds_weight": 0.25,
+                    "sentiment_weight": 0.15,
                     "theover_weight": 0.00,
                 }
                 moneyline_weights = {
-                    "ml_weight": 0.25,
-                    "kalshi_weight": 0.45,
-                    "odds_weight": 0.30,
-                    "sentiment_weight": 0.00,
+                    "ml_weight": 0.20,
+                    "kalshi_weight": 0.40,
+                    "odds_weight": 0.25,
+                    "sentiment_weight": 0.15,
                     "theover_weight": 0.00,
                 }
                 # Debug log
@@ -7019,6 +7060,7 @@ with tab_master:
                     theover_prob_final_spread,
                     spread_sentiment_adj,
                     spread_weights,
+                    sentiment_score=sentiment_diff,
                 )
 
                 # Apply TheOver Decision Engine Adjustment (Spread)
@@ -7062,6 +7104,7 @@ with tab_master:
                     theover_prob_final_total,
                     total_sentiment_adj,
                     total_weights,
+                    sentiment_score=sentiment_diff,
                 )
 
                 # Apply TheOver Decision Engine Adjustment (Total)
@@ -7367,6 +7410,7 @@ with tab_master:
                             None, # No TheOver for Moneyline yet
                             sentiment_adj,
                             moneyline_weights,
+                            sentiment_score=sentiment_diff,
                         )
                         sentiment_info = sentiment_impact_for_pick(sentiment_adj, pick, home, away)
                         sentiment_direction = sentiment_info.get("sentiment_direction")
