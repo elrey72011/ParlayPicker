@@ -900,16 +900,41 @@ def calculate_best_pick_metrics(df: pd.DataFrame) -> pd.DataFrame:
         t_edge = _safe("total_edge") or 0.0
 
         # Moneyline
-        # Assuming the row itself is the ML row, or has ML fields populated
-        ml_pick = _safe_str("Pick")
-        ml_prob = _safe("final_probability") # Using final_probability which is usually ML prob in ML row
+        # FIX: Do not rely on "Pick" column which might hold Spread/Total pick.
+        # Derive ML pick from Odds/Prob data if available.
+        ml_prob = _safe("final_probability")
         if ml_prob is None: ml_prob = _safe("AI_Prob")
         ml_implied = _safe("Implied_Prob")
-        ml_edge = (ml_prob - ml_implied) if (ml_prob is not None and ml_implied is not None) else 0.0
 
-        # Moneyline Suppression Check
+        # If the row is a spread/total row, AI_Prob might be the model prob for spread/total?
+        # Check "Market" column.
+        row_market = str(row.get("Market") or "").lower()
+        if "spread" in row_market or "total" in row_market:
+             # In Spread/Total rows, AI_Prob might be spread/total model prob.
+             # We should look for ML-specific columns if they exist, or rely on "model_prob_home".
+             ml_prob_raw = _safe("model_prob_home")
+             if ml_prob_raw is not None:
+                  ml_prob = ml_prob_raw
+
+             # If we are in a spread row, "Implied_Prob" is spread implied.
+             pass
+
         ml_home_price = _safe("Home_ML")
         ml_away_price = _safe("Away_ML")
+
+        # Determine ML Pick Side (Home/Away) based on Prob > 0.5 or Odds
+        # Just for eligibility check, we assume if we have odds and prob, it's valid.
+        ml_pick_candidate = "Home" # Placeholder, strict logic not needed for eligibility flag only
+
+        ml_edge = 0.0
+        # Derive ml_pick if not present (for ml_valid logic below)
+        ml_pick = _safe_str("Pick")
+        if not ml_pick and ml_prob is not None:
+            # Infer pick from prob > 0.5 or odds
+            if ml_prob > 0.5:
+                 ml_pick = row.get("Home")
+            else:
+                 ml_pick = row.get("Away")
 
         # FIX: Strict Moneyline Suppression using helper
         is_allowed = ml_allowed(ml_home_price, ml_away_price, threshold=300)
@@ -924,15 +949,16 @@ def calculate_best_pick_metrics(df: pd.DataFrame) -> pd.DataFrame:
             moneyline_disabled = True
             moneyline_disabled_reason = "Moneyline disabled: odds > 300"
             ml_suppressed_reason = "abs(ML)>300"
-            # Hard disable ML for selection
-            ml_pick = None
-            ml_prob = None
-            ml_edge = 0.0
 
-        # If no pick or prob, ML is not a candidate
-        if not ml_pick or ml_prob is None:
-            ml_eligible = False # Or just unavailable
-            if not ml_suppressed_reason: ml_suppressed_reason = "missing_data"
+        # Check data availability
+        if ml_home_price is None or ml_away_price is None:
+             ml_eligible = False
+             ml_suppressed_reason = "missing_odds"
+
+        # NOTE: We do NOT set ml_pick = None here because ml_pick variable (from "Pick" col)
+        # is used below for "best_pick" logic.
+        # If "Pick" is Spread, we don't want to mess it up.
+        # We only use ml_eligible to filter candidacy.
 
         # 3. Calculate Scores
         # Score = (Prob - 0.5) + Edge * 2.0 (favors higher edge)
@@ -1018,15 +1044,30 @@ def calculate_best_pick_metrics(df: pd.DataFrame) -> pd.DataFrame:
             else:
                 reason = "No Valid Markets"
 
-        # 5. Confidence Logic
-        # Bands: HIGH (>= 0.56 or Edge >= 0.035), MEDIUM (>= 0.53 or Edge >= 0.015), LOW (Otherwise)
+        # 5. Confidence Logic (Updated)
+        # HIGH: edge >= 0.02 (and 0.52 <= prob <= 0.75 sanity check)
+        # MEDIUM: -0.01 <= edge < 0.02
+        # LOW: edge < -0.01
+
         p_val = best_prob if best_prob is not None else 0.5
         e_val = best_edge if best_edge is not None else 0.0
 
-        conf_label = "LOW"
-        if p_val >= 0.56 or abs(e_val) >= 0.035:
+        # Base Confidence from Edge
+        if e_val >= 0.02:
             conf_label = "HIGH"
-        elif p_val >= 0.53 or abs(e_val) >= 0.015:
+        elif e_val >= -0.01:
+            conf_label = "MEDIUM"
+        else:
+            conf_label = "LOW"
+
+        # Sanity Checks (Downgrades)
+        # "final_prob is within a sane band (e.g. 0.52 <= final_prob <= 0.75)"
+        if conf_label == "HIGH":
+            if not (0.52 <= p_val <= 0.75):
+                conf_label = "MEDIUM"
+
+        # "If edge < 0, Bet_Confidence is never HIGH." (Covered by e_val >= 0.02)
+        if e_val < 0 and conf_label == "HIGH":
             conf_label = "MEDIUM"
 
         # Force LOW if ML was suppressed but selected (Fallback scenario)
@@ -1039,6 +1080,17 @@ def calculate_best_pick_metrics(df: pd.DataFrame) -> pd.DataFrame:
             conf_label = "LOW"
             reason = "NO_BET_POSSIBLE"
 
+        # At_a_Glance_Confidence Clamping
+        # "At_a_Glance_Confidence follows the same rule or is at most equal to Bet_Confidence, never higher."
+        glance_conf = row.get("At_a_Glance_Confidence", "LOW")
+        ranks = {"HIGH": 3, "MEDIUM": 2, "LOW": 1, "UNKNOWN": 0, None: 0}
+
+        glance_rank = ranks.get(glance_conf, 1)
+        bet_rank = ranks.get(conf_label, 1)
+
+        if glance_rank > bet_rank:
+            glance_conf = conf_label
+
         bet_lean = (conf_label == "LOW")
         conf_score = (p_val - 0.5) + e_val
 
@@ -1046,12 +1098,14 @@ def calculate_best_pick_metrics(df: pd.DataFrame) -> pd.DataFrame:
             best_type, best_pick, p_val, reason, e_val,
             conf_label, bet_lean, conf_score,
             ml_eligible, ml_suppressed_reason, candidate_types_str,
-            moneyline_disabled, moneyline_disabled_reason
+            moneyline_disabled, moneyline_disabled_reason,
+            glance_conf
         ], index=[
             "best_pick_type", "best_pick", "final_prob", "Best_ST_Reason", "edge",
             "Bet_Confidence", "Bet_Lean", "Bet_Confidence_Score",
             "ml_eligible", "ml_suppressed_reason", "candidate_types_available",
-            "moneyline_disabled", "moneyline_disabled_reason"
+            "moneyline_disabled", "moneyline_disabled_reason",
+            "At_a_Glance_Confidence"
         ])
 
     # Batch apply
@@ -6714,6 +6768,10 @@ with tab_master:
                 if not sentiment_sample_status and sentiment_rate_limited:
                     sentiment_sample_status = 429
                 sentiment_status_value = sentiment_meta_global.get("sentiment_status") or sentiment_sample_status
+                # Override status if sentiment weight is zero
+                effective_sent_weight = float(st.session_state.get("sentiment_weight") or 0.0)
+                if effective_sent_weight <= 0.0:
+                     sentiment_status_value = "disabled"
                 sentiment_confidence_value = max(sentiment_confidence_local, safe_float(sentiment_meta_global.get("sentiment_confidence")) or 0.0)
                 sentiment_score_value = sentiment_meta_global.get("sentiment_score")
                 sentiment_disabled_reason = sentiment_meta_global.get("sentiment_disabled_reason") or ""
@@ -9576,6 +9634,25 @@ with tab_master:
 
             picks_cols = list(final_picks_df.columns)
             logger.info(f"Export picks columns: {picks_cols}")
+
+            # Filter Export (Optional)
+            filter_export = st.checkbox("Filter Export (Strong Picks Only)", value=True, key="filter_export_check")
+            if filter_export:
+                # Keep if Bet_Confidence is HIGH (which implies edge >= 0.02 and sane prob)
+                # Or explicitly: edge >= 0.02 AND 0.52 <= final_prob <= 0.75
+                # Since we already encoded this logic into Bet_Confidence="HIGH", we can filter by that.
+                if "Bet_Confidence" in final_picks_df.columns:
+                    final_picks_df = final_picks_df[final_picks_df["Bet_Confidence"] == "HIGH"]
+                else:
+                    # Fallback explicit filter
+                    try:
+                        final_picks_df["edge"] = pd.to_numeric(final_picks_df["edge"], errors='coerce').fillna(0.0)
+                        final_picks_df["final_prob"] = pd.to_numeric(final_picks_df["final_prob"], errors='coerce').fillna(0.0)
+                        cond = (final_picks_df["edge"] >= 0.02) & (final_picks_df["final_prob"] >= 0.52) & (final_picks_df["final_prob"] <= 0.75)
+                        final_picks_df = final_picks_df[cond]
+                    except Exception:
+                        pass
+                st.caption(f"Export filtered to {len(final_picks_df)} strong picks.")
 
             picks_csv = final_picks_df.to_csv(index=False).encode("utf-8")
             st.download_button(
