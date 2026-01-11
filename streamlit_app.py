@@ -8490,33 +8490,38 @@ with tab_master:
                         logger.warning(f"Failed to accumulate debug data: {e}")
 
                     # 7. Call local prediction
-                    engine = get_prediction_engine()
-                    try:
-                        probs = engine.predict_batch(inference_df)
-                    except Exception as e:
-                        logger.error(f"Prediction batch failed: {e}")
-                        st.warning(f"AI Data Unavailable (using defaults): {e}")
-                        probs = [0.5] * len(inference_df)
+                    if not inference_df.empty:
+                        engine = get_prediction_engine()
+                        try:
+                            probs = engine.predict_batch(inference_df)
+                        except Exception as e:
+                            logger.error(f"Prediction batch failed: {e}")
+                            st.warning(f"AI Data Unavailable (using defaults): {e}")
+                            probs = [0.5] * len(inference_df)
 
-                    # FIX: Stop Using Indexing for AI Results (Safe Map Approach) - Logic Update: Pad with 0.5 instead of fail
-                    if probs:
-                        # Handle length mismatch by padding or truncating
-                        if len(probs) < len(inference_df):
-                            logger.warning(f"Prediction length mismatch (short): got {len(probs)}, expected {len(inference_df)}. Padding with 0.5.")
-                            probs = list(probs) + [0.5] * (len(inference_df) - len(probs))
-                        elif len(probs) > len(inference_df):
-                            logger.warning(f"Prediction length mismatch (long): got {len(probs)}, expected {len(inference_df)}. Truncating.")
-                            probs = list(probs)[:len(inference_df)]
+                        # FIX: Stop Using Indexing for AI Results (Safe Map Approach) - Logic Update: Pad with 0.5 instead of fail
+                        if probs:
+                            # Handle length mismatch by padding or truncating
+                            if len(probs) < len(inference_df):
+                                logger.warning(f"Prediction length mismatch (short): got {len(probs)}, expected {len(inference_df)}. Padding with 0.5.")
+                                probs = list(probs) + [0.5] * (len(inference_df) - len(probs))
+                            elif len(probs) > len(inference_df):
+                                logger.warning(f"Prediction length mismatch (long): got {len(probs)}, expected {len(inference_df)}. Truncating.")
+                                probs = list(probs)[:len(inference_df)]
 
-                        # Wrap in Series to match index explicitly (convert to list to drop any upstream index)
-                        predictions_series = pd.Series(list(probs), index=inference_df.index)
-                        # Assign using loc to ensure alignment
-                        master_df.loc[inference_df.index, 'AI_Prob'] = predictions_series
-                        master_df.loc[inference_df.index, 'ai_prob_base'] = predictions_series # Persist base if needed
+                            # Wrap in Series to match index explicitly (convert to list to drop any upstream index)
+                            # This aligns by index explicitly as requested to prevent mismatch
+                            predictions_series = pd.Series(list(probs), index=inference_df.index)
+
+                            # Assign using loc to ensure alignment
+                            master_df.loc[inference_df.index, 'AI_Prob'] = predictions_series
+                            master_df.loc[inference_df.index, 'ai_prob_base'] = predictions_series # Persist base if needed
+                        else:
+                            logger.warning("No predictions returned. Defaulting to 0.5.")
+                            master_df.loc[inference_df.index, 'AI_Prob'] = 0.5
+                            master_df.loc[inference_df.index, 'ai_prob_base'] = 0.5
                     else:
-                        logger.warning("No predictions returned. Defaulting to 0.5.")
-                        master_df.loc[inference_df.index, 'AI_Prob'] = 0.5
-                        master_df.loc[inference_df.index, 'ai_prob_base'] = 0.5
+                        logger.info("Skipping prediction: inference_df is empty.")
 
                     # Safe Edge Calculation
                     implied_probs = pd.to_numeric(master_df.get("Implied_Prob"), errors='coerce').fillna(0.5)
