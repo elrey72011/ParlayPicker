@@ -8,11 +8,11 @@ Now uses Canonical Keys for reliable matching.
 import pandas as pd
 import re
 import logging
-from typing import Tuple, Optional, Dict, List, Any
+from typing import Tuple, Optional, Dict, List, Any, Union
 from datetime import datetime
 from app_core.feature_processing import robust_normalize_team
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("app_core.theover_ingest")
 
 # User-specified Alias Map for TheOver input specifically
 THEOVER_LEAGUE_ALIASES = {
@@ -83,149 +83,121 @@ def generate_canonical_key(league: str, date_str: str, away_norm: str, home_norm
     """
     return f"{league}|{date_str}|{away_norm}|{home_norm}"
 
-def parse_theover_excel(file_buffer, pick_type_hint: str = "UNKNOWN") -> pd.DataFrame:
-    """
-    Parse an Excel file for TheOver.ai data.
-
-    Args:
-        file_buffer: The file-like object from st.file_uploader.
-        pick_type_hint: "TOTAL" or "SIDE" to guide default pick type if not detected.
-
-    Returns:
-        pd.DataFrame: Normalized DataFrame ready for merging.
-    """
+def _read_excel_safe(path: Union[str, Any], sheet_name: str) -> pd.DataFrame:
     try:
-        df = pd.read_excel(file_buffer)
-    except Exception as e:
-        logger.error(f"Failed to read Excel file: {e}")
+        return pd.read_excel(path, sheet_name=sheet_name, engine="openpyxl")
+    except ImportError as exc:
+        logger.error("Failed to read Excel file: %s", exc)
+        return pd.DataFrame()
+    except Exception as exc:
+        logger.error("Failed to read Excel file %s sheet %s: %s", str(path)[:50], sheet_name, exc)
         return pd.DataFrame()
 
-    # Clean column names
-    df.columns = [str(c).strip().lower().replace(" ", "_") for c in df.columns]
+def load_theover_sides(path: Union[str, Any]) -> pd.DataFrame:
+    df = _read_excel_safe(path, sheet_name="Table1")
+    if df.empty:
+        return df
 
-    # Map flexible columns
-    league_cols = [c for c in df.columns if c in ("league", "sport")]
-    col_league = league_cols[0] if league_cols else None
+    required = ["League", "HomeTeam", "AwayTeam", "Pick", "Line", "Market", "PickTeam"]
+    missing = [c for c in required if c not in df.columns]
+    if missing:
+        logger.error("Table1 missing required columns: %s", missing)
+        return pd.DataFrame()
 
-    # Date
-    date_candidates = ["date", "game_date", "time"]
-    col_date = next((c for c in date_candidates if c in df.columns), None)
+    df = df.copy()
+    df["League"] = df["League"].astype(str).str.upper()
+    df["HomeTeam"] = df["HomeTeam"].astype(str).str.strip()
+    df["AwayTeam"] = df["AwayTeam"].astype(str).str.strip()
+    return df
 
-    # Teams
-    away_candidates = ["away", "away_team", "visitor", "road"]
-    home_candidates = ["home", "home_team"]
-    col_away = next((c for c in away_candidates if c in df.columns), None)
-    col_home = next((c for c in home_candidates if c in df.columns), None)
+def load_theover_totals(path: Union[str, Any]) -> pd.DataFrame:
+    df = _read_excel_safe(path, sheet_name="TotalsRaw")
+    if df.empty:
+        return df
 
-    col_matchup = None
-    if not (col_away and col_home):
-        matchup_candidates = ["matchup", "game", "teams", "match"]
-        col_matchup = next((c for c in matchup_candidates if c in df.columns), None)
+    required = ["League", "HomeTeam", "AwayTeam", "Pick", "Line", "WinProbability", "Market"]
+    missing = [c for c in required if c not in df.columns]
+    if missing:
+        logger.error("TotalsRaw missing required columns: %s", missing)
+        return pd.DataFrame()
 
-    # Pick Info
-    pick_candidates = ["pick", "selection", "play", "team", "side", "total_pick"]
-    col_pick = next((c for c in pick_candidates if c in df.columns), None)
+    df = df.copy()
+    df["League"] = df["League"].astype(str).str.upper()
+    df["HomeTeam"] = df["HomeTeam"].astype(str).str.strip()
+    df["AwayTeam"] = df["AwayTeam"].astype(str).str.strip()
+    return df
 
-    line_candidates = ["line", "total", "points", "number", "odds", "spread"]
-    col_line = next((c for c in line_candidates if c in df.columns), None)
-
-    # Metadata
-    model_candidates = ["source_model", "model", "source", "capper", "backed_by"]
-    col_model = next((c for c in model_candidates if c in df.columns), None)
-
-    hit_rate_candidates = ["hit_rate", "win_pct", "rate", "accuracy", "history", "confidence"]
-    col_hit_rate = next((c for c in hit_rate_candidates if c in df.columns), None)
+def _transform_theover_df(df: pd.DataFrame, pick_type_default: str) -> pd.DataFrame:
+    """
+    Transforms the structured TheOver dataframes (from load_theover_*)
+    into the standardized records format expected by the application.
+    """
+    if df.empty:
+        return pd.DataFrame()
 
     records = []
-
-    # Default Date if missing = Today
     today_str = datetime.now().strftime("%Y-%m-%d")
 
     for _, row in df.iterrows():
-        # League
-        raw_league = str(row[col_league]) if col_league else "UNKNOWN"
-        league = raw_league.upper().strip()
-        if "NBA" in league: league = "NBA"
-        elif "NFL" in league: league = "NFL"
-        elif "NHL" in league: league = "NHL"
-        elif "MLB" in league: league = "MLB"
-        elif any(x in league for x in ["NCAAB", "CBB", "COLLEGE BASKETBALL"]): league = "NCAAB"
-        elif any(x in league for x in ["NCAAF", "CFB", "COLLEGE FOOTBALL"]): league = "NCAAF"
+        # League normalization
+        raw_league = str(row.get("League", "UNKNOWN")).strip().upper()
+        if "NBA" in raw_league: league = "NBA"
+        elif "NFL" in raw_league: league = "NFL"
+        elif "NHL" in raw_league: league = "NHL"
+        elif "MLB" in raw_league: league = "MLB"
+        elif any(x in raw_league for x in ["NCAAB", "CBB", "COLLEGE BASKETBALL"]): league = "NCAAB"
+        elif any(x in raw_league for x in ["NCAAF", "CFB", "COLLEGE FOOTBALL"]): league = "NCAAF"
+        else: league = raw_league
 
-        # Date
+        # Date - usually not in Excel, default to today
         date_val = today_str
-        if col_date:
-            try:
-                # Try to parse date
-                d = pd.to_datetime(row[col_date])
-                date_val = d.strftime("%Y-%m-%d")
-            except:
-                pass
 
         # Teams
-        raw_away = ""
-        raw_home = ""
+        raw_home = str(row.get("HomeTeam", "")).strip()
+        raw_away = str(row.get("AwayTeam", "")).strip()
 
-        if col_away and col_home:
-            raw_away = str(row[col_away])
-            raw_home = str(row[col_home])
-        elif col_matchup:
-            val = str(row[col_matchup])
-            if " @ " in val:
-                parts = val.split(" @ ")
-                raw_away, raw_home = parts[0], parts[1]
-            elif " at " in val:
-                parts = val.split(" at ")
-                raw_away, raw_home = parts[0], parts[1]
-            elif " vs " in val:
-                parts = val.split(" vs ")
-                if len(parts) == 2:
-                    raw_away, raw_home = parts[0], parts[1]
-
-        # Normalization
-        away_norm = normalize_theover_team_for_ingest(raw_away, league)
         home_norm = normalize_theover_team_for_ingest(raw_home, league)
+        away_norm = normalize_theover_team_for_ingest(raw_away, league)
 
-        # Pick
-        raw_pick = str(row[col_pick]) if col_pick else ""
-        pick_type = pick_type_hint
-
-        # Heuristic for pick type if UNKNOWN
-        if pick_type == "UNKNOWN":
-            if "OVER" in raw_pick.upper() or "UNDER" in raw_pick.upper():
-                pick_type = "TOTAL"
-            else:
-                pick_type = "SIDE"
+        # Pick & Line
+        raw_pick = str(row.get("Pick", "")).strip()
 
         line_val = None
-        if col_line:
-            try:
-                line_val = float(row[col_line])
-            except:
-                pass
+        try:
+            line_val = float(row.get("Line"))
+        except (ValueError, TypeError):
+            pass
 
-        # If TOTAL, try to extract line from pick if line_val is missing
-        if pick_type == "TOTAL":
-            match = re.search(r'(Over|Under)\s+([0-9]+\.?[0-9]*)', raw_pick, re.IGNORECASE)
-            if match:
-                if line_val is None:
-                    line_val = float(match.group(2))
-                raw_pick = match.group(1).upper() # OVER or UNDER
-
-        # Model & Hit Rate
-        source_model = str(row[col_model]) if col_model else "TheOver"
+        # Hit Rate / Win Probability
         hit_rate = 0.0
-        if col_hit_rate:
-            try:
-                raw_hr = str(row[col_hit_rate]).replace("%", "")
-                hit_rate = float(raw_hr)
+        try:
+            wp = row.get("WinProbability")
+            if wp is not None:
+                s_wp = str(wp).replace("%", "").strip()
+                hit_rate = float(s_wp)
                 if hit_rate > 1.0: hit_rate /= 100.0
-            except:
-                pass
+        except (ValueError, TypeError):
+            pass
 
+        # Market Type
+        market = str(row.get("Market", pick_type_default)).upper()
+        if "TOTAL" in market:
+            pick_type = "TOTAL"
+            # If line is missing, try to extract from pick
+            if line_val is None:
+                match = re.search(r'(Over|Under)\s+([0-9]+\.?[0-9]*)', raw_pick, re.IGNORECASE)
+                if match:
+                    line_val = float(match.group(2))
+                    raw_pick = match.group(1).upper()
+        elif "SPREAD" in market or "SIDE" in market or "MONEYLINE" in market:
+            pick_type = "SIDE"
+        else:
+            pick_type = pick_type_default
+
+        # Canonical Key
         canon_key = generate_canonical_key(league, date_val, away_norm, home_norm)
 
-        rec = {
+        records.append({
             "theover_key": canon_key,
             "league": league,
             "date_local": date_val,
@@ -234,11 +206,10 @@ def parse_theover_excel(file_buffer, pick_type_hint: str = "UNKNOWN") -> pd.Data
             "theover_pick": raw_pick,
             "theover_market_type": pick_type,
             "theover_line": line_val,
-            "theover_model": source_model,
+            "theover_model": "TheOver",
             "theover_hit_rate": hit_rate,
             "raw_text": str(row.to_dict())
-        }
-        records.append(rec)
+        })
 
     return pd.DataFrame(records)
 
@@ -266,8 +237,6 @@ def parse_theover_public_betting_text(raw_text: str, pick_type_hint: str = "UNKN
         line = lines[i]
 
         # 1. League/Date detection
-        # e.g. "NBA • Today • 7:00 PM" or just "NBA"
-        # Heuristics:
         if any(x in line.upper() for x in ["NBA", "NFL", "NHL", "NCAAB", "NCAAF", "CBB", "CFB"]):
             upper = line.upper()
             if "NBA" in upper: current_league = "NBA"
@@ -275,28 +244,20 @@ def parse_theover_public_betting_text(raw_text: str, pick_type_hint: str = "UNKN
             elif "NHL" in upper: current_league = "NHL"
             elif "NCAAB" in upper or "CBB" in upper: current_league = "NCAAB"
             elif "NCAAF" in upper or "CFB" in upper: current_league = "NCAAF"
-
-            # TODO: Parse date from "Today", "Tomorrow", or specific date if present?
-            # For now, assume Today matches the Master slate date usually.
             i += 1
             continue
 
         # 2. Matchup detection
-        # "Team A @ Team B" or "Team A vs Team B"
         if " @ " in line or " vs " in line:
             splitter = " @ " if " @ " in line else " vs "
             parts = line.split(splitter)
             if len(parts) >= 2:
                 current_away = parts[0].strip()
                 current_home = parts[1].strip()
-                # Clean up if there are odds attached (e.g. "Team A (+100) @ Team B (-120)")
-                # Usually TheOver headers are just names
                 i += 1
                 continue
 
         # 3. Pick detection
-        # "Over 46.5 (-110)" or "Chiefs -3 (-110)"
-        # Regex for total
         total_match = re.search(r'^(Over|Under)\s+([0-9]+\.?[0-9]*)', line, re.IGNORECASE)
         pick_type = "UNKNOWN"
         pick_val = None
@@ -307,42 +268,32 @@ def parse_theover_public_betting_text(raw_text: str, pick_type_hint: str = "UNKN
             pick_val = total_match.group(1).upper()
             pick_line = float(total_match.group(2))
         else:
-            # Maybe Side?
-            # Check for spread/odds patterns?
-            # Or assume if it's not metadata, it's a pick.
-            # But we need to distinguish from "Backed by..."
             if not line.startswith("Backed by") and not line.startswith("Analyze"):
                 pick_type = "SIDE"
-                pick_val = line # e.g. "Chiefs -3 (-110)"
-                # Clean it
+                pick_val = line
                 pick_val = pick_val.split("(")[0].strip()
 
         if pick_type != "UNKNOWN":
-            # Look ahead for "Backed by..."
             model_name = "TheOver"
             hit_rate = 0.0
 
-            # Check next line
+            # Check next line for metadata
             if i + 1 < len(lines):
                 next_line = lines[i+1]
                 if next_line.startswith("Backed by"):
-                    # "Backed by Atom (68%)"
                     m = re.search(r'Backed by (.*?) \((\d+)%\)', next_line)
                     if m:
                         model_name = m.group(1).strip()
                         hit_rate = float(m.group(2)) / 100.0
                     else:
-                        # Maybe "Backed by Atom"
                         model_name = next_line.replace("Backed by ", "").strip()
-                    i += 1 # Consume this line
+                    i += 1
 
-            # Determine implied market type if hint provided
             if pick_type_hint != "UNKNOWN":
                 market_type = pick_type_hint
             else:
                 market_type = pick_type
 
-            # Normalization
             away_norm = normalize_theover_team_for_ingest(current_away, current_league)
             home_norm = normalize_theover_team_for_ingest(current_home, current_league)
 
@@ -379,16 +330,32 @@ def process_theover_inputs(
     """
     dfs = []
 
-    # 1. Totals Ingestion
+    # 1. Excel Ingestion (Strict Sheets)
     if totals_file:
-        dfs.append(parse_theover_excel(totals_file, pick_type_hint="TOTAL"))
-    elif totals_paste and totals_paste.strip():
+        try:
+            raw_totals = load_theover_totals(totals_file)
+            if not raw_totals.empty:
+                processed = _transform_theover_df(raw_totals, pick_type_default="TOTAL")
+                if not processed.empty:
+                    dfs.append(processed)
+        except Exception as e:
+            logger.error(f"Error processing Totals Excel: {e}")
+
+    if sides_file:
+        try:
+            raw_sides = load_theover_sides(sides_file)
+            if not raw_sides.empty:
+                processed = _transform_theover_df(raw_sides, pick_type_default="SIDE")
+                if not processed.empty:
+                    dfs.append(processed)
+        except Exception as e:
+            logger.error(f"Error processing Sides Excel: {e}")
+
+    # 2. Text Paste Fallback
+    if totals_paste and totals_paste.strip():
         dfs.append(parse_theover_public_betting_text(totals_paste, pick_type_hint="TOTAL"))
 
-    # 2. Sides Ingestion
-    if sides_file:
-        dfs.append(parse_theover_excel(sides_file, pick_type_hint="SIDE"))
-    elif sides_paste and sides_paste.strip():
+    if sides_paste and sides_paste.strip():
         dfs.append(parse_theover_public_betting_text(sides_paste, pick_type_hint="SIDE"))
 
     if not dfs:
@@ -400,17 +367,8 @@ def process_theover_inputs(
         return combined
 
     # Deduplication strategy:
-    # We might have multiple picks for the same game (Total and Side).
-    # We want to keep them distinct.
-    # But if we have duplicates for the SAME market type (e.g. 2 totals for same game), pick best hit rate.
-
+    # Prioritize picks with higher hit rate if duplicates exist for same game + market type
     combined = combined.sort_values(by="theover_hit_rate", ascending=False)
-
-    # We need to return a structure that can be easily queried by Master Analysis.
-    # Master Analysis iterates by Game.
-    # So we want to find all TheOver picks for a given Key.
-
-    # Let's drop exact duplicates of (key, market_type)
     deduped = combined.drop_duplicates(subset=["theover_key", "theover_market_type"], keep="first")
 
     return deduped
