@@ -34,6 +34,7 @@ from app_core.apisports import (
     APISportsHockeyClient,
     get_key as get_apisports_key,
 )
+from app_core.new_summary_logic import build_game_summary_v2, reorder_for_spread_total_focus_v2
 from app_core.feature_processing import enrich_with_model_features, build_model_feature_row_from_record, robust_normalize_team
 from app_core.sportsdata import (
     SportsDataNBAClient,
@@ -938,83 +939,9 @@ def get_best_ml_picks(df: pd.DataFrame) -> pd.DataFrame:
 def build_game_summary(df: pd.DataFrame) -> pd.DataFrame:
     """
     Aggregates ML, Spread, and Total rows into a single row per game.
+    Wraps v2 logic to maintain compatibility if needed, or simply alias it.
     """
-    if df is None or df.empty:
-        return pd.DataFrame()
-
-    summary_rows = []
-    # Group by game key: League, Home, Away, Commence (UTC)
-    # We assume 'df' is the full master_df with all market rows
-
-    # Ensure necessary columns exist
-    for col in ["spread_prob_adj", "spread_prob", "total_prob_adj", "total_prob", "final_probability"]:
-        if col not in df.columns:
-            df[col] = None
-
-    grouped = df.groupby(["league", "Home", "Away", "Commence (UTC)"])
-
-    for name, group in grouped:
-        league, home, away, commence = name
-
-        # Initialize summary row
-        summary = {
-            "League": league,
-            "Home": home,
-            "Away": away,
-            "Commence UTC": commence,
-            "Commence (Local)": group["Commence (Local)"].iloc[0] if "Commence (Local)" in group.columns else None,
-        }
-
-        # Extract ML info
-        ml_rows = group[group["Market"] == "Moneyline"]
-        if not ml_rows.empty:
-            # Pick best ML row if multiple? Usually one per game.
-            best_ml = ml_rows.iloc[0]
-            # If multiple, take max prob?
-            if len(ml_rows) > 1:
-                ml_rows["final_probability"] = pd.to_numeric(ml_rows["final_probability"], errors='coerce').fillna(-1.0)
-                best_ml = ml_rows.loc[ml_rows["final_probability"].idxmax()]
-
-            summary["ML Pick"] = best_ml.get("Pick")
-            summary["ML Prob"] = best_ml.get("final_probability")
-        else:
-            summary["ML Pick"] = None
-            summary["ML Prob"] = None
-
-        # Extract Spread info
-        spread_rows = group[group["Market"] == "Spread"]
-        if not spread_rows.empty:
-            best_spread = spread_rows.iloc[0]
-            summary["Spread Pick"] = best_spread.get("Pick") or best_spread.get("Spread & Pick")
-            # Prefer adjusted prob, then raw
-            summary["Spread Prob"] = best_spread.get("spread_prob_adj") or best_spread.get("spread_prob")
-        else:
-             summary["Spread Pick"] = None
-             summary["Spread Prob"] = None
-
-        # Extract Total info
-        total_rows = group[group["Market"] == "Total"]
-        if not total_rows.empty:
-            best_total = total_rows.iloc[0]
-            summary["Total Pick"] = best_total.get("Pick") or best_total.get("Total & Pick")
-            summary["Total Prob"] = best_total.get("total_prob_adj") or best_total.get("total_prob")
-        else:
-             summary["Total Pick"] = None
-             summary["Total Prob"] = None
-
-        # Best Overall Pick (ML focused as per Task 2, or general?)
-        # Task 3 says "Best Overall Pick, Best Overall Prob" in this summary.
-        # Task 2 defined Best Overall as ML.
-        # Let's use the ML pick if available, or fallback to Spread/Total if ML missing?
-        # User said "A “Best Overall Picks” view shows one row per game with the ML pick".
-        # So here we populate it with ML.
-
-        summary["Best Overall Pick"] = summary["ML Pick"]
-        summary["Best Overall Prob"] = summary["ML Prob"]
-
-        summary_rows.append(summary)
-
-    return pd.DataFrame(summary_rows)
+    return build_game_summary_v2(df)
 
 def calculate_best_pick_metrics(df: pd.DataFrame) -> pd.DataFrame:
     """
@@ -1311,91 +1238,10 @@ def reorder_master_columns(df: pd.DataFrame) -> pd.DataFrame:
 
 def reorder_for_spread_total_focus(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Emphasize spread/total columns immediately after fixed front columns; push ML fields later.
+    Enforce fixed front columns, summary block, then remaining columns.
+    Wraps v2 logic.
     """
-    if df is None or df.empty:
-        return df
-
-    fixed_front = [
-        "league",
-        "Home",
-        "Away",
-        "Commence (UTC)",
-        "Commence (Local)",
-        "Local Date",
-    ]
-    fixed_front = [c for c in fixed_front if c in df.columns]
-
-    focus_cols = [
-        "overall_confidence",
-        "gemini_alignment",
-        "gemini_rationale",
-        "gemini_flags_short",
-        "prob_engine",
-        "gemini_mode",
-        "model_mode",
-        "Spread & Pick",
-        "Spread_Glance_Clean",
-        "spread_prob_adj",
-        "spread_prob",
-        "spread_sentiment_adj",
-        "spread_confidence",
-        "Total & Pick",
-        "Total_Glance_Clean",
-        "total_prob_adj",
-        "total_prob",
-        "total_sentiment_adj",
-        "total_confidence",
-        "sentiment_badge",
-        "sentiment_level",
-        "sentiment_strength",
-        "sentiment_articles_used",
-        "At_a_Glance_Confidence",
-        "At_a_Glance_Score",
-        "At_a_Glance_Reason",
-        "spread_min",
-        "spread_med",
-        "spread_max",
-        "spread_books_count",
-        "spread_confidence_reason",
-        "spread_prob_market_based",
-        "spread_prob_reason",
-        "total_min",
-        "total_med",
-        "total_max",
-        "total_books_count",
-        "total_confidence_reason",
-        "total_prob_market_based",
-        "total_prob_reason",
-        "spread_width",
-        "total_width",
-        "spread_best_book",
-        "total_best_book",
-    ]
-    focus_cols = [c for c in focus_cols if c in df.columns]
-
-    ml_cols = [
-        "Pick",
-        "Book",
-        "Home_ML",
-        "Away_ML",
-        "Implied_Prob",
-        "AI_Prob",
-        "ai_prob_adj",
-        "consensus_prob",
-        "consensus_prob_adj",
-        "edge_vs_odds",
-        "model_minus_market",
-    ]
-    ml_cols = [c for c in ml_cols if c in df.columns]
-
-    used = set(fixed_front + focus_cols + ml_cols)
-    remaining = [c for c in df.columns if c not in used]
-
-    try:
-        return df[fixed_front + focus_cols + remaining + ml_cols]
-    except Exception:
-        return df
+    return reorder_for_spread_total_focus_v2(df)
 
 
 def confidence_from_market(
@@ -9504,6 +9350,23 @@ with tab_master:
         # Enrich with Best Picks for Export/Display
         df_master_view = calculate_best_pick_metrics(df_master_view)
 
+        # --- MERGE GAME SUMMARY COLUMNS ---
+        try:
+            summary_df_merge = build_game_summary(st.session_state["master_df"])
+            if not summary_df_merge.empty and not df_master_view.empty:
+                # Avoid duplicate join keys in right frame
+                join_keys = ["league", "Home", "Away", "Commence (UTC)"]
+                cols_to_use = [c for c in summary_df_merge.columns if c not in ["Commence (Local)", "Local Date"]]
+
+                df_master_view = pd.merge(
+                    df_master_view,
+                    summary_df_merge[cols_to_use],
+                    on=join_keys,
+                    how="left"
+                )
+        except Exception as e:
+            logger.warning(f"Summary merge failed: {e}")
+
         counts = confidence_stats.get("counts") or {}
         st.caption(
             f"Confidence counts (post-filter): HIGH={counts.get('HIGH', 0)}, "
@@ -9773,7 +9636,8 @@ with tab_master:
 
         # --- FINAL WHITELIST FIX (Enhanced with Picks Sheet Columns) ---
         ui_whitelist = [
-            'league', 'Home', 'Away',
+            'league', 'Home', 'Away', 'Commence (UTC)', 'Commence (Local)', 'Local Date',
+            'Overall Pick', 'Overall Prob', 'Spread', 'Spread Prob', 'Total', 'Total Prob', 'ML', 'ML Prob',
             'best_pick', 'final_prob', 'edge', 'best_pick_type',
             'Bet_Confidence', 'Bet_Lean',
             'Spread & Pick', 'Total & Pick',
@@ -9786,7 +9650,7 @@ with tab_master:
 
         # Force Numeric and String consistency
         for col in top_df_ui.columns:
-            if col in ['AI_Prob', 'Implied_Prob', 'spread_edge', 'total_edge', 'Sentiment_Diff', 'final_prob', 'edge']:
+            if col in ['AI_Prob', 'Implied_Prob', 'spread_edge', 'total_edge', 'Sentiment_Diff', 'final_prob', 'edge', 'Overall Prob', 'Spread Prob', 'Total Prob', 'ML Prob']:
                 top_df_ui[col] = pd.to_numeric(top_df_ui[col], errors='coerce').fillna(0.0)
             else:
                 top_df_ui[col] = top_df_ui[col].astype(str).replace('None', 'N/A')
@@ -10018,80 +9882,29 @@ with tab_master:
 
         # --- PICKS SHEET EXPORT (DEFAULT) ---
         if not export_df.empty:
-            # Map intended output columns to DataFrame columns
-            # D) Replace export selection with an explicit picks sheet:
-            export_cols = [
-                "league",
-                "Commence (Local)",
-                "Home",
-                "Away",
-                "best_pick_type",
-                "best_pick",
-                "final_prob",
-                "edge",
-                "Bet_Confidence",
-                "Bet_Lean",
-                "Bet_Confidence_Score",
-                "Spread & Pick",
-                "spread_prob_adj",
-                "spread_edge",
-                "Total & Pick",
-                "total_prob_adj",
-                "total_edge",
-                "At_a_Glance_Confidence",
-                "At_a_Glance_Reason",
-                "Home_Sentiment",
-                "Away_Sentiment",
-                "Sentiment_Diff",
-                "sentiment_status",
-                "kalshi_prob_used",
-                "kalshi_matched",
-                "AI_Prob",
-                "Implied_Prob",
-                "ml_eligible",
-                "ml_suppressed_reason",
-                "moneyline_disabled",
-                "moneyline_disabled_reason",
-                "candidate_types_available",
-                "theover_pick",
-                "theover_pick_type",
-                "theover_hit_rate",
-                "theover_prob_used",
-                "theover_matched",
-                "theover_source_model"
-            ]
-
-            final_picks_df = pd.DataFrame()
-            for col in export_cols:
-                # Use defensive get to avoid KeyErrors, falling back to None
-                # Check mapping for fallbacks if column name in df differs from export name
-                # Here we assume df has these columns as we calculated them or they exist in source
-                if col in export_df.columns:
-                    final_picks_df[col] = export_df[col]
-                else:
-                    # Fallbacks for specific columns if strict match fails
-                    if col == "spread_prob_adj" and "spread_prob" in export_df.columns:
-                         final_picks_df[col] = export_df["spread_prob"]
-                    elif col == "total_prob_adj" and "total_prob" in export_df.columns:
-                         final_picks_df[col] = export_df["total_prob"]
-                    else:
-                         # Keep column but empty to ensure stable schema
-                         final_picks_df[col] = None
-
-            picks_cols = list(final_picks_df.columns)
-            logger.info(f"Export picks columns: {picks_cols}")
+            # Use the reordered full export dataframe directly to ensure all columns are preserved
+            final_picks_df = export_df.copy()
 
             # Filter Export (Optional)
-            filter_export = st.checkbox("Filter Export (Strong Picks Only)", value=False, key="filter_export_check") # Default False to match grid availability
+            filter_export = st.checkbox("Filter Export (Strong Picks Only)", value=False, key="filter_export_check")
 
             # Ensure export matches grid rows if not filtered specifically
             if filter_export:
                 if "Bet_Confidence" in final_picks_df.columns:
                     final_picks_df = final_picks_df[final_picks_df["Bet_Confidence"] == "HIGH"]
             else:
-                # Filter to Eligible (HIGH+MEDIUM) to match Top Picks Grid
-                if "Bet_Confidence" in final_picks_df.columns:
-                     final_picks_df = final_picks_df[final_picks_df["Bet_Confidence"].isin(["HIGH", "MEDIUM"])]
+                # Filter to Eligible (HIGH+MEDIUM) to match Top Picks Grid, but keep low confidence if they are in the view?
+                # The user asked to keep all columns, but implies rows should match the grid.
+                # "whichever dataframe drives the grid should also drive the download"
+                # The grid uses top_df which filters by Eligible_Top_Picks.
+                if "Eligible_Top_Picks" in final_picks_df.columns:
+                     final_picks_df = final_picks_df[final_picks_df["Eligible_Top_Picks"] == True]
+
+                # Also apply confidence filter from session state if needed, or just dump what's there.
+                # The prompt says: "The main “Download CSV” button (st.download_button) so the downloaded CSV matches what is shown on screen."
+                # top_df_ui filters out LOW confidence by default unless unchecked.
+                if not include_low_in_top and "Pick_Confidence" in final_picks_df.columns:
+                    final_picks_df = final_picks_df[final_picks_df["Pick_Confidence"].isin(["HIGH", "MEDIUM"])]
 
             st.caption(f"Export contains {len(final_picks_df)} picks.")
 
