@@ -5803,7 +5803,7 @@ with tab_master:
         try:
             # 0. Parse TheOver text input if present
             with st.spinner("Processing TheOver.ai data..."):
-                theover_df = process_theover_inputs(
+                theover_df, ingestion_stats = process_theover_inputs(
                     totals_file=theover_totals_file,
                     sides_file=theover_sides_file,
                     totals_paste=theover_totals_text,
@@ -5820,7 +5820,7 @@ with tab_master:
                 # Build Lookup
                 theover_lookup = {}
                 theover_stats = {
-                    "total_rows": len(theover_df),
+                    "total_rows": ingestion_stats.get("raw_total_rows", len(theover_df)),
                     "matched_rows": 0,
                     "unmatched_rows": 0,
                     "unmatched_examples": []

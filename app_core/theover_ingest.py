@@ -79,7 +79,11 @@ def normalize_theover_team_for_ingest(team_raw: str, league: str) -> str:
 
 def generate_canonical_key(league: str, date_str: str, away_norm: str, home_norm: str) -> str:
     """
-    {league}|{local_date}|{away_norm}|{home_norm}
+    Generates a canonical key for matching against the master schedule.
+    Format: {league}|{local_date}|{away_norm}|{home_norm}
+
+    This must match the key generation logic in streamlit_app.py 'Run Master Analysis' loop.
+    Ensure 'away_norm' and 'home_norm' have been normalized via robust_normalize_team.
     """
     return f"{league}|{date_str}|{away_norm}|{home_norm}"
 
@@ -95,38 +99,53 @@ def _read_excel_safe(path: Union[str, Any], sheet_name: str) -> pd.DataFrame:
 
 def load_theover_sides(path: Union[str, Any]) -> pd.DataFrame:
     df = _read_excel_safe(path, sheet_name="Table1")
-    logger.info(f"TheOver Table1 shape: {df.shape}")
+    logger.info("TheOver Sides Table1 raw shape: %s | columns: %s",
+                getattr(df, "shape", None),
+                list(df.columns) if hasattr(df, "columns") else None)
+
     if df.empty:
         return df
 
-    required = ["League", "HomeTeam", "AwayTeam", "Pick", "Line", "Market", "PickTeam"]
-    missing = [c for c in required if c not in df.columns]
+    # Relaxed validation: Just check for critical columns for keys
+    required_critical = ["League", "HomeTeam", "AwayTeam"]
+    missing = [c for c in required_critical if c not in df.columns]
     if missing:
-        logger.error("Table1 missing required columns: %s", missing)
+        logger.error("Table1 missing critical columns: %s", missing)
         return pd.DataFrame()
 
     df = df.copy()
-    df["League"] = df["League"].astype(str).str.upper()
-    df["HomeTeam"] = df["HomeTeam"].astype(str).str.strip()
-    df["AwayTeam"] = df["AwayTeam"].astype(str).str.strip()
+    # Ensure types for critical columns
+    if "League" in df.columns:
+        df["League"] = df["League"].astype(str).str.upper()
+    if "HomeTeam" in df.columns:
+        df["HomeTeam"] = df["HomeTeam"].astype(str).str.strip()
+    if "AwayTeam" in df.columns:
+        df["AwayTeam"] = df["AwayTeam"].astype(str).str.strip()
     return df
 
 def load_theover_totals(path: Union[str, Any]) -> pd.DataFrame:
     df = _read_excel_safe(path, sheet_name="TotalsRaw")
-    logger.info(f"TheOver TotalsRaw shape: {df.shape}")
+    logger.info("TheOver TotalsRaw raw shape: %s | columns: %s",
+                getattr(df, "shape", None),
+                list(df.columns) if hasattr(df, "columns") else None)
+
     if df.empty:
         return df
 
-    required = ["League", "HomeTeam", "AwayTeam", "Pick", "Line", "WinProbability", "Market"]
-    missing = [c for c in required if c not in df.columns]
+    # Relaxed validation
+    required_critical = ["League", "HomeTeam", "AwayTeam"]
+    missing = [c for c in required_critical if c not in df.columns]
     if missing:
-        logger.error("TotalsRaw missing required columns: %s", missing)
+        logger.error("TotalsRaw missing critical columns: %s", missing)
         return pd.DataFrame()
 
     df = df.copy()
-    df["League"] = df["League"].astype(str).str.upper()
-    df["HomeTeam"] = df["HomeTeam"].astype(str).str.strip()
-    df["AwayTeam"] = df["AwayTeam"].astype(str).str.strip()
+    if "League" in df.columns:
+        df["League"] = df["League"].astype(str).str.upper()
+    if "HomeTeam" in df.columns:
+        df["HomeTeam"] = df["HomeTeam"].astype(str).str.strip()
+    if "AwayTeam" in df.columns:
+        df["AwayTeam"] = df["AwayTeam"].astype(str).str.strip()
     return df
 
 def _transform_theover_df(df: pd.DataFrame, pick_type_default: str) -> pd.DataFrame:
@@ -173,7 +192,9 @@ def _transform_theover_df(df: pd.DataFrame, pick_type_default: str) -> pd.DataFr
 
         line_val = None
         try:
-            line_val = float(row.get("Line"))
+            l_raw = row.get("Line")
+            if pd.notnull(l_raw):
+                line_val = float(l_raw)
         except (ValueError, TypeError):
             pass
 
@@ -181,10 +202,11 @@ def _transform_theover_df(df: pd.DataFrame, pick_type_default: str) -> pd.DataFr
         hit_rate = 0.0
         try:
             wp = row.get("WinProbability")
-            if wp is not None:
+            if wp is not None and pd.notnull(wp):
                 s_wp = str(wp).replace("%", "").strip()
-                hit_rate = float(s_wp)
-                if hit_rate > 1.0: hit_rate /= 100.0
+                if s_wp:
+                    hit_rate = float(s_wp)
+                    if hit_rate > 1.0: hit_rate /= 100.0
         except (ValueError, TypeError):
             pass
 
@@ -220,9 +242,11 @@ def _transform_theover_df(df: pd.DataFrame, pick_type_default: str) -> pd.DataFr
             "raw_text": str(row.to_dict())
         })
 
-    logger.info(f"TheOver {pick_type_default} rows parsed: {len(records)}")
+    logger.info(f"TheOver totals rows retained for matching: {len(records)}")
     if records:
-        logger.info(f"Sample keys: {[r['theover_key'] for r in records[:3]]}")
+        logger.info(f"TheOver totals sample keys: {[r['theover_key'] for r in records[:3]]}")
+    else:
+        logger.warning(f"TheOver {pick_type_default} produced 0 records after transformation.")
 
     return pd.DataFrame(records)
 
@@ -335,18 +359,28 @@ def process_theover_inputs(
     sides_file=None,
     totals_paste=None,
     sides_paste=None
-) -> pd.DataFrame:
+) -> Tuple[pd.DataFrame, Dict[str, Any]]:
     """
     Main ingestion entry point.
     Merges all inputs into a single dataframe indexed by 'theover_key'.
     Handles multiple picks per game (e.g. Total AND Side).
+    Returns (DataFrame, stats_dict).
     """
     dfs = []
+    stats = {
+        "raw_total_rows": 0,
+        "raw_sides_rows": 0,
+        "raw_totals_rows": 0,
+        "files_processed": []
+    }
 
     # 1. Excel Ingestion (Strict Sheets)
     if totals_file:
         try:
             raw_totals = load_theover_totals(totals_file)
+            stats["raw_totals_rows"] += len(raw_totals)
+            stats["files_processed"].append("totals_file")
+
             if not raw_totals.empty:
                 processed = _transform_theover_df(raw_totals, pick_type_default="TOTAL")
                 if not processed.empty:
@@ -357,6 +391,9 @@ def process_theover_inputs(
     if sides_file:
         try:
             raw_sides = load_theover_sides(sides_file)
+            stats["raw_sides_rows"] += len(raw_sides)
+            stats["files_processed"].append("sides_file")
+
             if not raw_sides.empty:
                 processed = _transform_theover_df(raw_sides, pick_type_default="SIDE")
                 if not processed.empty:
@@ -364,24 +401,27 @@ def process_theover_inputs(
         except Exception as e:
             logger.error(f"Error processing Sides Excel: {e}")
 
+    stats["raw_total_rows"] = stats["raw_totals_rows"] + stats["raw_sides_rows"]
+
     # 2. Text Paste Fallback
     if totals_paste and totals_paste.strip():
+        # Note: text paste rows are not counted in "raw_total_rows" for Excel debug parity, or could be added separately
         dfs.append(parse_theover_public_betting_text(totals_paste, pick_type_hint="TOTAL"))
 
     if sides_paste and sides_paste.strip():
         dfs.append(parse_theover_public_betting_text(sides_paste, pick_type_hint="SIDE"))
 
     if not dfs:
-        return pd.DataFrame()
+        return pd.DataFrame(), stats
 
     combined = pd.concat(dfs, ignore_index=True)
 
     if combined.empty:
-        return combined
+        return combined, stats
 
     # Deduplication strategy:
     # Prioritize picks with higher hit rate if duplicates exist for same game + market type
     combined = combined.sort_values(by="theover_hit_rate", ascending=False)
     deduped = combined.drop_duplicates(subset=["theover_key", "theover_market_type"], keep="first")
 
-    return deduped
+    return deduped, stats
