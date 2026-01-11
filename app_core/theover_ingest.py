@@ -13,6 +13,14 @@ from pathlib import Path
 from datetime import datetime
 from app_core.feature_processing import robust_normalize_team
 
+try:
+    import rapidfuzz
+    from rapidfuzz import process, fuzz
+except ImportError:
+    rapidfuzz = None
+    process = None
+    fuzz = None
+
 logger = logging.getLogger("app_core.theover_ingest")
 
 # User-specified Alias Map for TheOver input specifically
@@ -78,6 +86,67 @@ def normalize_theover_team_for_ingest(team_raw: str, league: str) -> str:
     # robust_normalize_team handles lowercase, strip, mascot stripping (if college), etc.
     return robust_normalize_team(clean_raw, league=league)
 
+def match_teams_to_master(df: pd.DataFrame, games: List[Dict[str, Any]]) -> pd.DataFrame:
+    """
+    Fuzzy matches teams in the ingested DataFrame to canonical team names in the games list.
+    """
+    if df.empty or not games or not rapidfuzz:
+        return df
+
+    # Build canonical team set from games
+    canonical_teams = set()
+    for g in games:
+        if g.get("home_team"):
+            canonical_teams.add(g.get("home_team"))
+        if g.get("away_team"):
+            canonical_teams.add(g.get("away_team"))
+
+    # Also add normalized versions to the pool to assist matching
+    # Map normalized back to canonical
+    norm_to_canon = {}
+    for t in canonical_teams:
+        norm = robust_normalize_team(t)
+        norm_to_canon[norm] = t
+
+    choices = list(canonical_teams)
+
+    # Identify team columns
+    team_cols = [c for c in ["HomeTeam", "AwayTeam"] if c in df.columns]
+
+    mapping_cache = {}
+
+    def _fuzzy_map(name):
+        if not isinstance(name, str) or not name.strip():
+            return name
+
+        name_clean = name.strip()
+        if name_clean in mapping_cache:
+            return mapping_cache[name_clean]
+
+        # Try exact match first (normalized)
+        norm_input = robust_normalize_team(name_clean)
+        if norm_input in norm_to_canon:
+            res = norm_to_canon[norm_input]
+            mapping_cache[name_clean] = res
+            return res
+
+        # Fuzzy match
+        # Use token_set_ratio as requested
+        match = process.extractOne(name_clean, choices, scorer=fuzz.token_set_ratio)
+        if match:
+            best_match, score, _ = match
+            if score >= 80: # Threshold
+                mapping_cache[name_clean] = best_match
+                return best_match
+
+        mapping_cache[name_clean] = name # Keep original if no good match
+        return name
+
+    for col in team_cols:
+        df[col] = df[col].apply(_fuzzy_map)
+
+    return df
+
 def generate_canonical_key(league: str, date_str: str, away_norm: str, home_norm: str) -> str:
     """
     Generates a canonical key for matching against the master schedule.
@@ -88,31 +157,76 @@ def generate_canonical_key(league: str, date_str: str, away_norm: str, home_norm
     """
     return f"{league}|{date_str}|{away_norm}|{home_norm}"
 
-def _read_excel_safe(path: Union[str, Any], sheet_name: str) -> pd.DataFrame:
+def _read_file_safe(file_obj: Union[str, Any], sheet_name_hint: str) -> pd.DataFrame:
+    """
+    Reads a file object (or path) trying both Excel and CSV parsers.
+    """
+    # 1. Try Excel
     try:
-        return pd.read_excel(path, sheet_name=sheet_name, engine="openpyxl")
-    except ImportError as exc:
-        logger.error("Failed to read Excel file: %s", exc)
-        return pd.DataFrame()
-    except Exception as exc:
-        logger.error("Failed to read Excel file %s sheet %s: %s", str(path)[:50], sheet_name, exc)
+        # If it's a file-like object, we might need to seek 0 if it was read before,
+        # but here we assume it's fresh or handled by caller.
+        # file_uploader objects are seekable.
+        if hasattr(file_obj, "seek"):
+            file_obj.seek(0)
+
+        return pd.read_excel(file_obj, sheet_name=sheet_name_hint, engine="openpyxl")
+    except Exception as e_excel:
+        # logger.debug(f"Excel read failed, trying CSV: {e_excel}")
+        pass
+
+    # 2. Try CSV
+    try:
+        if hasattr(file_obj, "seek"):
+            file_obj.seek(0)
+        return pd.read_csv(file_obj)
+    except Exception as e_csv:
+        logger.error(f"Failed to read file as Excel or CSV: {e_csv}")
         return pd.DataFrame()
 
+def _parse_vertical_chunk_format(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Parses a vertical format where data is in chunks.
+    Example:
+    Row 1: NBA
+    Row 2: Team A
+    Row 3: Team B
+    Row 4: Over 210.5
+    ...
+    """
+    # Collapse to a single column of strings
+    # Convert entire DF to string representation then split?
+    # Or iterate rows if it loaded as single column.
+
+    # If DF has multiple columns, melt or stack?
+    # Usually these vertical files load as 1 or 2 columns with many NaNs.
+
+    # Convert to list of strings
+    all_values = []
+    for col in df.columns:
+        all_values.extend(df[col].dropna().astype(str).tolist())
+
+    # Heuristic parsing similar to text paste parser
+    # Re-use parse_theover_public_betting_text
+    text_blob = "\n".join(all_values)
+    return parse_theover_public_betting_text(text_blob)
+
 def load_theover_sides(path: Union[str, Any]) -> pd.DataFrame:
-    df = _read_excel_safe(path, sheet_name="Table1")
-    logger.info("TheOver Sides Table1 raw shape: %s | columns: %s",
+    df = _read_file_safe(path, sheet_name_hint="Table1")
+    logger.info("TheOver Sides raw shape: %s | columns: %s",
                 getattr(df, "shape", None),
                 list(df.columns) if hasattr(df, "columns") else None)
 
     if df.empty:
         return df
 
-    # Relaxed validation: Just check for critical columns for keys
+    # Check for vertical format / bad headers
     required_critical = ["League", "HomeTeam", "AwayTeam"]
     missing = [c for c in required_critical if c not in df.columns]
+
     if missing:
-        logger.error("Table1 missing critical columns: %s", missing)
-        return pd.DataFrame()
+        # Trigger fallback parser
+        logger.info("Sides file missing critical columns, attempting vertical/chunk parse.")
+        return _parse_vertical_chunk_format(df)
 
     df = df.copy()
     # Ensure types for critical columns
@@ -125,18 +239,11 @@ def load_theover_sides(path: Union[str, Any]) -> pd.DataFrame:
     return df
 
 def debug_load_theover_totals(totals_path: Union[str, Any]) -> pd.DataFrame:
-    try:
-        # Direct read using openpyxl, bypassing other checks
-        df = pd.read_excel(totals_path, sheet_name="TotalsRaw", engine="openpyxl")
-        logger.info("DEBUG TheOver TotalsRaw shape: %s | columns: %s",
-                    df.shape, list(df.columns))
-        return df
-    except Exception as e:
-        logger.error(f"DEBUG TheOver load failed: {e}")
-        return pd.DataFrame()
+    # Deprecated / Replaced by load_theover_totals logic, but kept for compatibility if imported elsewhere
+    return load_theover_totals(totals_path)
 
 def load_theover_totals(path: Union[str, Any]) -> pd.DataFrame:
-    df = _read_excel_safe(path, sheet_name="TotalsRaw")
+    df = _read_file_safe(path, sheet_name_hint="TotalsRaw")
     logger.info("TheOver TotalsRaw raw shape: %s | columns: %s",
                 getattr(df, "shape", None),
                 list(df.columns) if hasattr(df, "columns") else None)
@@ -147,9 +254,10 @@ def load_theover_totals(path: Union[str, Any]) -> pd.DataFrame:
     # Relaxed validation
     required_critical = ["League", "HomeTeam", "AwayTeam"]
     missing = [c for c in required_critical if c not in df.columns]
+
     if missing:
-        logger.error("TotalsRaw missing critical columns: %s", missing)
-        return pd.DataFrame()
+         logger.info("Totals file missing critical columns, attempting vertical/chunk parse.")
+         return _parse_vertical_chunk_format(df)
 
     df = df.copy()
     if "League" in df.columns:
@@ -187,7 +295,14 @@ def _transform_theover_df(df: pd.DataFrame, pick_type_default: str) -> pd.DataFr
         else: league = raw_league
 
         # Date - usually not in Excel, default to today
+        # Check if row has Date
         date_val = slate_date
+        if "Date" in row and pd.notnull(row["Date"]):
+            try:
+                # Try parsing date
+                date_val = str(row["Date"]).split(" ")[0] # Basic split
+            except Exception:
+                pass
 
         # Teams
         raw_home = str(row.get("HomeTeam", "")).strip()
@@ -390,69 +505,45 @@ def process_theover_inputs(
     # Debugging / Loading Totals
     totals_df = pd.DataFrame()
     if totals_file:
-        logger.info("DEBUG TheOver totals input provided: %s", totals_file)
-        if isinstance(totals_file, (str, Path)):
-             logger.info("DEBUG TheOver totals exists: %s", Path(totals_file).exists())
-        else:
-             logger.info("DEBUG TheOver totals is a file-like object")
-
+        logger.info("DEBUG TheOver totals input provided")
         try:
-            totals_df = pd.read_excel(totals_file, sheet_name="TotalsRaw", engine="openpyxl")
-            logger.info("DEBUG TotalsRaw shape: %s | columns: %s", totals_df.shape, list(totals_df.columns))
+            totals_df = load_theover_totals(totals_file)
             stats["raw_totals_rows"] = len(totals_df)
             stats["files_processed"].append("totals_file")
         except Exception as exc:
-            logger.error("DEBUG Failed to read TotalsRaw: %s", exc)
-            # Fallback or empty
+            logger.error("DEBUG Failed to read Totals: %s", exc)
             totals_df = pd.DataFrame()
 
     # Debugging / Loading Sides
     sides_df = pd.DataFrame()
     if sides_file:
-        logger.info("DEBUG TheOver sides input provided: %s", sides_file)
-        if isinstance(sides_file, (str, Path)):
-             logger.info("DEBUG TheOver sides exists: %s", Path(sides_file).exists())
-        else:
-             logger.info("DEBUG TheOver sides is a file-like object")
-
+        logger.info("DEBUG TheOver sides input provided")
         try:
-            sides_df = pd.read_excel(sides_file, sheet_name="Table1", engine="openpyxl")
-            logger.info("DEBUG Table1 shape: %s | columns: %s", sides_df.shape, list(sides_df.columns))
+            sides_df = load_theover_sides(sides_file)
             stats["raw_sides_rows"] = len(sides_df)
             stats["files_processed"].append("sides_file")
         except Exception as exc:
-            logger.error("DEBUG Failed to read Table1: %s", exc)
+            logger.error("DEBUG Failed to read Sides: %s", exc)
             sides_df = pd.DataFrame()
+
+    # Apply Fuzzy Matching to Master Schedule if games provided
+    # This aligns the "HomeTeam" / "AwayTeam" columns in the Excel DFs
+    # to match the canonical names in the 'games' list before normalization.
+    if games:
+        if not totals_df.empty:
+            totals_df = match_teams_to_master(totals_df, games)
+        if not sides_df.empty:
+            sides_df = match_teams_to_master(sides_df, games)
 
     total_rows_parsed = len(totals_df)
     # Matching logic using games is "Pending" but we log the counts
     matched_count = 0
     unmatched_count = 0
 
-    logger.info(
-        "TheOver Matching Debug\nTotal Rows Parsed: %d\nMatched Games: %d\nUnmatched Games: %d",
-        total_rows_parsed,
-        matched_count,
-        unmatched_count,
-    )
-
     # 1. Excel Ingestion (Strict Sheets)
     # Using the loaded DFs
     if not totals_df.empty:
         try:
-            # We assume column names are correct or compatible with _transform_theover_df
-            # load_theover_totals previously cleaned them.
-            # We can replicate basic cleanup here if needed.
-            # _transform_theover_df handles "League", "HomeTeam", "AwayTeam"
-
-            # Ensure critical column types if possible
-            if "League" in totals_df.columns:
-                totals_df["League"] = totals_df["League"].astype(str).str.upper()
-            if "HomeTeam" in totals_df.columns:
-                totals_df["HomeTeam"] = totals_df["HomeTeam"].astype(str).str.strip()
-            if "AwayTeam" in totals_df.columns:
-                totals_df["AwayTeam"] = totals_df["AwayTeam"].astype(str).str.strip()
-
             processed = _transform_theover_df(totals_df, pick_type_default="TOTAL")
             if not processed.empty:
                 dfs.append(processed)
@@ -461,13 +552,6 @@ def process_theover_inputs(
 
     if not sides_df.empty:
         try:
-            if "League" in sides_df.columns:
-                sides_df["League"] = sides_df["League"].astype(str).str.upper()
-            if "HomeTeam" in sides_df.columns:
-                sides_df["HomeTeam"] = sides_df["HomeTeam"].astype(str).str.strip()
-            if "AwayTeam" in sides_df.columns:
-                sides_df["AwayTeam"] = sides_df["AwayTeam"].astype(str).str.strip()
-
             processed = _transform_theover_df(sides_df, pick_type_default="SIDE")
             if not processed.empty:
                 dfs.append(processed)
