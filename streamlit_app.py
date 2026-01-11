@@ -5807,7 +5807,8 @@ with tab_master:
                     totals_file=theover_totals_file,
                     sides_file=theover_sides_file,
                     totals_paste=theover_totals_text,
-                    sides_paste=theover_sides_text
+                    sides_paste=theover_sides_text,
+                    games=games
                 )
 
                 if not theover_df.empty:

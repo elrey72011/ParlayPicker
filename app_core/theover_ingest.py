@@ -9,6 +9,7 @@ import pandas as pd
 import re
 import logging
 from typing import Tuple, Optional, Dict, List, Any, Union
+from pathlib import Path
 from datetime import datetime
 from app_core.feature_processing import robust_normalize_team
 
@@ -369,7 +370,8 @@ def process_theover_inputs(
     totals_file=None,
     sides_file=None,
     totals_paste=None,
-    sides_paste=None
+    sides_paste=None,
+    games=None
 ) -> Tuple[pd.DataFrame, Dict[str, Any]]:
     """
     Main ingestion entry point.
@@ -385,37 +387,90 @@ def process_theover_inputs(
         "files_processed": []
     }
 
-    # 1. Excel Ingestion (Strict Sheets)
+    # Debugging / Loading Totals
+    totals_df = pd.DataFrame()
     if totals_file:
-        logger.info("TheOver totals path: %s", totals_file)
+        logger.info("DEBUG TheOver totals input provided: %s", totals_file)
+        if isinstance(totals_file, (str, Path)):
+             logger.info("DEBUG TheOver totals exists: %s", Path(totals_file).exists())
+        else:
+             logger.info("DEBUG TheOver totals is a file-like object")
+
         try:
-            # Replaced load_theover_totals with debug_load_theover_totals
-            raw_totals = debug_load_theover_totals(totals_file)
-
-            total_rows_parsed = len(raw_totals)
-            # Log requested by user
-            logger.info("TheOver Matching Debug\nTotal Rows Parsed: %d\nMatched Games: 0 (Pending matching logic)", total_rows_parsed)
-
-            stats["raw_totals_rows"] += total_rows_parsed
+            totals_df = pd.read_excel(totals_file, sheet_name="TotalsRaw", engine="openpyxl")
+            logger.info("DEBUG TotalsRaw shape: %s | columns: %s", totals_df.shape, list(totals_df.columns))
+            stats["raw_totals_rows"] = len(totals_df)
             stats["files_processed"].append("totals_file")
+        except Exception as exc:
+            logger.error("DEBUG Failed to read TotalsRaw: %s", exc)
+            # Fallback or empty
+            totals_df = pd.DataFrame()
 
-            if not raw_totals.empty:
-                processed = _transform_theover_df(raw_totals, pick_type_default="TOTAL")
-                if not processed.empty:
-                    dfs.append(processed)
+    # Debugging / Loading Sides
+    sides_df = pd.DataFrame()
+    if sides_file:
+        logger.info("DEBUG TheOver sides input provided: %s", sides_file)
+        if isinstance(sides_file, (str, Path)):
+             logger.info("DEBUG TheOver sides exists: %s", Path(sides_file).exists())
+        else:
+             logger.info("DEBUG TheOver sides is a file-like object")
+
+        try:
+            sides_df = pd.read_excel(sides_file, sheet_name="Table1", engine="openpyxl")
+            logger.info("DEBUG Table1 shape: %s | columns: %s", sides_df.shape, list(sides_df.columns))
+            stats["raw_sides_rows"] = len(sides_df)
+            stats["files_processed"].append("sides_file")
+        except Exception as exc:
+            logger.error("DEBUG Failed to read Table1: %s", exc)
+            sides_df = pd.DataFrame()
+
+    total_rows_parsed = len(totals_df)
+    # Matching logic using games is "Pending" but we log the counts
+    matched_count = 0
+    unmatched_count = 0
+
+    logger.info(
+        "TheOver Matching Debug\nTotal Rows Parsed: %d\nMatched Games: %d\nUnmatched Games: %d",
+        total_rows_parsed,
+        matched_count,
+        unmatched_count,
+    )
+
+    # 1. Excel Ingestion (Strict Sheets)
+    # Using the loaded DFs
+    if not totals_df.empty:
+        try:
+            # We assume column names are correct or compatible with _transform_theover_df
+            # load_theover_totals previously cleaned them.
+            # We can replicate basic cleanup here if needed.
+            # _transform_theover_df handles "League", "HomeTeam", "AwayTeam"
+
+            # Ensure critical column types if possible
+            if "League" in totals_df.columns:
+                totals_df["League"] = totals_df["League"].astype(str).str.upper()
+            if "HomeTeam" in totals_df.columns:
+                totals_df["HomeTeam"] = totals_df["HomeTeam"].astype(str).str.strip()
+            if "AwayTeam" in totals_df.columns:
+                totals_df["AwayTeam"] = totals_df["AwayTeam"].astype(str).str.strip()
+
+            processed = _transform_theover_df(totals_df, pick_type_default="TOTAL")
+            if not processed.empty:
+                dfs.append(processed)
         except Exception as e:
             logger.error(f"Error processing Totals Excel: {e}")
 
-    if sides_file:
+    if not sides_df.empty:
         try:
-            raw_sides = load_theover_sides(sides_file)
-            stats["raw_sides_rows"] += len(raw_sides)
-            stats["files_processed"].append("sides_file")
+            if "League" in sides_df.columns:
+                sides_df["League"] = sides_df["League"].astype(str).str.upper()
+            if "HomeTeam" in sides_df.columns:
+                sides_df["HomeTeam"] = sides_df["HomeTeam"].astype(str).str.strip()
+            if "AwayTeam" in sides_df.columns:
+                sides_df["AwayTeam"] = sides_df["AwayTeam"].astype(str).str.strip()
 
-            if not raw_sides.empty:
-                processed = _transform_theover_df(raw_sides, pick_type_default="SIDE")
-                if not processed.empty:
-                    dfs.append(processed)
+            processed = _transform_theover_df(sides_df, pick_type_default="SIDE")
+            if not processed.empty:
+                dfs.append(processed)
         except Exception as e:
             logger.error(f"Error processing Sides Excel: {e}")
 
