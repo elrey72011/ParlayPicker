@@ -87,6 +87,15 @@ def safe_float(x: Any) -> Optional[float]:
     except Exception:
         return None
 
+def ml_allowed(home_ml, away_ml, threshold=300):
+    try:
+        vals = []
+        if home_ml is not None: vals.append(float(home_ml))
+        if away_ml is not None: vals.append(float(away_ml))
+        return all(abs(v) <= threshold for v in vals) and len(vals) > 0
+    except Exception:
+        return False
+
 
 def clean_df(df):
     return df.loc[:, ~df.columns.duplicated()].copy()
@@ -862,14 +871,23 @@ def calculate_best_pick_metrics(df: pd.DataFrame) -> pd.DataFrame:
         ml_home_price = _safe("Home_ML")
         ml_away_price = _safe("Away_ML")
 
+        # FIX: Strict Moneyline Suppression using helper
+        is_allowed = ml_allowed(ml_home_price, ml_away_price, threshold=300)
+
         ml_eligible = True
         ml_suppressed_reason = ""
+        moneyline_disabled = False
+        moneyline_disabled_reason = ""
 
-        # Rule: If abs(Home_ML) > 300 or abs(Away_ML) > 300, ML is NOT eligible
-        if (ml_home_price is not None and abs(ml_home_price) > 300) or \
-           (ml_away_price is not None and abs(ml_away_price) > 300):
+        if not is_allowed:
             ml_eligible = False
+            moneyline_disabled = True
+            moneyline_disabled_reason = "Moneyline disabled: odds > 300"
             ml_suppressed_reason = "abs(ML)>300"
+            # Hard disable ML for selection
+            ml_pick = None
+            ml_prob = None
+            ml_edge = 0.0
 
         # If no pick or prob, ML is not a candidate
         if not ml_pick or ml_prob is None:
@@ -987,11 +1005,13 @@ def calculate_best_pick_metrics(df: pd.DataFrame) -> pd.DataFrame:
         return pd.Series([
             best_type, best_pick, p_val, reason, e_val,
             conf_label, bet_lean, conf_score,
-            ml_eligible, ml_suppressed_reason, candidate_types_str
+            ml_eligible, ml_suppressed_reason, candidate_types_str,
+            moneyline_disabled, moneyline_disabled_reason
         ], index=[
             "best_pick_type", "best_pick", "final_prob", "Best_ST_Reason", "edge",
             "Bet_Confidence", "Bet_Lean", "Bet_Confidence_Score",
-            "ml_eligible", "ml_suppressed_reason", "candidate_types_available"
+            "ml_eligible", "ml_suppressed_reason", "candidate_types_available",
+            "moneyline_disabled", "moneyline_disabled_reason"
         ])
 
     # Batch apply
@@ -5915,6 +5935,11 @@ with tab_master:
                     "sentiment_weight": 0.00,
                     "theover_weight": 0.00,
                 }
+                # Fix: User requested explicit weights log
+                # The keys used in code are 'ml_weight', 'kalshi_weight' etc.
+                # User provided: {"model": 0.35, "kalshi": 0.35, "implied": 0.30, "sentiment": 0.00}
+                # We map them: model->ml_weight, implied->odds_weight.
+                # The values below match the user request.
                 total_weights = {
                     "ml_weight": 0.35,
                     "kalshi_weight": 0.35,
@@ -9472,6 +9497,8 @@ with tab_master:
                 "Implied_Prob",
                 "ml_eligible",
                 "ml_suppressed_reason",
+                "moneyline_disabled",
+                "moneyline_disabled_reason",
                 "candidate_types_available",
                 "theover_pick",
                 "theover_pick_type",
