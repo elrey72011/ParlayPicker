@@ -522,6 +522,46 @@ def map_kalshi_prob_for_pick(
     return 1.0 - prob
 
 
+def dynamic_kalshi_weight(
+    kalshi_prob_for_pick: Optional[float],
+    implied_pick_prob: Optional[float],
+    kalshi_matched: bool,
+    league: Optional[str],
+    base_default: float = 0.35,
+) -> float:
+    """
+    Compute a dynamic Kalshi weight based on signal strength and league.
+    - kalshi_prob_for_pick: Kalshi prob mapped to the chosen side.
+    - implied_pick_prob: Implied prob from book odds for the same side.
+    - kalshi_matched: True if a Kalshi market for this game/market is matched.
+    """
+    if not kalshi_matched or kalshi_prob_for_pick is None or implied_pick_prob is None:
+        return 0.0
+
+    try:
+        edge = abs(float(kalshi_prob_for_pick) - float(implied_pick_prob))
+    except Exception:
+        return base_default
+
+    # League-based caps (NBA/NFL get higher max weight than small-conference NCAAB)
+    lg = (league or "").upper()
+    if lg in ("NBA", "NFL"):
+        max_w = 0.5
+    elif lg in ("NHL", "MLB"):
+        max_w = 0.4
+    else:
+        max_w = 0.3  # NCAAB, NCAAF, etc.
+
+    # Piecewise mapping from edge size to weight
+    if edge < 0.03:
+        # light influence when market is basically fair
+        return 0.10 * max_w / 0.5
+    elif edge < 0.07:
+        return min(0.25, max_w * 0.6)
+    else:
+        return max_w  # strong divergence -> strong sentiment weight
+
+
 def compute_final_probability(
     pick_side: Optional[str],
     implied_prob: Optional[float],
@@ -7387,6 +7427,20 @@ with tab_master:
                     sentiment_score=sentiment_diff,
                 )
 
+                # Update Kalshi weight dynamically
+                _spread_kalshi_matched = bool(kalshi_spread.get("kalshi_matched"))
+                _spread_k_prob = map_kalshi_prob_for_pick(
+                    kalshi_prob_spread if _spread_kalshi_matched else None,
+                    kalshi_spread.get("kalshi_yes_side") or "home",
+                    spread_pick_side_key
+                )
+                spread_weights["kalshi_weight"] = dynamic_kalshi_weight(
+                    _spread_k_prob,
+                    spread_prob_market,
+                    _spread_kalshi_matched,
+                    league_name
+                )
+
                 spread_prob_final, spread_base_prob, spread_weights_used, spread_decision_driver, spread_warnings_new, spread_kalshi_prob_for_pick = compute_final_probability(
                     spread_pick_side_key,
                     spread_prob_market,
@@ -7446,6 +7500,20 @@ with tab_master:
                     total_sentiment_adj,
                     _weights_total_no_to,
                     sentiment_score=sentiment_diff,
+                )
+
+                # Update Kalshi weight dynamically
+                _total_kalshi_matched = bool(kalshi_total.get("kalshi_matched"))
+                _total_k_prob = map_kalshi_prob_for_pick(
+                    kalshi_prob_total if _total_kalshi_matched else None,
+                    kalshi_total.get("kalshi_yes_side") or "over",
+                    total_pick_side_key
+                )
+                total_weights["kalshi_weight"] = dynamic_kalshi_weight(
+                    _total_k_prob,
+                    total_prob_market,
+                    _total_kalshi_matched,
+                    league_name
                 )
 
                 total_prob_final, total_base_prob, total_weights_used, total_decision_driver, total_warnings_new, total_kalshi_prob_for_pick = compute_final_probability(
@@ -7755,6 +7823,20 @@ with tab_master:
                         # Update base moneyline weights
                         moneyline_weights["odds_weight"] = ml_odds_weight
                         moneyline_weights["sentiment_weight"] = abs(sentiment_adj or 0.0)
+
+                        # Update Kalshi weight dynamically
+                        _ml_kalshi_matched = bool(kalshi_winner.get("kalshi_matched"))
+                        _ml_k_prob = map_kalshi_prob_for_pick(
+                            kalshi_prob_used if _ml_kalshi_matched else None,
+                            kalshi_yes_side,
+                            pick_side
+                        )
+                        moneyline_weights["kalshi_weight"] = dynamic_kalshi_weight(
+                            _ml_k_prob,
+                            implied_pick,
+                            _ml_kalshi_matched,
+                            league_name
+                        )
 
                         final_prob_blend, base_prob_blend, weights_used, decision_driver, warnings_new, kalshi_prob_for_pick = compute_final_probability(
                             pick_side,
@@ -10000,23 +10082,21 @@ with tab_master:
             logger.info(f"Export picks columns: {picks_cols}")
 
             # Filter Export (Optional)
-            filter_export = st.checkbox("Filter Export (Strong Picks Only)", value=True, key="filter_export_check")
+            filter_export = st.checkbox("Filter Export (Strong Picks Only)", value=False, key="filter_export_check") # Default False to match grid availability
+
+            # Ensure export matches grid rows if not filtered specifically
             if filter_export:
-                # Keep if Bet_Confidence is HIGH (which implies edge >= 0.02 and sane prob)
-                # Or explicitly: edge >= 0.02 AND 0.52 <= final_prob <= 0.75
-                # Since we already encoded this logic into Bet_Confidence="HIGH", we can filter by that.
                 if "Bet_Confidence" in final_picks_df.columns:
                     final_picks_df = final_picks_df[final_picks_df["Bet_Confidence"] == "HIGH"]
-                else:
-                    # Fallback explicit filter
-                    try:
-                        final_picks_df["edge"] = pd.to_numeric(final_picks_df["edge"], errors='coerce').fillna(0.0)
-                        final_picks_df["final_prob"] = pd.to_numeric(final_picks_df["final_prob"], errors='coerce').fillna(0.0)
-                        cond = (final_picks_df["edge"] >= 0.02) & (final_picks_df["final_prob"] >= 0.52) & (final_picks_df["final_prob"] <= 0.75)
-                        final_picks_df = final_picks_df[cond]
-                    except Exception:
-                        pass
-                st.caption(f"Export filtered to {len(final_picks_df)} strong picks.")
+            else:
+                # Filter to Eligible (HIGH+MEDIUM) to match Top Picks Grid
+                if "Bet_Confidence" in final_picks_df.columns:
+                     final_picks_df = final_picks_df[final_picks_df["Bet_Confidence"].isin(["HIGH", "MEDIUM"])]
+
+            st.caption(f"Export contains {len(final_picks_df)} picks.")
+
+            # Persist to session state
+            st.session_state["final_picks_df"] = final_picks_df.copy()
 
             picks_csv = final_picks_df.to_csv(index=False).encode("utf-8")
             st.download_button(
