@@ -135,13 +135,13 @@ TEAM_NAME_MAPPING = {
     "DENVER BRONCOS": "DEN",
     "DETROIT LIONS": "DET",
     "GREEN BAY PACKERS": "GB",
-    "HOUSTON TEXANS": "HOU",
+    "HOUSTON TEXANS": "HOU", # Explicitly requested
     "INDIANAPOLIS COLTS": "IND",
     "JACKSONVILLE JAGUARS": "JAX",
     "KANSAS CITY CHIEFS": "KC",
     "LAS VEGAS RAIDERS": "LV",
     "LOS ANGELES CLIPPERS": "LAC",
-    "LA CLIPPERS": "LAC",
+    "LA CLIPPERS": "LAC", # Explicitly requested
     "LOS ANGELES CHARGERS": "LAC",
     "LOS ANGELES RAMS": "LAR",
     "MIAMI DOLPHINS": "MIA",
@@ -151,7 +151,7 @@ TEAM_NAME_MAPPING = {
     "NEW YORK GIANTS": "NYG",
     "NEW YORK JETS": "NYJ",
     "PHILADELPHIA EAGLES": "PHI",
-    "PITTSBURGH STEELERS": "PIT",
+    "PITTSBURGH STEELERS": "PIT", # Explicitly requested
     "SAN FRANCISCO 49ERS": "SF",
     "SEATTLE SEAHAWKS": "SEA",
     "TAMPA BAY BUCCANEERS": "TB",
@@ -548,8 +548,8 @@ def fetch_ncaaf_stats(season_year: int) -> List[Dict[str, Any]]:
         cfg = cfbd.Configuration()
         if primary:
             # User specified strict format: "Bearer {token}"
-            cfg.api_key['Authorization'] = f"Bearer {token}"
-            # cfg.api_key_prefix['Authorization'] = 'Bearer' # Removed to prevent double prefix
+            cfg.api_key['Authorization'] = token
+            cfg.api_key_prefix['Authorization'] = 'Bearer'
         else:
             # Alternate method: many OpenAPI clients treat access_token as Bearer automatically
             cfg.access_token = token
