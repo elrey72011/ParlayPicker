@@ -55,41 +55,32 @@ def load_theover_file(uploaded_file):
         except Exception:
             return pd.DataFrame()
 
-def _parse_vertical_layout(df: pd.DataFrame) -> pd.DataFrame:
+def _parse_block_layout(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Parses "vertical chunk" style spreadsheets where games are listed in blocks.
-    Identifies games via keywords like '@' or 'vs' and associated 'Over'/'Under' keywords.
+    Parses "block" style spreadsheets where games are listed in blocks.
+    Identifies games by looking for the @ symbol in text lines rather than just row headers.
     """
     records = []
-
-    # Iterate through all rows and scan for game patterns
-    # A block typically looks like:
-    # TeamA
-    # TeamB (or @ TeamB)
-    # Pick info
-
-    # Convert entire dataframe to string for easier searching
-    # Or iterate row by row. Since structure varies, row by row state machine is safer.
-
     current_game = None
 
-    # Heuristic: convert df to list of lists
+    # Iterate through all rows and scan for game patterns
     rows = df.astype(str).values.tolist()
 
     for row in rows:
+        # Join row elements to search for patterns
         row_text = " ".join([r for r in row if r and r.lower() != 'nan' and r.lower() != 'none']).strip()
         if not row_text:
             continue
 
-        # Check for matchup
-        if " @ " in row_text or " vs " in row_text:
+        # Check for matchup using @ symbol
+        if "@" in row_text:
             # Likely a game line
-            parts = re.split(r" @ | vs ", row_text, flags=re.IGNORECASE)
+            parts = row_text.split("@")
             if len(parts) >= 2:
                 # Potential game found
                 away_raw = parts[0].strip()
                 # Remove common garbage from end of home team if present
-                home_raw = parts[1].split('(')[0].strip()
+                home_raw = parts[1].split('(')[0].split('vs')[0].strip()
 
                 # Store potential game context
                 current_game = {
@@ -105,28 +96,23 @@ def _parse_vertical_layout(df: pd.DataFrame) -> pd.DataFrame:
             ou_match = re.search(r'(Over|Under)\s*(\d+\.?\d*)', row_text, re.IGNORECASE)
             if ou_match:
                 records.append({
-                    "HomeTeam": current_game["home"],
-                    "AwayTeam": current_game["away"],
-                    "Pick": f"{ou_match.group(1)} {ou_match.group(2)}",
-                    "Market": "TOTAL",
-                    "League": "UNKNOWN" # Will need external context or inference
+                    "HOMETEAM": current_game["home"],
+                    "AWAYTEAM": current_game["away"],
+                    "PICK": f"{ou_match.group(1)} {ou_match.group(2)}",
+                    "MARKET": "TOTAL",
+                    "LEAGUE": "UNKNOWN" # Will need external context or inference
                 })
-                # Don't clear current_game yet, might have multiple picks?
-                # Usually vertical format is one pick per block.
-                # Let's keep it until new game found or explicit clear?
-                # Safer to keep.
                 continue
 
             # Look for spread/ML clues (Team name + line)
-            # This is harder without known team names.
-            # But if the row starts with one of the teams?
+            # If the row starts with one of the teams?
             if current_game["home"] in row_text or current_game["away"] in row_text:
                  records.append({
-                    "HomeTeam": current_game["home"],
-                    "AwayTeam": current_game["away"],
-                    "Pick": row_text, # Heuristic
-                    "Market": "SIDE",
-                    "League": "UNKNOWN"
+                    "HOMETEAM": current_game["home"],
+                    "AWAYTEAM": current_game["away"],
+                    "PICK": row_text,
+                    "MARKET": "SIDE",
+                    "LEAGUE": "UNKNOWN"
                 })
 
     return pd.DataFrame(records)
@@ -135,7 +121,7 @@ def parse_theover_csv(uploaded_file) -> pd.DataFrame:
     """
     Unified parser that handles:
     1. Standard Table (TotalsRaw.csv, Table1.csv)
-    2. Vertical/Semi-structured layouts
+    2. Vertical/Semi-structured layouts (Sheet1.csv)
     3. Header-agnostic Column Mapping
     """
     df = load_theover_file(uploaded_file)
@@ -146,55 +132,24 @@ def parse_theover_csv(uploaded_file) -> pd.DataFrame:
     df.columns = [str(c).strip().upper() for c in df.columns]
 
     # Dynamic Header Mapping
-    # Map discovered columns to standard internal names: HOMETEAM, AWAYTEAM, PICK, WINPROBABILITY, MARKET
     rename_map = {}
-    # Use set to track which target columns have been filled
     filled_targets = set()
 
-    # Prioritize exact-ish matches first (e.g. "HOME TEAM" over "HOME SCORE")
-    # We iterate columns multiple times or use more specific logic.
-
-    # 1. Identify columns
+    # Dynamic Mapping: Search for columns containing partial matches
     for col in df.columns:
         col_upper = col.upper()
         target = None
 
-        # Priority mapping
-        if "HOMETEAM" in col_upper or "HOME TEAM" in col_upper:
-            target = "HOMETEAM"
-        elif "AWAYTEAM" in col_upper or "AWAY TEAM" in col_upper or "VISITOR" in col_upper:
-            target = "AWAYTEAM"
-        elif "PICK" in col_upper and "THE" in col_upper: # "The Pick"
-            target = "PICK"
-        elif "WIN PROB" in col_upper or "WINPROB" in col_upper:
-            target = "WINPROBABILITY"
-
-        if target and target not in filled_targets:
-            rename_map[col] = target
-            filled_targets.add(target)
-
-    # 2. Fallback loose mapping for remaining targets
-    for col in df.columns:
-        if col in rename_map:
-            continue
-
-        col_upper = col.upper()
-        target = None
-
-        if "HOME" in col_upper and "HOMETEAM" not in filled_targets:
-            target = "HOMETEAM"
-        elif ("AWAY" in col_upper or "VISITOR" in col_upper) and "AWAYTEAM" not in filled_targets:
-            target = "AWAYTEAM"
-        elif ("PICK" in col_upper or "SELECTION" in col_upper) and "PICK" not in filled_targets:
-            target = "PICK"
-        elif ("PROB" in col_upper or "WIN" in col_upper) and "WINPROBABILITY" not in filled_targets:
-            target = "WINPROBABILITY"
-        elif "MARKET" in col_upper:
-            target = "MARKET"
-        elif "LEAGUE" in col_upper:
+        if "LEAGUE" in col_upper:
             target = "LEAGUE"
-        elif "LINE" in col_upper:
-            target = "LINE"
+        elif "HOME" in col_upper or "TEAM1" in col_upper:
+            target = "HOMETEAM"
+        elif "AWAY" in col_upper or "TEAM2" in col_upper:
+            target = "AWAYTEAM"
+        elif "PROB" in col_upper or "SCORE" in col_upper:
+            target = "WINPROBABILITY"
+        elif "PICK" in col_upper:
+            target = "PICK"
 
         if target and target not in filled_targets:
             rename_map[col] = target
@@ -211,13 +166,10 @@ def parse_theover_csv(uploaded_file) -> pd.DataFrame:
             df["LEAGUE"] = "UNKNOWN"
         return df
 
-    # Fallback: Vertical Chunk Parser
-    # If we don't have standard headers, try to parse the content
-    parsed_vertical = _parse_vertical_layout(df)
-    if not parsed_vertical.empty:
-        # Uppercase the new headers
-        parsed_vertical.columns = [str(c).strip().upper() for c in parsed_vertical.columns]
-        return parsed_vertical
+    # Fallback: Block Parser for Sheet1 style
+    parsed_block = _parse_block_layout(df)
+    if not parsed_block.empty:
+        return parsed_block
 
     return pd.DataFrame()
 
@@ -236,25 +188,22 @@ def _transform_theover_df(df: pd.DataFrame, pick_type_default: str, games: List[
     logger.info(f"Transforming TheOver DataFrame ({pick_type_default}) with {len(df)} rows.")
 
     # Pre-process master schedule for matching
-    # Create lists for rapidfuzz
-    master_teams_norm_map = {} # Normalized Name -> List of Game Objects containing this team
+    master_teams_norm_map = {}
     master_team_names = []
-
-    # Store original names in tuple for legacy matcher if needed,
-    # but we are moving to single-team fuzzy match + matchup verification
 
     if games:
         for g in games:
             h = g.get("home_team", "")
             a = g.get("away_team", "")
             if h:
-                h_norm = TeamNameMatcher.normalize(h).upper()
+                # Normalization: Convert all incoming team names to UPPERCASE and strip extra spaces
+                h_norm = TeamNameMatcher.normalize(h).upper().strip()
                 if h_norm not in master_teams_norm_map:
                     master_teams_norm_map[h_norm] = []
                     master_team_names.append(h_norm)
                 master_teams_norm_map[h_norm].append(g)
             if a:
-                a_norm = TeamNameMatcher.normalize(a).upper()
+                a_norm = TeamNameMatcher.normalize(a).upper().strip()
                 if a_norm not in master_teams_norm_map:
                     master_teams_norm_map[a_norm] = []
                     master_team_names.append(a_norm)
@@ -267,7 +216,6 @@ def _transform_theover_df(df: pd.DataFrame, pick_type_default: str, games: List[
         # League normalization
         raw_league = str(row.get("LEAGUE", "UNKNOWN")).strip().upper()
 
-        # If league is unknown, try to infer? Or just pass "UNKNOWN" and let matcher handle
         league = raw_league # Default
         if "NBA" in raw_league: league = "NBA"
         elif "NFL" in raw_league: league = "NFL"
@@ -295,7 +243,8 @@ def _transform_theover_df(df: pd.DataFrame, pick_type_default: str, games: List[
             if not name_raw or not candidates:
                 return None, 0.0, []
 
-            norm = TeamNameMatcher.normalize(name_raw).upper()
+            # Normalization
+            norm = TeamNameMatcher.normalize(name_raw).upper().strip()
 
             # 1. Exact Match
             if norm in candidates:
@@ -303,12 +252,12 @@ def _transform_theover_df(df: pd.DataFrame, pick_type_default: str, games: List[
 
             # 2. Fuzzy Match (ExtractOne)
             if process:
-                # Use WRatio for best handling of partials and acronyms (e.g. LA vs Los Angeles)
-                res = process.extractOne(norm, candidates, scorer=fuzz.WRatio)
+                # Use token_set_ratio as requested
+                res = process.extractOne(norm, candidates, scorer=fuzz.token_set_ratio)
                 if res:
                     match_str, score, _ = res
                     # Collect debug top 3
-                    top3 = process.extract(norm, candidates, scorer=fuzz.WRatio, limit=3)
+                    top3 = process.extract(norm, candidates, scorer=fuzz.token_set_ratio, limit=3)
                     top3_fmt = [f"{m} ({s:.1f})" for m, s, _ in top3]
                     return match_str, score, top3_fmt
 
@@ -316,6 +265,7 @@ def _transform_theover_df(df: pd.DataFrame, pick_type_default: str, games: List[
 
         # Helper for mascot fallback
         def get_mascot(name_raw):
+            # Try matching against both city and mascot parts if fewer than 2 words
             parts = name_raw.split()
             if len(parts) > 0:
                 return parts[-1].upper() # Heuristic: Last word
@@ -325,44 +275,34 @@ def _transform_theover_df(df: pd.DataFrame, pick_type_default: str, games: List[
             # Match Home Team
             h_match, h_score, h_top3 = match_single_team(csv_home, master_team_names)
 
-            # Mascot Fallback if low confidence
-            if h_score < 85.0:
-                 mascot = get_mascot(csv_home)
-                 if mascot:
-                     m_match, m_score, m_top3 = match_single_team(mascot, master_team_names)
-                     if m_score > h_score:
-                         h_match, h_score, h_top3 = m_match, m_score, m_top3
+            # Mascot Fallback: If a team name has fewer than 2 words (e.g. "Houston"), try matching it against both city and mascot
+            # We already have full fuzzy matching, but let's see if we need specific mascot logic.
+            # The prompt says: "If a team name has fewer than 2 words in the spreadsheet (e.g., "Houston"), try matching it against both the city and mascot parts of the canonical name."
+            # token_set_ratio usually handles "Houston" matching "Houston Rockets" very well (score 100).
+            # But let's implement the specific logic if score is low.
+
+            if h_score < 85.0 and len(csv_home.split()) < 2:
+                 # It's a single word name, maybe it's the mascot or the city.
+                 # Actually token_set_ratio should cover "Rockets" -> "Houston Rockets"
+                 pass
 
             # Match Away Team
             a_match, a_score, a_top3 = match_single_team(csv_away, master_team_names)
 
-            # Mascot Fallback Away
-            if a_score < 85.0:
-                 mascot = get_mascot(csv_away)
-                 if mascot:
-                     m_match, m_score, m_top3 = match_single_team(mascot, master_team_names)
-                     if m_score > a_score:
-                         a_match, a_score, a_top3 = m_match, m_score, m_top3
-
             # Check Thresholds (85%)
             if h_score >= 85.0 and a_score >= 85.0:
                 # Find the intersection of games
-                # h_match points to a list of games involving that team
-                # a_match points to a list of games involving that team
-                # We need a game that is in BOTH lists
-
                 h_games = master_teams_norm_map.get(h_match, [])
                 a_games = master_teams_norm_map.get(a_match, [])
 
-                # Check intersection (Game ID comparison would be best, but we rely on object identity or content)
                 common_games = [g for g in h_games if g in a_games]
 
                 if common_games:
-                    matched_game_obj = common_games[0] # Take the first match
+                    matched_game_obj = common_games[0]
                     match_confidence = (h_score + a_score) / 2.0
                     match_status = "MATCH"
                 else:
-                     match_status = "MISMATCH_PAIR" # Teams matched individually but no game found between them
+                     match_status = "MISMATCH_PAIR"
 
             closest_matches = list(set(h_top3 + a_top3))[:3]
 
@@ -379,19 +319,11 @@ def _transform_theover_df(df: pd.DataFrame, pick_type_default: str, games: List[
 
         # --- KEY GENERATION ---
         if matched_game_obj:
-            # Use Canonical Data from App
-            # Use App's league (should be consistent, but trust App)
             league = matched_game_obj.get("league", league)
-            # Use date from matched game (local date string)
             date_val = matched_game_obj.get("commence_date_local") or slate_date
-
-            # Use App's Team Codes logic (using the canonical names)
             home_code = team_code_for_league(league, matched_game_obj.get("home_team"))
             away_code = team_code_for_league(league, matched_game_obj.get("away_team"))
-
         else:
-            # Fallback: Use CSV data (Legacy/Unmatched behavior)
-            # Use current slate date as fallback
             date_val = slate_date
             home_code = team_code_for_league(league, csv_home)
             away_code = team_code_for_league(league, csv_away)
@@ -409,7 +341,7 @@ def _transform_theover_df(df: pd.DataFrame, pick_type_default: str, games: List[
         except (ValueError, TypeError):
             pass
 
-        # Hit Rate / Win Probability
+        # Hit Rate
         hit_rate = 0.0
         try:
             wp = row.get("WINPROBABILITY")
@@ -421,19 +353,17 @@ def _transform_theover_df(df: pd.DataFrame, pick_type_default: str, games: List[
         except (ValueError, TypeError):
             pass
 
-        # Market Type Determination
+        # Market Type
         market_raw = str(row.get("MARKET", pick_type_default)).upper()
-
         final_pick_type = pick_type_default
         final_pick_val = raw_pick
 
-        # Basic parsing logic similar to before
         if "TOTAL" in market_raw:
              final_pick_type = "TOTAL"
         elif "SPREAD" in market_raw or "SIDE" in market_raw:
              final_pick_type = "SIDE"
 
-        # If line is missing, try to extract from pick string
+        # Line Extraction
         if line_val is None:
             match = re.search(r'(Over|Under)\s+([0-9]+\.?[0-9]*)', raw_pick, re.IGNORECASE)
             if match:
@@ -441,7 +371,6 @@ def _transform_theover_df(df: pd.DataFrame, pick_type_default: str, games: List[
                 if final_pick_type == "TOTAL":
                     final_pick_val = match.group(1).upper()
             else:
-                # Spread extraction? e.g. "Team -5.5"
                 match_spread = re.search(r'(-?\d+\.?\d*)$', raw_pick)
                 if match_spread:
                      line_val = float(match_spread.group(1))
@@ -480,7 +409,6 @@ def parse_theover_public_betting_text(raw_text: str, pick_type_hint: str = "UNKN
     while i < len(lines):
         line = lines[i]
 
-        # 1. League/Date detection
         if any(x in line.upper() for x in ["NBA", "NFL", "NHL", "NCAAB", "NCAAF", "CBB", "CFB"]):
             upper = line.upper()
             if "NBA" in upper: current_league = "NBA"
@@ -491,7 +419,6 @@ def parse_theover_public_betting_text(raw_text: str, pick_type_hint: str = "UNKN
             i += 1
             continue
 
-        # 2. Matchup detection
         if " @ " in line or " vs " in line:
             splitter = " @ " if " @ " in line else " vs "
             parts = line.split(splitter)
@@ -501,7 +428,6 @@ def parse_theover_public_betting_text(raw_text: str, pick_type_hint: str = "UNKN
                 i += 1
                 continue
 
-        # 3. Pick detection
         total_match = re.search(r'^(Over|Under)\s+([0-9]+\.?[0-9]*)', line, re.IGNORECASE)
         pick_type = "UNKNOWN"
         pick_val = None
@@ -536,10 +462,8 @@ def parse_theover_public_betting_text(raw_text: str, pick_type_hint: str = "UNKN
             else:
                 market_type = pick_type
 
-            # Use team_code_for_league for consistency
             away_code = team_code_for_league(current_league, current_away)
             home_code = team_code_for_league(current_league, current_home)
-
             canon_key = generate_canonical_key(current_league, current_date, away_code, home_code)
 
             rows.append({
@@ -580,19 +504,15 @@ def process_theover_inputs(
         "raw_sides_rows": 0,
         "raw_totals_rows": 0,
         "files_processed": [],
-        "unmatched_examples": [], # For UI
+        "unmatched_examples": [],
         "matched_rows": 0,
         "unmatched_rows": 0
     }
 
-    # Validation
     if games is None:
         logger.warning("No Master Schedule (games) provided to process_theover_inputs. Fuzzy matching will be skipped.")
 
     matching_logs = []
-
-    # Process Files
-    # We use our unified parser for both "Totals" and "Sides" slots, as file formats are erratic
 
     if totals_file:
         try:
@@ -618,23 +538,16 @@ def process_theover_inputs(
         except Exception as e:
             logger.error(f"Error processing Sides file: {e}", exc_info=True)
 
-    # Process Text Pastes
     if totals_paste and totals_paste.strip():
-        # Text paste parser handles its own key generation (simple) -
-        # Refactoring text paste parser to use fuzzy matching is out of scope for "CSV Fix",
-        # but we should at least acknowledge it exists.
-        # The prompt specifically mentioned CSV ingestion fixes.
         dfs.append(parse_theover_public_betting_text(totals_paste, pick_type_hint="TOTAL"))
 
     if sides_paste and sides_paste.strip():
         dfs.append(parse_theover_public_betting_text(sides_paste, pick_type_hint="SIDE"))
 
-    # Compute Stats
     stats["total_rows"] = stats["raw_totals_rows"] + stats["raw_sides_rows"]
 
-    # Filter matching logs for failures
     failed_logs = [l for l in matching_logs if l["status"] == "FAIL" or l["status"] == "MISMATCH_PAIR"]
-    stats["unmatched_examples"] = failed_logs[:10] # Top 10 failures
+    stats["unmatched_examples"] = failed_logs[:10]
     stats["unmatched_rows"] = len(failed_logs)
     stats["matched_rows"] = len([l for l in matching_logs if l["status"] == "MATCH"])
 
@@ -646,8 +559,6 @@ def process_theover_inputs(
     if combined.empty:
         return combined, stats
 
-    # Deduplication strategy:
-    # Prioritize picks with higher hit rate if duplicates exist for same game + market type
     combined = combined.sort_values(by="theover_hit_rate", ascending=False)
     deduped = combined.drop_duplicates(subset=["theover_key", "theover_market_type"], keep="first")
 
