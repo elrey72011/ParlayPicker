@@ -21,6 +21,7 @@ from app_core.kalshi_integrator import (
     league_game_prefix,
     league_series_ticker,
     team_code_for_league,
+    parse_event_ticker_codes,
 )
 from app_core.llm_assistant import generate_confidence_explanation
 from app_core.reddit_sentiment import fetch_reddit_sentiment_map
@@ -5789,9 +5790,8 @@ with tab_master:
     
     # Initialize variables to avoid NameError if skipped or failed
     theover_df = pd.DataFrame()
-    theover_totals_df = pd.DataFrame()
-    theover_sides_df = pd.DataFrame()
-    theover_lookup = {}
+    theover_lookup_exact = {}
+    theover_lookup_teams = {}
     theover_stats = {
         "total_rows": 0,
         "matched_rows": 0,
@@ -5801,7 +5801,7 @@ with tab_master:
 
     if should_run:
         try:
-            # 0. Parse TheOver text input if present
+            # 0. Parse TheOver inputs
             with st.spinner("Processing TheOver.ai data..."):
                 theover_df, ingestion_stats = process_theover_inputs(
                     totals_file=theover_totals_file,
@@ -5811,15 +5811,6 @@ with tab_master:
                     games=games
                 )
 
-                if not theover_df.empty:
-                    try:
-                        theover_totals_df = theover_df[theover_df["theover_market_type"] == "TOTAL"].copy()
-                        theover_sides_df = theover_df[theover_df["theover_market_type"] == "SIDE"].copy()
-                    except Exception as e:
-                        logger.warning(f"Error splitting TheOver DF: {e}")
-
-                # Build Lookup
-                theover_lookup = {}
                 theover_stats = {
                     "total_rows": ingestion_stats.get("raw_total_rows", len(theover_df)),
                     "matched_rows": 0,
@@ -5828,14 +5819,27 @@ with tab_master:
                 }
 
                 if not theover_df.empty:
-                    # Index by key
-                    # We might have multiple entries per key (Total vs Side).
-                    # Group by key.
-                    for key, group in theover_df.groupby("theover_key"):
-                        theover_lookup[key] = {}
-                        for _, row in group.iterrows():
-                            mtype = row.get("theover_market_type", "SIDE")
-                            theover_lookup[key][mtype] = row.to_dict()
+                    for _, row in theover_df.iterrows():
+                        row_dict = row.to_dict()
+
+                        # 1. Exact Canonical Key
+                        # Format: {league}|{away_code}|{home_code}|{local_date}
+                        ex_key = row["theover_key"]
+                        if ex_key not in theover_lookup_exact:
+                            theover_lookup_exact[ex_key] = []
+                        theover_lookup_exact[ex_key].append(row_dict)
+
+                        # 2. Team Key (League|AwayCode|HomeCode) for date matching
+                        # The ingest module ensures these columns exist
+                        lg = str(row.get("league")).upper()
+                        aw = str(row.get("away_code")).upper()
+                        hm = str(row.get("home_code")).upper()
+
+                        if lg and aw and hm:
+                            tm_key = f"{lg}|{aw}|{hm}"
+                            if tm_key not in theover_lookup_teams:
+                                theover_lookup_teams[tm_key] = []
+                            theover_lookup_teams[tm_key].append(row_dict)
 
             st.session_state["DECISION_TRACE_SAMPLES"] = {}
 
@@ -6086,6 +6090,83 @@ with tab_master:
                 model_prob_home = None
                 model_warn = None
                 sentiment_diff = None  # Ensure initialized
+
+                # --- THEOVER MATCHING START ---
+                league_name = str(g.get("league") or "UNKNOWN").upper()
+                home_team = str(g.get("home_team") or "")
+                away_team = str(g.get("away_team") or "")
+                commence_utc = parse_commence_to_utc(g.get("commence_time"))
+
+                # Local Date for Matching (US/Eastern)
+                local_date_str = datetime.now(ZoneInfo("America/New_York")).strftime("%Y-%m-%d") # Default
+                if commence_utc:
+                    local_dt = commence_utc.astimezone(ZoneInfo("America/New_York"))
+                    local_date_str = local_dt.strftime("%Y-%m-%d")
+
+                # 1. Resolve Team Codes (Prefer Kalshi, then System)
+                # Note: kalshi match happens later in the loop usually, but we need codes now.
+                # Ideally we check st.session_state['kalshi_match_results'] if already run?
+                # Or just use the system fallback which is robust enough for ingestion matching.
+                home_code = team_code_for_league(league_name, home_team)
+                away_code = team_code_for_league(league_name, away_team)
+
+                # 2. Generate Master Key
+                master_key_exact = generate_canonical_key(league_name, local_date_str, away_code, home_code)
+                master_key_teams = f"{league_name}|{away_code}|{home_code}"
+
+                # 3. Match TheOver Data
+                matched_total_row = None
+                matched_side_row = None
+                theover_match_reason = None
+                theover_matched = False
+
+                # Helper to find best match in list
+                def find_best_date_match(candidates, target_date_str):
+                    # Prefer exact date match
+                    for c in candidates:
+                        if c.get("date_local") == target_date_str:
+                            return c
+                    # Fallback to first if available (fuzzy date)
+                    return candidates[0] if candidates else None
+
+                # Look for TOTAL match (Exact then Team)
+                if master_key_exact in theover_lookup_exact:
+                    # Check for TOTAL type
+                    cands = [r for r in theover_lookup_exact[master_key_exact] if r["theover_market_type"] == "TOTAL"]
+                    if cands: matched_total_row = cands[0]
+
+                if not matched_total_row and master_key_teams in theover_lookup_teams:
+                    cands = [c for c in theover_lookup_teams[master_key_teams] if c["theover_market_type"] == "TOTAL"]
+                    matched_total_row = find_best_date_match(cands, local_date_str)
+
+                # Look for SIDE match (Exact then Team)
+                if master_key_exact in theover_lookup_exact:
+                    cands = [r for r in theover_lookup_exact[master_key_exact] if r["theover_market_type"] == "SIDE"]
+                    if cands: matched_side_row = cands[0]
+
+                if not matched_side_row and master_key_teams in theover_lookup_teams:
+                    cands = [c for c in theover_lookup_teams[master_key_teams] if c["theover_market_type"] == "SIDE"]
+                    matched_side_row = find_best_date_match(cands, local_date_str)
+
+                # If matched, update counters
+                if matched_total_row: theover_matched_count_totals += 1
+                if matched_side_row: theover_matched_count_sides += 1
+
+                # Extract Signals for Downstream
+                theover_matched_total = matched_total_row
+                theover_matched_side = matched_side_row
+
+                # Probabilities (defaults to None if not matched)
+                theover_prob_total = None
+                if matched_total_row:
+                    hit_rate = safe_float(matched_total_row.get("theover_hit_rate"))
+                    theover_prob_total = hit_rate if (hit_rate and hit_rate > 0) else 0.55
+
+                theover_prob_spread = None
+                if matched_side_row:
+                    hit_rate = safe_float(matched_side_row.get("theover_hit_rate"))
+                    theover_prob_spread = hit_rate if (hit_rate and hit_rate > 0) else 0.55
+                # --- THEOVER MATCHING END ---
 
                 # 1) Define Weights (Fix NameError)
                 # Updated weights with TheOver integration (Default 0.10 if matched)
@@ -7163,6 +7244,27 @@ with tab_master:
                 total_prob_placeholder_detected = False
                 overall_odds_placeholder = False
                 spread_pick_side_key = "home" if spread_pick_team == home else ("away" if spread_pick_team == away else None)
+
+                # --- THEOVER SIDE RESOLUTION ---
+                theover_spread_pick_side = None
+                if theover_matched_side:
+                    p_team = theover_matched_side.get("theover_pick")
+                    if p_team:
+                        p_norm = robust_normalize_team(p_team, league=league_name)
+                        h_norm = robust_normalize_team(home, league=league_name)
+                        a_norm = robust_normalize_team(away, league=league_name)
+                        # Use loose matching
+                        if p_norm == h_norm or h_norm in p_norm or p_norm in h_norm:
+                            theover_spread_pick_side = "home"
+                        elif p_norm == a_norm or a_norm in p_norm or p_norm in a_norm:
+                            theover_spread_pick_side = "away"
+
+                theover_total_pick_side = None
+                if theover_matched_total:
+                    p_side = theover_matched_total.get("theover_pick")
+                    if p_side:
+                        if "OVER" in str(p_side).upper(): theover_total_pick_side = "Over"
+                        elif "UNDER" in str(p_side).upper(): theover_total_pick_side = "Under"
                 if spread_pick:
                     spread_market_prob, spread_market_pairs_count, spread_prob_method, spread_market_placeholder = compute_market_prob_from_offers(
                         spread_offers, spread_pick_side_key, market_type="spread"
@@ -7246,15 +7348,15 @@ with tab_master:
                 theover_prob_final_spread = None
                 if theover_prob_spread is not None:
                     # Check alignment: spread_pick_side_key (home/away) vs theover_spread_pick_side
-                    if theover_spread_pick_side == spread_pick_side_key:
+                    if theover_spread_pick_side and spread_pick_side_key and theover_spread_pick_side == spread_pick_side_key:
                         theover_prob_final_spread = theover_prob_spread
                     else:
                         theover_prob_final_spread = 1.0 - theover_prob_spread
 
-                    spread_weights["theover_weight"] = 0.15
+                    spread_weights["theover_weight"] = 0.10
                     # Reduce model weight slightly if model is used, else rely on normalization
                     if spread_weights.get("ml_weight", 0) > 0.15:
-                        spread_weights["ml_weight"] -= 0.10
+                        spread_weights["ml_weight"] -= 0.05
 
                 # Update sentiment weight dynamically
                 spread_weights["sentiment_weight"] = abs(spread_sentiment_adj or 0.0)
@@ -7294,7 +7396,7 @@ with tab_master:
                     kalshi_prob_spread if kalshi_spread.get("kalshi_matched") else None,
                     kalshi_spread.get("kalshi_yes_side") or "home",
                     model_spread_prob if model_used_for_spread else None,
-                    theover_prob_final_spread,
+                    theover_prob_final_spread, # Should be ignored by weight=0
                     spread_sentiment_adj,
                     spread_weights,
                     sentiment_score=sentiment_diff,
@@ -7302,18 +7404,31 @@ with tab_master:
 
                 theover_delta_spread = (spread_prob_final or 0.0) - (spread_prob_no_to or 0.0)
 
-                # Apply TheOver Decision Engine Adjustment (Spread)
+                # Apply TheOver Decision Engine Adjustment (Spread) - Nudge Logic
                 if theover_prob_final_spread is not None and spread_prob_final is not None:
                     # Directional check: if both > 0.5 or both < 0.5
                     agree = (theover_prob_final_spread > 0.5 and spread_prob_final > 0.5) or \
                             (theover_prob_final_spread < 0.5 and spread_prob_final < 0.5)
 
+                    # Nudge: +0.02 if agree, -0.02 if strongly disagree (and we picked it)
                     if agree:
-                        spread_prob_final = clamp(spread_prob_final + 0.03, 0.01, 0.95)
+                        spread_prob_final = clamp(spread_prob_final + 0.02, 0.01, 0.95)
                         spread_warnings_new.append("theover_agrees")
                     else:
-                        spread_prob_final = clamp(spread_prob_final - 0.03, 0.05, 0.99)
+                        spread_prob_final = clamp(spread_prob_final - 0.02, 0.05, 0.99)
                         spread_warnings_new.append("theover_disagrees")
+
+                    # Update delta to reflect nudge
+                    theover_delta_spread = (spread_prob_final or 0.0) - (spread_prob_no_to or 0.0)
+
+                # Pick Change Detection
+                theover_changed_pick_spread = False
+                if spread_prob_final is not None and spread_prob_no_to is not None:
+                    if (spread_prob_final > 0.5) != (spread_prob_no_to > 0.5):
+                        theover_changed_pick_spread = True
+
+                theover_used_in_pick_spread = bool(theover_prob_final_spread is not None)
+
                 if spread_prob_final is None:
                     spread_prob_final = blend_kalshi_market(kalshi_prob_spread, spread_prob_market) if kalshi_spread.get("kalshi_matched") else spread_prob_market
                     if model_used_for_spread and model_spread_prob is not None:
@@ -7325,14 +7440,14 @@ with tab_master:
                 theover_prob_final_total = None
                 if theover_prob_total is not None:
                     # Check alignment: total_pick_side_key (over/under) vs theover_total_pick_side
-                    if str(theover_total_pick_side).upper() == str(total_pick_side_key).upper():
+                    if theover_total_pick_side and total_pick_side_key and str(theover_total_pick_side).upper() == str(total_pick_side_key).upper():
                         theover_prob_final_total = theover_prob_total
                     else:
                         theover_prob_final_total = 1.0 - theover_prob_total
 
-                    total_weights["theover_weight"] = 0.15
+                    total_weights["theover_weight"] = 0.10
                     if total_weights.get("ml_weight", 0) > 0.15:
-                        total_weights["ml_weight"] -= 0.10
+                        total_weights["ml_weight"] -= 0.05
 
                 # Calculate TOTAL probability WITHOUT TheOver
                 _weights_total_no_to = total_weights.copy()
@@ -7369,7 +7484,7 @@ with tab_master:
                     kalshi_prob_total if kalshi_total.get("kalshi_matched") else None,
                     kalshi_total.get("kalshi_yes_side") or "over",
                     model_total_prob if model_used_for_total else None,
-                    theover_prob_final_total,
+                    theover_prob_final_total, # Ignored by weight=0
                     total_sentiment_adj,
                     total_weights,
                     sentiment_score=sentiment_diff,
@@ -7377,18 +7492,31 @@ with tab_master:
 
                 theover_delta_total = (total_prob_final or 0.0) - (total_prob_no_to or 0.0)
 
-                # Apply TheOver Decision Engine Adjustment (Total)
+                # Apply TheOver Decision Engine Adjustment (Total) - Nudge Logic
                 if theover_prob_final_total is not None and total_prob_final is not None:
                     # Directional check: if both > 0.5 or both < 0.5
                     agree = (theover_prob_final_total > 0.5 and total_prob_final > 0.5) or \
                             (theover_prob_final_total < 0.5 and total_prob_final < 0.5)
 
+                    # Nudge: +0.02 if agree, -0.02 if strongly disagree (and we picked it)
                     if agree:
-                        total_prob_final = clamp(total_prob_final + 0.03, 0.01, 0.95)
+                        total_prob_final = clamp(total_prob_final + 0.02, 0.01, 0.95)
                         total_warnings_new.append("theover_agrees")
                     else:
-                        total_prob_final = clamp(total_prob_final - 0.03, 0.05, 0.99)
+                        total_prob_final = clamp(total_prob_final - 0.02, 0.05, 0.99)
                         total_warnings_new.append("theover_disagrees")
+
+                    # Update delta to reflect nudge
+                    theover_delta_total = (total_prob_final or 0.0) - (total_prob_no_to or 0.0)
+
+                # Pick Change Detection
+                theover_changed_pick_total = False
+                if total_prob_final is not None and total_prob_no_to is not None:
+                    if (total_prob_final > 0.5) != (total_prob_no_to > 0.5):
+                        theover_changed_pick_total = True
+
+                theover_used_in_pick_total = bool(theover_prob_final_total is not None)
+
                 if total_prob_final is None:
                     total_prob_final = blend_kalshi_market(kalshi_prob_total, total_prob_market) if kalshi_total.get("kalshi_matched") else total_prob_market
                     if model_used_for_total and model_total_prob is not None:
@@ -8178,6 +8306,16 @@ with tab_master:
                         "theover_matched": bool(theover_matched_side),
                         "theover_delta_final_prob": theover_delta_spread,
                         "final_prob_without_theover": spread_prob_no_to,
+                        "theover_changed_pick": theover_changed_pick_spread,
+                        "theover_used_in_pick": theover_used_in_pick_spread,
+                        "theover_available": bool(theover_matched_side),
+                        "theover_line": (theover_matched_side or {}).get("theover_line"),
+                        "theover_status": (theover_matched_side or {}).get("theover_model", "None"),
+                        "theover_side_available": bool(theover_matched_side),
+                        "theover_side_pick_team": (theover_matched_side or {}).get("theover_pick"),
+                        "theover_side_line": (theover_matched_side or {}).get("theover_line"),
+                        "theover_side_winprob": (theover_matched_side or {}).get("theover_hit_rate"),
+                        "theover_match_reason": theover_match_reason if theover_matched_side else None,
                             "spread_implied_prob": spread_implied,
                             "spread_prob_market_based": spread_prob_market_based,
                             "spread_prob_reason": spread_prob_reason,
@@ -8440,6 +8578,16 @@ with tab_master:
                         "theover_matched": bool(theover_matched_total),
                         "theover_delta_final_prob": theover_delta_total,
                         "final_prob_without_theover": total_prob_no_to,
+                        "theover_changed_pick": theover_changed_pick_total,
+                        "theover_used_in_pick": theover_used_in_pick_total,
+                        "theover_available": bool(theover_matched_total),
+                        "theover_line": (theover_matched_total or {}).get("theover_line"),
+                        "theover_status": (theover_matched_total or {}).get("theover_model", "None"),
+                        "theover_total_available": bool(theover_matched_total),
+                        "theover_total_pick": (theover_matched_total or {}).get("theover_pick"),
+                        "theover_total_line": (theover_matched_total or {}).get("theover_line"),
+                        "theover_total_winprob": (theover_matched_total or {}).get("theover_hit_rate"),
+                        "theover_match_reason": theover_match_reason if theover_matched_total else None,
                         "spread_implied_prob": spread_implied,
                         "spread_prob_market_based": spread_prob_market_based,
                         "spread_prob_reason": spread_prob_reason,
@@ -9861,6 +10009,17 @@ with tab_master:
             "theover_available",
             "theover_line",
             "theover_status",
+            "theover_total_available",
+            "theover_total_pick",
+            "theover_total_line",
+            "theover_total_winprob",
+            "theover_side_available",
+            "theover_side_pick_team",
+            "theover_side_line",
+            "theover_side_winprob",
+            "theover_match_reason",
+            "theover_changed_pick",
+            "theover_used_in_pick",
         ]
         export_df = df_master_view_full.copy()
         if "Unnamed: 0" in export_df.columns:
@@ -10103,7 +10262,12 @@ with tab_master:
                     df_master_view_display = df_master_view_display.drop(columns=['kalshi_wanted_tokens'])
 
                 # --- FINAL WHITELIST FIX ---
-                ui_whitelist = ['league', 'Home', 'Away', 'Pick', 'AI_Prob', 'Implied_Prob', 'Home_Sentiment', 'Away_Sentiment', 'Sentiment_Diff', 'sentiment_status', 'spread_edge', 'status', 'theover_pick', 'theover_delta_final_prob', 'final_prob_without_theover']
+                ui_whitelist = [
+                    'league', 'Home', 'Away', 'Pick', 'AI_Prob', 'Implied_Prob', 'Home_Sentiment',
+                    'Away_Sentiment', 'Sentiment_Diff', 'sentiment_status', 'spread_edge', 'status',
+                    'theover_pick', 'theover_delta_final_prob', 'final_prob_without_theover',
+                    'theover_total_pick', 'theover_side_pick_team', 'theover_matched'
+                ]
                 safe_cols = [c for c in ui_whitelist if c in df_master_view_display.columns] # or df_master_view_display at line 8946
                 top_df_ui = df_master_view_display[safe_cols].copy()
 
