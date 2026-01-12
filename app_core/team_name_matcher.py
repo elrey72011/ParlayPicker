@@ -21,253 +21,162 @@ TEAM_FUZZY_THRESHOLD = 0.80
 class TeamNameMatcher:
     """Handles fuzzy matching between TheOver.ai CSV names and app team names"""
     
-    # Common mascots to strip (expand this list as needed)
-    # Explicitly updated to include user-requested mascots
-    MASCOTS = [
-        # NBA
-        'Thunder', 'Warriors', 'Celtics', 'Knicks', 'Lakers', 'Clippers',
-        'Heat', 'Bulls', 'Cavaliers', 'Mavericks', 'Rockets', 'Spurs',
-        'Suns', 'Blazers', 'Jazz', 'Nuggets', 'Timberwolves', 'Pelicans',
-        'Kings', 'Nets', 'Bucks', 'Pistons', 'Pacers', 'Hawks',
-        'Hornets', 'Wizards', 'Magic', 'Raptors', 'Grizzlies', '76ers',
-        
-        # NHL
-        'Canucks', 'Avalanche', 'Flames', 'Oilers', 'Capitals', 'Penguins',
-        'Bruins', 'Rangers', 'Islanders', 'Devils', 'Flyers', 'Maple Leafs',
-        'Senators', 'Canadiens', 'Panthers', 'Lightning', 'Blue Jackets',
-        'Red Wings', 'Predators', 'Blues', 'Blackhawks', 'Wild', 'Stars',
-        'Golden Knights', 'Kraken', 'Ducks', 'Sharks', 'Kings',
-        
-        # NCAAB/NCAAF (expand as needed)
-        'Bearkats', 'Bears', 'Bulldogs', 'Eagles', 'Wildcats', 'Huskies',
-        'Ramblers', 'Golden Eagles', 'Blue Devils', 'Tar Heels', 'Jayhawks',
-        'Buckeyes', 'Spartans', 'Wolverines', 'Hawkeyes', 'Badgers',
-        'Scarlet Knights', 'Terrapins', 'Hoosiers', 'Illini', 'Boilermakers',
-        'Cornhuskers', 'Cyclones', 'Sooners', 'Cowboys', 'Mountaineers',
-        'Seminoles', 'Gators', 'Gamecocks', 'Tigers', 'Crimson Tide',
-        'Volunteers', 'Razorbacks', 'Aggies', 'Longhorns', 'Red Raiders',
-        'Horned Frogs', 'Cougars', 'Utes', 'Sun Devils', 'Trojans',
-        'Bruins', 'Cardinal', 'Golden Bears', 'Ducks', 'Beavers',
-        'Huskies', 'Buffaloes', 'Wildcats', 'Antelopes', 'Hatters',
-        'Seahawks', 'Colonels', 'Bluejays', 'Leathernecks', 'Racers',
-        'Beacons', 'Mean Green', 'Green Wave', 'Waves', 'Lions',
-        'Rebels', 'Fighting Irish', 'Billikens', 'Sharks', 'Chippewas',
-        'Braves', 'Hornets', 'Black Knights', 'Golden Griffins', 'Purple Eagles',
-        'Blue Raiders', 'Ragin Cajuns', 'Thundering Herd', 'Golden Flashes',
-        'RedHawks', 'Gamecocks', 'Mean Green', 'Roadrunners', 'Salukis',
-        'Chanticleers', 'Catamounts', 'Anteaters', 'Highlanders', 'Matadors',
-        'Commodores', 'Volunteers', 'Falcons', 'Lobos', 'Mustangs', 'Owls',
-        'Minutemen', 'Rams', 'Broncos', 'Midshipmen', 'Cadets', 'Knights',
-        'Terriers', 'Spiders', 'Dukes', 'Flyers', 'Explorers', 'Bonnies',
-        'Patriots', 'Billikens', 'Griffins', 'Peacocks', 'Stags', 'Jaspers',
-        'Gaels', 'Saints', 'Friars', 'Pirates', 'Hoyas', 'Blue Demons',
-        'Musketeers', 'Bulldogs', 'Hoyas', 'Friars', 'Titans', 'Matadors',
-        'Rockets', 'RedHawks', 'Jaspers', 'Golden Griffins', 'Golden Grizzlies',
-        'Vikings', 'Titans', 'Raiders', 'Stags', 'Broncs', 'Phoenix', 'Jaguars',
-        'Gaels', 'Purple Eagles', 'Pioneers', 'Red Foxes', 'Saints', 'Warriors',
-        'Peacocks', 'Falcons', 'Zips', 'Panthers', 'Norse', 'Golden Gophers',
-        'Trojans', 'Rams', 'Rebels', 'Hoosiers', 'Ducks', 'Buckeyes', 'Mammoth',
-        'Blackhawks', 'Capitals', 'Jets', 'Kings', 'Blues', 'Suns'
-    ]
-    
     # Special case full replacements
-    # KEYS MUST BE NORMALIZED (lowercase, no punctuation, single spaced)
-    # The normalization regex converts "St." to "State", so "St. John's" becomes "state johns"
+    # KEYS MUST BE NORMALIZED (UPPERCASE, no punctuation, single spaced)
     FULL_REPLACEMENTS = {
-        'la': 'los angeles',
-        'ny': 'new york',
-        'l a': 'los angeles',
-        'n y': 'new york',
-        'cal': 'california',
-        'umass': 'massachusetts',
-        'upenn': 'pennsylvania',
-        'penn': 'pennsylvania',
-        'nc state': 'north carolina state',
-        'n c state': 'north carolina state',
-        'oregon st': 'oregon state',
-        'michigan st': 'michigan state',
-        'florida st': 'florida state',
-        'georgia st': 'georgia state',
-        'mississippi st': 'mississippi state',
-        'washington st': 'washington state',
-        'kansas st': 'kansas state',
-        'iowa st': 'iowa state',
-        'ohio st': 'ohio state',
-        'oklahoma st': 'oklahoma state',
-        'penn st': 'pennsylvania state',
-        'ga tech': 'georgia tech',
-        'va tech': 'virginia tech',
-        'vmi': 'virginia military',
-        'army west point': 'army',
-        'navy midshipmen': 'navy',
-        'air force falcons': 'air force',
-        'loyola chicago': 'loyola il',
-        # Handle "St." -> "state" conversion
-        'state marys': 'saint marys',
-        'state josephs': 'saint josephs',
-        'state johns': 'saint johns',
-        'state bonaventure': 'saint bonaventure',
-        'state francis pa': 'saint francis pa',
-        'state francis ny': 'saint francis ny',
-        # Keep old keys just in case no "St" prefix was used or regex changes
-        'st marys': 'saint marys',
-        'st josephs': 'saint josephs',
-        'st johns': 'saint johns',
-        'sacramento st': 'sacramento state',
-        'sam houston st': 'sam houston state',
-        'fresno st': 'fresno state',
-        'san diego st': 'san diego state',
-        'montana st': 'montana state',
-        'arizona st': 'arizona state',
-        'boise st': 'boise state',
-        'ut arlington': 'texas arlington',
-        'uta': 'texas arlington',
-        'ut arlington': 'texas arlington',
-        'texas arlington': 'texas arlington',
-        'ucsd': 'uc san diego',
-        'uconn': 'connecticut',
-        'unc': 'north carolina',
-        'usc': 'southern california',
-        'ucla': 'california los angeles',
-        'unlv': 'nevada las vegas',
-        'american u': 'american university',
-        # Common NBA/NFL Nicknames
-        'philly': 'philadelphia',
-        'sixers': 'philadelphia',
-        'cavs': 'cleveland',
-        'mavs': 'dallas',
-        'wolves': 'minnesota',
-        't wolves': 'minnesota',
-        'blazers': 'portland',
-        'jags': 'jacksonville',
-        'bucs': 'tampa bay',
-        'pats': 'new england',
-        'niners': 'san francisco',
-        '49ers': 'san francisco',
+        'LA': 'LOS ANGELES',
+        'NY': 'NEW YORK',
+        'L A': 'LOS ANGELES',
+        'N Y': 'NEW YORK',
+        'CAL': 'CALIFORNIA',
+        'UMASS': 'MASSACHUSETTS',
+        'UPENN': 'PENNSYLVANIA',
+        'PENN': 'PENNSYLVANIA',
+        'NC STATE': 'NORTH CAROLINA STATE',
+        'N C STATE': 'NORTH CAROLINA STATE',
+        'OREGON ST': 'OREGON STATE',
+        'MICHIGAN ST': 'MICHIGAN STATE',
+        'FLORIDA ST': 'FLORIDA STATE',
+        'GEORGIA ST': 'GEORGIA STATE',
+        'MISSISSIPPI ST': 'MISSISSIPPI STATE',
+        'WASHINGTON ST': 'WASHINGTON STATE',
+        'KANSAS ST': 'KANSAS STATE',
+        'IOWA ST': 'IOWA STATE',
+        'OHIO ST': 'OHIO STATE',
+        'OKLAHOMA ST': 'OKLAHOMA STATE',
+        'PENN ST': 'PENNSYLVANIA STATE',
+        'GA TECH': 'GEORGIA TECH',
+        'VA TECH': 'VIRGINIA TECH',
+        'VMI': 'VIRGINIA MILITARY',
+        'ARMY WEST POINT': 'ARMY',
+        'NAVY MIDSHIPMEN': 'NAVY',
+        'AIR FORCE FALCONS': 'AIR FORCE',
+        'LOYOLA CHICAGO': 'LOYOLA IL',
+        # Handle "St." -> "STATE" conversion implicit in normalization if needed, but regex handles chars.
+        # If "St." becomes "ST", we map ST -> SAINT if desired, or keep as ST if that's canonical.
+        # User said "DO NOT remove 'STATE'".
+        # Often stats use "Saint" or "St". Let's standardize to "SAINT" for "ST" prefix if appropriate?
+        # Actually, let's keep it simple and map common ones.
+        'ST MARYS': 'SAINT MARYS',
+        'ST JOSEPHS': 'SAINT JOSEPHS',
+        'ST JOHNS': 'SAINT JOHNS',
+        'ST BONAVENTURE': 'SAINT BONAVENTURE',
+        'ST FRANCIS PA': 'SAINT FRANCIS PA',
+        'ST FRANCIS NY': 'SAINT FRANCIS NY',
+
+        'SACRAMENTO ST': 'SACRAMENTO STATE',
+        'SAM HOUSTON ST': 'SAM HOUSTON STATE',
+        'FRESNO ST': 'FRESNO STATE',
+        'SAN DIEGO ST': 'SAN DIEGO STATE',
+        'MONTANA ST': 'MONTANA STATE',
+        'ARIZONA ST': 'ARIZONA STATE',
+        'BOISE ST': 'BOISE STATE',
+        'UT ARLINGTON': 'TEXAS ARLINGTON',
+        'UTA': 'TEXAS ARLINGTON',
+        'UCSD': 'UC SAN DIEGO',
+        'UCONN': 'CONNECTICUT',
+        'UNC': 'NORTH CAROLINA',
+        'USC': 'SOUTHERN CALIFORNIA',
+        'UCLA': 'CALIFORNIA LOS ANGELES',
+        'UNLV': 'NEVADA LAS VEGAS',
+        'AMERICAN U': 'AMERICAN UNIVERSITY',
+        # Common NBA/NFL Nicknames (Mapping to Full Name)
+        'PHILLY': 'PHILADELPHIA EAGLES', # Context sensitive? Assuming NFL usually
+        'SIXERS': 'PHILADELPHIA 76ERS',
+        'CAVS': 'CLEVELAND CAVALIERS',
+        'MAVS': 'DALLAS MAVERICKS',
+        'WOLVES': 'MINNESOTA TIMBERWOLVES',
+        'T WOLVES': 'MINNESOTA TIMBERWOLVES',
+        'BLAZERS': 'PORTLAND TRAIL BLAZERS',
+        'JAGS': 'JACKSONVILLE JAGUARS',
+        'BUCS': 'TAMPA BAY BUCCANEERS',
+        'PATS': 'NEW ENGLAND PATRIOTS',
+        'NINERS': 'SAN FRANCISCO 49ERS',
+        '49ERS': 'SAN FRANCISCO 49ERS',
+
         # NCAAB/NCAAF specific
-        'ole miss': 'mississippi',
-        'pitt': 'pittsburgh',
-        'canisius golden griffins': 'canisius',
-        'niagara purple': 'niagara',
-        'niagara purple eagles': 'niagara',
-        'middle tennessee blue raiders': 'middle tennessee',
-        'louisiana tech bulldogs': 'louisiana tech',
-        'la tech': 'louisiana tech',
-        'fiu': 'florida international',
-        'fau': 'florida atlantic',
-        'utsa': 'texas san antonio',
-        'utep': 'texas el paso',
-        'uab': 'alabama birmingham',
-        'ucf': 'central florida',
-        'smu': 'southern methodist',
-        'tcu': 'texas christian',
-        'lsu': 'louisiana state',
-        'byu': 'brigham young',
-        'vcu': 'virginia commonwealth',
-        'umbc': 'maryland baltimore county',
-        'uncw': 'north carolina wilmington',
-        'uncg': 'north carolina greensboro',
-        'unco': 'northern colorado',
-        'miami fl': 'miami',
-        'miami oh': 'miami ohio',
-        'st bonaventure': 'saint bonaventure',
-        'st francis pa': 'saint francis pa',
-        'st francis ny': 'saint francis ny',
-        'li u': 'long island',
-        'liu': 'long island',
-        'mt st marys': 'mount saint marys',
-        'mt state marys': 'mount saint marys', # Mount St. Mary's -> mount state marys
-        'the citadel': 'citadel',
-        'vmi': 'virginia military',
-        'se missouri st': 'southeast missouri state',
-        'semo': 'southeast missouri state',
-        'siu edwardsville': 'southern illinois edwardsville',
-        'siue': 'southern illinois edwardsville',
-        'ul monroe': 'louisiana monroe',
-        'ulm': 'louisiana monroe',
-        'ul lafayette': 'louisiana',
-        'ull': 'louisiana',
-        'unc asheville': 'north carolina asheville',
-        'gardner webb': 'gardner webb',
-        'bethune cookman': 'bethune cookman',
-        'md eastern shore': 'maryland eastern shore',
-        'umes': 'maryland eastern shore',
-        'prairie view': 'prairie view am',
-        'prairie view am': 'prairie view am',
-        'alabama am': 'alabama am',
-        'florida am': 'florida am',
-        'nc at': 'north carolina at',
-        'n c at': 'north carolina at',
-        'texas am': 'texas am',
-        'corpus christi': 'texas am corpus christi',
-        'tamucc': 'texas am corpus christi',
-        'miami oh': 'miami ohio',
-        'mt st marys': 'mount st marys',
-        'st peters': 'saint peters',
-        'utah mammoth': 'utah',
-        'ohio state buckeyes': 'ohio state',
-        'cleveland st': 'cleveland state',
-        'wright st': 'wright state',
+        'OLE MISS': 'MISSISSIPPI',
+        'PITT': 'PITTSBURGH',
+        'CANISIUS GOLDEN GRIFFINS': 'CANISIUS',
+        'NIAGARA PURPLE': 'NIAGARA',
+        'NIAGARA PURPLE EAGLES': 'NIAGARA',
+        'MIDDLE TENNESSEE BLUE RAIDERS': 'MIDDLE TENNESSEE',
+        'LOUISIANA TECH BULLDOGS': 'LOUISIANA TECH',
+        'LA TECH': 'LOUISIANA TECH',
+        'FIU': 'FLORIDA INTERNATIONAL',
+        'FAU': 'FLORIDA ATLANTIC',
+        'UTSA': 'TEXAS SAN ANTONIO',
+        'UTEP': 'TEXAS EL PASO',
+        'UAB': 'ALABAMA BIRMINGHAM',
+        'UCF': 'CENTRAL FLORIDA',
+        'SMU': 'SOUTHERN METHODIST',
+        'TCU': 'TEXAS CHRISTIAN',
+        'LSU': 'LOUISIANA STATE',
+        'BYU': 'BRIGHAM YOUNG',
+        'VCU': 'VIRGINIA COMMONWEALTH',
+        'UMBC': 'MARYLAND BALTIMORE COUNTY',
+        'UNCW': 'NORTH CAROLINA WILMINGTON',
+        'UNCG': 'NORTH CAROLINA GREENSBORO',
+        'UNCO': 'NORTHERN COLORADO',
+        'MIAMI FL': 'MIAMI',
+        'MIAMI OH': 'MIAMI OHIO',
+        'ST PETERS': 'SAINT PETERS',
+        'LI U': 'LONG ISLAND',
+        'LIU': 'LONG ISLAND',
+        'MT ST MARYS': 'MOUNT SAINT MARYS',
+        'THE CITADEL': 'CITADEL',
+        'SE MISSOURI ST': 'SOUTHEAST MISSOURI STATE',
+        'SEMO': 'SOUTHEAST MISSOURI STATE',
+        'SIU EDWARDSVILLE': 'SOUTHERN ILLINOIS EDWARDSVILLE',
+        'SIUE': 'SOUTHERN ILLINOIS EDWARDSVILLE',
+        'UL MONROE': 'LOUISIANA MONROE',
+        'ULM': 'LOUISIANA MONROE',
+        'UL LAFAYETTE': 'LOUISIANA',
+        'ULL': 'LOUISIANA',
+        'UNC ASHEVILLE': 'NORTH CAROLINA ASHEVILLE',
+        'GARDNER WEBB': 'GARDNER WEBB',
+        'BETHUNE COOKMAN': 'BETHUNE COOKMAN',
+        'MD EASTERN SHORE': 'MARYLAND EASTERN SHORE',
+        'UMES': 'MARYLAND EASTERN SHORE',
+        'PRAIRIE VIEW': 'PRAIRIE VIEW AM',
+        'PRAIRIE VIEW AM': 'PRAIRIE VIEW AM',
+        'ALABAMA AM': 'ALABAMA AM',
+        'FLORIDA AM': 'FLORIDA AM',
+        'NC AT': 'NORTH CAROLINA AT',
+        'N C AT': 'NORTH CAROLINA AT',
+        'TEXAS AM': 'TEXAS AM',
+        'CORPUS CHRISTI': 'TEXAS AM CORPUS CHRISTI',
+        'TAMUCC': 'TEXAS AM CORPUS CHRISTI',
+        'UTAH MAMMOTH': 'UTAH', # NHL temp
+        'OHIO STATE BUCKEYES': 'OHIO STATE',
+        'CLEVELAND ST': 'CLEVELAND STATE',
+        'WRIGHT ST': 'WRIGHT STATE',
+        'ST LOUIS': 'ST LOUIS BLUES',
     }
     
     @classmethod
-    def normalize(cls, team: str, strip_mascots: bool = True) -> str:
+    def normalize(cls, team: str, strip_mascots: bool = False) -> str:
         """
-        Normalize team name for matching
-        
-        Examples:
-            "Oklahoma City Thunder" → "oklahoma city"
-            "Sam Houston St Bearkats" → "sam houston state"
-            "Sacramento St Hornets" → "sacramento state"
-            "New York Knicks" → "new york"
+        Normalize team name for matching.
+        NOW UPPERCASE ONLY.
+        NO MASCOT STRIPPING unless explicitly requested (deprecated).
         """
         if not team:
             return ""
         
-        # Convert to lowercase
-        team = team.lower().strip()
-
-        # Remove 'the ' prefix if present (e.g., 'The Citadel')
-        if team.startswith('the '):
+        # 1. Uppercase and basic clean
+        team = str(team).upper()
+        # Remove 'THE ' prefix
+        if team.startswith('THE '):
             team = team[4:]
 
-        # Normalize abbreviations using regex for safety
-        # St. or St -> State (must be careful not to replace St in names like West)
-        # We look for word boundaries
-        team = re.sub(r'\bst\.?\b', 'state', team)
-        # Univ. or Univ -> University
-        team = re.sub(r'\buniv\.?\b', 'university', team)
-        # Intl -> International
-        team = re.sub(r'\bintl\.?\b', 'international', team)
+        # 2. Regex: Keep Alphanumeric and Spaces
+        team = re.sub(r"[^A-Z0-9 ]", "", team)
+        team = re.sub(r"\s+", " ", team).strip()
 
-        # Handle & -> and or empty
-        # If we replace & with 'and', we must match keys.
-        # But most normalization strips punctuation.
-        # User requested aggressive normalization.
-        # Let's replace & with space or nothing.
-        team = team.replace('&', '')
-
-        # Remove punctuation
-        team = re.sub(r'[^\w\s]', '', team)
-        
-        # Remove mascots
-        if strip_mascots:
-            for mascot in cls.MASCOTS:
-                mascot_lower = mascot.lower()
-                # Remove at end with space before
-                if team.endswith(f" {mascot_lower}"):
-                    team = team[:-len(mascot_lower)-1]
-                # Remove if it's the entire string
-                if team == mascot_lower:
-                    team = ""
-        
-        # Apply full replacements
-        team = team.strip()
+        # 3. Apply Full Replacements
         if team in cls.FULL_REPLACEMENTS:
             team = cls.FULL_REPLACEMENTS[team]
-        
-        # Remove extra whitespace
-        team = ' '.join(team.split())
         
         return team
     
@@ -296,9 +205,10 @@ class TeamNameMatcher:
         
         if process:
              # rapidfuzz implementation (faster)
+             # Normalize choices
              app_normalized_map = {cls.normalize(t): t for t in app_teams if cls.normalize(t)}
              choices = list(app_normalized_map.keys())
-             # Use token_set_ratio to handle subset matches like "Lions" vs "Detroit Lions"
+             # Use token_set_ratio to handle subset matches like "LIONS" vs "DETROIT LIONS"
              result = process.extractOne(csv_normalized, choices, scorer=fuzz.token_set_ratio)
              if result:
                  match, score, _ = result

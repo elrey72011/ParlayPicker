@@ -1061,11 +1061,14 @@ def calculate_best_pick_metrics(df: pd.DataFrame) -> pd.DataFrame:
 
         s_score = _score(s_prob, s_edge)
         t_score = _score(t_prob, t_edge)
-        ml_score = _score(ml_prob, ml_edge)
+
+        # ML Score not needed for best_pick selection as ML is disqualified
+        # ml_score = _score(ml_prob, ml_edge)
 
         # Valid Flags (Prob > 0.0 check is mostly to avoid default zeros if they slipped in)
         s_valid = (s_prob is not None and s_pick is not None)
         t_valid = (t_prob is not None and t_pick is not None)
+        # ml_valid is tracked but not used for best_pick candidacy
         ml_valid = (ml_prob is not None and ml_pick is not None)
 
         # 4. Selection Logic
@@ -1075,64 +1078,48 @@ def calculate_best_pick_metrics(df: pd.DataFrame) -> pd.DataFrame:
         best_edge = s_edge
         reason = "Default"
 
-        # Priority: Prefer Spread/Total if "Available" (Valid)
-        # "Only consider Moneyline if: a) Spread and Total are missing/unavailable OR both are extremely weak"
-        # We define "Extremely Weak" as Score < Threshold? Or just prioritize S/T always if valid.
-        # User Requirement: "Prefer Total or Spread if either is available (has a valid probability/edge/confidence)."
-
+        # Priority: Strict Spread/Total Only. Moneyline never Best Pick.
         candidates = []
         if s_valid: candidates.append("SPREAD")
         if t_valid: candidates.append("TOTAL")
-        if ml_valid: candidates.append("ML")
 
         candidate_types_str = "|".join(candidates)
 
-        # Compare S vs T first
-        st_best_type = None
-        if s_valid and t_valid:
-            if t_score > s_score:
-                st_best_type = "TOTAL"
-            else:
-                st_best_type = "SPREAD"
-        elif s_valid:
-            st_best_type = "SPREAD"
-        elif t_valid:
-            st_best_type = "TOTAL"
-
         # Decision
-        if st_best_type:
-            # S/T available. Pick the best of them.
-            if st_best_type == "SPREAD":
-                best_type = "SPREAD"
-                best_pick = s_pick
-                best_prob = s_prob
-                best_edge = s_edge
-                reason = "Spread > Total" if t_valid else "Only Spread Valid"
-            else:
+        if s_valid and t_valid:
+            # Pick whichever has higher score (edge+prob combo)
+            if t_score > s_score:
                 best_type = "TOTAL"
                 best_pick = t_pick
                 best_prob = t_prob
                 best_edge = t_edge
-                reason = "Total > Spread" if s_valid else "Only Total Valid"
-
+                reason = "Total > Spread"
+            else:
+                best_type = "SPREAD"
+                best_pick = s_pick
+                best_prob = s_prob
+                best_edge = s_edge
+                reason = "Spread > Total"
+        elif s_valid:
+            best_type = "SPREAD"
+            best_pick = s_pick
+            best_prob = s_prob
+            best_edge = s_edge
+            reason = "Only Spread Valid"
+        elif t_valid:
+            best_type = "TOTAL"
+            best_pick = t_pick
+            best_prob = t_prob
+            best_edge = t_edge
+            reason = "Only Total Valid"
         else:
-            # S and T both missing/invalid.
-            # Updated Logic: "Moneyline should NOT be the final recommendation."
-            # We must force a Spread or Total even if invalid/missing, unless absolutely nothing exists.
-
-            # If we have ML data, we can try to hint at a Spread/Total direction or just return ML as a helper but TYPE is forced to SPREAD/TOTAL.
-            # But the user said "Moneyline should NOT be the final recommendation."
-            # So if we only have ML valid, we can't pick it as type ML.
-            # We will fallback to SPREAD and label as "Low Confidence - Forced".
-
-            # Fallback to Spread
+            # Both Missing/Invalid. Fallback to Spread (Empty/Low Confidence)
             best_type = "SPREAD"
             best_pick = s_pick # Might be None
             best_prob = s_prob if s_prob is not None else 0.5
             best_edge = s_edge
-
             if ml_valid:
-                reason = f"Forced Spread (ML Valid but suppressed)"
+                reason = "Forced Spread (ML used as signal only)"
             else:
                 reason = "No Valid Markets"
 
@@ -7790,28 +7777,43 @@ with tab_master:
                         pick_side = "home" if pick == home else "away"
                         implied_pick = implied_prob_for_pick(home_ml, away_ml, pick_side)
                         kalshi_yes_side = kalshi_winner.get("kalshi_yes_side")
-                        # ML Suppression for extreme odds
-                        ml_odds_weight = 0.30
-                        if (home_ml is not None and abs(home_ml) > 300) or (away_ml is not None and abs(away_ml) > 300):
-                            ml_odds_weight = 0.10 # Strongly downweight implied probability contribution for ML row
 
-                        # Update base moneyline weights
-                        moneyline_weights["odds_weight"] = ml_odds_weight
-                        moneyline_weights["sentiment_weight"] = abs(sentiment_adj or 0.0)
+                        # ML Suppression / Weighting Logic
+                        # If absolute American odds > 300: model_weight = 0, kalshi_weight = 0.6, implied_weight = 0.4
+                        current_ml_weights = moneyline_weights.copy()
+                        is_heavy_chalk = False
+                        try:
+                            h_p = float(home_ml) if home_ml is not None else 0
+                            a_p = float(away_ml) if away_ml is not None else 0
+                            if abs(h_p) > 300 or abs(a_p) > 300:
+                                is_heavy_chalk = True
+                        except:
+                            pass
 
-                        # Update Kalshi weight dynamically
-                        _ml_kalshi_matched = bool(kalshi_winner.get("kalshi_matched"))
-                        _ml_k_prob = map_kalshi_prob_for_pick(
-                            kalshi_prob_used if _ml_kalshi_matched else None,
-                            kalshi_yes_side,
-                            pick_side
-                        )
-                        moneyline_weights["kalshi_weight"] = dynamic_kalshi_weight(
-                            _ml_k_prob,
-                            implied_pick,
-                            _ml_kalshi_matched,
-                            league_name
-                        )
+                        if is_heavy_chalk:
+                            current_ml_weights["ml_weight"] = 0.0
+                            current_ml_weights["kalshi_weight"] = 0.6
+                            current_ml_weights["odds_weight"] = 0.4
+                            current_ml_weights["sentiment_weight"] = 0.0
+                            current_ml_weights["theover_weight"] = 0.0
+                        else:
+                            # Standard Dynamic Weighting
+                            ml_odds_weight = 0.30
+                            current_ml_weights["odds_weight"] = ml_odds_weight
+                            current_ml_weights["sentiment_weight"] = abs(sentiment_adj or 0.0)
+
+                            _ml_kalshi_matched = bool(kalshi_winner.get("kalshi_matched"))
+                            _ml_k_prob = map_kalshi_prob_for_pick(
+                                kalshi_prob_used if _ml_kalshi_matched else None,
+                                kalshi_yes_side,
+                                pick_side
+                            )
+                            current_ml_weights["kalshi_weight"] = dynamic_kalshi_weight(
+                                _ml_k_prob,
+                                implied_pick,
+                                _ml_kalshi_matched,
+                                league_name
+                            )
 
                         final_prob_blend, base_prob_blend, weights_used, decision_driver, warnings_new, kalshi_prob_for_pick = compute_final_probability(
                             pick_side,
@@ -7821,7 +7823,7 @@ with tab_master:
                             ai_prob_base,
                             None, # No TheOver for Moneyline yet
                             sentiment_adj,
-                            moneyline_weights,
+                            current_ml_weights,
                             sentiment_score=sentiment_diff,
                         )
                         sentiment_info = sentiment_impact_for_pick(sentiment_adj, pick, home, away)
@@ -8308,6 +8310,11 @@ with tab_master:
                         "final_prob_without_theover": spread_prob_no_to,
                         "theover_changed_pick": theover_changed_pick_spread,
                         "theover_used_in_pick": theover_used_in_pick_spread,
+                        "theover_total_prob": theover_prob_total,
+                        "theover_spread_prob": theover_prob_spread,
+                        "kalshi_event_ticker": kalshi_spread.get("raw_event_id"),
+                        "kalshi_series": None,
+                        "normalization_source": "Dynamic",
                         "theover_available": bool(theover_matched_side),
                         "theover_line": (theover_matched_side or {}).get("theover_line"),
                         "theover_status": (theover_matched_side or {}).get("theover_model", "None"),
@@ -8580,6 +8587,11 @@ with tab_master:
                         "final_prob_without_theover": total_prob_no_to,
                         "theover_changed_pick": theover_changed_pick_total,
                         "theover_used_in_pick": theover_used_in_pick_total,
+                        "theover_total_prob": theover_prob_total,
+                        "theover_spread_prob": theover_prob_spread,
+                        "kalshi_event_ticker": kalshi_total.get("raw_event_id") or kalshi_spread.get("raw_event_id"),
+                        "kalshi_series": None,
+                        "normalization_source": "Dynamic",
                         "theover_available": bool(theover_matched_total),
                         "theover_line": (theover_matched_total or {}).get("theover_line"),
                         "theover_status": (theover_matched_total or {}).get("theover_model", "None"),
@@ -10020,6 +10032,11 @@ with tab_master:
             "theover_match_reason",
             "theover_changed_pick",
             "theover_used_in_pick",
+            "theover_total_prob",
+            "theover_spread_prob",
+            "kalshi_event_ticker",
+            "kalshi_series",
+            "normalization_source",
         ]
         export_df = df_master_view_full.copy()
         if "Unnamed: 0" in export_df.columns:

@@ -322,6 +322,8 @@ NHL_TEAM_CODE_MAP = {
     "VANCOUVER CANUCKS": "VAN",
     "VEGAS GOLDEN KNIGHTS": "VGK",
     "WINNIPEG JETS": "WPG",
+    "UTAH": "UTA",
+    "UTAH MAMMOTH": "UTA",
 }
 
 # MLB: full name -> 3-letter-ish code
@@ -362,6 +364,7 @@ MLB_TEAM_CODE_MAP = {
 NCAAF_TEAM_CODE_MAP: Dict[str, str] = {
     # "ALABAMA CRIMSON TIDE": "ALA",
     # "GEORGIA BULLDOGS": "UGA",
+    "FLORIDA STATE": "FSU",
 }
 
 NCAAB_TEAM_CODE_MAP: Dict[str, str] = {
@@ -687,13 +690,8 @@ def _match_via_events(
         return None
 
     # 2. Fetch events (using cache inside get_events)
-    # Use a safe lookback window (e.g., event close time >= game_time - buffer)
-    # But get_events min_close_ts filters events that close AFTER this time.
-    # We want events that close around game time.
-    # If we use status="active", we get current ones.
-    # If we want to catch games that might have just started or are about to, "active" is good.
-    # For robust matching, we just fetch active + cache.
     try:
+        # Request with_nested_markets=True is now default in updated get_events
         events_resp = integrator.get_events(series_ticker, status=status)
     except Exception:
         return None
@@ -706,7 +704,7 @@ def _match_via_events(
     best_score = 0.0
 
     # Time window for matching (hours)
-    TIME_WINDOW_HOURS = 36 # Generous window
+    TIME_WINDOW_HOURS = 36
 
     for evt in events:
         ticker = evt.get("ticker")
@@ -722,12 +720,10 @@ def _match_via_events(
         resolved_away = {resolve_team_code(c, league) for c in away_codes}
 
         # Check codes against our candidates
-        # Orientation 1: Event Away == Game Away, Event Home == Game Home
         score_1 = 0
         if evt_away_code in resolved_away: score_1 += 50
         if evt_home_code in resolved_home: score_1 += 50
 
-        # Orientation 2: Swap (unlikely but possible)
         score_2 = 0
         if evt_away_code in resolved_home: score_2 += 50
         if evt_home_code in resolved_away: score_2 += 50
@@ -755,34 +751,24 @@ def _match_via_events(
             best_event = evt
 
     if best_event and best_score >= 90: # High confidence match
-        # Now fetch markets for this event
-        evt_ticker = best_event.get("ticker")
+        # Extract nested markets from the event object directly
+        markets = best_event.get("markets", [])
 
-        # We need the markets for this event to get the probability.
-        # We can use get_markets with event_ticker param if supported, or filter from broad list.
-        # But wait, get_markets allows filtering by event_ticker?
-        # Typically yes, or we can use the "markets" field if nested (but we set with_nested_markets=False).
-        # Let's fetch markets for this specific event ticker.
-
-        # Efficient way: call get_markets with event_ticker param?
-        # Kalshi API usually supports event_ticker filter on /markets.
-        try:
-            markets_resp = integrator._request("GET", "/markets", params={"event_ticker": evt_ticker})
-            markets = markets_resp.get("markets", [])
-        except Exception:
-            markets = []
+        # If markets missing (e.g. from cache without nested), fetch them explicitly
+        if not markets:
+             evt_ticker = best_event.get("ticker")
+             try:
+                markets_resp = integrator._request("GET", "/markets", params={"event_ticker": evt_ticker})
+                markets = markets_resp.get("markets", [])
+             except Exception:
+                markets = []
 
         if not markets:
             return None
 
         # Find the main game market (Winner)
-        # Usually checking "Winner" title or market type
         target_market = None
         for m in markets:
-            # We prefer the main line.
-            # Usually generic game winner.
-            # Avoid spread/total if we just want the main prob, but function returns a generic result.
-            # match_game_to_kalshi usually returns the "Winner" market or best fit.
             t = (m.get("title") or "").lower()
             if "winner" in t:
                 target_market = m
@@ -805,13 +791,13 @@ def _match_via_events(
                 matched=True,
                 kalshi_available=True,
                 label=target_market.get("title"),
-                probability=prob if prob is not None else 0.5, # Default if missing
-                raw_event_id=evt_ticker,
+                probability=prob if prob is not None else 0.5,
+                raw_event_id=best_event.get("ticker"),
                 league=league,
                 reason="matched_via_events_api",
                 market_type="winner",
                 game_date=game_dt_utc,
-                debug={"score": best_score, "event": evt_ticker}
+                debug={"score": best_score, "event": best_event.get("ticker")}
             )
 
     return None
@@ -844,8 +830,6 @@ def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time:
     if game_time and league_key in ["NBA", "NFL", "NCAAB", "NCAAF", "MLB", "NHL"]:
         # Normalize game_time to UTC
         if game_time.tzinfo is None:
-            # Assume UTC if naive? Or try to match without TZ.
-            # Best practice: ensure it has timezone.
             gt_utc = pytz.utc.localize(game_time)
         else:
             gt_utc = game_time.astimezone(pytz.UTC)
@@ -1265,6 +1249,7 @@ class KalshiIntegrator:
     ) -> Dict[str, Any]:
         """
         Fetch events for a series with optional caching.
+        Enables with_nested_markets=True to get market data in one call.
         """
         cache_key = f"{series_ticker}:{status}:{min_close_ts}"
         now = time.time()
@@ -1277,7 +1262,7 @@ class KalshiIntegrator:
         params = {
             "limit": limit,
             "cursor": cursor,
-            "with_nested_markets": False,
+            "with_nested_markets": True, # ENABLED NESTED MARKETS
             "series_ticker": series_ticker,
         }
         if status:
@@ -1448,78 +1433,6 @@ class KalshiIntegrator:
             time.sleep(0.1)
         return all_markets
 
-    def _get_nba_markets_targeted(
-        self,
-        *,
-        status: Optional[str] = None,
-        min_hits: int = 100,
-        max_pages: int = 5,
-    ) -> Dict[str, Any]:
-        collected: Dict[str, Dict[str, Any]] = {}
-        total_pages = 0
-        total_hits = 0
-        normalized_status = normalize_status(status)
-        # Prioritize single-game slates before futures so we do not short-circuit on KXNBA finals
-        # KXNBAGAME carries the daily slate winners; KXNBA alone mostly serves season-long futures.
-        series_candidates = ["KXNBAGAME", "KXNBATOTAL", "KXNBASPREAD", "KXNBA"]
-        for series in series_candidates:
-            series_pages = 0
-            series_hits = 0
-            next_cursor: Optional[str] = None
-            # Give game winners their own hit target; futures/totals should not prevent slate discovery.
-            series_min_hits = 50 if series == "KXNBAGAME" else min_hits
-            while series_pages < max_pages and series_hits < series_min_hits:
-                params = {"limit": 200, "series_ticker": series}
-                if next_cursor:
-                    params["cursor"] = next_cursor
-                try:
-                    data = self._request("GET", "/markets", params=params)
-                except KalshiAPIError:
-                    status = (self.last_error_info or {}).get("status_code")
-                    if status == 429:
-                        logger.warning("Kalshi NBA targeted fetch rate limited; using cached data.")
-                        cached = self._markets_cache or []
-                        merged = list(collected.values()) or cached
-                        return {"markets": merged, "pages": total_pages, "prefix_hits": total_hits}
-                    raise
-                chunk = data.get("markets", []) or []
-                for m in chunk:
-                    key = str(m.get("event_ticker") or m.get("ticker") or "").upper()
-                    if key and key not in collected:
-                        collected[key] = m
-                tickers = [str(m.get("ticker") or m.get("event_ticker") or "").upper() for m in chunk]
-                series_hits += len([t for t in tickers if t.startswith(series)])
-                series_pages += 1
-                next_cursor = (
-                    data.get("cursor")
-                    or data.get("next_cursor")
-                    or data.get("next")
-                    or data.get("next_token")
-                )
-                if series == "KXNBAGAME" and series_hits >= series_min_hits:
-                    break
-                if not next_cursor:
-                    break
-                time.sleep(0.1)
-            # Do not let futures (KXNBA) decide we are "done" when still seeking game markets
-            total_pages += series_pages
-            if series != "KXNBA":
-                total_hits += series_hits
-
-        deduped_markets_all = list(collected.values())
-        deduped_markets = [
-            m
-            for m in deduped_markets_all
-            if str(m.get("event_ticker") or m.get("ticker") or "").upper().startswith("KXNBAGAME-")
-        ]
-        if not deduped_markets:
-            deduped_markets = deduped_markets_all
-        return {
-            "markets": deduped_markets,
-            "pages": total_pages,
-            "prefix_hits": total_hits,
-        }
-
     def get_markets(self, status: Optional[str] = None) -> List[Dict[str, Any]]:
         """Fetch all markets with pagination support and a sane cap."""
         now = time.time()
@@ -1533,29 +1446,6 @@ class KalshiIntegrator:
         self._markets_cache_ts = now
         logger.info(f"✅ Successfully loaded {len(all_markets)} Kalshi markets (paginated)")
         return all_markets
-
-    def get_nba_game_markets(
-        self, *, status: Optional[str] = None, limit: int = 200, max_pages: int = 10
-    ) -> List[Dict[str, Any]]:
-        """Fetch NBA markets broadly, returning KXNBAGAME entries when available."""
-
-        normalized_status = normalize_status(status)
-        markets: List[Dict[str, Any]] = []
-        try:
-            markets = self.get_markets_paginated(
-                status=normalized_status, limit=limit, max_pages=max_pages
-            )
-        except Exception:
-            logger.exception("NBA market pagination failed")
-            return []
-
-        game_markets = [
-            m
-            for m in markets or []
-            if str(m.get("event_ticker") or m.get("ticker") or "").upper().startswith("KXNBAGAME-")
-        ]
-
-        return game_markets if game_markets else markets
 
     def get_league_markets(
         self,
