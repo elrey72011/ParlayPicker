@@ -6114,7 +6114,7 @@ with tab_master:
                 away_code = team_code_for_league(league_name, away_team)
 
                 # 2. Generate Master Key
-                master_key_exact = generate_canonical_key(league_name, local_date_str, away_code, home_code)
+                master_key_exact = generate_canonical_key(league_name, local_date_str, home_code, away_code)
                 master_key_teams = f"{league_name}|{away_code}|{home_code}"
 
                 # 3. Match TheOver Data
