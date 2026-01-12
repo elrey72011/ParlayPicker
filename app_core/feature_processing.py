@@ -547,8 +547,9 @@ def fetch_ncaaf_stats(season_year: int) -> List[Dict[str, Any]]:
         """
         cfg = cfbd.Configuration()
         if primary:
-            cfg.api_key['Authorization'] = token
-            cfg.api_key_prefix['Authorization'] = 'Bearer'
+            # User specified strict format: "Bearer {token}"
+            cfg.api_key['Authorization'] = f"Bearer {token}"
+            # cfg.api_key_prefix['Authorization'] = 'Bearer' # Removed to prevent double prefix
         else:
             # Alternate method: many OpenAPI clients treat access_token as Bearer automatically
             cfg.access_token = token

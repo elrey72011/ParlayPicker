@@ -14,13 +14,8 @@ from app_core.feature_processing import robust_normalize_team
 from app_core.kalshi_integrator import team_code_for_league
 from app_core.team_name_matcher import TeamNameMatcher
 
-try:
-    import rapidfuzz
-    from rapidfuzz import process, fuzz
-except ImportError:
-    rapidfuzz = None
-    process = None
-    fuzz = None
+import rapidfuzz
+from rapidfuzz import process, fuzz
 
 logger = logging.getLogger("app_core.theover_ingest")
 
@@ -59,61 +54,58 @@ def _parse_block_layout(df: pd.DataFrame) -> pd.DataFrame:
     """
     Parses "block" style spreadsheets where games are listed in blocks.
     Identifies games by looking for the @ symbol in text lines rather than just row headers.
+    Implements a scan window logic (8-10 lines) to find disconnected lines/picks.
     """
     records = []
-    current_game = None
 
-    # Iterate through all rows and scan for game patterns
+    # Flatten to list of strings
     rows = df.astype(str).values.tolist()
+    # Flatten structure: list of text lines (joining columns)
+    text_lines = []
+    for r in rows:
+        # Join non-empty cells
+        line = " ".join([x for x in r if x and x.lower() != 'nan' and x.lower() != 'none']).strip()
+        if line:
+            text_lines.append(line)
 
-    for row in rows:
-        # Join row elements to search for patterns
-        row_text = " ".join([r for r in row if r and r.lower() != 'nan' and r.lower() != 'none']).strip()
-        if not row_text:
-            continue
+    i = 0
+    while i < len(text_lines):
+        line = text_lines[i]
 
-        # Check for matchup using @ symbol
-        if "@" in row_text:
-            # Likely a game line
-            parts = row_text.split("@")
+        # 1. Find Game Line (contains "@")
+        if "@" in line:
+            parts = line.split("@")
             if len(parts) >= 2:
-                # Potential game found
                 away_raw = parts[0].strip()
-                # Remove common garbage from end of home team if present
+                # Clean home team (remove parens etc)
                 home_raw = parts[1].split('(')[0].split('vs')[0].strip()
 
-                # Store potential game context
-                current_game = {
-                    "away": away_raw,
-                    "home": home_raw,
-                }
-                continue
+                # We found a game. Now scan next 10 lines for Pick info.
+                found_pick = False
 
-        # Check for Pick info if we have a current game
-        if current_game:
-            # Look for Over/Under or Spread clues
-            # Regex for Over/Under
-            ou_match = re.search(r'(Over|Under)\s*(\d+\.?\d*)', row_text, re.IGNORECASE)
-            if ou_match:
-                records.append({
-                    "HOMETEAM": current_game["home"],
-                    "AWAYTEAM": current_game["away"],
-                    "PICK": f"{ou_match.group(1)} {ou_match.group(2)}",
-                    "MARKET": "TOTAL",
-                    "LEAGUE": "UNKNOWN" # Will need external context or inference
-                })
-                continue
+                # Look ahead window
+                for j in range(1, 11):
+                    if i + j >= len(text_lines):
+                        break
 
-            # Look for spread/ML clues (Team name + line)
-            # If the row starts with one of the teams?
-            if current_game["home"] in row_text or current_game["away"] in row_text:
-                 records.append({
-                    "HOMETEAM": current_game["home"],
-                    "AWAYTEAM": current_game["away"],
-                    "PICK": row_text,
-                    "MARKET": "SIDE",
-                    "LEAGUE": "UNKNOWN"
-                })
+                    next_line = text_lines[i + j]
+
+                    # Regex for Over/Under
+                    # Matches "Over 45.5" or just "45.5" then "Over" logic would require state,
+                    # but typically block format has "Over 55.5" or "55.5 Over" or similar.
+                    ou_match = re.search(r'(Over|Under)\s*(\d+\.?\d*)', next_line, re.IGNORECASE)
+                    if ou_match:
+                        records.append({
+                            "HOMETEAM": home_raw,
+                            "AWAYTEAM": away_raw,
+                            "PICK": f"{ou_match.group(1)} {ou_match.group(2)}",
+                            "MARKET": "TOTAL",
+                            "LEAGUE": "UNKNOWN"
+                        })
+                        found_pick = True
+                        break # Found the total for this game
+
+        i += 1
 
     return pd.DataFrame(records)
 
@@ -142,11 +134,11 @@ def parse_theover_csv(uploaded_file) -> pd.DataFrame:
 
         if "LEAGUE" in col_upper:
             target = "LEAGUE"
-        elif "HOME" in col_upper or "TEAM1" in col_upper:
+        elif any(x in col_upper for x in ["HOME", "TEAM1", "HOMETEAM"]):
             target = "HOMETEAM"
-        elif "AWAY" in col_upper or "TEAM2" in col_upper:
+        elif any(x in col_upper for x in ["AWAY", "TEAM2", "AWAYTEAM"]):
             target = "AWAYTEAM"
-        elif "PROB" in col_upper or "SCORE" in col_upper:
+        elif any(x in col_upper for x in ["PROB", "WINPROBABILITY", "HITRATE", "SCORE"]):
             target = "WINPROBABILITY"
         elif "PICK" in col_upper:
             target = "PICK"
@@ -160,13 +152,16 @@ def parse_theover_csv(uploaded_file) -> pd.DataFrame:
 
     # Check for Standard Format (post-rename)
     required_std = {"HOMETEAM", "AWAYTEAM", "PICK"}
-    if required_std.intersection(set(df.columns)):
+
+    # Validation Logic: Only return if at least 2 key columns are present.
+    # If standard columns are missing, we MUST fallback to block parser.
+    if len(required_std.intersection(set(df.columns))) >= 2:
         # Ensure 'LEAGUE' column exists
         if "LEAGUE" not in df.columns:
             df["LEAGUE"] = "UNKNOWN"
         return df
 
-    # Fallback: Block Parser for Sheet1 style
+    # Fallback: Block Parser for Sheet1 style (Triggered if <2 standard cols found)
     parsed_block = _parse_block_layout(df)
     if not parsed_block.empty:
         return parsed_block
@@ -243,16 +238,16 @@ def _transform_theover_df(df: pd.DataFrame, pick_type_default: str, games: List[
             if not name_raw or not candidates:
                 return None, 0.0, []
 
-            # Normalization
+            # Normalization: Convert all team strings to UPPERCASE and strip extra spaces
             norm = TeamNameMatcher.normalize(name_raw).upper().strip()
 
             # 1. Exact Match
             if norm in candidates:
                 return norm, 100.0, []
 
-            # 2. Fuzzy Match (ExtractOne)
+            # 2. Fuzzy Match (ExtractOne) with token_set_ratio
             if process:
-                # Use token_set_ratio as requested
+                # Use token_set_ratio as requested (Handles "Houston" -> "HOUSTON TEXANS")
                 res = process.extractOne(norm, candidates, scorer=fuzz.token_set_ratio)
                 if res:
                     match_str, score, _ = res
@@ -289,8 +284,8 @@ def _transform_theover_df(df: pd.DataFrame, pick_type_default: str, games: List[
             # Match Away Team
             a_match, a_score, a_top3 = match_single_team(csv_away, master_team_names)
 
-            # Check Thresholds (85%)
-            if h_score >= 85.0 and a_score >= 85.0:
+            # Check Thresholds (75%)
+            if h_score >= 75.0 and a_score >= 75.0:
                 # Find the intersection of games
                 h_games = master_teams_norm_map.get(h_match, [])
                 a_games = master_teams_norm_map.get(a_match, [])
