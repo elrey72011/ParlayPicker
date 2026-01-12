@@ -51,7 +51,7 @@ def load_theover_file(uploaded_file):
         try:
             if hasattr(uploaded_file, "seek"):
                 uploaded_file.seek(0)
-            return pd.read_csv(uploaded_file)
+            return pd.read_csv(uploaded_file, on_bad_lines='skip', skip_blank_lines=True)
         except Exception:
             return pd.DataFrame()
 
@@ -136,6 +136,7 @@ def parse_theover_csv(uploaded_file) -> pd.DataFrame:
     Unified parser that handles:
     1. Standard Table (TotalsRaw.csv, Table1.csv)
     2. Vertical/Semi-structured layouts
+    3. Header-agnostic Column Mapping
     """
     df = load_theover_file(uploaded_file)
     if df.empty:
@@ -144,7 +145,65 @@ def parse_theover_csv(uploaded_file) -> pd.DataFrame:
     # Normalize Headers: Uppercase, Strip
     df.columns = [str(c).strip().upper() for c in df.columns]
 
-    # Check for Standard Format
+    # Dynamic Header Mapping
+    # Map discovered columns to standard internal names: HOMETEAM, AWAYTEAM, PICK, WINPROBABILITY, MARKET
+    rename_map = {}
+    # Use set to track which target columns have been filled
+    filled_targets = set()
+
+    # Prioritize exact-ish matches first (e.g. "HOME TEAM" over "HOME SCORE")
+    # We iterate columns multiple times or use more specific logic.
+
+    # 1. Identify columns
+    for col in df.columns:
+        col_upper = col.upper()
+        target = None
+
+        # Priority mapping
+        if "HOMETEAM" in col_upper or "HOME TEAM" in col_upper:
+            target = "HOMETEAM"
+        elif "AWAYTEAM" in col_upper or "AWAY TEAM" in col_upper or "VISITOR" in col_upper:
+            target = "AWAYTEAM"
+        elif "PICK" in col_upper and "THE" in col_upper: # "The Pick"
+            target = "PICK"
+        elif "WIN PROB" in col_upper or "WINPROB" in col_upper:
+            target = "WINPROBABILITY"
+
+        if target and target not in filled_targets:
+            rename_map[col] = target
+            filled_targets.add(target)
+
+    # 2. Fallback loose mapping for remaining targets
+    for col in df.columns:
+        if col in rename_map:
+            continue
+
+        col_upper = col.upper()
+        target = None
+
+        if "HOME" in col_upper and "HOMETEAM" not in filled_targets:
+            target = "HOMETEAM"
+        elif ("AWAY" in col_upper or "VISITOR" in col_upper) and "AWAYTEAM" not in filled_targets:
+            target = "AWAYTEAM"
+        elif ("PICK" in col_upper or "SELECTION" in col_upper) and "PICK" not in filled_targets:
+            target = "PICK"
+        elif ("PROB" in col_upper or "WIN" in col_upper) and "WINPROBABILITY" not in filled_targets:
+            target = "WINPROBABILITY"
+        elif "MARKET" in col_upper:
+            target = "MARKET"
+        elif "LEAGUE" in col_upper:
+            target = "LEAGUE"
+        elif "LINE" in col_upper:
+            target = "LINE"
+
+        if target and target not in filled_targets:
+            rename_map[col] = target
+            filled_targets.add(target)
+
+    if rename_map:
+        df = df.rename(columns=rename_map)
+
+    # Check for Standard Format (post-rename)
     required_std = {"HOMETEAM", "AWAYTEAM", "PICK"}
     if required_std.intersection(set(df.columns)):
         # Ensure 'LEAGUE' column exists
@@ -177,20 +236,29 @@ def _transform_theover_df(df: pd.DataFrame, pick_type_default: str, games: List[
     logger.info(f"Transforming TheOver DataFrame ({pick_type_default}) with {len(df)} rows.")
 
     # Pre-process master schedule for matching
-    # Create list of (Home, Away) tuples from master schedule
-    master_schedule_tuples = []
-    game_lookup = {} # (HomeNorm, AwayNorm) -> GameDict
+    # Create lists for rapidfuzz
+    master_teams_norm_map = {} # Normalized Name -> List of Game Objects containing this team
+    master_team_names = []
+
+    # Store original names in tuple for legacy matcher if needed,
+    # but we are moving to single-team fuzzy match + matchup verification
 
     if games:
         for g in games:
             h = g.get("home_team", "")
             a = g.get("away_team", "")
-            if h and a:
-                # Store original names in tuple
-                master_schedule_tuples.append((h, a))
-                # Store normalized key for lookup
-                key = (TeamNameMatcher.normalize(h), TeamNameMatcher.normalize(a))
-                game_lookup[key] = g
+            if h:
+                h_norm = TeamNameMatcher.normalize(h).upper()
+                if h_norm not in master_teams_norm_map:
+                    master_teams_norm_map[h_norm] = []
+                    master_team_names.append(h_norm)
+                master_teams_norm_map[h_norm].append(g)
+            if a:
+                a_norm = TeamNameMatcher.normalize(a).upper()
+                if a_norm not in master_teams_norm_map:
+                    master_teams_norm_map[a_norm] = []
+                    master_team_names.append(a_norm)
+                master_teams_norm_map[a_norm].append(g)
 
     # Normalize column names one last time to be safe
     df.columns = [str(c).upper().strip() for c in df.columns]
@@ -213,36 +281,90 @@ def _transform_theover_df(df: pd.DataFrame, pick_type_default: str, games: List[
         csv_away = str(row.get("AWAYTEAM", "")).strip()
 
         # If teams are missing, skip
-        if not csv_home or not csv_away or csv_home == "nan" or csv_away == "nan":
+        if not csv_home or not csv_away or csv_home.lower() == "nan" or csv_away.lower() == "nan":
             continue
 
         # --- ADVANCED FUZZY MATCHING ---
         matched_game_obj = None
         match_confidence = 0.0
         match_status = "FAIL"
+        closest_matches = []
 
-        if master_schedule_tuples:
-            # Use TeamNameMatcher to find best game
-            # Threshold set to 0.70 to catch "Central Florida" -> "UCF"
-            matched_tuple = TeamNameMatcher.match_game(csv_home, csv_away, master_schedule_tuples, threshold=0.70)
+        # Helper to match a single team name
+        def match_single_team(name_raw, candidates):
+            if not name_raw or not candidates:
+                return None, 0.0, []
 
-            if matched_tuple:
-                # Retrieve the full game object
-                h_matched, a_matched = matched_tuple
-                key = (TeamNameMatcher.normalize(h_matched), TeamNameMatcher.normalize(a_matched))
-                # Try finding it; if fuzzy matching swapped home/away, check both orientations
-                matched_game_obj = game_lookup.get(key)
-                if not matched_game_obj:
-                     # Try swap
-                     key_swap = (TeamNameMatcher.normalize(a_matched), TeamNameMatcher.normalize(h_matched))
-                     matched_game_obj = game_lookup.get(key_swap)
+            norm = TeamNameMatcher.normalize(name_raw).upper()
 
-                if matched_game_obj:
+            # 1. Exact Match
+            if norm in candidates:
+                return norm, 100.0, []
+
+            # 2. Fuzzy Match (ExtractOne)
+            if process:
+                # Use WRatio for best handling of partials and acronyms (e.g. LA vs Los Angeles)
+                res = process.extractOne(norm, candidates, scorer=fuzz.WRatio)
+                if res:
+                    match_str, score, _ = res
+                    # Collect debug top 3
+                    top3 = process.extract(norm, candidates, scorer=fuzz.WRatio, limit=3)
+                    top3_fmt = [f"{m} ({s:.1f})" for m, s, _ in top3]
+                    return match_str, score, top3_fmt
+
+            return None, 0.0, []
+
+        # Helper for mascot fallback
+        def get_mascot(name_raw):
+            parts = name_raw.split()
+            if len(parts) > 0:
+                return parts[-1].upper() # Heuristic: Last word
+            return ""
+
+        if master_team_names:
+            # Match Home Team
+            h_match, h_score, h_top3 = match_single_team(csv_home, master_team_names)
+
+            # Mascot Fallback if low confidence
+            if h_score < 85.0:
+                 mascot = get_mascot(csv_home)
+                 if mascot:
+                     m_match, m_score, m_top3 = match_single_team(mascot, master_team_names)
+                     if m_score > h_score:
+                         h_match, h_score, h_top3 = m_match, m_score, m_top3
+
+            # Match Away Team
+            a_match, a_score, a_top3 = match_single_team(csv_away, master_team_names)
+
+            # Mascot Fallback Away
+            if a_score < 85.0:
+                 mascot = get_mascot(csv_away)
+                 if mascot:
+                     m_match, m_score, m_top3 = match_single_team(mascot, master_team_names)
+                     if m_score > a_score:
+                         a_match, a_score, a_top3 = m_match, m_score, m_top3
+
+            # Check Thresholds (85%)
+            if h_score >= 85.0 and a_score >= 85.0:
+                # Find the intersection of games
+                # h_match points to a list of games involving that team
+                # a_match points to a list of games involving that team
+                # We need a game that is in BOTH lists
+
+                h_games = master_teams_norm_map.get(h_match, [])
+                a_games = master_teams_norm_map.get(a_match, [])
+
+                # Check intersection (Game ID comparison would be best, but we rely on object identity or content)
+                common_games = [g for g in h_games if g in a_games]
+
+                if common_games:
+                    matched_game_obj = common_games[0] # Take the first match
+                    match_confidence = (h_score + a_score) / 2.0
                     match_status = "MATCH"
-                    # Calculate rough confidence score for logging (average of home/away fuzzy ratios)
-                    s1 = TeamNameMatcher.similarity_score(TeamNameMatcher.normalize(csv_home), TeamNameMatcher.normalize(h_matched))
-                    s2 = TeamNameMatcher.similarity_score(TeamNameMatcher.normalize(csv_away), TeamNameMatcher.normalize(a_matched))
-                    match_confidence = (s1 + s2) / 2.0
+                else:
+                     match_status = "MISMATCH_PAIR" # Teams matched individually but no game found between them
+
+            closest_matches = list(set(h_top3 + a_top3))[:3]
 
         # Logging
         stats_collector.append({
@@ -251,7 +373,8 @@ def _transform_theover_df(df: pd.DataFrame, pick_type_default: str, games: List[
             "matched_home": matched_game_obj.get("home_team") if matched_game_obj else None,
             "matched_away": matched_game_obj.get("away_team") if matched_game_obj else None,
             "confidence": f"{match_confidence:.2f}",
-            "status": match_status
+            "status": match_status,
+            "closest_matches": "; ".join(closest_matches)
         })
 
         # --- KEY GENERATION ---
@@ -260,8 +383,6 @@ def _transform_theover_df(df: pd.DataFrame, pick_type_default: str, games: List[
             # Use App's league (should be consistent, but trust App)
             league = matched_game_obj.get("league", league)
             # Use date from matched game (local date string)
-            # The app games usually have 'commence_time_iso_local' or similar, but key uses YYYY-MM-DD
-            # 'commence_date_local' is standard in this app
             date_val = matched_game_obj.get("commence_date_local") or slate_date
 
             # Use App's Team Codes logic (using the canonical names)
@@ -512,7 +633,7 @@ def process_theover_inputs(
     stats["total_rows"] = stats["raw_totals_rows"] + stats["raw_sides_rows"]
 
     # Filter matching logs for failures
-    failed_logs = [l for l in matching_logs if l["status"] == "FAIL"]
+    failed_logs = [l for l in matching_logs if l["status"] == "FAIL" or l["status"] == "MISMATCH_PAIR"]
     stats["unmatched_examples"] = failed_logs[:10] # Top 10 failures
     stats["unmatched_rows"] = len(failed_logs)
     stats["matched_rows"] = len([l for l in matching_logs if l["status"] == "MATCH"])
