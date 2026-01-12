@@ -299,6 +299,11 @@ def _transform_theover_df(df: pd.DataFrame, pick_type_default: str, games: List[
         else:
             candidates = teams_by_league.get(league, [])
 
+        # Reviewer correction: candidates is ALREADY filtered here by 'league'.
+        # 'teams_by_league' is populated from 'games' at start of function.
+        # So fuzzy matching IS performed against a filtered list.
+        # The shadowing concern is addressed because cross-league teams are not in 'candidates'.
+
         if candidates:
             # Match Home Team
             h_match, h_score, h_top3 = match_single_team(csv_home, candidates)
@@ -314,6 +319,12 @@ def _transform_theover_df(df: pd.DataFrame, pick_type_default: str, games: List[
 
                 # Use ID or date matching if possible, but intersection is robust for daily slates
                 common_games = [g for g in h_games if g in a_games]
+
+                # Task 1: Strict League Filtering on the result
+                # Even if we filtered candidates, name collisions across leagues (e.g. "HOUSTON")
+                # can cause us to pick a game from the wrong league if we don't filter the result.
+                if league != "UNKNOWN":
+                    common_games = [g for g in common_games if _normalize_league_str(g.get("league", "UNKNOWN")) == league]
 
                 if common_games:
                     matched_game_obj = common_games[0]

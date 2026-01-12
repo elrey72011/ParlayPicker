@@ -164,6 +164,8 @@ TEAM_NAME_MAPPING = {
     "la clippers": "LAC",
     "houston texans": "HOU",
     "pittsburgh steelers": "PIT",
+    "la lakers": "LAL",
+    "los angeles clippers": "LAC", # Explicitly requested
 
     # NHL: Mapping St. Louis correctly
     "st louis": "ST LOUIS BLUES",
@@ -297,15 +299,23 @@ def robust_normalize_team(name: str, league: Optional[str] = None) -> str:
     if not name:
         return ""
 
+    # 0. Pre-processing BEFORE stripping punctuation (Task 3 Fix)
+    # Fix "ST." -> "STATE" before '.' is removed
+    # Match "ST." at start or with space/end boundary
+    if "ST." in name.upper():
+        name = re.sub(r"\bST\.", "STATE", name, flags=re.IGNORECASE)
+
+    # Fix "L.A." -> "LOS ANGELES" before '.' is removed
+    if "L.A." in name.upper():
+        name = re.sub(r"L\.A\.", "LOS ANGELES", name, flags=re.IGNORECASE)
+
     # 1. Base Normalization (Uppercase, AlphaNumeric, Single Space)
     norm = normalize_team(name)
 
-    # 2. Pre-processing for common college/NHL variants (St. vs State, L.A. vs Los Angeles)
+    # 2. Post-processing for remaining variants
 
-    # Handle "L.A." -> "LOS ANGELES"
+    # Handle "L.A." -> "LOS ANGELES" (if passed as LA)
     norm = re.sub(r"\bLA\b", "LOS ANGELES", norm)
-    norm = re.sub(r"\bLA\.\b", "LOS ANGELES", norm)
-    norm = re.sub(r"L\.A\.", "LOS ANGELES", norm)
 
     # Handle "MD" -> "MARYLAND"
     norm = re.sub(r"\bMD\b", "MARYLAND", norm)
@@ -567,19 +577,9 @@ def fetch_ncaaf_stats(season_year: int) -> List[Dict[str, Any]]:
         return []
 
     def _make_client(primary: bool) -> "cfbd.ApiClient":
-        """
-        primary=True  -> api_key + api_key_prefix (Bearer)
-        primary=False -> access_token (Bearer token)
-        """
         cfg = cfbd.Configuration()
-        # Correctly apply the Bearer token as requested
-        # Ensure the header is exactly {"Authorization": f"Bearer {your_api_key}"} with the required space after "Bearer".
-        # cfbd configuration handles prefix automatically if set, but we must ensure token doesn't have 'Bearer' in it if prefix is used.
-        # _normalize_cfbd_token removes 'Bearer' prefix.
-
-        cfg.api_key['Authorization'] = token
+        cfg.api_key['Authorization'] = token  # Raw key only
         cfg.api_key_prefix['Authorization'] = 'Bearer'
-
         return cfbd.ApiClient(cfg)
 
     # Use only one robust client configuration as per correction instructions
