@@ -181,6 +181,17 @@ def parse_theover_csv(uploaded_file) -> pd.DataFrame:
 
     return pd.DataFrame()
 
+def _normalize_league_str(raw_league: str) -> str:
+    """Normalize league strings to standard keys (NBA, NFL, etc)."""
+    raw_league = str(raw_league).strip().upper()
+    if "NBA" in raw_league: return "NBA"
+    if "NFL" in raw_league: return "NFL"
+    if "NHL" in raw_league: return "NHL"
+    if "MLB" in raw_league: return "MLB"
+    if any(x in raw_league for x in ["NCAAB", "CBB", "COLLEGE BASKETBALL"]): return "NCAAB"
+    if any(x in raw_league for x in ["NCAAF", "CFB", "COLLEGE FOOTBALL"]): return "NCAAF"
+    return raw_league
+
 def _transform_theover_df(df: pd.DataFrame, pick_type_default: str, games: List[Dict[str, Any]], stats_collector: List[Dict]) -> pd.DataFrame:
     """
     Transforms the parsed TheOver dataframe into standardized records.
@@ -197,26 +208,40 @@ def _transform_theover_df(df: pd.DataFrame, pick_type_default: str, games: List[
 
     # Pre-process master schedule for matching
     master_teams_norm_map = {}
-    master_team_names = []
+    teams_by_league: Dict[str, List[str]] = {}
 
     if games:
         for g in games:
             h = g.get("home_team", "")
             a = g.get("away_team", "")
+            # Determine league for this game
+            g_league = _normalize_league_str(g.get("league", "UNKNOWN"))
+
             if h:
                 # Normalization: Convert all incoming team names to UPPERCASE and strip extra spaces
                 # This ensures the canonical name is used for matching.
                 h_norm = TeamNameMatcher.normalize(h).upper().strip()
                 if h_norm not in master_teams_norm_map:
                     master_teams_norm_map[h_norm] = []
-                    master_team_names.append(h_norm)
                 master_teams_norm_map[h_norm].append(g)
+
+                # Add to league bucket
+                if g_league not in teams_by_league:
+                    teams_by_league[g_league] = []
+                if h_norm not in teams_by_league[g_league]:
+                    teams_by_league[g_league].append(h_norm)
+
             if a:
                 a_norm = TeamNameMatcher.normalize(a).upper().strip()
                 if a_norm not in master_teams_norm_map:
                     master_teams_norm_map[a_norm] = []
-                    master_team_names.append(a_norm)
                 master_teams_norm_map[a_norm].append(g)
+
+                # Add to league bucket
+                if g_league not in teams_by_league:
+                    teams_by_league[g_league] = []
+                if a_norm not in teams_by_league[g_league]:
+                    teams_by_league[g_league].append(a_norm)
 
     # Normalize column names one last time to be safe
     df.columns = [str(c).upper().strip() for c in df.columns]
@@ -224,14 +249,7 @@ def _transform_theover_df(df: pd.DataFrame, pick_type_default: str, games: List[
     for _, row in df.iterrows():
         # League normalization
         raw_league = str(row.get("LEAGUE", "UNKNOWN")).strip().upper()
-
-        league = raw_league # Default
-        if "NBA" in raw_league: league = "NBA"
-        elif "NFL" in raw_league: league = "NFL"
-        elif "NHL" in raw_league: league = "NHL"
-        elif "MLB" in raw_league: league = "MLB"
-        elif any(x in raw_league for x in ["NCAAB", "CBB", "COLLEGE BASKETBALL"]): league = "NCAAB"
-        elif any(x in raw_league for x in ["NCAAF", "CFB", "COLLEGE FOOTBALL"]): league = "NCAAF"
+        league = _normalize_league_str(raw_league)
 
         # Extract Team Names
         csv_home = str(row.get("HOMETEAM", "")).strip()
@@ -273,12 +291,15 @@ def _transform_theover_df(df: pd.DataFrame, pick_type_default: str, games: List[
 
             return None, 0.0, []
 
-        if master_team_names:
+        # League-Gated Matching Candidates
+        candidates = teams_by_league.get(league, [])
+
+        if candidates:
             # Match Home Team
-            h_match, h_score, h_top3 = match_single_team(csv_home, master_team_names)
+            h_match, h_score, h_top3 = match_single_team(csv_home, candidates)
 
             # Match Away Team
-            a_match, a_score, a_top3 = match_single_team(csv_away, master_team_names)
+            a_match, a_score, a_top3 = match_single_team(csv_away, candidates)
 
             # Check Thresholds (75%)
             if h_score >= 75.0 and a_score >= 75.0:

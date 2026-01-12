@@ -6230,7 +6230,7 @@ with tab_master:
                     except:
                         pass
 
-                canon_key = generate_canonical_key(g_league, g_date_local, g_away_norm, g_home_norm)
+                canon_key = generate_canonical_key(g_league, g_date_local, g_home_norm, g_away_norm)
 
                 # 2. Lookup in TheOver Dictionary
                 theover_side_data = None
