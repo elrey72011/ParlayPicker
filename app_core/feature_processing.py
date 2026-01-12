@@ -159,6 +159,12 @@ TEAM_NAME_MAPPING = {
     "WASHINGTON COMMANDERS": "WAS",
     "WASHINGTON FOOTBALL TEAM": "WAS",
 
+    # NBA Explicit Additions (Task 4)
+    "LOS ANGELES CLIPPERS": "LAC",
+    "LA CLIPPERS": "LAC",
+    "HOUSTON TEXANS": "HOU",
+    "PITTSBURGH STEELERS": "PIT",
+
     # NHL: Mapping St. Louis correctly
     "ST LOUIS": "ST LOUIS BLUES",
     "ST LOUIS BLUES": "ST LOUIS BLUES",
@@ -546,18 +552,15 @@ def fetch_ncaaf_stats(season_year: int) -> List[Dict[str, Any]]:
         primary=False -> access_token (Bearer token)
         """
         cfg = cfbd.Configuration()
-        if primary:
-            # User specified strict format: "Bearer {token}"
-            cfg.api_key['Authorization'] = token
-            cfg.api_key_prefix['Authorization'] = 'Bearer'
-        else:
-            # Alternate method: many OpenAPI clients treat access_token as Bearer automatically
-            cfg.access_token = token
+        # Correctly apply the Bearer token as requested
+        # 'Authorization' header needs to be manually set in api_key with prefix 'Bearer' separately
+        cfg.api_key['Authorization'] = token
+        cfg.api_key_prefix['Authorization'] = 'Bearer'
+
         return cfbd.ApiClient(cfg)
 
-    # Primary client first
-    api_client_primary = _make_client(primary=True)
-    api_client_fallback = _make_client(primary=False)
+    # Use only one robust client configuration as per correction instructions
+    api_client = _make_client(primary=True)
 
     logger.info(f"CFBD auth prepared (token_length={len(token)})")
 
@@ -567,37 +570,32 @@ def fetch_ncaaf_stats(season_year: int) -> List[Dict[str, Any]]:
         return status == 401 or "401" in msg or "Unauthorized" in msg
 
     def _fetch_stats_for_year(yr: int) -> List[Any]:
-        # Try primary auth, then fallback auth
-        for attempt_name, api_client in (("primary", api_client_primary), ("fallback", api_client_fallback)):
-            try:
-                api_instance = cfbd.StatsApi(api_client)
-                return api_instance.get_team_stats(year=yr)
-            except Exception as e:
-                if _is_unauthorized(e):
-                    logger.warning(
-                        f"CFBD unauthorized (401) when fetching NCAAF stats ({attempt_name}). "
-                        "Check CFBD_API_KEY value in Streamlit secrets."
-                    )
-                    continue
-                logger.warning(f"NCAAF Stats fetch failed for {yr} ({attempt_name}): {e}")
-                return []
-        return []
+        try:
+            api_instance = cfbd.StatsApi(api_client)
+            return api_instance.get_team_stats(year=yr)
+        except Exception as e:
+            if _is_unauthorized(e):
+                logger.warning(
+                    f"CFBD unauthorized (401) when fetching NCAAF stats. "
+                    "Check CFBD_API_KEY value in Streamlit secrets."
+                )
+            else:
+                logger.warning(f"NCAAF Stats fetch failed for {yr}: {e}")
+            return []
 
     def _fetch_games_for_year(yr: int) -> List[Any]:
-        for attempt_name, api_client in (("primary", api_client_primary), ("fallback", api_client_fallback)):
-            try:
-                games_api = cfbd.GamesApi(api_client)
-                return games_api.get_games(year=yr)
-            except Exception as e:
-                if _is_unauthorized(e):
-                    logger.warning(
-                        f"CFBD unauthorized (401) when fetching NCAAF games ({attempt_name}). "
-                        "Check CFBD_API_KEY value in Streamlit secrets."
-                    )
-                    continue
-                logger.warning(f"NCAAF Games API Unavailable for {yr} ({attempt_name}): {e}")
-                return []
-        return []
+        try:
+            games_api = cfbd.GamesApi(api_client)
+            return games_api.get_games(year=yr)
+        except Exception as e:
+            if _is_unauthorized(e):
+                logger.warning(
+                    f"CFBD unauthorized (401) when fetching NCAAF games. "
+                    "Check CFBD_API_KEY value in Streamlit secrets."
+                )
+            else:
+                logger.warning(f"NCAAF Games API Unavailable for {yr}: {e}")
+            return []
 
     try:
         # 1) requested year
