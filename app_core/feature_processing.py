@@ -140,6 +140,8 @@ TEAM_NAME_MAPPING = {
     "JACKSONVILLE JAGUARS": "JAX",
     "KANSAS CITY CHIEFS": "KC",
     "LAS VEGAS RAIDERS": "LV",
+    "LOS ANGELES CLIPPERS": "LAC",
+    "LA CLIPPERS": "LAC",
     "LOS ANGELES CHARGERS": "LAC",
     "LOS ANGELES RAMS": "LAR",
     "MIAMI DOLPHINS": "MIA",
@@ -545,9 +547,8 @@ def fetch_ncaaf_stats(season_year: int) -> List[Dict[str, Any]]:
         """
         cfg = cfbd.Configuration()
         if primary:
-            # Fix: Manually construct Bearer string to ensure space exists
-            cfg.api_key["Authorization"] = f"Bearer {token}"
-            # cfg.api_key_prefix["Authorization"] = "Bearer" # Removed to prevent double prefix or missing space issues
+            cfg.api_key['Authorization'] = token
+            cfg.api_key_prefix['Authorization'] = 'Bearer'
         else:
             # Alternate method: many OpenAPI clients treat access_token as Bearer automatically
             cfg.access_token = token
