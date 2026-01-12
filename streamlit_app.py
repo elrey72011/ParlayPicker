@@ -6234,7 +6234,8 @@ with tab_master:
                 # Task 2: Synchronize Master Key (Use Codes, Home then Away)
                 g_home_code = team_code_for_league(g_league, g.get("home_team"))
                 g_away_code = team_code_for_league(g_league, g.get("away_team"))
-                canon_key = generate_canonical_key(g_league, g_date_local, g_home_code, g_away_code)
+                # Task 2 Fix: Enforce correct parameter order explicitly using named arguments
+                canon_key = generate_canonical_key(league=g_league, date_str=g_date_local, home_code=g_home_code, away_code=g_away_code)
 
                 # 2. Lookup in TheOver Dictionary
                 theover_side_data = None
