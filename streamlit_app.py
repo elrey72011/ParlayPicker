@@ -5464,8 +5464,8 @@ st.sidebar.header("Controls")
 # TheOver Public Betting Input
 with st.sidebar.expander("TheOver.ai Data (Optional)", expanded=False):
     st.caption("Paste text or upload Excel exports from TheOver.ai")
-    theover_totals_file = st.file_uploader("Upload Totals (.xlsx)", type=["xlsx"], key="theover_totals_file")
-    theover_sides_file = st.file_uploader("Upload Sides (.xlsx)", type=["xlsx"], key="theover_sides_file")
+    theover_totals_file = st.file_uploader("Upload Totals (.xlsx, .csv)", type=["xlsx", "csv"], key="theover_totals_file")
+    theover_sides_file = st.file_uploader("Upload Sides (.xlsx, .csv)", type=["xlsx", "csv"], key="theover_sides_file")
     theover_totals_text = st.text_area("Paste Totals Text", height=100, key="theover_totals_text")
     theover_sides_text = st.text_area("Paste Sides Text", height=100, key="theover_sides_text")
 
