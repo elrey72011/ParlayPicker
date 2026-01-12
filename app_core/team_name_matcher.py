@@ -81,7 +81,7 @@ class TeamNameMatcher:
         'UNLV': 'NEVADA LAS VEGAS',
         'AMERICAN U': 'AMERICAN UNIVERSITY',
         # Common NBA/NFL Nicknames (Mapping to Full Name)
-        'PHILLY': 'PHILADELPHIA EAGLES', # Context sensitive? Assuming NFL usually
+        'PHILLY': 'PHILADELPHIA', # Generalized to city for multi-league support (fuzzy match handles rest)
         'SIXERS': 'PHILADELPHIA 76ERS',
         'CAVS': 'CLEVELAND CAVALIERS',
         'MAVS': 'DALLAS MAVERICKS',
