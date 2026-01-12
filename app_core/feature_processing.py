@@ -123,51 +123,51 @@ TEAM_NAME_MAPPING = {
     # (Removed short city mappings to favor full names)
     
     # NFL (nfl_data_py returns codes like ARI, ATL) - MUST KEEP
-    "ARIZONA CARDINALS": "ARI",
-    "ATLANTA FALCONS": "ATL",
-    "BALTIMORE RAVENS": "BAL",
-    "BUFFALO BILLS": "BUF",
-    "CAROLINA PANTHERS": "CAR",
-    "CHICAGO BEARS": "CHI",
-    "CINCINNATI BENGALS": "CIN",
-    "CLEVELAND BROWNS": "CLE",
-    "DALLAS COWBOYS": "DAL",
-    "DENVER BRONCOS": "DEN",
-    "DETROIT LIONS": "DET",
-    "GREEN BAY PACKERS": "GB",
-    "HOUSTON TEXANS": "HOU", # Explicitly requested
-    "INDIANAPOLIS COLTS": "IND",
-    "JACKSONVILLE JAGUARS": "JAX",
-    "KANSAS CITY CHIEFS": "KC",
-    "LAS VEGAS RAIDERS": "LV",
-    "LOS ANGELES CLIPPERS": "LAC",
-    "LA CLIPPERS": "LAC", # Explicitly requested
-    "LOS ANGELES CHARGERS": "LAC",
-    "LOS ANGELES RAMS": "LAR",
-    "MIAMI DOLPHINS": "MIA",
-    "MINNESOTA VIKINGS": "MIN",
-    "NEW ENGLAND PATRIOTS": "NE",
-    "NEW ORLEANS SAINTS": "NO",
-    "NEW YORK GIANTS": "NYG",
-    "NEW YORK JETS": "NYJ",
-    "PHILADELPHIA EAGLES": "PHI",
-    "PITTSBURGH STEELERS": "PIT", # Explicitly requested
-    "SAN FRANCISCO 49ERS": "SF",
-    "SEATTLE SEAHAWKS": "SEA",
-    "TAMPA BAY BUCCANEERS": "TB",
-    "TENNESSEE TITANS": "TEN",
-    "WASHINGTON COMMANDERS": "WAS",
-    "WASHINGTON FOOTBALL TEAM": "WAS",
+    "arizona cardinals": "ARI",
+    "atlanta falcons": "ATL",
+    "baltimore ravens": "BAL",
+    "buffalo bills": "BUF",
+    "carolina panthers": "CAR",
+    "chicago bears": "CHI",
+    "cincinnati bengals": "CIN",
+    "cleveland browns": "CLE",
+    "dallas cowboys": "DAL",
+    "denver broncos": "DEN",
+    "detroit lions": "DET",
+    "green bay packers": "GB",
+    "houston texans": "HOU", # Explicitly requested
+    "indianapolis colts": "IND",
+    "jacksonville jaguars": "JAX",
+    "kansas city chiefs": "KC",
+    "las vegas raiders": "LV",
+    "los angeles clippers": "LAC",
+    "la clippers": "LAC", # Explicitly requested
+    "los angeles chargers": "LAC",
+    "los angeles rams": "LAR",
+    "miami dolphins": "MIA",
+    "minnesota vikings": "MIN",
+    "new england patriots": "NE",
+    "new orleans saints": "NO",
+    "new york giants": "NYG",
+    "new york jets": "NYJ",
+    "philadelphia eagles": "PHI",
+    "pittsburgh steelers": "PIT", # Explicitly requested
+    "san francisco 49ers": "SF",
+    "seattle seahawks": "SEA",
+    "tampa bay buccaneers": "TB",
+    "tennessee titans": "TEN",
+    "washington commanders": "WAS",
+    "washington football team": "WAS",
 
     # NBA Explicit Additions (Task 4)
-    "LOS ANGELES CLIPPERS": "LAC",
-    "LA CLIPPERS": "LAC",
-    "HOUSTON TEXANS": "HOU",
-    "PITTSBURGH STEELERS": "PIT",
+    "los angeles clippers": "LAC",
+    "la clippers": "LAC",
+    "houston texans": "HOU",
+    "pittsburgh steelers": "PIT",
 
     # NHL: Mapping St. Louis correctly
-    "ST LOUIS": "ST LOUIS BLUES",
-    "ST LOUIS BLUES": "ST LOUIS BLUES",
+    "st louis": "ST LOUIS BLUES",
+    "st louis blues": "ST LOUIS BLUES",
 }
 
 # Manual overrides for team name normalization failures
@@ -214,6 +214,7 @@ MANUAL_TEAM_OVERRIDES = {
     # NHL accent + city-only fixes
     "MONTRÉAL CANADIENS": "MONTREAL CANADIENS",
     "ST LOUIS": "ST LOUIS BLUES",
+    "STATE LOUIS": "ST LOUIS BLUES", # Fix for ST->STATE regex
     "ST LOUIS BLUES": "ST LOUIS BLUES",
 
     # NFL
@@ -299,8 +300,23 @@ def robust_normalize_team(name: str, league: Optional[str] = None) -> str:
     # 1. Base Normalization (Uppercase, AlphaNumeric, Single Space)
     norm = normalize_team(name)
 
-    # 2. Pre-processing for common college/NHL variants (St. vs State)
-    # Replace "ST " with "STATE " at start or middle (but not end to avoid confusion if any)
+    # 2. Pre-processing for common college/NHL variants (St. vs State, L.A. vs Los Angeles)
+
+    # Handle "L.A." -> "LOS ANGELES"
+    norm = re.sub(r"\bLA\b", "LOS ANGELES", norm)
+    norm = re.sub(r"\bLA\.\b", "LOS ANGELES", norm)
+
+    # Handle "AM" or "A&M" -> "A&M" (Standardize to A&M for Texas A&M etc)
+    # Actually, normalize_team removes special chars. So "A&M" becomes "AM".
+    # The requirement says: Replace "AM" with "A&M".
+    # Since normalize_team (called at start) does: re.sub(r"[^A-Z0-9 ]", "", name)
+    # "Texas A&M" -> "TEXAS AM".
+    # So we should look for "AM" at end of word? e.g. "TEXAS AM"
+    # But "MIAMI" has "AM" in middle.
+    # "TEXAS AM" -> "TEXAS A&M"
+    norm = re.sub(r"\bAM\b", "A&M", norm)
+
+    # Replace "ST " with "STATE " at start or middle
     # Also handle "ST." -> "STATE"
     norm = re.sub(r"\bST\b", "STATE", norm)
     norm = re.sub(r"\bST\.\b", "STATE", norm)
@@ -553,7 +569,10 @@ def fetch_ncaaf_stats(season_year: int) -> List[Dict[str, Any]]:
         """
         cfg = cfbd.Configuration()
         # Correctly apply the Bearer token as requested
-        # 'Authorization' header needs to be manually set in api_key with prefix 'Bearer' separately
+        # Ensure the header is exactly {"Authorization": f"Bearer {your_api_key}"} with the required space after "Bearer".
+        # cfbd configuration handles prefix automatically if set, but we must ensure token doesn't have 'Bearer' in it if prefix is used.
+        # _normalize_cfbd_token removes 'Bearer' prefix.
+
         cfg.api_key['Authorization'] = token
         cfg.api_key_prefix['Authorization'] = 'Bearer'
 
@@ -1070,8 +1089,8 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
                     continue
 
                 # 3. Try Manual Overrides
-                if key in MANUAL_TEAM_OVERRIDES:
-                    target = MANUAL_TEAM_OVERRIDES[key]
+                if t_norm in MANUAL_TEAM_OVERRIDES:
+                    target = MANUAL_TEAM_OVERRIDES[t_norm]
                     target_norm = robust_normalize_team(target, lg_key).strip().lower()
                     if target_norm in stats_index_norm_map:
                         home_map_local[t_norm] = stats_index_norm_map[target_norm]
@@ -1120,8 +1139,8 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
                     continue
 
                 # 3. Try Manual Overrides
-                if key in MANUAL_TEAM_OVERRIDES:
-                    target = MANUAL_TEAM_OVERRIDES[key]
+                if t_norm in MANUAL_TEAM_OVERRIDES:
+                    target = MANUAL_TEAM_OVERRIDES[t_norm]
                     target_norm = robust_normalize_team(target, lg_key).strip().lower()
                     if target_norm in stats_index_norm_map:
                         away_map_local[t_norm] = stats_index_norm_map[target_norm]
