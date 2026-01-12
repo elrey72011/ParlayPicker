@@ -6114,6 +6114,7 @@ with tab_master:
                 away_code = team_code_for_league(league_name, away_team)
 
                 # 2. Generate Master Key
+                # Task 2: Verified parameter order (league, date, home, away)
                 master_key_exact = generate_canonical_key(league_name, local_date_str, home_code, away_code)
                 master_key_teams = f"{league_name}|{away_code}|{home_code}"
 
@@ -6230,6 +6231,7 @@ with tab_master:
                     except:
                         pass
 
+                # Task 2: Verified parameter order (league, date, home, away)
                 canon_key = generate_canonical_key(g_league, g_date_local, g_home_norm, g_away_norm)
 
                 # 2. Lookup in TheOver Dictionary
