@@ -14,8 +14,15 @@ from app_core.feature_processing import robust_normalize_team
 from app_core.kalshi_integrator import team_code_for_league
 from app_core.team_name_matcher import TeamNameMatcher
 
-import rapidfuzz
-from rapidfuzz import process, fuzz
+# Assuming rapidfuzz is available as per requirements
+try:
+    import rapidfuzz
+    from rapidfuzz import process, fuzz
+except ImportError:
+    rapidfuzz = None
+    process = None
+    fuzz = None
+    logging.getLogger("app_core.theover_ingest").warning("rapidfuzz not installed. Fuzzy matching will be disabled.")
 
 logger = logging.getLogger("app_core.theover_ingest")
 
@@ -47,7 +54,8 @@ def load_theover_file(uploaded_file):
             if hasattr(uploaded_file, "seek"):
                 uploaded_file.seek(0)
             # Ensure messy files are handled with skip_blank_lines and on_bad_lines
-            return pd.read_csv(uploaded_file, on_bad_lines='skip', skip_blank_lines=True)
+            # Enforce utf-8-sig to handle BOM if present
+            return pd.read_csv(uploaded_file, on_bad_lines='skip', skip_blank_lines=True, encoding='utf-8-sig')
         except Exception:
             return pd.DataFrame()
 
@@ -124,34 +132,37 @@ def parse_theover_csv(uploaded_file) -> pd.DataFrame:
     # Normalize Headers: Uppercase, Strip
     df.columns = [str(c).strip().upper() for c in df.columns]
 
-    # Dynamic Header Mapping
-    rename_map = {}
-    filled_targets = set()
+    # Priorities for mapping to ensure correct assignment
+    # (Target, List of Keywords)
+    mappings = [
+        ("LEAGUE", ["LEAGUE"]),
+        ("HOMETEAM", ["HOMETEAM", "HOME", "TEAM1", "TEAM 1"]),
+        ("AWAYTEAM", ["AWAYTEAM", "AWAY", "TEAM2", "TEAM 2"]),
+        ("WINPROBABILITY", ["WINPROBABILITY", "PROB", "HITRATE", "SCORE"]),
+        ("PICK", ["PICK"])
+    ]
 
-    # Dynamic Mapping: Search for columns containing partial matches
-    for col in df.columns:
-        col_upper = col.upper()
-        target = None
+    # Robust Coalescing Logic:
+    # Identify all columns that match keywords for a target, then coalesce them.
+    # This handles mixed-schema files or files with alternative headers.
 
-        if "LEAGUE" in col_upper:
-            target = "LEAGUE"
-        elif any(x in col_upper for x in ["HOME", "TEAM1", "TEAM 1", "HOMETEAM"]):
-            target = "HOMETEAM"
-        elif any(x in col_upper for x in ["AWAY", "TEAM2", "TEAM 2", "AWAYTEAM"]):
-            target = "AWAYTEAM"
-        elif any(x in col_upper for x in ["PROB", "WINPROBABILITY", "HITRATE", "SCORE"]):
-            target = "WINPROBABILITY"
-        elif "PICK" in col_upper:
-            target = "PICK"
+    for target, keywords in mappings:
+        matching_cols = []
+        for col in df.columns:
+            # Check for keyword match
+            if any(k in col for k in keywords):
+                matching_cols.append(col)
 
-        if target and target not in filled_targets:
-            rename_map[col] = target
-            filled_targets.add(target)
+        if matching_cols:
+            # Combine first found column with others as fallback
+            combined = df[matching_cols[0]]
+            for other_col in matching_cols[1:]:
+                combined = combined.combine_first(df[other_col])
 
-    if rename_map:
-        df = df.rename(columns=rename_map)
+            # Assign to standardized target column
+            df[target] = combined
 
-    # Check for Standard Format (post-rename)
+    # Check for Standard Format (post-mapping)
     required_std = {"HOMETEAM", "AWAYTEAM", "PICK"}
 
     # Validation Logic: Only return if at least 2 key columns are present.
@@ -193,6 +204,7 @@ def _transform_theover_df(df: pd.DataFrame, pick_type_default: str, games: List[
             a = g.get("away_team", "")
             if h:
                 # Normalization: Convert all incoming team names to UPPERCASE and strip extra spaces
+                # This ensures the canonical name is used for matching.
                 h_norm = TeamNameMatcher.normalize(h).upper().strip()
                 if h_norm not in master_teams_norm_map:
                     master_teams_norm_map[h_norm] = []
@@ -239,7 +251,7 @@ def _transform_theover_df(df: pd.DataFrame, pick_type_default: str, games: List[
             if not name_raw or not candidates:
                 return None, 0.0, []
 
-            # Normalization: Convert all team strings to UPPERCASE and strip extra spaces
+            # Normalization: Convert to UPPERCASE as requested
             norm = TeamNameMatcher.normalize(name_raw).upper().strip()
 
             # 1. Exact Match
@@ -247,9 +259,9 @@ def _transform_theover_df(df: pd.DataFrame, pick_type_default: str, games: List[
                 return norm, 100.0, []
 
             # 2. Fuzzy Match (ExtractOne) with token_set_ratio
-            # Updated to ensure robust matching for nicknames (e.g. "Houston" -> "HOUSTON TEXANS")
             if process:
                 # Use score_cutoff=75.0 to enforce strict matching as requested
+                # Using token_set_ratio which handles "Utah" -> "Utah Jazz" well
                 res = process.extractOne(norm, candidates, scorer=fuzz.token_set_ratio, score_cutoff=75.0)
                 if res:
                     match_str, score, _ = res
@@ -260,28 +272,9 @@ def _transform_theover_df(df: pd.DataFrame, pick_type_default: str, games: List[
 
             return None, 0.0, []
 
-        # Helper for mascot fallback
-        def get_mascot(name_raw):
-            # Try matching against both city and mascot parts if fewer than 2 words
-            parts = name_raw.split()
-            if len(parts) > 0:
-                return parts[-1].upper() # Heuristic: Last word
-            return ""
-
         if master_team_names:
             # Match Home Team
             h_match, h_score, h_top3 = match_single_team(csv_home, master_team_names)
-
-            # Mascot Fallback: If a team name has fewer than 2 words (e.g. "Houston"), try matching it against both city and mascot
-            # We already have full fuzzy matching, but let's see if we need specific mascot logic.
-            # The prompt says: "If a team name has fewer than 2 words in the spreadsheet (e.g., "Houston"), try matching it against both the city and mascot parts of the canonical name."
-            # token_set_ratio usually handles "Houston" matching "Houston Rockets" very well (score 100).
-            # But let's implement the specific logic if score is low.
-
-            if h_score < 85.0 and len(csv_home.split()) < 2:
-                 # It's a single word name, maybe it's the mascot or the city.
-                 # Actually token_set_ratio should cover "Rockets" -> "Houston Rockets"
-                 pass
 
             # Match Away Team
             a_match, a_score, a_top3 = match_single_team(csv_away, master_team_names)
@@ -292,6 +285,7 @@ def _transform_theover_df(df: pd.DataFrame, pick_type_default: str, games: List[
                 h_games = master_teams_norm_map.get(h_match, [])
                 a_games = master_teams_norm_map.get(a_match, [])
 
+                # Use ID or date matching if possible, but intersection is robust for daily slates
                 common_games = [g for g in h_games if g in a_games]
 
                 if common_games:
@@ -315,6 +309,7 @@ def _transform_theover_df(df: pd.DataFrame, pick_type_default: str, games: List[
         })
 
         # --- KEY GENERATION ---
+        # Critical: Use matched canonical names if available
         if matched_game_obj:
             league = matched_game_obj.get("league", league)
             date_val = matched_game_obj.get("commence_date_local") or slate_date
