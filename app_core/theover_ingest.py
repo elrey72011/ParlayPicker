@@ -26,12 +26,12 @@ except ImportError:
 
 logger = logging.getLogger("app_core.theover_ingest")
 
-def generate_canonical_key(league: str, date_str: str, away_code: str, home_code: str) -> str:
+def generate_canonical_key(league: str, date_str: str, home_code: str, away_code: str) -> str:
     """
     Generates a canonical key for matching against the master schedule.
-    Format: {league}|{away_code}|{home_code}|{local_date}
+    Format: {league}|{home_code}|{away_code}|{local_date}
     """
-    return f"{league}|{away_code}|{home_code}|{date_str}"
+    return f"{league}|{home_code}|{away_code}|{date_str}"
 
 def load_theover_file(uploaded_file):
     """
@@ -54,7 +54,7 @@ def load_theover_file(uploaded_file):
             if hasattr(uploaded_file, "seek"):
                 uploaded_file.seek(0)
             # Ensure messy files are handled with skip_blank_lines and on_bad_lines
-            # Enforce utf-8-sig to handle BOM if present
+            # Enforce utf-8-sig to handle BOM if present (Task 1: Constraint met)
             return pd.read_csv(uploaded_file, on_bad_lines='skip', skip_blank_lines=True, encoding='utf-8-sig')
         except Exception:
             return pd.DataFrame()
@@ -134,10 +134,11 @@ def parse_theover_csv(uploaded_file) -> pd.DataFrame:
 
     # Priorities for mapping to ensure correct assignment
     # (Target, List of Keywords)
+    # Task 1: Explicitly include requested aliases
     mappings = [
         ("LEAGUE", ["LEAGUE"]),
-        ("HOMETEAM", ["HOMETEAM", "HOME", "TEAM1", "TEAM 1"]),
-        ("AWAYTEAM", ["AWAYTEAM", "AWAY", "TEAM2", "TEAM 2"]),
+        ("HOMETEAM", ["HOMETEAM", "HOME", "TEAM1", "TEAM 1", "HOMETEAM"]),
+        ("AWAYTEAM", ["AWAYTEAM", "AWAY", "TEAM2", "TEAM 2", "AWAYTEAM"]),
         ("WINPROBABILITY", ["WINPROBABILITY", "PROB", "HITRATE", "SCORE"]),
         ("PICK", ["PICK"])
     ]
@@ -260,7 +261,7 @@ def _transform_theover_df(df: pd.DataFrame, pick_type_default: str, games: List[
 
             # 2. Fuzzy Match (ExtractOne) with token_set_ratio
             if process:
-                # Use score_cutoff=75.0 to enforce strict matching as requested
+                # Use score_cutoff=75.0 to enforce strict matching as requested (Task 5)
                 # Using token_set_ratio which handles "Utah" -> "Utah Jazz" well
                 res = process.extractOne(norm, candidates, scorer=fuzz.token_set_ratio, score_cutoff=75.0)
                 if res:
@@ -320,7 +321,7 @@ def _transform_theover_df(df: pd.DataFrame, pick_type_default: str, games: List[
             home_code = team_code_for_league(league, csv_home)
             away_code = team_code_for_league(league, csv_away)
 
-        canon_key = generate_canonical_key(league, date_val, away_code, home_code)
+        canon_key = generate_canonical_key(league, date_val, home_code, away_code)
 
         # Pick & Line
         raw_pick = str(row.get("PICK", "")).strip()
@@ -456,7 +457,7 @@ def parse_theover_public_betting_text(raw_text: str, pick_type_hint: str = "UNKN
 
             away_code = team_code_for_league(current_league, current_away)
             home_code = team_code_for_league(current_league, current_home)
-            canon_key = generate_canonical_key(current_league, current_date, away_code, home_code)
+            canon_key = generate_canonical_key(current_league, current_date, home_code, away_code)
 
             rows.append({
                 "theover_key": canon_key,
