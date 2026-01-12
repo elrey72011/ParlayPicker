@@ -152,6 +152,10 @@ class TeamNameMatcher:
         'CLEVELAND ST': 'CLEVELAND STATE',
         'WRIGHT ST': 'WRIGHT STATE',
         'ST LOUIS': 'ST LOUIS BLUES',
+
+        # --- NEW MANUAL MAPPINGS FOR THEOVER.AI ---
+        'CENTRAL FLORIDA': 'UCF',
+        'NC CENTRAL': 'NORTH CAROLINA CENTRAL',
     }
     
     @classmethod

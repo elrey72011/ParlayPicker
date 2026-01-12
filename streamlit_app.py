@@ -5798,12 +5798,8 @@ with tab_master:
                     games=games
                 )
 
-                theover_stats = {
-                    "total_rows": ingestion_stats.get("raw_total_rows", len(theover_df)),
-                    "matched_rows": 0,
-                    "unmatched_rows": 0,
-                    "unmatched_examples": []
-                }
+                # Use returned stats which now include fuzzy match results
+                theover_stats = ingestion_stats.copy()
 
                 if not theover_df.empty:
                     for _, row in theover_df.iterrows():
@@ -10173,13 +10169,13 @@ with tab_master:
         with st.expander("TheOver Matching Debug", expanded=False):
             if 'theover_stats' in locals():
                 st.write(f"Total Rows Parsed: {theover_stats.get('total_rows', 0)}")
-                st.write(f"Matched Games: {theover_stats.get('matched_rows', 0)}")
-                st.write(f"Unmatched Games: {theover_stats.get('unmatched_rows', 0)}")
+                st.write(f"Matched Games (Fuzzy): {theover_stats.get('matched_rows', 0)}")
+                st.write(f"Unmatched Games (Fuzzy): {theover_stats.get('unmatched_rows', 0)}")
 
                 unmatched = theover_stats.get("unmatched_examples", [])
                 if unmatched:
-                    st.caption("Sample Unmatched Games (Canonical Key):")
-                    st.json(unmatched)
+                    st.caption("Sample Unmatched Games (Ingestion):")
+                    st.table(pd.DataFrame(unmatched))
             else:
                 st.info("No TheOver statistics available.")
 
