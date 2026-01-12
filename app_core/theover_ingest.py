@@ -292,7 +292,12 @@ def _transform_theover_df(df: pd.DataFrame, pick_type_default: str, games: List[
             return None, 0.0, []
 
         # League-Gated Matching Candidates
-        candidates = teams_by_league.get(league, [])
+        # Task 1: Strict League Filtering
+        # If league is UNKNOWN, do not attempt to match against the entire world.
+        if league == "UNKNOWN":
+            candidates = []
+        else:
+            candidates = teams_by_league.get(league, [])
 
         if candidates:
             # Match Home Team

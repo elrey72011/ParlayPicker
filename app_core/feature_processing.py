@@ -159,7 +159,7 @@ TEAM_NAME_MAPPING = {
     "washington commanders": "WAS",
     "washington football team": "WAS",
 
-    # NBA Explicit Additions (Task 4)
+    # NBA Explicit Additions (Task 4) - Verified
     "los angeles clippers": "LAC",
     "la clippers": "LAC",
     "houston texans": "HOU",
@@ -305,6 +305,10 @@ def robust_normalize_team(name: str, league: Optional[str] = None) -> str:
     # Handle "L.A." -> "LOS ANGELES"
     norm = re.sub(r"\bLA\b", "LOS ANGELES", norm)
     norm = re.sub(r"\bLA\.\b", "LOS ANGELES", norm)
+    norm = re.sub(r"L\.A\.", "LOS ANGELES", norm)
+
+    # Handle "MD" -> "MARYLAND"
+    norm = re.sub(r"\bMD\b", "MARYLAND", norm)
 
     # Handle "AM" or "A&M" -> "A&M" (Standardize to A&M for Texas A&M etc)
     # Actually, normalize_team removes special chars. So "A&M" becomes "AM".
@@ -1064,7 +1068,7 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
             for t_norm in current_home_teams:
                 if not t_norm: continue
 
-                # FIX: Force strict normalization key for lookup
+                # FIX: Force strict normalization key for lookup (Task 4)
                 key = str(t_norm).strip().lower()
 
                 if lg_key == "NFL":
