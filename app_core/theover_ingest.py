@@ -46,6 +46,7 @@ def load_theover_file(uploaded_file):
         try:
             if hasattr(uploaded_file, "seek"):
                 uploaded_file.seek(0)
+            # Ensure messy files are handled with skip_blank_lines and on_bad_lines
             return pd.read_csv(uploaded_file, on_bad_lines='skip', skip_blank_lines=True)
         except Exception:
             return pd.DataFrame()
@@ -134,9 +135,9 @@ def parse_theover_csv(uploaded_file) -> pd.DataFrame:
 
         if "LEAGUE" in col_upper:
             target = "LEAGUE"
-        elif any(x in col_upper for x in ["HOME", "TEAM1", "HOMETEAM"]):
+        elif any(x in col_upper for x in ["HOME", "TEAM1", "TEAM 1", "HOMETEAM"]):
             target = "HOMETEAM"
-        elif any(x in col_upper for x in ["AWAY", "TEAM2", "AWAYTEAM"]):
+        elif any(x in col_upper for x in ["AWAY", "TEAM2", "TEAM 2", "AWAYTEAM"]):
             target = "AWAYTEAM"
         elif any(x in col_upper for x in ["PROB", "WINPROBABILITY", "HITRATE", "SCORE"]):
             target = "WINPROBABILITY"
@@ -246,12 +247,13 @@ def _transform_theover_df(df: pd.DataFrame, pick_type_default: str, games: List[
                 return norm, 100.0, []
 
             # 2. Fuzzy Match (ExtractOne) with token_set_ratio
+            # Updated to ensure robust matching for nicknames (e.g. "Houston" -> "HOUSTON TEXANS")
             if process:
-                # Use token_set_ratio as requested (Handles "Houston" -> "HOUSTON TEXANS")
-                res = process.extractOne(norm, candidates, scorer=fuzz.token_set_ratio)
+                # Use score_cutoff=75.0 to enforce strict matching as requested
+                res = process.extractOne(norm, candidates, scorer=fuzz.token_set_ratio, score_cutoff=75.0)
                 if res:
                     match_str, score, _ = res
-                    # Collect debug top 3
+                    # Collect debug top 3 for transparency
                     top3 = process.extract(norm, candidates, scorer=fuzz.token_set_ratio, limit=3)
                     top3_fmt = [f"{m} ({s:.1f})" for m, s, _ in top3]
                     return match_str, score, top3_fmt
