@@ -7,6 +7,7 @@ import warnings
 import os
 import threading
 import concurrent.futures
+import re
 
 # -------------------------------------------------------------------------
 # Library Imports with Fail-Safe Wrappers
@@ -17,34 +18,6 @@ import concurrent.futures
 # -------------------------------------------------------------------
 _FALLBACK_LOG_COUNT = 0
 _FALLBACK_LOG_LIMIT = 15  # max number of fallback logs to emit
-
-import re
-
-_MASCOT_WORDS = {
-    # common NCAA mascots/labels that appear in matchup feeds but not in stats keys
-    "rockets","jaspers","golden","grizzlies","raiders","vikings","rams","peacocks",
-    "mountaineers","stags","terriers","seawolves","hawks","eagles","tigers","bears",
-    "bulldogs","wildcats","panthers","lions","wolves","knights","spartans","bruins",
-    "aztecs","dons","titans","trojans","gators","utes","aggies","lobos","cowboys",
-    "rebels","cougars","hornets","blue","devils","tar","heels","boilermakers",
-    "illini","hoosiers","buckeyes","wolverines","badgers","gophers","nittany",
-    "lions","longhorns","sooners","jayhawks","cyclones","hurricanes","seminoles",
-    "crimson","tide","volunteers","razorbacks","gamecocks"
-}
-
-def _strip_mascot_words(name_norm: str) -> str:
-    """
-    Turn 'toledo rockets' -> 'toledo'
-    Keep things like 'state', 'st', 'saint', 'mount', etc.
-    """
-    parts = name_norm.split()
-    # remove trailing mascot-like words (and occasional two-word mascots like "golden grizzlies")
-    while parts and parts[-1] in _MASCOT_WORDS:
-        parts.pop()
-    while len(parts) >= 2 and f"{parts[-2]} {parts[-1]}" in { "golden grizzlies", "tar heels", "crimson tide", "blue devils", "nittany lions", "boilermakers" }:
-        parts = parts[:-2]
-    return " ".join(parts).strip()
-
 
 try:
     from nba_api.stats.endpoints import leaguedashteamstats
@@ -129,268 +102,148 @@ LEAGUE_AVERAGES = {
     "default": {"ppg": 50.0, "oppg": 50.0, "win_pct": 0.5, "last5_win_pct": 0.5}
 }
 
+def normalize_team(name: str) -> str:
+    """
+    Standardized normalization: Uppercase, alphanumeric + spaces only, single space.
+    Does NOT strip mascots or suffixes.
+    """
+    if not name:
+        return ""
+    name = str(name).upper()
+    name = re.sub(r"[^A-Z0-9 ]", "", name)
+    name = re.sub(r"\s+", " ", name).strip()
+    return name
+
 # -------------------------------------------------------------------------
 # Pro League Mappings (100% Lookup Guarantee)
 # Maps full team names to the normalized keys used by stats libraries.
 # -------------------------------------------------------------------------
 TEAM_NAME_MAPPING = {
-    # NBA (nba_api returns City Mascot, robust_normalize_team strips mascot -> City)
-    "atlanta hawks": "atlanta",
-    "boston celtics": "boston",
-    "brooklyn nets": "brooklyn",
-    "charlotte hornets": "charlotte",
-    "chicago bulls": "chicago",
-    "cleveland cavaliers": "cleveland",
-    "dallas mavericks": "dallas",
-    "denver nuggets": "denver",
-    "detroit pistons": "detroit",
-    "golden state warriors": "golden state",
-    "houston rockets": "houston",
-    "indiana pacers": "indiana",
-    "los angeles clippers": "los angeles",
-    "los angeles lakers": "los angeles",
-    "memphis grizzlies": "memphis",
-    "miami heat": "miami",
-    "milwaukee bucks": "milwaukee",
-    "minnesota timberwolves": "minnesota",
-    "new orleans pelicans": "new orleans",
-    "new york knicks": "new york",
-    "oklahoma city thunder": "oklahoma city",
-    "orlando magic": "orlando",
-    "philadelphia 76ers": "philadelphia",
-    "phoenix suns": "phoenix",
-    "portland trail blazers": "portland",
-    "sacramento kings": "sacramento",
-    "san antonio spurs": "san antonio",
-    "toronto raptors": "toronto",
-    "utah jazz": "utah",
-    "washington wizards": "washington",
-
-    # NFL (nfl_data_py returns codes like ARI, ATL)
-    "arizona cardinals": "ari",
-    "atlanta falcons": "atl",
-    "baltimore ravens": "bal",
-    "buffalo bills": "buf",
-    "carolina panthers": "car",
-    "chicago bears": "chi",
-    "cincinnati bengals": "cin",
-    "cleveland browns": "cle",
-    "dallas cowboys": "dal",
-    "denver broncos": "den",
-    "detroit lions": "det",
-    "green bay packers": "gb",
-    "houston texans": "hou",
-    "indianapolis colts": "ind",
-    "jacksonville jaguars": "jax",
-    "kansas city chiefs": "kc",
-    "las vegas raiders": "lv",
-    "los angeles chargers": "lac",
-    "los angeles rams": "lar",
-    "miami dolphins": "mia",
-    "minnesota vikings": "min",
-    "new england patriots": "ne",
-    "new orleans saints": "no",
-    "new york giants": "nyg",
-    "new york jets": "nyj",
-    "philadelphia eagles": "phi",
-    "pittsburgh steelers": "pit",
-    "san francisco 49ers": "sf",
-    "seattle seahawks": "sea",
-    "tampa bay buccaneers": "tb",
-    "tennessee titans": "ten",
-    "washington commanders": "was",
-    "washington football team": "was",
-
-    # --- NHL (mapping to a short key you use in stats, e.g. city name) ---
-    "anaheim ducks": "anaheim",
-    "arizona coyotes": "arizona",
-    "boston bruins": "boston",
-    "buffalo sabres": "buffalo",
-    "calgary flames": "calgary",
-    "carolina hurricanes": "carolina",
-    "chicago blackhawks": "chicago",
-    "colorado avalanche": "colorado",
-    "columbus blue jackets": "columbus",
-    "dallas stars": "dallas",
-    "detroit red wings": "detroit",
-    "edmonton oilers": "edmonton",
-    "florida panthers": "florida",
-    "los angeles kings": "los angeles",
-    "minnesota wild": "minnesota",
-    "montreal canadiens": "montreal canadiens",
-    "nashville predators": "nashville",
-    "new jersey devils": "new jersey",
-    "new york islanders": "new york islanders",
-    "new york rangers": "new york rangers",
-    "ottawa senators": "ottawa",
-    "philadelphia flyers": "philadelphia",
-    "pittsburgh penguins": "pittsburgh",
-    "san jose sharks": "san jose",
-    "seattle kraken": "seattle",
-    "st louis blues": "st louis blues",
-    "tampa bay lightning": "tampa bay",
-    "toronto maple leafs": "toronto",
-    "vancouver canucks": "vancouver",
-    "vegas golden knights": "vegas",
-    "washington capitals": "washington",
-    "winnipeg jets": "winnipeg",
+    # NBA: Usually unnecessary as stats match full names, but good for aliases
+    # (Removed short city mappings to favor full names)
     
-    # MLB (Placeholder for future stats - Assuming City Mascot or City)
-    "arizona diamondbacks": "arizona diamondbacks",
-    "atlanta braves": "atlanta braves",
-    "baltimore orioles": "baltimore orioles",
-    "boston red sox": "boston red sox",
-    "chicago white sox": "chicago white sox",
-    "chicago cubs": "chicago cubs",
-    "cincinnati reds": "cincinnati reds",
-    "cleveland guardians": "cleveland guardians",
-    "colorado rockies": "colorado rockies",
-    "detroit tigers": "detroit tigers",
-    "houston astros": "houston astros",
-    "kansas city royals": "kansas city royals",
-    "los angeles angels": "los angeles angels",
-    "los angeles dodgers": "los angeles dodgers",
-    "miami marlins": "miami marlins",
-    "milwaukee brewers": "milwaukee brewers",
-    "minnesota twins": "minnesota twins",
-    "new york yankees": "new york yankees",
-    "new york mets": "new york mets",
-    "oakland athletics": "oakland athletics",
-    "philadelphia phillies": "philadelphia phillies",
-    "pittsburgh pirates": "pittsburgh pirates",
-    "san diego padres": "san diego padres",
-    "san francisco giants": "san francisco giants",
-    "seattle mariners": "seattle mariners",
-    "st. louis cardinals": "st louis cardinals",
-    "tampa bay rays": "tampa bay rays",
-    "texas rangers": "texas rangers",
-    "toronto blue jays": "toronto blue jays",
-    "washington nationals": "washington nationals",
+    # NFL (nfl_data_py returns codes like ARI, ATL) - MUST KEEP
+    "ARIZONA CARDINALS": "ARI",
+    "ATLANTA FALCONS": "ATL",
+    "BALTIMORE RAVENS": "BAL",
+    "BUFFALO BILLS": "BUF",
+    "CAROLINA PANTHERS": "CAR",
+    "CHICAGO BEARS": "CHI",
+    "CINCINNATI BENGALS": "CIN",
+    "CLEVELAND BROWNS": "CLE",
+    "DALLAS COWBOYS": "DAL",
+    "DENVER BRONCOS": "DEN",
+    "DETROIT LIONS": "DET",
+    "GREEN BAY PACKERS": "GB",
+    "HOUSTON TEXANS": "HOU",
+    "INDIANAPOLIS COLTS": "IND",
+    "JACKSONVILLE JAGUARS": "JAX",
+    "KANSAS CITY CHIEFS": "KC",
+    "LAS VEGAS RAIDERS": "LV",
+    "LOS ANGELES CHARGERS": "LAC",
+    "LOS ANGELES RAMS": "LAR",
+    "MIAMI DOLPHINS": "MIA",
+    "MINNESOTA VIKINGS": "MIN",
+    "NEW ENGLAND PATRIOTS": "NE",
+    "NEW ORLEANS SAINTS": "NO",
+    "NEW YORK GIANTS": "NYG",
+    "NEW YORK JETS": "NYJ",
+    "PHILADELPHIA EAGLES": "PHI",
+    "PITTSBURGH STEELERS": "PIT",
+    "SAN FRANCISCO 49ERS": "SF",
+    "SEATTLE SEAHAWKS": "SEA",
+    "TAMPA BAY BUCCANEERS": "TB",
+    "TENNESSEE TITANS": "TEN",
+    "WASHINGTON COMMANDERS": "WAS",
+    "WASHINGTON FOOTBALL TEAM": "WAS",
+
+    # NHL: Mapping St. Louis correctly
+    "ST LOUIS": "ST LOUIS BLUES",
+    "ST LOUIS BLUES": "ST LOUIS BLUES",
 }
 
 # Manual overrides for team name normalization failures
-# Keys and values should be lowercase normalized forms
+# Keys and values should be UPPERCASE normalized forms
 MANUAL_TEAM_OVERRIDES = {
     # NBA/NHL Fixes
-    "phoenix suns": "phoenix", "chicago blackhawks": "chicago",
-    "washington capitals": "washington", "winnipeg jets": "winnipeg",
-    "los angeles kings": "los angeles", "utah mammoth": "utah",
-    # NCAAB/NCAAF Log Fixes (14:42)
-    "toledo rockets": "toledo", "miami (oh) redhawks": "miami oh",
-    "manhattan jaspers": "manhattan", "canisius golden griffins": "canisius",
-    "oakland golden grizzlies": "oakland", "cleveland st vikings": "cleveland state",
-    "detroit mercy titans": "detroit mercy", "wright st raiders": "wright state",
-    "fairfield stags": "fairfield", "rider broncs": "rider",
-    "green bay phoenix": "green bay", "iupui jaguars": "iupui",
-    "iona gaels": "iona", "niagara purple eagles": "niagara",
-    "sacred heart pioneers": "sacred heart", "marist red foxes": "marist",
-    "siena saints": "siena", "merrimack warriors": "merrimack",
-    "mt. st. mary's mountaineers": "mount st marys", "saint peter's peacocks": "saint peters",
-    "bowling green falcons": "bowling green", "akron zips": "akron",
-    "milwaukee panthers": "milwaukee", "northern kentucky norse": "northern kentucky",
-    "minnesota golden gophers": "minnesota", "usc trojans": "usc",
-    "colorado st rams": "colorado state", "unlv rebels": "unlv",
-    "indiana hoosiers": "indiana", "oregon ducks": "oregon",
-    "ohio state buckeyes": "ohio state","florida gators": "florida",
-    "tennessee volunteers": "tennessee",
-    "indiana hoosiers": "indiana",
-    "nebraska cornhuskers": "nebraska",
-    "west virginia mountaineers": "west virginia",
-    "kansas jayhawks": "kansas",
-    "st. bonaventure bonnies": "st bonaventure",
-    "george mason patriots": "george mason",
-    "vcu rams": "vcu",
-    "miami hurricanes": "miami",
-    "georgia tech yellow jackets": "georgia tech",
-    "florida st seminoles": "florida state",
-    "nc state wolfpack": "nc state",
-    "louisville cardinals": "louisville",
-    "boston college eagles": "boston college",
-    "uconn huskies": "connecticut",
-    "depaul blue demons": "depaul",
-    "coastal carolina chanticleers": "coastal carolina",
-    "appalachian st mountaineers": "appalachian state",
-    "boston univ. terriers": "boston university",
-    "army knights": "army",
-    "le moyne dolphins": "le moyne",
-    "central connecticut st blue devils": "central connecticut state",
-    "western michigan broncos": "western michigan",
-    "eastern michigan eagles": "eastern michigan",
-    "new haven chargers": "new haven",
-    "fairleigh dickinson knights": "fairleigh dickinson",
-    "louisiana ragin' cajuns": "louisiana",
-    "troy trojans": "troy",
+    "PHOENIX SUNS": "PHOENIX SUNS", # Redundant but safe
+    "CHICAGO BLACKHAWKS": "CHICAGO BLACKHAWKS",
+    "WASHINGTON CAPITALS": "WASHINGTON CAPITALS",
+    "WINNIPEG JETS": "WINNIPEG JETS",
+    "LOS ANGELES KINGS": "LOS ANGELES KINGS",
+    "UTAH MAMMOTH": "UTAH", # If Utah has new team name issues
 
-    # ...existing overrides...
+    # NCAAB/NCAAF
+    # Map common variations to the canonical name used in stats (usually School Name for colleges)
+    # Most stats APIs (cfbd, cbbpy) return "Florida State", "Miami (OH)"
+    "FLORIDA ST SEMINOLES": "FLORIDA STATE",
+    "FLORIDA STATE SEMINOLES": "FLORIDA STATE",
+    "NC STATE WOLFPACK": "NC STATE",
+    "MIAMI HURRICANES": "MIAMI",
+    "MIAMI OH REDHAWKS": "MIAMI OH",
+    "MIAMI OHIO": "MIAMI OH",
+    "UCONN HUSKIES": "CONNECTICUT",
+    "UCONN": "CONNECTICUT",
+    "OLE MISS REBELS": "OLE MISS",
+    "MISSISSIPPI ST BULLDOGS": "MISSISSIPPI STATE",
+    "LSU TIGERS": "LSU",
+    "USC TROJANS": "USC",
+    "TCU HORNED FROGS": "TCU",
+    "SMU MUSTANGS": "SMU",
+    "BYU COUGARS": "BYU",
+    "UCF KNIGHTS": "UCF",
+    "UNLV REBELS": "UNLV",
+    "UTEP MINERS": "UTEP",
+    "UTSA ROADRUNNERS": "UTSA",
+    "VANDERBILT COMMODORES": "VANDERBILT",
+    "VIRGINIA TECH HOKIES": "VIRGINIA TECH",
+    "GEORGIA TECH YELLOW JACKETS": "GEORGIA TECH",
+    "TEXAS AM AGGIES": "TEXAS AM", # Depending on how '&' is handled by normalize_team
+    "TEXAS A&M AGGIES": "TEXAS AM",
+    "TEXAS AM": "TEXAS AM",
+    "TEXAS A&M": "TEXAS AM",
 
     # NHL accent + city-only fixes
-    "montréal canadiens": "montreal canadiens",
-    "st louis": "st louis blues",
-    "st. louis": "st louis blues",
+    "MONTRÉAL CANADIENS": "MONTREAL CANADIENS",
+    "ST LOUIS": "ST LOUIS BLUES",
+    "ST LOUIS BLUES": "ST LOUIS BLUES",
 
-    # NCAAB Short Name / Normalized Overrides
-    "uconn": "connecticut",
-    "depaul": "depaul",
-    "coastal carolina": "coastal carolina",
-    "western michigan": "western michigan",
-    "new haven": "new haven",
-    "baylor": "baylor",
-    "michigan": "michigan",
-    "wisconsin": "wisconsin",
-    "fiu": "florida international",
-    "florida intl": "florida international",
-    "florida gulf coast": "florida gulf coast",
-    "south florida": "south florida",
-    "middle tennessee": "middle tennessee",
-    "kansas st": "kansas state",
-    "kansas state": "kansas state",
-    "central arkansas": "central arkansas",
-    "arkansaslittle rock": "arkansas little rock",
-    "tennessee state": "tennessee state",
-    "tennessee tech": "tennessee tech",
-    "arkansaspine bluff": "arkansas pine bluff",
-    "east tennessee state buccaneers": "east tennessee state",
-    "arkansas state red": "arkansas state",
-    "florida am rattlers": "florida a&m",
-    
-    # --- NEW NFL city-only fixes ---
-    "carolina": "carolina panthers",
-    "chicago": "chicago bears",
+    # NFL
+    "WASHINGTON FOOTBALL TEAM": "WASHINGTON COMMANDERS",
 }
 
 # NFL Aliases: City-only -> Full Canonical Name
 # Used when the input is just "Carolina" or "Chicago" but stats are keyed by "Carolina Panthers"
 NFL_TEAM_ALIASES = {
-    "arizona": "arizona cardinals",
-    "atlanta": "atlanta falcons",
-    "baltimore": "baltimore ravens",
-    "buffalo": "buffalo bills",
-    "carolina": "carolina panthers",
-    "chicago": "chicago bears",
-    "cincinnati": "cincinnati bengals",
-    "cleveland": "cleveland browns",
-    "dallas": "dallas cowboys",
-    "denver": "denver broncos",
-    "detroit": "detroit lions",
-    "green bay": "green bay packers",
-    "houston": "houston texans",
-    "indianapolis": "indianapolis colts",
-    "jacksonville": "jacksonville jaguars",
-    "kansas city": "kansas city chiefs",
-    "las vegas": "las vegas raiders",
-    "miami": "miami dolphins",
-    "minnesota": "minnesota vikings",
-    "new england": "new england patriots",
-    "new orleans": "new orleans saints",
-    "philadelphia": "philadelphia eagles",
-    "pittsburgh": "pittsburgh steelers",
-    "san francisco": "san francisco 49ers",
-    "seattle": "seattle seahawks",
-    "tampa bay": "tampa bay buccaneers",
-    "tennessee": "tennessee titans",
-    "washington": "washington commanders",
-    # "los angeles" and "new york" are intentionally excluded as they are ambiguous (Rams/Chargers, Giants/Jets).
-    # Inputs like "new york" should fail lookup rather than silently mapping to the wrong team.
+    "ARIZONA": "ARIZONA CARDINALS",
+    "ATLANTA": "ATLANTA FALCONS",
+    "BALTIMORE": "BALTIMORE RAVENS",
+    "BUFFALO": "BUFFALO BILLS",
+    "CAROLINA": "CAROLINA PANTHERS",
+    "CHICAGO": "CHICAGO BEARS",
+    "CINCINNATI": "CINCINNATI BENGALS",
+    "CLEVELAND": "CLEVELAND BROWNS",
+    "DALLAS": "DALLAS COWBOYS",
+    "DENVER": "DENVER BRONCOS",
+    "DETROIT": "DETROIT LIONS",
+    "GREEN BAY": "GREEN BAY PACKERS",
+    "HOUSTON": "HOUSTON TEXANS",
+    "INDIANAPOLIS": "INDIANAPOLIS COLTS",
+    "JACKSONVILLE": "JACKSONVILLE JAGUARS",
+    "KANSAS CITY": "KANSAS CITY CHIEFS",
+    "LAS VEGAS": "LAS VEGAS RAIDERS",
+    "MIAMI": "MIAMI DOLPHINS",
+    "MINNESOTA": "MINNESOTA VIKINGS",
+    "NEW ENGLAND": "NEW ENGLAND PATRIOTS",
+    "NEW ORLEANS": "NEW ORLEANS SAINTS",
+    "PHILADELPHIA": "PHILADELPHIA EAGLES",
+    "PITTSBURGH": "PITTSBURGH STEELERS",
+    "SAN FRANCISCO": "SAN FRANCISCO 49ERS",
+    "SEATTLE": "SEATTLE SEAHAWKS",
+    "TAMPA BAY": "TAMPA BAY BUCCANEERS",
+    "TENNESSEE": "TENNESSEE TITANS",
+    "WASHINGTON": "WASHINGTON COMMANDERS",
+    # "LOS ANGELES" and "NEW YORK" are intentionally excluded as they are ambiguous.
 }
 
 _NFL_ALIAS_LOG_COUNT = 0
@@ -427,84 +280,37 @@ def _parse_form(form_str: str) -> float:
 
 def robust_normalize_team(name: str, league: Optional[str] = None) -> str:
     """
-    Aggressive team name normalization.
-    Converts to lowercase, removes common suffixes/mascots.
-    LEAGUE-AWARE: Only strips mascots for NCAA. Preserves full names for NFL/NBA/etc.
+    Standardized team name normalization.
+    Uses normalize_team() to produce UPPERCASE, clean strings.
+    Applies overrides and aliases.
     """
     global _NFL_ALIAS_LOG_COUNT
     if not name:
         return ""
 
-    # Check overrides case-insensitively FIRST
-    name_lower = str(name).lower().strip()
-    if name_lower in MANUAL_TEAM_OVERRIDES:
-        return MANUAL_TEAM_OVERRIDES[name_lower]
+    # 1. Base Normalization (Uppercase, AlphaNumeric, Single Space)
+    norm = normalize_team(name)
 
-    # 1. Lowercase and strip
-    name = name_lower
+    # 2. Check Overrides
+    if norm in MANUAL_TEAM_OVERRIDES:
+        return MANUAL_TEAM_OVERRIDES[norm]
 
-    # Check if league implies college (aggressive stripping)
-    is_college = False
+    # 3. League Specific Logic
     is_nfl = False
-    is_pro = False
     if league:
         lg = str(league).strip().upper()
-        if lg in ("NCAAB", "NCAAF", "NCAAW", "NCAABW"):
-            is_college = True
         if lg == "NFL":
             is_nfl = True
-        if lg in ("NBA", "NFL", "NHL", "MLB", "WNBA"):
-            is_pro = True
 
-    # 2. Use TeamNameMatcher's normalization
-    # Disable mascot stripping for Pro leagues to preserve full names (e.g. "Phoenix Suns")
-    name = TeamNameMatcher.normalize(name, strip_mascots=not is_pro)
-
-    # 2.5 League-aware stripping: ONLY strip mascots for college leagues
-    if is_college:
-        # Debug logging for problematic NCAAB teams
-        if "florida" in name or "tennessee" in name or "kansas" in name:
-            logger.info(f"NCAAB Norm Debug: '{name}' (Before Strip)")
-
-        # keeps "state", "st", "saint", "mount" but removes trailing mascots
-        name = _strip_mascot_words(name)
-
-        if "florida" in name or "tennessee" in name or "kansas" in name:
-            logger.info(f"NCAAB Norm Debug: '{name}' (After Strip)")
-    
-        # 3. Additional aggressive mascot stripping (if not covered by TeamNameMatcher)
-        # Note: TeamNameMatcher.normalize already removes mascots from its internal list.
-        # We can add extra cleanup if needed here.
-
-        # Remove common suffixes that might remain or be specific
-        suffixes = [
-            ' bulls', ' tigers', ' mountaineers', ' blue hens', ' university', ' college',
-            ' rockets', ' redhawks', ' jaspers', ' golden griffins', ' golden grizzlies',
-            ' vikings', ' titans', ' raiders', ' stags', ' broncs', ' phoenix', ' jaguars',
-            ' gaels', ' purple eagles', ' pioneers', ' red foxes', ' saints', ' warriors',
-            ' peacocks', ' falcons', ' zips', ' panthers', ' norse', ' golden gophers',
-            ' trojans', ' rams', ' rebels', ' hoosiers', ' ducks', ' buckeyes',
-            ' blackhawks', ' capitals', ' jets', ' kings', ' mammoth', ' blues'
-        ]
-        for s in suffixes:
-            if name.endswith(s):
-                name = name[:-len(s)].strip()
-
-    # Apply manual overrides last
-    if name in MANUAL_TEAM_OVERRIDES:
-        return MANUAL_TEAM_OVERRIDES[name]
-
-    # NFL Alias Fallback (for City-Only inputs)
-    if is_nfl and name in NFL_TEAM_ALIASES:
-        resolved = NFL_TEAM_ALIASES[name]
+    # 4. NFL Aliases (City -> Full Name)
+    if is_nfl and norm in NFL_TEAM_ALIASES:
+        resolved = NFL_TEAM_ALIASES[norm]
         if _NFL_ALIAS_LOG_COUNT < _NFL_ALIAS_LOG_LIMIT:
             logger.info(f"NFL Alias Applied: '{name}' -> '{resolved}'")
             _NFL_ALIAS_LOG_COUNT += 1
         return resolved
 
-    return name
-
-
+    return norm
 
 def fuzzy_match_team_robust(target: str, choices: List[str], threshold: float = 80.0) -> Optional[str]:
     """
@@ -517,6 +323,7 @@ def fuzzy_match_team_robust(target: str, choices: List[str], threshold: float = 
     if rapidfuzz:
         # extraction returns list of (match, score, index)
         # process.extractOne finds the single best match
+        # Use token_sort_ratio to handle word order differences and partials better
         result = process.extractOne(target, choices, scorer=fuzz.token_sort_ratio)
         if result:
             match, score, _ = result
@@ -1620,4 +1427,3 @@ def build_model_feature_row_from_record(record: Mapping[str, Any]) -> Dict[str, 
             row[col] = default_val
 
     return row
-

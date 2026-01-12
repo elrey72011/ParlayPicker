@@ -30,48 +30,82 @@ def generate_canonical_key(league: str, date_str: str, away_code: str, home_code
     """
     return f"{league}|{away_code}|{home_code}|{date_str}"
 
-def _read_file_safe(file_obj: Union[str, Any], sheet_name_hint: str) -> pd.DataFrame:
+def load_theover_file(uploaded_file):
     """
-    Reads a file object (or path) trying both Excel and CSV parsers.
-    Prioritizes specific sheet if provided.
+    Robust file loader that attempts Excel first, then CSV.
+    Never attempts UTF-8 decode on XLSX to prevent binary errors.
     """
-    # 1. Try Excel
+    if uploaded_file is None:
+        return pd.DataFrame()
+
+    # Reset pointer if possible
+    if hasattr(uploaded_file, "seek"):
+        uploaded_file.seek(0)
+
+    # 1. Try Excel (openpyxl)
     try:
-        if hasattr(file_obj, "seek"):
-            file_obj.seek(0)
-
-        # Check available sheets if possible (requires loading workbook first, but read_excel can handle errors)
-        # We try to read the specific sheet first
-        try:
-            return pd.read_excel(file_obj, sheet_name=sheet_name_hint, engine="openpyxl")
-        except Exception:
-            # Fallback to first sheet
-            if hasattr(file_obj, "seek"):
-                file_obj.seek(0)
-            return pd.read_excel(file_obj, sheet_name=0, engine="openpyxl")
-
-    except Exception as e_excel:
+        return pd.read_excel(uploaded_file, engine="openpyxl")
+    except Exception:
         # 2. Try CSV
         try:
-            if hasattr(file_obj, "seek"):
-                file_obj.seek(0)
-            return pd.read_csv(file_obj)
-        except Exception as e_csv:
-            logger.error(f"Failed to read file as Excel or CSV: {e_csv}")
+            if hasattr(uploaded_file, "seek"):
+                uploaded_file.seek(0)
+            return pd.read_csv(uploaded_file)
+        except Exception:
             return pd.DataFrame()
 
 def load_theover_sides(path: Union[str, Any]) -> pd.DataFrame:
-    df = _read_file_safe(path, sheet_name_hint="Table1")
-    logger.info("TheOver Sides raw shape: %s | columns: %s",
-                getattr(df, "shape", None),
-                list(df.columns) if hasattr(df, "columns") else None)
+    # Use specific sheet for Sides if possible, but load_theover_file is generic.
+    # We will try to load the specific sheet inside a wrapper or modify load_theover_file to take args.
+    # The user provided a simple load_theover_file. Let's stick to that pattern but allow sheet specification if it's excel.
+
+    # Actually, the user instruction was specifically to implement load_theover_file.
+    # But I need to respect the "Table1" / "TotalsRaw" sheet names if I can.
+    # Let's use the logic but adapted to try specific sheets if it IS an excel file.
+
+    df = pd.DataFrame()
+    if hasattr(path, "seek"):
+        path.seek(0)
+
+    try:
+        df = pd.read_excel(path, sheet_name="Table1", engine="openpyxl")
+    except Exception:
+        try:
+            if hasattr(path, "seek"):
+                path.seek(0)
+            df = pd.read_excel(path, sheet_name=0, engine="openpyxl")
+        except Exception:
+            try:
+                if hasattr(path, "seek"):
+                    path.seek(0)
+                df = pd.read_csv(path)
+            except Exception:
+                pass
+
+    logger.info("TheOver Sides rows loaded: %s", len(df))
     return df
 
 def load_theover_totals(path: Union[str, Any]) -> pd.DataFrame:
-    df = _read_file_safe(path, sheet_name_hint="TotalsRaw")
-    logger.info("TheOver TotalsRaw raw shape: %s | columns: %s",
-                getattr(df, "shape", None),
-                list(df.columns) if hasattr(df, "columns") else None)
+    df = pd.DataFrame()
+    if hasattr(path, "seek"):
+        path.seek(0)
+
+    try:
+        df = pd.read_excel(path, sheet_name="TotalsRaw", engine="openpyxl")
+    except Exception:
+        try:
+            if hasattr(path, "seek"):
+                path.seek(0)
+            df = pd.read_excel(path, sheet_name=0, engine="openpyxl")
+        except Exception:
+            try:
+                if hasattr(path, "seek"):
+                    path.seek(0)
+                df = pd.read_csv(path)
+            except Exception:
+                pass
+
+    logger.info("TheOver Totals rows loaded: %s", len(df))
     return df
 
 def _transform_theover_df(df: pd.DataFrame, pick_type_default: str) -> pd.DataFrame:
