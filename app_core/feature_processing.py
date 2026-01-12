@@ -291,18 +291,27 @@ def robust_normalize_team(name: str, league: Optional[str] = None) -> str:
     # 1. Base Normalization (Uppercase, AlphaNumeric, Single Space)
     norm = normalize_team(name)
 
-    # 2. Check Overrides
+    # 2. Pre-processing for common college/NHL variants (St. vs State)
+    # Replace "ST " with "STATE " at start or middle (but not end to avoid confusion if any)
+    # Also handle "ST." -> "STATE"
+    norm = re.sub(r"\bST\b", "STATE", norm)
+    norm = re.sub(r"\bST\.\b", "STATE", norm)
+
+    # Clean up multiple spaces again just in case
+    norm = re.sub(r"\s+", " ", norm).strip()
+
+    # 3. Check Overrides
     if norm in MANUAL_TEAM_OVERRIDES:
         return MANUAL_TEAM_OVERRIDES[norm]
 
-    # 3. League Specific Logic
+    # 4. League Specific Logic
     is_nfl = False
     if league:
         lg = str(league).strip().upper()
         if lg == "NFL":
             is_nfl = True
 
-    # 4. NFL Aliases (City -> Full Name)
+    # 5. NFL Aliases (City -> Full Name)
     if is_nfl and norm in NFL_TEAM_ALIASES:
         resolved = NFL_TEAM_ALIASES[norm]
         if _NFL_ALIAS_LOG_COUNT < _NFL_ALIAS_LOG_LIMIT:
@@ -311,6 +320,24 @@ def robust_normalize_team(name: str, league: Optional[str] = None) -> str:
         return resolved
 
     return norm
+
+def debug_team_mapping_health():
+    """
+    Run manual validation of team mappings for known tricky cases.
+    """
+    cases = {
+        "NFL": ["Carolina", "Chicago", "LA", "NY Giants", "WSH"],
+        "NCAAB": ["NC State", "Miami (OH)", "UConn", "Ole Miss", "St. Mary's"],
+        "NHL": ["St Louis", "Montreal", "NY Rangers"],
+        "NBA": ["LA Lakers", "Philly"]
+    }
+    results = {}
+    for lg, teams in cases.items():
+        results[lg] = {}
+        for t in teams:
+            norm = robust_normalize_team(t, lg)
+            results[lg][t] = norm
+    return results
 
 def fuzzy_match_team_robust(target: str, choices: List[str], threshold: float = 80.0) -> Optional[str]:
     """

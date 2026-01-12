@@ -6078,6 +6078,26 @@ with tab_master:
                 model_warn = None
                 sentiment_diff = None  # Ensure initialized
 
+                # Weights & Status Defaults (Fix NameErrors)
+                spread_weights = {}
+                total_weights = {}
+                moneyline_weights = {}
+                spread_weights_used = {}
+                total_weights_used = {}
+                moneyline_weights_used = {}
+
+                theover_prob_final_spread = None
+                theover_prob_final_total = None
+                theover_delta_spread = None
+                theover_delta_total = None
+
+                spread_prob_final = None
+                total_prob_final = None
+
+                # Default empty containers for decision traces
+                spread_trace_json = "{}"
+                total_trace_json = "{}"
+
                 # --- THEOVER MATCHING START ---
                 league_name = str(g.get("league") or "UNKNOWN").upper()
                 home_team = str(g.get("home_team") or "")
@@ -6251,8 +6271,10 @@ with tab_master:
 
                 if theover_side_data:
                     theover_matched_side = theover_side_data
+                    theover_matched_count_sides += 1
                 if theover_total_data:
                     theover_matched_total = theover_total_data
+                    theover_matched_count_totals += 1
 
                 # --- End TheOver Matching ---
 
@@ -6275,18 +6297,9 @@ with tab_master:
                                 theover_matched_side = row.to_dict()
                                 break
 
-                if not theover_totals_df.empty:
-                    to_match = TeamNameMatcher.match_game(
-                        g.get("home_team"),
-                        g.get("away_team"),
-                        [(r.get("home_team_norm"), r.get("away_team_norm")) for r in theover_totals_df.to_dict('records')]
-                    )
-                    if to_match:
-                        for _, row in theover_totals_df.iterrows():
-                            if (row['home_team_norm'], row['away_team_norm']) == to_match or \
-                               (row['away_team_norm'], row['home_team_norm']) == to_match:
-                                theover_matched_total = row.to_dict()
-                                break
+                # --- TheOver Legacy Block Removed ---
+                # Rely on canonical key matching done above
+                pass
 
                 # Calculate TheOver Probs & Signal Alignment
                 if theover_matched_side:
@@ -6991,7 +7004,16 @@ with tab_master:
                 if effective_sent_weight <= 0.0:
                      sentiment_status_value = "disabled"
                 sentiment_confidence_value = max(sentiment_confidence_local, safe_float(sentiment_meta_global.get("sentiment_confidence")) or 0.0)
-                sentiment_score_value = sentiment_meta_global.get("sentiment_score")
+
+                # Fix: preserve None if missing (Part C)
+                # sentiment_meta_global should have 'score': None if invalid/missing
+                sentiment_score_value = safe_float(sentiment_meta_global.get("sentiment_score"))
+                if sentiment_score_value is None:
+                    # Double check raw value in case safe_float was too strict or meta structure differs
+                    # But meta construction (compute_team_sentiment_map) explicitly sets None if invalid.
+                    # Just ensure we don't default to 0.0 here.
+                    pass
+
                 sentiment_disabled_reason = sentiment_meta_global.get("sentiment_disabled_reason") or ""
                 sentiment_error_count = int(sentiment_error_count or 0)
                 sentiment_articles_total = int(sentiment_articles_total or 0)
@@ -7792,10 +7814,12 @@ with tab_master:
 
                         if is_heavy_chalk:
                             current_ml_weights["ml_weight"] = 0.0
+                            current_ml_weights["w_model"] = 0.0 # Ensure explicit key also zeroed
                             current_ml_weights["kalshi_weight"] = 0.6
                             current_ml_weights["odds_weight"] = 0.4
                             current_ml_weights["sentiment_weight"] = 0.0
                             current_ml_weights["theover_weight"] = 0.0
+                            warnings.append("ml_disabled_odds_gt_300")
                         else:
                             # Standard Dynamic Weighting
                             ml_odds_weight = 0.30
@@ -9774,6 +9798,45 @@ with tab_master:
         if "spread_edge" in top_df_display.columns:
             top_df_display["spread_edge"] = top_df_display["spread_edge"].apply(lambda x: f"{x:+.1%}" if pd.notnull(x) else "")
             top_df_display = top_df_display.copy()
+
+        # --- Part F: TheOver Impact String ---
+        # Generate "TheOver Impact" column for display
+        # Format: "TheOver: +0.012 (agree)" or "TheOver: n/a"
+        if "theover_delta_final_prob" in top_df_display.columns:
+            def _fmt_theover_impact(row):
+                if not row.get("theover_matched"):
+                    return "TheOver: n/a"
+
+                delta = row.get("theover_delta_final_prob")
+                if delta is None:
+                    return "TheOver: n/a"
+
+                # Check agreement direction
+                # Compare final_prob vs final_prob_without_theover?
+                # Actually, simpler: if delta > 0, it boosted confidence.
+                # But 'agreement' usually means 'TheOver Pick matches Our Pick'.
+                # Let's use the 'theover_changed_pick' or inferred agreement.
+                # If delta is positive and substantial, it likely agreed/boosted.
+
+                # We can also check pick alignment if we have "theover_pick" and "Pick"
+                # But let's stick to the delta for now as requested: "TheOver: +0.012 (agree)"
+
+                # Heuristic:
+                # If delta > 0: "boost" or "agree" (if we picked it)
+                # If delta < 0: "drag" or "disagree"
+
+                # Refined: "agree" if sign(delta) matches sign(edge)?
+                # Let's just output the delta sign and value.
+
+                direction = "neutral"
+                if delta > 0.005: direction = "boost"
+                elif delta < -0.005: direction = "drag"
+
+                return f"TheOver: {delta:+.3f} ({direction})"
+
+            top_df_display["TheOver_Impact"] = top_df_display.apply(_fmt_theover_impact, axis=1)
+            # Add to reason short
+            top_df_display["Pick_Reason_Short"] = top_df_display["Pick_Reason_Short"] + " | " + top_df_display["TheOver_Impact"]
 
         if not show_moneyline_details:
             ml_detail_cols = [
