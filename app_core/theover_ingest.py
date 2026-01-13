@@ -283,16 +283,19 @@ def _transform_theover_df(df: pd.DataFrame, pick_type_default: str, games: List[
                 matches.append((norm, 100.0))
 
             # 2. Substring Priority (Task 2)
-            # If input is a clean substring of candidate (e.g. "VANCOUVER" in "VANCOUVER CANUCKS")
-            # we treat it as very high confidence (100.0), regardless of fuzzy score.
-            # We filter for reasonable length (>3) to avoid spurious matches like "A" in "ARIZONA".
+            # If input is a leading substring of candidate (e.g. "VANCOUVER" in "VANCOUVER CANUCKS")
+            # we treat it as very high confidence (100.0).
+            # We filter for reasonable length (>3) to avoid spurious matches.
             if len(norm) > 3:
                 for cand in candidates:
-                    # Check both directions: cand in norm OR norm in cand
-                    # (e.g. "UTAH" in "UTAH JAZZ", or "UTAH JAZZ" input matching "UTAH"?)
-                    # Usually input is short (VANCOUVER), candidate is long (VANCOUVER CANUCKS).
-                    if norm in cand:
+                    # STRICTER: Only accept Leading Substring (Task 2 Requirement)
+                    # "Vancouver" -> "Vancouver Canucks" (Good)
+                    # "Duke" -> "James Madison Dukes" (Bad - avoided by startswith)
+                    if cand.startswith(norm):
                         matches.append((cand, 100.0))
+                    elif norm in cand:
+                         # Still give a boost to non-leading substrings, but slightly less than 100 to prefer leading
+                         matches.append((cand, 95.0))
 
             # 3. Fuzzy Match (Extract Top N)
             if process:
@@ -342,21 +345,22 @@ def _transform_theover_df(df: pd.DataFrame, pick_type_default: str, games: List[
             best_pair_names = (None, None)
 
             # Limit to top 5 to keep complexity low (5x5 = 25 checks max)
+            # Task 3: Location-Agnostic Verification (Solved by common_games logic, but expanded check)
             for h_cand, h_s in h_candidates[:5]:
                 for a_cand, a_s in a_candidates[:5]:
 
-                    # Optimization: If pair score is already worse than best found, skip?
-                    # No, because a worse score might yield a VALID game while better score yielded none.
-                    # But we should prioritize score. So we should sort pairs by combined score?
-                    # Let's iterate and keep track of the *best valid* game.
-
-                    if h_s < 75.0 or a_s < 75.0:
+                    # Relaxed Threshold for Pair Validation:
+                    # If we find a VALID GAME, we can tolerate slightly lower individual scores
+                    # because the existence of the pairing confirms the identity.
+                    # Lowering 75.0 -> 50.0 allows "AR-Pine Bluff" (58.8) to match if pair is valid.
+                    if h_s < 50.0 or a_s < 50.0:
                         continue
 
-                    # Check for valid game intersection
+                    # Check for valid game intersection (Home/Away Agnostic)
                     h_games = master_teams_norm_map.get(h_cand, [])
                     a_games = master_teams_norm_map.get(a_cand, [])
 
+                    # common_games contains games where BOTH candidates are playing (regardless of side)
                     common_games = [g for g in h_games if g in a_games]
 
                     # Strict League Filter
@@ -364,10 +368,11 @@ def _transform_theover_df(df: pd.DataFrame, pick_type_default: str, games: List[
                         common_games = [g for g in common_games if _normalize_league_str(g.get("league", "UNKNOWN")) == league]
 
                     if common_games:
+                        # Boost score if a valid game exists (Confirmation Bonus)
+                        # If we found a real game match, this is almost certainly correct.
+                        # We use the raw fuzzy score but guarantee acceptance if > best.
                         avg_score = (h_s + a_s) / 2.0
-                        # If this valid game has a better confidence than previous valid game found, take it.
-                        # Since we iterate in order of score desc (mostly), the first one is likely best,
-                        # but h_candidates are sorted by h_s, not combined.
+
                         if avg_score > best_pair_score:
                             best_pair_score = avg_score
                             best_pair_game = common_games[0]
