@@ -299,13 +299,12 @@ def robust_normalize_team(name: str, league: Optional[str] = None) -> str:
     if not name:
         return ""
 
-    # 0. Pre-processing BEFORE stripping punctuation (Task 3 Fix)
-    # Fix "ST." -> "STATE" before '.' is removed
-    # Match "ST." at start or with space/end boundary
+    # Task 3 Fix: Refined Pre-processing
+    # Ensure "ST." becomes "STATE" (e.g., St. Louis -> STATE Louis)
     if "ST." in name.upper():
         name = re.sub(r"\bST\.", "STATE", name, flags=re.IGNORECASE)
 
-    # Fix "L.A." -> "LOS ANGELES" before '.' is removed
+    # Ensure "L.A." becomes "LOS ANGELES" (e.g., L.A. Lakers -> LOS ANGELES Lakers)
     if "L.A." in name.upper():
         name = re.sub(r"L\.A\.", "LOS ANGELES", name, flags=re.IGNORECASE)
 
@@ -578,6 +577,7 @@ def fetch_ncaaf_stats(season_year: int) -> List[Dict[str, Any]]:
 
     def _make_client(primary: bool) -> "cfbd.ApiClient":
         cfg = cfbd.Configuration()
+        # Task 4: Fix Authorization
         cfg.api_key['Authorization'] = token  # Raw key only
         cfg.api_key_prefix['Authorization'] = 'Bearer'
         return cfbd.ApiClient(cfg)
@@ -1068,7 +1068,7 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
             for t_norm in current_home_teams:
                 if not t_norm: continue
 
-                # FIX: Force strict normalization key for lookup (Task 4)
+                # FIX: Force strict normalization key for lookup (Task 4/5)
                 key = str(t_norm).strip().lower()
 
                 if lg_key == "NFL":
@@ -1078,6 +1078,7 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
                     logger.debug(f"NCAAB Debug: norm_key={key!r} in index? {key in stats_index_norm_map}")
 
                 # 1. Try Mapping (TEAM_NAME_MAPPING)
+                # Task 5: TEAM_NAME_MAPPING keys are already lowercase, key is lowercase.
                 if key in TEAM_NAME_MAPPING:
                     mapped = TEAM_NAME_MAPPING[key]
                     mapped_norm = robust_normalize_team(mapped, lg_key).strip().lower()
@@ -1093,6 +1094,7 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
                     continue
 
                 # 3. Try Manual Overrides
+                # MANUAL_TEAM_OVERRIDES keys are UPPERCASE. We use t_norm (UPPER) for lookup.
                 if t_norm in MANUAL_TEAM_OVERRIDES:
                     target = MANUAL_TEAM_OVERRIDES[t_norm]
                     target_norm = robust_normalize_team(target, lg_key).strip().lower()

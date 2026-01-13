@@ -297,12 +297,18 @@ def _transform_theover_df(df: pd.DataFrame, pick_type_default: str, games: List[
         if league == "UNKNOWN":
             candidates = []
         else:
-            candidates = teams_by_league.get(league, [])
+            # Verification Pattern: Ensure the logic follows: league_candidates = [g for g in games if g['league'] == row['league']]
+            # Explicitly filter games for the current league to prevent cross-league pollution (e.g. NFL Houston vs NCAAB Houston)
+            league_candidates = [g for g in games if _normalize_league_str(g.get("league", "UNKNOWN")) == league]
 
-        # Reviewer correction: candidates is ALREADY filtered here by 'league'.
-        # 'teams_by_league' is populated from 'games' at start of function.
-        # So fuzzy matching IS performed against a filtered list.
-        # The shadowing concern is addressed because cross-league teams are not in 'candidates'.
+            # Re-derive candidates strictly from this filtered list
+            candidates_set = set()
+            for g in league_candidates:
+                if g.get("home_team"):
+                    candidates_set.add(TeamNameMatcher.normalize(g.get("home_team")).upper().strip())
+                if g.get("away_team"):
+                    candidates_set.add(TeamNameMatcher.normalize(g.get("away_team")).upper().strip())
+            candidates = list(candidates_set)
 
         if candidates:
             # Match Home Team
