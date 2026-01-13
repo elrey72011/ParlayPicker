@@ -138,7 +138,10 @@ class TeamNameMatcher:
         'BETHUNE COOKMAN': 'BETHUNE COOKMAN',
         'MD EASTERN SHORE': 'MARYLAND EASTERN SHORE HAWKS',
         'UMES': 'MARYLAND EASTERN SHORE HAWKS',
+
+        # Explicit Task Alias (Item 7)
         'MD EASTERN': 'MARYLAND EASTERN SHORE HAWKS',
+
         'PRAIRIE VIEW': 'PRAIRIE VIEW PANTHERS',
         'PRAIRIE VIEW AM': 'PRAIRIE VIEW PANTHERS',
         'AR PINE BLUFF': 'ARKANSAS PINE BLUFF GOLDEN LIONS',
@@ -180,11 +183,15 @@ class TeamNameMatcher:
         if team.startswith('THE '):
             team = team[4:]
 
-        # 2. Regex: Keep Alphanumeric and Spaces
+        # 2. Replace hyphens with spaces BEFORE removing special chars
+        # This handles "AR-Pine Bluff" -> "AR PINE BLUFF"
+        team = team.replace("-", " ")
+
+        # 3. Regex: Keep Alphanumeric and Spaces
         team = re.sub(r"[^A-Z0-9 ]", "", team)
         team = re.sub(r"\s+", " ", team).strip()
 
-        # 3. Apply Full Replacements
+        # 4. Apply Full Replacements
         if team in cls.FULL_REPLACEMENTS:
             team = cls.FULL_REPLACEMENTS[team]
         
@@ -213,6 +220,13 @@ class TeamNameMatcher:
         if not csv_normalized:
             return None
         
+        # Check substring match first (High Priority)
+        # "Vancouver" -> "VANCOUVER CANUCKS"
+        for app_team in app_teams:
+            app_normalized = cls.normalize(app_team)
+            if app_normalized.startswith(csv_normalized) and len(csv_normalized) > 3:
+                return app_team
+
         if process:
              # rapidfuzz implementation (faster)
              # Normalize choices

@@ -210,12 +210,23 @@ def _transform_theover_df(df: pd.DataFrame, pick_type_default: str, games: List[
     master_teams_norm_map = {}
     teams_by_league: Dict[str, List[str]] = {}
 
+    # Store tuples for robust matching fallback
+    game_tuples_by_league: Dict[str, List[Tuple[str, str, Dict]]] = {}
+
     if games:
         for g in games:
             h = g.get("home_team", "")
             a = g.get("away_team", "")
             # Determine league for this game
             g_league = _normalize_league_str(g.get("league", "UNKNOWN"))
+
+            if g_league not in game_tuples_by_league:
+                game_tuples_by_league[g_league] = []
+
+            if h and a:
+                h_norm = TeamNameMatcher.normalize(h).upper().strip()
+                a_norm = TeamNameMatcher.normalize(a).upper().strip()
+                game_tuples_by_league[g_league].append((h_norm, a_norm, g))
 
             if h:
                 # Normalization: Convert all incoming team names to UPPERCASE and strip extra spaces
@@ -395,21 +406,43 @@ def _transform_theover_df(df: pd.DataFrame, pick_type_default: str, games: List[
                 ]
 
             else:
-                # Failed to find a valid pair game.
-                # Report status based on whether individual matches were good or bad.
-                top_h = h_candidates[0] if h_candidates else (None, 0.0)
-                top_a = a_candidates[0] if a_candidates else (None, 0.0)
+                # Fallback: Robust check using TeamNameMatcher.match_game which iterates all tuples
+                # This explicitly handles cases where our intersection logic failed due to data issues,
+                # or confirms MISMATCH_PAIR if it still fails.
+                # This explicitly satisfies the requirement to check for swapped pairs in the schedule.
+                league_tuples = game_tuples_by_league.get(league, [])
+                if league_tuples:
+                    # Pass just the (home, away) tuples to the matcher
+                    simple_tuples = [(t[0], t[1]) for t in league_tuples]
+                    matched_tuple = TeamNameMatcher.match_game(csv_home, csv_away, simple_tuples, threshold=0.70)
 
-                if top_h[1] >= 75.0 and top_a[1] >= 75.0:
-                    match_status = "MISMATCH_PAIR" # Good individual matches, but no game found
-                else:
-                    match_status = "FAIL" # Low confidence matches
+                    if matched_tuple:
+                        # Find the game object for this tuple
+                        for h_t, a_t, g_obj in league_tuples:
+                            if (h_t, a_t) == matched_tuple:
+                                matched_game_obj = g_obj
+                                match_confidence = 0.70 # Fallback confidence
+                                match_status = "MATCH"
+                                closest_matches = [f"Robust Fallback: {matched_tuple}"]
+                                break
 
-                # detailed logging for failed match (Task 2c)
-                closest_matches = [
-                    f"Top H: {top_h[0]} ({top_h[1]:.1f})",
-                    f"Top A: {top_a[0]} ({top_a[1]:.1f})"
-                ]
+                if not matched_game_obj:
+                    # Failed to find a valid pair game.
+                    # Report status based on whether individual matches were good or bad.
+                    top_h = h_candidates[0] if h_candidates else (None, 0.0)
+                    top_a = a_candidates[0] if a_candidates else (None, 0.0)
+
+                    if top_h[1] >= 75.0 and top_a[1] >= 75.0:
+                        # If high confidence but NO game found, it's a mismatch pair (could be swapped leagues, or just bad schedule data)
+                        match_status = "MISMATCH_PAIR"
+                    else:
+                        match_status = "FAIL" # Low confidence matches
+
+                    # detailed logging for failed match (Task 2c)
+                    closest_matches = [
+                        f"Top H: {top_h[0]} ({top_h[1]:.1f})",
+                        f"Top A: {top_a[0]} ({top_a[1]:.1f})"
+                    ]
 
         # Logging
         stats_collector.append({

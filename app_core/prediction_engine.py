@@ -3,6 +3,7 @@ import xgboost as xgb
 import os
 import logging
 from pathlib import Path
+import json
 from typing import List, Optional, Any, Dict, Mapping, Tuple
 from app_core.team_name_matcher import TeamNameMatcher
 
@@ -93,17 +94,38 @@ class PredictionEngine:
             root_dir = Path(__file__).resolve().parents[1]
             model_path = str(root_dir / "models" / "model.json")
 
+        self.use_fallback = True # Default to fallback
+
         if os.path.exists(model_path):
             try:
-                self.model.load_model(model_path)
-                self.use_fallback = False
-                logger.info(f"Jules: Loaded local model from {model_path}")
+                # Check if file is valid JSON and not empty
+                is_valid = False
+                if os.path.getsize(model_path) > 0:
+                    with open(model_path, 'r') as f:
+                        try:
+                            content = json.load(f)
+                            # If content is empty dict {}, treating as dummy model -> fallback
+                            if content:
+                                is_valid = True
+                        except json.JSONDecodeError:
+                            pass # Invalid JSON, use fallback
+
+                if is_valid:
+                    self.model.load_model(model_path)
+                    self.use_fallback = False
+                    logger.info(f"Jules: Loaded local model from {model_path}")
+                else:
+                    global _LOGGED_MODEL_MISSING
+                    if not _LOGGED_MODEL_MISSING:
+                        logger.info(f"Jules: Model file at {model_path} is placeholder/invalid. Using statistical fallback mode.")
+                        _LOGGED_MODEL_MISSING = True
+
             except Exception as e:
                 self.use_fallback = True
                 logger.error(f"Jules: Failed to load model from {model_path}: {e}. Using statistical fallback.")
         else:
             self.use_fallback = True
-            global _LOGGED_MODEL_MISSING
+            # Only log once if missing
             if not _LOGGED_MODEL_MISSING:
                 logger.warning(
                     f"Jules: Model file missing at {model_path}. Using statistical fallback."
