@@ -450,6 +450,8 @@ def _transform_theover_df(df: pd.DataFrame, pick_type_default: str, games: List[
             "csv_away": csv_away,
             "matched_home": matched_game_obj.get("home_team") if matched_game_obj else None,
             "matched_away": matched_game_obj.get("away_team") if matched_game_obj else None,
+            "source_date": slate_date,
+            "target_date": matched_game_obj.get("commence_date_local") if matched_game_obj else None,
             "confidence": f"{match_confidence:.2f}",
             "status": match_status,
             "closest_matches": "; ".join(closest_matches)
@@ -689,6 +691,7 @@ def process_theover_inputs(
     stats["unmatched_examples"] = failed_logs[:10]
     stats["unmatched_rows"] = len(failed_logs)
     stats["matched_rows"] = len([l for l in matching_logs if l["status"] == "MATCH"])
+    stats["full_debug_log"] = matching_logs
 
     if not dfs:
         return pd.DataFrame(), stats
