@@ -46,6 +46,15 @@ from app_core.sportsdata import (
     get_key as get_sportsdata_key,
 )
 import app_core.market_tracker as market_tracker
+import app_core.snapshot_manager as snapshot_manager
+from app_core.weights_config import (
+    KALSHI_WEIGHT,
+    MARKET_WEIGHT,
+    ML_MODEL_WEIGHT,
+    THEOVER_WEIGHT,
+    SENTIMENT_WEIGHT
+)
+from app_core.consensus_ingest import enrich_with_consensus
 
 try:
     from app_core.sentiment import RealSentimentAnalyzer
@@ -573,7 +582,7 @@ def compute_final_probability(
     model_prob: Optional[float],
     theover_prob: Optional[float],
     sentiment_adj: Optional[float],
-    weights_dict: Dict[str, Any],
+    weights_dict: Dict[str, Any], # Deprecated, will use Hardcoded Globals
     sentiment_score: Optional[float] = None,
 ) -> Tuple[Optional[float], Optional[float], Dict[str, float], str, List[str], Optional[float]]:
     """
@@ -585,25 +594,57 @@ def compute_final_probability(
     weights_used: Dict[str, float] = {"w_implied": 0.0, "w_kalshi": 0.0, "w_model": 0.0, "w_sentiment": 0.0, "w_theover": 0.0}
     kalshi_prob_for_pick = map_kalshi_prob_for_pick(kalshi_prob_yes, kalshi_side_yes, pick_side)
 
-    # 1. Standard Sources
-    if implied_prob is not None:
-        sources.append(("implied", clamp(implied_prob), float(weights_dict.get("odds_weight") or 0.0)))
-    if kalshi_prob_for_pick is not None:
-        sources.append(("kalshi", clamp(kalshi_prob_for_pick), float(weights_dict.get("kalshi_weight") or 0.0)))
-    if model_prob is not None:
-        sources.append(("model", clamp(model_prob), float(weights_dict.get("ml_weight") or 0.0)))
-    if theover_prob is not None:
-        sources.append(("theover", clamp(theover_prob), float(weights_dict.get("theover_weight") or 0.0)))
+    # Task 1: Hardcoded Global Weights (No Dynamic Shifting)
+    # Values: Kalshi 0.35, Market 0.30, ML 0.20, TheOver 0.10, Sentiment 0.05
+    # If source is missing, distribute weight to MARKET_WEIGHT (implied_prob).
 
-    # 2. Sentiment as a Probability Source
-    # Convert raw score (-1 to 1) into a probability (0 to 1)
-    # 0.0 score -> 0.50 prob. 1.0 score -> 0.65 prob (conservative scaling)
-    sentiment_weight = float(weights_dict.get("sentiment_weight") or 0.0)
+    # 1. Define Static Weights
+    w_kalshi = KALSHI_WEIGHT
+    w_market = MARKET_WEIGHT
+    w_model = ML_MODEL_WEIGHT
+    w_theover = THEOVER_WEIGHT
+    w_sentiment = SENTIMENT_WEIGHT
+
+    # 2. Check Availability
+    has_kalshi = kalshi_prob_for_pick is not None
+    has_market = implied_prob is not None
+    has_model = model_prob is not None
+    has_theover = theover_prob is not None
+
+    # Task 4: Sentiment Logic driven by Sharpness Delta
+    # Sentiment Prob is derived later, availability check:
+    has_sentiment = sentiment_score is not None
+
+    # 3. Redistribute Missing Weights to Market
+    if not has_kalshi:
+        w_market += w_kalshi
+        w_kalshi = 0.0
+    if not has_model:
+        w_market += w_model
+        w_model = 0.0
+    if not has_theover:
+        w_market += w_theover
+        w_theover = 0.0
+    if not has_sentiment:
+        w_market += w_sentiment
+        w_sentiment = 0.0
+
+    # Safety: If market is also missing (rare/impossible if we have a pick), normalize remainder?
+    # For now assuming implied_prob exists if we are calculating probability for a pick.
+
+    # 4. Append Sources
+    if has_market:
+        sources.append(("implied", clamp(implied_prob), w_market))
+    if has_kalshi:
+        sources.append(("kalshi", clamp(kalshi_prob_for_pick), w_kalshi))
+    if has_model:
+        sources.append(("model", clamp(model_prob), w_model))
+    if has_theover:
+        sources.append(("theover", clamp(theover_prob), w_theover))
+
+    # 5. Sentiment as a Probability Source
     sentiment_prob_val = None
-    if sentiment_score is not None and sentiment_weight > 0.0:
-        # Base conversion: home_advantage_prob = 0.5 + (score * 0.15)
-        # If score is Sentiment_Diff (Home - Away), then >0 favors Home.
-        # We need to map this to the pick_side.
+    if has_sentiment and w_sentiment > 0.0:
         try:
             raw_score = float(sentiment_score)
             # Cap impact to +/- 0.15
@@ -612,13 +653,12 @@ def compute_final_probability(
 
             p_side = str(pick_side or "").lower()
             if p_side in {"home", "over"}:
-                # For totals, we assume sentiment_score tracks 'positive' outcome or home strength correlation
                 sentiment_prob_val = home_prob
             elif p_side in {"away", "under"}:
                 sentiment_prob_val = 1.0 - home_prob
 
             if sentiment_prob_val is not None:
-                sources.append(("sentiment", clamp(sentiment_prob_val), sentiment_weight))
+                sources.append(("sentiment", clamp(sentiment_prob_val), w_sentiment))
         except Exception as e:
             logger.warning(f"Sentiment Prob Calculation Error: {e}")
 
@@ -8918,11 +8958,42 @@ with tab_master:
             master_df = master_df.loc[:, ~master_df.columns.duplicated()].copy()
             master_df = master_df.reset_index(drop=True)
 
+        # Task 4: Enrich with Consensus (Sharpness Delta)
+        # Must be done before sentiment integration or model features if model uses it
+        with st.spinner("📊 Ingesting Public Consensus Data..."):
+            master_df = enrich_with_consensus(master_df)
+
             # 3. CRITICAL: Enrich the whole batch to fill 'feature_diff' columns
             # This fixes the 'Missing feature column' warnings in the logs
             with st.spinner("🚀 Running Batch Feature Enrichment..."):
                 # FIX: Pass ALL api_clients so stats for all leagues are fetched, not just the last loop variable
                 master_df = enrich_with_model_features(master_df, api_sports_clients)
+
+        # Task 4: Update Sentiment Score using Sharpness Delta
+        # Integration: 60% Sharpness Delta, 40% Social Sentiment
+        # We need to update 'Sentiment_Diff' or create a new combined score.
+        # Currently 'Sentiment_Diff' is used in compute_final_probability via sentiment_score.
+
+        def _update_sentiment_score(row):
+            social_diff = row.get("Sentiment_Diff")
+            if social_diff is None: social_diff = 0.0
+
+            sharpness = row.get("sharpness_delta")
+            if sharpness is None: sharpness = 0.0
+
+            # Hybrid Formula
+            # Normalize sharpness (e.g. 0.15 delta -> 1.0 score equiv? or keep raw?)
+            # Sentiment Diff is typically -1 to 1.
+            # Sharpness Delta is typically -0.3 to +0.3.
+            # Let's scale sharpness by 3.33 to map 0.3 to 1.0 roughly.
+            sharpness_scaled = sharpness * 3.33
+
+            # Weighted Combo
+            hybrid_score = (0.6 * sharpness_scaled) + (0.4 * social_diff)
+            return hybrid_score
+
+        if 'Sentiment_Diff' in master_df.columns and 'sharpness_delta' in master_df.columns:
+            master_df['Sentiment_Diff'] = master_df.apply(_update_sentiment_score, axis=1)
 
             # Ensure use_model_numeric_probs is synchronized from session state
             use_model_numeric_probs = st.session_state.get("use_model_numeric_probs", True)
@@ -9090,14 +9161,17 @@ with tab_master:
 
             # --- MARKET TRACKER HOOK (Snapshot System) ---
             try:
-                # 1. Save Noon Baseline (if in window)
-                market_tracker.save_snapshot(df)
+                # 1. Save Noon Baseline (Task 2: Use Snapshot Manager)
+                snapshot_manager.save_noon_baseline(df)
+
                 # 2. Compare against Noon Baseline (if Evening/Late)
                 df = market_tracker.load_and_compare(df)
 
                 # Persist TheOver debug stats for sidebar export
                 if 'theover_stats' in locals():
                     st.session_state["theover_debug_log"] = theover_stats.get("full_debug_log", [])
+                    # Task 3: Persist RAW TheOver DataFrame
+                    st.session_state["theover_raw_df"] = theover_stats.get("raw_df", pd.DataFrame())
             except Exception as e:
                 logger.error(f"Market Tracker Error: {e}")
             # ---------------------------
@@ -11044,7 +11118,23 @@ with tab_debug:
         except Exception:
             pass
 
-    # TheOver.ai Debug Export (Task 2)
+    # TheOver.ai Debug Export (Task 2/3)
+    # Task 3: Force the "TheOver.ai Debug" Button for Raw Data
+    if "theover_raw_df" in st.session_state and not st.session_state["theover_raw_df"].empty:
+        try:
+            theover_raw_df = st.session_state["theover_raw_df"]
+            theover_raw_csv = theover_raw_df.to_csv(index=False).encode("utf-8")
+            st.sidebar.download_button(
+                "Download TheOver Debug", # Exact text requested
+                data=theover_raw_csv,
+                file_name="theover_raw_debug.csv",
+                mime="text/csv",
+                key="theover_raw_export_btn",
+                help="Exports the RAW TheOver dataframe before transformation."
+            )
+        except Exception as e:
+            logger.error(f"Failed to render TheOver raw debug button: {e}")
+
     if "theover_debug_log" in st.session_state and st.session_state["theover_debug_log"]:
         try:
             theover_logs = st.session_state["theover_debug_log"]
@@ -11054,15 +11144,20 @@ with tab_debug:
                 theover_csv = theover_debug_df.to_csv(index=False).encode("utf-8")
 
                 st.sidebar.download_button(
-                    "Export TheOver.ai Debug",
+                    "Export TheOver.ai Log", # Renamed to distinguish
                     data=theover_csv,
-                    file_name="theover_debug_dump.csv",
+                    file_name="theover_log_dump.csv",
                     mime="text/csv",
-                    key="theover_debug_export_btn",
-                    help="Exports raw ingestion logs including fuzzy match scores and timing."
+                    key="theover_log_export_btn",
+                    help="Exports fuzzy match logs."
                 )
         except Exception as e:
-            logger.error(f"Failed to render TheOver debug button: {e}")
+            logger.error(f"Failed to render TheOver log button: {e}")
+
+    # Task 2: Snapshot Status UI
+    # UI: Add a status text in the sidebar: "✅ Noon Baseline Cached" or "⚠️ Noon Baseline Missing".
+    snapshot_status = snapshot_manager.check_noon_baseline_status()
+    st.sidebar.markdown(f"**Snapshot Status:** {snapshot_status}")
 
 
 if __name__ == "__main__" and os.environ.get("KALSHI_SELF_TEST"):

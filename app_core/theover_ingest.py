@@ -694,9 +694,14 @@ def process_theover_inputs(
     stats["full_debug_log"] = matching_logs
 
     if not dfs:
+        # Task 3: Ensure raw_df is empty if no dfs
+        stats["raw_df"] = pd.DataFrame()
         return pd.DataFrame(), stats
 
     combined = pd.concat(dfs, ignore_index=True)
+
+    # Task 3: Capture the raw combined dataframe before deduplication for debugging
+    stats["raw_df"] = combined.copy()
 
     if combined.empty:
         return combined, stats
