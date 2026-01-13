@@ -265,31 +265,46 @@ def _transform_theover_df(df: pd.DataFrame, pick_type_default: str, games: List[
         match_status = "FAIL"
         closest_matches = []
 
-        # Helper to match a single team name
-        def match_single_team(name_raw, candidates):
+        # Helper to find CANDIDATES (plural) for a team name
+        def find_candidate_matches(name_raw, candidates) -> List[Tuple[str, float]]:
+            """
+            Returns list of (candidate, score) tuples for top matches.
+            Prioritizes exact match and substrings.
+            """
             if not name_raw or not candidates:
-                return None, 0.0, []
+                return []
 
-            # Normalization: Convert to UPPERCASE as requested
+            # Normalization
             norm = TeamNameMatcher.normalize(name_raw).upper().strip()
+            matches = []
 
-            # 1. Exact Match
+            # 1. Exact Match (Score 100)
             if norm in candidates:
-                return norm, 100.0, []
+                matches.append((norm, 100.0))
 
-            # 2. Fuzzy Match (ExtractOne) with token_set_ratio
+            # 2. Substring Priority (Task 2)
+            # If input is a clean substring of candidate (e.g. "VANCOUVER" in "VANCOUVER CANUCKS")
+            # we treat it as very high confidence (100.0), regardless of fuzzy score.
+            # We filter for reasonable length (>3) to avoid spurious matches like "A" in "ARIZONA".
+            if len(norm) > 3:
+                for cand in candidates:
+                    # Check both directions: cand in norm OR norm in cand
+                    # (e.g. "UTAH" in "UTAH JAZZ", or "UTAH JAZZ" input matching "UTAH"?)
+                    # Usually input is short (VANCOUVER), candidate is long (VANCOUVER CANUCKS).
+                    if norm in cand:
+                        matches.append((cand, 100.0))
+
+            # 3. Fuzzy Match (Extract Top N)
             if process:
-                # Use score_cutoff=75.0 to enforce strict matching as requested (Task 5)
-                # Using token_set_ratio which handles "Utah" -> "Utah Jazz" well
-                res = process.extractOne(norm, candidates, scorer=fuzz.token_set_ratio, score_cutoff=75.0)
-                if res:
-                    match_str, score, _ = res
-                    # Collect debug top 3 for transparency
-                    top3 = process.extract(norm, candidates, scorer=fuzz.token_set_ratio, limit=3)
-                    top3_fmt = [f"{m} ({s:.1f})" for m, s, _ in top3]
-                    return match_str, score, top3_fmt
+                # Get top 5 candidates to allow for pairwise resolution
+                # Use token_set_ratio to handle word reordering/partials
+                results = process.extract(norm, candidates, scorer=fuzz.token_set_ratio, limit=5)
+                for m, s, _ in results:
+                    matches.append((m, float(s)))
 
-            return None, 0.0, []
+            # Sort by score desc
+            matches.sort(key=lambda x: x[1], reverse=True)
+            return matches
 
         # League-Gated Matching Candidates
         # Task 1: Strict League Filtering
@@ -311,35 +326,85 @@ def _transform_theover_df(df: pd.DataFrame, pick_type_default: str, games: List[
             candidates = list(candidates_set)
 
         if candidates:
-            # Match Home Team
-            h_match, h_score, h_top3 = match_single_team(csv_home, candidates)
+            # Pairwise Resolution Logic (Task 2)
+            # Instead of picking best Home and best Away independently, we pick the best PAIR that forms a valid game.
 
-            # Match Away Team
-            a_match, a_score, a_top3 = match_single_team(csv_away, candidates)
+            # 1. Get Candidates
+            h_candidates = find_candidate_matches(csv_home, candidates)
+            a_candidates = find_candidate_matches(csv_away, candidates)
 
-            # Check Thresholds (75%)
-            if h_score >= 75.0 and a_score >= 75.0:
-                # Find the intersection of games
-                h_games = master_teams_norm_map.get(h_match, [])
-                a_games = master_teams_norm_map.get(a_match, [])
+            # 2. Iterate through pairs to find a valid game
+            # We look for a game where HomeCandidate vs AwayCandidate exists.
+            # We also check the reverse order (Task 2: Swapped Pairs), though our intersection logic is inherently order-agnostic.
 
-                # Use ID or date matching if possible, but intersection is robust for daily slates
-                common_games = [g for g in h_games if g in a_games]
+            best_pair_game = None
+            best_pair_score = 0.0
+            best_pair_names = (None, None)
 
-                # Task 1: Strict League Filtering on the result
-                # Even if we filtered candidates, name collisions across leagues (e.g. "HOUSTON")
-                # can cause us to pick a game from the wrong league if we don't filter the result.
-                if league != "UNKNOWN":
-                    common_games = [g for g in common_games if _normalize_league_str(g.get("league", "UNKNOWN")) == league]
+            # Limit to top 5 to keep complexity low (5x5 = 25 checks max)
+            for h_cand, h_s in h_candidates[:5]:
+                for a_cand, a_s in a_candidates[:5]:
 
-                if common_games:
-                    matched_game_obj = common_games[0]
-                    match_confidence = (h_score + a_score) / 2.0
-                    match_status = "MATCH"
+                    # Optimization: If pair score is already worse than best found, skip?
+                    # No, because a worse score might yield a VALID game while better score yielded none.
+                    # But we should prioritize score. So we should sort pairs by combined score?
+                    # Let's iterate and keep track of the *best valid* game.
+
+                    if h_s < 75.0 or a_s < 75.0:
+                        continue
+
+                    # Check for valid game intersection
+                    h_games = master_teams_norm_map.get(h_cand, [])
+                    a_games = master_teams_norm_map.get(a_cand, [])
+
+                    common_games = [g for g in h_games if g in a_games]
+
+                    # Strict League Filter
+                    if league != "UNKNOWN":
+                        common_games = [g for g in common_games if _normalize_league_str(g.get("league", "UNKNOWN")) == league]
+
+                    if common_games:
+                        avg_score = (h_s + a_s) / 2.0
+                        # If this valid game has a better confidence than previous valid game found, take it.
+                        # Since we iterate in order of score desc (mostly), the first one is likely best,
+                        # but h_candidates are sorted by h_s, not combined.
+                        if avg_score > best_pair_score:
+                            best_pair_score = avg_score
+                            best_pair_game = common_games[0]
+                            best_pair_names = (h_cand, a_cand)
+
+            # 3. Final Decision
+            if best_pair_game:
+                matched_game_obj = best_pair_game
+                match_confidence = best_pair_score
+                match_status = "MATCH"
+
+                # Update debug logging vars
+                csv_home_disp = f"{csv_home} -> {best_pair_names[0]} ({h_candidates[0][1]:.1f})"
+                # Note: h_candidates[0] might not be the one we picked if we picked a lower score to make a pair
+                # But for debug, we usually want to see what we picked.
+                # Let's construct a helpful string.
+                closest_matches = [
+                    f"H: {best_pair_names[0]} (Score {dict(h_candidates).get(best_pair_names[0], 0):.1f})",
+                    f"A: {best_pair_names[1]} (Score {dict(a_candidates).get(best_pair_names[1], 0):.1f})"
+                ]
+
+            else:
+                # Failed to find a valid pair game.
+                # Report status based on whether individual matches were good or bad.
+                top_h = h_candidates[0] if h_candidates else (None, 0.0)
+                top_a = a_candidates[0] if a_candidates else (None, 0.0)
+
+                if top_h[1] >= 75.0 and top_a[1] >= 75.0:
+                    match_status = "MISMATCH_PAIR" # Good individual matches, but no game found
                 else:
-                     match_status = "MISMATCH_PAIR"
+                    match_status = "FAIL" # Low confidence matches
 
-            closest_matches = list(set(h_top3 + a_top3))[:3]
+                # detailed logging for failed match (Task 2c)
+                closest_matches = [
+                    f"Top H: {top_h[0]} ({top_h[1]:.1f})",
+                    f"Top A: {top_a[0]} ({top_a[1]:.1f})"
+                ]
 
         # Logging
         stats_collector.append({
