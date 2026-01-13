@@ -45,6 +45,7 @@ from app_core.sportsdata import (
     SportsDataNCAAFClient,
     get_key as get_sportsdata_key,
 )
+import app_core.market_tracker as market_tracker
 
 try:
     from app_core.sentiment import RealSentimentAnalyzer
@@ -5569,8 +5570,8 @@ render_pipeline_banner()
 # Tabs
 # -----------------
 
-tab_master, tab_shotgun, tab_games, tab_kalshi, tab_sentiment, tab_debug = st.tabs(
-    ["Master Analysis", "🚀 Shotgun Mode", "Games & Odds", "Kalshi", "Sentiment", "Debug"]
+tab_master, tab_shotgun, tab_games, tab_kalshi, tab_sentiment, tab_debug, tab_movement = st.tabs(
+    ["Master Analysis", "Shotgun Mode", "Game Slate", "Kalshi", "Sentiment", "Debug", "Market Movement"]
 )
 
 
@@ -9086,6 +9087,17 @@ with tab_master:
             # The shotgun data is stored separately.
             # 1. Deduplicate Master DF (Fix Duplicate Column Crash)
             df = df.loc[:, ~df.columns.duplicated()].copy()
+
+            # --- MARKET TRACKER HOOK ---
+            try:
+                # Save baseline if appropriate (morning)
+                market_tracker.save_baseline_if_appropriate(df)
+                # Load baseline and compare if appropriate (evening)
+                df = market_tracker.load_baseline_for_comparison(df)
+            except Exception as e:
+                logger.error(f"Market Tracker Error: {e}")
+            # ---------------------------
+
             st.session_state["master_df"] = df
 
         except Exception as e:
@@ -10704,6 +10716,100 @@ with tab_sentiment:
         st.json(sent_debug or {})
         st.json({"meta": sent_meta, "error_count": error_count})
         st.write("Teams with sentiment:", list((st.session_state.get("sentiment_map") or {}).keys())[:20])
+
+
+with tab_movement:
+    st.header("📉 Closing Line / Market Movement Tracker")
+    st.info("Tracks line movements and probability shifts between the Noon Baseline and Evening Update.")
+
+    if "master_df" in st.session_state and not st.session_state["master_df"].empty:
+        move_df = st.session_state["master_df"].copy()
+
+        # Check if movement columns exist
+        has_movement = 'delta_implied_prob' in move_df.columns
+
+        if not has_movement:
+            st.warning("No baseline comparison data available yet. Comparison runs after 5:30 PM ET if a Noon Baseline was saved.")
+            # Check if baseline file exists for today to give better hint
+            try:
+                now_et = market_tracker.get_et_now()
+                fname = market_tracker.get_baseline_filename(now_et.date().isoformat())
+                if os.path.exists(fname):
+                    st.info(f"Baseline found for today ({now_et.date()}). Run analysis after 5:30 PM ET to see deltas.")
+                else:
+                    st.info(f"No baseline saved for today ({now_et.date()}). Run analysis between 9:00 AM and 1:00 PM ET to save a baseline.")
+            except Exception:
+                pass
+        else:
+            # Filter for significant movement
+            # "Only display games where the final_probability or implied_prob moved by >3% since the noon baseline."
+
+            # Ensure numeric
+            move_df['delta_implied_prob'] = pd.to_numeric(move_df.get('delta_implied_prob'), errors='coerce').fillna(0.0)
+
+            # We don't have delta_final_prob explicitly calculated in market_tracker, but we have delta_implied_prob.
+            # User requirement: "final_probability or implied_prob moved by > 3%"
+            # Let's calculate delta_final_prob here if possible
+            if 'final_probability' in move_df.columns and 'final_probability_noon' in move_df.columns:
+                move_df['delta_final_prob'] = pd.to_numeric(move_df['final_probability'], errors='coerce') - pd.to_numeric(move_df['final_probability_noon'], errors='coerce')
+            else:
+                move_df['delta_final_prob'] = 0.0
+
+            move_df['delta_final_prob'] = move_df['delta_final_prob'].fillna(0.0)
+
+            # Filter
+            mask = (abs(move_df['delta_implied_prob']) > 0.03) | (abs(move_df['delta_final_prob']) > 0.03)
+
+            significant_moves = move_df[mask].copy()
+
+            if significant_moves.empty:
+                st.success("No significant market movements (>3%) detected since noon.")
+            else:
+                st.write(f"Found {len(significant_moves)} games with significant movement (>3%).")
+
+                # Display Columns
+                display_cols = [
+                    'league', 'Home', 'Away',
+                    'Pick', 'Pick_noon',
+                    'Implied_Prob', 'delta_implied_prob',
+                    'final_probability', 'delta_final_prob',
+                    'delta_sentiment',
+                    'spread_pick_line', 'line_move_spread',
+                    'movement_alerts'
+                ]
+
+                # Filter cols
+                cols = [c for c in display_cols if c in significant_moves.columns]
+
+                # Format for display
+                # Percentage formatting
+                format_dict = {
+                    'Implied_Prob': '{:.1%}',
+                    'delta_implied_prob': '{:+.1%}',
+                    'final_probability': '{:.1%}',
+                    'delta_final_prob': '{:+.1%}',
+                    'line_move_spread': '{:+.1f}'
+                }
+
+                st.dataframe(significant_moves[cols].style.format(format_dict))
+
+                # Learning Insight Warning
+                # "If the line moved against the model's original pick, add a warning"
+                # This is already handled in 'movement_alerts' column constructed in backend,
+                # but let's highlight it here if present.
+
+                alerts = significant_moves[significant_moves['movement_alerts'] != ""]
+                if not alerts.empty:
+                    st.subheader("⚠️ Market Movement Alerts")
+                    for _, row in alerts.iterrows():
+                        st.warning(f"**{row['Home']} vs {row['Away']}**: {row['movement_alerts']}")
+
+            # Show all movement (optional expander)
+            with st.expander("View All Movements (Raw Data)"):
+                st.dataframe(move_df)
+
+    else:
+        st.info("Run Master Analysis to view Market Movement.")
 
 
 with tab_debug:
