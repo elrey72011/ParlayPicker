@@ -110,6 +110,11 @@ def normalize_team(name: str) -> str:
     if not name:
         return ""
     name = str(name).upper()
+
+    # Replace hyphens with spaces BEFORE removing special chars
+    # This handles "AR-Pine Bluff" -> "AR PINE BLUFF"
+    name = name.replace("-", " ")
+
     name = re.sub(r"[^A-Z0-9 ]", "", name)
     name = re.sub(r"\s+", " ", name).strip()
     return name
@@ -212,6 +217,14 @@ MANUAL_TEAM_OVERRIDES = {
     "TEXAS A&M AGGIES": "TEXAS AM",
     "TEXAS AM": "TEXAS AM",
     "TEXAS A&M": "TEXAS AM",
+
+    # Task: Fix Missing NCAAB Stats
+    "MORGAN ST": "MORGAN STATE",
+    "NORFOLK ST": "NORFOLK STATE",
+    "HOWARD": "HOWARD",
+    "MD EASTERN SHORE": "MARYLAND EASTERN SHORE",
+    "PRAIRIE VIEW AM": "PRAIRIE VIEW",
+    "AR PINE BLUFF": "ARKANSAS PINE BLUFF",
 
     # NHL accent + city-only fixes
     "MONTRÉAL CANADIENS": "MONTREAL CANADIENS",
@@ -569,7 +582,15 @@ def fetch_ncaaf_stats(season_year: int) -> List[Dict[str, Any]]:
     if cfbd is None:
         return []
 
+    # Improved: Explicitly check st.secrets if _get_secret fails or for robustness
     raw_key = _get_secret("CFBD_API_KEY")
+    if not raw_key and st is not None:
+        try:
+            if hasattr(st, "secrets") and "CFBD_API_KEY" in st.secrets:
+                raw_key = st.secrets["CFBD_API_KEY"]
+        except Exception:
+            pass
+
     token = _normalize_cfbd_token(raw_key)
     if not token:
         logger.warning("CFBD_API_KEY not found. Skipping NCAAF stats.")

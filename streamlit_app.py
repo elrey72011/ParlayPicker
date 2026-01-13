@@ -9593,6 +9593,29 @@ with tab_master:
 
         df_master_view["status"] = df_master_view["Bet_Confidence"]
 
+        # Format Spread & Pick and Total & Pick with Odds
+        # "{Team} {Line} ({Odds})"
+        if "spread_pick_odds" in df_master_view.columns:
+            # Need to rebuild this string carefully for display
+            # We assume "Spread & Pick" already has "{Team} {Line}" from upstream
+            # We append odds if available.
+
+            def _format_pick_with_odds(row, col_base, col_odds):
+                base = str(row.get(col_base) or "").strip()
+                odds = row.get(col_odds)
+                if not base or base.lower() == "none" or base.lower() == "nan":
+                    return None
+                if odds is None or pd.isna(odds):
+                    return base
+                return f"{base} ({odds})"
+
+            df_master_view["Spread & Pick"] = df_master_view.apply(
+                lambda r: _format_pick_with_odds(r, "Spread & Pick", "spread_pick_odds"), axis=1
+            )
+            df_master_view["Total & Pick"] = df_master_view.apply(
+                lambda r: _format_pick_with_odds(r, "Total & Pick", "total_pick_odds"), axis=1
+            )
+
         forced_cols = ["league", "Home", "Away", "Implied_Prob", "AI_Prob", "Pick", "status"]
         cols_present = [c for c in forced_cols if c in df_master_view.columns]
         other_cols = [c for c in df_master_view.columns if c not in cols_present]
