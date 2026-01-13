@@ -9088,12 +9088,16 @@ with tab_master:
             # 1. Deduplicate Master DF (Fix Duplicate Column Crash)
             df = df.loc[:, ~df.columns.duplicated()].copy()
 
-            # --- MARKET TRACKER HOOK ---
+            # --- MARKET TRACKER HOOK (Snapshot System) ---
             try:
-                # Save baseline if appropriate (morning)
-                market_tracker.save_baseline_if_appropriate(df)
-                # Load baseline and compare if appropriate (evening)
-                df = market_tracker.load_baseline_for_comparison(df)
+                # 1. Save Noon Baseline (if in window)
+                market_tracker.save_snapshot(df)
+                # 2. Compare against Noon Baseline (if Evening/Late)
+                df = market_tracker.load_and_compare(df)
+
+                # Persist TheOver debug stats for sidebar export
+                if 'theover_stats' in locals():
+                    st.session_state["theover_debug_log"] = theover_stats.get("full_debug_log", [])
             except Exception as e:
                 logger.error(f"Market Tracker Error: {e}")
             # ---------------------------
@@ -10136,6 +10140,11 @@ with tab_master:
             "kalshi_event_ticker",
             "kalshi_series",
             "normalization_source",
+            "delta_implied_prob",
+            "delta_sentiment",
+            "movement_alerts",
+            "clv_spread_edge_diff",
+            "clv_total_edge_diff"
         ]
         export_df = df_master_view_full.copy()
         if "Unnamed: 0" in export_df.columns:
@@ -11034,6 +11043,26 @@ with tab_debug:
             )
         except Exception:
             pass
+
+    # TheOver.ai Debug Export (Task 2)
+    if "theover_debug_log" in st.session_state and st.session_state["theover_debug_log"]:
+        try:
+            theover_logs = st.session_state["theover_debug_log"]
+            # Convert list of dicts to CSV string
+            if isinstance(theover_logs, list) and len(theover_logs) > 0:
+                theover_debug_df = pd.DataFrame(theover_logs)
+                theover_csv = theover_debug_df.to_csv(index=False).encode("utf-8")
+
+                st.sidebar.download_button(
+                    "Export TheOver.ai Debug",
+                    data=theover_csv,
+                    file_name="theover_debug_dump.csv",
+                    mime="text/csv",
+                    key="theover_debug_export_btn",
+                    help="Exports raw ingestion logs including fuzzy match scores and timing."
+                )
+        except Exception as e:
+            logger.error(f"Failed to render TheOver debug button: {e}")
 
 
 if __name__ == "__main__" and os.environ.get("KALSHI_SELF_TEST"):
