@@ -45,7 +45,10 @@ from app_core.sportsdata import (
     SportsDataNCAAFClient,
     get_key as get_sportsdata_key,
 )
-import app_core.market_tracker as market_tracker
+import app_core.snapshot_manager as snapshot_manager
+from app_core.consensus_ingest import ConsensusIngest
+from app_core.theover_debug import generate_debug_export
+from weights_config import WEIGHTS_CONFIG
 
 try:
     from app_core.sentiment import RealSentimentAnalyzer
@@ -5763,6 +5766,10 @@ with tab_master:
         disabled=(not kalshi_status.get("configured")) and st.session_state.get("kalshi_required", True),
         help="Requires Kalshi availability",
     )
+
+    # Sidebar Status (Snapshot)
+    st.sidebar.caption(snapshot_manager.get_active_snapshot_status())
+
     games = st.session_state.get("games", [])
     if run_master and (not kalshi_status.get("configured")):
         st.error("Kalshi is required but unavailable. Fix Kalshi first.")
@@ -5786,6 +5793,11 @@ with tab_master:
         "unmatched_rows": 0,
         "unmatched_examples": []
     }
+
+    # Consensus Data Fetch (Mock/Sim)
+    consensus_data_map = {}
+    if should_run:
+         consensus_data_map = ConsensusIngest.fetch_consensus_data(games)
 
     if should_run:
         try:
@@ -6173,31 +6185,12 @@ with tab_master:
                     theover_prob_spread = hit_rate if (hit_rate and hit_rate > 0) else 0.55
                 # --- THEOVER MATCHING END ---
 
-                # 1) Define Weights (Fix NameError)
-                # Updated weights with TheOver integration (Default 0.10 if matched)
-                # If TheOver is not matched, its weight is effectively zeroed and others renormalized dynamically
-                spread_weights = {
-                    "ml_weight": 0.25,
-                    "kalshi_weight": 0.35,
-                    "odds_weight": 0.30,
-                    "sentiment_weight": 0.00, # Sentiment disabled for now per instruction
-                    "theover_weight": 0.10,
-                }
-                # Totals (TheOver carries slightly more weight)
-                total_weights = {
-                    "ml_weight": 0.25,
-                    "kalshi_weight": 0.35,
-                    "odds_weight": 0.30,
-                    "sentiment_weight": 0.00,
-                    "theover_weight": 0.10,
-                }
-                moneyline_weights = {
-                    "ml_weight": 0.25,
-                    "kalshi_weight": 0.35,
-                    "odds_weight": 0.30,
-                    "sentiment_weight": 0.00,
-                    "theover_weight": 0.10,
-                }
+                # 1) Define Weights using Global Config
+                # The 'sentiment_weight' is now active (0.05).
+                spread_weights = WEIGHTS_CONFIG["spread"].copy()
+                total_weights = WEIGHTS_CONFIG["total"].copy()
+                moneyline_weights = WEIGHTS_CONFIG["moneyline"].copy()
+
                 # Debug log
                 logger.info(f"Weight sets active: spread={spread_weights}, total={total_weights}, ml={moneyline_weights}")
 
@@ -7010,11 +7003,35 @@ with tab_master:
                 # Fix: preserve None if missing (Part C)
                 # sentiment_meta_global should have 'score': None if invalid/missing
                 sentiment_score_value = safe_float(sentiment_meta_global.get("sentiment_score"))
-                if sentiment_score_value is None:
-                    # Double check raw value in case safe_float was too strict or meta structure differs
-                    # But meta construction (compute_team_sentiment_map) explicitly sets None if invalid.
-                    # Just ensure we don't default to 0.0 here.
-                    pass
+
+                # --- HYBRID SENTIMENT CALCULATION (Task 3) ---
+                # Extract Consensus Data
+                game_key_consensus = f"{home} vs {away}"
+                consensus_obj = consensus_data_map.get(game_key_consensus) or {}
+                ticket_pct = consensus_obj.get("ticket_pct")
+                money_pct = consensus_obj.get("money_pct")
+                sharpness = consensus_obj.get("sharpness")
+
+                # Calculate Sentiment Diff for later use
+                sentiment_diff = None
+                if home_sent is not None and away_sent is not None:
+                    sentiment_diff = home_sent - away_sent
+
+                # Hybrid Score Construction
+                # 60% Sharpness Delta (Sharp Money) + 40% Social Sentiment (News/Reddit)
+                hybrid_sentiment_score = 0.0
+
+                # Sharpness Component
+                if sharpness is not None:
+                    hybrid_sentiment_score += 0.60 * sharpness
+
+                # Social Component
+                if sentiment_diff is not None:
+                     hybrid_sentiment_score += 0.40 * sentiment_diff
+
+                # Use this hybrid score for the final probability boost
+                if sentiment_diff is not None or sharpness is not None:
+                    sentiment_score_value = hybrid_sentiment_score
 
                 sentiment_disabled_reason = sentiment_meta_global.get("sentiment_disabled_reason") or ""
                 sentiment_error_count = int(sentiment_error_count or 0)
@@ -7370,7 +7387,7 @@ with tab_master:
                         spread_weights["ml_weight"] -= 0.05
 
                 # Update sentiment weight dynamically
-                spread_weights["sentiment_weight"] = abs(spread_sentiment_adj or 0.0)
+                # spread_weights["sentiment_weight"] = abs(spread_sentiment_adj or 0.0)
 
                 # Calculate SPREAD probability WITHOUT TheOver
                 _weights_no_to = spread_weights.copy()
@@ -7819,14 +7836,14 @@ with tab_master:
                             current_ml_weights["w_model"] = 0.0 # Ensure explicit key also zeroed
                             current_ml_weights["kalshi_weight"] = 0.6
                             current_ml_weights["odds_weight"] = 0.4
-                            current_ml_weights["sentiment_weight"] = 0.0
+                            # current_ml_weights["sentiment_weight"] = 0.0
                             current_ml_weights["theover_weight"] = 0.0
                             warnings.append("ml_disabled_odds_gt_300")
                         else:
                             # Standard Dynamic Weighting
                             ml_odds_weight = 0.30
                             current_ml_weights["odds_weight"] = ml_odds_weight
-                            current_ml_weights["sentiment_weight"] = abs(sentiment_adj or 0.0)
+                            # current_ml_weights["sentiment_weight"] = abs(sentiment_adj or 0.0)
 
                             _ml_kalshi_matched = bool(kalshi_winner.get("kalshi_matched"))
                             _ml_k_prob = map_kalshi_prob_for_pick(
@@ -8402,6 +8419,9 @@ with tab_master:
                         "At_a_Glance_Confidence": None,
                         "At_a_Glance_Score": None,
                         "At_a_Glance_Reason": None,
+                        "ticket_pct": ticket_pct,
+                        "money_pct": money_pct,
+                        "sharpness": sharpness
                     }
                     spread_row["consensus_prob"] = spread_base_prob
                     spread_row["consensus_prob_adj"] = spread_prob_final
@@ -8673,6 +8693,9 @@ with tab_master:
                         "At_a_Glance_Confidence": None,
                         "At_a_Glance_Score": None,
                         "At_a_Glance_Reason": None,
+                        "ticket_pct": ticket_pct,
+                        "money_pct": money_pct,
+                        "sharpness": sharpness
                     }
                     total_row["consensus_prob"] = total_base_prob
                     total_row["consensus_prob_adj"] = total_prob_final
@@ -8901,6 +8924,9 @@ with tab_master:
                         "spread_prob_placeholder_detected": spread_prob_placeholder_detected,
                         "total_prob_placeholder_detected": total_prob_placeholder_detected,
                         "odds_placeholder_detected": bool(odds_placeholder_overall),
+                        "ticket_pct": ticket_pct,
+                        "money_pct": money_pct,
+                        "sharpness": sharpness
                     }
                     conf, reason_short, eligible = score_pick_confidence(fallback_row)
                     fallback_row["Pick_Confidence"] = conf
@@ -9088,18 +9114,20 @@ with tab_master:
             # 1. Deduplicate Master DF (Fix Duplicate Column Crash)
             df = df.loc[:, ~df.columns.duplicated()].copy()
 
-            # --- MARKET TRACKER HOOK (Snapshot System) ---
+            # --- SNAPSHOT MANAGER HOOK ---
             try:
-                # 1. Save Noon Baseline (if in window)
-                market_tracker.save_snapshot(df)
+                # 1. Save Snapshot (Noon/Eve/Late)
+                status_msg = snapshot_manager.save_snapshot(df)
+                logger.info(f"Snapshot Status: {status_msg}")
+
                 # 2. Compare against Noon Baseline (if Evening/Late)
-                df = market_tracker.load_and_compare(df)
+                df = snapshot_manager.load_and_compare(df)
 
                 # Persist TheOver debug stats for sidebar export
                 if 'theover_stats' in locals():
                     st.session_state["theover_debug_log"] = theover_stats.get("full_debug_log", [])
             except Exception as e:
-                logger.error(f"Market Tracker Error: {e}")
+                logger.error(f"Snapshot Manager Error: {e}")
             # ---------------------------
 
             st.session_state["master_df"] = df
@@ -9310,6 +9338,11 @@ with tab_master:
             "spread_edge",
             "total_edge",
             "market_stability",
+            "delta_implied_prob",
+            "delta_sentiment",
+            "ticket_pct",
+            "money_pct",
+            "sharpness",
         ]
 
         # Batch assign missing columns to avoid fragmentation
@@ -9878,6 +9911,30 @@ with tab_master:
             # Add to reason short
             top_df_display["Pick_Reason_Short"] = top_df_display["Pick_Reason_Short"] + " | " + top_df_display["TheOver_Impact"]
 
+        # --- VISUAL INDICATORS (Steam & Sharpness) ---
+        # 🔥 for positive Market Steam > 3%
+        if "delta_implied_prob" in top_df_display.columns:
+            def _steam_icon(x):
+                try:
+                     val = float(x)
+                     if val > 0.03: return f"🔥 {val:+.1%}"
+                     return f"{val:+.1%}" if val != 0 else ""
+                except: return ""
+            top_df_display["Steam"] = top_df_display["delta_implied_prob"].apply(_steam_icon)
+
+        # Highlight Money % in Green if Sharp (> 15% delta)
+        # We can't apply style directly to dataframe object in Streamlit (deprecated ways).
+        # We use Styler.
+
+        def _highlight_sharp(row):
+            try:
+                m_pct = float(row.get("money_pct", 0))
+                t_pct = float(row.get("ticket_pct", 0))
+                if m_pct > (t_pct + 0.15):
+                    return ['background-color: #d4edda; color: #155724'] * len(row) # Light Green
+            except: pass
+            return [''] * len(row)
+
         if not show_moneyline_details:
             ml_detail_cols = [
                 "Pick",
@@ -9907,19 +9964,24 @@ with tab_master:
             'Spread & Pick', 'Total & Pick',
             'spread_edge', 'total_edge',
             'Pick', 'AI_Prob', 'Implied_Prob', 'Home_Sentiment', 'Away_Sentiment', 'Sentiment_Diff', 'sentiment_status', 'status', 'best_pick_prob', 'best_pick_edge',
-            'theover_pick', 'theover_prob_used', 'theover_delta_final_prob', 'final_prob_without_theover'
+            'theover_pick', 'theover_prob_used', 'theover_delta_final_prob', 'final_prob_without_theover',
+            'Steam', 'money_pct', 'ticket_pct', 'sharpness'
         ]
         safe_cols = [c for c in ui_whitelist if c in top_df_display.columns]
         top_df_ui = top_df_display[safe_cols].copy()
 
         # Force Numeric and String consistency
         for col in top_df_ui.columns:
-            if col in ['AI_Prob', 'Implied_Prob', 'spread_edge', 'total_edge', 'Sentiment_Diff', 'final_prob', 'edge', 'Overall Prob', 'Spread Prob', 'Total Prob', 'ML Prob']:
+            if col in ['AI_Prob', 'Implied_Prob', 'spread_edge', 'total_edge', 'Sentiment_Diff', 'final_prob', 'edge', 'Overall Prob', 'Spread Prob', 'Total Prob', 'ML Prob', 'money_pct', 'ticket_pct', 'sharpness']:
                 top_df_ui[col] = pd.to_numeric(top_df_ui[col], errors='coerce').fillna(0.0)
             else:
                 top_df_ui[col] = top_df_ui[col].astype(str).replace('None', 'N/A')
 
-        st.dataframe(top_df_ui, width="stretch", hide_index=True)
+        # Apply Highlight Style for Sharp Money
+        try:
+            st.dataframe(top_df_ui.style.apply(_highlight_sharp, axis=1), width="stretch", hide_index=True)
+        except Exception:
+            st.dataframe(top_df_ui, width="stretch", hide_index=True)
 
         export_cols = [
             "AI_Prob",
@@ -10144,7 +10206,10 @@ with tab_master:
             "delta_sentiment",
             "movement_alerts",
             "clv_spread_edge_diff",
-            "clv_total_edge_diff"
+            "clv_total_edge_diff",
+            "ticket_pct",
+            "money_pct",
+            "sharpness"
         ]
         export_df = df_master_view_full.copy()
         if "Unnamed: 0" in export_df.columns:
@@ -10741,8 +10806,8 @@ with tab_movement:
             st.warning("No baseline comparison data available yet. Comparison runs after 5:30 PM ET if a Noon Baseline was saved.")
             # Check if baseline file exists for today to give better hint
             try:
-                now_et = market_tracker.get_et_now()
-                fname = market_tracker.get_baseline_filename(now_et.date().isoformat())
+                now_et = snapshot_manager.get_et_now()
+                fname = snapshot_manager.get_snapshot_filename(now_et.date().isoformat(), "noon_baseline")
                 if os.path.exists(fname):
                     st.info(f"Baseline found for today ({now_et.date()}). Run analysis after 5:30 PM ET to see deltas.")
                 else:
@@ -11048,14 +11113,12 @@ with tab_debug:
     if "theover_debug_log" in st.session_state and st.session_state["theover_debug_log"]:
         try:
             theover_logs = st.session_state["theover_debug_log"]
-            # Convert list of dicts to CSV string
-            if isinstance(theover_logs, list) and len(theover_logs) > 0:
-                theover_debug_df = pd.DataFrame(theover_logs)
-                theover_csv = theover_debug_df.to_csv(index=False).encode("utf-8")
-
+            # Generate export using helper
+            theover_csv = generate_debug_export(theover_logs)
+            if theover_csv:
                 st.sidebar.download_button(
                     "Export TheOver.ai Debug",
-                    data=theover_csv,
+                    data=theover_csv.encode("utf-8"),
                     file_name="theover_debug_dump.csv",
                     mime="text/csv",
                     key="theover_debug_export_btn",
