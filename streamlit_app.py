@@ -598,12 +598,13 @@ def compute_final_probability(
     # Values: Kalshi 0.35, Market 0.30, ML 0.20, TheOver 0.10, Sentiment 0.05
     # If source is missing, distribute weight to MARKET_WEIGHT (implied_prob).
 
-    # 1. Define Static Weights
-    w_kalshi = KALSHI_WEIGHT
-    w_market = MARKET_WEIGHT
-    w_model = ML_MODEL_WEIGHT
-    w_theover = THEOVER_WEIGHT
-    w_sentiment = SENTIMENT_WEIGHT
+    # 1. Define Static Weights (Hardcoded per User Request)
+    # Force these values: Kalshi 0.35, Market 0.30, ML 0.20, TheOver 0.10, Sentiment 0.05
+    w_kalshi = 0.35
+    w_market = 0.30
+    w_model = 0.20
+    w_theover = 0.10
+    w_sentiment = 0.05
 
     # 2. Check Availability
     has_kalshi = kalshi_prob_for_pick is not None
@@ -616,18 +617,19 @@ def compute_final_probability(
     has_sentiment = sentiment_score is not None
 
     # 3. Redistribute Missing Weights to Market
-    # User Instruction: "Stop the dynamic normalization for now... treat its contribution as 0 but do not change the other weights."
+    # Logic: To keep other weights (like ML=0.20) static relative to the total sum of 1.0,
+    # we must redistribute any missing weight to the Market bucket.
     if not has_kalshi:
-        # w_market += w_kalshi
+        w_market += w_kalshi
         w_kalshi = 0.0
     if not has_model:
-        # w_market += w_model
+        w_market += w_model
         w_model = 0.0
     if not has_theover:
-        # w_market += w_theover
+        w_market += w_theover
         w_theover = 0.0
     if not has_sentiment:
-        # w_market += w_sentiment
+        w_market += w_sentiment
         w_sentiment = 0.0
 
     # Safety: If market is also missing (rare/impossible if we have a pick), normalize remainder?
@@ -9991,6 +9993,21 @@ with tab_master:
             top_df_display = top_df_display.drop(columns=[c for c in ml_detail_cols if c in top_df_display.columns], errors="ignore")
 
         # --- FINAL WHITELIST FIX (Enhanced with Picks Sheet Columns) ---
+        # --- SHARPNESS DELTA UI ---
+        # Add "Sharp Action" column
+        if "sharpness_delta" in top_df_display.columns:
+            def _fmt_sharp_action(val):
+                try:
+                    v = float(val)
+                    if v > 0.10:
+                        return "💰 Sharp"
+                    elif v < -0.10:
+                        return "Square"
+                    return ""
+                except Exception:
+                    return ""
+            top_df_display["Sharp Action"] = top_df_display["sharpness_delta"].apply(_fmt_sharp_action)
+
         ui_whitelist = [
             'league', 'Home', 'Away', 'Commence (UTC)', 'Commence (Local)', 'Local Date',
             'Overall Pick', 'Overall Prob', 'Spread', 'Spread Prob', 'Total', 'Total Prob', 'ML', 'ML Prob',
@@ -9999,14 +10016,15 @@ with tab_master:
             'Spread & Pick', 'Total & Pick',
             'spread_edge', 'total_edge',
             'Pick', 'AI_Prob', 'Implied_Prob', 'Home_Sentiment', 'Away_Sentiment', 'Sentiment_Diff', 'sentiment_status', 'status', 'best_pick_prob', 'best_pick_edge',
-            'theover_pick', 'theover_prob_used', 'theover_delta_final_prob', 'final_prob_without_theover'
+            'theover_pick', 'theover_prob_used', 'theover_delta_final_prob', 'final_prob_without_theover',
+            'Sharp Action', 'sharpness_delta'
         ]
         safe_cols = [c for c in ui_whitelist if c in top_df_display.columns]
         top_df_ui = top_df_display[safe_cols].copy()
 
         # Force Numeric and String consistency
         for col in top_df_ui.columns:
-            if col in ['AI_Prob', 'Implied_Prob', 'spread_edge', 'total_edge', 'Sentiment_Diff', 'final_prob', 'edge', 'Overall Prob', 'Spread Prob', 'Total Prob', 'ML Prob']:
+            if col in ['AI_Prob', 'Implied_Prob', 'spread_edge', 'total_edge', 'Sentiment_Diff', 'final_prob', 'edge', 'Overall Prob', 'Spread Prob', 'Total Prob', 'ML Prob', 'sharpness_delta']:
                 top_df_ui[col] = pd.to_numeric(top_df_ui[col], errors='coerce').fillna(0.0)
             else:
                 top_df_ui[col] = top_df_ui[col].astype(str).replace('None', 'N/A')
