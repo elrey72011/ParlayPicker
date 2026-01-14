@@ -6342,7 +6342,8 @@ with tab_master:
                 g_home_code = team_code_for_league(g_league, g.get("home_team"))
                 g_away_code = team_code_for_league(g_league, g.get("away_team"))
                 # Task 2 Fix: Enforce correct parameter order explicitly using named arguments
-                canon_key = generate_canonical_key(league=g_league, date_str=g_date_local, home_code=g_home_code, away_code=g_away_code)
+                date_clean = str(g_date_local or "")[:10]
+                canon_key = generate_canonical_key(league=g_league, date_str=date_clean, home_code=g_home_code, away_code=g_away_code)
 
                 # 2. Lookup in TheOver Dictionary
                 theover_side_data = None
@@ -10121,11 +10122,16 @@ with tab_master:
                      return f"{reason} {icon_str}"
             return reason
 
+        # Apply to Display DF (top_df_display) which is used for UI and Exports
         if "Pick_Reason_Short" in top_df_display.columns:
             top_df_display["Pick_Reason_Short"] = top_df_display.apply(lambda r: _append_icons(r, "Pick_Reason_Short"), axis=1)
 
         if "At_a_Glance_Reason" in top_df_display.columns:
             top_df_display["At_a_Glance_Reason"] = top_df_display.apply(lambda r: _append_icons(r, "At_a_Glance_Reason"), axis=1)
+
+        # Apply to Main Master View as well (for big table)
+        if "Pick_Reason_Short" in df_master_view_display.columns:
+            df_master_view_display["Pick_Reason_Short"] = df_master_view_display.apply(lambda r: _append_icons(r, "Pick_Reason_Short"), axis=1)
         if not show_moneyline_details:
             ml_detail_cols = [
                 "Pick",
