@@ -596,10 +596,10 @@ def compute_final_probability(
 
     # Task 1: Hardcoded Global Weights (No Dynamic Shifting)
     # Values: Kalshi 0.35, Market 0.30, ML 0.20, TheOver 0.10, Sentiment 0.05
-    # If source is missing, weight is 0.0. No redistribution.
+    # Logic: Missing sources are imputed with 0.5 (neutral) to maintain probability scale
+    # while keeping weight denominators static (Sum=1.0).
 
     # 1. Define Static Weights (Hardcoded per User Request)
-    # Force these values: Kalshi 0.35, Market 0.30, ML 0.20, TheOver 0.10, Sentiment 0.05
     w_kalshi = 0.35
     w_market = 0.30
     w_model = 0.20
@@ -611,78 +611,71 @@ def compute_final_probability(
     has_market = implied_prob is not None
     has_model = model_prob is not None
     has_theover = theover_prob is not None
-
-    # Task 4: Sentiment Logic driven by Sharpness Delta
-    # Sentiment Prob is derived later, availability check:
     has_sentiment = sentiment_score is not None
 
-    # 3. Force Global Weight Compliance (Rule: No redistribution)
-    # "If sentiment or theover are missing for a specific game, their weight contribution is 0, but the other weights do not move."
-    if not has_kalshi:
-        w_kalshi = 0.0
-    if not has_model:
-        w_model = 0.0
-    if not has_theover:
-        w_theover = 0.0
-    if not has_sentiment:
-        w_sentiment = 0.0
+    # 3. Build Sources (Always include all 5)
 
-    # Safety: If market is also missing (rare/impossible if we have a pick), normalize remainder?
-    # For now assuming implied_prob exists if we are calculating probability for a pick.
+    # Market (0.30)
+    p_market = clamp(implied_prob) if has_market else 0.5
+    sources.append(("implied", p_market, w_market))
 
-    # 4. Append Sources
-    if has_market:
-        sources.append(("implied", clamp(implied_prob), w_market))
-    if has_kalshi:
-        sources.append(("kalshi", clamp(kalshi_prob_for_pick), w_kalshi))
-    if has_model:
-        sources.append(("model", clamp(model_prob), w_model))
-    if has_theover:
-        sources.append(("theover", clamp(theover_prob), w_theover))
+    # Kalshi (0.35)
+    p_kalshi = clamp(kalshi_prob_for_pick) if has_kalshi else 0.5
+    sources.append(("kalshi", p_kalshi, w_kalshi))
 
-    # 5. Sentiment as a Probability Source
-    sentiment_prob_val = None
-    if has_sentiment and w_sentiment > 0.0:
+    # ML Model (0.20)
+    p_model = clamp(model_prob) if has_model else 0.5
+    sources.append(("model", p_model, w_model))
+
+    # TheOver (0.10)
+    p_theover = clamp(theover_prob) if has_theover else 0.5
+    sources.append(("theover", p_theover, w_theover))
+
+    # Sentiment (0.05) - Logic for converting score to prob
+    p_sentiment = 0.5
+    if has_sentiment:
         try:
             raw_score = float(sentiment_score)
-            # Cap impact to +/- 0.15
+            # Cap impact to +/- 0.15 (Map 1.0 score to 0.65 prob)
             impact = max(-0.15, min(0.15, raw_score * 0.15))
             home_prob = 0.50 + impact
-
             p_side = str(pick_side or "").lower()
             if p_side in {"home", "over"}:
-                sentiment_prob_val = home_prob
+                p_sentiment = home_prob
             elif p_side in {"away", "under"}:
-                sentiment_prob_val = 1.0 - home_prob
-
-            if sentiment_prob_val is not None:
-                sources.append(("sentiment", clamp(sentiment_prob_val), w_sentiment))
+                p_sentiment = 1.0 - home_prob
+            p_sentiment = clamp(p_sentiment)
         except Exception as e:
             logger.warning(f"Sentiment Prob Calculation Error: {e}")
+            p_sentiment = 0.5
+
+    sources.append(("sentiment", p_sentiment, w_sentiment))
 
     if sentiment_adj is None:
         sentiment_adj = 0.0
 
-    if not sources:
-        return None, None, weights_used, "missing", warnings, kalshi_prob_for_pick
+    # 5. Calculate Weighted Sum (Denominator is always 1.0)
+    # "Disable all dynamic weight normalization"
 
-    if all((w or 0.0) <= 0.0 for _, _, w in sources):
-        # Fallback: Equal weighting if all zero
-        sources = [(name, prob, 1.0) for name, prob, _ in sources]
+    # Update weights_used for display (static values)
+    weights_used["w_implied"] = w_market
+    weights_used["w_kalshi"] = w_kalshi
+    weights_used["w_model"] = w_model
+    weights_used["w_theover"] = w_theover
+    weights_used["w_sentiment"] = w_sentiment
 
-    total_w = sum(max(w, 0.0) for _, _, w in sources)
-    if total_w <= 0:
-        total_w = float(len(sources))
-        sources = [(name, prob, 1.0) for name, prob, _ in sources]
+    # Calculate Base Prob
+    # Sum(P * W) / Sum(W) -> Sum(W) is 1.0
+    base_prob = sum((p if p is not None else 0.5) * w for _, p, w in sources)
 
+    # Reconstruct weights_norm list for downstream compatibility (though normalization is effectively 1.0)
     weights_norm: List[Tuple[str, float, float]] = []
-    for name, prob, weight in sources:
-        w_norm = max(weight, 0.0) / total_w
-        weights_used[f"w_{name}"] = w_norm
-        weights_norm.append((name, prob if prob is not None else None, w_norm))
+    for name, p, w in sources:
+        weights_norm.append((name, p, w))
 
-    driver = max(weights_norm, key=lambda tup: tup[2])[0] if weights_norm else "missing"
-    base_prob = sum((prob or 0.0) * w for _, prob, w in weights_norm)
+    # Determine Driver (Highest Weight) - Static, but effectively Kalshi or Market usually
+    # Just pick max weight
+    driver = "kalshi" # 0.35 is highest
 
     # ENHANCEMENT: Explicitly zero out w_model in return dict if not used, and flag reason
     if 'model' not in [s[0] for s in sources]:
@@ -1122,6 +1115,11 @@ def calculate_best_pick_metrics(df: pd.DataFrame) -> pd.DataFrame:
         if s_valid: candidates.append("SPREAD")
         if t_valid: candidates.append("TOTAL")
 
+        # Explicitly Exclude Moneyline (Task 2) - Ensure ML never enters candidate pool
+        # If any legacy logic added "ML" to candidates, remove it.
+        if "ML" in candidates:
+            candidates.remove("ML")
+
         candidate_types_str = "|".join(candidates)
 
         # Decision
@@ -1153,6 +1151,7 @@ def calculate_best_pick_metrics(df: pd.DataFrame) -> pd.DataFrame:
             reason = "Only Total Valid"
         else:
             # Both Missing/Invalid. Fallback to Spread (Empty/Low Confidence)
+            # Even if ML is valid, we force Spread/Total type to avoid ML recommendation loop.
             best_type = "SPREAD"
             best_pick = s_pick # Might be None
             best_prob = s_prob if s_prob is not None else 0.5
@@ -9998,6 +9997,7 @@ with tab_master:
             def _fmt_sharp_money(row):
                 icons = []
                 try:
+                    # Task 4: Sharp Money Icon (Money% > Ticket% by 10%)
                     sd = float(row.get("sharpness_delta") or 0.0)
                     if sd > 0.10:
                         icons.append("💰")
@@ -10005,9 +10005,9 @@ with tab_master:
                     pass
 
                 try:
-                    # Check for Market Steam (delta_implied_prob)
+                    # Check for Market Steam (delta_implied_prob > 3%)
                     steam = float(row.get("delta_implied_prob") or 0.0)
-                    if abs(steam) > 0.03:
+                    if steam > 0.03:
                          icons.append("🔥")
                 except Exception:
                     pass
