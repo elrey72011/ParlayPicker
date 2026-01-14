@@ -6026,6 +6026,10 @@ with tab_master:
                 commence_times_by_league: Dict[str, List[str]] = {}
                 rows_out = [] # FIX: Ensure accumulator is initialized before loop
                 for g in games:
+                    # FIX: Track if ANY row was created for this game to ensure fallback works
+                    ml_row_created = False
+                    spread_row_created = False
+                    total_row_created = False
                     lg = g.get("league")
                     commence_val = g.get("commence_time_iso_utc") or g.get("commence_time") or g.get("commence_time_iso")
                     if not commence_val:
@@ -8291,6 +8295,7 @@ with tab_master:
                         ml_row["Eligible_Top_Picks"] = eligible
                         ml_row = apply_sentiment_defaults(ml_row, sentiment_defaults_base)
                         rows_out.append(ml_row)
+                        ml_row_created = True
                         master_stats["h2h_found"] += 1
                         master_stats["market_rows_out"] += 1
                 elif extreme_ml:
@@ -8574,6 +8579,7 @@ with tab_master:
                     spread_row["Eligible_Top_Picks"] = eligible
                     spread_row = apply_sentiment_defaults(spread_row, sentiment_defaults_base)
                     rows_out.append(spread_row)
+                    spread_row_created = True
                     master_stats["market_rows_out"] += 1
 
                 # TOTAL ROW
@@ -8845,10 +8851,12 @@ with tab_master:
                     total_row["Eligible_Top_Picks"] = eligible
                     total_row = apply_sentiment_defaults(total_row, sentiment_defaults_base)
                     rows_out.append(total_row)
+                    total_row_created = True
                     master_stats["market_rows_out"] += 1
 
                 # --- 5. FALLBACK: "NONE" MARKET ROW ---
-                if not (g.get("home_ml_price") or g.get("home_spread_point") or g.get("total_point")):
+                # Ensure a row is created for the game even if specific market data is missing
+                if not (ml_row_created or spread_row_created or total_row_created):
                     warnings = list(dict.fromkeys(warnings + ["no_markets"]))
                     fallback_row = {
                         "league": league_name,
@@ -9230,9 +9238,10 @@ with tab_master:
                 # Ensure rows_for_dedupe is initialized even if master_df was empty
                 rows_for_dedupe = master_df.to_dict("records") if not master_df.empty else []
 
-                deduped_rows: Dict[Tuple[Any, Any, Any, Any], Dict[str, Any]] = {}
+                deduped_rows: Dict[Tuple[Any, Any, Any, Any, Any], Dict[str, Any]] = {}
                 for row in rows_for_dedupe:
-                    key = (row.get("league"), row.get("Home"), row.get("Away"), row.get("Commence (UTC)"))
+                    # Key must include the market to prevent overwriting Spread/Total rows for the same game
+                    key = (row.get("league"), row.get("Home"), row.get("Away"), row.get("Commence (UTC)"), row.get("Market"))
                     existing = deduped_rows.get(key)
                     if (existing is None) or (
                         not existing.get("kalshi_matched") and row.get("kalshi_matched")
@@ -9368,6 +9377,10 @@ with tab_master:
                     return row
 
                 df = df.apply(_force_pivot, axis=1)
+
+                # FIX: Deduplicate AFTER pivot to remove redundant rows.
+                # If ML pivoted to Spread and Spread already existed, keep original Spread (last in list).
+                df = df.drop_duplicates(subset=['league', 'Home', 'Away', 'Commence (UTC)', 'Market'], keep='last')
 
                 st.session_state["master_df"] = df
                 st.session_state["master_results_df"] = df
@@ -11375,7 +11388,7 @@ with tab_master:
         pass
         # FIX: Load from persistent session state to avoid NameError on reruns (Debug Export)
         # Use session state to retrieve stats safely
-        stats = st.session_state.get("master_stats_persistent", {})
+        stats = st.session_state.get("master_stats_persistent", {"rows_out": 0, "games_in": 0})
         rows_out_val = stats.get('rows_out', 0)
         games_in_val = stats.get('games_in', 0)
 
