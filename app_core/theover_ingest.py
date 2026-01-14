@@ -34,11 +34,26 @@ TEAM_ALIAS_MAP = {
     "Toronto": "Toronto Maple Leafs", "Florida": "Florida Panthers",
     "Vancouver": "Vancouver Canucks", "Montreal": "Montreal Canadiens",
     "NY Rangers": "New York Rangers", "NY Islanders": "New York Islanders",
-    "LA": "Los Angeles Kings", "SJ": "San Jose Sharks", # Kept existing
+    # "LA": "Los Angeles Kings",  <-- REMOVED (Handled conditionally)
+    "SJ": "San Jose Sharks",
+    "St Louis": "St Louis Blues", "Tampa Bay": "Tampa Bay Lightning",
+    "Vegas": "Vegas Golden Knights", "Washington": "Washington Capitals",
+    "Arizona": "Arizona Coyotes", "Anaheim": "Anaheim Ducks",
+    "Boston": "Boston Bruins", "Calgary": "Calgary Flames",
+    "Carolina": "Carolina Hurricanes", "Chicago": "Chicago Blackhawks",
+    "Colorado": "Colorado Avalanche", "Columbus": "Columbus Blue Jackets",
+    "Dallas": "Dallas Stars", "Detroit": "Detroit Red Wings",
+    "Edmonton": "Edmonton Oilers", "Minnesota": "Minnesota Wild",
+    "Nashville": "Nashville Predators", "Pittsburgh": "Pittsburgh Penguins",
     # NBA
     "New York": "New York Knicks", "Sacramento": "Sacramento Kings",
-    "LA": "Los Angeles Lakers", "PHI": "Philadelphia 76ers",
-    "GSW": "Golden State Warriors", "LAL": "Los Angeles Lakers", # Kept existing
+    # "LA": "Los Angeles Lakers", <-- REMOVED (Handled conditionally)
+    "PHI": "Philadelphia 76ers",
+    "GSW": "Golden State Warriors", "LAL": "Los Angeles Lakers",
+    "LAC": "Los Angeles Clippers", "BKN": "Brooklyn Nets",
+    "OKC": "Oklahoma City Thunder", "NOP": "New Orleans Pelicans",
+    "SAS": "San Antonio Spurs", "UTA": "Utah Jazz",
+    "WAS": "Washington Wizards", "CHA": "Charlotte Hornets",
     # NCAAB (Major Naming Delta)
     "South Carolina": "South Carolina Gamecocks", "Arkansas": "Arkansas Razorbacks",
     "Pittsburgh": "Pittsburgh Panthers", "Georgia Tech": "Georgia Tech Yellow Jackets",
@@ -47,7 +62,21 @@ TEAM_ALIAS_MAP = {
     "LSU": "LSU Tigers", "Kansas": "Kansas Jayhawks", "Kansas St": "Kansas State Wildcats",
     "Illinois": "Illinois Fighting Illini", "Ohio St": "Ohio State Buckeyes",
     "Boston Univ": "Boston Univ. Terriers", "Western Carolina": "Western Carolina Catamounts",
-    "Chattanooga": "Chattanooga Mocs"
+    "Chattanooga": "Chattanooga Mocs", "NC State": "NC State Wolfpack",
+    "Iowa": "Iowa Hawkeyes", "Iowa St": "Iowa State Cyclones",
+    "Michigan": "Michigan Wolverines", "Michigan St": "Michigan State Spartans",
+    "Penn St": "Penn State Nittany Lions", "Texas A&M": "Texas A&M Aggies",
+    "Virginia": "Virginia Cavaliers", "Virginia Tech": "Virginia Tech Hokies",
+    "West Virginia": "West Virginia Mountaineers", "Florida St": "Florida State Seminoles",
+    "Miami (FL)": "Miami Hurricanes", "Miami": "Miami Hurricanes",
+    "Kentucky": "Kentucky Wildcats", "Tennessee": "Tennessee Volunteers",
+    "Auburn": "Auburn Tigers", "Alabama": "Alabama Crimson Tide",
+    "Arizona St": "Arizona State Sun Devils", "Oregon": "Oregon Ducks",
+    "Oregon St": "Oregon State Beavers", "UCLA": "UCLA Bruins",
+    "USC": "USC Trojans", "Washington St": "Washington State Cougars",
+    "Colorado St": "Colorado State Rams", "San Diego St": "San Diego State Aztecs",
+    "Boise St": "Boise State Broncos", "Nevada": "Nevada Wolf Pack",
+    "UNLV": "UNLV Rebels", "Utah St": "Utah State Aggies"
 }
 
 def generate_canonical_key(league: str, date_str: str, home_code: str, away_code: str) -> str:
@@ -217,6 +246,27 @@ def _normalize_league_str(raw_league: str) -> str:
     if any(x in raw_league for x in ["NCAAF", "CFB", "COLLEGE FOOTBALL"]): return "NCAAF"
     return raw_league
 
+def _resolve_team_alias(name: str, league: str) -> str:
+    """
+    Resolve team alias with league-specific context.
+    """
+    name = name.strip()
+
+    # 1. Global Map Lookup (Explicit Aliases)
+    if name in TEAM_ALIAS_MAP:
+        return TEAM_ALIAS_MAP[name]
+
+    # 2. Context-Aware Resolution (Resolving Collisions)
+    if name == "LA":
+        if league == "NBA":
+            return "Los Angeles Lakers"
+        elif league == "NHL":
+            return "Los Angeles Kings"
+        # Default or fallback?
+        return "Los Angeles"
+
+    return name
+
 def _transform_theover_df(df: pd.DataFrame, pick_type_default: str, games: List[Dict[str, Any]], stats_collector: List[Dict]) -> pd.DataFrame:
     """
     Transforms the parsed TheOver dataframe into standardized records.
@@ -291,11 +341,9 @@ def _transform_theover_df(df: pd.DataFrame, pick_type_default: str, games: List[
         csv_home = str(row.get("HOMETEAM", "")).strip()
         csv_away = str(row.get("AWAYTEAM", "")).strip()
 
-        # Apply TEAM_ALIAS_MAP
-        if csv_home in TEAM_ALIAS_MAP:
-            csv_home = TEAM_ALIAS_MAP[csv_home]
-        if csv_away in TEAM_ALIAS_MAP:
-            csv_away = TEAM_ALIAS_MAP[csv_away]
+        # Apply Context-Aware Alias Resolution
+        csv_home = _resolve_team_alias(csv_home, league)
+        csv_away = _resolve_team_alias(csv_away, league)
 
         # Extract Date (if available) for Time Window Filtering
         input_date_str = str(row.get("COMMENCE", "")).strip()
