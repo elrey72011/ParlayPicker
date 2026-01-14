@@ -616,17 +616,18 @@ def compute_final_probability(
     has_sentiment = sentiment_score is not None
 
     # 3. Redistribute Missing Weights to Market
+    # User Instruction: "Stop the dynamic normalization for now... treat its contribution as 0 but do not change the other weights."
     if not has_kalshi:
-        w_market += w_kalshi
+        # w_market += w_kalshi
         w_kalshi = 0.0
     if not has_model:
-        w_market += w_model
+        # w_market += w_model
         w_model = 0.0
     if not has_theover:
-        w_market += w_theover
+        # w_market += w_theover
         w_theover = 0.0
     if not has_sentiment:
-        w_market += w_sentiment
+        # w_market += w_sentiment
         w_sentiment = 0.0
 
     # Safety: If market is also missing (rare/impossible if we have a pick), normalize remainder?
@@ -3288,6 +3289,11 @@ def init_data_clients() -> Tuple[Dict[str, Any], Dict[str, Any]]:
 
 # Must be the first Streamlit call
 st.set_page_config(page_title="ParlayDesk", layout="wide")
+
+# Task 3: Initialize TheOver Raw Debug State
+if "theover_raw_df" not in st.session_state:
+    st.session_state["theover_raw_df"] = pd.DataFrame()
+
 if "model_mode" not in st.session_state:
     st.session_state["model_mode"] = "Local XGBoost"
 if "model_ready" not in st.session_state:
@@ -8960,8 +8966,20 @@ with tab_master:
 
         # Task 4: Enrich with Consensus (Sharpness Delta)
         # Must be done before sentiment integration or model features if model uses it
-        with st.spinner("📊 Ingesting Public Consensus Data..."):
-            master_df = enrich_with_consensus(master_df)
+        # --- FIXED CODE FOR JULES ---
+            try:
+                with st.spinner("📊 Ingesting Public Consensus Data..."):
+                    # This is where the Money % and Ticket % are pulled
+                    import app_core.consensus_ingest as consensus
+                    consensus_data = consensus.fetch_latest_splits()
+                    st.session_state.consensus_data = consensus_data
+                    master_df = enrich_with_consensus(master_df, consensus_data)
+            except Exception as e:
+                st.error(f"Consensus Ingestion Failed: {e}")
+                st.session_state.consensus_data = None
+                # Fallback to enrich without external data (uses mocks)
+                master_df = enrich_with_consensus(master_df)
+            # -----------------------------
 
             # 3. CRITICAL: Enrich the whole batch to fill 'feature_diff' columns
             # This fixes the 'Missing feature column' warnings in the logs
@@ -8969,173 +8987,173 @@ with tab_master:
                 # FIX: Pass ALL api_clients so stats for all leagues are fetched, not just the last loop variable
                 master_df = enrich_with_model_features(master_df, api_sports_clients)
 
-        # Task 4: Update Sentiment Score using Sharpness Delta
-        # Integration: 60% Sharpness Delta, 40% Social Sentiment
-        # We need to update 'Sentiment_Diff' or create a new combined score.
-        # Currently 'Sentiment_Diff' is used in compute_final_probability via sentiment_score.
+            # Task 4: Update Sentiment Score using Sharpness Delta
+            # Integration: 60% Sharpness Delta, 40% Social Sentiment
+            # We need to update 'Sentiment_Diff' or create a new combined score.
+            # Currently 'Sentiment_Diff' is used in compute_final_probability via sentiment_score.
 
-        def _update_sentiment_score(row):
-            social_diff = row.get("Sentiment_Diff")
-            if social_diff is None: social_diff = 0.0
+            def _update_sentiment_score(row):
+                social_diff = row.get("Sentiment_Diff")
+                if social_diff is None: social_diff = 0.0
 
-            sharpness = row.get("sharpness_delta")
-            if sharpness is None: sharpness = 0.0
+                sharpness = row.get("sharpness_delta")
+                if sharpness is None: sharpness = 0.0
 
-            # Hybrid Formula
-            # Normalize sharpness (e.g. 0.15 delta -> 1.0 score equiv? or keep raw?)
-            # Sentiment Diff is typically -1 to 1.
-            # Sharpness Delta is typically -0.3 to +0.3.
-            # Let's scale sharpness by 3.33 to map 0.3 to 1.0 roughly.
-            sharpness_scaled = sharpness * 3.33
+                # Hybrid Formula
+                # Normalize sharpness (e.g. 0.15 delta -> 1.0 score equiv? or keep raw?)
+                # Sentiment Diff is typically -1 to 1.
+                # Sharpness Delta is typically -0.3 to +0.3.
+                # Let's scale sharpness by 3.33 to map 0.3 to 1.0 roughly.
+                sharpness_scaled = sharpness * 3.33
 
-            # Weighted Combo
-            hybrid_score = (0.6 * sharpness_scaled) + (0.4 * social_diff)
-            return hybrid_score
+                # Weighted Combo
+                hybrid_score = (0.6 * sharpness_scaled) + (0.4 * social_diff)
+                return hybrid_score
 
-        if 'Sentiment_Diff' in master_df.columns and 'sharpness_delta' in master_df.columns:
-            master_df['Sentiment_Diff'] = master_df.apply(_update_sentiment_score, axis=1)
+            if 'Sentiment_Diff' in master_df.columns and 'sharpness_delta' in master_df.columns:
+                master_df['Sentiment_Diff'] = master_df.apply(_update_sentiment_score, axis=1)
 
-            # Ensure use_model_numeric_probs is synchronized from session state
-            use_model_numeric_probs = st.session_state.get("use_model_numeric_probs", True)
+                # Ensure use_model_numeric_probs is synchronized from session state
+                use_model_numeric_probs = st.session_state.get("use_model_numeric_probs", True)
 
-            # 4. BATCH PREDICTION: Local Inference
-            master_df = clean_df(master_df)
-            # Local inference is always "configured" (or falls back)
-            if True:
-                with st.spinner("🔮 Computing Win Probabilities (Local)..."):
-                    # 2. Filter for exactly the columns the model expects
-                    # User Action: Ensure columns exist before filtering
-                    missing_cols = [col for col in VERTEX_FEATURE_COLUMNS if col not in master_df.columns]
-                    if missing_cols:
-                        zeros_df = pd.DataFrame(0.0, index=master_df.index, columns=missing_cols)
-                        master_df = pd.concat([master_df, zeros_df], axis=1)
+                # 4. BATCH PREDICTION: Local Inference
+                master_df = clean_df(master_df)
+                # Local inference is always "configured" (or falls back)
+                if True:
+                    with st.spinner("🔮 Computing Win Probabilities (Local)..."):
+                        # 2. Filter for exactly the columns the model expects
+                        # User Action: Ensure columns exist before filtering
+                        missing_cols = [col for col in VERTEX_FEATURE_COLUMNS if col not in master_df.columns]
+                        if missing_cols:
+                            zeros_df = pd.DataFrame(0.0, index=master_df.index, columns=missing_cols)
+                            master_df = pd.concat([master_df, zeros_df], axis=1)
 
-                    inference_df = master_df[VERTEX_FEATURE_COLUMNS].copy()
+                        inference_df = master_df[VERTEX_FEATURE_COLUMNS].copy()
 
-                    # 3. Sanitize feature batch
-                    for col in VERTEX_FEATURE_COLUMNS:
-                        col_data = inference_df[col]
-                        if isinstance(col_data, pd.DataFrame):
-                            col_data = col_data.iloc[:, 0]
-                        default_val = 0.5 if "prob" in col else 0.0
-                        inference_df[col] = pd.to_numeric(col_data, errors='coerce').fillna(default_val).astype(float)
+                        # 3. Sanitize feature batch
+                        for col in VERTEX_FEATURE_COLUMNS:
+                            col_data = inference_df[col]
+                            if isinstance(col_data, pd.DataFrame):
+                                col_data = col_data.iloc[:, 0]
+                            default_val = 0.5 if "prob" in col else 0.0
+                            inference_df[col] = pd.to_numeric(col_data, errors='coerce').fillna(default_val).astype(float)
 
-                    # 6. Accumulate Debug Data (Base Dict + Feature Vector)
-                    if "debug_log_history" not in st.session_state:
-                        st.session_state["debug_log_history"] = []
+                        # 6. Accumulate Debug Data (Base Dict + Feature Vector)
+                        if "debug_log_history" not in st.session_state:
+                            st.session_state["debug_log_history"] = []
 
-                    try:
-                        # Capture base metadata
-                        debug_base = master_df[['Home', 'Away', 'league', 'Commence (UTC)']].copy()
-                        # Combine with feature vector
-                        debug_combined = pd.concat([debug_base, inference_df], axis=1)
-                        # Append to session state accumulator
-                        st.session_state["debug_log_history"].extend(debug_combined.to_dict('records'))
-                    except Exception as e:
-                        logger.warning(f"Failed to accumulate debug data: {e}")
-
-                    # 7. Call local prediction
-                    if not inference_df.empty:
-                        engine = get_prediction_engine()
                         try:
-                            probs = engine.predict_batch(inference_df)
+                            # Capture base metadata
+                            debug_base = master_df[['Home', 'Away', 'league', 'Commence (UTC)']].copy()
+                            # Combine with feature vector
+                            debug_combined = pd.concat([debug_base, inference_df], axis=1)
+                            # Append to session state accumulator
+                            st.session_state["debug_log_history"].extend(debug_combined.to_dict('records'))
                         except Exception as e:
-                            logger.error(f"Prediction batch failed: {e}")
-                            st.warning(f"AI Data Unavailable (using defaults): {e}")
-                            probs = [0.5] * len(inference_df)
+                            logger.warning(f"Failed to accumulate debug data: {e}")
 
-                        # FIX: Stop Using Indexing for AI Results (Safe Map Approach) - Logic Update: Pad with 0.5 instead of fail
-                        if probs:
-                            # Handle length mismatch by padding or truncating
-                            if len(probs) < len(inference_df):
-                                logger.warning(f"Prediction length mismatch (short): got {len(probs)}, expected {len(inference_df)}. Padding with 0.5.")
-                                probs = list(probs) + [0.5] * (len(inference_df) - len(probs))
-                            elif len(probs) > len(inference_df):
-                                logger.warning(f"Prediction length mismatch (long): got {len(probs)}, expected {len(inference_df)}. Truncating.")
-                                probs = list(probs)[:len(inference_df)]
+                        # 7. Call local prediction
+                        if not inference_df.empty:
+                            engine = get_prediction_engine()
+                            try:
+                                probs = engine.predict_batch(inference_df)
+                            except Exception as e:
+                                logger.error(f"Prediction batch failed: {e}")
+                                st.warning(f"AI Data Unavailable (using defaults): {e}")
+                                probs = [0.5] * len(inference_df)
 
-                            # Wrap in Series to match index explicitly (convert to list to drop any upstream index)
-                            # This aligns by index explicitly as requested to prevent mismatch
-                            predictions_series = pd.Series(list(probs), index=inference_df.index)
+                            # FIX: Stop Using Indexing for AI Results (Safe Map Approach) - Logic Update: Pad with 0.5 instead of fail
+                            if probs:
+                                # Handle length mismatch by padding or truncating
+                                if len(probs) < len(inference_df):
+                                    logger.warning(f"Prediction length mismatch (short): got {len(probs)}, expected {len(inference_df)}. Padding with 0.5.")
+                                    probs = list(probs) + [0.5] * (len(inference_df) - len(probs))
+                                elif len(probs) > len(inference_df):
+                                    logger.warning(f"Prediction length mismatch (long): got {len(probs)}, expected {len(inference_df)}. Truncating.")
+                                    probs = list(probs)[:len(inference_df)]
 
-                            # Assign using loc to ensure alignment
-                            master_df.loc[inference_df.index, 'AI_Prob'] = predictions_series
-                            master_df.loc[inference_df.index, 'ai_prob_base'] = predictions_series # Persist base if needed
+                                # Wrap in Series to match index explicitly (convert to list to drop any upstream index)
+                                # This aligns by index explicitly as requested to prevent mismatch
+                                predictions_series = pd.Series(list(probs), index=inference_df.index)
+
+                                # Assign using loc to ensure alignment
+                                master_df.loc[inference_df.index, 'AI_Prob'] = predictions_series
+                                master_df.loc[inference_df.index, 'ai_prob_base'] = predictions_series # Persist base if needed
+                            else:
+                                logger.warning("No predictions returned. Defaulting to 0.5.")
+                                master_df.loc[inference_df.index, 'AI_Prob'] = 0.5
+                                master_df.loc[inference_df.index, 'ai_prob_base'] = 0.5
                         else:
-                            logger.warning("No predictions returned. Defaulting to 0.5.")
-                            master_df.loc[inference_df.index, 'AI_Prob'] = 0.5
-                            master_df.loc[inference_df.index, 'ai_prob_base'] = 0.5
-                    else:
-                        logger.info("Skipping prediction: inference_df is empty.")
+                            logger.info("Skipping prediction: inference_df is empty.")
 
-                    # Safe Edge Calculation
-                    implied_probs = pd.to_numeric(master_df.get("Implied_Prob"), errors='coerce').fillna(0.5)
-                    master_df["AI_Edge"] = master_df["AI_Prob"] - implied_probs
+                        # Safe Edge Calculation
+                        implied_probs = pd.to_numeric(master_df.get("Implied_Prob"), errors='coerce').fillna(0.5)
+                        master_df["AI_Edge"] = master_df["AI_Prob"] - implied_probs
 
-            # 4. SHOTGUN ACTIVATION: Use ParlayOptimizer to tier the results
-            if ParlayOptimizer:
-                # FIX: Use absolute path for robustness
-                model_dir_abs = os.path.join(os.path.dirname(__file__), "models")
-                optimizer = ParlayOptimizer(model_dir=model_dir_abs)
-                shotgun_picks = optimizer.get_shotgun_picks(master_df)
-                st.session_state["shotgun_data"] = shotgun_picks
+                # 4. SHOTGUN ACTIVATION: Use ParlayOptimizer to tier the results
+                if ParlayOptimizer:
+                    # FIX: Use absolute path for robustness
+                    model_dir_abs = os.path.join(os.path.dirname(__file__), "models")
+                    optimizer = ParlayOptimizer(model_dir=model_dir_abs)
+                    shotgun_picks = optimizer.get_shotgun_picks(master_df)
+                    st.session_state["shotgun_data"] = shotgun_picks
 
-            # Collapse to one row per game (prefer the first generated row, typically moneyline) for Master View
-            # NOTE: master_df now has ALL rows (ML/Spread/Total). We duplicate logic for deduping for the UI view if needed,
-            # but the prompt implies we persist the FULL master_df to session state for tabs to use.
+                # Collapse to one row per game (prefer the first generated row, typically moneyline) for Master View
+                # NOTE: master_df now has ALL rows (ML/Spread/Total). We duplicate logic for deduping for the UI view if needed,
+                # but the prompt implies we persist the FULL master_df to session state for tabs to use.
 
-            # We need to preserve the sentiment metadata enrichment logic
-            sentiment_meta_for_export = sentiment_pack_meta or init_sentiment_meta()
-            # Vectorized or simple loop to fill sentiment meta if missing
-            # (Assuming enrich_with_model_features preserves existing cols, which it does)
+                # We need to preserve the sentiment metadata enrichment logic
+                sentiment_meta_for_export = sentiment_pack_meta or init_sentiment_meta()
+                # Vectorized or simple loop to fill sentiment meta if missing
+                # (Assuming enrich_with_model_features preserves existing cols, which it does)
 
-            # Deduping logic for "Master View" (one row per game)
-            # We'll create a view for display, but keep master_df full for shotgun/optimizer.
+                # Deduping logic for "Master View" (one row per game)
+                # We'll create a view for display, but keep master_df full for shotgun/optimizer.
 
-            # But wait, the previous code replaced `df` with `deduped_list`.
-            # If we overwrite `st.session_state["master_df"]` with the full `master_df`,
-            # downstream code expecting 1 row per game might break.
-            # However, the user instruction was "Persist to session state for the tabs to use".
-            # The tabs (Shotgun) likely need the full rows.
-            # The "Master Analysis" tab view logic (later in the file) uses `df` (which was deduped).
-            # We should probably assign `df` to the deduped version for the immediate display logic below,
-            # but maybe store `master_df_full` or similar?
-            # Actually, let's follow the pattern but adapt for the existing `df` variable usage.
+                # But wait, the previous code replaced `df` with `deduped_list`.
+                # If we overwrite `st.session_state["master_df"]` with the full `master_df`,
+                # downstream code expecting 1 row per game might break.
+                # However, the user instruction was "Persist to session state for the tabs to use".
+                # The tabs (Shotgun) likely need the full rows.
+                # The "Master Analysis" tab view logic (later in the file) uses `df` (which was deduped).
+                # We should probably assign `df` to the deduped version for the immediate display logic below,
+                # but maybe store `master_df_full` or similar?
+                # Actually, let's follow the pattern but adapt for the existing `df` variable usage.
 
-            # Apply sentiment meta to master_df
-            # (Simulating what the loop did)
-            if not master_df.empty:
-                # Optimized bulk assignment to prevent fragmentation
-                meta_updates = {
-                    "sentiment_sample_status": str(sentiment_meta_for_export.get("sentiment_sample_status", "NO_CALL") or "NO_CALL"),
-                    "sentiment_source": str(sentiment_meta_for_export.get("sentiment_source", "none") or "none"),
-                    "sentiment_status_counts": json.dumps(sentiment_meta_for_export.get("sentiment_status_counts", {"NO_CALL": 1})),
-                    "sentiment_sample_query": sentiment_meta_for_export.get("sentiment_sample_query", "") or "",
-                    "sentiment_disabled_reason": sentiment_meta_for_export.get("sentiment_disabled_reason", "") or "",
-                    "sentiment_errors_sample": sentiment_meta_for_export.get("sentiment_errors_sample", "") or "",
-                    "sentiment_error_count": int(sentiment_meta_for_export.get("sentiment_error_count", 0) or 0),
-                }
-                # Create DataFrame for new columns and concat
-                meta_df = pd.DataFrame(meta_updates, index=master_df.index)
-                master_df = pd.concat([master_df, meta_df], axis=1)
+                # Apply sentiment meta to master_df
+                # (Simulating what the loop did)
+                if not master_df.empty:
+                    # Optimized bulk assignment to prevent fragmentation
+                    meta_updates = {
+                        "sentiment_sample_status": str(sentiment_meta_for_export.get("sentiment_sample_status", "NO_CALL") or "NO_CALL"),
+                        "sentiment_source": str(sentiment_meta_for_export.get("sentiment_source", "none") or "none"),
+                        "sentiment_status_counts": json.dumps(sentiment_meta_for_export.get("sentiment_status_counts", {"NO_CALL": 1})),
+                        "sentiment_sample_query": sentiment_meta_for_export.get("sentiment_sample_query", "") or "",
+                        "sentiment_disabled_reason": sentiment_meta_for_export.get("sentiment_disabled_reason", "") or "",
+                        "sentiment_errors_sample": sentiment_meta_for_export.get("sentiment_errors_sample", "") or "",
+                        "sentiment_error_count": int(sentiment_meta_for_export.get("sentiment_error_count", 0) or 0),
+                    }
+                    # Create DataFrame for new columns and concat
+                    meta_df = pd.DataFrame(meta_updates, index=master_df.index)
+                    master_df = pd.concat([master_df, meta_df], axis=1)
 
-                # Fill remaining fields using bulk fillna
-                # Fix: Ensure no 'None' values are passed to fillna
-                fill_map = {
-                    "sentiment_status": str(sentiment_meta_for_export.get("sentiment_status") or "ok"),
-                    "sentiment_confidence": float(sentiment_meta_for_export.get("sentiment_confidence") or 0.0),
-                    "sentiment_score": float(sentiment_meta_for_export.get("sentiment_score") or 0.0),
-                }
-                # Apply individually to avoid ValueError
-                for col, val in fill_map.items():
-                    if col in master_df.columns:
-                        master_df[col] = master_df[col].fillna(val)
-                # Fill visual cols with empty string
-                visual_cols = ["spread_sentiment_arrow", "total_sentiment_arrow", "spread_sentiment_note", "total_sentiment_note"]
-                master_df[visual_cols] = master_df[visual_cols].fillna("")
+                    # Fill remaining fields using bulk fillna
+                    # Fix: Ensure no 'None' values are passed to fillna
+                    fill_map = {
+                        "sentiment_status": str(sentiment_meta_for_export.get("sentiment_status") or "ok"),
+                        "sentiment_confidence": float(sentiment_meta_for_export.get("sentiment_confidence") or 0.0),
+                        "sentiment_score": float(sentiment_meta_for_export.get("sentiment_score") or 0.0),
+                    }
+                    # Apply individually to avoid ValueError
+                    for col, val in fill_map.items():
+                        if col in master_df.columns:
+                            master_df[col] = master_df[col].fillna(val)
+                    # Fill visual cols with empty string
+                    visual_cols = ["spread_sentiment_arrow", "total_sentiment_arrow", "spread_sentiment_note", "total_sentiment_note"]
+                    master_df[visual_cols] = master_df[visual_cols].fillna("")
 
-            # Re-implement deduping for the `df` variable used by the UI below
-            rows_for_dedupe = master_df.to_dict("records")
+                # Re-implement deduping for the `df` variable used by the UI below
+                rows_for_dedupe = master_df.to_dict("records")
             deduped_rows: Dict[Tuple[Any, Any, Any, Any], Dict[str, Any]] = {}
             for row in rows_for_dedupe:
                 key = (row.get("league"), row.get("Home"), row.get("Away"), row.get("Commence (UTC)"))
