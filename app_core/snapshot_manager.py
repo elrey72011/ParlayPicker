@@ -9,17 +9,14 @@ from zoneinfo import ZoneInfo
 logger = logging.getLogger("snapshot_manager")
 
 # Snapshot Directory - Explicitly enforced as per task instructions
-# Priority: /mount/src/parlaypicker/data/snapshots/ -> local data/snapshots/
-MOUNT_PATH = "/mount/src/parlaypicker/data/snapshots"
-LOCAL_PATH = os.path.join(os.getcwd(), "data", "snapshots")
+# Hardcoded loading path to resolve "No noon baseline found" error
+SNAPSHOT_DIR = "/mount/src/parlaypicker/data/snapshots"
 
-if os.path.exists("/mount/src/parlaypicker"):
-    SNAPSHOT_DIR = MOUNT_PATH
-else:
-    SNAPSHOT_DIR = LOCAL_PATH
-
-# Ensure directory exists
-os.makedirs(SNAPSHOT_DIR, exist_ok=True)
+# Ensure directory exists (if we have permissions, otherwise this might fail but path is forced)
+try:
+    os.makedirs(SNAPSHOT_DIR, exist_ok=True)
+except Exception:
+    pass # Ignore permission errors if on read-only system, path is what matters for loading
 
 # Time Windows (ET) - Duplicated from market_tracker to avoid circular import
 NOON_BASELINE_START = time(9, 0)

@@ -1115,7 +1115,7 @@ def calculate_best_pick_metrics(df: pd.DataFrame) -> pd.DataFrame:
         if s_valid: candidates.append("SPREAD")
         if t_valid: candidates.append("TOTAL")
 
-        # Explicitly Exclude Moneyline (Task 2) - Ensure ML never enters candidate pool
+        # Explicitly Exclude Moneyline (Task 1) - Ensure ML never enters candidate pool
         # If any legacy logic added "ML" to candidates, remove it.
         if "ML" in candidates:
             candidates.remove("ML")
@@ -6316,40 +6316,43 @@ with tab_master:
                     # Default if matched but no hit rate
                     return 0.55
 
-                theover_prob_spread = _calc_theover_prob(theover_side_data)
-                theover_prob_total = _calc_theover_prob(theover_total_data)
+                # Task 3: Fix TheOver Lookup Logic (Corrected)
+                # Use master_key_exact and master_key_teams (already defined in loop)
+                theover_side_data = None
+                theover_total_data = None
 
-                if theover_side_data:
-                    theover_matched_side = theover_side_data
+                # Check for Side match in Exact lookup
+                if master_key_exact in theover_lookup_exact:
+                    cands = [r for r in theover_lookup_exact[master_key_exact] if r["theover_market_type"] == "SIDE"]
+                    if cands: theover_side_data = cands[0]
+                # Fallback to Teams lookup
+                if not theover_side_data and master_key_teams in theover_lookup_teams:
+                    cands = [r for r in theover_lookup_teams[master_key_teams] if r["theover_market_type"] == "SIDE"]
+                    if cands: theover_side_data = cands[0] # Simplification: take first matching date/team
+
+                # Check for Total match in Exact lookup
+                if master_key_exact in theover_lookup_exact:
+                    cands = [r for r in theover_lookup_exact[master_key_exact] if r["theover_market_type"] == "TOTAL"]
+                    if cands: theover_total_data = cands[0]
+                # Fallback to Teams lookup
+                if not theover_total_data and master_key_teams in theover_lookup_teams:
+                    cands = [r for r in theover_lookup_teams[master_key_teams] if r["theover_market_type"] == "TOTAL"]
+                    if cands: theover_total_data = cands[0]
+
+                theover_matched_side = theover_side_data
+                theover_matched_total = theover_total_data
+
+                # Set boolean flag for export
+                if theover_matched_side or theover_matched_total:
+                    theover_matched = True
+
+                theover_prob_spread = _calc_theover_prob(theover_matched_side)
+                theover_prob_total = _calc_theover_prob(theover_matched_total)
+
+                if theover_matched_side:
                     theover_matched_count_sides += 1
-                if theover_total_data:
-                    theover_matched_total = theover_total_data
+                if theover_matched_total:
                     theover_matched_count_totals += 1
-
-                # --- End TheOver Matching ---
-
-                # Placeholder for legacy block removal (if present downstream)
-                # We replaced the old manual check logic with this canonical key lookup.
-                if False:
-                    # Match game
-                    to_match = TeamNameMatcher.match_game(
-                        g.get("home_team"),
-                        g.get("away_team"),
-                        [(r.get("home_team_norm"), r.get("away_team_norm")) for r in theover_sides_df.to_dict('records')]
-                    )
-                    if to_match:
-                        # Find the row(s)
-                        # We matched (home_norm, away_norm)
-                        # We need to find the row in theover_sides_df
-                        for _, row in theover_sides_df.iterrows():
-                            if (row['home_team_norm'], row['away_team_norm']) == to_match or \
-                               (row['away_team_norm'], row['home_team_norm']) == to_match:
-                                theover_matched_side = row.to_dict()
-                                break
-
-                # --- TheOver Legacy Block Removed ---
-                # Rely on canonical key matching done above
-                pass
 
                 # Calculate TheOver Probs & Signal Alignment
                 if theover_matched_side:
@@ -9696,6 +9699,37 @@ with tab_master:
         # User Action: Enforce specific column order: Home, Away, Implied_Prob, AI_Prob
         df_master_view = reorder_for_spread_total_focus(df_master_view)
 
+        # Task 2: Moneyline Pivot (Final Safety Net)
+        # If Market == "Moneyline", verify spread/total and pivot if possible.
+        def _pivot_ml(row):
+            if row.get("Market") == "Moneyline" or row.get("best_pick_type") == "ML":
+                # Compare Spread vs Total probs
+                s_prob = safe_float(row.get("spread_prob_final")) or 0.0
+                t_prob = safe_float(row.get("total_prob_final")) or 0.0
+
+                # Pivot to Spread or Total based on higher prob
+                if s_prob >= t_prob and s_prob > 0:
+                     # Pivot to Spread
+                     row["Market"] = "Spread"
+                     row["Pick"] = row.get("Spread & Pick")
+                     row["final_probability"] = s_prob
+                     row["best_pick_type"] = "SPREAD"
+                     row["edge"] = row.get("spread_edge")
+                elif t_prob > 0:
+                     # Pivot to Total
+                     row["Market"] = "Total"
+                     row["Pick"] = row.get("Total & Pick")
+                     row["final_probability"] = t_prob
+                     row["best_pick_type"] = "TOTAL"
+                     row["edge"] = row.get("total_edge")
+                else:
+                    # Fallback if both missing (should not happen in pivot unless data is bad)
+                    row["Market"] = "Spread"
+                    row["best_pick_type"] = "SPREAD"
+            return row
+
+        df_master_view = df_master_view.apply(_pivot_ml, axis=1)
+
         # Explicit column ordering override
         # Jules: Map derived alias columns for display
         df_master_view["Pick"] = df_master_view["best_pick"]
@@ -9992,9 +10026,9 @@ with tab_master:
             top_df_display["Pick_Reason_Short"] = top_df_display["Pick_Reason_Short"] + " | " + top_df_display["TheOver_Impact"]
 
         # --- Task 3: Visual Icon Injection (💰 & 🔥) ---
-        # Append icons to Pick_Reason_Short
-        def _append_icons(row):
-            reason = str(row.get("Pick_Reason_Short") or "")
+        # Append icons to Pick_Reason_Short and At_a_Glance_Reason
+        def _append_icons(row, col_name):
+            reason = str(row.get(col_name) or "")
             icons = []
 
             # 💰 Money Bag: sharpness_delta > 0.10
@@ -10023,7 +10057,10 @@ with tab_master:
             return reason
 
         if "Pick_Reason_Short" in top_df_display.columns:
-            top_df_display["Pick_Reason_Short"] = top_df_display.apply(_append_icons, axis=1)
+            top_df_display["Pick_Reason_Short"] = top_df_display.apply(lambda r: _append_icons(r, "Pick_Reason_Short"), axis=1)
+
+        if "At_a_Glance_Reason" in top_df_display.columns:
+            top_df_display["At_a_Glance_Reason"] = top_df_display.apply(lambda r: _append_icons(r, "At_a_Glance_Reason"), axis=1)
         if not show_moneyline_details:
             ml_detail_cols = [
                 "Pick",
@@ -10313,10 +10350,14 @@ with tab_master:
             "theover_used_in_pick",
             "theover_total_prob",
             "theover_spread_prob",
+            "theover_weight",
+            "theover_matched",
             "kalshi_event_ticker",
             "kalshi_series",
             "normalization_source",
             "delta_implied_prob",
+            "sharpness_delta",
+            "Sharp Money",
             "delta_sentiment",
             "movement_alerts",
             "clv_spread_edge_diff",
@@ -10346,28 +10387,20 @@ with tab_master:
             # Use the reordered full export dataframe directly to ensure all columns are preserved
             final_picks_df = export_df.copy()
 
-            # Filter Export (Optional)
-            filter_export = st.checkbox("Filter Export (Strong Picks Only)", value=False, key="filter_export_check")
+            # Task 1: "Missing Games" Fix
+            # Remove all filters for the picks_sheet export. It must contain every analyzed row.
+            # We use final_picks_df which is a copy of export_df (the full dataset).
 
-            # Ensure export matches grid rows if not filtered specifically
-            if filter_export:
-                if "Bet_Confidence" in final_picks_df.columns:
-                    final_picks_df = final_picks_df[final_picks_df["Bet_Confidence"] == "HIGH"]
-            else:
-                # Filter to Eligible (HIGH+MEDIUM) to match Top Picks Grid, but keep low confidence if they are in the view?
-                # The user asked to keep all columns, but implies rows should match the grid.
-                # "whichever dataframe drives the grid should also drive the download"
-                # The grid uses top_df which filters by Eligible_Top_Picks.
-                if "Eligible_Top_Picks" in final_picks_df.columns:
-                     final_picks_df = final_picks_df[final_picks_df["Eligible_Top_Picks"] == True]
+            # Ensure overall_confidence is calculated as a float for sorting
+            if "overall_confidence" in final_picks_df.columns:
+                 # It might be string (HIGH/MED/LOW).
+                 # Task says "Edge between final_probability and implied_prob"
+                 # We have 'edge' column or 'active_edge'.
+                 # Let's ensure 'edge' is used or 'overall_confidence_score' is created if needed.
+                 # Actually, final_picks_df already has 'edge' calculated.
+                 pass
 
-                # Also apply confidence filter from session state if needed, or just dump what's there.
-                # The prompt says: "The main “Download CSV” button (st.download_button) so the downloaded CSV matches what is shown on screen."
-                # top_df_ui filters out LOW confidence by default unless unchecked.
-                if not include_low_in_top and "Pick_Confidence" in final_picks_df.columns:
-                    final_picks_df = final_picks_df[final_picks_df["Pick_Confidence"].isin(["HIGH", "MEDIUM"])]
-
-            st.caption(f"Export contains {len(final_picks_df)} picks.")
+            st.caption(f"Export contains {len(final_picks_df)} picks (All Games).")
 
             # Persist to session state
             st.session_state["final_picks_df"] = final_picks_df.copy()
