@@ -31,11 +31,13 @@ TEAM_ALIAS_MAP = {
     "Winnipeg": "Winnipeg Jets",
     "Vancouver": "Vancouver Canucks",
     "Toronto": "Toronto Maple Leafs",
-    "Montreal": "蒙特利尔加拿大人 (Montreal Canadiens)", # Verify local naming
+    "Montreal": "Montreal Canadiens", # Note: removed Chinese chars
     "Florida": "Florida Panthers",
     "Arizona": "Arizona Coyotes",
     "NY Rangers": "New York Rangers",
-    "NY Islanders": "New York Islanders"
+    "NY Islanders": "New York Islanders",
+    "LA": "Los Angeles Kings",
+    "SJ": "San Jose Sharks"
 }
 
 def generate_canonical_key(league: str, date_str: str, home_code: str, away_code: str) -> str:
