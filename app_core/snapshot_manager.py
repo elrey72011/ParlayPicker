@@ -7,8 +7,13 @@ import app_core.market_tracker as market_tracker
 
 logger = logging.getLogger("snapshot_manager")
 
-# Snapshot Directory from market_tracker or default
-SNAPSHOT_DIR = market_tracker.SNAPSHOT_DIR
+# Snapshot Directory - Explicitly enforced as per task instructions
+PERSISTENT_MOUNT_ROOT = "/mount/src/parlaypicker"
+if os.path.exists(PERSISTENT_MOUNT_ROOT):
+    SNAPSHOT_DIR = os.path.join(PERSISTENT_MOUNT_ROOT, "data", "snapshots")
+else:
+    # Fallback only if mount not present (e.g. local dev)
+    SNAPSHOT_DIR = market_tracker.SNAPSHOT_DIR
 
 # Time Windows (ET) from market_tracker
 NOON_BASELINE_START = market_tracker.NOON_BASELINE_START

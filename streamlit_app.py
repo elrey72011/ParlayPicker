@@ -1124,12 +1124,12 @@ def calculate_best_pick_metrics(df: pd.DataFrame) -> pd.DataFrame:
 
         # Decision
         # Compare Final Probability directly as requested by user
-        # "Logic: For every game, compare the final_probability of the Spread Pick vs. the Total Pick. The one with the highest confidence/edge becomes the official recommendation."
+        # "Logic: For every game, compare the final_probability of the Spread vs. the Total. The one with the highest confidence/edge becomes the official recommendation."
         # Note: s_prob and t_prob here ARE the final probabilities (adjusted or raw).
+
+        # Use score which combines prob and edge as "confidence/edge" metric.
         if s_valid and t_valid:
-            # Compare probability first, then edge
-            # If scores are close, prefer higher probability
-            # We stick to the composite score logic which balances edge/prob
+            # Strictly compare scores derived from Prob + Edge
             if t_score > s_score:
                 best_type = "TOTAL"
                 best_pick = t_pick
@@ -9979,6 +9979,7 @@ with tab_master:
 
         # --- Task 3: Visual Icon Injection (💰 & 🔥) ---
         # Append icons to Pick_Reason_Short
+        # Append icons to Pick_Reason_Short
         def _append_icons(row):
             reason = str(row.get("Pick_Reason_Short") or "")
             icons = []
@@ -10001,12 +10002,14 @@ with tab_master:
                 pass
 
             if icons:
-                return f"{reason} {' '.join(icons)}"
+                # Deduplicate icons if they might already be there
+                icon_str = " ".join(icons)
+                if icon_str not in reason:
+                     return f"{reason} {icon_str}"
             return reason
 
         if "Pick_Reason_Short" in top_df_display.columns:
             top_df_display["Pick_Reason_Short"] = top_df_display.apply(_append_icons, axis=1)
-
         if not show_moneyline_details:
             ml_detail_cols = [
                 "Pick",
