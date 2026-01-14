@@ -9028,18 +9028,18 @@ with tab_master:
                     rows_out.append(fallback_row)
                     master_stats["market_rows_out"] += 1
 
-            # CRITICAL FIX: Create DataFrame AFTER loop completes (moved outside for loop)
-            # This ensures ALL game rows are accumulated before creating the DataFrame
-            # Previously this was inside the loop, causing only the last game to be retained
-            master_df = pd.DataFrame.from_records(rows_out)
+                # CRITICAL FIX: Create DataFrame AFTER loop completes (moved outside for loop)
+                # This ensures ALL game rows are accumulated before creating the DataFrame
+                # Previously this was inside the loop, causing only the last game to be retained
+                master_df = pd.DataFrame.from_records(rows_out)
 
-            # FIX: Deduplicate columns immediately to prevent "Duplicate labels" error
-            master_df = master_df.loc[:, ~master_df.columns.duplicated()].copy()
-            master_df = master_df.reset_index(drop=True)
+                # FIX: Deduplicate columns immediately to prevent "Duplicate labels" error
+                master_df = master_df.loc[:, ~master_df.columns.duplicated()].copy()
+                master_df = master_df.reset_index(drop=True)
 
-            # Task 4: Enrich with Consensus (Sharpness Delta)
-            # Must be done before sentiment integration or model features if model uses it
-            # --- FIXED CODE FOR JULES ---
+                # Task 4: Enrich with Consensus (Sharpness Delta)
+                # Must be done before sentiment integration or model features if model uses it
+                # --- FIXED CODE FOR JULES ---
                 try:
                     with st.spinner("📊 Ingesting Public Consensus Data..."):
                         # This is where the Money % and Ticket % are pulled
