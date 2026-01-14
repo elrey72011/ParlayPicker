@@ -5883,30 +5883,30 @@ with tab_master:
             try:
                 # Task 1: Pre-process games to ensure commence_date_local is set for TheOver matching
                 # This aligns the dates so the canonical keys match (ingestion vs loop).
-            for g in games:
-                if not g.get("commence_date_local"):
-                    try:
-                        # Try to derive from UTC
-                        dt = parse_commence_to_utc(g.get("commence_time_iso_utc") or g.get("commence_time"))
-                        if dt:
-                            # Use simple YYYY-MM-DD - Convert to ET to match main loop
-                            dt_et = dt.astimezone(ZoneInfo("America/New_York"))
-                            g["commence_date_local"] = dt_et.strftime("%Y-%m-%d")
-                    except Exception:
-                        pass
+                for g in games:
+                    if not g.get("commence_date_local"):
+                        try:
+                            # Try to derive from UTC
+                            dt = parse_commence_to_utc(g.get("commence_time_iso_utc") or g.get("commence_time"))
+                            if dt:
+                                # Use simple YYYY-MM-DD - Convert to ET to match main loop
+                                dt_et = dt.astimezone(ZoneInfo("America/New_York"))
+                                g["commence_date_local"] = dt_et.strftime("%Y-%m-%d")
+                        except Exception:
+                            pass
 
-            # 0. Parse TheOver inputs
-            with st.spinner("Processing TheOver.ai data..."):
-                theover_df, ingestion_stats = process_theover_inputs(
-                    totals_file=theover_totals_file,
-                    sides_file=theover_sides_file,
-                    totals_paste=theover_totals_text,
-                    sides_paste=theover_sides_text,
-                    games=games
-                )
+                # 0. Parse TheOver inputs
+                with st.spinner("Processing TheOver.ai data..."):
+                    theover_df, ingestion_stats = process_theover_inputs(
+                        totals_file=theover_totals_file,
+                        sides_file=theover_sides_file,
+                        totals_paste=theover_totals_text,
+                        sides_paste=theover_sides_text,
+                        games=games
+                    )
 
-                # Use returned stats which now include fuzzy match results
-                theover_stats = ingestion_stats.copy()
+                    # Use returned stats which now include fuzzy match results
+                    theover_stats = ingestion_stats.copy()
 
                 if not theover_df.empty:
                     for _, row in theover_df.iterrows():
@@ -5931,9 +5931,9 @@ with tab_master:
                                 theover_lookup_teams[tm_key] = []
                             theover_lookup_teams[tm_key].append(row_dict)
 
-            st.session_state["DECISION_TRACE_SAMPLES"] = {}
+                st.session_state["DECISION_TRACE_SAMPLES"] = {}
 
-            def store_decision_trace_sample(
+                def store_decision_trace_sample(
                     league_code: Optional[str],
                     home_team: Optional[str],
                     away_team: Optional[str],
@@ -5966,38 +5966,38 @@ with tab_master:
                     }
                     st.session_state["DECISION_TRACE_SAMPLES"] = samples
 
-            api_sports_status_run = api_sports_status
-            sportsdata_status_run = sportsdata_status
-            df_master = pd.DataFrame(games or [])
+                api_sports_status_run = api_sports_status
+                sportsdata_status_run = sportsdata_status_run
+                df_master = pd.DataFrame(games or [])
 
-            # Inject real-time stats for Vertex
-            api_sports_clients, _ = init_data_clients()
-            df_master = enrich_with_model_features(df_master, api_sports_clients)
+                # Inject real-time stats for Vertex
+                api_sports_clients, _ = init_data_clients()
+                df_master = enrich_with_model_features(df_master, api_sports_clients)
 
-            unique_teams = sorted(
-                set(df_master.get("home_team", pd.Series([], dtype=str)).dropna().astype(str))
-                | set(df_master.get("away_team", pd.Series([], dtype=str)).dropna().astype(str))
-            )
-            enable_sentiment_master = st.checkbox(
-                "Enable sentiment (NewsAPI)",
-                value=True,
-                key="enable_sentiment_master",
-            )
-            st.session_state["enable_sentiment"] = enable_sentiment_master
-            slate_sentiment = get_slate_sentiment(enable_sentiment_master, unique_teams, "MIXED", news_api_key)
-            st.session_state["sentiment_map"] = slate_sentiment.get("map") or {}
-            st.session_state["sentiment_meta_map"] = slate_sentiment.get("meta_map") or {}
-            st.session_state["sentiment_meta"] = slate_sentiment.get("meta") or init_sentiment_meta()
-            st.session_state["sentiment_debug"] = slate_sentiment.get("debug") or {}
-            with st.expander("Sentiment Debug", expanded=False):
-                meta_view = slate_sentiment.get("meta") or {}
-                meta_map_view = slate_sentiment.get("meta_map") or {}
-                source_counts: Dict[str, int] = {}
-                for mv in meta_map_view.values():
-                    src_val = str(mv.get("sentiment_source") or "none")
-                    source_counts[src_val] = source_counts.get(src_val, 0) + 1
-                st.write("Sentiment source:", meta_view.get("sentiment_source"))
-                st.write("Status counts:", meta_view.get("sentiment_status_counts"))
+                unique_teams = sorted(
+                    set(df_master.get("home_team", pd.Series([], dtype=str)).dropna().astype(str))
+                    | set(df_master.get("away_team", pd.Series([], dtype=str)).dropna().astype(str))
+                )
+                enable_sentiment_master = st.checkbox(
+                    "Enable sentiment (NewsAPI)",
+                    value=True,
+                    key="enable_sentiment_master",
+                )
+                st.session_state["enable_sentiment"] = enable_sentiment_master
+                slate_sentiment = get_slate_sentiment(enable_sentiment_master, unique_teams, "MIXED", news_api_key)
+                st.session_state["sentiment_map"] = slate_sentiment.get("map") or {}
+                st.session_state["sentiment_meta_map"] = slate_sentiment.get("meta_map") or {}
+                st.session_state["sentiment_meta"] = slate_sentiment.get("meta") or init_sentiment_meta()
+                st.session_state["sentiment_debug"] = slate_sentiment.get("debug") or {}
+                with st.expander("Sentiment Debug", expanded=False):
+                    meta_view = slate_sentiment.get("meta") or {}
+                    meta_map_view = slate_sentiment.get("meta_map") or {}
+                    source_counts: Dict[str, int] = {}
+                    for mv in meta_map_view.values():
+                        src_val = str(mv.get("sentiment_source") or "none")
+                        source_counts[src_val] = source_counts.get(src_val, 0) + 1
+                    st.write("Sentiment source:", meta_view.get("sentiment_source"))
+                    st.write("Status counts:", meta_view.get("sentiment_status_counts"))
                 st.write("Teams by source:", source_counts)
                 st.write(
                     "Reddit posts/comments used:",
@@ -6044,145 +6044,145 @@ with tab_master:
                     # Don't stop, try to proceed without Kalshi if that was the issue
                     kalshi_markets_by_league = {}
 
-            if not kalshi_markets_by_league:
-                st.warning(
-                    "Kalshi markets could not be fetched; proceeding with cached/empty set."
-                )
-                kalshi_markets_by_league = {}
-            all_markets_flat: List[Dict[str, Any]] = []
-            for mkts in kalshi_markets_by_league.values():
-                all_markets_flat.extend(mkts)
-            st.session_state["kalshi_all_markets"] = all_markets_flat
-            winner_refetch_attempted = False
-            full_search_first_game: Optional[Dict[str, Any]] = None
-            if games:
-                fg_league = league
-                try:
-                    fg = games[0]
-                    fg_league = fg.get("league")
-                    fg_markets = kalshi_markets_by_league.get(fg_league, [])
-                    full_search_first_game = debug_search_markets_for_game(
-                        fg_markets,
-                        fg.get("home_team"),
-                        fg.get("away_team"),
-                        (team_code_candidates(fg_league, fg.get("home_team")) or [None])[0],
-                        (team_code_candidates(fg_league, fg.get("away_team")) or [None])[0],
-                        league=fg_league,
+                if not kalshi_markets_by_league:
+                    st.warning(
+                        "Kalshi markets could not be fetched; proceeding with cached/empty set."
                     )
-                except Exception:
-                    st.session_state["last_exception"] = traceback.format_exc()
-            if (
-                full_search_first_game
-                and (fg_league or league) == "NBA"
-                and not full_search_first_game.get("found_any_winner_market_for_game")
-                and (
-                    full_search_first_game.get("found_any_total_market_for_game")
-                    or full_search_first_game.get("matches")
-                )
-            ):
-                winner_refetch_attempted = True
-                try:
-                    refreshed = kalshi_integrator.get_sports_markets() if kalshi_integrator else []
-                    prefix = LEAGUE_SERIES_MAP.get((league or "").upper())
-                    if prefix:
-                        refreshed = [
-                            m
-                            for m in refreshed
-                            if str(m.get("ticker") or "").upper().startswith(prefix)
-                        ]
-                    if refreshed:
-                        kalshi_markets_by_league[(fg_league or league)] = refreshed
-                        st.session_state["kalshi_all_markets"] = refreshed
-                        if games:
-                            try:
-                                fg = games[0]
-                                full_search_first_game = debug_search_markets_for_game(
-                                    kalshi_markets_by_league.get(fg_league or league, []),
-                                    fg.get("home_team"),
-                                    fg.get("away_team"),
-                                    (team_code_candidates(fg_league or league, fg.get("home_team")) or [None])[0],
-                                    (team_code_candidates(fg_league or league, fg.get("away_team")) or [None])[0],
-                                    league=fg_league or league,
-                                )
-                            except Exception:
-                                st.session_state["last_exception"] = traceback.format_exc()
-                except Exception:
-                    st.session_state["last_exception"] = traceback.format_exc()
-            filtered_counts: List[int] = []
-            per_game_kalshi_debug: List[Dict[str, Any]] = []
-            first_game_full_search = full_search_first_game
-            rows_out: List[Dict[str, Any]] = []
-            master_stats = {
-                "games_in": len(games),
-                "rows_out": 0,
-                "h2h_found": 0,
-                "exceptions": 0,
-                "market_rows_out": 0,
-                "kalshi_matches": 0,
-                "kalshi_total": len(games),
-            }
-            data_source_stats = {
-                "api_sports_games": 0,
-                "sportsdata_games": 0,
-                "injury_pulls": 0,
-                "weather_pulls": 0,
-                "errors": [],
-            }
-            # Dictionary mapping for robust access (User Request: "Switch to Dictionary Mapping")
-            kalshi_match_results: Dict[str, Dict[str, Any]] = {}
-            # --- CLEANED MASTER ANALYSIS LOOP ---
+                    kalshi_markets_by_league = {}
+                all_markets_flat: List[Dict[str, Any]] = []
+                for mkts in kalshi_markets_by_league.values():
+                    all_markets_flat.extend(mkts)
+                st.session_state["kalshi_all_markets"] = all_markets_flat
+                winner_refetch_attempted = False
+                full_search_first_game: Optional[Dict[str, Any]] = None
+                if games:
+                    fg_league = league
+                    try:
+                        fg = games[0]
+                        fg_league = fg.get("league")
+                        fg_markets = kalshi_markets_by_league.get(fg_league, [])
+                        full_search_first_game = debug_search_markets_for_game(
+                            fg_markets,
+                            fg.get("home_team"),
+                            fg.get("away_team"),
+                            (team_code_candidates(fg_league, fg.get("home_team")) or [None])[0],
+                            (team_code_candidates(fg_league, fg.get("away_team")) or [None])[0],
+                            league=fg_league,
+                        )
+                    except Exception:
+                        st.session_state["last_exception"] = traceback.format_exc()
+                if (
+                    full_search_first_game
+                    and (fg_league or league) == "NBA"
+                    and not full_search_first_game.get("found_any_winner_market_for_game")
+                    and (
+                        full_search_first_game.get("found_any_total_market_for_game")
+                        or full_search_first_game.get("matches")
+                    )
+                ):
+                    winner_refetch_attempted = True
+                    try:
+                        refreshed = kalshi_integrator.get_sports_markets() if kalshi_integrator else []
+                        prefix = LEAGUE_SERIES_MAP.get((league or "").upper())
+                        if prefix:
+                            refreshed = [
+                                m
+                                for m in refreshed
+                                if str(m.get("ticker") or "").upper().startswith(prefix)
+                            ]
+                        if refreshed:
+                            kalshi_markets_by_league[(fg_league or league)] = refreshed
+                            st.session_state["kalshi_all_markets"] = refreshed
+                            if games:
+                                try:
+                                    fg = games[0]
+                                    full_search_first_game = debug_search_markets_for_game(
+                                        kalshi_markets_by_league.get(fg_league or league, []),
+                                        fg.get("home_team"),
+                                        fg.get("away_team"),
+                                        (team_code_candidates(fg_league or league, fg.get("home_team")) or [None])[0],
+                                        (team_code_candidates(fg_league or league, fg.get("away_team")) or [None])[0],
+                                        league=fg_league or league,
+                                    )
+                                except Exception:
+                                    st.session_state["last_exception"] = traceback.format_exc()
+                    except Exception:
+                        st.session_state["last_exception"] = traceback.format_exc()
+                filtered_counts: List[int] = []
+                per_game_kalshi_debug: List[Dict[str, Any]] = []
+                first_game_full_search = full_search_first_game
+                rows_out: List[Dict[str, Any]] = []
+                master_stats = {
+                    "games_in": len(games),
+                    "rows_out": 0,
+                    "h2h_found": 0,
+                    "exceptions": 0,
+                    "market_rows_out": 0,
+                    "kalshi_matches": 0,
+                    "kalshi_total": len(games),
+                }
+                data_source_stats = {
+                    "api_sports_games": 0,
+                    "sportsdata_games": 0,
+                    "injury_pulls": 0,
+                    "weather_pulls": 0,
+                    "errors": [],
+                }
+                # Dictionary mapping for robust access (User Request: "Switch to Dictionary Mapping")
+                kalshi_match_results: Dict[str, Dict[str, Any]] = {}
+                # --- CLEANED MASTER ANALYSIS LOOP ---
 
-            # --- PRE-LOOP BATCH ENRICHMENT (PARITY FIX) ---
-            # Ensure 'g' in the loop has stats for single-row prediction.
-            # We must perform batch enrichment on the raw games list BEFORE the loop.
-            games_to_process = games
-            if games:
-                try:
-                    with st.spinner("🚀 PRE-FETCH: Batch Enriching Stats..."):
-                        # 1. Convert to DataFrame
-                        _df_pre = pd.DataFrame(games)
+                # --- PRE-LOOP BATCH ENRICHMENT (PARITY FIX) ---
+                # Ensure 'g' in the loop has stats for single-row prediction.
+                # We must perform batch enrichment on the raw games list BEFORE the loop.
+                games_to_process = games
+                if games:
+                    try:
+                        with st.spinner("🚀 PRE-FETCH: Batch Enriching Stats..."):
+                            # 1. Convert to DataFrame
+                            _df_pre = pd.DataFrame(games)
 
-                        # 2. Ensure League column exists (crucial for enrichment lookup)
-                        if "League" not in _df_pre.columns:
-                            _df_pre["League"] = league
+                            # 2. Ensure League column exists (crucial for enrichment lookup)
+                            if "League" not in _df_pre.columns:
+                                _df_pre["League"] = league
 
-                        # 3. Call Enrichment (uses TeamNameMatcher and API clients)
-                        # Note: We pass the specific client for this league
-                        _client_map = {league: api_sports_clients.get(league)} if api_sports_clients else {}
-                        _df_enriched = enrich_with_model_features(_df_pre, _client_map)
+                            # 3. Call Enrichment (uses TeamNameMatcher and API clients)
+                            # Note: We pass the specific client for this league
+                            _client_map = {league: api_sports_clients.get(league)} if api_sports_clients else {}
+                            _df_enriched = enrich_with_model_features(_df_pre, _client_map)
 
-                        # 4. Convert back to list of dicts for the loop
-                        # Force numeric conversion where possible to avoid NaN issues
-                        games_to_process = _df_enriched.to_dict('records')
+                            # 4. Convert back to list of dicts for the loop
+                            # Force numeric conversion where possible to avoid NaN issues
+                            games_to_process = _df_enriched.to_dict('records')
 
-                        # Debug: Verify one row
-                        if games_to_process:
-                            logger.info("Pre-Enrichment Sample Stats: %s", games_to_process[0].get('feature_home_ppg'))
-                except Exception as e:
-                    logger.error(f"Pre-loop enrichment failed: {e}", exc_info=True)
-                    if st:
-                        st.error(f"Pre-enrichment failed: {e}")
-                    games_to_process = games
+                            # Debug: Verify one row
+                            if games_to_process:
+                                logger.info("Pre-Enrichment Sample Stats: %s", games_to_process[0].get('feature_home_ppg'))
+                    except Exception as e:
+                        logger.error(f"Pre-loop enrichment failed: {e}", exc_info=True)
+                        if st:
+                            st.error(f"Pre-enrichment failed: {e}")
+                        games_to_process = games
 
-            # --- FIX: Define variables at the start of the loop ---
-            # Ensure use_model_numeric_probs is available in local scope
-            use_model_numeric_probs = st.session_state.get("use_model_numeric_probs", True)
-            # Ensure model_mode is available
-            model_mode = st.session_state.get("model_mode", "Local XGBoost")
+                # --- FIX: Define variables at the start of the loop ---
+                # Ensure use_model_numeric_probs is available in local scope
+                use_model_numeric_probs = st.session_state.get("use_model_numeric_probs", True)
+                # Ensure model_mode is available
+                model_mode = st.session_state.get("model_mode", "Local XGBoost")
 
-            # TheOver Match Counters
-            theover_matched_count_sides = 0
-            theover_matched_count_totals = 0
+                # TheOver Match Counters
+                theover_matched_count_sides = 0
+                theover_matched_count_totals = 0
 
-            for idx, g in enumerate(games_to_process):
-                g = g.copy()
-                # Initialize loop-local variables to prevent NameError
-                model_prob_home = None
-                model_warn = None
-                sentiment_diff = None  # Ensure initialized
+                for idx, g in enumerate(games_to_process):
+                    g = g.copy()
+                    # Initialize loop-local variables to prevent NameError
+                    model_prob_home = None
+                    model_warn = None
+                    sentiment_diff = None  # Ensure initialized
 
-                # Weights & Status Defaults (Fix NameErrors)
-                spread_weights = {}
+                    # Weights & Status Defaults (Fix NameErrors)
+                    spread_weights = {}
                 total_weights = {}
                 moneyline_weights = {}
                 spread_weights_used = {}
@@ -6221,9 +6221,22 @@ with tab_master:
                 away_code = team_code_for_league(league_name, away_team)
 
                 # 2. Generate Master Key
+                # Normalize league to match ingestion (NBA, NFL, etc.)
+                norm_league_key = str(league_name).strip().upper()
+                if "NBA" in norm_league_key: norm_league_key = "NBA"
+                elif "NFL" in norm_league_key: norm_league_key = "NFL"
+                elif "NHL" in norm_league_key: norm_league_key = "NHL"
+                elif "MLB" in norm_league_key: norm_league_key = "MLB"
+                elif "NCAAB" in norm_league_key or "COLLEGE BASKETBALL" in norm_league_key: norm_league_key = "NCAAB"
+                elif "NCAAF" in norm_league_key or "COLLEGE FOOTBALL" in norm_league_key: norm_league_key = "NCAAF"
+
+                # Regenerate codes with normalized league to be safe
+                home_code_norm = team_code_for_league(norm_league_key, home)
+                away_code_norm = team_code_for_league(norm_league_key, away)
+
                 # Task 2: Verified parameter order (league, date, home, away)
-                master_key_exact = generate_canonical_key(league_name, local_date_str, home_code, away_code)
-                master_key_teams = f"{league_name}|{away_code}|{home_code}"
+                master_key_exact = generate_canonical_key(norm_league_key, local_date_str, home_code_norm, away_code_norm)
+                master_key_teams = f"{norm_league_key}|{away_code_norm}|{home_code_norm}"
 
                 # 3. Match TheOver Data
                 matched_total_row = None
@@ -9006,71 +9019,71 @@ with tab_master:
                     rows_out.append(fallback_row)
                     master_stats["market_rows_out"] += 1
 
-            # 1. Create the base Master DataFrame from your processed rows
-            # User Action: Use from_records and copy to prevent fragmentation
-            master_df = pd.DataFrame.from_records(rows_out)
+                # 1. Create the base Master DataFrame from your processed rows
+                # User Action: Use from_records and copy to prevent fragmentation
+                master_df = pd.DataFrame.from_records(rows_out)
 
-            # FIX: Deduplicate columns immediately to prevent "Duplicate labels" error
-            master_df = master_df.loc[:, ~master_df.columns.duplicated()].copy()
-            master_df = master_df.reset_index(drop=True)
+                # FIX: Deduplicate columns immediately to prevent "Duplicate labels" error
+                master_df = master_df.loc[:, ~master_df.columns.duplicated()].copy()
+                master_df = master_df.reset_index(drop=True)
 
-        # Task 4: Enrich with Consensus (Sharpness Delta)
-        # Must be done before sentiment integration or model features if model uses it
-        # --- FIXED CODE FOR JULES ---
-            try:
-                with st.spinner("📊 Ingesting Public Consensus Data..."):
-                    # This is where the Money % and Ticket % are pulled
-                    import app_core.consensus_ingest as consensus
-                    consensus_data = consensus.fetch_latest_splits()
-                    st.session_state.consensus_data = consensus_data
-                    master_df = enrich_with_consensus(master_df, consensus_data)
-            except Exception as e:
-                st.error(f"Consensus Ingestion Failed: {e}")
-                st.session_state.consensus_data = None
-                # Fallback to enrich without external data (uses mocks)
-                master_df = enrich_with_consensus(master_df)
-            # -----------------------------
+            # Task 4: Enrich with Consensus (Sharpness Delta)
+            # Must be done before sentiment integration or model features if model uses it
+            # --- FIXED CODE FOR JULES ---
+                try:
+                    with st.spinner("📊 Ingesting Public Consensus Data..."):
+                        # This is where the Money % and Ticket % are pulled
+                        import app_core.consensus_ingest as consensus
+                        consensus_data = consensus.fetch_latest_splits()
+                        st.session_state.consensus_data = consensus_data
+                        master_df = enrich_with_consensus(master_df, consensus_data)
+                except Exception as e:
+                    st.error(f"Consensus Ingestion Failed: {e}")
+                    st.session_state.consensus_data = None
+                    # Fallback to enrich without external data (uses mocks)
+                    master_df = enrich_with_consensus(master_df)
+                # -----------------------------
 
-            # 3. CRITICAL: Enrich the whole batch to fill 'feature_diff' columns
-            # This fixes the 'Missing feature column' warnings in the logs
-            with st.spinner("🚀 Running Batch Feature Enrichment..."):
-                # FIX: Pass ALL api_clients so stats for all leagues are fetched, not just the last loop variable
-                master_df = enrich_with_model_features(master_df, api_sports_clients)
+                # 3. CRITICAL: Enrich the whole batch to fill 'feature_diff' columns
+                # This fixes the 'Missing feature column' warnings in the logs
+                with st.spinner("🚀 Running Batch Feature Enrichment..."):
+                    # FIX: Pass ALL api_clients so stats for all leagues are fetched, not just the last loop variable
+                    master_df = enrich_with_model_features(master_df, api_sports_clients)
 
             # Task 4: Update Sentiment Score using Sharpness Delta
             # Integration: 60% Sharpness Delta, 40% Social Sentiment
             # We need to update 'Sentiment_Diff' or create a new combined score.
             # Currently 'Sentiment_Diff' is used in compute_final_probability via sentiment_score.
 
-            def _update_sentiment_score(row):
-                social_diff = row.get("Sentiment_Diff")
-                if social_diff is None: social_diff = 0.0
+                def _update_sentiment_score(row):
+                    social_diff = row.get("Sentiment_Diff")
+                    if social_diff is None: social_diff = 0.0
 
-                sharpness = row.get("sharpness_delta")
-                if sharpness is None: sharpness = 0.0
+                    sharpness = row.get("sharpness_delta")
+                    if sharpness is None: sharpness = 0.0
 
-                # Hybrid Formula
-                # Normalize sharpness (e.g. 0.15 delta -> 1.0 score equiv? or keep raw?)
-                # Sentiment Diff is typically -1 to 1.
-                # Sharpness Delta is typically -0.3 to +0.3.
-                # Let's scale sharpness by 3.33 to map 0.3 to 1.0 roughly.
-                sharpness_scaled = sharpness * 3.33
+                    # Hybrid Formula
+                    # Normalize sharpness (e.g. 0.15 delta -> 1.0 score equiv? or keep raw?)
+                    # Sentiment Diff is typically -1 to 1.
+                    # Sharpness Delta is typically -0.3 to +0.3.
+                    # Let's scale sharpness by 3.33 to map 0.3 to 1.0 roughly.
+                    sharpness_scaled = sharpness * 3.33
 
-                # Weighted Combo
-                hybrid_score = (0.6 * sharpness_scaled) + (0.4 * social_diff)
-                return hybrid_score
+                    # Weighted Combo
+                    hybrid_score = (0.6 * sharpness_scaled) + (0.4 * social_diff)
+                    return hybrid_score
 
-            if 'Sentiment_Diff' in master_df.columns and 'sharpness_delta' in master_df.columns:
-                master_df['Sentiment_Diff'] = master_df.apply(_update_sentiment_score, axis=1)
+                if 'Sentiment_Diff' in master_df.columns and 'sharpness_delta' in master_df.columns:
+                    master_df['Sentiment_Diff'] = master_df.apply(_update_sentiment_score, axis=1)
 
-            # Ensure use_model_numeric_probs is synchronized from session state
-            use_model_numeric_probs = st.session_state.get("use_model_numeric_probs", True)
+                # Ensure use_model_numeric_probs is synchronized from session state
+                use_model_numeric_probs = st.session_state.get("use_model_numeric_probs", True)
 
-            # 4. BATCH PREDICTION: Local Inference
-            master_df = clean_df(master_df)
-            # Local inference is always "configured" (or falls back)
-            if True:
-                with st.spinner("🔮 Computing Win Probabilities (Local)..."):
+                # 4. BATCH PREDICTION: Local Inference
+                master_df = clean_df(master_df)
+                # Local inference is always "configured" (or falls back)
+                if True:
+                    with st.spinner("🔮 Computing Win Probabilities (Local)..."):
                         # 2. Filter for exactly the columns the model expects
                         # User Action: Ensure columns exist before filtering
                         missing_cols = [col for col in VERTEX_FEATURE_COLUMNS if col not in master_df.columns]
@@ -9203,76 +9216,78 @@ with tab_master:
                     master_df[visual_cols] = master_df[visual_cols].fillna("")
 
                 # Re-implement deduping for the `df` variable used by the UI below
-                rows_for_dedupe = master_df.to_dict("records")
-            deduped_rows: Dict[Tuple[Any, Any, Any, Any], Dict[str, Any]] = {}
-            for row in rows_for_dedupe:
-                key = (row.get("league"), row.get("Home"), row.get("Away"), row.get("Commence (UTC)"))
-                existing = deduped_rows.get(key)
-                if (existing is None) or (
-                    not existing.get("kalshi_matched") and row.get("kalshi_matched")
-                ):
-                    deduped_rows[key] = row
-            deduped_list = list(deduped_rows.values())
+                # Ensure rows_for_dedupe is initialized even if master_df was empty
+                rows_for_dedupe = master_df.to_dict("records") if not master_df.empty else []
 
-            if st.session_state.get("kalshi_match_only"):
-                deduped_list = [r for r in deduped_list if r.get("kalshi_matched")]
+                deduped_rows: Dict[Tuple[Any, Any, Any, Any], Dict[str, Any]] = {}
+                for row in rows_for_dedupe:
+                    key = (row.get("league"), row.get("Home"), row.get("Away"), row.get("Commence (UTC)"))
+                    existing = deduped_rows.get(key)
+                    if (existing is None) or (
+                        not existing.get("kalshi_matched") and row.get("kalshi_matched")
+                    ):
+                        deduped_rows[key] = row
+                deduped_list = list(deduped_rows.values())
 
-            df = pd.DataFrame(deduped_list)
-            if "Unnamed: 0" in df.columns:
-                df = df.drop(columns=["Unnamed: 0"])
+                if st.session_state.get("kalshi_match_only"):
+                    deduped_list = [r for r in deduped_list if r.get("kalshi_matched")]
+
+                df = pd.DataFrame(deduped_list)
+                if "Unnamed: 0" in df.columns:
+                    df = df.drop(columns=["Unnamed: 0"])
         
-            # 5. UI PERSISTENCE
-            # We persist the DEDUPED df as "master_df" because that's what the UI expects for the "Master Analysis" tab table.
-            # The shotgun data is stored separately.
-            # 1. Deduplicate Master DF (Fix Duplicate Column Crash)
-            df = df.loc[:, ~df.columns.duplicated()].copy()
+                # 5. UI PERSISTENCE
+                # We persist the DEDUPED df as "master_df" because that's what the UI expects for the "Master Analysis" tab table.
+                # The shotgun data is stored separately.
+                # 1. Deduplicate Master DF (Fix Duplicate Column Crash)
+                df = df.loc[:, ~df.columns.duplicated()].copy()
 
-            # --- MARKET TRACKER HOOK (Snapshot System) ---
-            try:
-                # 1. Save Noon Baseline (Task 2: Use Snapshot Manager)
-                snapshot_manager.save_noon_baseline(df)
+                # --- MARKET TRACKER HOOK (Snapshot System) ---
+                try:
+                    # 1. Save Noon Baseline (Task 2: Use Snapshot Manager)
+                    snapshot_manager.save_noon_baseline(df)
 
-                # 2. Compare against Noon Baseline (if Evening/Late)
-                df = market_tracker.load_and_compare(df)
+                    # 2. Compare against Noon Baseline (if Evening/Late)
+                    df = market_tracker.load_and_compare(df)
 
-                # Persist TheOver debug stats for sidebar export
-                if 'theover_stats' in locals():
-                    st.session_state["theover_debug_log"] = theover_stats.get("full_debug_log", [])
-                    # Task 3: Persist RAW TheOver DataFrame
-                    st.session_state["theover_raw_df"] = theover_stats.get("raw_df", pd.DataFrame())
-            except Exception as e:
-                logger.error(f"Market Tracker Error: {e}")
+                    # Persist TheOver debug stats for sidebar export
+                    if 'theover_stats' in locals():
+                        st.session_state["theover_debug_log"] = theover_stats.get("full_debug_log", [])
+                        # Task 3: Persist RAW TheOver DataFrame
+                        st.session_state["theover_raw_df"] = theover_stats.get("raw_df", pd.DataFrame())
+                except Exception as e:
+                    logger.error(f"Market Tracker Error: {e}")
             # ---------------------------
 
-            master_stats["rows_out"] = len(deduped_list)
-            master_stats["theover_matched_sides"] = theover_matched_count_sides
-            master_stats["theover_matched_totals"] = theover_matched_count_totals
+                master_stats["rows_out"] = len(deduped_list)
+                master_stats["theover_matched_sides"] = theover_matched_count_sides
+                master_stats["theover_matched_totals"] = theover_matched_count_totals
 
-            st.session_state["last_rows_out"] = len(deduped_list)
-            st.session_state["master_stats"] = master_stats
-            st.session_state["kalshi_match_results"] = kalshi_match_results
-            st.session_state["data_source_debug"] = data_source_stats
-            total_game_markets = len(
-                [
-                    m
-                    for m in all_markets_flat
-                    if "GAME" in str(m.get("event_ticker") or m.get("ticker") or "").upper()
-                ]
-            )
-            first_game_meta = per_game_kalshi_debug[0] if per_game_kalshi_debug else {}
-            st.session_state["kalshi_filter_stats"] = {
-                "total_markets_fetched": len(all_markets_flat),
-                "total_game_markets": total_game_markets,
-                "avg_filtered_markets_per_game": sum(filtered_counts) / len(filtered_counts)
-                if filtered_counts
-                else 0,
-                "filtered_markets_min": min(filtered_counts) if filtered_counts else 0,
-                "filtered_markets_max": max(filtered_counts) if filtered_counts else 0,
-                "per_game_debug": per_game_kalshi_debug,
-                "first_game_debug": per_game_kalshi_debug[0]
-                if per_game_kalshi_debug
-                else {},
-                "first_game_full_market_search": first_game_full_search,
+                st.session_state["last_rows_out"] = len(deduped_list)
+                st.session_state["master_stats"] = master_stats
+                st.session_state["kalshi_match_results"] = kalshi_match_results
+                st.session_state["data_source_debug"] = data_source_stats
+                total_game_markets = len(
+                    [
+                        m
+                        for m in all_markets_flat
+                        if "GAME" in str(m.get("event_ticker") or m.get("ticker") or "").upper()
+                    ]
+                )
+                first_game_meta = per_game_kalshi_debug[0] if per_game_kalshi_debug else {}
+                st.session_state["kalshi_filter_stats"] = {
+                    "total_markets_fetched": len(all_markets_flat),
+                    "total_game_markets": total_game_markets,
+                    "avg_filtered_markets_per_game": sum(filtered_counts) / len(filtered_counts)
+                    if filtered_counts
+                    else 0,
+                    "filtered_markets_min": min(filtered_counts) if filtered_counts else 0,
+                    "filtered_markets_max": max(filtered_counts) if filtered_counts else 0,
+                    "per_game_debug": per_game_kalshi_debug,
+                    "first_game_debug": per_game_kalshi_debug[0]
+                    if per_game_kalshi_debug
+                    else {},
+                    "first_game_full_market_search": first_game_full_search,
                 "kalshi_winner_refetch_attempted": winner_refetch_attempted,
                 "first_game_expected": {
                     "expected_date_token": (first_game_meta or {}).get("kalshi_date_token_used"),
@@ -9282,16 +9297,38 @@ with tab_master:
                 },
             }
 
-            # Task 2: Absolute Moneyline (ML) Pivot (Applied BEFORE saving)
-            df = df.apply(pivot_market, axis=1)
+                # Task 2: Absolute Moneyline (ML) Pivot (Applied BEFORE saving)
+                # Ensure "Moneyline" is pivoted to Spread/Total if present in Market column
+                def _force_pivot(row):
+                    if row.get('Market') == 'Moneyline':
+                        s_edge = safe_float(row.get('spread_edge')) or 0.0
+                        t_edge = safe_float(row.get('total_edge')) or 0.0
+                        # Fallback to probabilities if edges are 0
+                        if s_edge == 0 and t_edge == 0:
+                             s_prob = safe_float(row.get('spread_prob')) or 0.0
+                             t_prob = safe_float(row.get('total_prob')) or 0.0
+                             s_edge = s_prob
+                             t_edge = t_prob
 
-            st.session_state["master_df"] = df
-            st.session_state["master_results_df"] = df
+                        if s_edge >= t_edge:
+                            row['Market'] = 'Spread'
+                            row['Pick'] = row.get('Spread & Pick')
+                            row['best_pick_type'] = 'SPREAD'
+                        else:
+                            row['Market'] = 'Total'
+                            row['Pick'] = row.get('Total & Pick')
+                            row['best_pick_type'] = 'TOTAL'
+                    return row
 
-        except Exception as e:
-            st.error(f"Analysis failed: {str(e)}")
-            st.code(traceback.format_exc())
-            st.stop()
+                df = df.apply(_force_pivot, axis=1)
+
+                st.session_state["master_df"] = df
+                st.session_state["master_results_df"] = df
+
+            except Exception as e:
+                st.error(f"Analysis failed: {str(e)}")
+                st.code(traceback.format_exc())
+                st.stop()
 
     # 4. ALWAYS RENDER IF DATA EXISTS (Outside the button block)
     if st.session_state["master_results_df"] is not None:
