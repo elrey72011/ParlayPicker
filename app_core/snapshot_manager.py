@@ -24,7 +24,7 @@ def get_snapshot_filename(date_str, suffix):
 
 def save_noon_baseline(df: pd.DataFrame, force: bool = False) -> bool:
     """
-    Saves the dataframe to /snapshots/[YYYY-MM-DD]_noon.csv.
+    Saves the dataframe to /snapshots/[YYYY-MM-DD]_noon_baseline.csv.
     Checks time window (9 AM - 1 PM ET) unless force=True.
     Returns True if saved or already exists, False if outside window (and not forced) or error.
     """
@@ -37,8 +37,8 @@ def save_noon_baseline(df: pd.DataFrame, force: bool = False) -> bool:
 
     # Logic: If forced OR (current_time is between 9 AM and 1 PM)
     if force or (NOON_BASELINE_START <= current_time <= NOON_BASELINE_END):
-        # Use _noon.csv as requested
-        filename = get_snapshot_filename(date_str, "noon")
+        # Use _noon_baseline.csv as requested for consistency
+        filename = get_snapshot_filename(date_str, "noon_baseline")
 
         # Check for existence to avoid overwriting baseline unless forced
         if os.path.exists(filename) and not force:
@@ -64,7 +64,7 @@ def check_noon_baseline_status() -> str:
     """
     now_et = get_et_now()
     date_str = now_et.date().isoformat()
-    filename = get_snapshot_filename(date_str, "noon")
+    filename = get_snapshot_filename(date_str, "noon_baseline")
 
     if os.path.exists(filename):
         return "✅ Noon Baseline Cached"
