@@ -5840,8 +5840,9 @@ with tab_master:
             st.warning(kalshi_status.get("warning"))
     st.session_state.setdefault("kalshi_match_only", False)
     kalshi_match_only = st.checkbox(
-        "Show only games with a Kalshi match",
+        "Show only games with a Kalshi match (UI display only - exports include all games)",
         value=st.session_state.get("kalshi_match_only", False),
+        help="Filter the UI table to show only games with Kalshi market matches. This does NOT affect CSV/JSON exports, which always include all games."
     )
     st.session_state["kalshi_match_only"] = kalshi_match_only
     use_gemini_explanations = st.checkbox(
@@ -9239,8 +9240,9 @@ with tab_master:
                         deduped_rows[key] = row
                 deduped_list = list(deduped_rows.values())
 
-                if st.session_state.get("kalshi_match_only"):
-                    deduped_list = [r for r in deduped_list if r.get("kalshi_matched")]
+                # FIX: Do NOT filter by kalshi_match_only here - this removes games from exports!
+                # The kalshi_match_only filter should only apply to UI display, not to the persisted data.
+                # If filtering is needed for display, it should be applied in the UI tabs after loading from session state.
 
                 df = pd.DataFrame(deduped_list)
                 if "Unnamed: 0" in df.columns:
@@ -10035,7 +10037,15 @@ with tab_debug:
 # --- Forced UI Persistence Block ---
 with tab_master:
     if st.session_state["master_results_df"] is not None:
-        df = st.session_state["master_results_df"]
+        df = st.session_state["master_results_df"].copy()
+
+        # Apply Kalshi match filter for UI display only (does NOT affect exports)
+        if st.session_state.get("kalshi_match_only", False):
+            kalshi_matched_count_before = len(df)
+            df = df[df.get("kalshi_matched", pd.Series([False] * len(df))).fillna(False) == True]
+            kalshi_matched_count_after = len(df)
+            if kalshi_matched_count_after < kalshi_matched_count_before:
+                st.info(f"🔍 Kalshi Filter Active: Showing {kalshi_matched_count_after} of {kalshi_matched_count_before} games with Kalshi matches (exports will include all games)")
 
         required_display_cols = [
             "Home_Sentiment",
