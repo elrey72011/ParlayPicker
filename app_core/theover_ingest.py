@@ -256,6 +256,12 @@ def _resolve_team_alias(name: str, league: str) -> str:
     if name in TEAM_ALIAS_MAP:
         return TEAM_ALIAS_MAP[name]
 
+    # 1b. Case-Insensitive Lookup (Robustness)
+    # Task 4: Ensure "South Carolina" matches "SOUTH CAROLINA"
+    for k, v in TEAM_ALIAS_MAP.items():
+        if k.lower() == name.lower():
+            return v
+
     # 2. Context-Aware Resolution (Resolving Collisions)
     if name == "LA":
         if league == "NBA":
