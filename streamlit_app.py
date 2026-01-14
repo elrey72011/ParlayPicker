@@ -9015,14 +9015,14 @@ with tab_master:
             if 'Sentiment_Diff' in master_df.columns and 'sharpness_delta' in master_df.columns:
                 master_df['Sentiment_Diff'] = master_df.apply(_update_sentiment_score, axis=1)
 
-                # Ensure use_model_numeric_probs is synchronized from session state
-                use_model_numeric_probs = st.session_state.get("use_model_numeric_probs", True)
+            # Ensure use_model_numeric_probs is synchronized from session state
+            use_model_numeric_probs = st.session_state.get("use_model_numeric_probs", True)
 
-                # 4. BATCH PREDICTION: Local Inference
-                master_df = clean_df(master_df)
-                # Local inference is always "configured" (or falls back)
-                if True:
-                    with st.spinner("🔮 Computing Win Probabilities (Local)..."):
+            # 4. BATCH PREDICTION: Local Inference
+            master_df = clean_df(master_df)
+            # Local inference is always "configured" (or falls back)
+            if True:
+                with st.spinner("🔮 Computing Win Probabilities (Local)..."):
                         # 2. Filter for exactly the columns the model expects
                         # User Action: Ensure columns exist before filtering
                         missing_cols = [col for col in VERTEX_FEATURE_COLUMNS if col not in master_df.columns]
@@ -9675,6 +9675,14 @@ with tab_master:
             if not show_moneyline_rows:
                 df_master_view = df_master_view[df_master_view["Market"].isin(["Spread", "Total"])]
 
+        # Task 1: Explicitly Purge Moneyline from Recommendations (Recommendations Table)
+        # We enforce this on the "top_df" (Best Bets) which uses "Market" column.
+        # But here we are in df_master_view which is the big table.
+        # The user said "In the final step of the run_master_analysis function, filter the dataframe to ensure the Market column never contains 'Moneyline.'".
+        # This implies standard view unless specifically requested?
+        # Actually, "Recommendations" usually implies the Top Picks list.
+        # But let's add a robust filter for the Top Picks section specifically.
+
         try:
             df_master_view["st_conf_rank"] = df_master_view["st_conf_rank"].fillna(0)
             df_master_view["decisiveness"] = df_master_view["decisiveness"].fillna(0.0)
@@ -9918,6 +9926,12 @@ with tab_master:
         missing_top = [c for c in required_display_cols if c not in top_df.columns]
         if missing_top:
             top_df = pd.concat([top_df, pd.DataFrame(columns=missing_top)], axis=1)
+
+        # Task 1: Strict Moneyline Purge
+        # Ensure Moneyline never appears in Top Picks
+        if "Market" in top_df.columns:
+             top_df = top_df[top_df["Market"] != "Moneyline"]
+
         top_df = top_df[top_df["Eligible_Top_Picks"] == True]
         if not include_low_in_top:
             top_df = top_df[top_df["Pick_Confidence"].isin(["HIGH", "MEDIUM"])]
@@ -9979,7 +9993,6 @@ with tab_master:
 
         # --- Task 3: Visual Icon Injection (💰 & 🔥) ---
         # Append icons to Pick_Reason_Short
-        # Append icons to Pick_Reason_Short
         def _append_icons(row):
             reason = str(row.get("Pick_Reason_Short") or "")
             icons = []
@@ -10004,7 +10017,8 @@ with tab_master:
             if icons:
                 # Deduplicate icons if they might already be there
                 icon_str = " ".join(icons)
-                if icon_str not in reason:
+                # Check to prevent duplicate appends if run multiple times
+                if not any(ic in reason for ic in icons):
                      return f"{reason} {icon_str}"
             return reason
 

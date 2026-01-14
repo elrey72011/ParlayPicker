@@ -588,6 +588,7 @@ def _transform_theover_df(df: pd.DataFrame, pick_type_default: str, games: List[
         # Critical: Use matched canonical names if available
         if matched_game_obj:
             league = matched_game_obj.get("league", league)
+            # Use commence_date_local from matched game if available
             date_val = matched_game_obj.get("commence_date_local") or slate_date
             home_code = team_code_for_league(league, matched_game_obj.get("home_team"))
             away_code = team_code_for_league(league, matched_game_obj.get("away_team"))
