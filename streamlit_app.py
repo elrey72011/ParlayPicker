@@ -6178,6 +6178,10 @@ with tab_master:
                 theover_matched_count_sides = 0
                 theover_matched_count_totals = 0
 
+                # FIX: Initialize loop variables to prevent NameError if loop is skipped or variables accessed outside
+                winner_refetch_attempted = False
+                first_game_full_search = None
+
                 for idx, g in enumerate(games_to_process):
                     g = g.copy()
                     # Initialize loop-local variables to prevent NameError
@@ -9269,6 +9273,8 @@ with tab_master:
 
                 st.session_state["last_rows_out"] = len(deduped_list)
                 st.session_state["master_stats"] = master_stats
+                # FIX: Persist master_stats for Debug Export reruns
+                st.session_state["master_stats_persistent"] = master_stats
                 st.session_state["kalshi_match_results"] = kalshi_match_results
                 st.session_state["data_source_debug"] = data_source_stats
                 total_game_markets = len(
@@ -9306,17 +9312,28 @@ with tab_master:
                 def _force_pivot(row):
                     if row.get('Market') == 'Moneyline':
                         # Select the Spread or Total alternative with the higher edge
-                        s_edge = row.get('spread_edge') or 0.0
-                        t_edge = row.get('total_edge') or 0.0
+                        s_edge = safe_float(row.get('spread_edge')) or 0.0
+                        t_edge = safe_float(row.get('total_edge')) or 0.0
+
+                        s_prob = safe_float(row.get('spread_prob_adj')) or safe_float(row.get('spread_prob'))
+                        t_prob = safe_float(row.get('total_prob_adj')) or safe_float(row.get('total_prob'))
 
                         if s_edge >= t_edge:
                             row['Market'] = 'Spread'
                             row['Pick'] = row.get('Spread & Pick')
                             row['best_pick_type'] = 'SPREAD'
+                            row['edge'] = s_edge
+                            if s_prob is not None:
+                                row['final_probability'] = s_prob
+                                row['final_prob'] = s_prob
                         else:
                             row['Market'] = 'Total'
                             row['Pick'] = row.get('Total & Pick')
                             row['best_pick_type'] = 'TOTAL'
+                            row['edge'] = t_edge
+                            if t_prob is not None:
+                                row['final_probability'] = t_prob
+                                row['final_prob'] = t_prob
                     return row
 
                 df = df.apply(_force_pivot, axis=1)
@@ -10636,16 +10653,19 @@ with tab_master:
 
         # Stats saving block moved to Processing Block
         pass
-        matches = master_stats.get("kalshi_matches", 0)
-        total_games = master_stats.get("kalshi_total", 0) or 1
+        # FIX: Load from persistent session state to avoid NameError on reruns (Debug Export)
+        stats = st.session_state.get("master_stats_persistent", {})
+
+        matches = stats.get("kalshi_matches", 0)
+        total_games = stats.get("kalshi_total", 0) or 1
         st.caption(
             f"Kalshi matches: {matches}/{total_games} ({matches/total_games:.1%}) | "
-            f"TheOver matches: {master_stats.get('theover_matched_sides', 0)} sides, {master_stats.get('theover_matched_totals', 0)} totals"
+            f"TheOver matches: {stats.get('theover_matched_sides', 0)} sides, {stats.get('theover_matched_totals', 0)} totals"
         )
 
-        if master_stats["games_in"] > 0 and master_stats["rows_out"] == 0:
+        if stats.get("games_in", 0) > 0 and stats.get("rows_out", 0) == 0:
             st.error("Master analysis produced 0 rows; see debug stats below.")
-            st.json(master_stats)
+            st.json(stats)
         elif not games:
             st.warning("No games loaded. Use the sidebar to load games first.")
         else:
