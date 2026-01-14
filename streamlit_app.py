@@ -5837,6 +5837,19 @@ with tab_master:
 
     if should_run:
         try:
+            # Task 1: Pre-process games to ensure commence_date_local is set for TheOver matching
+            # This aligns the dates so the canonical keys match (ingestion vs loop).
+            for g in games:
+                if not g.get("commence_date_local"):
+                    try:
+                        # Try to derive from UTC
+                        dt = parse_commence_to_utc(g.get("commence_time_iso_utc") or g.get("commence_time"))
+                        if dt:
+                            # Use simple YYYY-MM-DD
+                            g["commence_date_local"] = dt.strftime("%Y-%m-%d")
+                    except Exception:
+                        pass
+
             # 0. Parse TheOver inputs
             with st.spinner("Processing TheOver.ai data..."):
                 theover_df, ingestion_stats = process_theover_inputs(
@@ -6290,13 +6303,21 @@ with tab_master:
                 theover_side_data = None
                 theover_total_data = None
 
-                if 'theover_lookup' in locals() and canon_key in theover_lookup:
-                    game_picks = theover_lookup[canon_key]
-                    theover_side_data = game_picks.get("SIDE")
-                    theover_total_data = game_picks.get("TOTAL")
+                # Task 1: Corrected Lookup Logic using canon_key and theover_lookup_exact
+                # This replaces the previous broken block that referenced undefined 'theover_lookup'
+                if canon_key in theover_lookup_exact:
+                    # Check for SIDE and TOTAL records in the list
+                    records = theover_lookup_exact[canon_key]
+                    for r in records:
+                        if r["theover_market_type"] == "SIDE":
+                            theover_side_data = r
+                        elif r["theover_market_type"] == "TOTAL":
+                            theover_total_data = r
 
                     theover_stats["matched_rows"] += 1
                 else:
+                    # Fallback: Check Fuzzy/Team lookup if exact key failed (e.g. date mismatch handled by ingestion fuzzy logic?)
+                    # Actually ingestion fuzzy logic aligns the key. If key doesn't match, it means date/team code mismatch.
                     theover_stats["unmatched_rows"] += 1
                     if len(theover_stats["unmatched_examples"]) < 10:
                         theover_stats["unmatched_examples"].append({
@@ -6316,29 +6337,7 @@ with tab_master:
                     # Default if matched but no hit rate
                     return 0.55
 
-                # Task 3: Fix TheOver Lookup Logic (Corrected)
-                # Use master_key_exact and master_key_teams (already defined in loop)
-                theover_side_data = None
-                theover_total_data = None
-
-                # Check for Side match in Exact lookup
-                if master_key_exact in theover_lookup_exact:
-                    cands = [r for r in theover_lookup_exact[master_key_exact] if r["theover_market_type"] == "SIDE"]
-                    if cands: theover_side_data = cands[0]
-                # Fallback to Teams lookup
-                if not theover_side_data and master_key_teams in theover_lookup_teams:
-                    cands = [r for r in theover_lookup_teams[master_key_teams] if r["theover_market_type"] == "SIDE"]
-                    if cands: theover_side_data = cands[0] # Simplification: take first matching date/team
-
-                # Check for Total match in Exact lookup
-                if master_key_exact in theover_lookup_exact:
-                    cands = [r for r in theover_lookup_exact[master_key_exact] if r["theover_market_type"] == "TOTAL"]
-                    if cands: theover_total_data = cands[0]
-                # Fallback to Teams lookup
-                if not theover_total_data and master_key_teams in theover_lookup_teams:
-                    cands = [r for r in theover_lookup_teams[master_key_teams] if r["theover_market_type"] == "TOTAL"]
-                    if cands: theover_total_data = cands[0]
-
+                # (Legacy redundant lookup block removed)
                 theover_matched_side = theover_side_data
                 theover_matched_total = theover_total_data
 
@@ -9699,33 +9698,55 @@ with tab_master:
         # User Action: Enforce specific column order: Home, Away, Implied_Prob, AI_Prob
         df_master_view = reorder_for_spread_total_focus(df_master_view)
 
-        # Task 2: Moneyline Pivot (Final Safety Net)
-        # If Market == "Moneyline", verify spread/total and pivot if possible.
+        # Task 2: Absolute Moneyline (ML) Pivot
+        # Logic: Moneyline is for internal math only. It must never be the final pick.
+        # Pivot to Spread or Total based on whichever has the highest final_probability or edge.
         def _pivot_ml(row):
+            # Check if current decision is Moneyline OR if Market column says "Moneyline"
             if row.get("Market") == "Moneyline" or row.get("best_pick_type") == "ML":
-                # Compare Spread vs Total probs
-                s_prob = safe_float(row.get("spread_prob_final")) or 0.0
-                t_prob = safe_float(row.get("total_prob_final")) or 0.0
+                # Get Spread and Total probabilities (using adjusted/final if available)
+                s_prob = safe_float(row.get("spread_prob_adj")) or safe_float(row.get("spread_prob_final")) or 0.0
+                t_prob = safe_float(row.get("total_prob_adj")) or safe_float(row.get("total_prob_final")) or 0.0
 
-                # Pivot to Spread or Total based on higher prob
-                if s_prob >= t_prob and s_prob > 0:
+                # Get Edges for tie-breaking
+                s_edge = safe_float(row.get("spread_edge")) or 0.0
+                t_edge = safe_float(row.get("total_edge")) or 0.0
+
+                # Pivot Decision Logic
+                # Prefer highest probability, use edge as tiebreaker
+                pivot_to_spread = False
+
+                if s_prob > t_prob:
+                    pivot_to_spread = True
+                elif t_prob > s_prob:
+                    pivot_to_spread = False
+                else:
+                    # Tie in probability, use edge
+                    if s_edge >= t_edge:
+                        pivot_to_spread = True
+                    else:
+                        pivot_to_spread = False
+
+                if pivot_to_spread:
                      # Pivot to Spread
                      row["Market"] = "Spread"
                      row["Pick"] = row.get("Spread & Pick")
                      row["final_probability"] = s_prob
                      row["best_pick_type"] = "SPREAD"
-                     row["edge"] = row.get("spread_edge")
-                elif t_prob > 0:
+                     row["edge"] = s_edge
+                     # Ensure we don't carry over ML-specific reasons
+                     if "Moneyline" in str(row.get("Pick_Reason_Short")):
+                         row["Pick_Reason_Short"] = "Spread Pivot"
+                else:
                      # Pivot to Total
                      row["Market"] = "Total"
                      row["Pick"] = row.get("Total & Pick")
                      row["final_probability"] = t_prob
                      row["best_pick_type"] = "TOTAL"
-                     row["edge"] = row.get("total_edge")
-                else:
-                    # Fallback if both missing (should not happen in pivot unless data is bad)
-                    row["Market"] = "Spread"
-                    row["best_pick_type"] = "SPREAD"
+                     row["edge"] = t_edge
+                     if "Moneyline" in str(row.get("Pick_Reason_Short")):
+                         row["Pick_Reason_Short"] = "Total Pivot"
+
             return row
 
         df_master_view = df_master_view.apply(_pivot_ml, axis=1)
@@ -10032,6 +10053,7 @@ with tab_master:
             icons = []
 
             # 💰 Money Bag: sharpness_delta > 0.10
+            # Indicates sharp money is on this side (Money % > Ticket %)
             try:
                 sd = float(row.get("sharpness_delta") or 0.0)
                 if sd > 0.10:
@@ -10040,6 +10062,7 @@ with tab_master:
                 pass
 
             # 🔥 Fire: Market Steam > 0.03
+            # Indicates the market moved significantly in favor of this pick
             try:
                 # delta_implied_prob alias "Market Steam"
                 steam = float(row.get("delta_implied_prob") or 0.0)
@@ -10049,10 +10072,9 @@ with tab_master:
                 pass
 
             if icons:
-                # Deduplicate icons if they might already be there
                 icon_str = " ".join(icons)
-                # Check to prevent duplicate appends if run multiple times
-                if not any(ic in reason for ic in icons):
+                # Ensure we don't double-append
+                if icon_str not in reason:
                      return f"{reason} {icon_str}"
             return reason
 
@@ -10120,6 +10142,7 @@ with tab_master:
             'spread_edge', 'total_edge',
             'Pick', 'AI_Prob', 'Implied_Prob', 'Home_Sentiment', 'Away_Sentiment', 'Sentiment_Diff', 'sentiment_status', 'status', 'best_pick_prob', 'best_pick_edge',
             'theover_pick', 'theover_prob_used', 'theover_delta_final_prob', 'final_prob_without_theover',
+            'theover_weight', 'theover_matched',
             'Sharp Money', 'sharpness_delta', 'delta_implied_prob'
         ]
         safe_cols = [c for c in ui_whitelist if c in top_df_display.columns]
