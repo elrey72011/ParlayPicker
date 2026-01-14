@@ -9311,29 +9311,56 @@ with tab_master:
                 # Ensure "Moneyline" is pivoted to Spread/Total if present in Market column
                 def _force_pivot(row):
                     if row.get('Market') == 'Moneyline':
-                        # Select the Spread or Total alternative with the higher edge
+                        # Check availability of data
+                        s_pick = row.get('Spread & Pick')
+                        t_pick = row.get('Total & Pick')
+
+                        # Validate if picks are actually present (not None, not empty, not "None")
+                        has_spread = s_pick is not None and str(s_pick).strip() != '' and str(s_pick).lower() != 'none'
+                        has_total = t_pick is not None and str(t_pick).strip() != '' and str(t_pick).lower() != 'none'
+
                         s_edge = safe_float(row.get('spread_edge')) or 0.0
                         t_edge = safe_float(row.get('total_edge')) or 0.0
 
                         s_prob = safe_float(row.get('spread_prob_adj')) or safe_float(row.get('spread_prob'))
                         t_prob = safe_float(row.get('total_prob_adj')) or safe_float(row.get('total_prob'))
 
-                        if s_edge >= t_edge:
+                        # Logic to determine target market
+                        target = None
+
+                        if has_spread and has_total:
+                            if s_edge >= t_edge:
+                                target = 'Spread'
+                            else:
+                                target = 'Total'
+                        elif has_spread:
+                            target = 'Spread'
+                        elif has_total:
+                            target = 'Total'
+                        else:
+                            # If neither Spread nor Total is available, we MUST keep the row but label it clearly
+                            target = 'Keep_ML'
+
+                        if target == 'Spread':
                             row['Market'] = 'Spread'
-                            row['Pick'] = row.get('Spread & Pick')
+                            row['Pick'] = s_pick
                             row['best_pick_type'] = 'SPREAD'
                             row['edge'] = s_edge
                             if s_prob is not None:
                                 row['final_probability'] = s_prob
                                 row['final_prob'] = s_prob
-                        else:
+                        elif target == 'Total':
                             row['Market'] = 'Total'
-                            row['Pick'] = row.get('Total & Pick')
+                            row['Pick'] = t_pick
                             row['best_pick_type'] = 'TOTAL'
                             row['edge'] = t_edge
                             if t_prob is not None:
                                 row['final_probability'] = t_prob
                                 row['final_prob'] = t_prob
+                        elif target == 'Keep_ML':
+                            row['Market'] = 'ML (No Spread/Total Avail)'
+                            # Keep original ML pick and probabilities
+
                     return row
 
                 df = df.apply(_force_pivot, axis=1)
@@ -10708,8 +10735,14 @@ with tab_master:
                 st.dataframe(top_df_ui, width="stretch", hide_index=True)
             except Exception as e:
                  st.error(f"Display Error (Master Table): {e}")
+
+            # Safe retrieval of stats from session state
+            current_stats = st.session_state.get("master_stats_persistent", {})
+            rows_out_val = current_stats.get('rows_out', 0)
+            games_in_val = current_stats.get('games_in', 0)
+
             st.caption(
-                f"rows_out/games_in = {master_stats['rows_out']} / {master_stats['games_in']}"
+                f"rows_out/games_in = {rows_out_val} / {games_in_val}"
             )
             with st.expander("Decision Trace (Samples)", expanded=False):
                 st.caption("One sample per league (NFL / NBA / NCAAB) showing how the final pick & probability were derived.")
