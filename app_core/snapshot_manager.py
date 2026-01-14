@@ -10,7 +10,7 @@ logger = logging.getLogger("snapshot_manager")
 
 # Snapshot Directory - Explicitly enforced as per task instructions
 # Hardcoded loading path to resolve "No noon baseline found" error
-SNAPSHOT_DIR = "/mount/src/parlaypicker/data/snapshots"
+SNAPSHOT_DIR = "data/snapshots"
 
 # Ensure directory exists (if we have permissions, otherwise this might fail but path is forced)
 try:
