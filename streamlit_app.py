@@ -82,10 +82,13 @@ logger = logging.getLogger("parlaypicker")
 if not logger.handlers:
     logging.basicConfig(level=logging.INFO)
 
-# Initializing global status variables to prevent NameErrors
-sportsdata_status_run = "pending"
-apisports_status_run = "pending"
-consensus_status_run = "pending"
+# Initialize status variables at the top level to ensure global scope availability
+if 'sportsdata_status_run' not in st.session_state:
+    st.session_state['sportsdata_status_run'] = "pending"
+if 'apisports_status_run' not in st.session_state:
+    st.session_state['apisports_status_run'] = "pending"
+if 'consensus_status_run' not in st.session_state:
+    st.session_state['consensus_status_run'] = "pending"
 
 # -----------------
 # Utility helpers (null-safe probability handling)
@@ -5880,11 +5883,6 @@ with tab_master:
         st.session_state["master_results_df"] = None
 
     if st.button("🚀 Run Master Analysis"):
-        should_run = True
-    else:
-        should_run = False
-
-    if should_run:
         with st.spinner("Analyzing Markets..."):
             try:
                 # Task 1: Pre-process games to ensure commence_date_local is set for TheOver matching
@@ -6237,8 +6235,8 @@ with tab_master:
                 elif "NCAAF" in norm_league_key or "COLLEGE FOOTBALL" in norm_league_key: norm_league_key = "NCAAF"
 
                 # Regenerate codes with normalized league to be safe
-                home_code_norm = team_code_for_league(norm_league_key, home)
-                away_code_norm = team_code_for_league(norm_league_key, away)
+                home_code_norm = team_code_for_league(norm_league_key, home_team)
+                away_code_norm = team_code_for_league(norm_league_key, away_team)
 
                 # Task 2: Verified parameter order (league, date, home, away)
                 master_key_exact = generate_canonical_key(norm_league_key, local_date_str, home_code_norm, away_code_norm)
