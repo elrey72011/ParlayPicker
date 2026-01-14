@@ -876,6 +876,47 @@ def parse_total_pick(raw_val: Any) -> Tuple[Optional[str], Optional[float]]:
     line = safe_float(match.group(2))
     return side, line
 
+def pivot_market(row):
+    """
+    Constraint: The final Market column must never say "Moneyline."
+    Pivots Moneyline picks to Spread or Total based on Edge/Probability.
+    """
+    if row.get('Market') == "Moneyline":
+        # Compare Spread Prob vs Total Prob (using edge or confidence)
+        # Use defaults if keys missing
+        s_prob = safe_float(row.get('spread_prob_adj')) or safe_float(row.get('spread_prob_final')) or 0.0
+        t_prob = safe_float(row.get('total_prob_adj')) or safe_float(row.get('total_prob_final')) or 0.0
+
+        s_edge = safe_float(row.get('spread_edge')) or 0.0
+        t_edge = safe_float(row.get('total_edge')) or 0.0
+
+        pivot_to_spread = False
+        if s_prob > t_prob:
+            pivot_to_spread = True
+        elif t_prob > s_prob:
+            pivot_to_spread = False
+        else:
+            # Tie-break with edge
+            if s_edge >= t_edge:
+                pivot_to_spread = True
+            else:
+                pivot_to_spread = False
+
+        if pivot_to_spread:
+            row['Market'] = "Spread"
+            row['Pick'] = row.get('Spread & Pick')
+            row['final_probability'] = s_prob
+            row['best_pick_type'] = "SPREAD"
+            row['edge'] = s_edge
+        else:
+            row['Market'] = "Total"
+            row['Pick'] = row.get('Total & Pick')
+            row['final_probability'] = t_prob
+            row['best_pick_type'] = "TOTAL"
+            row['edge'] = t_edge
+
+    return row
+
 def enrich_picks_with_roi_metrics(df: pd.DataFrame) -> pd.DataFrame:
     """
     Jules: Call this function to prepare the 'Infallible' dashboard view.
@@ -5805,20 +5846,13 @@ with tab_master:
         key="use_model_numeric_probs",
         help="If checked, the 'AI_Prob' column will use the local XGBoost model output."
     )
-    run_master = st.button(
-        "Run Master Analysis",
-        key="run_master",
-        disabled=(not kalshi_status.get("configured")) and st.session_state.get("kalshi_required", True),
-        help="Requires Kalshi availability",
-    )
     games = st.session_state.get("games", [])
-    if run_master and (not kalshi_status.get("configured")):
-        st.error("Kalshi is required but unavailable. Fix Kalshi first.")
-        st.stop()
+    # if run_master and (not kalshi_status.get("configured")):
+    #    st.error("Kalshi is required but unavailable. Fix Kalshi first.")
+    #    st.stop()
 
     # Determine if we need to run (user clicked button) or just display (cached df exists)
-    df_existing = st.session_state.get("master_df")
-    should_run = run_master
+    df_existing = st.session_state.get("master_results_df")
     
     # If we have existing data and didn't request a re-run, use it to skip the heavy lifting
     # We still need to define the helper functions because they are called during the DataFrame construction block
@@ -5835,18 +5869,29 @@ with tab_master:
         "unmatched_examples": []
     }
 
+    # 1. Initialize session state for the results if not present
+    if "master_results_df" not in st.session_state:
+        st.session_state["master_results_df"] = None
+
+    if st.button("🚀 Run Master Analysis"):
+        should_run = True
+    else:
+        should_run = False
+
     if should_run:
-        try:
-            # Task 1: Pre-process games to ensure commence_date_local is set for TheOver matching
-            # This aligns the dates so the canonical keys match (ingestion vs loop).
+        with st.spinner("Analyzing Markets..."):
+            try:
+                # Task 1: Pre-process games to ensure commence_date_local is set for TheOver matching
+                # This aligns the dates so the canonical keys match (ingestion vs loop).
             for g in games:
                 if not g.get("commence_date_local"):
                     try:
                         # Try to derive from UTC
                         dt = parse_commence_to_utc(g.get("commence_time_iso_utc") or g.get("commence_time"))
                         if dt:
-                            # Use simple YYYY-MM-DD
-                            g["commence_date_local"] = dt.strftime("%Y-%m-%d")
+                            # Use simple YYYY-MM-DD - Convert to ET to match main loop
+                            dt_et = dt.astimezone(ZoneInfo("America/New_York"))
+                            g["commence_date_local"] = dt_et.strftime("%Y-%m-%d")
                     except Exception:
                         pass
 
@@ -9236,12 +9281,20 @@ with tab_master:
                 },
             }
 
+            # Task 2: Absolute Moneyline (ML) Pivot (Applied BEFORE saving)
+            df = df.apply(pivot_market, axis=1)
+
             st.session_state["master_df"] = df
+            st.session_state["master_results_df"] = df
 
         except Exception as e:
             st.error(f"Analysis failed: {str(e)}")
             st.code(traceback.format_exc())
             st.stop()
+
+    # 4. ALWAYS RENDER IF DATA EXISTS (Outside the button block)
+    if st.session_state["master_results_df"] is not None:
+        df = st.session_state["master_results_df"]
 
         required_display_cols = [
             "Home_Sentiment",
@@ -9736,58 +9789,10 @@ with tab_master:
         # User Action: Enforce specific column order: Home, Away, Implied_Prob, AI_Prob
         df_master_view = reorder_for_spread_total_focus(df_master_view)
 
-        # Task 2: Absolute Moneyline (ML) Pivot
-        # Logic: Moneyline is for internal math only. It must never be the final pick.
-        # Pivot to Spread or Total based on whichever has the highest final_probability or edge.
-        def _pivot_ml(row):
-            # Check if current decision is Moneyline OR if Market column says "Moneyline"
-            if row.get("Market") == "Moneyline" or row.get("best_pick_type") == "ML":
-                # Get Spread and Total probabilities (using adjusted/final if available)
-                s_prob = safe_float(row.get("spread_prob_adj")) or safe_float(row.get("spread_prob_final")) or 0.0
-                t_prob = safe_float(row.get("total_prob_adj")) or safe_float(row.get("total_prob_final")) or 0.0
-
-                # Get Edges for tie-breaking
-                s_edge = safe_float(row.get("spread_edge")) or 0.0
-                t_edge = safe_float(row.get("total_edge")) or 0.0
-
-                # Pivot Decision Logic
-                # Prefer highest probability, use edge as tiebreaker
-                pivot_to_spread = False
-
-                if s_prob > t_prob:
-                    pivot_to_spread = True
-                elif t_prob > s_prob:
-                    pivot_to_spread = False
-                else:
-                    # Tie in probability, use edge
-                    if s_edge >= t_edge:
-                        pivot_to_spread = True
-                    else:
-                        pivot_to_spread = False
-
-                if pivot_to_spread:
-                     # Pivot to Spread
-                     row["Market"] = "Spread"
-                     row["Pick"] = row.get("Spread & Pick")
-                     row["final_probability"] = s_prob
-                     row["best_pick_type"] = "SPREAD"
-                     row["edge"] = s_edge
-                     # Ensure we don't carry over ML-specific reasons
-                     if "Moneyline" in str(row.get("Pick_Reason_Short")):
-                         row["Pick_Reason_Short"] = "Spread Pivot"
-                else:
-                     # Pivot to Total
-                     row["Market"] = "Total"
-                     row["Pick"] = row.get("Total & Pick")
-                     row["final_probability"] = t_prob
-                     row["best_pick_type"] = "TOTAL"
-                     row["edge"] = t_edge
-                     if "Moneyline" in str(row.get("Pick_Reason_Short")):
-                         row["Pick_Reason_Short"] = "Total Pivot"
-
-            return row
-
-        df_master_view = df_master_view.apply(_pivot_ml, axis=1)
+        # Task 2: Absolute Moneyline (ML) Pivot (Redundant here but ensuring UI view consistency)
+        # We already applied pivot_market to the main dataframe before saving.
+        # But since df_master_view is derived and calculated freshly, we apply it again to be safe.
+        df_master_view = df_master_view.apply(pivot_market, axis=1)
 
         # Explicit column ordering override
         # Jules: Map derived alias columns for display
@@ -10084,7 +10089,7 @@ with tab_master:
             # Add to reason short
             top_df_display["Pick_Reason_Short"] = top_df_display["Pick_Reason_Short"] + " | " + top_df_display["TheOver_Impact"]
 
-        # --- Task 3: Visual Icon Injection (💰 & 🔥) ---
+        # --- Task 4: Visual Icon Injection (💰 & 🔥) ---
         # Append icons to Pick_Reason_Short and At_a_Glance_Reason
         def _append_icons(row, col_name):
             reason = str(row.get(col_name) or "")
@@ -10668,19 +10673,6 @@ with tab_master:
                             except Exception:
                                 trace_payload = {"trace": trace_payload}
                         st.json(trace_payload or {})
-    # If we didn't run, try to display from cache
-    elif df_existing is not None:
-        # Reconstruct display logic from df_existing
-        # Note: This is a partial recovery. Ideally we would cache the display dataframe or reconstruct it.
-        # Given the complexity, we will display the cached dataframe directly for now, 
-        # or rely on the user to re-run if they want full interactivity of the ephemeral elements.
-        st.success(f"Loaded {len(df_existing)} rows from session cache.")
-        st.dataframe(df_existing)
-        
-        # Restore basic stats if available
-        if "master_stats" in st.session_state:
-            st.caption(f"Cached stats: {st.session_state['master_stats'].get('rows_out', 0)} rows out")
-
     elif not games:
         st.info("Load games from the sidebar, then run Master Analysis.")
 
