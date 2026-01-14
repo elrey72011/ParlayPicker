@@ -10039,13 +10039,8 @@ with tab_master:
     if st.session_state["master_results_df"] is not None:
         df = st.session_state["master_results_df"].copy()
 
-        # Apply Kalshi match filter for UI display only (does NOT affect exports)
-        if st.session_state.get("kalshi_match_only", False):
-            kalshi_matched_count_before = len(df)
-            df = df[df.get("kalshi_matched", pd.Series([False] * len(df))).fillna(False) == True]
-            kalshi_matched_count_after = len(df)
-            if kalshi_matched_count_after < kalshi_matched_count_before:
-                st.info(f"🔍 Kalshi Filter Active: Showing {kalshi_matched_count_after} of {kalshi_matched_count_before} games with Kalshi matches (exports will include all games)")
+        # NOTE: Do NOT apply Kalshi match filter here - it must only affect UI display, not exports
+        # The filter is applied later to df_master_view_display only (see line ~10613+)
 
         required_display_cols = [
             "Home_Sentiment",
@@ -10612,6 +10607,17 @@ with tab_master:
 
         df_master_view_display = df_master_view.copy()
         df_master_view_full = df_master_view.copy()
+
+        # Apply Kalshi match filter ONLY to display dataframe (does NOT affect exports)
+        if st.session_state.get("kalshi_match_only", False):
+            kalshi_matched_count_before = len(df_master_view_display)
+            df_master_view_display = df_master_view_display[
+                df_master_view_display.get("kalshi_matched", pd.Series([False] * len(df_master_view_display))).fillna(False) == True
+            ]
+            kalshi_matched_count_after = len(df_master_view_display)
+            if kalshi_matched_count_after < kalshi_matched_count_before:
+                st.info(f"🔍 Kalshi Filter Active: Showing {kalshi_matched_count_after} of {kalshi_matched_count_before} games with Kalshi matches (exports will include all games)")
+
         trace_cols = [
             "spread_engine_used",
             "spread_pick_label",
