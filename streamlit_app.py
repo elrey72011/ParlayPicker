@@ -9028,13 +9028,14 @@ with tab_master:
                     rows_out.append(fallback_row)
                     master_stats["market_rows_out"] += 1
 
-                # 1. Create the base Master DataFrame from your processed rows
-                # User Action: Use from_records and copy to prevent fragmentation
-                master_df = pd.DataFrame.from_records(rows_out)
+            # CRITICAL FIX: Create DataFrame AFTER loop completes (moved outside for loop)
+            # This ensures ALL game rows are accumulated before creating the DataFrame
+            # Previously this was inside the loop, causing only the last game to be retained
+            master_df = pd.DataFrame.from_records(rows_out)
 
-                # FIX: Deduplicate columns immediately to prevent "Duplicate labels" error
-                master_df = master_df.loc[:, ~master_df.columns.duplicated()].copy()
-                master_df = master_df.reset_index(drop=True)
+            # FIX: Deduplicate columns immediately to prevent "Duplicate labels" error
+            master_df = master_df.loc[:, ~master_df.columns.duplicated()].copy()
+            master_df = master_df.reset_index(drop=True)
 
             # Task 4: Enrich with Consensus (Sharpness Delta)
             # Must be done before sentiment integration or model features if model uses it
@@ -10472,7 +10473,24 @@ with tab_master:
         )
         st.session_state["show_low_confidence"] = hide_low
         df_master_view, confidence_stats = apply_confidence_filter(df, confidence_mode, not hide_low)
-        
+
+        # Task 2: Force Spread/Total Pivot (Applied immediately after df_master_view creation)
+        def force_spread_total_pivot(row):
+            if row.get('Market') == "Moneyline":
+                # Pivot to whichever alternative has the higher probability
+                spread_prob = safe_float(row.get('spread_prob_pick_final', 0)) or 0
+                total_prob = safe_float(row.get('total_prob_pick_final', 0)) or 0
+
+                if spread_prob >= total_prob:
+                    row['Market'] = "Spread"
+                    row['Pick'] = row.get('Spread & Pick', row.get('Pick'))
+                else:
+                    row['Market'] = "Total"
+                    row['Pick'] = row.get('Total & Pick', row.get('Pick'))
+            return row
+
+        df_master_view = df_master_view.apply(force_spread_total_pivot, axis=1)
+
         if market_stability_filter:
             df_master_view = df_master_view[df_master_view['market_stability'].isin(market_stability_filter)]
 
