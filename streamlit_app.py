@@ -81,6 +81,12 @@ except Exception:  # pragma: no cover - optional import
 logger = logging.getLogger("parlaypicker")
 if not logger.handlers:
     logging.basicConfig(level=logging.INFO)
+
+# Initializing global status variables to prevent NameErrors
+sportsdata_status_run = "pending"
+apisports_status_run = "pending"
+consensus_status_run = "pending"
+
 # -----------------
 # Utility helpers (null-safe probability handling)
 # -----------------
@@ -5966,8 +5972,8 @@ with tab_master:
                     }
                     st.session_state["DECISION_TRACE_SAMPLES"] = samples
 
-                api_sports_status_run = api_sports_status
-                sportsdata_status_run = sportsdata_status_run
+                api_sports_status_run = "pending"
+                sportsdata_status_run = "pending"
                 df_master = pd.DataFrame(games or [])
 
                 # Inject real-time stats for Vertex
@@ -9301,14 +9307,9 @@ with tab_master:
                 # Ensure "Moneyline" is pivoted to Spread/Total if present in Market column
                 def _force_pivot(row):
                     if row.get('Market') == 'Moneyline':
-                        s_edge = safe_float(row.get('spread_edge')) or 0.0
-                        t_edge = safe_float(row.get('total_edge')) or 0.0
-                        # Fallback to probabilities if edges are 0
-                        if s_edge == 0 and t_edge == 0:
-                             s_prob = safe_float(row.get('spread_prob')) or 0.0
-                             t_prob = safe_float(row.get('total_prob')) or 0.0
-                             s_edge = s_prob
-                             t_edge = t_prob
+                        # Select the Spread or Total alternative with the higher edge
+                        s_edge = row.get('spread_edge') or 0.0
+                        t_edge = row.get('total_edge') or 0.0
 
                         if s_edge >= t_edge:
                             row['Market'] = 'Spread'
