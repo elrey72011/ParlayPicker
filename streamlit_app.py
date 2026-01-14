@@ -596,7 +596,7 @@ def compute_final_probability(
 
     # Task 1: Hardcoded Global Weights (No Dynamic Shifting)
     # Values: Kalshi 0.35, Market 0.30, ML 0.20, TheOver 0.10, Sentiment 0.05
-    # If source is missing, distribute weight to MARKET_WEIGHT (implied_prob).
+    # If source is missing, weight is 0.0. No redistribution.
 
     # 1. Define Static Weights (Hardcoded per User Request)
     # Force these values: Kalshi 0.35, Market 0.30, ML 0.20, TheOver 0.10, Sentiment 0.05
@@ -616,20 +616,15 @@ def compute_final_probability(
     # Sentiment Prob is derived later, availability check:
     has_sentiment = sentiment_score is not None
 
-    # 3. Redistribute Missing Weights to Market
-    # Logic: To keep other weights (like ML=0.20) static relative to the total sum of 1.0,
-    # we must redistribute any missing weight to the Market bucket.
+    # 3. Force Global Weight Compliance (Rule: No redistribution)
+    # "If sentiment or theover are missing for a specific game, their weight contribution is 0, but the other weights do not move."
     if not has_kalshi:
-        w_market += w_kalshi
         w_kalshi = 0.0
     if not has_model:
-        w_market += w_model
         w_model = 0.0
     if not has_theover:
-        w_market += w_theover
         w_theover = 0.0
     if not has_sentiment:
-        w_market += w_sentiment
         w_sentiment = 0.0
 
     # Safety: If market is also missing (rare/impossible if we have a pick), normalize remainder?
@@ -10000,9 +9995,7 @@ with tab_master:
                 try:
                     v = float(val)
                     if v > 0.10:
-                        return "💰 Sharp"
-                    elif v < -0.10:
-                        return "Square"
+                        return "💰"
                     return ""
                 except Exception:
                     return ""

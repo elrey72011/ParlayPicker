@@ -9,13 +9,21 @@ import logging
 
 logger = logging.getLogger("consensus_ingest")
 
-def enrich_with_consensus(df: pd.DataFrame) -> pd.DataFrame:
+def fetch_latest_splits() -> pd.DataFrame:
+    """
+    Fetches the latest betting splits (Ticket % and Money %).
+    For now, returns a DataFrame with team_name, money_pct, and ticket_pct.
+    """
+    return pd.DataFrame(columns=["team_name", "money_pct", "ticket_pct"])
+
+def enrich_with_consensus(df: pd.DataFrame, consensus_data: pd.DataFrame = None) -> pd.DataFrame:
     """
     Adds 'ticket_pct' and 'money_pct' columns to the dataframe.
     Calculates 'sharpness_delta' = money_pct - ticket_pct.
 
     Args:
         df: The master dataframe.
+        consensus_data: Optional DataFrame containing real consensus data.
 
     Returns:
         DataFrame with added consensus columns.
@@ -23,7 +31,13 @@ def enrich_with_consensus(df: pd.DataFrame) -> pd.DataFrame:
     if df is None or df.empty:
         return df
 
-    # Check if columns already exist (e.g. from real ingestion)
+    # If real consensus data is provided, try to merge it
+    # (Implementation placeholder: currently fetch_latest_splits returns empty)
+    if consensus_data is not None and not consensus_data.empty:
+        # TODO: Implement merge logic when real data is available
+        pass
+
+    # Check if columns already exist (e.g. from real ingestion or merge)
     if 'ticket_pct' in df.columns and 'money_pct' in df.columns:
         # Just ensure they are numeric
         df['ticket_pct'] = pd.to_numeric(df['ticket_pct'], errors='coerce').fillna(0.5)
