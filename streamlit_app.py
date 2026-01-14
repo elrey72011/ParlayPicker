@@ -9037,9 +9037,11 @@ with tab_master:
                     rows_out.append(fallback_row)
                     master_stats["market_rows_out"] += 1
 
-                # CRITICAL FIX: Create DataFrame AFTER loop completes (moved outside for loop)
-                # This ensures ALL game rows are accumulated before creating the DataFrame
-                # Previously this was inside the loop, causing only the last game to be retained
+                # --- 6. POST-LOOP PROCESSING (Task 1: Fix Result Accumulator) ---
+                # Move dataframe creation and enrichment OUTSIDE the loop.
+                # This prevents overwriting and ensures all games are processed correctly.
+
+                # Task 1: Create DataFrame
                 master_df = pd.DataFrame.from_records(rows_out)
 
                 # FIX: Deduplicate columns immediately to prevent "Duplicate labels" error
@@ -9047,8 +9049,6 @@ with tab_master:
                 master_df = master_df.reset_index(drop=True)
 
                 # Task 4: Enrich with Consensus (Sharpness Delta)
-                # Must be done before sentiment integration or model features if model uses it
-                # --- FIXED CODE FOR JULES ---
                 try:
                     with st.spinner("📊 Ingesting Public Consensus Data..."):
                         # This is where the Money % and Ticket % are pulled
@@ -9061,19 +9061,13 @@ with tab_master:
                     st.session_state.consensus_data = None
                     # Fallback to enrich without external data (uses mocks)
                     master_df = enrich_with_consensus(master_df)
-                # -----------------------------
 
                 # 3. CRITICAL: Enrich the whole batch to fill 'feature_diff' columns
-                # This fixes the 'Missing feature column' warnings in the logs
                 with st.spinner("🚀 Running Batch Feature Enrichment..."):
-                    # FIX: Pass ALL api_clients so stats for all leagues are fetched, not just the last loop variable
+                    # FIX: Pass ALL api_clients so stats for all leagues are fetched
                     master_df = enrich_with_model_features(master_df, api_sports_clients)
 
                 # Task 4: Update Sentiment Score using Sharpness Delta
-                # Integration: 60% Sharpness Delta, 40% Social Sentiment
-                # We need to update 'Sentiment_Diff' or create a new combined score.
-                # Currently 'Sentiment_Diff' is used in compute_final_probability via sentiment_score.
-
                 def _update_sentiment_score(row):
                     social_diff = row.get("Sentiment_Diff")
                     if social_diff is None: social_diff = 0.0
@@ -9081,14 +9075,9 @@ with tab_master:
                     sharpness = row.get("sharpness_delta")
                     if sharpness is None: sharpness = 0.0
 
-                    # Hybrid Formula
-                    # Normalize sharpness (e.g. 0.15 delta -> 1.0 score equiv? or keep raw?)
-                    # Sentiment Diff is typically -1 to 1.
-                    # Sharpness Delta is typically -0.3 to +0.3.
-                    # Let's scale sharpness by 3.33 to map 0.3 to 1.0 roughly.
+                    # Hybrid Formula: 60% Sharpness, 40% Social
+                    # Scale sharpness (e.g. 0.3 -> 1.0)
                     sharpness_scaled = sharpness * 3.33
-
-                    # Weighted Combo
                     hybrid_score = (0.6 * sharpness_scaled) + (0.4 * social_diff)
                     return hybrid_score
 
@@ -9100,11 +9089,9 @@ with tab_master:
 
                 # 4. BATCH PREDICTION: Local Inference
                 master_df = clean_df(master_df)
-                # Local inference is always "configured" (or falls back)
                 if True:
                     with st.spinner("🔮 Computing Win Probabilities (Local)..."):
                         # 2. Filter for exactly the columns the model expects
-                        # User Action: Ensure columns exist before filtering
                         missing_cols = [col for col in VERTEX_FEATURE_COLUMNS if col not in master_df.columns]
                         if missing_cols:
                             zeros_df = pd.DataFrame(0.0, index=master_df.index, columns=missing_cols)
@@ -9120,16 +9107,14 @@ with tab_master:
                             default_val = 0.5 if "prob" in col else 0.0
                             inference_df[col] = pd.to_numeric(col_data, errors='coerce').fillna(default_val).astype(float)
 
-                        # 6. Accumulate Debug Data (Base Dict + Feature Vector)
+                        # 6. Accumulate Debug Data
                         if "debug_log_history" not in st.session_state:
                             st.session_state["debug_log_history"] = []
 
                         try:
                             # Capture base metadata
                             debug_base = master_df[['Home', 'Away', 'league', 'Commence (UTC)']].copy()
-                            # Combine with feature vector
                             debug_combined = pd.concat([debug_base, inference_df], axis=1)
-                            # Append to session state accumulator
                             st.session_state["debug_log_history"].extend(debug_combined.to_dict('records'))
                         except Exception as e:
                             logger.warning(f"Failed to accumulate debug data: {e}")
@@ -9144,9 +9129,8 @@ with tab_master:
                                 st.warning(f"AI Data Unavailable (using defaults): {e}")
                                 probs = [0.5] * len(inference_df)
 
-                            # FIX: Stop Using Indexing for AI Results (Safe Map Approach) - Logic Update: Pad with 0.5 instead of fail
+                            # FIX: Stop Using Indexing for AI Results (Safe Map Approach)
                             if probs:
-                                # Handle length mismatch by padding or truncating
                                 if len(probs) < len(inference_df):
                                     logger.warning(f"Prediction length mismatch (short): got {len(probs)}, expected {len(inference_df)}. Padding with 0.5.")
                                     probs = list(probs) + [0.5] * (len(inference_df) - len(probs))
@@ -9154,13 +9138,9 @@ with tab_master:
                                     logger.warning(f"Prediction length mismatch (long): got {len(probs)}, expected {len(inference_df)}. Truncating.")
                                     probs = list(probs)[:len(inference_df)]
 
-                                # Wrap in Series to match index explicitly (convert to list to drop any upstream index)
-                                # This aligns by index explicitly as requested to prevent mismatch
                                 predictions_series = pd.Series(list(probs), index=inference_df.index)
-
-                                # Assign using loc to ensure alignment
                                 master_df.loc[inference_df.index, 'AI_Prob'] = predictions_series
-                                master_df.loc[inference_df.index, 'ai_prob_base'] = predictions_series # Persist base if needed
+                                master_df.loc[inference_df.index, 'ai_prob_base'] = predictions_series
                             else:
                                 logger.warning("No predictions returned. Defaulting to 0.5.")
                                 master_df.loc[inference_df.index, 'AI_Prob'] = 0.5
@@ -9172,40 +9152,16 @@ with tab_master:
                         implied_probs = pd.to_numeric(master_df.get("Implied_Prob"), errors='coerce').fillna(0.5)
                         master_df["AI_Edge"] = master_df["AI_Prob"] - implied_probs
 
-                # 4. SHOTGUN ACTIVATION: Use ParlayOptimizer to tier the results
+                # 4. SHOTGUN ACTIVATION
                 if ParlayOptimizer:
-                    # FIX: Use absolute path for robustness
                     model_dir_abs = os.path.join(os.path.dirname(__file__), "models")
                     optimizer = ParlayOptimizer(model_dir=model_dir_abs)
                     shotgun_picks = optimizer.get_shotgun_picks(master_df)
                     st.session_state["shotgun_data"] = shotgun_picks
 
-                # Collapse to one row per game (prefer the first generated row, typically moneyline) for Master View
-                # NOTE: master_df now has ALL rows (ML/Spread/Total). We duplicate logic for deduping for the UI view if needed,
-                # but the prompt implies we persist the FULL master_df to session state for tabs to use.
-
-                # We need to preserve the sentiment metadata enrichment logic
-                sentiment_meta_for_export = sentiment_pack_meta or init_sentiment_meta()
-                # Vectorized or simple loop to fill sentiment meta if missing
-                # (Assuming enrich_with_model_features preserves existing cols, which it does)
-
-                # Deduping logic for "Master View" (one row per game)
-                # We'll create a view for display, but keep master_df full for shotgun/optimizer.
-
-                # But wait, the previous code replaced `df` with `deduped_list`.
-                # If we overwrite `st.session_state["master_df"]` with the full `master_df`,
-                # downstream code expecting 1 row per game might break.
-                # However, the user instruction was "Persist to session state for the tabs to use".
-                # The tabs (Shotgun) likely need the full rows.
-                # The "Master Analysis" tab view logic (later in the file) uses `df` (which was deduped).
-                # We should probably assign `df` to the deduped version for the immediate display logic below,
-                # but maybe store `master_df_full` or similar?
-                # Actually, let's follow the pattern but adapt for the existing `df` variable usage.
-
                 # Apply sentiment meta to master_df
-                # (Simulating what the loop did)
                 if not master_df.empty:
-                    # Optimized bulk assignment to prevent fragmentation
+                    sentiment_meta_for_export = sentiment_pack_meta or init_sentiment_meta()
                     meta_updates = {
                         "sentiment_sample_status": str(sentiment_meta_for_export.get("sentiment_sample_status", "NO_CALL") or "NO_CALL"),
                         "sentiment_source": str(sentiment_meta_for_export.get("sentiment_source", "none") or "none"),
@@ -9215,32 +9171,38 @@ with tab_master:
                         "sentiment_errors_sample": sentiment_meta_for_export.get("sentiment_errors_sample", "") or "",
                         "sentiment_error_count": int(sentiment_meta_for_export.get("sentiment_error_count", 0) or 0),
                     }
-                    # Create DataFrame for new columns and concat
                     meta_df = pd.DataFrame(meta_updates, index=master_df.index)
                     master_df = pd.concat([master_df, meta_df], axis=1)
 
-                    # Fill remaining fields using bulk fillna
-                    # Fix: Ensure no 'None' values are passed to fillna
                     fill_map = {
                         "sentiment_status": str(sentiment_meta_for_export.get("sentiment_status") or "ok"),
                         "sentiment_confidence": float(sentiment_meta_for_export.get("sentiment_confidence") or 0.0),
                         "sentiment_score": float(sentiment_meta_for_export.get("sentiment_score") or 0.0),
                     }
-                    # Apply individually to avoid ValueError
                     for col, val in fill_map.items():
                         if col in master_df.columns:
                             master_df[col] = master_df[col].fillna(val)
-                    # Fill visual cols with empty string
                     visual_cols = ["spread_sentiment_arrow", "total_sentiment_arrow", "spread_sentiment_note", "total_sentiment_note"]
                     master_df[visual_cols] = master_df[visual_cols].fillna("")
 
-                # Re-implement deduping for the `df` variable used by the UI below
-                # Ensure rows_for_dedupe is initialized even if master_df was empty
-                rows_for_dedupe = master_df.to_dict("records") if not master_df.empty else []
+                # Task 2: Absolute Moneyline Pivot (Apply to master_df before anything else)
+                def pivot_to_st(row):
+                    if row.get('Market') == "Moneyline":
+                        s_edge = safe_float(row.get('spread_edge')) or 0.0
+                        t_edge = safe_float(row.get('total_edge')) or 0.0
+                        if s_edge >= t_edge:
+                            row['Market'], row['Pick'] = "Spread", row.get('Spread & Pick')
+                        else:
+                            row['Market'], row['Pick'] = "Total", row.get('Total & Pick')
+                    return row
 
+                # Deduplication Setup
+                rows_for_dedupe = master_df.to_dict("records") if not master_df.empty else []
                 deduped_rows: Dict[Tuple[Any, Any, Any, Any, Any], Dict[str, Any]] = {}
                 for row in rows_for_dedupe:
-                    # Key must include the market to prevent overwriting Spread/Total rows for the same game
+                    # Apply pivot logic here if desired, or after df creation.
+                    # Applying here is cleaner.
+                    row = pivot_to_st(row)
                     key = (row.get("league"), row.get("Home"), row.get("Away"), row.get("Commence (UTC)"), row.get("Market"))
                     existing = deduped_rows.get(key)
                     if (existing is None) or (
@@ -9249,36 +9211,20 @@ with tab_master:
                         deduped_rows[key] = row
                 deduped_list = list(deduped_rows.values())
 
-                # FIX: Do NOT filter by kalshi_match_only here - this removes games from exports!
-                # The kalshi_match_only filter should only apply to UI display, not to the persisted data.
-                # If filtering is needed for display, it should be applied in the UI tabs after loading from session state.
-
                 df = pd.DataFrame(deduped_list)
                 if "Unnamed: 0" in df.columns:
                     df = df.drop(columns=["Unnamed: 0"])
-
-                # 5. UI PERSISTENCE
-                # We persist the DEDUPED df as "master_df" because that's what the UI expects for the "Master Analysis" tab table.
-                # The shotgun data is stored separately.
-                # 1. Deduplicate Master DF (Fix Duplicate Column Crash)
                 df = df.loc[:, ~df.columns.duplicated()].copy()
 
-                # --- MARKET TRACKER HOOK (Snapshot System) ---
+                # --- MARKET TRACKER HOOK ---
                 try:
-                    # 1. Save Noon Baseline (Task 2: Use Snapshot Manager)
                     snapshot_manager.save_noon_baseline(df)
-
-                    # 2. Compare against Noon Baseline (if Evening/Late)
                     df = market_tracker.load_and_compare(df)
-
-                    # Persist TheOver debug stats for sidebar export
                     if 'theover_stats' in locals():
                         st.session_state["theover_debug_log"] = theover_stats.get("full_debug_log", [])
-                        # Task 3: Persist RAW TheOver DataFrame
                         st.session_state["theover_raw_df"] = theover_stats.get("raw_df", pd.DataFrame())
                 except Exception as e:
                     logger.error(f"Market Tracker Error: {e}")
-                # ---------------------------
 
                 master_stats["rows_out"] = len(deduped_list)
                 master_stats["theover_matched_sides"] = theover_matched_count_sides
@@ -9286,30 +9232,19 @@ with tab_master:
 
                 st.session_state["last_rows_out"] = len(deduped_list)
                 st.session_state["master_stats"] = master_stats
-                # FIX: Persist master_stats for Debug Export reruns
                 st.session_state["master_stats_persistent"] = master_stats
                 st.session_state["kalshi_match_results"] = kalshi_match_results
                 st.session_state["data_source_debug"] = data_source_stats
-                total_game_markets = len(
-                    [
-                        m
-                        for m in all_markets_flat
-                        if "GAME" in str(m.get("event_ticker") or m.get("ticker") or "").upper()
-                    ]
-                )
+                total_game_markets = len([m for m in all_markets_flat if "GAME" in str(m.get("event_ticker") or m.get("ticker") or "").upper()])
                 first_game_meta = per_game_kalshi_debug[0] if per_game_kalshi_debug else {}
                 st.session_state["kalshi_filter_stats"] = {
                     "total_markets_fetched": len(all_markets_flat),
                     "total_game_markets": total_game_markets,
-                    "avg_filtered_markets_per_game": sum(filtered_counts) / len(filtered_counts)
-                    if filtered_counts
-                    else 0,
+                    "avg_filtered_markets_per_game": sum(filtered_counts) / len(filtered_counts) if filtered_counts else 0,
                     "filtered_markets_min": min(filtered_counts) if filtered_counts else 0,
                     "filtered_markets_max": max(filtered_counts) if filtered_counts else 0,
                     "per_game_debug": per_game_kalshi_debug,
-                    "first_game_debug": per_game_kalshi_debug[0]
-                    if per_game_kalshi_debug
-                    else {},
+                    "first_game_debug": per_game_kalshi_debug[0] if per_game_kalshi_debug else {},
                     "first_game_full_market_search": first_game_full_search,
                     "kalshi_winner_refetch_attempted": winner_refetch_attempted,
                     "first_game_expected": {
@@ -9320,68 +9255,8 @@ with tab_master:
                     },
                 }
 
-                # Task 2: Absolute Moneyline (ML) Pivot (Applied BEFORE saving)
-                # Ensure "Moneyline" is pivoted to Spread/Total if present in Market column
-                def _force_pivot(row):
-                    if row.get('Market') == 'Moneyline':
-                        # Check availability of data
-                        s_pick = row.get('Spread & Pick')
-                        t_pick = row.get('Total & Pick')
-
-                        # Validate if picks are actually present (not None, not empty, not "None")
-                        has_spread = s_pick is not None and str(s_pick).strip() != '' and str(s_pick).lower() != 'none'
-                        has_total = t_pick is not None and str(t_pick).strip() != '' and str(t_pick).lower() != 'none'
-
-                        s_edge = safe_float(row.get('spread_edge')) or 0.0
-                        t_edge = safe_float(row.get('total_edge')) or 0.0
-
-                        s_prob = safe_float(row.get('spread_prob_adj')) or safe_float(row.get('spread_prob'))
-                        t_prob = safe_float(row.get('total_prob_adj')) or safe_float(row.get('total_prob'))
-
-                        # Logic to determine target market
-                        target = None
-
-                        if has_spread and has_total:
-                            if s_edge >= t_edge:
-                                target = 'Spread'
-                            else:
-                                target = 'Total'
-                        elif has_spread:
-                            target = 'Spread'
-                        elif has_total:
-                            target = 'Total'
-                        else:
-                            # If neither Spread nor Total is available, we MUST keep the row but label it clearly
-                            target = 'Keep_ML'
-
-                        if target == 'Spread':
-                            row['Market'] = 'Spread'
-                            row['Pick'] = s_pick
-                            row['best_pick_type'] = 'SPREAD'
-                            row['edge'] = s_edge
-                            if s_prob is not None:
-                                row['final_probability'] = s_prob
-                                row['final_prob'] = s_prob
-                        elif target == 'Total':
-                            row['Market'] = 'Total'
-                            row['Pick'] = t_pick
-                            row['best_pick_type'] = 'TOTAL'
-                            row['edge'] = t_edge
-                            if t_prob is not None:
-                                row['final_probability'] = t_prob
-                                row['final_prob'] = t_prob
-                        elif target == 'Keep_ML':
-                            row['Market'] = 'ML (No Spread/Total Avail)'
-                            # Keep original ML pick and probabilities
-
-                    return row
-
-                df = df.apply(_force_pivot, axis=1)
-
-                # FIX: Deduplicate AFTER pivot to remove redundant rows.
-                # If ML pivoted to Spread and Spread already existed, keep original Spread (last in list).
-                df = df.drop_duplicates(subset=['league', 'Home', 'Away', 'Commence (UTC)', 'Market'], keep='last')
-
+                # Task 3: Ensure UI Persistence
+                # Save the final pivoted & deduped DF to master_results_df
                 st.session_state["master_df"] = df
                 st.session_state["master_results_df"] = df
 
