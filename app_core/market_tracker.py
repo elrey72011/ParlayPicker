@@ -8,15 +8,15 @@ try:
 except ImportError:
     from backports.zoneinfo import ZoneInfo # Fallback if needed
 
+# Import snapshot manager to share constants
+import app_core.snapshot_manager as snapshot_manager
+
 logger = logging.getLogger("market_tracker")
 
 # Define Snapshot Directory
-# Prefer absolute path for persistent mount if it exists, otherwise fallback to local relative path
-PERSISTENT_MOUNT_ROOT = "/mount/src/parlaypicker"
-if os.path.exists(PERSISTENT_MOUNT_ROOT):
-    SNAPSHOT_DIR = os.path.join(PERSISTENT_MOUNT_ROOT, "data", "snapshots")
-else:
-    SNAPSHOT_DIR = os.path.join("data", "snapshots")
+# Use the centralized definition from snapshot_manager
+SNAPSHOT_DIR = snapshot_manager.SNAPSHOT_DIR
+os.makedirs(SNAPSHOT_DIR, exist_ok=True)
 
 # Time Windows (ET)
 NOON_BASELINE_START = time(9, 0)
@@ -31,6 +31,10 @@ LATE_UPDATE_END = time(23, 0)
 def get_et_now():
     """Returns current time in US/Eastern."""
     return datetime.now(ZoneInfo("America/New_York"))
+
+def get_baseline_filename(date_str):
+    """Helper to get noon baseline filename from snapshot manager."""
+    return snapshot_manager.get_snapshot_filename(date_str, "noon_baseline")
 
 def get_snapshot_filename(date_str, suffix):
     """Returns the expected filename for a given date and suffix."""
@@ -91,9 +95,6 @@ def save_snapshot(df: pd.DataFrame):
 
     except Exception as e:
         logger.error(f"Failed to save snapshot: {e}")
-
-# Maintain backward compatibility alias if needed, but updated calls should use save_snapshot
-save_baseline_if_appropriate = save_snapshot
 
 def load_and_compare(current_df: pd.DataFrame):
     """
@@ -206,5 +207,6 @@ def load_and_compare(current_df: pd.DataFrame):
         logger.error(f"Failed to load/compare baseline: {e}")
         return current_df
 
-# Maintain backward compatibility
+# Maintain backward compatibility alias if needed, but updated calls should use save_snapshot
+save_baseline_if_appropriate = save_snapshot
 load_baseline_for_comparison = load_and_compare

@@ -3,21 +3,27 @@ import logging
 import pandas as pd
 from datetime import datetime, time
 from zoneinfo import ZoneInfo
-import app_core.market_tracker as market_tracker
+# Avoid top-level import of market_tracker to prevent circular dependency
+# import app_core.market_tracker as market_tracker
 
 logger = logging.getLogger("snapshot_manager")
 
 # Snapshot Directory - Explicitly enforced as per task instructions
-PERSISTENT_MOUNT_ROOT = "/mount/src/parlaypicker"
-if os.path.exists(PERSISTENT_MOUNT_ROOT):
-    SNAPSHOT_DIR = os.path.join(PERSISTENT_MOUNT_ROOT, "data", "snapshots")
-else:
-    # Fallback only if mount not present (e.g. local dev)
-    SNAPSHOT_DIR = market_tracker.SNAPSHOT_DIR
+# Priority: /mount/src/parlaypicker/data/snapshots/ -> local data/snapshots/
+MOUNT_PATH = "/mount/src/parlaypicker/data/snapshots"
+LOCAL_PATH = os.path.join(os.getcwd(), "data", "snapshots")
 
-# Time Windows (ET) from market_tracker
-NOON_BASELINE_START = market_tracker.NOON_BASELINE_START
-NOON_BASELINE_END = market_tracker.NOON_BASELINE_END
+if os.path.exists("/mount/src/parlaypicker"):
+    SNAPSHOT_DIR = MOUNT_PATH
+else:
+    SNAPSHOT_DIR = LOCAL_PATH
+
+# Ensure directory exists
+os.makedirs(SNAPSHOT_DIR, exist_ok=True)
+
+# Time Windows (ET) - Duplicated from market_tracker to avoid circular import
+NOON_BASELINE_START = time(9, 0)
+NOON_BASELINE_END = time(13, 0)
 
 def get_et_now():
     """Returns current time in US/Eastern."""
@@ -51,6 +57,7 @@ def save_noon_baseline(df: pd.DataFrame, force: bool = False) -> bool:
             return True
 
         try:
+            # Ensure dir exists before saving
             os.makedirs(SNAPSHOT_DIR, exist_ok=True)
             # Save Full DataFrame as baseline
             df.to_csv(filename, index=False)
