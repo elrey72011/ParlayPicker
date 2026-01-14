@@ -876,6 +876,47 @@ def parse_total_pick(raw_val: Any) -> Tuple[Optional[str], Optional[float]]:
     line = safe_float(match.group(2))
     return side, line
 
+def pivot_market(row):
+    """
+    Constraint: The final Market column must never say "Moneyline."
+    Pivots Moneyline picks to Spread or Total based on Edge/Probability.
+    """
+    if row.get('Market') == "Moneyline":
+        # Compare Spread Prob vs Total Prob (using edge or confidence)
+        # Use defaults if keys missing
+        s_prob = safe_float(row.get('spread_prob_adj')) or safe_float(row.get('spread_prob_final')) or 0.0
+        t_prob = safe_float(row.get('total_prob_adj')) or safe_float(row.get('total_prob_final')) or 0.0
+
+        s_edge = safe_float(row.get('spread_edge')) or 0.0
+        t_edge = safe_float(row.get('total_edge')) or 0.0
+
+        pivot_to_spread = False
+        if s_prob > t_prob:
+            pivot_to_spread = True
+        elif t_prob > s_prob:
+            pivot_to_spread = False
+        else:
+            # Tie-break with edge
+            if s_edge >= t_edge:
+                pivot_to_spread = True
+            else:
+                pivot_to_spread = False
+
+        if pivot_to_spread:
+            row['Market'] = "Spread"
+            row['Pick'] = row.get('Spread & Pick')
+            row['final_probability'] = s_prob
+            row['best_pick_type'] = "SPREAD"
+            row['edge'] = s_edge
+        else:
+            row['Market'] = "Total"
+            row['Pick'] = row.get('Total & Pick')
+            row['final_probability'] = t_prob
+            row['best_pick_type'] = "TOTAL"
+            row['edge'] = t_edge
+
+    return row
+
 def enrich_picks_with_roi_metrics(df: pd.DataFrame) -> pd.DataFrame:
     """
     Jules: Call this function to prepare the 'Infallible' dashboard view.
@@ -5805,20 +5846,13 @@ with tab_master:
         key="use_model_numeric_probs",
         help="If checked, the 'AI_Prob' column will use the local XGBoost model output."
     )
-    run_master = st.button(
-        "Run Master Analysis",
-        key="run_master",
-        disabled=(not kalshi_status.get("configured")) and st.session_state.get("kalshi_required", True),
-        help="Requires Kalshi availability",
-    )
     games = st.session_state.get("games", [])
-    if run_master and (not kalshi_status.get("configured")):
-        st.error("Kalshi is required but unavailable. Fix Kalshi first.")
-        st.stop()
+    # if run_master and (not kalshi_status.get("configured")):
+    #    st.error("Kalshi is required but unavailable. Fix Kalshi first.")
+    #    st.stop()
 
     # Determine if we need to run (user clicked button) or just display (cached df exists)
-    df_existing = st.session_state.get("master_df")
-    should_run = run_master
+    df_existing = st.session_state.get("master_results_df")
     
     # If we have existing data and didn't request a re-run, use it to skip the heavy lifting
     # We still need to define the helper functions because they are called during the DataFrame construction block
@@ -5835,18 +5869,29 @@ with tab_master:
         "unmatched_examples": []
     }
 
+    # 1. Initialize session state for the results if not present
+    if "master_results_df" not in st.session_state:
+        st.session_state["master_results_df"] = None
+
+    if st.button("🚀 Run Master Analysis"):
+        should_run = True
+    else:
+        should_run = False
+
     if should_run:
-        try:
-            # Task 1: Pre-process games to ensure commence_date_local is set for TheOver matching
-            # This aligns the dates so the canonical keys match (ingestion vs loop).
+        with st.spinner("Analyzing Markets..."):
+            try:
+                # Task 1: Pre-process games to ensure commence_date_local is set for TheOver matching
+                # This aligns the dates so the canonical keys match (ingestion vs loop).
             for g in games:
                 if not g.get("commence_date_local"):
                     try:
                         # Try to derive from UTC
                         dt = parse_commence_to_utc(g.get("commence_time_iso_utc") or g.get("commence_time"))
                         if dt:
-                            # Use simple YYYY-MM-DD
-                            g["commence_date_local"] = dt.strftime("%Y-%m-%d")
+                            # Use simple YYYY-MM-DD - Convert to ET to match main loop
+                            dt_et = dt.astimezone(ZoneInfo("America/New_York"))
+                            g["commence_date_local"] = dt_et.strftime("%Y-%m-%d")
                     except Exception:
                         pass
 
@@ -9237,12 +9282,20 @@ with tab_master:
                 },
             }
 
+            # Task 2: Absolute Moneyline (ML) Pivot (Applied BEFORE saving)
+            df = df.apply(pivot_market, axis=1)
+
             st.session_state["master_df"] = df
+            st.session_state["master_results_df"] = df
 
         except Exception as e:
             st.error(f"Analysis failed: {str(e)}")
             st.code(traceback.format_exc())
             st.stop()
+
+    # 4. ALWAYS RENDER IF DATA EXISTS (Outside the button block)
+    if st.session_state["master_results_df"] is not None:
+        df = st.session_state["master_results_df"]
 
         required_display_cols = [
             "Home_Sentiment",
@@ -9737,72 +9790,10 @@ with tab_master:
         # User Action: Enforce specific column order: Home, Away, Implied_Prob, AI_Prob
         df_master_view = reorder_for_spread_total_focus(df_master_view)
 
-        # Task 2: Absolute Moneyline (ML) Pivot
-        # Logic: Moneyline is for internal math only. It must never be the final pick.
-        # Pivot to Spread or Total based on whichever has the highest final_probability or edge.
-        def _pivot_ml(row):
-            # Check if current decision is Moneyline OR if Market column says "Moneyline"
-            # Also check if best_pick_type is ML (which means logic selected ML)
-            market_is_ml = str(row.get("Market")).lower() in ["moneyline", "ml"]
-            best_is_ml = str(row.get("best_pick_type")).lower() in ["ml", "moneyline"]
-
-            if market_is_ml or best_is_ml:
-                # Get Spread and Total probabilities (using adjusted/final if available)
-                # Fallback to spread_prob if adj is missing
-                s_prob = safe_float(row.get("spread_prob_adj"))
-                if s_prob is None: s_prob = safe_float(row.get("spread_prob")) or 0.0
-
-                t_prob = safe_float(row.get("total_prob_adj"))
-                if t_prob is None: t_prob = safe_float(row.get("total_prob")) or 0.0
-
-                # Get Edges for tie-breaking
-                s_edge = safe_float(row.get("spread_edge")) or 0.0
-                t_edge = safe_float(row.get("total_edge")) or 0.0
-
-                # Pivot Decision Logic
-                # Prefer highest probability, use edge as tiebreaker
-                pivot_to_spread = False
-
-                if s_prob > t_prob:
-                    pivot_to_spread = True
-                elif t_prob > s_prob:
-                    pivot_to_spread = False
-                else:
-                    # Tie in probability, use edge
-                    if s_edge >= t_edge:
-                        pivot_to_spread = True
-                    else:
-                        pivot_to_spread = False
-
-                if pivot_to_spread:
-                     # Pivot to Spread
-                     row["Market"] = "Spread"
-                     row["Pick"] = row.get("Spread & Pick")
-                     row["final_probability"] = s_prob
-                     row["best_pick_type"] = "SPREAD"
-                     row["edge"] = s_edge
-                     # Append pivot note to reason
-                     current_reason = str(row.get("Pick_Reason_Short") or "")
-                     if "Pivot" not in current_reason:
-                         row["Pick_Reason_Short"] = (current_reason + " [Spread Pivot]").strip()
-                else:
-                     # Pivot to Total
-                     row["Market"] = "Total"
-                     row["Pick"] = row.get("Total & Pick")
-                     row["final_probability"] = t_prob
-                     row["best_pick_type"] = "TOTAL"
-                     row["edge"] = t_edge
-                     current_reason = str(row.get("Pick_Reason_Short") or "")
-                     if "Pivot" not in current_reason:
-                         row["Pick_Reason_Short"] = (current_reason + " [Total Pivot]").strip()
-
-            return row
-
-        df_master_view = df_master_view.apply(_pivot_ml, axis=1)
-        # Task 1: Strict Filter to remove any residual Moneyline rows from view
-        # This now safely removes rows that FAILED to pivot (if any), but _pivot_ml should have converted them.
-        if "Market" in df_master_view.columns:
-            df_master_view = df_master_view[df_master_view["Market"].isin(["Spread", "Total"])]
+        # Task 2: Absolute Moneyline (ML) Pivot (Redundant here but ensuring UI view consistency)
+        # We already applied pivot_market to the main dataframe before saving.
+        # But since df_master_view is derived and calculated freshly, we apply it again to be safe.
+        df_master_view = df_master_view.apply(pivot_market, axis=1)
 
         # Explicit column ordering override
         # Jules: Map derived alias columns for display
@@ -10099,7 +10090,7 @@ with tab_master:
             # Add to reason short
             top_df_display["Pick_Reason_Short"] = top_df_display["Pick_Reason_Short"] + " | " + top_df_display["TheOver_Impact"]
 
-        # --- Task 3: Visual Icon Injection (💰 & 🔥) ---
+        # --- Task 4: Visual Icon Injection (💰 & 🔥) ---
         # Append icons to Pick_Reason_Short and At_a_Glance_Reason
         def _append_icons(row, col_name):
             reason = str(row.get(col_name) or "")
@@ -10688,131 +10679,6 @@ with tab_master:
                             except Exception:
                                 trace_payload = {"trace": trace_payload}
                         st.json(trace_payload or {})
-
-            # --- PERSISTENCE: Save results for persistent rendering ---
-            st.session_state["master_results"] = {
-                "df_master_view": df_master_view,
-                "df_master_view_display": df_master_view_display,
-                "game_summary_df": game_summary_df,
-                "best_ml_df": best_ml_df,
-                "top_df_ui": top_df_ui,
-                "export_df": export_df,
-                "final_picks_df": final_picks_df,
-                "master_stats": master_stats,
-                "theover_stats": theover_stats if 'theover_stats' in locals() else {},
-            }
-            st.session_state["master_analysis_complete"] = True
-
-    # --- RENDERING BLOCK (Runs on button click OR after interaction) ---
-    if st.session_state.get("master_analysis_complete") and "master_results" in st.session_state:
-        results = st.session_state["master_results"]
-
-        # Unpack essential display dataframes
-        game_summary_df = results.get("game_summary_df")
-        best_ml_df = results.get("best_ml_df")
-        top_df_ui = results.get("top_df_ui")
-        df_master_view_display = results.get("df_master_view_display")
-        final_picks_df = results.get("final_picks_df")
-        export_df = results.get("export_df")
-        master_stats = results.get("master_stats", {})
-        theover_stats = results.get("theover_stats", {})
-
-        # --- NEW: GAME SUMMARY VIEW ---
-        st.subheader("Game Summary View")
-        if game_summary_df is not None and not game_summary_df.empty:
-            summary_cols = [
-                "League", "Home", "Away", "Commence UTC", "Commence (Local)",
-                "Best Overall Pick", "Best Overall Prob",
-                "Spread Pick", "Spread Prob",
-                "Total Pick", "Total Prob",
-                "ML Pick", "ML Prob"
-            ]
-            summary_cols = [c for c in summary_cols if c in game_summary_df.columns]
-            format_cols = {
-                "Best Overall Prob": st.column_config.NumberColumn(format="%.1f%%"),
-                "Spread Prob": st.column_config.NumberColumn(format="%.1f%%"),
-                "Total Prob": st.column_config.NumberColumn(format="%.1f%%"),
-                "ML Prob": st.column_config.NumberColumn(format="%.1f%%")
-            }
-            st.dataframe(game_summary_df[summary_cols], column_config=format_cols, width="stretch", hide_index=True)
-        else:
-            st.info("No game summary data available.")
-
-        # --- NEW: BEST OVERALL PICKS (ML Focused) ---
-        st.subheader("Best Overall Picks (Moneyline)")
-        if best_ml_df is not None and not best_ml_df.empty:
-            ml_cols = [
-                "league", "Home", "Away", "Commence (Local)",
-                "Best Overall Pick", "Best Overall Prob", "Best Overall Confidence",
-                "Implied Prob", "AI Prob"
-            ]
-            st.dataframe(
-                best_ml_df[ml_cols],
-                column_config={
-                    "Best Overall Prob": st.column_config.NumberColumn(format="%.1f%%"),
-                    "Implied Prob": st.column_config.NumberColumn(format="%.1f%%"),
-                    "AI Prob": st.column_config.NumberColumn(format="%.1f%%"),
-                },
-                width="stretch",
-                hide_index=True
-            )
-        else:
-            st.info("No Moneyline picks available.")
-
-        # --- TOP PICKS ---
-        st.subheader("Top Picks / Best Bets")
-        if top_df_ui is not None and not top_df_ui.empty:
-            st.dataframe(top_df_ui, width="stretch", hide_index=True)
-        
-        # --- EXPORTS ---
-        if final_picks_df is not None and not final_picks_df.empty:
-            picks_csv = final_picks_df.to_csv(index=False).encode("utf-8")
-            st.download_button("Download Picks Sheet CSV (Default)", data=picks_csv, file_name="picks_sheet.csv", mime="text/csv", key="picks_sheet_csv_persistent")
-
-            debug_csv = export_df.to_csv(index=False).encode("utf-8")
-            st.download_button("Download Full Debug CSV", data=debug_csv, file_name="full_debug_dump.csv", mime="text/csv", key="full_debug_csv_btn_persistent")
-
-        # --- DEBUG EXPANDERS ---
-        with st.expander("TheOver Matching Debug", expanded=False):
-            if theover_stats:
-                st.write(f"Total Rows Parsed: {theover_stats.get('total_rows', 0)}")
-                st.write(f"Matched Games (Fuzzy): {theover_stats.get('matched_rows', 0)}")
-                st.write(f"Unmatched Games (Fuzzy): {theover_stats.get('unmatched_rows', 0)}")
-                unmatched = theover_stats.get("unmatched_examples", [])
-                if unmatched:
-                    st.caption("Sample Unmatched Games (Ingestion):")
-                    st.table(pd.DataFrame(unmatched))
-            else:
-                st.info("No TheOver statistics available.")
-
-        with st.expander("Sentiment Debug", expanded=False):
-            meta_view = st.session_state.get("sentiment_meta", {})
-            st.json(meta_view)
-
-        # --- MAIN TABLE ---
-        st.subheader("Master Analysis View")
-        if df_master_view_display is not None and not df_master_view_display.empty:
-            # Re-apply ui_whitelist logic for display if needed, or assume df_master_view_display is ready
-            # We will use top_df_ui style columns if possible or just dump it
-            # The original code did formatting and safety checks.
-            # We assume df_master_view_display stored in results is the final one.
-
-            # Final Whitelist Application for the big table
-            ui_whitelist = [
-                'league', 'Home', 'Away', 'Pick', 'AI_Prob', 'Implied_Prob', 'Home_Sentiment',
-                'Away_Sentiment', 'Sentiment_Diff', 'sentiment_status', 'spread_edge', 'status',
-                'theover_pick', 'theover_delta_final_prob', 'final_prob_without_theover',
-                'theover_total_pick', 'theover_side_pick_team', 'theover_matched',
-                'best_pick', 'best_pick_type', 'final_prob'
-            ]
-            safe_cols = [c for c in ui_whitelist if c in df_master_view_display.columns]
-            st.dataframe(df_master_view_display[safe_cols], width="stretch", hide_index=True)
-
-        # Stats
-        matches = master_stats.get("kalshi_matches", 0)
-        total_games = master_stats.get("kalshi_total", 0) or 1
-        st.caption(f"Kalshi matches: {matches}/{total_games} ({matches/total_games:.1%}) | TheOver matches: {master_stats.get('theover_matched_sides', 0)} sides, {master_stats.get('theover_matched_totals', 0)} totals")
-
     elif not games:
         st.info("Load games from the sidebar, then run Master Analysis.")
 
