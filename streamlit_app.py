@@ -9028,18 +9028,18 @@ with tab_master:
                     rows_out.append(fallback_row)
                     master_stats["market_rows_out"] += 1
 
-            # CRITICAL FIX: Create DataFrame AFTER loop completes (moved outside for loop)
-            # This ensures ALL game rows are accumulated before creating the DataFrame
-            # Previously this was inside the loop, causing only the last game to be retained
-            master_df = pd.DataFrame.from_records(rows_out)
+                # CRITICAL FIX: Create DataFrame AFTER loop completes (moved outside for loop)
+                # This ensures ALL game rows are accumulated before creating the DataFrame
+                # Previously this was inside the loop, causing only the last game to be retained
+                master_df = pd.DataFrame.from_records(rows_out)
 
-            # FIX: Deduplicate columns immediately to prevent "Duplicate labels" error
-            master_df = master_df.loc[:, ~master_df.columns.duplicated()].copy()
-            master_df = master_df.reset_index(drop=True)
+                # FIX: Deduplicate columns immediately to prevent "Duplicate labels" error
+                master_df = master_df.loc[:, ~master_df.columns.duplicated()].copy()
+                master_df = master_df.reset_index(drop=True)
 
-            # Task 4: Enrich with Consensus (Sharpness Delta)
-            # Must be done before sentiment integration or model features if model uses it
-            # --- FIXED CODE FOR JULES ---
+                # Task 4: Enrich with Consensus (Sharpness Delta)
+                # Must be done before sentiment integration or model features if model uses it
+                # --- FIXED CODE FOR JULES ---
                 try:
                     with st.spinner("📊 Ingesting Public Consensus Data..."):
                         # This is where the Money % and Ticket % are pulled
@@ -9060,10 +9060,10 @@ with tab_master:
                     # FIX: Pass ALL api_clients so stats for all leagues are fetched, not just the last loop variable
                     master_df = enrich_with_model_features(master_df, api_sports_clients)
 
-            # Task 4: Update Sentiment Score using Sharpness Delta
-            # Integration: 60% Sharpness Delta, 40% Social Sentiment
-            # We need to update 'Sentiment_Diff' or create a new combined score.
-            # Currently 'Sentiment_Diff' is used in compute_final_probability via sentiment_score.
+                # Task 4: Update Sentiment Score using Sharpness Delta
+                # Integration: 60% Sharpness Delta, 40% Social Sentiment
+                # We need to update 'Sentiment_Diff' or create a new combined score.
+                # Currently 'Sentiment_Diff' is used in compute_final_probability via sentiment_score.
 
                 def _update_sentiment_score(row):
                     social_diff = row.get("Sentiment_Diff")
@@ -9245,7 +9245,7 @@ with tab_master:
                 df = pd.DataFrame(deduped_list)
                 if "Unnamed: 0" in df.columns:
                     df = df.drop(columns=["Unnamed: 0"])
-        
+
                 # 5. UI PERSISTENCE
                 # We persist the DEDUPED df as "master_df" because that's what the UI expects for the "Master Analysis" tab table.
                 # The shotgun data is stored separately.
@@ -9267,7 +9267,7 @@ with tab_master:
                         st.session_state["theover_raw_df"] = theover_stats.get("raw_df", pd.DataFrame())
                 except Exception as e:
                     logger.error(f"Market Tracker Error: {e}")
-            # ---------------------------
+                # ---------------------------
 
                 master_stats["rows_out"] = len(deduped_list)
                 master_stats["theover_matched_sides"] = theover_matched_count_sides
@@ -9300,14 +9300,14 @@ with tab_master:
                     if per_game_kalshi_debug
                     else {},
                     "first_game_full_market_search": first_game_full_search,
-                "kalshi_winner_refetch_attempted": winner_refetch_attempted,
-                "first_game_expected": {
-                    "expected_date_token": (first_game_meta or {}).get("kalshi_date_token_used"),
-                    "expected_codes": (first_game_meta or {}).get("expected_codes"),
-                    "matched_ticker": (first_game_meta or {}).get("matched_ticker"),
-                    "kalshi_reason": (first_game_meta or {}).get("kalshi_reason"),
-                },
-            }
+                    "kalshi_winner_refetch_attempted": winner_refetch_attempted,
+                    "first_game_expected": {
+                        "expected_date_token": (first_game_meta or {}).get("kalshi_date_token_used"),
+                        "expected_codes": (first_game_meta or {}).get("expected_codes"),
+                        "matched_ticker": (first_game_meta or {}).get("matched_ticker"),
+                        "kalshi_reason": (first_game_meta or {}).get("kalshi_reason"),
+                    },
+                }
 
                 # Task 2: Absolute Moneyline (ML) Pivot (Applied BEFORE saving)
                 # Ensure "Moneyline" is pivoted to Spread/Total if present in Market column
