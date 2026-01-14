@@ -31,7 +31,7 @@ TEAM_ALIAS_MAP = {
     "Winnipeg": "Winnipeg Jets",
     "Vancouver": "Vancouver Canucks",
     "Toronto": "Toronto Maple Leafs",
-    "Montreal": "Montreal Canadiens", # Note: removed Chinese chars
+    "Montreal": "Montreal Canadiens",
     "Florida": "Florida Panthers",
     "Arizona": "Arizona Coyotes",
     "NY Rangers": "New York Rangers",

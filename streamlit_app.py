@@ -6220,25 +6220,25 @@ with tab_master:
                 # Updated weights with TheOver integration (Default 0.10 if matched)
                 # If TheOver is not matched, its weight is effectively zeroed and others renormalized dynamically
                 spread_weights = {
-                    "ml_weight": 0.25,
+                    "ml_weight": 0.20,
                     "kalshi_weight": 0.35,
                     "odds_weight": 0.30,
-                    "sentiment_weight": 0.00, # Sentiment disabled for now per instruction
+                    "sentiment_weight": 0.05,
                     "theover_weight": 0.10,
                 }
                 # Totals (TheOver carries slightly more weight)
                 total_weights = {
-                    "ml_weight": 0.25,
+                    "ml_weight": 0.20,
                     "kalshi_weight": 0.35,
                     "odds_weight": 0.30,
-                    "sentiment_weight": 0.00,
+                    "sentiment_weight": 0.05,
                     "theover_weight": 0.10,
                 }
                 moneyline_weights = {
-                    "ml_weight": 0.25,
+                    "ml_weight": 0.20,
                     "kalshi_weight": 0.35,
                     "odds_weight": 0.30,
-                    "sentiment_weight": 0.00,
+                    "sentiment_weight": 0.05,
                     "theover_weight": 0.10,
                 }
                 # Debug log
@@ -9989,17 +9989,32 @@ with tab_master:
 
         # --- FINAL WHITELIST FIX (Enhanced with Picks Sheet Columns) ---
         # --- SHARPNESS DELTA UI ---
-        # Add "Sharp Action" column
+        # Add "Sharp Money" column with Sharpness Delta + Market Steam logic
+        # Logic: sharpness_delta > 0.10 => 💰, Market Steam > 0.03 => 🔥
         if "sharpness_delta" in top_df_display.columns:
-            def _fmt_sharp_action(val):
+            # Pre-calculate delta_implied_prob alias "Market_Steam" if missing in display df
+            # delta_implied_prob comes from market_tracker comparison (persisted in master_df)
+
+            def _fmt_sharp_money(row):
+                icons = []
                 try:
-                    v = float(val)
-                    if v > 0.10:
-                        return "💰"
-                    return ""
+                    sd = float(row.get("sharpness_delta") or 0.0)
+                    if sd > 0.10:
+                        icons.append("💰")
                 except Exception:
-                    return ""
-            top_df_display["Sharp Action"] = top_df_display["sharpness_delta"].apply(_fmt_sharp_action)
+                    pass
+
+                try:
+                    # Check for Market Steam (delta_implied_prob)
+                    steam = float(row.get("delta_implied_prob") or 0.0)
+                    if abs(steam) > 0.03:
+                         icons.append("🔥")
+                except Exception:
+                    pass
+
+                return " ".join(icons)
+
+            top_df_display["Sharp Money"] = top_df_display.apply(_fmt_sharp_money, axis=1)
 
         ui_whitelist = [
             'league', 'Home', 'Away', 'Commence (UTC)', 'Commence (Local)', 'Local Date',
@@ -10010,7 +10025,7 @@ with tab_master:
             'spread_edge', 'total_edge',
             'Pick', 'AI_Prob', 'Implied_Prob', 'Home_Sentiment', 'Away_Sentiment', 'Sentiment_Diff', 'sentiment_status', 'status', 'best_pick_prob', 'best_pick_edge',
             'theover_pick', 'theover_prob_used', 'theover_delta_final_prob', 'final_prob_without_theover',
-            'Sharp Action', 'sharpness_delta'
+            'Sharp Money', 'sharpness_delta', 'delta_implied_prob'
         ]
         safe_cols = [c for c in ui_whitelist if c in top_df_display.columns]
         top_df_ui = top_df_display[safe_cols].copy()
@@ -11187,6 +11202,22 @@ with tab_debug:
     # UI: Add a status text in the sidebar: "✅ Noon Baseline Cached" or "⚠️ Noon Baseline Missing".
     snapshot_status = snapshot_manager.check_noon_baseline_status()
     st.sidebar.markdown(f"**Snapshot Status:** {snapshot_status}")
+
+    # Manual Baseline Button
+    if st.sidebar.button("Manual Baseline Snapshot"):
+        if "master_df" in st.session_state and not st.session_state["master_df"].empty:
+            success = snapshot_manager.save_noon_baseline(st.session_state["master_df"], force=True)
+            if success:
+                # Re-check status to show filename
+                now_et = snapshot_manager.get_et_now()
+                date_str = now_et.date().isoformat()
+                filename = snapshot_manager.get_snapshot_filename(date_str, "noon")
+                st.info(f"Baseline Comparison Active: {filename}")
+                st.sidebar.success("Manual Baseline Saved.")
+            else:
+                st.sidebar.error("Failed to save baseline.")
+        else:
+            st.sidebar.warning("Run Master Analysis first.")
 
 
 if __name__ == "__main__" and os.environ.get("KALSHI_SELF_TEST"):
