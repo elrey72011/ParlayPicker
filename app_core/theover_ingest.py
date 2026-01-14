@@ -26,6 +26,18 @@ except ImportError:
 
 logger = logging.getLogger("app_core.theover_ingest")
 
+TEAM_ALIAS_MAP = {
+    "Ottawa": "Ottawa Senators",
+    "Winnipeg": "Winnipeg Jets",
+    "Vancouver": "Vancouver Canucks",
+    "Toronto": "Toronto Maple Leafs",
+    "Montreal": "蒙特利尔加拿大人 (Montreal Canadiens)", # Verify local naming
+    "Florida": "Florida Panthers",
+    "Arizona": "Arizona Coyotes",
+    "NY Rangers": "New York Rangers",
+    "NY Islanders": "New York Islanders"
+}
+
 def generate_canonical_key(league: str, date_str: str, home_code: str, away_code: str) -> str:
     """
     Generates a canonical key for matching against the master schedule.
@@ -140,7 +152,8 @@ def parse_theover_csv(uploaded_file) -> pd.DataFrame:
         ("HOMETEAM", ["HOMETEAM", "HOME", "TEAM1", "TEAM 1", "HOMETEAM"]),
         ("AWAYTEAM", ["AWAYTEAM", "AWAY", "TEAM2", "TEAM 2", "AWAYTEAM"]),
         ("WINPROBABILITY", ["WINPROBABILITY", "PROB", "HITRATE", "SCORE"]),
-        ("PICK", ["PICK"])
+        ("PICK", ["PICK"]),
+        ("COMMENCE", ["COMMENCE", "DATE", "TIME", "START"])
     ]
 
     # Robust Coalescing Logic:
@@ -266,6 +279,23 @@ def _transform_theover_df(df: pd.DataFrame, pick_type_default: str, games: List[
         csv_home = str(row.get("HOMETEAM", "")).strip()
         csv_away = str(row.get("AWAYTEAM", "")).strip()
 
+        # Apply TEAM_ALIAS_MAP
+        if csv_home in TEAM_ALIAS_MAP:
+            csv_home = TEAM_ALIAS_MAP[csv_home]
+        if csv_away in TEAM_ALIAS_MAP:
+            csv_away = TEAM_ALIAS_MAP[csv_away]
+
+        # Extract Date (if available) for Time Window Filtering
+        input_date_str = str(row.get("COMMENCE", "")).strip()
+        input_dt = None
+        if input_date_str and input_date_str.lower() != "nan":
+            try:
+                # Try parsing basic formats
+                from dateutil import parser
+                input_dt = parser.parse(input_date_str)
+            except Exception:
+                pass
+
         # If teams are missing, skip
         if not csv_home or not csv_away or csv_home.lower() == "nan" or csv_away.lower() == "nan":
             continue
@@ -379,15 +409,53 @@ def _transform_theover_df(df: pd.DataFrame, pick_type_default: str, games: List[
                         common_games = [g for g in common_games if _normalize_league_str(g.get("league", "UNKNOWN")) == league]
 
                     if common_games:
-                        # Boost score if a valid game exists (Confirmation Bonus)
-                        # If we found a real game match, this is almost certainly correct.
-                        # We use the raw fuzzy score but guarantee acceptance if > best.
-                        avg_score = (h_s + a_s) / 2.0
+                        # Time Window Filter (Relaxed 12h Buffer)
+                        valid_game = None
+                        for g_cand in common_games:
+                            # If input has no date, accept the first game (legacy behavior)
+                            if not input_dt:
+                                valid_game = g_cand
+                                break
 
-                        if avg_score > best_pair_score:
-                            best_pair_score = avg_score
-                            best_pair_game = common_games[0]
-                            best_pair_names = (h_cand, a_cand)
+                            # If input has date, check buffer
+                            g_date_str = g_cand.get("commence_time") or g_cand.get("commence_time_iso_utc")
+                            if g_date_str:
+                                try:
+                                    from dateutil import parser
+                                    from datetime import timedelta
+                                    g_dt = parser.parse(g_date_str)
+                                    # Handle timezone naive/aware comparison
+                                    if input_dt.tzinfo and not g_dt.tzinfo:
+                                        from datetime import timezone
+                                        g_dt = g_dt.replace(tzinfo=timezone.utc)
+                                    elif not input_dt.tzinfo and g_dt.tzinfo:
+                                        input_dt = input_dt.replace(tzinfo=timezone.utc)
+
+                                    # 12 Hour Buffer
+                                    diff_hours = abs((g_dt - input_dt).total_seconds()) / 3600.0
+                                    if diff_hours <= 12:
+                                        valid_game = g_cand
+                                        break
+                                except Exception:
+                                    # Date parse error on game side, accept as fallback?
+                                    # Or stricter: ignore this game?
+                                    # Let's be permissive if date parsing fails
+                                    valid_game = g_cand
+                                    break
+                            else:
+                                valid_game = g_cand
+                                break
+
+                        if valid_game:
+                            # Boost score if a valid game exists (Confirmation Bonus)
+                            # If we found a real game match, this is almost certainly correct.
+                            # We use the raw fuzzy score but guarantee acceptance if > best.
+                            avg_score = (h_s + a_s) / 2.0
+
+                            if avg_score > best_pair_score:
+                                best_pair_score = avg_score
+                                best_pair_game = valid_game
+                                best_pair_names = (h_cand, a_cand)
 
             # 3. Final Decision
             if best_pair_game:
