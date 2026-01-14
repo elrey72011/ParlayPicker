@@ -14,6 +14,7 @@ def fetch_latest_splits() -> pd.DataFrame:
     Fetches the latest betting splits (Ticket % and Money %).
     For now, returns a DataFrame with team_name, money_pct, and ticket_pct.
     """
+    # Placeholder for active code requirements - mocks handled in enrich step
     return pd.DataFrame(columns=["team_name", "money_pct", "ticket_pct"])
 
 def enrich_with_consensus(df: pd.DataFrame, consensus_data: pd.DataFrame = None) -> pd.DataFrame:

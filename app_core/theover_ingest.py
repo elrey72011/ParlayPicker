@@ -27,17 +27,12 @@ except ImportError:
 logger = logging.getLogger("app_core.theover_ingest")
 
 TEAM_ALIAS_MAP = {
-    "Ottawa": "Ottawa Senators",
-    "Winnipeg": "Winnipeg Jets",
-    "Vancouver": "Vancouver Canucks",
-    "Toronto": "Toronto Maple Leafs",
-    "Montreal": "Montreal Canadiens",
-    "Florida": "Florida Panthers",
-    "Arizona": "Arizona Coyotes",
-    "NY Rangers": "New York Rangers",
-    "NY Islanders": "New York Islanders",
-    "LA": "Los Angeles Kings",
-    "SJ": "San Jose Sharks"
+    "Ottawa": "Ottawa Senators", "Winnipeg": "Winnipeg Jets",
+    "Vancouver": "Vancouver Canucks", "Toronto": "Toronto Maple Leafs",
+    "Montreal": "Montreal Canadiens", "Florida": "Florida Panthers",
+    "NY Rangers": "New York Rangers", "NY Islanders": "New York Islanders",
+    "LA": "Los Angeles Kings", "SJ": "San Jose Sharks",
+    "GSW": "Golden State Warriors", "LAL": "Los Angeles Lakers"
 }
 
 def generate_canonical_key(league: str, date_str: str, home_code: str, away_code: str) -> str:
@@ -411,7 +406,8 @@ def _transform_theover_df(df: pd.DataFrame, pick_type_default: str, games: List[
                         common_games = [g for g in common_games if _normalize_league_str(g.get("league", "UNKNOWN")) == league]
 
                     if common_games:
-                        # Time Window Filter (Relaxed 12h Buffer)
+                        # Task 3: 12-Hour Time Buffer Implementation
+                        # Filter (Relaxed 12h Buffer) to ignore UTC vs local offsets
                         valid_game = None
                         for g_cand in common_games:
                             # If input has no date, accept the first game (legacy behavior)
@@ -433,15 +429,13 @@ def _transform_theover_df(df: pd.DataFrame, pick_type_default: str, games: List[
                                     elif not input_dt.tzinfo and g_dt.tzinfo:
                                         input_dt = input_dt.replace(tzinfo=timezone.utc)
 
-                                    # 12 Hour Buffer
+                                    # 12 Hour Buffer Logic
                                     diff_hours = abs((g_dt - input_dt).total_seconds()) / 3600.0
                                     if diff_hours <= 12:
                                         valid_game = g_cand
                                         break
                                 except Exception:
                                     # Date parse error on game side, accept as fallback?
-                                    # Or stricter: ignore this game?
-                                    # Let's be permissive if date parsing fails
                                     valid_game = g_cand
                                     break
                             else:
