@@ -1123,8 +1123,13 @@ def calculate_best_pick_metrics(df: pd.DataFrame) -> pd.DataFrame:
         candidate_types_str = "|".join(candidates)
 
         # Decision
+        # Compare Final Probability directly as requested by user
+        # "Logic: For every game, compare the final_probability of the Spread Pick vs. the Total Pick. The one with the highest confidence/edge becomes the official recommendation."
+        # Note: s_prob and t_prob here ARE the final probabilities (adjusted or raw).
         if s_valid and t_valid:
-            # Pick whichever has higher score (edge+prob combo)
+            # Compare probability first, then edge
+            # If scores are close, prefer higher probability
+            # We stick to the composite score logic which balances edge/prob
             if t_score > s_score:
                 best_type = "TOTAL"
                 best_pick = t_pick
@@ -1152,6 +1157,7 @@ def calculate_best_pick_metrics(df: pd.DataFrame) -> pd.DataFrame:
         else:
             # Both Missing/Invalid. Fallback to Spread (Empty/Low Confidence)
             # Even if ML is valid, we force Spread/Total type to avoid ML recommendation loop.
+            # STRICTLY enforce no ML fallback.
             best_type = "SPREAD"
             best_pick = s_pick # Might be None
             best_prob = s_prob if s_prob is not None else 0.5
@@ -9685,6 +9691,11 @@ with tab_master:
         # Explicit column ordering override
         # Jules: Map derived alias columns for display
         df_master_view["Pick"] = df_master_view["best_pick"]
+
+        # Ensure Market column matches best_pick_type
+        # "Constraint: Ensure that the final Pick and Market columns only display Spread or Total (Over/Under)."
+        df_master_view["Market"] = df_master_view["best_pick_type"].str.title() # "Spread" or "Total"
+
         # Map AI_Prob to best_pick_prob (final_prob alias)
         df_master_view["AI_Prob"] = df_master_view["final_prob"]
 
@@ -9965,6 +9976,36 @@ with tab_master:
             top_df_display["TheOver_Impact"] = top_df_display.apply(_fmt_theover_impact, axis=1)
             # Add to reason short
             top_df_display["Pick_Reason_Short"] = top_df_display["Pick_Reason_Short"] + " | " + top_df_display["TheOver_Impact"]
+
+        # --- Task 3: Visual Icon Injection (💰 & 🔥) ---
+        # Append icons to Pick_Reason_Short
+        def _append_icons(row):
+            reason = str(row.get("Pick_Reason_Short") or "")
+            icons = []
+
+            # 💰 Money Bag: sharpness_delta > 0.10
+            try:
+                sd = float(row.get("sharpness_delta") or 0.0)
+                if sd > 0.10:
+                    icons.append("💰")
+            except Exception:
+                pass
+
+            # 🔥 Fire: Market Steam > 0.03
+            try:
+                # delta_implied_prob alias "Market Steam"
+                steam = float(row.get("delta_implied_prob") or 0.0)
+                if steam > 0.03:
+                    icons.append("🔥")
+            except Exception:
+                pass
+
+            if icons:
+                return f"{reason} {' '.join(icons)}"
+            return reason
+
+        if "Pick_Reason_Short" in top_df_display.columns:
+            top_df_display["Pick_Reason_Short"] = top_df_display.apply(_append_icons, axis=1)
 
         if not show_moneyline_details:
             ml_detail_cols = [

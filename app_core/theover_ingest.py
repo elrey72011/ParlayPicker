@@ -27,12 +27,27 @@ except ImportError:
 logger = logging.getLogger("app_core.theover_ingest")
 
 TEAM_ALIAS_MAP = {
+    # NHL
+    "Seattle": "Seattle Kraken", "New Jersey": "New Jersey Devils",
+    "Buffalo": "Buffalo Sabres", "Philadelphia": "Philadelphia Flyers",
     "Ottawa": "Ottawa Senators", "Winnipeg": "Winnipeg Jets",
-    "Vancouver": "Vancouver Canucks", "Toronto": "Toronto Maple Leafs",
-    "Montreal": "Montreal Canadiens", "Florida": "Florida Panthers",
+    "Toronto": "Toronto Maple Leafs", "Florida": "Florida Panthers",
+    "Vancouver": "Vancouver Canucks", "Montreal": "Montreal Canadiens",
     "NY Rangers": "New York Rangers", "NY Islanders": "New York Islanders",
-    "LA": "Los Angeles Kings", "SJ": "San Jose Sharks",
-    "GSW": "Golden State Warriors", "LAL": "Los Angeles Lakers"
+    "LA": "Los Angeles Kings", "SJ": "San Jose Sharks", # Kept existing
+    # NBA
+    "New York": "New York Knicks", "Sacramento": "Sacramento Kings",
+    "LA": "Los Angeles Lakers", "PHI": "Philadelphia 76ers",
+    "GSW": "Golden State Warriors", "LAL": "Los Angeles Lakers", # Kept existing
+    # NCAAB (Major Naming Delta)
+    "South Carolina": "South Carolina Gamecocks", "Arkansas": "Arkansas Razorbacks",
+    "Pittsburgh": "Pittsburgh Panthers", "Georgia Tech": "Georgia Tech Yellow Jackets",
+    "Missouri": "Missouri Tigers", "Ole Miss": "Ole Miss Rebels",
+    "Mississippi St": "Mississippi State Bulldogs", "Vanderbilt": "Vanderbilt Commodores",
+    "LSU": "LSU Tigers", "Kansas": "Kansas Jayhawks", "Kansas St": "Kansas State Wildcats",
+    "Illinois": "Illinois Fighting Illini", "Ohio St": "Ohio State Buckeyes",
+    "Boston Univ": "Boston Univ. Terriers", "Western Carolina": "Western Carolina Catamounts",
+    "Chattanooga": "Chattanooga Mocs"
 }
 
 def generate_canonical_key(league: str, date_str: str, home_code: str, away_code: str) -> str:
