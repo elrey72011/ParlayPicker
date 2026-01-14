@@ -9198,6 +9198,44 @@ with tab_master:
                 logger.error(f"Market Tracker Error: {e}")
             # ---------------------------
 
+            master_stats["rows_out"] = len(deduped_list)
+            master_stats["theover_matched_sides"] = theover_matched_count_sides
+            master_stats["theover_matched_totals"] = theover_matched_count_totals
+
+            st.session_state["last_rows_out"] = len(deduped_list)
+            st.session_state["master_stats"] = master_stats
+            st.session_state["kalshi_match_results"] = kalshi_match_results
+            st.session_state["data_source_debug"] = data_source_stats
+            total_game_markets = len(
+                [
+                    m
+                    for m in all_markets_flat
+                    if "GAME" in str(m.get("event_ticker") or m.get("ticker") or "").upper()
+                ]
+            )
+            first_game_meta = per_game_kalshi_debug[0] if per_game_kalshi_debug else {}
+            st.session_state["kalshi_filter_stats"] = {
+                "total_markets_fetched": len(all_markets_flat),
+                "total_game_markets": total_game_markets,
+                "avg_filtered_markets_per_game": sum(filtered_counts) / len(filtered_counts)
+                if filtered_counts
+                else 0,
+                "filtered_markets_min": min(filtered_counts) if filtered_counts else 0,
+                "filtered_markets_max": max(filtered_counts) if filtered_counts else 0,
+                "per_game_debug": per_game_kalshi_debug,
+                "first_game_debug": per_game_kalshi_debug[0]
+                if per_game_kalshi_debug
+                else {},
+                "first_game_full_market_search": first_game_full_search,
+                "kalshi_winner_refetch_attempted": winner_refetch_attempted,
+                "first_game_expected": {
+                    "expected_date_token": (first_game_meta or {}).get("kalshi_date_token_used"),
+                    "expected_codes": (first_game_meta or {}).get("expected_codes"),
+                    "matched_ticker": (first_game_meta or {}).get("matched_ticker"),
+                    "kalshi_reason": (first_game_meta or {}).get("kalshi_reason"),
+                },
+            }
+
             st.session_state["master_df"] = df
 
         except Exception as e:
@@ -10549,43 +10587,8 @@ with tab_master:
             else:
                 st.info("Enable line movement by saving periodic snapshots to data/line_history.csv")
 
-        master_stats["rows_out"] = len(deduped_list)
-        master_stats["theover_matched_sides"] = theover_matched_count_sides
-        master_stats["theover_matched_totals"] = theover_matched_count_totals
-
-        st.session_state["last_rows_out"] = len(deduped_list)
-        st.session_state["master_stats"] = master_stats
-        st.session_state["kalshi_match_results"] = kalshi_match_results
-        st.session_state["data_source_debug"] = data_source_stats
-        total_game_markets = len(
-            [
-                m
-                for m in all_markets_flat
-                if "GAME" in str(m.get("event_ticker") or m.get("ticker") or "").upper()
-            ]
-        )
-        first_game_meta = per_game_kalshi_debug[0] if per_game_kalshi_debug else {}
-        st.session_state["kalshi_filter_stats"] = {
-            "total_markets_fetched": len(all_markets_flat),
-            "total_game_markets": total_game_markets,
-            "avg_filtered_markets_per_game": sum(filtered_counts) / len(filtered_counts)
-            if filtered_counts
-            else 0,
-            "filtered_markets_min": min(filtered_counts) if filtered_counts else 0,
-            "filtered_markets_max": max(filtered_counts) if filtered_counts else 0,
-            "per_game_debug": per_game_kalshi_debug,
-            "first_game_debug": per_game_kalshi_debug[0]
-            if per_game_kalshi_debug
-            else {},
-            "first_game_full_market_search": first_game_full_search,
-            "kalshi_winner_refetch_attempted": winner_refetch_attempted,
-            "first_game_expected": {
-                "expected_date_token": (first_game_meta or {}).get("kalshi_date_token_used"),
-                "expected_codes": (first_game_meta or {}).get("expected_codes"),
-                "matched_ticker": (first_game_meta or {}).get("matched_ticker"),
-                "kalshi_reason": (first_game_meta or {}).get("kalshi_reason"),
-            },
-        }
+        # Stats saving block moved to Processing Block
+        pass
         matches = master_stats.get("kalshi_matches", 0)
         total_games = master_stats.get("kalshi_total", 0) or 1
         st.caption(
