@@ -6023,6 +6023,7 @@ with tab_master:
                         st.stop()
 
                 commence_times_by_league: Dict[str, List[str]] = {}
+                rows_out = [] # FIX: Ensure accumulator is initialized before loop
                 for g in games:
                     lg = g.get("league")
                     commence_val = g.get("commence_time_iso_utc") or g.get("commence_time") or g.get("commence_time_iso")
@@ -9374,6 +9375,664 @@ with tab_master:
                 st.stop()
 
     # 4. ALWAYS RENDER IF DATA EXISTS (Outside the button block)
+    # Rendering block moved to bottom for persistence
+    pass
+
+with tab_shotgun:
+    st.header("🚀 Shotgun Mode: High Value Parlays")
+    st.info("Filters for 'High Value Plays' (Tight market, Edge > 1%) and generates 2-leg parlays.")
+
+    if "master_df" in st.session_state and not st.session_state["master_df"].empty:
+        with st.spinner("Analyzing Shotgun Candidates..."):
+            try:
+                df_shotgun = st.session_state["master_df"].copy()
+
+                # FIX: Sanitize ALL numeric columns early to prevent Arrow serialization crashes
+                numeric_cols = [
+                    'ai_prob_base', 'sentiment_diff', 'model_prob_home',
+                    'final_probability', 'spread_implied_prob', 'total_implied_prob',
+                    'spread_width', 'total_width', 'AI_Prob', 'Implied_Prob',
+                    'active_edge', 'total_edge', 'spread_edge'
+                ]
+
+                # Bulk convert ensuring existence
+                valid_numeric = [c for c in numeric_cols if c in df_shotgun.columns]
+                if valid_numeric:
+                    df_shotgun[valid_numeric] = df_shotgun[valid_numeric].apply(pd.to_numeric, errors='coerce').fillna(0.0)
+
+                # Filter: Remove rows with invalid probabilities (Fail-safe)
+                # Ensure we don't process "broken" rows with 0/null AI probs
+                if 'AI_Prob' in df_shotgun.columns:
+                    df_shotgun = df_shotgun[df_shotgun['AI_Prob'] > 0.0]
+                if 'final_probability' in df_shotgun.columns:
+                    df_shotgun = df_shotgun[df_shotgun['final_probability'] > 0.0]
+
+                # Ensure all ROI metrics are calculated
+                df_shotgun = add_spread_total_confidence(df_shotgun)
+                df_shotgun = df_shotgun.copy()
+                df_shotgun = enrich_picks_with_roi_metrics(df_shotgun)
+                df_shotgun = df_shotgun.copy()
+
+                # Calculate active_edge = final_probability - Implied_Prob
+                active_edge_series = (
+                    df_shotgun["final_probability"].fillna(0.0) - pd.to_numeric(df_shotgun.get("Implied_Prob"), errors='coerce').fillna(0.0)
+                )
+
+                # Create a small DataFrame for the new column to concat
+                new_metrics = pd.DataFrame({'active_edge': active_edge_series}, index=df_shotgun.index)
+                df_shotgun = pd.concat([df_shotgun, new_metrics], axis=1)
+                df_shotgun = df_shotgun.loc[:, ~df_shotgun.columns.duplicated()].copy()
+
+                # Filter logic
+                # 1. Tight Markets
+                # Ensure active_edge and spread_width are float
+                df_shotgun["active_edge"] = pd.to_numeric(df_shotgun["active_edge"], errors='coerce').fillna(0.0)
+                df_shotgun["spread_width"] = pd.to_numeric(df_shotgun["spread_width"], errors='coerce').fillna(99.0)
+
+                tight_mask = (df_shotgun["active_edge"] > 0.01) & (df_shotgun["spread_width"] <= 0.5)
+                candidates = df_shotgun[tight_mask].copy()
+
+                filter_mode = "Tight (Width <= 0.5)"
+
+                if len(candidates) < 2:
+                    # Fallback
+                    normal_mask = (df_shotgun["active_edge"] > 0.01) & (df_shotgun["spread_width"] <= 1.5)
+                    candidates = df_shotgun[normal_mask].copy()
+                    filter_mode = "Normal (Width <= 1.5)"
+
+                st.write(f"Filter Mode: **{filter_mode}** | Candidates found: {len(candidates)}")
+            except Exception as e:
+                st.warning("Data mismatch in Shotgun results. Defaulting to neutral values.")
+                logger.error(f"Shotgun logic error: {e}", exc_info=True)
+                candidates = pd.DataFrame()
+
+            if not candidates.empty:
+                # Tiered Display
+                col1, col2, col3 = st.columns(3)
+
+                with col1:
+                    st.subheader("🎯 Snipers (Prob > 60%)")
+                    # High Prob (>60%)
+                    snipers = candidates[candidates["final_probability"] > 0.60].sort_values("final_probability", ascending=False).head(5)
+                    if not snipers.empty:
+                        for _, row in snipers.iterrows():
+                            st.markdown(f"**{row.get('Pick')}** ({row.get('Market')})")
+                            st.caption(f"Prob: {row.get('final_probability'):.1%} | Edge: {row.get('active_edge'):.1%}")
+                    else:
+                        st.write("No Snipers found.")
+
+                with col2:
+                    st.subheader("📈 Strategy (High EV)")
+                    # High EV (Edge)
+                    strategy = candidates.sort_values("active_edge", ascending=False).head(5)
+                    if not strategy.empty:
+                        for _, row in strategy.iterrows():
+                            st.markdown(f"**{row.get('Pick')}** ({row.get('Market')})")
+                            st.caption(f"Edge: {row.get('active_edge'):.1%} | Prob: {row.get('final_probability'):.1%}")
+                    else:
+                        st.write("No Strategy plays found.")
+
+                with col3:
+                    st.subheader("🎲 Longshots")
+                    # Top 10 by Edge
+                    longshots = candidates.sort_values("active_edge", ascending=False).head(10)
+                    if not longshots.empty:
+                        for _, row in longshots.iterrows():
+                            st.markdown(f"**{row.get('Pick')}** ({row.get('Market')})")
+                            st.caption(f"Edge: {row.get('active_edge'):.1%}")
+                    else:
+                        st.write("No Longshots found.")
+
+                st.divider()
+                st.subheader("🔗 2-Leg Parlay Generator")
+
+                # Generate pairs
+                valid_parlays = []
+
+                # Convert to records for iteration
+                recs = candidates.to_dict('records')
+
+                # Use itertools combinations
+                for p1, p2 in itertools.combinations(recs, 2):
+                    # Constraint: Different Home teams (approx for different games)
+                    if p1.get('Home') == p2.get('Home'):
+                        continue
+
+                    edge1 = p1.get('active_edge', 0)
+                    edge2 = p2.get('active_edge', 0)
+                    combined_edge = edge1 + edge2
+
+                    # Combined Prob (assuming independence)
+                    prob1 = p1.get('final_probability', 0)
+                    prob2 = p2.get('final_probability', 0)
+                    combined_prob = prob1 * prob2
+
+                    valid_parlays.append({
+                        "Leg 1": f"{p1.get('Pick')} ({p1.get('Market')})",
+                        "Leg 2": f"{p2.get('Pick')} ({p2.get('Market')})",
+                        "Combined Edge": combined_edge,
+                        "Combined Prob": combined_prob,
+                        "Leg 1 Edge": edge1,
+                        "Leg 2 Edge": edge2
+                    })
+
+                # Sort by Combined Edge
+                valid_parlays.sort(key=lambda x: x['Combined Edge'], reverse=True)
+
+                if valid_parlays:
+                    st.write(f"Top 10 generated parlays (out of {len(valid_parlays)})")
+                    parlay_df = pd.DataFrame(valid_parlays).head(10)
+                    # Format
+                    parlay_df['Combined Edge'] = parlay_df['Combined Edge'].map('{:.1%}'.format)
+                    parlay_df['Combined Prob'] = parlay_df['Combined Prob'].map('{:.1%}'.format)
+                    parlay_df['Leg 1 Edge'] = parlay_df['Leg 1 Edge'].map('{:.1%}'.format)
+                    parlay_df['Leg 2 Edge'] = parlay_df['Leg 2 Edge'].map('{:.1%}'.format)
+
+                    # Final "Shotgun" Cleanup: Sanitization
+                    if not parlay_df.empty:
+                        # Convert to numeric where possible, fill NaN
+                        parlay_df = parlay_df.apply(lambda x: pd.to_numeric(x, errors='coerce')).fillna(0.0)
+
+                    try:
+                        st.dataframe(
+                            parlay_df,
+                            column_config={
+                                "Combined Edge": st.column_config.TextColumn("Combined Edge"),
+                                "Combined Prob": st.column_config.TextColumn("Combined Prob"),
+                            },
+                            width="stretch"
+                        )
+                    except Exception as e:
+                        st.error(f"Display Error (Shotgun Parlays): {e}")
+                else:
+                    st.warning("No valid parlay combinations found (check independence constraints).")
+
+            else:
+                st.warning("No candidates found matching the filters.")
+
+    else:
+        st.info("Run Master Analysis first to unlock Shotgun Mode.")
+
+
+with tab_kalshi:
+    st.header("Kalshi Health")
+    kalshi_status = kalshi_health_check(league)
+    st.json(kalshi_status)
+    if not kalshi_status.get("configured"):
+        st.error("Kalshi is required but not configured.")
+    elif not kalshi_status.get("ok"):
+        st.error("Kalshi is required but unavailable. Fix keys/API and retry.")
+    else:
+        if (kalshi_status.get("market_count") or 0) > 0:
+            st.success("Kalshi credentials detected and markets available.")
+        else:
+            expected_prefix = league_game_prefix(league)
+            st.warning(
+                kalshi_status.get("warning")
+                or f"Kalshi reachable, but no {league} {expected_prefix} markets returned (futures-only or slate not listed)."
+            )
+    games_for_debug = st.session_state.get("games") or []
+    if games_for_debug:
+        with st.expander("Search first game markets", expanded=False):
+            fg = games_for_debug[0]
+            # Safe access for team codes
+            hc_cands = team_code_candidates(fg.get("league"), fg.get("home_team")) or []
+            home_code_dbg = hc_cands[0] if hc_cands else None
+
+            ac_cands = team_code_candidates(fg.get("league"), fg.get("away_team")) or []
+            away_code_dbg = ac_cands[0] if ac_cands else None
+            search_results = debug_search_markets_for_game(
+                st.session_state.get("kalshi_all_markets") or [],
+                fg.get("home_team"),
+                fg.get("away_team"),
+                home_code_dbg,
+                away_code_dbg,
+                league=fg.get("league"),
+                limit=25,
+            )
+            st.json(
+                {
+                    "game": {"home": fg.get("home_team"), "away": fg.get("away_team"), "league": fg.get("league")},
+                    "expected_codes": {"home": home_code_dbg, "away": away_code_dbg},
+                    "search_results": search_results,
+                }
+            )
+
+with tab_sentiment:
+    st.header("Sentiment")
+    sentiment_enabled = st.session_state.get("enable_sentiment", True)
+    sent_map = st.session_state.get("sentiment_map") or {}
+    sent_debug = st.session_state.get("sentiment_debug") or {}
+    sent_meta = st.session_state.get("sentiment_meta") or {}
+    st.caption(f"Sentiment enabled: {sentiment_enabled}")
+    articles_total = sent_meta.get("articles_total") or sent_debug.get("articles_total") or 0
+    error_count = sent_meta.get("error_count") or sent_debug.get("error_count") or 0
+    if sentiment_enabled and news_api_key and (articles_total == 0):
+        st.warning(
+            "Sentiment enabled but NewsAPI returned 0 articles. Check NEWS_API_KEY, request limits, or query format."
+        )
+    if st.button("🧹 Clear Sentiment Cache", key="clear_sent_cache"):
+        try:
+            st.cache_data.clear()
+        except Exception:
+            st.warning("Unable to clear cache.")
+        for k in ["sentiment_map", "sentiment_meta_map", "sentiment_meta", "sentiment_debug", "sentiment_slate_key", "sentiment_source", "reddit_used"]:
+            st.session_state.pop(k, None)
+        for k in list(st.session_state.keys()):
+            if str(k).startswith("sentiment_"):
+                st.session_state.pop(k, None)
+        st.success("Cleared sentiment cache/state. Run analysis again.")
+    if sent_map:
+        scores_df = pd.DataFrame(
+            sorted(sent_map.items(), key=lambda kv: kv[0]),
+            columns=["Team", "Sentiment"],
+        )
+        st.dataframe(scores_df)
+    else:
+        st.info("No sentiment scores available yet (missing NewsAPI key or disabled).")
+    with st.expander("Sentiment Debug", expanded=True):
+        sent_debug = st.session_state.get("sentiment_debug", {})
+        meta_map_view = st.session_state.get("sentiment_meta_map", {})
+        source_counts: Dict[str, int] = {}
+        for mv in meta_map_view.values():
+            src_val = str(mv.get("sentiment_source") or "none")
+            source_counts[src_val] = source_counts.get(src_val, 0) + 1
+        st.json(
+            {
+                "requests_attempted": sent_debug.get("requests_attempted"),
+                "requests_skipped_due_to_cache": sent_debug.get("requests_skipped_due_to_cache"),
+                "requests_skipped_due_to_cooldown": sent_debug.get("requests_skipped_due_to_cooldown"),
+                "rate_limit_hit": sent_debug.get("rate_limit_hit"),
+                "cooldown_until": sent_debug.get("cooldown_until"),
+                "rate_limited": sent_debug.get("rate_limited"),
+                "reddit_posts_used": sent_debug.get("reddit_posts_used"),
+                "reddit_comments_used": sent_debug.get("reddit_comments_used"),
+                "teams_by_source": source_counts,
+            }
+        )
+        st.json(sent_debug or {})
+        st.json({"meta": sent_meta, "error_count": error_count})
+        st.write("Teams with sentiment:", list((st.session_state.get("sentiment_map") or {}).keys())[:20])
+
+
+with tab_movement:
+    st.header("📉 Closing Line / Market Movement Tracker")
+    st.info("Tracks line movements and probability shifts between the Noon Baseline and Evening Update.")
+
+    if "master_df" in st.session_state and not st.session_state["master_df"].empty:
+        move_df = st.session_state["master_df"].copy()
+
+        # Check if movement columns exist
+        has_movement = 'delta_implied_prob' in move_df.columns
+
+        if not has_movement:
+            st.warning("No baseline comparison data available yet. Comparison runs after 5:30 PM ET if a Noon Baseline was saved.")
+            # Check if baseline file exists for today to give better hint
+            try:
+                now_et = market_tracker.get_et_now()
+                fname = market_tracker.get_baseline_filename(now_et.date().isoformat())
+                if os.path.exists(fname):
+                    st.info(f"Baseline found for today ({now_et.date()}). Run analysis after 5:30 PM ET to see deltas.")
+                else:
+                    st.info(f"No baseline saved for today ({now_et.date()}). Run analysis between 9:00 AM and 1:00 PM ET to save a baseline.")
+            except Exception:
+                pass
+        else:
+            # Filter for significant movement
+            # "Only display games where the final_probability or implied_prob moved by >3% since the noon baseline."
+
+            # Ensure numeric
+            move_df['delta_implied_prob'] = pd.to_numeric(move_df.get('delta_implied_prob'), errors='coerce').fillna(0.0)
+
+            # We don't have delta_final_prob explicitly calculated in market_tracker, but we have delta_implied_prob.
+            # User requirement: "final_probability or implied_prob moved by > 3%"
+            # Let's calculate delta_final_prob here if possible
+            if 'final_probability' in move_df.columns and 'final_probability_noon' in move_df.columns:
+                move_df['delta_final_prob'] = pd.to_numeric(move_df['final_probability'], errors='coerce') - pd.to_numeric(move_df['final_probability_noon'], errors='coerce')
+            else:
+                move_df['delta_final_prob'] = 0.0
+
+            move_df['delta_final_prob'] = move_df['delta_final_prob'].fillna(0.0)
+
+            # Filter
+            mask = (abs(move_df['delta_implied_prob']) > 0.03) | (abs(move_df['delta_final_prob']) > 0.03)
+
+            significant_moves = move_df[mask].copy()
+
+            if significant_moves.empty:
+                st.success("No significant market movements (>3%) detected since noon.")
+            else:
+                st.write(f"Found {len(significant_moves)} games with significant movement (>3%).")
+
+                # Display Columns
+                display_cols = [
+                    'league', 'Home', 'Away',
+                    'Pick', 'Pick_noon',
+                    'Implied_Prob', 'delta_implied_prob',
+                    'final_probability', 'delta_final_prob',
+                    'delta_sentiment',
+                    'spread_pick_line', 'line_move_spread',
+                    'movement_alerts'
+                ]
+
+                # Filter cols
+                cols = [c for c in display_cols if c in significant_moves.columns]
+
+                # Format for display
+                # Percentage formatting
+                format_dict = {
+                    'Implied_Prob': '{:.1%}',
+                    'delta_implied_prob': '{:+.1%}',
+                    'final_probability': '{:.1%}',
+                    'delta_final_prob': '{:+.1%}',
+                    'line_move_spread': '{:+.1f}'
+                }
+
+                st.dataframe(significant_moves[cols].style.format(format_dict))
+
+                # Learning Insight Warning
+                # "If the line moved against the model's original pick, add a warning"
+                # This is already handled in 'movement_alerts' column constructed in backend,
+                # but let's highlight it here if present.
+
+                alerts = significant_moves[significant_moves['movement_alerts'] != ""]
+                if not alerts.empty:
+                    st.subheader("⚠️ Market Movement Alerts")
+                    for _, row in alerts.iterrows():
+                        st.warning(f"**{row['Home']} vs {row['Away']}**: {row['movement_alerts']}")
+
+            # Show all movement (optional expander)
+            with st.expander("View All Movements (Raw Data)"):
+                st.dataframe(move_df)
+
+    else:
+        st.info("Run Master Analysis to view Market Movement.")
+
+
+with tab_debug:
+    st.header("Debug")
+    flags = {
+        "odds_api": bool(odds_api_key),
+        "news_api": bool(news_api_key),
+        "model_configured": True,  # Local fallback always enabled
+        "kalshi_configured": bool(kalshi_api_key and kalshi_api_secret),
+    }
+    st.subheader("Config Flags")
+    st.json({**flags, "project_id": project_id, "location": location})
+
+    games = st.session_state.get("games", [])
+    st.subheader("Counts")
+    st.json(
+        {
+            "games_loaded_raw": len(games),
+            "games_normalized": len(games),
+            "last_rows_out": st.session_state.get("last_rows_out", 0),
+            "moneyline_available_count": st.session_state.get("market_counts", {}).get(
+                "moneyline_available_count", 0
+            ),
+            "spreads_available_count": st.session_state.get("market_counts", {}).get(
+                "spreads_available_count", 0
+            ),
+            "totals_available_count": st.session_state.get("market_counts", {}).get(
+                "totals_available_count", 0
+            ),
+            "market_rows_out": st.session_state.get("master_stats", {}).get(
+                "market_rows_out", 0
+            ),
+        }
+    )
+
+    with st.expander("TheOver Matching Debug", expanded=False):
+        t_stats = st.session_state.get("master_stats", {})
+        st.write(f"Matched Sides: {t_stats.get('theover_matched_sides', 0)}")
+        st.write(f"Matched Totals: {t_stats.get('theover_matched_totals', 0)}")
+
+        # We can try to access the raw 'theover_stats' if preserved in session,
+        # but 'master_stats' only has the counts.
+        # Ideally we would have stored the 'unmatched_examples' in session state too.
+        # Let's check 'kalshi_filter_stats' or similar?
+        # No, we didn't save 'theover_stats' to session state explicitly in the main loop block
+        # (it was a local variable in the 'Run Master Analysis' block).
+        # However, we displayed it in the main UI column earlier. This is just the Debug tab summary.
+
+    with st.expander("Team Code Generation Debug", expanded=False):
+        # Existing logic placeholder or new addition
+        pass
+
+    with st.expander("Data Sources Debug", expanded=False):
+        ds_debug = st.session_state.get("data_source_debug") or {}
+        key_sources = {
+            "api_sports_key_present": bool(api_sports_key),
+            "sportsdata_key_present": bool(sportsdata_key),
+            "api_sports_lookup": ["API_SPORTS_KEY", "APISPORTS_API_KEY", "NBA_APISPORTS_API_KEY", "NFL_APISPORTS_API_KEY"],
+            "sportsdata_lookup": ["SPORTSDATA_API_KEY", "SPORTSDATA_KEY", "NBA_SPORTSDATA_API_KEY", "NFL_SPORTSDATA_API_KEY"],
+        }
+        st.json(
+            {
+                **ds_debug,
+                "key_sources": key_sources,
+            }
+        )
+
+    st.subheader("Timezones")
+    commence_stats = st.session_state.get("commence_stats", {})
+    st.json({"timezone_used": commence_stats.get("timezone") or get_local_tz()})
+    if games:
+        samples = []
+        for g in games[:3]:
+            samples.append(
+                {
+                    "home": g.get("home_team"),
+                    "away": g.get("away_team"),
+                    "utc": g.get("commence_time_iso_utc"),
+                    "local": g.get("commence_time_iso_local"),
+                }
+            )
+        st.caption("Sample commence conversions (first 3 games)")
+        st.json(samples)
+
+    if games:
+        st.subheader("Sample normalized game")
+        # Safe access for games[0]
+        st.code(json.dumps(games[0], indent=2, default=str) if games else "{}")
+
+    st.subheader("Kalshi health")
+    kalshi_health = kalshi_health_check(league)
+    st.json(kalshi_health)
+    if kalshi_integrator and st.checkbox("Show Kalshi market counts", key="kalshi_market_counts_toggle"):
+        dbg_markets = kalshi_integrator.get_league_markets(
+            league, status="active", max_pages=2, min_prefix_hits=5
+        )
+        dbg_tickers = [str(m.get("event_ticker") or m.get("ticker") or "").upper() for m in dbg_markets]
+        dbg_game_prefix = league_game_prefix(league)
+        st.json(
+            {
+                "kalshi_debug_counts": {
+                    "game_prefix": dbg_game_prefix,
+                    "game": len([t for t in dbg_tickers if t.startswith(dbg_game_prefix)]),
+                    "base": len([
+                        t
+                        for t in dbg_tickers
+                        if t.startswith(league_series_ticker(league) or f"KX{(league or '').upper()}")
+                        and not t.startswith(dbg_game_prefix)
+                    ]),
+                    "total": len(dbg_tickers),
+                }
+            }
+        )
+    filter_stats = st.session_state.get("kalshi_filter_stats") or {}
+    if filter_stats:
+        st.subheader("Kalshi filtering stats")
+        st.json(
+            {
+                "total_markets_fetched": filter_stats.get("total_markets_fetched"),
+                "total_game_markets": filter_stats.get("total_game_markets"),
+                "avg_filtered_markets_per_game": filter_stats.get(
+                    "avg_filtered_markets_per_game"
+                ),
+                "first_game": filter_stats.get("first_game_expected"),
+            }
+        )
+        st.json(filter_stats)
+    prefix_counts_map = st.session_state.get("kalshi_prefix_counts") or {}
+    if prefix_counts_map:
+        st.subheader("Kalshi ticker prefix counts")
+        st.json(prefix_counts_map)
+        samples_map = st.session_state.get("kalshi_prefix_samples_game") or {}
+        if samples_map:
+            st.caption("First 20 game-market tickers (by league)")
+            st.json(samples_map)
+    all_markets_debug = st.session_state.get("kalshi_all_markets") or []
+    if games and all_markets_debug:
+        fg = games[0]
+        # Safe access for team codes
+        hc_cands = team_code_candidates(fg.get("league"), fg.get("home_team")) or []
+        home_code_dbg = hc_cands[0] if hc_cands else None
+
+        ac_cands = team_code_candidates(fg.get("league"), fg.get("away_team")) or []
+        away_code_dbg = ac_cands[0] if ac_cands else None
+
+        search_results = debug_search_markets_for_game(
+            all_markets_debug,
+            fg.get("home_team"),
+            fg.get("away_team"),
+            home_code_dbg,
+            away_code_dbg,
+            league=fg.get("league"),
+            limit=15,
+        )
+        st.subheader("Kalshi full-market search (first game)")
+        st.json(
+            {
+                "expected_codes": {"home": home_code_dbg, "away": away_code_dbg},
+                "found_any_winner_market_for_game": search_results.get(
+                    "found_any_winner_market_for_game"
+                ),
+                "found_any_total_market_for_game": search_results.get(
+                    "found_any_total_market_for_game"
+                ),
+                "found_any_spread_market_for_game": search_results.get(
+                    "found_any_spread_market_for_game"
+                ),
+                "counts": search_results.get("counts"),
+                "top_matches": search_results.get("matches"),
+            }
+        )
+    if st.session_state.get("kalshi_match_results"):
+        _matches_raw = st.session_state.get("kalshi_match_results")
+        matches = _matches_raw.values() if isinstance(_matches_raw, dict) else (_matches_raw or [])
+        matched = []
+        non_match_reasons: List[str] = []
+        for m in matches:
+            for res in (m.get("matches") or {}).values():
+                if res.get("kalshi_matched"):
+                    matched.append(res)
+                else:
+                    non_match_reasons.append(res.get("kalshi_reason") or "unknown")
+        if matched:
+            st.caption("Sample matched market")
+            st.json(matched[0])
+        first_game_debug = filter_stats.get("first_game_debug") or {}
+        if first_game_debug:
+            st.caption("Kalshi per-game debug (first game)")
+            st.json(first_game_debug)
+        if filter_stats.get("per_game_debug"):
+            st.caption("Kalshi per-game debug (all games)")
+            st.json(filter_stats.get("per_game_debug"))
+        if non_match_reasons:
+            reasons: Dict[str, int] = {}
+            for reason in non_match_reasons:
+                reasons[reason] = reasons.get(reason, 0) + 1
+            top_reasons = sorted(reasons.items(), key=lambda x: x[1], reverse=True)[:5]
+            st.caption("Top non-match reasons")
+            st.json(top_reasons)
+
+    if "master_stats" in st.session_state:
+        st.subheader("Master analysis stats")
+        st.json(st.session_state["master_stats"])
+
+    if st.session_state.get("last_exception"):
+        st.subheader("Last exception")
+        st.code(st.session_state["last_exception"])
+
+    if "model_last_error" in st.session_state:
+        st.error(f"Prediction Error: {st.session_state['model_last_error']}")
+
+    # Debug Export Button (Sidebar)
+    if "debug_log_history" in st.session_state and st.session_state["debug_log_history"]:
+        try:
+            debug_json = json.dumps(st.session_state["debug_log_history"], default=str, indent=2)
+            st.sidebar.download_button(
+                "Download Debug Log",
+                data=debug_json,
+                file_name="parlay_debug_export.json",
+                mime="application/json",
+                key="debug_log_export_btn"
+            )
+        except Exception:
+            pass
+
+    # TheOver.ai Debug Export (Task 2/3)
+    # Task 3: Force the "TheOver.ai Debug" Button for Raw Data
+    if "theover_raw_df" in st.session_state and not st.session_state["theover_raw_df"].empty:
+        try:
+            theover_raw_df = st.session_state["theover_raw_df"]
+            theover_raw_csv = theover_raw_df.to_csv(index=False).encode("utf-8")
+            st.sidebar.download_button(
+                "Download TheOver Debug", # Exact text requested
+                data=theover_raw_csv,
+                file_name="theover_raw_debug.csv",
+                mime="text/csv",
+                key="theover_raw_export_btn",
+                help="Exports the RAW TheOver dataframe before transformation."
+            )
+        except Exception as e:
+            logger.error(f"Failed to render TheOver raw debug button: {e}")
+
+    if "theover_debug_log" in st.session_state and st.session_state["theover_debug_log"]:
+        try:
+            theover_logs = st.session_state["theover_debug_log"]
+            # Convert list of dicts to CSV string
+            if isinstance(theover_logs, list) and len(theover_logs) > 0:
+                theover_debug_df = pd.DataFrame(theover_logs)
+                theover_csv = theover_debug_df.to_csv(index=False).encode("utf-8")
+
+                st.sidebar.download_button(
+                    "Export TheOver.ai Log", # Renamed to distinguish
+                    data=theover_csv,
+                    file_name="theover_log_dump.csv",
+                    mime="text/csv",
+                    key="theover_log_export_btn",
+                    help="Exports fuzzy match logs."
+                )
+        except Exception as e:
+            logger.error(f"Failed to render TheOver log button: {e}")
+
+    # Task 2: Snapshot Status UI
+    # UI: Add a status text in the sidebar: "✅ Noon Baseline Cached" or "⚠️ Noon Baseline Missing".
+    snapshot_status = snapshot_manager.check_noon_baseline_status()
+    st.sidebar.markdown(f"**Snapshot Status:** {snapshot_status}")
+
+    # Manual Baseline Button
+    if st.sidebar.button("Manual Baseline Snapshot"):
+        if "master_df" in st.session_state and not st.session_state["master_df"].empty:
+            success = snapshot_manager.save_noon_baseline(st.session_state["master_df"], force=True)
+            if success:
+                # Re-check status to show filename
+                now_et = snapshot_manager.get_et_now()
+                date_str = now_et.date().isoformat()
+                filename = snapshot_manager.get_snapshot_filename(date_str, "noon")
+                st.info(f"Baseline Comparison Active: {filename}")
+                st.sidebar.success("Manual Baseline Saved.")
+            else:
+                st.sidebar.error("Failed to save baseline.")
+        else:
+            st.sidebar.warning("Run Master Analysis first.")
+
+
+
+# --- Forced UI Persistence Block ---
+with tab_master:
     if st.session_state["master_results_df"] is not None:
         df = st.session_state["master_results_df"]
 
@@ -10681,7 +11340,13 @@ with tab_master:
         # Stats saving block moved to Processing Block
         pass
         # FIX: Load from persistent session state to avoid NameError on reruns (Debug Export)
+        # Use session state to retrieve stats safely
         stats = st.session_state.get("master_stats_persistent", {})
+        rows_out_val = stats.get('rows_out', 0)
+        games_in_val = stats.get('games_in', 0)
+
+        # Update the summary line to use safe variables
+        debug_info = f"rows_out/games_in = {rows_out_val} / {games_in_val}"
 
         matches = stats.get("kalshi_matches", 0)
         total_games = stats.get("kalshi_total", 0) or 1
@@ -10736,14 +11401,7 @@ with tab_master:
             except Exception as e:
                  st.error(f"Display Error (Master Table): {e}")
 
-            # Safe retrieval of stats from session state
-            current_stats = st.session_state.get("master_stats_persistent", {})
-            rows_out_val = current_stats.get('rows_out', 0)
-            games_in_val = current_stats.get('games_in', 0)
-
-            st.caption(
-                f"rows_out/games_in = {rows_out_val} / {games_in_val}"
-            )
+            st.caption(debug_info)
             with st.expander("Decision Trace (Samples)", expanded=False):
                 st.caption("One sample per league (NFL / NBA / NCAAB) showing how the final pick & probability were derived.")
                 samples = st.session_state.get("DECISION_TRACE_SAMPLES", {}) or {}
@@ -10771,657 +11429,6 @@ with tab_master:
     elif not games:
         st.info("Load games from the sidebar, then run Master Analysis.")
 
-
-with tab_shotgun:
-    st.header("🚀 Shotgun Mode: High Value Parlays")
-    st.info("Filters for 'High Value Plays' (Tight market, Edge > 1%) and generates 2-leg parlays.")
-
-    if "master_df" in st.session_state and not st.session_state["master_df"].empty:
-        with st.spinner("Analyzing Shotgun Candidates..."):
-            try:
-                df_shotgun = st.session_state["master_df"].copy()
-
-                # FIX: Sanitize ALL numeric columns early to prevent Arrow serialization crashes
-                numeric_cols = [
-                    'ai_prob_base', 'sentiment_diff', 'model_prob_home',
-                    'final_probability', 'spread_implied_prob', 'total_implied_prob',
-                    'spread_width', 'total_width', 'AI_Prob', 'Implied_Prob',
-                    'active_edge', 'total_edge', 'spread_edge'
-                ]
-
-                # Bulk convert ensuring existence
-                valid_numeric = [c for c in numeric_cols if c in df_shotgun.columns]
-                if valid_numeric:
-                    df_shotgun[valid_numeric] = df_shotgun[valid_numeric].apply(pd.to_numeric, errors='coerce').fillna(0.0)
-
-                # Filter: Remove rows with invalid probabilities (Fail-safe)
-                # Ensure we don't process "broken" rows with 0/null AI probs
-                if 'AI_Prob' in df_shotgun.columns:
-                    df_shotgun = df_shotgun[df_shotgun['AI_Prob'] > 0.0]
-                if 'final_probability' in df_shotgun.columns:
-                    df_shotgun = df_shotgun[df_shotgun['final_probability'] > 0.0]
-
-                # Ensure all ROI metrics are calculated
-                df_shotgun = add_spread_total_confidence(df_shotgun)
-                df_shotgun = df_shotgun.copy()
-                df_shotgun = enrich_picks_with_roi_metrics(df_shotgun)
-                df_shotgun = df_shotgun.copy()
-
-                # Calculate active_edge = final_probability - Implied_Prob
-                active_edge_series = (
-                    df_shotgun["final_probability"].fillna(0.0) - pd.to_numeric(df_shotgun.get("Implied_Prob"), errors='coerce').fillna(0.0)
-                )
-
-                # Create a small DataFrame for the new column to concat
-                new_metrics = pd.DataFrame({'active_edge': active_edge_series}, index=df_shotgun.index)
-                df_shotgun = pd.concat([df_shotgun, new_metrics], axis=1)
-                df_shotgun = df_shotgun.loc[:, ~df_shotgun.columns.duplicated()].copy()
-
-                # Filter logic
-                # 1. Tight Markets
-                # Ensure active_edge and spread_width are float
-                df_shotgun["active_edge"] = pd.to_numeric(df_shotgun["active_edge"], errors='coerce').fillna(0.0)
-                df_shotgun["spread_width"] = pd.to_numeric(df_shotgun["spread_width"], errors='coerce').fillna(99.0)
-
-                tight_mask = (df_shotgun["active_edge"] > 0.01) & (df_shotgun["spread_width"] <= 0.5)
-                candidates = df_shotgun[tight_mask].copy()
-
-                filter_mode = "Tight (Width <= 0.5)"
-
-                if len(candidates) < 2:
-                    # Fallback
-                    normal_mask = (df_shotgun["active_edge"] > 0.01) & (df_shotgun["spread_width"] <= 1.5)
-                    candidates = df_shotgun[normal_mask].copy()
-                    filter_mode = "Normal (Width <= 1.5)"
-
-                st.write(f"Filter Mode: **{filter_mode}** | Candidates found: {len(candidates)}")
-            except Exception as e:
-                st.warning("Data mismatch in Shotgun results. Defaulting to neutral values.")
-                logger.error(f"Shotgun logic error: {e}", exc_info=True)
-                candidates = pd.DataFrame()
-
-            if not candidates.empty:
-                # Tiered Display
-                col1, col2, col3 = st.columns(3)
-
-                with col1:
-                    st.subheader("🎯 Snipers (Prob > 60%)")
-                    # High Prob (>60%)
-                    snipers = candidates[candidates["final_probability"] > 0.60].sort_values("final_probability", ascending=False).head(5)
-                    if not snipers.empty:
-                        for _, row in snipers.iterrows():
-                            st.markdown(f"**{row.get('Pick')}** ({row.get('Market')})")
-                            st.caption(f"Prob: {row.get('final_probability'):.1%} | Edge: {row.get('active_edge'):.1%}")
-                    else:
-                        st.write("No Snipers found.")
-
-                with col2:
-                    st.subheader("📈 Strategy (High EV)")
-                    # High EV (Edge)
-                    strategy = candidates.sort_values("active_edge", ascending=False).head(5)
-                    if not strategy.empty:
-                        for _, row in strategy.iterrows():
-                            st.markdown(f"**{row.get('Pick')}** ({row.get('Market')})")
-                            st.caption(f"Edge: {row.get('active_edge'):.1%} | Prob: {row.get('final_probability'):.1%}")
-                    else:
-                        st.write("No Strategy plays found.")
-
-                with col3:
-                    st.subheader("🎲 Longshots")
-                    # Top 10 by Edge
-                    longshots = candidates.sort_values("active_edge", ascending=False).head(10)
-                    if not longshots.empty:
-                        for _, row in longshots.iterrows():
-                            st.markdown(f"**{row.get('Pick')}** ({row.get('Market')})")
-                            st.caption(f"Edge: {row.get('active_edge'):.1%}")
-                    else:
-                        st.write("No Longshots found.")
-
-                st.divider()
-                st.subheader("🔗 2-Leg Parlay Generator")
-
-                # Generate pairs
-                valid_parlays = []
-
-                # Convert to records for iteration
-                recs = candidates.to_dict('records')
-
-                # Use itertools combinations
-                for p1, p2 in itertools.combinations(recs, 2):
-                    # Constraint: Different Home teams (approx for different games)
-                    if p1.get('Home') == p2.get('Home'):
-                        continue
-
-                    edge1 = p1.get('active_edge', 0)
-                    edge2 = p2.get('active_edge', 0)
-                    combined_edge = edge1 + edge2
-
-                    # Combined Prob (assuming independence)
-                    prob1 = p1.get('final_probability', 0)
-                    prob2 = p2.get('final_probability', 0)
-                    combined_prob = prob1 * prob2
-
-                    valid_parlays.append({
-                        "Leg 1": f"{p1.get('Pick')} ({p1.get('Market')})",
-                        "Leg 2": f"{p2.get('Pick')} ({p2.get('Market')})",
-                        "Combined Edge": combined_edge,
-                        "Combined Prob": combined_prob,
-                        "Leg 1 Edge": edge1,
-                        "Leg 2 Edge": edge2
-                    })
-
-                # Sort by Combined Edge
-                valid_parlays.sort(key=lambda x: x['Combined Edge'], reverse=True)
-
-                if valid_parlays:
-                    st.write(f"Top 10 generated parlays (out of {len(valid_parlays)})")
-                    parlay_df = pd.DataFrame(valid_parlays).head(10)
-                    # Format
-                    parlay_df['Combined Edge'] = parlay_df['Combined Edge'].map('{:.1%}'.format)
-                    parlay_df['Combined Prob'] = parlay_df['Combined Prob'].map('{:.1%}'.format)
-                    parlay_df['Leg 1 Edge'] = parlay_df['Leg 1 Edge'].map('{:.1%}'.format)
-                    parlay_df['Leg 2 Edge'] = parlay_df['Leg 2 Edge'].map('{:.1%}'.format)
-
-                    # Final "Shotgun" Cleanup: Sanitization
-                    if not parlay_df.empty:
-                        # Convert to numeric where possible, fill NaN
-                        parlay_df = parlay_df.apply(lambda x: pd.to_numeric(x, errors='coerce')).fillna(0.0)
-
-                    try:
-                        st.dataframe(
-                            parlay_df,
-                            column_config={
-                                "Combined Edge": st.column_config.TextColumn("Combined Edge"),
-                                "Combined Prob": st.column_config.TextColumn("Combined Prob"),
-                            },
-                            width="stretch"
-                        )
-                    except Exception as e:
-                        st.error(f"Display Error (Shotgun Parlays): {e}")
-                else:
-                    st.warning("No valid parlay combinations found (check independence constraints).")
-
-            else:
-                st.warning("No candidates found matching the filters.")
-
-    else:
-        st.info("Run Master Analysis first to unlock Shotgun Mode.")
-
-
-with tab_kalshi:
-    st.header("Kalshi Health")
-    kalshi_status = kalshi_health_check(league)
-    st.json(kalshi_status)
-    if not kalshi_status.get("configured"):
-        st.error("Kalshi is required but not configured.")
-    elif not kalshi_status.get("ok"):
-        st.error("Kalshi is required but unavailable. Fix keys/API and retry.")
-    else:
-        if (kalshi_status.get("market_count") or 0) > 0:
-            st.success("Kalshi credentials detected and markets available.")
-        else:
-            expected_prefix = league_game_prefix(league)
-            st.warning(
-                kalshi_status.get("warning")
-                or f"Kalshi reachable, but no {league} {expected_prefix} markets returned (futures-only or slate not listed)."
-            )
-    games_for_debug = st.session_state.get("games") or []
-    if games_for_debug:
-        with st.expander("Search first game markets", expanded=False):
-            fg = games_for_debug[0]
-            # Safe access for team codes
-            hc_cands = team_code_candidates(fg.get("league"), fg.get("home_team")) or []
-            home_code_dbg = hc_cands[0] if hc_cands else None
-
-            ac_cands = team_code_candidates(fg.get("league"), fg.get("away_team")) or []
-            away_code_dbg = ac_cands[0] if ac_cands else None
-            search_results = debug_search_markets_for_game(
-                st.session_state.get("kalshi_all_markets") or [],
-                fg.get("home_team"),
-                fg.get("away_team"),
-                home_code_dbg,
-                away_code_dbg,
-                league=fg.get("league"),
-                limit=25,
-            )
-            st.json(
-                {
-                    "game": {"home": fg.get("home_team"), "away": fg.get("away_team"), "league": fg.get("league")},
-                    "expected_codes": {"home": home_code_dbg, "away": away_code_dbg},
-                    "search_results": search_results,
-                }
-            )
-
-with tab_sentiment:
-    st.header("Sentiment")
-    sentiment_enabled = st.session_state.get("enable_sentiment", True)
-    sent_map = st.session_state.get("sentiment_map") or {}
-    sent_debug = st.session_state.get("sentiment_debug") or {}
-    sent_meta = st.session_state.get("sentiment_meta") or {}
-    st.caption(f"Sentiment enabled: {sentiment_enabled}")
-    articles_total = sent_meta.get("articles_total") or sent_debug.get("articles_total") or 0
-    error_count = sent_meta.get("error_count") or sent_debug.get("error_count") or 0
-    if sentiment_enabled and news_api_key and (articles_total == 0):
-        st.warning(
-            "Sentiment enabled but NewsAPI returned 0 articles. Check NEWS_API_KEY, request limits, or query format."
-        )
-    if st.button("🧹 Clear Sentiment Cache", key="clear_sent_cache"):
-        try:
-            st.cache_data.clear()
-        except Exception:
-            st.warning("Unable to clear cache.")
-        for k in ["sentiment_map", "sentiment_meta_map", "sentiment_meta", "sentiment_debug", "sentiment_slate_key", "sentiment_source", "reddit_used"]:
-            st.session_state.pop(k, None)
-        for k in list(st.session_state.keys()):
-            if str(k).startswith("sentiment_"):
-                st.session_state.pop(k, None)
-        st.success("Cleared sentiment cache/state. Run analysis again.")
-    if sent_map:
-        scores_df = pd.DataFrame(
-            sorted(sent_map.items(), key=lambda kv: kv[0]),
-            columns=["Team", "Sentiment"],
-        )
-        st.dataframe(scores_df)
-    else:
-        st.info("No sentiment scores available yet (missing NewsAPI key or disabled).")
-    with st.expander("Sentiment Debug", expanded=True):
-        sent_debug = st.session_state.get("sentiment_debug", {})
-        meta_map_view = st.session_state.get("sentiment_meta_map", {})
-        source_counts: Dict[str, int] = {}
-        for mv in meta_map_view.values():
-            src_val = str(mv.get("sentiment_source") or "none")
-            source_counts[src_val] = source_counts.get(src_val, 0) + 1
-        st.json(
-            {
-                "requests_attempted": sent_debug.get("requests_attempted"),
-                "requests_skipped_due_to_cache": sent_debug.get("requests_skipped_due_to_cache"),
-                "requests_skipped_due_to_cooldown": sent_debug.get("requests_skipped_due_to_cooldown"),
-                "rate_limit_hit": sent_debug.get("rate_limit_hit"),
-                "cooldown_until": sent_debug.get("cooldown_until"),
-                "rate_limited": sent_debug.get("rate_limited"),
-                "reddit_posts_used": sent_debug.get("reddit_posts_used"),
-                "reddit_comments_used": sent_debug.get("reddit_comments_used"),
-                "teams_by_source": source_counts,
-            }
-        )
-        st.json(sent_debug or {})
-        st.json({"meta": sent_meta, "error_count": error_count})
-        st.write("Teams with sentiment:", list((st.session_state.get("sentiment_map") or {}).keys())[:20])
-
-
-with tab_movement:
-    st.header("📉 Closing Line / Market Movement Tracker")
-    st.info("Tracks line movements and probability shifts between the Noon Baseline and Evening Update.")
-
-    if "master_df" in st.session_state and not st.session_state["master_df"].empty:
-        move_df = st.session_state["master_df"].copy()
-
-        # Check if movement columns exist
-        has_movement = 'delta_implied_prob' in move_df.columns
-
-        if not has_movement:
-            st.warning("No baseline comparison data available yet. Comparison runs after 5:30 PM ET if a Noon Baseline was saved.")
-            # Check if baseline file exists for today to give better hint
-            try:
-                now_et = market_tracker.get_et_now()
-                fname = market_tracker.get_baseline_filename(now_et.date().isoformat())
-                if os.path.exists(fname):
-                    st.info(f"Baseline found for today ({now_et.date()}). Run analysis after 5:30 PM ET to see deltas.")
-                else:
-                    st.info(f"No baseline saved for today ({now_et.date()}). Run analysis between 9:00 AM and 1:00 PM ET to save a baseline.")
-            except Exception:
-                pass
-        else:
-            # Filter for significant movement
-            # "Only display games where the final_probability or implied_prob moved by >3% since the noon baseline."
-
-            # Ensure numeric
-            move_df['delta_implied_prob'] = pd.to_numeric(move_df.get('delta_implied_prob'), errors='coerce').fillna(0.0)
-
-            # We don't have delta_final_prob explicitly calculated in market_tracker, but we have delta_implied_prob.
-            # User requirement: "final_probability or implied_prob moved by > 3%"
-            # Let's calculate delta_final_prob here if possible
-            if 'final_probability' in move_df.columns and 'final_probability_noon' in move_df.columns:
-                move_df['delta_final_prob'] = pd.to_numeric(move_df['final_probability'], errors='coerce') - pd.to_numeric(move_df['final_probability_noon'], errors='coerce')
-            else:
-                move_df['delta_final_prob'] = 0.0
-
-            move_df['delta_final_prob'] = move_df['delta_final_prob'].fillna(0.0)
-
-            # Filter
-            mask = (abs(move_df['delta_implied_prob']) > 0.03) | (abs(move_df['delta_final_prob']) > 0.03)
-
-            significant_moves = move_df[mask].copy()
-
-            if significant_moves.empty:
-                st.success("No significant market movements (>3%) detected since noon.")
-            else:
-                st.write(f"Found {len(significant_moves)} games with significant movement (>3%).")
-
-                # Display Columns
-                display_cols = [
-                    'league', 'Home', 'Away',
-                    'Pick', 'Pick_noon',
-                    'Implied_Prob', 'delta_implied_prob',
-                    'final_probability', 'delta_final_prob',
-                    'delta_sentiment',
-                    'spread_pick_line', 'line_move_spread',
-                    'movement_alerts'
-                ]
-
-                # Filter cols
-                cols = [c for c in display_cols if c in significant_moves.columns]
-
-                # Format for display
-                # Percentage formatting
-                format_dict = {
-                    'Implied_Prob': '{:.1%}',
-                    'delta_implied_prob': '{:+.1%}',
-                    'final_probability': '{:.1%}',
-                    'delta_final_prob': '{:+.1%}',
-                    'line_move_spread': '{:+.1f}'
-                }
-
-                st.dataframe(significant_moves[cols].style.format(format_dict))
-
-                # Learning Insight Warning
-                # "If the line moved against the model's original pick, add a warning"
-                # This is already handled in 'movement_alerts' column constructed in backend,
-                # but let's highlight it here if present.
-
-                alerts = significant_moves[significant_moves['movement_alerts'] != ""]
-                if not alerts.empty:
-                    st.subheader("⚠️ Market Movement Alerts")
-                    for _, row in alerts.iterrows():
-                        st.warning(f"**{row['Home']} vs {row['Away']}**: {row['movement_alerts']}")
-
-            # Show all movement (optional expander)
-            with st.expander("View All Movements (Raw Data)"):
-                st.dataframe(move_df)
-
-    else:
-        st.info("Run Master Analysis to view Market Movement.")
-
-
-with tab_debug:
-    st.header("Debug")
-    flags = {
-        "odds_api": bool(odds_api_key),
-        "news_api": bool(news_api_key),
-        "model_configured": True,  # Local fallback always enabled
-        "kalshi_configured": bool(kalshi_api_key and kalshi_api_secret),
-    }
-    st.subheader("Config Flags")
-    st.json({**flags, "project_id": project_id, "location": location})
-
-    games = st.session_state.get("games", [])
-    st.subheader("Counts")
-    st.json(
-        {
-            "games_loaded_raw": len(games),
-            "games_normalized": len(games),
-            "last_rows_out": st.session_state.get("last_rows_out", 0),
-            "moneyline_available_count": st.session_state.get("market_counts", {}).get(
-                "moneyline_available_count", 0
-            ),
-            "spreads_available_count": st.session_state.get("market_counts", {}).get(
-                "spreads_available_count", 0
-            ),
-            "totals_available_count": st.session_state.get("market_counts", {}).get(
-                "totals_available_count", 0
-            ),
-            "market_rows_out": st.session_state.get("master_stats", {}).get(
-                "market_rows_out", 0
-            ),
-        }
-    )
-
-    with st.expander("TheOver Matching Debug", expanded=False):
-        t_stats = st.session_state.get("master_stats", {})
-        st.write(f"Matched Sides: {t_stats.get('theover_matched_sides', 0)}")
-        st.write(f"Matched Totals: {t_stats.get('theover_matched_totals', 0)}")
-
-        # We can try to access the raw 'theover_stats' if preserved in session,
-        # but 'master_stats' only has the counts.
-        # Ideally we would have stored the 'unmatched_examples' in session state too.
-        # Let's check 'kalshi_filter_stats' or similar?
-        # No, we didn't save 'theover_stats' to session state explicitly in the main loop block
-        # (it was a local variable in the 'Run Master Analysis' block).
-        # However, we displayed it in the main UI column earlier. This is just the Debug tab summary.
-
-    with st.expander("Team Code Generation Debug", expanded=False):
-        # Existing logic placeholder or new addition
-        pass
-
-    with st.expander("Data Sources Debug", expanded=False):
-        ds_debug = st.session_state.get("data_source_debug") or {}
-        key_sources = {
-            "api_sports_key_present": bool(api_sports_key),
-            "sportsdata_key_present": bool(sportsdata_key),
-            "api_sports_lookup": ["API_SPORTS_KEY", "APISPORTS_API_KEY", "NBA_APISPORTS_API_KEY", "NFL_APISPORTS_API_KEY"],
-            "sportsdata_lookup": ["SPORTSDATA_API_KEY", "SPORTSDATA_KEY", "NBA_SPORTSDATA_API_KEY", "NFL_SPORTSDATA_API_KEY"],
-        }
-        st.json(
-            {
-                **ds_debug,
-                "key_sources": key_sources,
-            }
-        )
-
-    st.subheader("Timezones")
-    commence_stats = st.session_state.get("commence_stats", {})
-    st.json({"timezone_used": commence_stats.get("timezone") or get_local_tz()})
-    if games:
-        samples = []
-        for g in games[:3]:
-            samples.append(
-                {
-                    "home": g.get("home_team"),
-                    "away": g.get("away_team"),
-                    "utc": g.get("commence_time_iso_utc"),
-                    "local": g.get("commence_time_iso_local"),
-                }
-            )
-        st.caption("Sample commence conversions (first 3 games)")
-        st.json(samples)
-
-    if games:
-        st.subheader("Sample normalized game")
-        # Safe access for games[0]
-        st.code(json.dumps(games[0], indent=2, default=str) if games else "{}")
-
-    st.subheader("Kalshi health")
-    kalshi_health = kalshi_health_check(league)
-    st.json(kalshi_health)
-    if kalshi_integrator and st.checkbox("Show Kalshi market counts", key="kalshi_market_counts_toggle"):
-        dbg_markets = kalshi_integrator.get_league_markets(
-            league, status="active", max_pages=2, min_prefix_hits=5
-        )
-        dbg_tickers = [str(m.get("event_ticker") or m.get("ticker") or "").upper() for m in dbg_markets]
-        dbg_game_prefix = league_game_prefix(league)
-        st.json(
-            {
-                "kalshi_debug_counts": {
-                    "game_prefix": dbg_game_prefix,
-                    "game": len([t for t in dbg_tickers if t.startswith(dbg_game_prefix)]),
-                    "base": len([
-                        t
-                        for t in dbg_tickers
-                        if t.startswith(league_series_ticker(league) or f"KX{(league or '').upper()}")
-                        and not t.startswith(dbg_game_prefix)
-                    ]),
-                    "total": len(dbg_tickers),
-                }
-            }
-        )
-    filter_stats = st.session_state.get("kalshi_filter_stats") or {}
-    if filter_stats:
-        st.subheader("Kalshi filtering stats")
-        st.json(
-            {
-                "total_markets_fetched": filter_stats.get("total_markets_fetched"),
-                "total_game_markets": filter_stats.get("total_game_markets"),
-                "avg_filtered_markets_per_game": filter_stats.get(
-                    "avg_filtered_markets_per_game"
-                ),
-                "first_game": filter_stats.get("first_game_expected"),
-            }
-        )
-        st.json(filter_stats)
-    prefix_counts_map = st.session_state.get("kalshi_prefix_counts") or {}
-    if prefix_counts_map:
-        st.subheader("Kalshi ticker prefix counts")
-        st.json(prefix_counts_map)
-        samples_map = st.session_state.get("kalshi_prefix_samples_game") or {}
-        if samples_map:
-            st.caption("First 20 game-market tickers (by league)")
-            st.json(samples_map)
-    all_markets_debug = st.session_state.get("kalshi_all_markets") or []
-    if games and all_markets_debug:
-        fg = games[0]
-        # Safe access for team codes
-        hc_cands = team_code_candidates(fg.get("league"), fg.get("home_team")) or []
-        home_code_dbg = hc_cands[0] if hc_cands else None
-
-        ac_cands = team_code_candidates(fg.get("league"), fg.get("away_team")) or []
-        away_code_dbg = ac_cands[0] if ac_cands else None
-
-        search_results = debug_search_markets_for_game(
-            all_markets_debug,
-            fg.get("home_team"),
-            fg.get("away_team"),
-            home_code_dbg,
-            away_code_dbg,
-            league=fg.get("league"),
-            limit=15,
-        )
-        st.subheader("Kalshi full-market search (first game)")
-        st.json(
-            {
-                "expected_codes": {"home": home_code_dbg, "away": away_code_dbg},
-                "found_any_winner_market_for_game": search_results.get(
-                    "found_any_winner_market_for_game"
-                ),
-                "found_any_total_market_for_game": search_results.get(
-                    "found_any_total_market_for_game"
-                ),
-                "found_any_spread_market_for_game": search_results.get(
-                    "found_any_spread_market_for_game"
-                ),
-                "counts": search_results.get("counts"),
-                "top_matches": search_results.get("matches"),
-            }
-        )
-    if st.session_state.get("kalshi_match_results"):
-        _matches_raw = st.session_state.get("kalshi_match_results")
-        matches = _matches_raw.values() if isinstance(_matches_raw, dict) else (_matches_raw or [])
-        matched = []
-        non_match_reasons: List[str] = []
-        for m in matches:
-            for res in (m.get("matches") or {}).values():
-                if res.get("kalshi_matched"):
-                    matched.append(res)
-                else:
-                    non_match_reasons.append(res.get("kalshi_reason") or "unknown")
-        if matched:
-            st.caption("Sample matched market")
-            st.json(matched[0])
-        first_game_debug = filter_stats.get("first_game_debug") or {}
-        if first_game_debug:
-            st.caption("Kalshi per-game debug (first game)")
-            st.json(first_game_debug)
-        if filter_stats.get("per_game_debug"):
-            st.caption("Kalshi per-game debug (all games)")
-            st.json(filter_stats.get("per_game_debug"))
-        if non_match_reasons:
-            reasons: Dict[str, int] = {}
-            for reason in non_match_reasons:
-                reasons[reason] = reasons.get(reason, 0) + 1
-            top_reasons = sorted(reasons.items(), key=lambda x: x[1], reverse=True)[:5]
-            st.caption("Top non-match reasons")
-            st.json(top_reasons)
-
-    if "master_stats" in st.session_state:
-        st.subheader("Master analysis stats")
-        st.json(st.session_state["master_stats"])
-
-    if st.session_state.get("last_exception"):
-        st.subheader("Last exception")
-        st.code(st.session_state["last_exception"])
-
-    if "model_last_error" in st.session_state:
-        st.error(f"Prediction Error: {st.session_state['model_last_error']}")
-
-    # Debug Export Button (Sidebar)
-    if "debug_log_history" in st.session_state and st.session_state["debug_log_history"]:
-        try:
-            debug_json = json.dumps(st.session_state["debug_log_history"], default=str, indent=2)
-            st.sidebar.download_button(
-                "Download Debug Log",
-                data=debug_json,
-                file_name="parlay_debug_export.json",
-                mime="application/json",
-                key="debug_log_export_btn"
-            )
-        except Exception:
-            pass
-
-    # TheOver.ai Debug Export (Task 2/3)
-    # Task 3: Force the "TheOver.ai Debug" Button for Raw Data
-    if "theover_raw_df" in st.session_state and not st.session_state["theover_raw_df"].empty:
-        try:
-            theover_raw_df = st.session_state["theover_raw_df"]
-            theover_raw_csv = theover_raw_df.to_csv(index=False).encode("utf-8")
-            st.sidebar.download_button(
-                "Download TheOver Debug", # Exact text requested
-                data=theover_raw_csv,
-                file_name="theover_raw_debug.csv",
-                mime="text/csv",
-                key="theover_raw_export_btn",
-                help="Exports the RAW TheOver dataframe before transformation."
-            )
-        except Exception as e:
-            logger.error(f"Failed to render TheOver raw debug button: {e}")
-
-    if "theover_debug_log" in st.session_state and st.session_state["theover_debug_log"]:
-        try:
-            theover_logs = st.session_state["theover_debug_log"]
-            # Convert list of dicts to CSV string
-            if isinstance(theover_logs, list) and len(theover_logs) > 0:
-                theover_debug_df = pd.DataFrame(theover_logs)
-                theover_csv = theover_debug_df.to_csv(index=False).encode("utf-8")
-
-                st.sidebar.download_button(
-                    "Export TheOver.ai Log", # Renamed to distinguish
-                    data=theover_csv,
-                    file_name="theover_log_dump.csv",
-                    mime="text/csv",
-                    key="theover_log_export_btn",
-                    help="Exports fuzzy match logs."
-                )
-        except Exception as e:
-            logger.error(f"Failed to render TheOver log button: {e}")
-
-    # Task 2: Snapshot Status UI
-    # UI: Add a status text in the sidebar: "✅ Noon Baseline Cached" or "⚠️ Noon Baseline Missing".
-    snapshot_status = snapshot_manager.check_noon_baseline_status()
-    st.sidebar.markdown(f"**Snapshot Status:** {snapshot_status}")
-
-    # Manual Baseline Button
-    if st.sidebar.button("Manual Baseline Snapshot"):
-        if "master_df" in st.session_state and not st.session_state["master_df"].empty:
-            success = snapshot_manager.save_noon_baseline(st.session_state["master_df"], force=True)
-            if success:
-                # Re-check status to show filename
-                now_et = snapshot_manager.get_et_now()
-                date_str = now_et.date().isoformat()
-                filename = snapshot_manager.get_snapshot_filename(date_str, "noon")
-                st.info(f"Baseline Comparison Active: {filename}")
-                st.sidebar.success("Manual Baseline Saved.")
-            else:
-                st.sidebar.error("Failed to save baseline.")
-        else:
-            st.sidebar.warning("Run Master Analysis first.")
 
 
 if __name__ == "__main__" and os.environ.get("KALSHI_SELF_TEST"):
