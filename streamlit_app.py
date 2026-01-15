@@ -26,7 +26,7 @@ from app_core.kalshi_integrator import (
 from app_core.llm_assistant import generate_confidence_explanation
 from app_core.reddit_sentiment import fetch_reddit_sentiment_map
 from app_core.sentiment_pipeline import MAX_SENTIMENT_CALLS, fetch_team_news, league_label, team_sentiment_from_articles
-from app_core.theover_ingest import process_theover_inputs, parse_theover_public_betting_text, generate_canonical_key
+from app_core.theover_ingest import process_theover_inputs, parse_theover_public_betting_text, generate_canonical_key, TEAM_ALIAS_MAP
 from app_core.team_name_matcher import TeamNameMatcher
 from app_core.prediction_engine import VERTEX_FEATURE_COLUMNS, PredictionEngine, get_prediction_prob, match_team_name
 from app_core.apisports import (
@@ -6026,7 +6026,8 @@ with tab_master:
                 commence_times_by_league: Dict[str, List[str]] = {}
                 # FIX: Accumulator initialized ONCE.
                 # We ensure it is a fresh list and is NOT reassigned inside the loop.
-                accumulated_rows = []
+                master_stats = {"rows_out": 0, "games_in": len(games), "kalshi_matches": 0, "kalshi_total": len(games), "market_rows_out": 0}
+                rows_out = []
                 for g in games:
                     # FIX: Track if ANY row was created for this game to ensure fallback works
                     ml_row_created = False
@@ -6368,8 +6369,13 @@ with tab_master:
                         pass
 
                 # Task 2: Synchronize Master Key (Use Codes, Home then Away)
-                g_home_code = team_code_for_league(g_league, g.get("home_team"))
-                g_away_code = team_code_for_league(g_league, g.get("away_team"))
+                # Fix AI Matches (Task 4): Normalize team names using alias map before code generation
+                home_raw = g.get("home_team")
+                away_raw = g.get("away_team")
+                home_norm = TEAM_ALIAS_MAP.get(home_raw, home_raw)
+                away_norm = TEAM_ALIAS_MAP.get(away_raw, away_raw)
+                g_home_code = team_code_for_league(g_league, home_norm)
+                g_away_code = team_code_for_league(g_league, away_norm)
                 # Task 2 Fix: Enforce correct parameter order explicitly using named arguments
                 date_clean = str(g_date_local or "")[:10]
                 canon_key = generate_canonical_key(league=g_league, date_str=date_clean, home_code=g_home_code, away_code=g_away_code)
@@ -9219,7 +9225,7 @@ with tab_master:
                     market_type = row.get('Market')
 
                     # Construct unique key
-                    unique_key = f"{league}_{home}_{away}_{commence}_{market_type}"
+                    unique_key = f"{league}{home}{away}{commence}{market_type}"
 
                     # Store in map (overwriting duplicates, which is intended per game/market)
                     # Prioritize rows with Kalshi match if available
@@ -9949,8 +9955,9 @@ with tab_debug:
 # --- Forced UI Persistence Block ---
 # The complex display logic is deprecated in favor of the persistent block at the bottom.
 # We wrap the old code in a False block to prevent IndentationError and execution.
-if False:
+if st.session_state.get("master_results_df") is not None:
     with tab_master:
+        df = st.session_state["master_results_df"]
         pass
 
         # NOTE: Do NOT apply Kalshi match filter here - it must only affect UI display, not exports
@@ -11380,21 +11387,6 @@ if False:
     # but removing it clean up the syntax error context.
     pass
 
-
-
-# --- FINAL UI PERSISTENCE (Task 3) ---
-# Moves the Master Results display to the absolute bottom to ensure it persists across reruns.
-if st.session_state.get("master_results_df") is not None:
-    with tab_master:
-        display_df = st.session_state["master_results_df"]
-        st.subheader(f"📊 Analyzed Picks ({len(display_df)} Rows)")
-
-        # Render the dataframe with full width
-        st.dataframe(display_df, use_container_width=True)
-
-        # Ensure Download Buttons stay visible
-        csv_data = display_df.to_csv(index=False).encode('utf-8')
-        st.download_button("Download Full CSV", csv_data, "parlay_picker_results.csv", "text/csv")
 
 
 if __name__ == "__main__" and os.environ.get("KALSHI_SELF_TEST"):
