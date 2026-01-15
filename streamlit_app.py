@@ -9376,10 +9376,10 @@ with tab_master:
                 # --- MARKET TRACKER HOOK ---
                 try:
                     snapshot_manager.save_noon_baseline(df)
-                    # Ensure current games are preserved even if comparison data is missing
-                    df_compared = market_tracker.load_and_compare(df)
-                    if df_compared is not None and not df_compared.empty:
-                        df = df_compared
+                    # Preserve original data in case the tracker returns a truncated/empty set
+                    df_with_movement = market_tracker.load_and_compare(df)
+                    if df_with_movement is not None and not df_with_movement.empty:
+                        df = df_with_movement
                     if 'theover_stats' in locals():
                         st.session_state["theover_debug_log"] = theover_stats.get("full_debug_log", [])
                         st.session_state["theover_raw_df"] = theover_stats.get("raw_df", pd.DataFrame())
@@ -11448,8 +11448,9 @@ if st.session_state.get("master_results_df") is not None:
         elif stats.get("games_in", 0) == 0:
             st.warning("No games loaded. Use the sidebar to load games first.")
         else:
-            # Task 4: Fix NameError - Use safe session state getter instead of games variable
-            st.success(f"Produced {len(st.session_state['master_results_df'])} rows from {len(st.session_state.get('games', []))} games")
+            # Display the raw count of master_results_df to reflect the current analyzed slate
+            games = st.session_state.get('games', [])
+            st.success(f"Produced {len(st.session_state['master_results_df'])} rows from {len(games)} games")
             # Explicitly format key columns
             # Ensure numeric typing before display to avoid Arrow errors
             cols_to_force_numeric = ["AI_Prob", "model_prob_home", "final_probability", "Implied_Prob", "spread_edge", "total_edge"]
