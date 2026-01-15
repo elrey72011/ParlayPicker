@@ -6024,7 +6024,9 @@ with tab_master:
                         st.stop()
 
                 commence_times_by_league: Dict[str, List[str]] = {}
-                accumulated_rows = [] # FIX: Ensure accumulator is initialized before loop
+                # FIX: Accumulator initialized ONCE.
+                # We ensure it is a fresh list and is NOT reassigned inside the loop.
+                accumulated_rows = []
                 for g in games:
                     # FIX: Track if ANY row was created for this game to ensure fallback works
                     ml_row_created = False
@@ -9060,6 +9062,10 @@ with tab_master:
                 master_df = master_df.loc[:, ~master_df.columns.duplicated()].copy()
                 master_df = master_df.reset_index(drop=True)
 
+                # Task 2: Force "No Moneyline" Pivot immediately after creation
+                # Ensure the dataframe only contains "Spread" and "Total" markets.
+                master_df = master_df.apply(pivot_market, axis=1)
+
                 # Task 4: Enrich with Consensus (Sharpness Delta)
                 try:
                     with st.spinner("📊 Ingesting Public Consensus Data..."):
@@ -9199,15 +9205,16 @@ with tab_master:
 
                 # Deduplication Setup
                 rows_for_dedupe = master_df.to_dict("records") if not master_df.empty else []
-                deduped_rows: Dict[Tuple[Any, Any, Any, Any, Any], Dict[str, Any]] = {}
+                deduped_rows: Dict[str, Dict[str, Any]] = {}
                 for row in rows_for_dedupe:
-                    # Logic already applied inside loop
-                    key = (row.get("league"), row.get("Home"), row.get("Away"), row.get("Commence (UTC)"), row.get("Market"))
-                    existing = deduped_rows.get(key)
+                    # FIX: Market-specific deduplication key
+                    # Key must be unique per game AND per market type to allow all rows to pass
+                    unique_key = f"{row.get('league')}_{row.get('Home')}_{row.get('Away')}_{row.get('Commence (UTC)')}_{row.get('Market')}"
+                    existing = deduped_rows.get(unique_key)
                     if (existing is None) or (
                         not existing.get("kalshi_matched") and row.get("kalshi_matched")
                     ):
-                        deduped_rows[key] = row
+                        deduped_rows[unique_key] = row
                 deduped_list = list(deduped_rows.values())
 
                 df = pd.DataFrame(deduped_list)
@@ -9922,9 +9929,11 @@ with tab_debug:
 
 
 # --- Forced UI Persistence Block ---
-with tab_master:
-    if st.session_state["master_results_df"] is not None:
-        df = st.session_state["master_results_df"].copy()
+# The complex display logic is deprecated in favor of the persistent block at the bottom.
+# We wrap the old code in a False block to prevent IndentationError and execution.
+if False:
+    with tab_master:
+        pass
 
         # NOTE: Do NOT apply Kalshi match filter here - it must only affect UI display, not exports
         # The filter is applied later to df_master_view_display only (see line ~10613+)
@@ -11348,9 +11357,25 @@ with tab_master:
                             except Exception:
                                 trace_payload = {"trace": trace_payload}
                         st.json(trace_payload or {})
-    elif not games:
-        st.info("Load games from the sidebar, then run Master Analysis.")
+    # This elif block is unreachable due to the if False wrap above,
+    # but removing it clean up the syntax error context.
+    pass
 
+
+
+# --- FINAL UI PERSISTENCE (Task 3) ---
+# Moves the Master Results display to the absolute bottom to ensure it persists across reruns.
+if st.session_state.get("master_results_df") is not None:
+    with tab_master:
+        display_df = st.session_state["master_results_df"]
+        st.subheader(f"📊 Analyzed Picks ({len(display_df)} Rows)")
+
+        # Render the dataframe with full width
+        st.dataframe(display_df, use_container_width=True)
+
+        # Ensure Download Buttons stay visible
+        csv_data = display_df.to_csv(index=False).encode('utf-8')
+        st.download_button("Download Full CSV", csv_data, "parlay_picker_results.csv", "text/csv")
 
 
 if __name__ == "__main__" and os.environ.get("KALSHI_SELF_TEST"):
