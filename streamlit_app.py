@@ -9538,11 +9538,11 @@ with tab_master:
             with st.spinner("📊 Ingesting Public Consensus Data..."):
                 master_df = enrich_with_consensus(master_df)
 
-                # 3. CRITICAL: Enrich the whole batch to fill 'feature_diff' columns
-                # This fixes the 'Missing feature column' warnings in the logs
-                with st.spinner("🚀 Running Batch Feature Enrichment..."):
-                    # FIX: Pass ALL api_clients so stats for all leagues are fetched, not just the last loop variable
-                    master_df = enrich_with_model_features(master_df, api_sports_clients)
+            # 3. CRITICAL: Enrich the whole batch to fill 'feature_diff' columns
+            # This fixes the 'Missing feature column' warnings in the logs
+            with st.spinner("🚀 Running Batch Feature Enrichment..."):
+                # FIX: Pass ALL api_clients so stats for all leagues are fetched, not just the last loop variable
+                master_df = enrich_with_model_features(master_df, api_sports_clients)
 
             # Task 4: Update Sentiment Score using Sharpness Delta
             # Integration: 60% Sharpness Delta, 40% Social Sentiment
@@ -9740,9 +9740,7 @@ with tab_master:
                     snapshot_manager.save_noon_baseline(df)
 
                     # 2. Compare against Noon Baseline (if Evening/Late)
-                    df_compare = market_tracker.load_and_compare(df)
-                    if df_compare is not None and not df_compare.empty:
-                        df = df_compare
+                    df = market_tracker.load_and_compare(df)
 
                     # Persist TheOver debug stats for sidebar export
                     if 'theover_stats' in locals():
@@ -9754,88 +9752,6 @@ with tab_master:
                 # ---------------------------
 
                 st.session_state["master_df"] = df
-
-with tab_debug:
-    st.header("Debug")
-    flags = {
-        "odds_api": bool(odds_api_key),
-        "news_api": bool(news_api_key),
-        "model_configured": True,  # Local fallback always enabled
-        "kalshi_configured": bool(kalshi_api_key and kalshi_api_secret),
-    }
-    st.subheader("Config Flags")
-    st.json({**flags, "project_id": project_id, "location": location})
-
-    games = st.session_state.get("games", [])
-    st.subheader("Counts")
-    st.json(
-        {
-            "games_loaded_raw": len(games),
-            "games_normalized": len(games),
-            "last_rows_out": st.session_state.get("last_rows_out", 0),
-            "moneyline_available_count": st.session_state.get("market_counts", {}).get(
-                "moneyline_available_count", 0
-            ),
-            "spreads_available_count": st.session_state.get("market_counts", {}).get(
-                "spreads_available_count", 0
-            ),
-            "totals_available_count": st.session_state.get("market_counts", {}).get(
-                "totals_available_count", 0
-            ),
-            "market_rows_out": st.session_state.get("master_stats", {}).get(
-                "market_rows_out", 0
-            ),
-        }
-    )
-
-    with st.expander("TheOver Matching Debug", expanded=False):
-        t_stats = st.session_state.get("master_stats", {})
-        st.write(f"Matched Sides: {t_stats.get('theover_matched_sides', 0)}")
-        st.write(f"Matched Totals: {t_stats.get('theover_matched_totals', 0)}")
-
-        # We can try to access the raw 'theover_stats' if preserved in session,
-        # but 'master_stats' only has the counts.
-        # Ideally we would have stored the 'unmatched_examples' in session state too.
-        # Let's check 'kalshi_filter_stats' or similar?
-        # No, we didn't save 'theover_stats' to session state explicitly in the main loop block
-        # (it was a local variable in the 'Run Master Analysis' block).
-        # However, we displayed it in the main UI column earlier. This is just the Debug tab summary.
-
-    with st.expander("Team Code Generation Debug", expanded=False):
-        # Existing logic placeholder or new addition
-        pass
-
-    with st.expander("Data Sources Debug", expanded=False):
-        ds_debug = st.session_state.get("data_source_debug") or {}
-        key_sources = {
-            "api_sports_key_present": bool(api_sports_key),
-            "sportsdata_key_present": bool(sportsdata_key),
-            "api_sports_lookup": ["API_SPORTS_KEY", "APISPORTS_API_KEY", "NBA_APISPORTS_API_KEY", "NFL_APISPORTS_API_KEY"],
-            "sportsdata_lookup": ["SPORTSDATA_API_KEY", "SPORTSDATA_KEY", "NBA_SPORTSDATA_API_KEY", "NFL_SPORTSDATA_API_KEY"],
-        }
-        st.json(
-            {
-                **ds_debug,
-                "key_sources": key_sources,
-            }
-        )
-
-    st.subheader("Timezones")
-    commence_stats = st.session_state.get("commence_stats", {})
-    st.json({"timezone_used": commence_stats.get("timezone") or get_local_tz()})
-    if games:
-        samples = []
-        for g in games[:3]:
-            samples.append(
-                {
-                    "home": g.get("home_team"),
-                    "away": g.get("away_team"),
-                    "utc": g.get("commence_time_iso_utc"),
-                    "local": g.get("commence_time_iso_local"),
-                }
-            )
-        st.caption("Sample commence conversions (first 3 games)")
-        st.json(samples)
 
     if games:
         st.subheader("Sample normalized game")
