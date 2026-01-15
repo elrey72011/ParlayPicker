@@ -9091,6 +9091,15 @@ with tab_master:
                 # DIAGNOSTIC: Log row counts after game loop
                 logger.info(f"🔍 DIAGNOSTIC: After game loop, rows_out has {len(rows_out)} rows for {len(games)} games")
                 logger.info(f"🔍 DIAGNOSTIC: master_stats shows {master_stats.get('games_in', 0)} games_in")
+                logger.info(f"🔍 DIAGNOSTIC: master_stats market_rows_out: {master_stats.get('market_rows_out', 0)}")
+
+                # Count rows by market type
+                if rows_out:
+                    market_type_counts = {}
+                    for row in rows_out:
+                        mt = row.get('Market', 'Unknown')
+                        market_type_counts[mt] = market_type_counts.get(mt, 0) + 1
+                    logger.info(f"🔍 DIAGNOSTIC: Rows by market type: {market_type_counts}")
 
                 # Task 1: Create DataFrame
                 master_df = pd.DataFrame.from_records(rows_out)
@@ -9263,8 +9272,10 @@ with tab_master:
                     commence = row.get('Commence (UTC)')
                     market_type = row.get('Market')
 
-                    # Construct unique key
-                    unique_key = f"{league}{home}{away}{commence}{market_type}"
+                    # Construct unique key using tuple to avoid collisions from string concatenation
+                    # Previous bug: String concat like f"{league}{home}{away}..." could cause collisions
+                    # Example: "NH"+"LA"+"..." vs "NHL"+"A"+"..." would both be "NHLA..."
+                    unique_key = (league, home, away, commence, market_type)
 
                     # Store in map (overwriting duplicates, which is intended per game/market)
                     # Prioritize rows with Kalshi match if available
