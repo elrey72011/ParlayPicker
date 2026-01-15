@@ -143,6 +143,11 @@ def load_and_compare(current_df: pd.DataFrame):
         # Merge on composite key
         merged = pd.merge(current_df, baseline_subset, on=['league', 'Home', 'Away'], how='left')
 
+        # Safety Check: Ensure we didn't lose rows (Left Join should preserve them)
+        if len(merged) < len(current_df):
+            logger.warning(f"CRITICAL: Market Tracker merge truncated data! Input: {len(current_df)}, Output: {len(merged)}")
+            return current_df
+
         # --- CALCULATE DELTAS ---
 
         # Helper for safe numeric subtraction

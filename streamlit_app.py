@@ -7458,7 +7458,7 @@ with tab_master:
                     if p_side:
                         if "OVER" in str(p_side).upper(): theover_total_pick_side = "Over"
                         elif "UNDER" in str(p_side).upper(): theover_total_pick_side = "Under"
-                if spread_pick:
+                if spread_pick or g.get("home_spread_point") is not None:
                     spread_market_prob, spread_market_pairs_count, spread_prob_method, spread_market_placeholder = compute_market_prob_from_offers(
                         spread_offers, spread_pick_side_key, market_type="spread"
                     )
@@ -7495,7 +7495,7 @@ with tab_master:
                     )
 
                 total_pick_side_key = str(total_pick_side or "").lower() if total_pick_side else None
-                if total_pick:
+                if total_pick or g.get("total_point") is not None:
                     total_market_prob, total_market_pairs_count, total_prob_method, total_market_placeholder = compute_market_prob_from_offers(
                         total_offers, total_pick_side_key, market_type="total"
                     )
@@ -9376,19 +9376,12 @@ with tab_master:
                 # --- MARKET TRACKER HOOK ---
                 try:
                     snapshot_manager.save_noon_baseline(df)
-                    # PRESERVE ORIGINAL DATA: Stop the inner-join from purging games missing baseline data
-                    df_temp = market_tracker.load_and_compare(df)
-                    if df_temp is not None and not df_temp.empty:
-                        # Safety check: Only use tracker result if it doesn't massively truncate the data
-                        # Prevent purging games that lack baseline comparison data
-                        original_count = len(df)
-                        tracker_count = len(df_temp)
-                        # Allow up to 10% loss, but reject if we lose more than that (indicates purge bug)
-                        if tracker_count >= (original_count * 0.9):
-                            df = df_temp
-                            logger.info(f"✅ Market Tracker: Preserved {tracker_count}/{original_count} rows")
-                        else:
-                            logger.warning(f"⚠️  Market Tracker: REJECTED truncation ({tracker_count}/{original_count} rows). Keeping original data.")
+                    # Force preservation of all analyzed games even if movement data is missing
+                    df_with_movement = market_tracker.load_and_compare(df)
+                    if df_with_movement is not None and not df_with_movement.empty:
+                        df = df_with_movement
+                    # Else: df remains the full analyzed slate
+
                     if 'theover_stats' in locals():
                         st.session_state["theover_debug_log"] = theover_stats.get("full_debug_log", [])
                         st.session_state["theover_raw_df"] = theover_stats.get("raw_df", pd.DataFrame())
@@ -10867,8 +10860,8 @@ if st.session_state.get("master_results_df") is not None:
         if "Market" in top_df.columns:
              top_df = top_df[top_df["Market"] != "Moneyline"]
 
-        if not include_low_in_top:
-            top_df = top_df[top_df["Pick_Confidence"].isin(["HIGH", "MEDIUM"])]
+        # if not include_low_in_top:
+        #     top_df = top_df[top_df["Pick_Confidence"].isin(["HIGH", "MEDIUM"])]
         try:
             top_df["st_conf_rank"] = top_df["st_conf_rank"].fillna(0)
             top_df["decisiveness"] = top_df["decisiveness"].fillna(0.0)
