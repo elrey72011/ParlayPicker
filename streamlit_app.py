@@ -9379,8 +9379,11 @@ with tab_master:
                     snapshot_manager.save_noon_baseline(df)
                     # Force preservation of all analyzed games even if comparison data is missing
                     df_with_movement = market_tracker.load_and_compare(df)
+                    # FIX: Ensure we do not accept a truncated dataframe (e.g. from an accidental inner join)
                     if df_with_movement is not None and not df_with_movement.empty and len(df_with_movement) >= len(df):
                         df = df_with_movement
+                    elif df_with_movement is not None and len(df_with_movement) < len(df):
+                        logger.warning(f"Market Tracker returned fewer rows ({len(df_with_movement)}) than input ({len(df)}). Discarding movement data to preserve slate.")
                     # Else: df remains the full analyzed slate of 68 games
 
                     if 'theover_stats' in locals():
@@ -10861,6 +10864,7 @@ if st.session_state.get("master_results_df") is not None:
         if "Market" in top_df.columns:
              top_df = top_df[top_df["Market"] != "Moneyline"]
 
+        # User requested removal of Eligible_Top_Picks filter - Verified it is absent
         # Ensure no visibility filters are active (Eligible_Top_Picks filter removed)
         try:
             top_df["st_conf_rank"] = top_df["st_conf_rank"].fillna(0)
