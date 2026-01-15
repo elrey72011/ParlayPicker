@@ -6065,6 +6065,15 @@ with tab_master:
                 all_markets_flat: List[Dict[str, Any]] = []
                 for mkts in kalshi_markets_by_league.values():
                     all_markets_flat.extend(mkts)
+
+                # DIAGNOSTIC: Log Kalshi market counts
+                logger.info(f"🔍 KALSHI DIAGNOSTIC: Fetched {len(all_markets_flat)} total Kalshi markets across {len(kalshi_markets_by_league)} leagues")
+                for lg, mkts in kalshi_markets_by_league.items():
+                    logger.info(f"🔍 KALSHI DIAGNOSTIC: League {lg} has {len(mkts)} markets")
+                if all_markets_flat:
+                    sample_tickers = [m.get('ticker') or m.get('event_ticker') for m in all_markets_flat[:10]]
+                    logger.info(f"🔍 KALSHI DIAGNOSTIC: Sample market tickers: {sample_tickers}")
+
                 st.session_state["kalshi_all_markets"] = all_markets_flat
                 winner_refetch_attempted = False
                 full_search_first_game: Optional[Dict[str, Any]] = None
@@ -7185,6 +7194,10 @@ with tab_master:
                 try:
                     home_code = team_code_for_league(league_name, home)
                     away_code = team_code_for_league(league_name, away)
+
+                    # DIAGNOSTIC: Log team code generation for first few games
+                    if idx < 3:
+                        logger.info(f"🔍 KALSHI TEAM CODES: Game {idx+1} - {home} → {home_code}, {away} → {away_code}")
                 except Exception:
                     home_code, away_code = None, None
 
@@ -7200,6 +7213,10 @@ with tab_master:
                 )
 
                 # --- 2. Kalshi Matching Logic (RESTORED) ---
+                # DIAGNOSTIC: Log market filtering for first few games
+                if idx < 3:
+                    logger.info(f"🔍 KALSHI FILTERING: Game {idx+1} has {len(league_markets)} league markets before filtering")
+
                 filtered_markets = filter_kalshi_game_markets(
                     league_markets,
                     commence_for_match,
@@ -7214,6 +7231,10 @@ with tab_master:
                 deduped = {m.get("event_ticker") or m.get("ticker"): m for m in filtered_markets}
                 filtered_markets = list(deduped.values())
                 filtered_counts.append(len(filtered_markets))
+
+                # DIAGNOSTIC: Log filtered market count
+                if idx < 3:
+                    logger.info(f"🔍 KALSHI FILTERING: Game {idx+1} has {len(filtered_markets)} markets after filtering")
 
                 winner_reason_override = None
                 if (idx == 0 and first_game_full_search and not first_game_full_search.get("found_any_winner_market_for_game")):
@@ -7240,6 +7261,12 @@ with tab_master:
                 kalshi_winner = kalshi_matches.get("winner", {})
                 kalshi_spread = kalshi_matches.get("spread", {})
                 kalshi_total = kalshi_matches.get("total", {})
+
+                # DIAGNOSTIC: Log Kalshi matching results for each game
+                if kalshi_winner.get("kalshi_matched") or kalshi_spread.get("kalshi_matched") or kalshi_total.get("kalshi_matched"):
+                    logger.info(f"🔍 KALSHI MATCH SUCCESS: {home} vs {away} - Winner: {kalshi_winner.get('kalshi_matched')}, Spread: {kalshi_spread.get('kalshi_matched')}, Total: {kalshi_total.get('kalshi_matched')}")
+                else:
+                    logger.warning(f"⚠️  KALSHI MATCH FAILED: {home} vs {away} - Reason: {kalshi_winner.get('kalshi_reason', 'unknown')}, Candidates: {len(filtered_markets)}, League markets: {len(league_markets)}")
 
                 # Default sentiment_diff if match fails (Requirement: "default the sentiment_diff to 0.0... if team names do not match")
                 if not kalshi_winner.get("kalshi_matched"):
@@ -9061,8 +9088,15 @@ with tab_master:
                 # Move dataframe creation and enrichment OUTSIDE the loop.
                 # This prevents overwriting and ensures all games are processed correctly.
 
+                # DIAGNOSTIC: Log row counts after game loop
+                logger.info(f"🔍 DIAGNOSTIC: After game loop, rows_out has {len(rows_out)} rows for {len(games)} games")
+                logger.info(f"🔍 DIAGNOSTIC: master_stats shows {master_stats.get('games_in', 0)} games_in")
+
                 # Task 1: Create DataFrame
                 master_df = pd.DataFrame.from_records(rows_out)
+
+                # DIAGNOSTIC: Log after dataframe creation
+                logger.info(f"🔍 DIAGNOSTIC: After pd.DataFrame.from_records, master_df has {len(master_df)} rows")
 
                 # FIX: Deduplicate columns immediately to prevent "Duplicate labels" error
                 master_df = master_df.loc[:, ~master_df.columns.duplicated()].copy()
@@ -9213,6 +9247,11 @@ with tab_master:
                 # Deduplication Setup
                 # Ensure we have a list of records
                 rows_for_dedupe = master_df.to_dict("records") if not master_df.empty else []
+
+                # DIAGNOSTIC: Log before deduplication
+                logger.info(f"🔍 DIAGNOSTIC: Before deduplication, master_df has {len(master_df)} rows")
+                logger.info(f"🔍 DIAGNOSTIC: rows_for_dedupe has {len(rows_for_dedupe)} records")
+
                 deduped_rows: Dict[str, Dict[str, Any]] = {}
 
                 for row in rows_for_dedupe:
@@ -9240,6 +9279,14 @@ with tab_master:
                         # Otherwise keep existing (first seen)
 
                 deduped_list = list(deduped_rows.values())
+
+                # DIAGNOSTIC: Log after deduplication
+                logger.info(f"🔍 DIAGNOSTIC: After deduplication, deduped_list has {len(deduped_list)} rows")
+                if len(deduped_list) < len(rows_for_dedupe):
+                    logger.warning(f"⚠️  DIAGNOSTIC: Deduplication removed {len(rows_for_dedupe) - len(deduped_list)} rows!")
+                    # Sample some unique keys to see what's being kept
+                    sample_keys = list(deduped_rows.keys())[:5]
+                    logger.info(f"🔍 DIAGNOSTIC: Sample deduped keys: {sample_keys}")
 
                 df = pd.DataFrame(deduped_list)
                 if "Unnamed: 0" in df.columns:
