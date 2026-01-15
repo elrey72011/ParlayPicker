@@ -6208,12 +6208,35 @@ with tab_master:
                 winner_refetch_attempted = False
                 first_game_full_search = None
 
+                # DIAGNOSTIC: Log data quality for all games
+                logger.info(f"📊 DATA QUALITY CHECK: Loaded {len(games_to_process)} games")
+                games_with_ml = sum(1 for g in games_to_process if g.get('home_ml_price') is not None)
+                games_with_spread = sum(1 for g in games_to_process if g.get('home_spread_point') is not None)
+                games_with_total = sum(1 for g in games_to_process if g.get('total_point') is not None)
+                games_with_any_market = sum(1 for g in games_to_process if any([
+                    g.get('home_ml_price') is not None,
+                    g.get('home_spread_point') is not None,
+                    g.get('total_point') is not None
+                ]))
+                logger.info(f"  - Games with ML data: {games_with_ml} ({games_with_ml/len(games_to_process)*100:.1f}%)")
+                logger.info(f"  - Games with Spread data: {games_with_spread} ({games_with_spread/len(games_to_process)*100:.1f}%)")
+                logger.info(f"  - Games with Total data: {games_with_total} ({games_with_total/len(games_to_process)*100:.1f}%)")
+                logger.info(f"  - Games with ANY market data: {games_with_any_market} ({games_with_any_market/len(games_to_process)*100:.1f}%)")
+
                 for idx, g in enumerate(games_to_process):
                     g = g.copy()
                     # Initialize loop-local variables to prevent NameError
                     model_prob_home = None
                     model_warn = None
                     sentiment_diff = None  # Ensure initialized
+
+                    # DIAGNOSTIC: Track row creation for each game
+                    ml_row_created = False
+                    spread_row_created = False
+                    total_row_created = False
+                    game_home = g.get("home_team", "Unknown")
+                    game_away = g.get("away_team", "Unknown")
+                    logger.info(f"🎮 Processing game {idx+1}/{len(games_to_process)}: {game_away} @ {game_home}")
 
                     # Weights & Status Defaults (Fix NameErrors)
                     spread_weights = {}
@@ -8357,11 +8380,16 @@ with tab_master:
                     warnings = list(dict.fromkeys(warnings + ["moneyline_extreme_skipped"]))
 
                 # SPREAD ROW
-                if g.get("home_spread_point") is not None and spread_pick is not None:
+                # FIX: Create spread row if spread data exists, even if spread_pick is None
+                # This ensures all games with spread data create output rows
+                if g.get("home_spread_point") is not None:
                     ai_prob_base = None
                     ai_prob_row = None
                     model_spread_prob = None
                     warnings.append("market_based_spread_prob")
+                    # Add warning if spread_pick is None
+                    if spread_pick is None:
+                        warnings.append("spread_pick_none")
                     warnings_field = ";".join(warnings) if warnings else None
                     spread_row = {
                         "league": league_name, "Home": home, "Away": away,
@@ -8643,10 +8671,15 @@ with tab_master:
                         logger.warning(f"⚠️  DIAGNOSTIC: Game {idx+1} ({home} vs {away}) - NO SPREAD ROW: home_spread_point={spread_point}, spread_pick={spread_pick}")
 
                 # TOTAL ROW
-                if g.get("total_point") is not None and total_pick is not None:
+                # FIX: Create total row if total data exists, even if total_pick is None
+                # This ensures all games with total data create output rows
+                if g.get("total_point") is not None:
                     ai_prob_base = None
                     ai_prob_row = None
                     warnings.append("market_based_total_prob")
+                    # Add warning if total_pick is None
+                    if total_pick is None:
+                        warnings.append("total_pick_none")
                     warnings_field = ";".join(warnings) if warnings else None
                     total_row = {
                         "league": league_name, "Home": home, "Away": away,
@@ -8918,6 +8951,21 @@ with tab_master:
                     if idx < 5:  # Only log first 5 games to avoid spam
                         total_point = g.get("total_point")
                         logger.warning(f"⚠️  DIAGNOSTIC: Game {idx+1} ({home} vs {away}) - NO TOTAL ROW: total_point={total_point}, total_pick={total_pick}")
+
+                # DIAGNOSTIC: Log row creation summary for this game
+                if not (ml_row_created or spread_row_created or total_row_created):
+                    logger.warning(
+                        f"⚠️  NO ROWS CREATED for game {idx+1}/{len(games_to_process)} ({game_away} @ {game_home})\n"
+                        f"    home_ml_price={g.get('home_ml_price')}, extreme_ml={extreme_ml if 'extreme_ml' in locals() else 'N/A'}\n"
+                        f"    home_spread_point={g.get('home_spread_point')}, spread_pick={spread_pick if 'spread_pick' in locals() else 'N/A'}\n"
+                        f"    total_point={g.get('total_point')}, total_pick={total_pick if 'total_pick' in locals() else 'N/A'}"
+                    )
+                else:
+                    rows_created_str = []
+                    if ml_row_created: rows_created_str.append("ML")
+                    if spread_row_created: rows_created_str.append("Spread")
+                    if total_row_created: rows_created_str.append("Total")
+                    logger.info(f"  ✓ Created rows for game {idx+1}: {', '.join(rows_created_str)}")
 
                 # --- 5. FALLBACK: "NONE" MARKET ROW ---
                 # Ensure a row is created for the game even if specific market data is missing
@@ -9313,9 +9361,19 @@ with tab_master:
                 logger.info(f"🔍 DIAGNOSTIC: After deduplication, deduped_list has {len(deduped_list)} rows")
                 if len(deduped_list) < len(rows_for_dedupe):
                     logger.warning(f"⚠️  DIAGNOSTIC: Deduplication removed {len(rows_for_dedupe) - len(deduped_list)} rows!")
-                    # Sample some unique keys to see what's being kept
-                    sample_keys = list(deduped_rows.keys())[:5]
-                    logger.info(f"🔍 DIAGNOSTIC: Sample deduped keys: {sample_keys}")
+
+                # Count unique games (regardless of market type)
+                unique_games = set()
+                for row in deduped_list:
+                    game_key = (row.get('league'), row.get('Home'), row.get('Away'), row.get('Commence (UTC)'))
+                    unique_games.add(game_key)
+                logger.info(f"🔍 DIAGNOSTIC: Unique games in deduped_list: {len(unique_games)}")
+                logger.info(f"🔍 DIAGNOSTIC: Average rows per game: {len(deduped_list) / len(unique_games) if unique_games else 0:.2f}")
+
+                # Sample some rows to see what's being kept
+                if deduped_list:
+                    sample_games = list(unique_games)[:5]
+                    logger.info(f"🔍 DIAGNOSTIC: Sample games: {[f'{g[1]} vs {g[2]}' for g in sample_games]}")
 
                 df = pd.DataFrame(deduped_list)
                 if "Unnamed: 0" in df.columns:
