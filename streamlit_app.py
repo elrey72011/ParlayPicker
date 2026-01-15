@@ -9500,42 +9500,42 @@ with tab_master:
             # Must be done before sentiment integration or model features if model uses it
             with st.spinner("📊 Ingesting Public Consensus Data..."):
                 master_df = enrich_with_consensus(master_df)
-    
+
                 # 3. CRITICAL: Enrich the whole batch to fill 'feature_diff' columns
                 # This fixes the 'Missing feature column' warnings in the logs
                 with st.spinner("🚀 Running Batch Feature Enrichment..."):
                     # FIX: Pass ALL api_clients so stats for all leagues are fetched, not just the last loop variable
                     master_df = enrich_with_model_features(master_df, api_sports_clients)
-    
+
             # Task 4: Update Sentiment Score using Sharpness Delta
             # Integration: 60% Sharpness Delta, 40% Social Sentiment
             # We need to update 'Sentiment_Diff' or create a new combined score.
             # Currently 'Sentiment_Diff' is used in compute_final_probability via sentiment_score.
-    
+
             def _update_sentiment_score(row):
                 social_diff = row.get("Sentiment_Diff")
                 if social_diff is None: social_diff = 0.0
-    
+
                 sharpness = row.get("sharpness_delta")
                 if sharpness is None: sharpness = 0.0
-    
+
                 # Hybrid Formula
                 # Normalize sharpness (e.g. 0.15 delta -> 1.0 score equiv? or keep raw?)
                 # Sentiment Diff is typically -1 to 1.
                 # Sharpness Delta is typically -0.3 to +0.3.
                 # Let's scale sharpness by 3.33 to map 0.3 to 1.0 roughly.
                 sharpness_scaled = sharpness * 3.33
-    
+
                 # Weighted Combo
                 hybrid_score = (0.6 * sharpness_scaled) + (0.4 * social_diff)
                 return hybrid_score
-    
+
             if 'Sentiment_Diff' in master_df.columns and 'sharpness_delta' in master_df.columns:
                 master_df['Sentiment_Diff'] = master_df.apply(_update_sentiment_score, axis=1)
-    
+
                 # Ensure use_model_numeric_probs is synchronized from session state
                 use_model_numeric_probs = st.session_state.get("use_model_numeric_probs", True)
-    
+
                 # 4. BATCH PREDICTION: Local Inference
                 master_df = clean_df(master_df)
                 # Local inference is always "configured" (or falls back)
@@ -9547,9 +9547,9 @@ with tab_master:
                         if missing_cols:
                             zeros_df = pd.DataFrame(0.0, index=master_df.index, columns=missing_cols)
                             master_df = pd.concat([master_df, zeros_df], axis=1)
-    
+
                         inference_df = master_df[VERTEX_FEATURE_COLUMNS].copy()
-    
+
                         # 3. Sanitize feature batch
                         for col in VERTEX_FEATURE_COLUMNS:
                             col_data = inference_df[col]
@@ -9557,11 +9557,11 @@ with tab_master:
                                 col_data = col_data.iloc[:, 0]
                             default_val = 0.5 if "prob" in col else 0.0
                             inference_df[col] = pd.to_numeric(col_data, errors='coerce').fillna(default_val).astype(float)
-    
+
                         # 6. Accumulate Debug Data (Base Dict + Feature Vector)
                         if "debug_log_history" not in st.session_state:
                             st.session_state["debug_log_history"] = []
-    
+
                         try:
                             # Capture base metadata
                             debug_base = master_df[['Home', 'Away', 'league', 'Commence (UTC)']].copy()
@@ -9571,7 +9571,7 @@ with tab_master:
                             st.session_state["debug_log_history"].extend(debug_combined.to_dict('records'))
                         except Exception as e:
                             logger.warning(f"Failed to accumulate debug data: {e}")
-    
+
                         # 7. Call local prediction
                         if not inference_df.empty:
                             engine = get_prediction_engine()
@@ -9581,7 +9581,7 @@ with tab_master:
                                 logger.error(f"Prediction batch failed: {e}")
                                 st.warning(f"AI Data Unavailable (using defaults): {e}")
                                 probs = [0.5] * len(inference_df)
-    
+
                             # FIX: Stop Using Indexing for AI Results (Safe Map Approach) - Logic Update: Pad with 0.5 instead of fail
                             if probs:
                                 # Handle length mismatch by padding or truncating
@@ -9591,11 +9591,11 @@ with tab_master:
                                 elif len(probs) > len(inference_df):
                                     logger.warning(f"Prediction length mismatch (long): got {len(probs)}, expected {len(inference_df)}. Truncating.")
                                     probs = list(probs)[:len(inference_df)]
-    
+
                                 # Wrap in Series to match index explicitly (convert to list to drop any upstream index)
                                 # This aligns by index explicitly as requested to prevent mismatch
                                 predictions_series = pd.Series(list(probs), index=inference_df.index)
-    
+
                                 # Assign using loc to ensure alignment
                                 master_df.loc[inference_df.index, 'AI_Prob'] = predictions_series
                                 master_df.loc[inference_df.index, 'ai_prob_base'] = predictions_series # Persist base if needed
@@ -9605,11 +9605,11 @@ with tab_master:
                                 master_df.loc[inference_df.index, 'ai_prob_base'] = 0.5
                         else:
                             logger.info("Skipping prediction: inference_df is empty.")
-    
+
                         # Safe Edge Calculation
                         implied_probs = pd.to_numeric(master_df.get("Implied_Prob"), errors='coerce').fillna(0.5)
                         master_df["AI_Edge"] = master_df["AI_Prob"] - implied_probs
-    
+
                 # 4. SHOTGUN ACTIVATION: Use ParlayOptimizer to tier the results
                 if ParlayOptimizer:
                     # FIX: Use absolute path for robustness
@@ -9617,19 +9617,19 @@ with tab_master:
                     optimizer = ParlayOptimizer(model_dir=model_dir_abs)
                     shotgun_picks = optimizer.get_shotgun_picks(master_df)
                     st.session_state["shotgun_data"] = shotgun_picks
-    
+
                 # Collapse to one row per game (prefer the first generated row, typically moneyline) for Master View
                 # NOTE: master_df now has ALL rows (ML/Spread/Total). We duplicate logic for deduping for the UI view if needed,
                 # but the prompt implies we persist the FULL master_df to session state for tabs to use.
-    
+
                 # We need to preserve the sentiment metadata enrichment logic
                 sentiment_meta_for_export = sentiment_pack_meta or init_sentiment_meta()
                 # Vectorized or simple loop to fill sentiment meta if missing
                 # (Assuming enrich_with_model_features preserves existing cols, which it does)
-    
+
                 # Deduping logic for "Master View" (one row per game)
                 # We'll create a view for display, but keep master_df full for shotgun/optimizer.
-    
+
                 # But wait, the previous code replaced `df` with `deduped_list`.
                 # If we overwrite `st.session_state["master_df"]` with the full `master_df`,
                 # downstream code expecting 1 row per game might break.
@@ -9639,7 +9639,7 @@ with tab_master:
                 # We should probably assign `df` to the deduped version for the immediate display logic below,
                 # but maybe store `master_df_full` or similar?
                 # Actually, let's follow the pattern but adapt for the existing `df` variable usage.
-    
+
                 # Apply sentiment meta to master_df
                 # (Simulating what the loop did)
                 if not master_df.empty:
@@ -9656,7 +9656,7 @@ with tab_master:
                     # Create DataFrame for new columns and concat
                     meta_df = pd.DataFrame(meta_updates, index=master_df.index)
                     master_df = pd.concat([master_df, meta_df], axis=1)
-    
+
                     # Fill remaining fields using bulk fillna
                     # Fix: Ensure no 'None' values are passed to fillna
                     fill_map = {
@@ -9671,7 +9671,7 @@ with tab_master:
                     # Fill visual cols with empty string
                     visual_cols = ["spread_sentiment_arrow", "total_sentiment_arrow", "spread_sentiment_note", "total_sentiment_note"]
                     master_df[visual_cols] = master_df[visual_cols].fillna("")
-    
+
                 # Re-implement deduping for the `df` variable used by the UI below
                 rows_for_dedupe = master_df.to_dict("records")
                 deduped_rows: Dict[Tuple[Any, Any, Any, Any], Dict[str, Any]] = {}
@@ -9683,28 +9683,30 @@ with tab_master:
                     ):
                         deduped_rows[key] = row
                 deduped_list = list(deduped_rows.values())
-    
+
                 if st.session_state.get("kalshi_match_only"):
                     deduped_list = [r for r in deduped_list if r.get("kalshi_matched")]
-    
+
                 df = pd.DataFrame(deduped_list)
                 if "Unnamed: 0" in df.columns:
                     df = df.drop(columns=["Unnamed: 0"])
-            
+        
                 # 5. UI PERSISTENCE
                 # We persist the DEDUPED df as "master_df" because that's what the UI expects for the "Master Analysis" tab table.
                 # The shotgun data is stored separately.
                 # 1. Deduplicate Master DF (Fix Duplicate Column Crash)
                 df = df.loc[:, ~df.columns.duplicated()].copy()
-    
+
                 # --- MARKET TRACKER HOOK (Snapshot System) ---
                 try:
                     # 1. Save Noon Baseline (Task 2: Use Snapshot Manager)
                     snapshot_manager.save_noon_baseline(df)
-    
+
                     # 2. Compare against Noon Baseline (if Evening/Late)
-                    df = market_tracker.load_and_compare(df)
-    
+                    df_compare = market_tracker.load_and_compare(df)
+                    if df_compare is not None and not df_compare.empty:
+                        df = df_compare
+
                     # Persist TheOver debug stats for sidebar export
                     if 'theover_stats' in locals():
                         st.session_state["theover_debug_log"] = theover_stats.get("full_debug_log", [])
@@ -9713,76 +9715,8 @@ with tab_master:
                 except Exception as e:
                     logger.error(f"Market Tracker Error: {e}")
                 # ---------------------------
-    
+
                 st.session_state["master_df"] = df
-
-            # Ensure numeric
-            move_df['delta_implied_prob'] = pd.to_numeric(move_df.get('delta_implied_prob'), errors='coerce').fillna(0.0)
-
-            # We don't have delta_final_prob explicitly calculated in market_tracker, but we have delta_implied_prob.
-            # User requirement: "final_probability or implied_prob moved by > 3%"
-            # Let's calculate delta_final_prob here if possible
-            if 'final_probability' in move_df.columns and 'final_probability_noon' in move_df.columns:
-                move_df['delta_final_prob'] = pd.to_numeric(move_df['final_probability'], errors='coerce') - pd.to_numeric(move_df['final_probability_noon'], errors='coerce')
-            else:
-                move_df['delta_final_prob'] = 0.0
-
-            move_df['delta_final_prob'] = move_df['delta_final_prob'].fillna(0.0)
-
-            # Filter
-            mask = (abs(move_df['delta_implied_prob']) > 0.03) | (abs(move_df['delta_final_prob']) > 0.03)
-
-            significant_moves = move_df[mask].copy()
-
-            if significant_moves.empty:
-                st.success("No significant market movements (>3%) detected since noon.")
-            else:
-                st.write(f"Found {len(significant_moves)} games with significant movement (>3%).")
-
-                # Display Columns
-                display_cols = [
-                    'league', 'Home', 'Away',
-                    'Pick', 'Pick_noon',
-                    'Implied_Prob', 'delta_implied_prob',
-                    'final_probability', 'delta_final_prob',
-                    'delta_sentiment',
-                    'spread_pick_line', 'line_move_spread',
-                    'movement_alerts'
-                ]
-
-                # Filter cols
-                cols = [c for c in display_cols if c in significant_moves.columns]
-
-                # Format for display
-                # Percentage formatting
-                format_dict = {
-                    'Implied_Prob': '{:.1%}',
-                    'delta_implied_prob': '{:+.1%}',
-                    'final_probability': '{:.1%}',
-                    'delta_final_prob': '{:+.1%}',
-                    'line_move_spread': '{:+.1f}'
-                }
-
-                st.dataframe(significant_moves[cols].style.format(format_dict))
-
-                # Learning Insight Warning
-                # "If the line moved against the model's original pick, add a warning"
-                # This is already handled in 'movement_alerts' column constructed in backend,
-                # but let's highlight it here if present.
-
-                alerts = significant_moves[significant_moves['movement_alerts'] != ""]
-                if not alerts.empty:
-                    st.subheader("⚠️ Market Movement Alerts")
-                    for _, row in alerts.iterrows():
-                        st.warning(f"**{row['Home']} vs {row['Away']}**: {row['movement_alerts']}")
-
-            # Show all movement (optional expander)
-            with st.expander("View All Movements (Raw Data)"):
-                st.dataframe(move_df)
-
-    else:
-        st.info("Run Master Analysis to view Market Movement.")
-
 
 with tab_debug:
     st.header("Debug")
@@ -10176,6 +10110,299 @@ if st.session_state.get("master_results_df") is not None:
             "kalshi_best_score",
             "kalshi_match_reason",
             "kalshi_status",
+            "llm_disagreement_flag",
+            "consensus_weight_ai",
+            "consensus_weight_market",
+            "consensus_weight_kalshi",
+            "consensus_weight_sentiment",
+            "consensus_weight_total",
+            "consensus_guardrails",
+            "gemini_error",
+        ]
+        df_master_view_display = df_master_view.drop(columns=[c for c in trace_cols if c in df_master_view.columns], errors="ignore")
+        show_moneyline_details = st.checkbox("Show Moneyline details", value=False, key="show_moneyline_details")
+        if not show_moneyline_details:
+            ml_detail_cols = [
+                "Pick",
+                "Book",
+                "Home_ML",
+                "Away_ML",
+                "Implied_Prob",
+                "AI_Prob",
+                "ai_prob_adj",
+                "consensus_prob",
+                "consensus_prob_adj",
+                "kalshi_prob",
+                "kalshi_prob_used",
+                "kalshi_event_ticker",
+                "kalshi_event_ticker_used",
+                "edge_vs_odds",
+                "model_minus_market",
+            ]
+            df_master_view_display = df_master_view_display.drop(columns=[c for c in ml_detail_cols if c in df_master_view_display.columns], errors="ignore")
+        st.caption(f"Column order (first 8): {', '.join(list(df_master_view_display.columns[:8]))} ...")
+        df_master_view_display["Spread_Range"] = df_master_view_display.apply(
+            lambda r: f"{r['spread_min']} to {r['spread_max']} (med {r['spread_med']})"
+            if pd.notnull(r.get("spread_min")) and pd.notnull(r.get("spread_max"))
+            else "N/A",
+            axis=1,
+        )
+        df_master_view_display = df_master_view_display.copy()
+        df_master_view_display["Total_Range"] = df_master_view_display.apply(
+            lambda r: f"{r['total_min']} to {r['total_max']} (med {r['total_med']})"
+            if pd.notnull(r.get("total_min")) and pd.notnull(r.get("total_max"))
+            else "N/A",
+            axis=1,
+        )
+        df_master_view_display = df_master_view_display.copy()
+
+        def _market_badge(r):
+            badges_local = []
+            if (pd.notnull(r.get("spread_min")) and pd.notnull(r.get("spread_max")) and abs((r.get("spread_max") or 0) - (r.get("spread_min") or 0)) >= 2):
+                badges_local.append("WIDE MARKET")
+            if (pd.notnull(r.get("total_min")) and pd.notnull(r.get("total_max")) and abs((r.get("total_max") or 0) - (r.get("total_min") or 0)) >= 3):
+                badges_local.append("WIDE MARKET")
+            if (r.get("spread_books_count") == 1) or (r.get("total_books_count") == 1):
+                badges_local.append("THIN MARKET")
+            return ";".join(sorted(set(badges_local))) if badges_local else None
+        df_master_view_display["Market_Badge"] = df_master_view_display.apply(_market_badge, axis=1)
+        df_master_view_display = df_master_view_display.copy()
+        placeholder_count = int((df_master_view_display.get("odds_placeholder_detected") == True).sum()) if "odds_placeholder_detected" in df_master_view_display.columns else 0
+        implied_null_count = int(df_master_view_display["Implied_Prob"].isna().sum()) if "Implied_Prob" in df_master_view_display.columns else 0
+        st.caption(f"Debug: placeholder odds rows={placeholder_count}; Implied_Prob null rows={implied_null_count}")
+
+        # --- NEW: GAME SUMMARY VIEW ---
+        st.subheader("Game Summary View")
+        game_summary_df = build_game_summary(st.session_state["master_df"])
+
+        if not game_summary_df.empty:
+            # Reorder columns as requested
+            summary_cols = [
+                "League", "Home", "Away", "Commence UTC", "Commence (Local)",
+                "Best Overall Pick", "Best Overall Prob",
+                "Spread Pick", "Spread Prob",
+                "Total Pick", "Total Prob",
+                "ML Pick", "ML Prob"
+            ]
+            # Ensure columns exist
+            summary_cols = [c for c in summary_cols if c in game_summary_df.columns]
+
+            # Formatting
+            format_cols = {
+                "Best Overall Prob": st.column_config.NumberColumn(format="%.1f%%"),
+                "Spread Prob": st.column_config.NumberColumn(format="%.1f%%"),
+                "Total Prob": st.column_config.NumberColumn(format="%.1f%%"),
+                "ML Prob": st.column_config.NumberColumn(format="%.1f%%")
+            }
+
+            st.dataframe(
+                game_summary_df[summary_cols],
+                column_config=format_cols,
+                width="stretch",
+                hide_index=True
+            )
+        else:
+            st.info("No game summary data available.")
+
+        # --- NEW: BEST OVERALL PICKS (ML Focused) ---
+        st.subheader("Best Overall Picks (Moneyline)")
+        best_ml_df = get_best_ml_picks(st.session_state["master_df"])
+        if not best_ml_df.empty:
+            # Sort by Best Overall Prob descending
+            best_ml_df = best_ml_df.sort_values(by="Best Overall Prob", ascending=False)
+
+            ml_cols = [
+                "league", "Home", "Away", "Commence (Local)",
+                "Best Overall Pick", "Best Overall Prob", "Best Overall Confidence",
+                "Implied Prob", "AI Prob"
+            ]
+
+            st.dataframe(
+                best_ml_df[ml_cols],
+                column_config={
+                    "Best Overall Prob": st.column_config.NumberColumn(format="%.1f%%"),
+                    "Implied Prob": st.column_config.NumberColumn(format="%.1f%%"),
+                    "AI Prob": st.column_config.NumberColumn(format="%.1f%%"),
+                },
+                width="stretch",
+                hide_index=True
+            )
+        else:
+            st.info("No Moneyline picks available.")
+
+        st.subheader("Top Picks / Best Bets")
+        include_low_in_top = st.checkbox("Include LOW confidence in Top Picks", value=False, key="include_low_top_picks")
+        df = clean_df(df)
+        top_df = df.copy()
+        if "Unnamed: 0" in top_df.columns:
+            top_df = top_df.drop(columns=["Unnamed: 0"])
+        # Optimization: Bulk add missing columns
+        missing_top = [c for c in required_display_cols if c not in top_df.columns]
+        if missing_top:
+            top_df = pd.concat([top_df, pd.DataFrame(columns=missing_top)], axis=1)
+        if not include_low_in_top:
+            top_df = top_df[top_df["Pick_Confidence"].isin(["HIGH", "MEDIUM"])]
+        try:
+            top_df["st_conf_rank"] = top_df["st_conf_rank"].fillna(0)
+            top_df["decisiveness"] = top_df["decisiveness"].fillna(0.0)
+            top_df = top_df.sort_values(
+                by=["spread_edge", "st_conf_rank", "decisiveness"],
+                ascending=[False, False, False],
+            )
+        except Exception:
+            pass
+        top_df = reorder_for_spread_total_focus(top_df)
+        top_df_display = top_df.drop(columns=[c for c in trace_cols if c in top_df.columns], errors="ignore")
+
+        # Format spread_edge as percentage
+        if "spread_edge" in top_df_display.columns:
+            top_df_display["spread_edge"] = top_df_display["spread_edge"].apply(lambda x: f"{x:+.1%}" if pd.notnull(x) else "")
+            top_df_display = top_df_display.copy()
+
+        # --- Part F: TheOver Impact String ---
+        # Generate "TheOver Impact" column for display
+        # Format: "TheOver: +0.012 (agree)" or "TheOver: n/a"
+        if "theover_delta_final_prob" in top_df_display.columns:
+            def _fmt_theover_impact(row):
+                if not row.get("theover_matched"):
+                    return "TheOver: n/a"
+
+                delta = row.get("theover_delta_final_prob")
+                if delta is None:
+                    return "TheOver: n/a"
+
+                # Check agreement direction
+                # Compare final_prob vs final_prob_without_theover?
+                # Actually, simpler: if delta > 0, it boosted confidence.
+                # But 'agreement' usually means 'TheOver Pick matches Our Pick'.
+                # Let's use the 'theover_changed_pick' or inferred agreement.
+                # If delta is positive and substantial, it likely agreed/boosted.
+
+                # We can also check pick alignment if we have "theover_pick" and "Pick"
+                # But let's stick to the delta for now as requested: "TheOver: +0.012 (agree)"
+
+                # Heuristic:
+                # If delta > 0: "boost" or "agree" (if we picked it)
+                # If delta < 0: "drag" or "disagree"
+
+                # Refined: "agree" if sign(delta) matches sign(edge)?
+                # Let's just output the delta sign and value.
+
+                direction = "neutral"
+                if delta > 0.005: direction = "boost"
+                elif delta < -0.005: direction = "drag"
+
+                return f"TheOver: {delta:+.3f} ({direction})"
+
+            top_df_display["TheOver_Impact"] = top_df_display.apply(_fmt_theover_impact, axis=1)
+            # Add to reason short
+            top_df_display["Pick_Reason_Short"] = top_df_display["Pick_Reason_Short"] + " | " + top_df_display["TheOver_Impact"]
+
+        if not show_moneyline_details:
+            ml_detail_cols = [
+                "Pick",
+                "Book",
+                "Home_ML",
+                "Away_ML",
+                "Implied_Prob",
+                "AI_Prob",
+                "ai_prob_adj",
+                "consensus_prob",
+                "consensus_prob_adj",
+                "kalshi_prob",
+                "kalshi_prob_used",
+                "kalshi_event_ticker",
+                "kalshi_event_ticker_used",
+                "edge_vs_odds",
+                "model_minus_market",
+            ]
+            top_df_display = top_df_display.drop(columns=[c for c in ml_detail_cols if c in top_df_display.columns], errors="ignore")
+
+        # --- FINAL WHITELIST FIX (Enhanced with Picks Sheet Columns) ---
+        ui_whitelist = [
+            'league', 'Home', 'Away', 'Commence (UTC)', 'Commence (Local)', 'Local Date',
+            'Overall Pick', 'Overall Prob', 'Spread', 'Spread Prob', 'Total', 'Total Prob', 'ML', 'ML Prob',
+            'best_pick', 'final_prob', 'edge', 'best_pick_type',
+            'Bet_Confidence', 'Bet_Lean',
+            'Spread & Pick', 'Total & Pick',
+            'spread_edge', 'total_edge',
+            'Pick', 'AI_Prob', 'Implied_Prob', 'Home_Sentiment', 'Away_Sentiment', 'Sentiment_Diff', 'sentiment_status', 'status', 'best_pick_prob', 'best_pick_edge',
+            'theover_pick', 'theover_prob_used', 'theover_delta_final_prob', 'final_prob_without_theover'
+        ]
+        safe_cols = [c for c in ui_whitelist if c in top_df_display.columns]
+        top_df_ui = top_df_display[safe_cols].copy()
+
+        # Force Numeric and String consistency
+        for col in top_df_ui.columns:
+            if col in ['AI_Prob', 'Implied_Prob', 'spread_edge', 'total_edge', 'Sentiment_Diff', 'final_prob', 'edge', 'Overall Prob', 'Spread Prob', 'Total Prob', 'ML Prob']:
+                top_df_ui[col] = pd.to_numeric(top_df_ui[col], errors='coerce').fillna(0.0)
+            else:
+                top_df_ui[col] = top_df_ui[col].astype(str).replace('None', 'N/A')
+
+        st.dataframe(top_df_ui, width="stretch", hide_index=True)
+
+        export_cols = [
+            "AI_Prob",
+            "Implied_Prob",
+            "ai_prob_adj",
+            "consensus_prob",
+            "consensus_prob_adj",
+            "final_probability",
+            "decision_driver",
+            "kalshi_weight",
+            "odds_weight",
+            "ml_weight",
+            "sentiment_weight",
+            "sentiment_score",
+            "Home_Sentiment",
+            "Away_Sentiment",
+            "sentiment_status",
+            "sentiment_direction",
+            "sentiment_impact_applied",
+            "confidence_reason",
+            "spread_engine_used",
+            "spread_pick_label",
+            "spread_alt_label",
+            "spread_prob_pick_final",
+            "spread_prob_alt_final",
+            "spread_prob_margin",
+            "spread_prob_pick_market",
+            "spread_prob_alt_market",
+            "spread_prob_pick_kalshi",
+            "spread_prob_alt_kalshi",
+            "spread_decision_metric_used",
+            "spread_decision_score_pick",
+            "spread_decision_score_alt",
+            "spread_decision_score_margin",
+            "spread_trace_json",
+            "total_engine_used",
+            "total_pick_label",
+            "total_alt_label",
+            "total_prob_pick_final",
+            "total_prob_alt_final",
+            "total_prob_margin",
+            "total_prob_pick_market",
+            "total_prob_alt_market",
+            "total_prob_pick_kalshi",
+            "total_prob_alt_kalshi",
+            "total_decision_metric_used",
+            "total_decision_score_pick",
+            "total_decision_score_alt",
+            "total_decision_score_margin",
+            "total_trace_json",
+            "decision_trace_version",
+            "overall_engine_used",
+            "decision_trace_notes",
+            "decision_trace_short",
+            "decision_trace_json",
+            "kalshi_matched",
+            "kalshi_prob_used",
+            "kalshi_prob_for_pick",
+            "kalshi_yes_side",
+            "kalshi_event_ticker_used",
+            "kalshi_candidate_count",
+            "kalshi_best_score",
+            "kalshi_match_reason",
             "kalshi_game_prefix_used",
             "kalshi_wanted_tokens",
             "consensus_prob_adj",
