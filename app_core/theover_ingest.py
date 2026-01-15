@@ -603,7 +603,7 @@ def _transform_theover_df(df: pd.DataFrame, pick_type_default: str, games: List[
             home_code = team_code_for_league(league, csv_home)
             away_code = team_code_for_league(league, csv_away)
 
-        # FIX: Ensure argument order is (league, date_str, home_code, away_code)
+        # FIX: Explicitly name arguments to match the master analysis loop key format
         canon_key = generate_canonical_key(league=league, date_str=date_val, home_code=home_code, away_code=away_code)
 
         # Pick & Line
