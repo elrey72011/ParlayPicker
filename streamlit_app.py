@@ -5981,15 +5981,12 @@ with tab_master:
 
                 api_sports_status_run = "pending"
                 sportsdata_status_run = "pending"
-                df_master = pd.DataFrame(games or [])
 
-                # Inject real-time stats for Vertex
+                # Extract unique teams directly from games for sentiment analysis
                 api_sports_clients, _ = init_data_clients()
-                df_master = enrich_with_model_features(df_master, api_sports_clients)
-
                 unique_teams = sorted(
-                    set(df_master.get("home_team", pd.Series([], dtype=str)).dropna().astype(str))
-                    | set(df_master.get("away_team", pd.Series([], dtype=str)).dropna().astype(str))
+                    set(g.get("home_team", "") for g in (games or []) if g.get("home_team"))
+                    | set(g.get("away_team", "") for g in (games or []) if g.get("away_team"))
                 )
                 enable_sentiment_master = st.checkbox(
                     "Enable sentiment (NewsAPI)",
@@ -6162,37 +6159,10 @@ with tab_master:
                 kalshi_match_results: Dict[str, Dict[str, Any]] = {}
                 # --- CLEANED MASTER ANALYSIS LOOP ---
 
-                # --- PRE-LOOP BATCH ENRICHMENT (PARITY FIX) ---
-                # Ensure 'g' in the loop has stats for single-row prediction.
-                # We must perform batch enrichment on the raw games list BEFORE the loop.
+                # --- SET GAMES TO PROCESS (NO PRE-LOOP ENRICHMENT) ---
+                # Task 1: Stop pre-loop game deletion by skipping enrich_with_model_features
+                # Set games_to_process directly without DataFrame merges or enrichment
                 games_to_process = games
-                if games:
-                    try:
-                        with st.spinner("🚀 PRE-FETCH: Batch Enriching Stats..."):
-                            # 1. Convert to DataFrame
-                            _df_pre = pd.DataFrame(games)
-
-                            # 2. Ensure League column exists (crucial for enrichment lookup)
-                            if "League" not in _df_pre.columns:
-                                _df_pre["League"] = league
-
-                            # 3. Call Enrichment (uses TeamNameMatcher and API clients)
-                            # Note: We pass the specific client for this league
-                            _client_map = {league: api_sports_clients.get(league)} if api_sports_clients else {}
-                            _df_enriched = enrich_with_model_features(_df_pre, _client_map)
-
-                            # 4. Convert back to list of dicts for the loop
-                            # Force numeric conversion where possible to avoid NaN issues
-                            games_to_process = _df_enriched.to_dict('records')
-
-                            # Debug: Verify one row
-                            if games_to_process:
-                                logger.info("Pre-Enrichment Sample Stats: %s", games_to_process[0].get('feature_home_ppg'))
-                    except Exception as e:
-                        logger.error(f"Pre-loop enrichment failed: {e}", exc_info=True)
-                        if st:
-                            st.error(f"Pre-enrichment failed: {e}")
-                        games_to_process = games
 
                 # --- FIX: Define variables at the start of the loop ---
                 # Ensure use_model_numeric_probs is available in local scope
@@ -6270,12 +6240,17 @@ with tab_master:
                     local_dt = commence_utc.astimezone(ZoneInfo("America/New_York"))
                     local_date_str = local_dt.strftime("%Y-%m-%d")
 
+                # Task 2: Apply TEAM_ALIAS_MAP normalization before matching
+                # Normalize team names using the alias map before generating codes
+                home_norm = TEAM_ALIAS_MAP.get(home_team, home_team)
+                away_norm = TEAM_ALIAS_MAP.get(away_team, away_team)
+
                 # 1. Resolve Team Codes (Prefer Kalshi, then System)
                 # Note: kalshi match happens later in the loop usually, but we need codes now.
                 # Ideally we check st.session_state['kalshi_match_results'] if already run?
                 # Or just use the system fallback which is robust enough for ingestion matching.
-                home_code = team_code_for_league(league_name, home_team)
-                away_code = team_code_for_league(league_name, away_team)
+                home_code = team_code_for_league(league_name, home_norm)
+                away_code = team_code_for_league(league_name, away_norm)
 
                 # 2. Generate Master Key
                 # Normalize league to match ingestion (NBA, NFL, etc.)
@@ -6287,11 +6262,11 @@ with tab_master:
                 elif "NCAAB" in norm_league_key or "COLLEGE BASKETBALL" in norm_league_key: norm_league_key = "NCAAB"
                 elif "NCAAF" in norm_league_key or "COLLEGE FOOTBALL" in norm_league_key: norm_league_key = "NCAAF"
 
-                # Regenerate codes with normalized league to be safe
-                home_code_norm = team_code_for_league(norm_league_key, home_team)
-                away_code_norm = team_code_for_league(norm_league_key, away_team)
+                # Regenerate codes with normalized league and aliased team names
+                home_code_norm = team_code_for_league(norm_league_key, home_norm)
+                away_code_norm = team_code_for_league(norm_league_key, away_norm)
 
-                # Task 2: Verified parameter order (league, date, home, away)
+                # Task 2: Ensure canon_key uses these mapped codes
                 master_key_exact = generate_canonical_key(norm_league_key, local_date_str, home_code_norm, away_code_norm)
                 master_key_teams = f"{norm_league_key}|{away_code_norm}|{home_code_norm}"
 
@@ -10572,6 +10547,8 @@ if st.session_state.get("master_results_df") is not None:
                     on=join_keys,
                     how="left"
                 )
+                # Task 3: Optimization - Replace fragmented column assignments with copy
+                df_master_view = df_master_view.copy()
         except Exception as e:
             logger.warning(f"Summary merge failed: {e}")
 
@@ -11448,11 +11425,11 @@ if st.session_state.get("master_results_df") is not None:
         if stats.get("games_in", 0) > 0 and stats.get("rows_out", 0) == 0:
             st.error("Master analysis produced 0 rows; see debug stats below.")
             st.json(stats)
-        elif not games:
+        elif stats.get("games_in", 0) == 0:
             st.warning("No games loaded. Use the sidebar to load games first.")
         else:
-            # Correct the Success Message
-            st.success(f"Produced {len(st.session_state['master_results_df'])} rows from {len(games)} games")
+            # Task 4: Fix NameError - Use safe session state getter instead of games variable
+            st.success(f"Produced {len(st.session_state['master_results_df'])} rows from {stats.get('games_in', 0)} games")
             # Explicitly format key columns
             # Ensure numeric typing before display to avoid Arrow errors
             cols_to_force_numeric = ["AI_Prob", "model_prob_home", "final_probability", "Implied_Prob", "spread_edge", "total_edge"]
