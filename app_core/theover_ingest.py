@@ -26,6 +26,59 @@ except ImportError:
 
 logger = logging.getLogger("app_core.theover_ingest")
 
+TEAM_ALIAS_MAP = {
+    # NHL
+    "Seattle": "Seattle Kraken", "New Jersey": "New Jersey Devils",
+    "Buffalo": "Buffalo Sabres", "Philadelphia": "Philadelphia Flyers",
+    "Ottawa": "Ottawa Senators", "Winnipeg": "Winnipeg Jets",
+    "Toronto": "Toronto Maple Leafs", "Florida": "Florida Panthers",
+    "Vancouver": "Vancouver Canucks", "Montreal": "Montreal Canadiens",
+    "NY Rangers": "New York Rangers", "NY Islanders": "New York Islanders",
+    # "LA": "Los Angeles Kings",  <-- REMOVED (Handled conditionally)
+    "SJ": "San Jose Sharks",
+    "St Louis": "St Louis Blues", "Tampa Bay": "Tampa Bay Lightning",
+    "Vegas": "Vegas Golden Knights", "Washington": "Washington Capitals",
+    "Arizona": "Arizona Coyotes", "Anaheim": "Anaheim Ducks",
+    "Boston": "Boston Bruins", "Calgary": "Calgary Flames",
+    "Carolina": "Carolina Hurricanes", "Chicago": "Chicago Blackhawks",
+    "Colorado": "Colorado Avalanche", "Columbus": "Columbus Blue Jackets",
+    "Dallas": "Dallas Stars", "Detroit": "Detroit Red Wings",
+    "Edmonton": "Edmonton Oilers", "Minnesota": "Minnesota Wild",
+    "Nashville": "Nashville Predators", "Pittsburgh": "Pittsburgh Penguins",
+    # NBA
+    "New York": "New York Knicks", "Sacramento": "Sacramento Kings",
+    # "LA": "Los Angeles Lakers", <-- REMOVED (Handled conditionally)
+    "PHI": "Philadelphia 76ers",
+    "GSW": "Golden State Warriors", "LAL": "Los Angeles Lakers",
+    "LAC": "Los Angeles Clippers", "BKN": "Brooklyn Nets",
+    "OKC": "Oklahoma City Thunder", "NOP": "New Orleans Pelicans",
+    "SAS": "San Antonio Spurs", "UTA": "Utah Jazz",
+    "WAS": "Washington Wizards", "CHA": "Charlotte Hornets",
+    # NCAAB (Major Naming Delta)
+    "South Carolina": "South Carolina Gamecocks", "Arkansas": "Arkansas Razorbacks",
+    "Pittsburgh": "Pittsburgh Panthers", "Georgia Tech": "Georgia Tech Yellow Jackets",
+    "Missouri": "Missouri Tigers", "Ole Miss": "Ole Miss Rebels",
+    "Mississippi St": "Mississippi State Bulldogs", "Vanderbilt": "Vanderbilt Commodores",
+    "LSU": "LSU Tigers", "Kansas": "Kansas Jayhawks", "Kansas St": "Kansas State Wildcats",
+    "Illinois": "Illinois Fighting Illini", "Ohio St": "Ohio State Buckeyes",
+    "Boston Univ": "Boston Univ. Terriers", "Western Carolina": "Western Carolina Catamounts",
+    "Chattanooga": "Chattanooga Mocs", "NC State": "NC State Wolfpack",
+    "Iowa": "Iowa Hawkeyes", "Iowa St": "Iowa State Cyclones",
+    "Michigan": "Michigan Wolverines", "Michigan St": "Michigan State Spartans",
+    "Penn St": "Penn State Nittany Lions", "Texas A&M": "Texas A&M Aggies",
+    "Virginia": "Virginia Cavaliers", "Virginia Tech": "Virginia Tech Hokies",
+    "West Virginia": "West Virginia Mountaineers", "Florida St": "Florida State Seminoles",
+    "Miami (FL)": "Miami Hurricanes", "Miami": "Miami Hurricanes",
+    "Kentucky": "Kentucky Wildcats", "Tennessee": "Tennessee Volunteers",
+    "Auburn": "Auburn Tigers", "Alabama": "Alabama Crimson Tide",
+    "Arizona St": "Arizona State Sun Devils", "Oregon": "Oregon Ducks",
+    "Oregon St": "Oregon State Beavers", "UCLA": "UCLA Bruins",
+    "USC": "USC Trojans", "Washington St": "Washington State Cougars",
+    "Colorado St": "Colorado State Rams", "San Diego St": "San Diego State Aztecs",
+    "Boise St": "Boise State Broncos", "Nevada": "Nevada Wolf Pack",
+    "UNLV": "UNLV Rebels", "Utah St": "Utah State Aggies"
+}
+
 def generate_canonical_key(league: str, date_str: str, home_code: str, away_code: str) -> str:
     """
     Generates a canonical key for matching against the master schedule.
@@ -140,7 +193,8 @@ def parse_theover_csv(uploaded_file) -> pd.DataFrame:
         ("HOMETEAM", ["HOMETEAM", "HOME", "TEAM1", "TEAM 1", "HOMETEAM"]),
         ("AWAYTEAM", ["AWAYTEAM", "AWAY", "TEAM2", "TEAM 2", "AWAYTEAM"]),
         ("WINPROBABILITY", ["WINPROBABILITY", "PROB", "HITRATE", "SCORE"]),
-        ("PICK", ["PICK"])
+        ("PICK", ["PICK"]),
+        ("COMMENCE", ["COMMENCE", "DATE", "TIME", "START"])
     ]
 
     # Robust Coalescing Logic:
@@ -191,6 +245,33 @@ def _normalize_league_str(raw_league: str) -> str:
     if any(x in raw_league for x in ["NCAAB", "CBB", "COLLEGE BASKETBALL"]): return "NCAAB"
     if any(x in raw_league for x in ["NCAAF", "CFB", "COLLEGE FOOTBALL"]): return "NCAAF"
     return raw_league
+
+def _resolve_team_alias(name: str, league: str) -> str:
+    """
+    Resolve team alias with league-specific context.
+    """
+    name = name.strip()
+
+    # 1. Global Map Lookup (Explicit Aliases)
+    if name in TEAM_ALIAS_MAP:
+        return TEAM_ALIAS_MAP[name]
+
+    # 1b. Case-Insensitive Lookup (Robustness)
+    # Task 4: Ensure "South Carolina" matches "SOUTH CAROLINA"
+    for k, v in TEAM_ALIAS_MAP.items():
+        if k.lower() == name.lower():
+            return v
+
+    # 2. Context-Aware Resolution (Resolving Collisions)
+    if name == "LA":
+        if league == "NBA":
+            return "Los Angeles Lakers"
+        elif league == "NHL":
+            return "Los Angeles Kings"
+        # Default or fallback?
+        return "Los Angeles"
+
+    return name
 
 def _transform_theover_df(df: pd.DataFrame, pick_type_default: str, games: List[Dict[str, Any]], stats_collector: List[Dict]) -> pd.DataFrame:
     """
@@ -265,6 +346,21 @@ def _transform_theover_df(df: pd.DataFrame, pick_type_default: str, games: List[
         # Extract Team Names
         csv_home = str(row.get("HOMETEAM", "")).strip()
         csv_away = str(row.get("AWAYTEAM", "")).strip()
+
+        # Apply Context-Aware Alias Resolution
+        csv_home = _resolve_team_alias(csv_home, league)
+        csv_away = _resolve_team_alias(csv_away, league)
+
+        # Extract Date (if available) for Time Window Filtering
+        input_date_str = str(row.get("COMMENCE", "")).strip()
+        input_dt = None
+        if input_date_str and input_date_str.lower() != "nan":
+            try:
+                # Try parsing basic formats
+                from dateutil import parser
+                input_dt = parser.parse(input_date_str)
+            except Exception:
+                pass
 
         # If teams are missing, skip
         if not csv_home or not csv_away or csv_home.lower() == "nan" or csv_away.lower() == "nan":
@@ -379,15 +475,52 @@ def _transform_theover_df(df: pd.DataFrame, pick_type_default: str, games: List[
                         common_games = [g for g in common_games if _normalize_league_str(g.get("league", "UNKNOWN")) == league]
 
                     if common_games:
-                        # Boost score if a valid game exists (Confirmation Bonus)
-                        # If we found a real game match, this is almost certainly correct.
-                        # We use the raw fuzzy score but guarantee acceptance if > best.
-                        avg_score = (h_s + a_s) / 2.0
+                        # Task 3: 12-Hour Time Buffer Implementation
+                        # Filter (Relaxed 12h Buffer) to ignore UTC vs local offsets
+                        valid_game = None
+                        for g_cand in common_games:
+                            # If input has no date, accept the first game (legacy behavior)
+                            if not input_dt:
+                                valid_game = g_cand
+                                break
 
-                        if avg_score > best_pair_score:
-                            best_pair_score = avg_score
-                            best_pair_game = common_games[0]
-                            best_pair_names = (h_cand, a_cand)
+                            # If input has date, check buffer
+                            g_date_str = g_cand.get("commence_time") or g_cand.get("commence_time_iso_utc")
+                            if g_date_str:
+                                try:
+                                    from dateutil import parser
+                                    from datetime import timedelta
+                                    g_dt = parser.parse(g_date_str)
+                                    # Handle timezone naive/aware comparison
+                                    if input_dt.tzinfo and not g_dt.tzinfo:
+                                        from datetime import timezone
+                                        g_dt = g_dt.replace(tzinfo=timezone.utc)
+                                    elif not input_dt.tzinfo and g_dt.tzinfo:
+                                        input_dt = input_dt.replace(tzinfo=timezone.utc)
+
+                                    # 12 Hour Buffer Logic
+                                    diff_hours = abs((g_dt - input_dt).total_seconds()) / 3600.0
+                                    if diff_hours <= 12:
+                                        valid_game = g_cand
+                                        break
+                                except Exception:
+                                    # Date parse error on game side, accept as fallback?
+                                    valid_game = g_cand
+                                    break
+                            else:
+                                valid_game = g_cand
+                                break
+
+                        if valid_game:
+                            # Boost score if a valid game exists (Confirmation Bonus)
+                            # If we found a real game match, this is almost certainly correct.
+                            # We use the raw fuzzy score but guarantee acceptance if > best.
+                            avg_score = (h_s + a_s) / 2.0
+
+                            if avg_score > best_pair_score:
+                                best_pair_score = avg_score
+                                best_pair_game = valid_game
+                                best_pair_names = (h_cand, a_cand)
 
             # 3. Final Decision
             if best_pair_game:
@@ -461,6 +594,7 @@ def _transform_theover_df(df: pd.DataFrame, pick_type_default: str, games: List[
         # Critical: Use matched canonical names if available
         if matched_game_obj:
             league = matched_game_obj.get("league", league)
+            # Use commence_date_local from matched game if available
             date_val = matched_game_obj.get("commence_date_local") or slate_date
             home_code = team_code_for_league(league, matched_game_obj.get("home_team"))
             away_code = team_code_for_league(league, matched_game_obj.get("away_team"))
@@ -469,7 +603,7 @@ def _transform_theover_df(df: pd.DataFrame, pick_type_default: str, games: List[
             home_code = team_code_for_league(league, csv_home)
             away_code = team_code_for_league(league, csv_away)
 
-        canon_key = generate_canonical_key(league, date_val, home_code, away_code)
+        canon_key = generate_canonical_key(league=league, date_str=date_val, home_code=home_code, away_code=away_code)
 
         # Pick & Line
         raw_pick = str(row.get("PICK", "")).strip()
@@ -605,7 +739,7 @@ def parse_theover_public_betting_text(raw_text: str, pick_type_hint: str = "UNKN
 
             away_code = team_code_for_league(current_league, current_away)
             home_code = team_code_for_league(current_league, current_home)
-            canon_key = generate_canonical_key(current_league, current_date, home_code, away_code)
+            canon_key = generate_canonical_key(league=current_league, date_str=current_date, home_code=home_code, away_code=away_code)
 
             rows.append({
                 "theover_key": canon_key,
