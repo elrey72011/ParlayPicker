@@ -9690,7 +9690,7 @@ with tab_master:
                 df = pd.DataFrame(deduped_list)
                 if "Unnamed: 0" in df.columns:
                     df = df.drop(columns=["Unnamed: 0"])
-            
+        
                 # 5. UI PERSISTENCE
                 # We persist the DEDUPED df as "master_df" because that's what the UI expects for the "Master Analysis" tab table.
                 # The shotgun data is stored separately.
@@ -9715,75 +9715,6 @@ with tab_master:
                 # ---------------------------
 
                 st.session_state["master_df"] = df
-
-                with col1:
-                    st.subheader("🎯 Snipers (Prob > 60%)")
-                    # High Prob (>60%)
-                    snipers = candidates[candidates["final_probability"] > 0.60].sort_values("final_probability", ascending=False).head(5)
-                    if not snipers.empty:
-                        for _, row in snipers.iterrows():
-                            st.markdown(f"**{row.get('Pick')}** ({row.get('Market')})")
-                            st.caption(f"Prob: {row.get('final_probability'):.1%} | Edge: {row.get('active_edge'):.1%}")
-                    else:
-                        st.write("No Snipers found.")
-
-                with col2:
-                    st.subheader("📈 Strategy (High EV)")
-                    # High EV (Edge)
-                    strategy = candidates.sort_values("active_edge", ascending=False).head(5)
-                    if not strategy.empty:
-                        for _, row in strategy.iterrows():
-                            st.markdown(f"**{row.get('Pick')}** ({row.get('Market')})")
-                            st.caption(f"Edge: {row.get('active_edge'):.1%} | Prob: {row.get('final_probability'):.1%}")
-                    else:
-                        st.write("No Strategy plays found.")
-
-                with col3:
-                    st.subheader("🎲 Longshots")
-                    # Top 10 by Edge
-                    longshots = candidates.sort_values("active_edge", ascending=False).head(10)
-                    if not longshots.empty:
-                        for _, row in longshots.iterrows():
-                            st.markdown(f"**{row.get('Pick')}** ({row.get('Market')})")
-                            st.caption(f"Edge: {row.get('active_edge'):.1%}")
-                    else:
-                        st.write("No Longshots found.")
-
-                st.divider()
-                st.subheader("🔗 2-Leg Parlay Generator")
-
-                # Generate pairs
-                valid_parlays = []
-
-                # Convert to records for iteration
-                recs = candidates.to_dict('records')
-
-                # Use itertools combinations
-                for p1, p2 in itertools.combinations(recs, 2):
-                    # Constraint: Different Home teams (approx for different games)
-                    if p1.get('Home') == p2.get('Home'):
-                        continue
-
-                    edge1 = p1.get('active_edge', 0)
-                    edge2 = p2.get('active_edge', 0)
-                    combined_edge = edge1 + edge2
-
-                    # Combined Prob (assuming independence)
-                    prob1 = p1.get('final_probability', 0)
-                    prob2 = p2.get('final_probability', 0)
-                    combined_prob = prob1 * prob2
-
-                    valid_parlays.append({
-                        "Leg 1": f"{p1.get('Pick')} ({p1.get('Market')})",
-                        "Leg 2": f"{p2.get('Pick')} ({p2.get('Market')})",
-                        "Combined Edge": combined_edge,
-                        "Combined Prob": combined_prob,
-                        "Leg 1 Edge": edge1,
-                        "Leg 2 Edge": edge2
-                    })
-
-                # Sort by Combined Edge
-                valid_parlays.sort(key=lambda x: x['Combined Edge'], reverse=True)
 
                 if valid_parlays:
                     st.write(f"Top 10 generated parlays (out of {len(valid_parlays)})")
