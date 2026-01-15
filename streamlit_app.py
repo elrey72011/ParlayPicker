@@ -9538,11 +9538,11 @@ with tab_master:
             with st.spinner("📊 Ingesting Public Consensus Data..."):
                 master_df = enrich_with_consensus(master_df)
 
-            # 3. CRITICAL: Enrich the whole batch to fill 'feature_diff' columns
-            # This fixes the 'Missing feature column' warnings in the logs
-            with st.spinner("🚀 Running Batch Feature Enrichment..."):
-                # FIX: Pass ALL api_clients so stats for all leagues are fetched, not just the last loop variable
-                master_df = enrich_with_model_features(master_df, api_sports_clients)
+                # 3. CRITICAL: Enrich the whole batch to fill 'feature_diff' columns
+                # This fixes the 'Missing feature column' warnings in the logs
+                with st.spinner("🚀 Running Batch Feature Enrichment..."):
+                    # FIX: Pass ALL api_clients so stats for all leagues are fetched, not just the last loop variable
+                    master_df = enrich_with_model_features(master_df, api_sports_clients)
 
             # Task 4: Update Sentiment Score using Sharpness Delta
             # Integration: 60% Sharpness Delta, 40% Social Sentiment
@@ -9752,130 +9752,6 @@ with tab_master:
                 # ---------------------------
 
                 st.session_state["master_df"] = df
-
-    if games:
-        st.subheader("Sample normalized game")
-        # Safe access for games[0]
-        st.code(json.dumps(games[0], indent=2, default=str) if games else "{}")
-
-    st.subheader("Kalshi health")
-    kalshi_health = kalshi_health_check(league)
-    st.json(kalshi_health)
-    if kalshi_integrator and st.checkbox("Show Kalshi market counts", key="kalshi_market_counts_toggle"):
-        dbg_markets = kalshi_integrator.get_league_markets(
-            league, status="active", max_pages=2, min_prefix_hits=5
-        )
-        dbg_tickers = [str(m.get("event_ticker") or m.get("ticker") or "").upper() for m in dbg_markets]
-        dbg_game_prefix = league_game_prefix(league)
-        st.json(
-            {
-                "kalshi_debug_counts": {
-                    "game_prefix": dbg_game_prefix,
-                    "game": len([t for t in dbg_tickers if t.startswith(dbg_game_prefix)]),
-                    "base": len([
-                        t
-                        for t in dbg_tickers
-                        if t.startswith(league_series_ticker(league) or f"KX{(league or '').upper()}")
-                        and not t.startswith(dbg_game_prefix)
-                    ]),
-                    "total": len(dbg_tickers),
-                }
-            }
-        )
-    filter_stats = st.session_state.get("kalshi_filter_stats") or {}
-    if filter_stats:
-        st.subheader("Kalshi filtering stats")
-        st.json(
-            {
-                "total_markets_fetched": filter_stats.get("total_markets_fetched"),
-                "total_game_markets": filter_stats.get("total_game_markets"),
-                "avg_filtered_markets_per_game": filter_stats.get(
-                    "avg_filtered_markets_per_game"
-                ),
-                "first_game": filter_stats.get("first_game_expected"),
-            }
-        )
-        st.json(filter_stats)
-    prefix_counts_map = st.session_state.get("kalshi_prefix_counts") or {}
-    if prefix_counts_map:
-        st.subheader("Kalshi ticker prefix counts")
-        st.json(prefix_counts_map)
-        samples_map = st.session_state.get("kalshi_prefix_samples_game") or {}
-        if samples_map:
-            st.caption("First 20 game-market tickers (by league)")
-            st.json(samples_map)
-    all_markets_debug = st.session_state.get("kalshi_all_markets") or []
-    if games and all_markets_debug:
-        fg = games[0]
-        # Safe access for team codes
-        hc_cands = team_code_candidates(fg.get("league"), fg.get("home_team")) or []
-        home_code_dbg = hc_cands[0] if hc_cands else None
-
-        ac_cands = team_code_candidates(fg.get("league"), fg.get("away_team")) or []
-        away_code_dbg = ac_cands[0] if ac_cands else None
-
-        search_results = debug_search_markets_for_game(
-            all_markets_debug,
-            fg.get("home_team"),
-            fg.get("away_team"),
-            home_code_dbg,
-            away_code_dbg,
-            league=fg.get("league"),
-            limit=15,
-        )
-        st.subheader("Kalshi full-market search (first game)")
-        st.json(
-            {
-                "expected_codes": {"home": home_code_dbg, "away": away_code_dbg},
-                "found_any_winner_market_for_game": search_results.get(
-                    "found_any_winner_market_for_game"
-                ),
-                "found_any_total_market_for_game": search_results.get(
-                    "found_any_total_market_for_game"
-                ),
-                "found_any_spread_market_for_game": search_results.get(
-                    "found_any_spread_market_for_game"
-                ),
-                "counts": search_results.get("counts"),
-                "top_matches": search_results.get("matches"),
-            }
-        )
-    if st.session_state.get("kalshi_match_results"):
-        _matches_raw = st.session_state.get("kalshi_match_results")
-        matches = _matches_raw.values() if isinstance(_matches_raw, dict) else (_matches_raw or [])
-        matched = []
-        non_match_reasons: List[str] = []
-        for m in matches:
-            for res in (m.get("matches") or {}).values():
-                if res.get("kalshi_matched"):
-                    matched.append(res)
-                else:
-                    non_match_reasons.append(res.get("kalshi_reason") or "unknown")
-        if matched:
-            st.caption("Sample matched market")
-            st.json(matched[0])
-        first_game_debug = filter_stats.get("first_game_debug") or {}
-        if first_game_debug:
-            st.caption("Kalshi per-game debug (first game)")
-            st.json(first_game_debug)
-        if filter_stats.get("per_game_debug"):
-            st.caption("Kalshi per-game debug (all games)")
-            st.json(filter_stats.get("per_game_debug"))
-        if non_match_reasons:
-            reasons: Dict[str, int] = {}
-            for reason in non_match_reasons:
-                reasons[reason] = reasons.get(reason, 0) + 1
-            top_reasons = sorted(reasons.items(), key=lambda x: x[1], reverse=True)[:5]
-            st.caption("Top non-match reasons")
-            st.json(top_reasons)
-
-    if "master_stats" in st.session_state:
-        st.subheader("Master analysis stats")
-        st.json(st.session_state["master_stats"])
-
-    if st.session_state.get("last_exception"):
-        st.subheader("Last exception")
-        st.code(st.session_state["last_exception"])
 
     if "model_last_error" in st.session_state:
         st.error(f"Prediction Error: {st.session_state['model_last_error']}")
@@ -11032,14 +10908,9 @@ if st.session_state.get("master_results_df") is not None:
         missing_top = [c for c in required_display_cols if c not in top_df.columns]
         if missing_top:
             top_df = pd.concat([top_df, pd.DataFrame(columns=missing_top)], axis=1)
-
-        # Task 1: Strict Moneyline Purge
-        # Ensure Moneyline never appears in Top Picks
-        if "Market" in top_df.columns:
-             top_df = top_df[top_df["Market"] != "Moneyline"]
-
-        # User requested removal of Eligible_Top_Picks filter - Verified it is absent
-        # Ensure no visibility filters are active (Eligible_Top_Picks filter removed)
+        # Filter removed to show all games during debugging
+        if not include_low_in_top:
+            top_df = top_df[top_df["Pick_Confidence"].isin(["HIGH", "MEDIUM"])]
         try:
             top_df["st_conf_rank"] = top_df["st_conf_rank"].fillna(0)
             top_df["decisiveness"] = top_df["decisiveness"].fillna(0.0)
@@ -11469,14 +11340,22 @@ if st.session_state.get("master_results_df") is not None:
             # Remove all filters for the picks_sheet export. It must contain every analyzed row.
             # We use final_picks_df which is a copy of export_df (the full dataset).
 
-            # Ensure overall_confidence is calculated as a float for sorting
-            if "overall_confidence" in final_picks_df.columns:
-                 # It might be string (HIGH/MED/LOW).
-                 # Task says "Edge between final_probability and implied_prob"
-                 # We have 'edge' column or 'active_edge'.
-                 # Let's ensure 'edge' is used or 'overall_confidence_score' is created if needed.
-                 # Actually, final_picks_df already has 'edge' calculated.
-                 pass
+            # Ensure export matches grid rows if not filtered specifically
+            if filter_export:
+                if "Bet_Confidence" in final_picks_df.columns:
+                    final_picks_df = final_picks_df[final_picks_df["Bet_Confidence"] == "HIGH"]
+            else:
+                # Filter to Eligible (HIGH+MEDIUM) to match Top Picks Grid, but keep low confidence if they are in the view?
+                # The user asked to keep all columns, but implies rows should match the grid.
+                # "whichever dataframe drives the grid should also drive the download"
+                # The grid uses top_df which filters by Eligible_Top_Picks.
+                # Filter removed to show all games during debugging
+
+                # Also apply confidence filter from session state if needed, or just dump what's there.
+                # The prompt says: "The main “Download CSV” button (st.download_button) so the downloaded CSV matches what is shown on screen."
+                # top_df_ui filters out LOW confidence by default unless unchecked.
+                if not include_low_in_top and "Pick_Confidence" in final_picks_df.columns:
+                    final_picks_df = final_picks_df[final_picks_df["Pick_Confidence"].isin(["HIGH", "MEDIUM"])]
 
             st.caption(f"Export contains {len(final_picks_df)} picks (All Games).")
 
