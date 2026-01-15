@@ -6242,8 +6242,17 @@ with tab_master:
 
                 # Task 2: Apply TEAM_ALIAS_MAP normalization before matching
                 # Normalize team names using the alias map before generating codes
-                home_norm = TEAM_ALIAS_MAP.get(home_team, home_team)
-                away_norm = TEAM_ALIAS_MAP.get(away_team, away_team)
+                # Robust normalization: Find if any short name is part of the raw name
+                home_norm = home_team
+                for short_name, long_name in TEAM_ALIAS_MAP.items():
+                    if short_name.lower() in home_team.lower():
+                        home_norm = long_name
+                        break
+                away_norm = away_team
+                for short_name, long_name in TEAM_ALIAS_MAP.items():
+                    if short_name.lower() in away_team.lower():
+                        away_norm = long_name
+                        break
 
                 # 1. Resolve Team Codes (Prefer Kalshi, then System)
                 # Note: kalshi match happens later in the loop usually, but we need codes now.
@@ -6387,8 +6396,17 @@ with tab_master:
                 # Fix AI Matches (Task 4): Normalize team names using alias map before code generation
                 home_raw = g.get("home_team")
                 away_raw = g.get("away_team")
-                home_norm = TEAM_ALIAS_MAP.get(home_raw, home_raw)
-                away_norm = TEAM_ALIAS_MAP.get(away_raw, away_raw)
+                # Robust normalization: Find if any short name is part of the raw name
+                home_norm = home_raw
+                for short_name, long_name in TEAM_ALIAS_MAP.items():
+                    if short_name.lower() in home_raw.lower():
+                        home_norm = long_name
+                        break
+                away_norm = away_raw
+                for short_name, long_name in TEAM_ALIAS_MAP.items():
+                    if short_name.lower() in away_raw.lower():
+                        away_norm = long_name
+                        break
                 g_home_code = team_code_for_league(g_league, home_norm)
                 g_away_code = team_code_for_league(g_league, away_norm)
                 # Task 2 Fix: Enforce correct parameter order explicitly using named arguments
@@ -10837,7 +10855,6 @@ if st.session_state.get("master_results_df") is not None:
         if "Market" in top_df.columns:
              top_df = top_df[top_df["Market"] != "Moneyline"]
 
-        top_df = top_df[top_df["Eligible_Top_Picks"] == True]
         if not include_low_in_top:
             top_df = top_df[top_df["Pick_Confidence"].isin(["HIGH", "MEDIUM"])]
         try:
@@ -11429,7 +11446,7 @@ if st.session_state.get("master_results_df") is not None:
             st.warning("No games loaded. Use the sidebar to load games first.")
         else:
             # Task 4: Fix NameError - Use safe session state getter instead of games variable
-            st.success(f"Produced {len(st.session_state['master_results_df'])} rows from {stats.get('games_in', 0)} games")
+            st.success(f"Produced {len(st.session_state['master_results_df'])} rows from {len(st.session_state.get('games', []))} games")
             # Explicitly format key columns
             # Ensure numeric typing before display to avoid Arrow errors
             cols_to_force_numeric = ["AI_Prob", "model_prob_home", "final_probability", "Implied_Prob", "spread_edge", "total_edge"]
