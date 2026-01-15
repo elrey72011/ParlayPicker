@@ -9379,7 +9379,7 @@ with tab_master:
                     snapshot_manager.save_noon_baseline(df)
                     # Force preservation of all analyzed games even if movement data is missing
                     df_with_movement = market_tracker.load_and_compare(df)
-                    if df_with_movement is not None and not df_with_movement.empty:
+                    if df_with_movement is not None and not df_with_movement.empty and len(df_with_movement) >= len(df):
                         df = df_with_movement
                     # Else: df remains the full analyzed slate of 68 games
 
