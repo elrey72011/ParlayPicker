@@ -9377,11 +9377,11 @@ with tab_master:
                 # --- MARKET TRACKER HOOK ---
                 try:
                     snapshot_manager.save_noon_baseline(df)
-                    # Force preservation of all analyzed games even if movement data is missing
-                    df_with_movement = market_tracker.load_and_compare(df)
-                    if df_with_movement is not None and not df_with_movement.empty and len(df_with_movement) >= len(df):
-                        df = df_with_movement
-                    # Else: df remains the full analyzed slate of 68 games
+                    # ATOMIC FIX: Stop the inner-join purge. Keep all current games.
+                    df_compare = market_tracker.load_and_compare(df)
+                    if df_compare is not None and not df_compare.empty:
+                        df = df_compare
+                    # If df_compare is empty/missing, 'df' remains the full 68-game slate.
 
                     if 'theover_stats' in locals():
                         st.session_state["theover_debug_log"] = theover_stats.get("full_debug_log", [])
