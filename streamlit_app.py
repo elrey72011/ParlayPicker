@@ -6024,7 +6024,7 @@ with tab_master:
                         st.stop()
 
                 commence_times_by_league: Dict[str, List[str]] = {}
-                rows_out = [] # FIX: Ensure accumulator is initialized before loop
+                accumulated_rows = [] # FIX: Ensure accumulator is initialized before loop
                 for g in games:
                     # FIX: Track if ANY row was created for this game to ensure fallback works
                     ml_row_created = False
@@ -6121,7 +6121,7 @@ with tab_master:
                 filtered_counts: List[int] = []
                 per_game_kalshi_debug: List[Dict[str, Any]] = []
                 first_game_full_search = full_search_first_game
-                rows_out: List[Dict[str, Any]] = []
+                accumulated_rows: List[Dict[str, Any]] = []
                 master_stats = {
                     "games_in": len(games),
                     "rows_out": 0,
@@ -8294,7 +8294,19 @@ with tab_master:
                             SENTIMENT_LOG_SAMPLE[league_name] = True
                         ml_row["Eligible_Top_Picks"] = eligible
                         ml_row = apply_sentiment_defaults(ml_row, sentiment_defaults_base)
-                        rows_out.append(ml_row)
+
+                        # Task 3: Force Moneyline Pivot (Inside Loop)
+                        if ml_row.get("Market") == "Moneyline":
+                            s_edge = safe_float(ml_row.get("spread_edge")) or 0.0
+                            t_edge = safe_float(ml_row.get("total_edge")) or 0.0
+                            if s_edge >= t_edge:
+                                ml_row["Market"] = "Spread"
+                                ml_row["Pick"] = ml_row.get("Spread & Pick")
+                            else:
+                                ml_row["Market"] = "Total"
+                                ml_row["Pick"] = ml_row.get("Total & Pick")
+
+                        accumulated_rows.append(ml_row)
                         ml_row_created = True
                         master_stats["h2h_found"] += 1
                         master_stats["market_rows_out"] += 1
@@ -8578,7 +8590,7 @@ with tab_master:
                     )
                     spread_row["Eligible_Top_Picks"] = eligible
                     spread_row = apply_sentiment_defaults(spread_row, sentiment_defaults_base)
-                    rows_out.append(spread_row)
+                    accumulated_rows.append(spread_row)
                     spread_row_created = True
                     master_stats["market_rows_out"] += 1
 
@@ -8850,7 +8862,7 @@ with tab_master:
                     )
                     total_row["Eligible_Top_Picks"] = eligible
                     total_row = apply_sentiment_defaults(total_row, sentiment_defaults_base)
-                    rows_out.append(total_row)
+                    accumulated_rows.append(total_row)
                     total_row_created = True
                     master_stats["market_rows_out"] += 1
 
@@ -9034,7 +9046,7 @@ with tab_master:
                     fallback_row["Pick_Reason_Short"] = reason_short
                     fallback_row["Eligible_Top_Picks"] = eligible
                     fallback_row = apply_sentiment_defaults(fallback_row, sentiment_defaults_base)
-                    rows_out.append(fallback_row)
+                    accumulated_rows.append(fallback_row)
                     master_stats["market_rows_out"] += 1
 
                 # --- 6. POST-LOOP PROCESSING (Task 1: Fix Result Accumulator) ---
@@ -9042,7 +9054,7 @@ with tab_master:
                 # This prevents overwriting and ensures all games are processed correctly.
 
                 # Task 1: Create DataFrame
-                master_df = pd.DataFrame.from_records(rows_out)
+                master_df = pd.DataFrame.from_records(accumulated_rows)
 
                 # FIX: Deduplicate columns immediately to prevent "Duplicate labels" error
                 master_df = master_df.loc[:, ~master_df.columns.duplicated()].copy()
@@ -9185,24 +9197,11 @@ with tab_master:
                     visual_cols = ["spread_sentiment_arrow", "total_sentiment_arrow", "spread_sentiment_note", "total_sentiment_note"]
                     master_df[visual_cols] = master_df[visual_cols].fillna("")
 
-                # Task 2: Absolute Moneyline Pivot (Apply to master_df before anything else)
-                def pivot_to_st(row):
-                    if row.get('Market') == "Moneyline":
-                        s_edge = safe_float(row.get('spread_edge')) or 0.0
-                        t_edge = safe_float(row.get('total_edge')) or 0.0
-                        if s_edge >= t_edge:
-                            row['Market'], row['Pick'] = "Spread", row.get('Spread & Pick')
-                        else:
-                            row['Market'], row['Pick'] = "Total", row.get('Total & Pick')
-                    return row
-
                 # Deduplication Setup
                 rows_for_dedupe = master_df.to_dict("records") if not master_df.empty else []
                 deduped_rows: Dict[Tuple[Any, Any, Any, Any, Any], Dict[str, Any]] = {}
                 for row in rows_for_dedupe:
-                    # Apply pivot logic here if desired, or after df creation.
-                    # Applying here is cleaner.
-                    row = pivot_to_st(row)
+                    # Logic already applied inside loop
                     key = (row.get("league"), row.get("Home"), row.get("Away"), row.get("Commence (UTC)"), row.get("Market"))
                     existing = deduped_rows.get(key)
                     if (existing is None) or (
@@ -11283,7 +11282,8 @@ with tab_master:
         elif not games:
             st.warning("No games loaded. Use the sidebar to load games first.")
         else:
-            st.success(f"Produced {len(df_master_view)} rows from {len(games)} games")
+            success_msg = f"Produced {stats.get('rows_out')} rows from {stats.get('games_in')} games"
+            st.success(success_msg)
             # Explicitly format key columns
             # Ensure numeric typing before display to avoid Arrow errors
             cols_to_force_numeric = ["AI_Prob", "model_prob_home", "final_probability", "Implied_Prob", "spread_edge", "total_edge"]
