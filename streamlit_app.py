@@ -9376,7 +9376,10 @@ with tab_master:
                 # --- MARKET TRACKER HOOK ---
                 try:
                     snapshot_manager.save_noon_baseline(df)
-                    df = market_tracker.load_and_compare(df)
+                    # Ensure current games are preserved even if comparison data is missing
+                    df_compared = market_tracker.load_and_compare(df)
+                    if df_compared is not None and not df_compared.empty:
+                        df = df_compared
                     if 'theover_stats' in locals():
                         st.session_state["theover_debug_log"] = theover_stats.get("full_debug_log", [])
                         st.session_state["theover_raw_df"] = theover_stats.get("raw_df", pd.DataFrame())
