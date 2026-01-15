@@ -9379,7 +9379,8 @@ with tab_master:
                     snapshot_manager.save_noon_baseline(df)
                     # Force preservation of all analyzed games even if comparison data is missing
                     df_temp = market_tracker.load_and_compare(df)
-                    if df_temp is not None and not df_temp.empty:
+                    # Check if we got a valid result AND we didn't lose rows (allow for small diffs? No, usually should be exact or strictly enriched)
+                    if df_temp is not None and not df_temp.empty and len(df_temp) >= len(df):
                         df = df_temp
                     # Else: df remains the full analyzed slate of 68 games
 
@@ -10861,8 +10862,7 @@ if st.session_state.get("master_results_df") is not None:
         if "Market" in top_df.columns:
              top_df = top_df[top_df["Market"] != "Moneyline"]
 
-        # if not include_low_in_top:
-        #     top_df = top_df[top_df["Pick_Confidence"].isin(["HIGH", "MEDIUM"])]
+        # Ensure no visibility filters are active (Eligible_Top_Picks filter removed)
         try:
             top_df["st_conf_rank"] = top_df["st_conf_rank"].fillna(0)
             top_df["decisiveness"] = top_df["decisiveness"].fillna(0.0)
@@ -11453,6 +11453,7 @@ if st.session_state.get("master_results_df") is not None:
         else:
             # Display the raw count of master_results_df to reflect the current analyzed slate
             games = st.session_state.get('games', [])
+            # Standardized success message as requested
             st.success(f"Produced {len(st.session_state['master_results_df'])} rows from {len(games)} games")
             # Explicitly format key columns
             # Ensure numeric typing before display to avoid Arrow errors
