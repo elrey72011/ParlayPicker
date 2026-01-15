@@ -603,7 +603,7 @@ def _transform_theover_df(df: pd.DataFrame, pick_type_default: str, games: List[
             home_code = team_code_for_league(league, csv_home)
             away_code = team_code_for_league(league, csv_away)
 
-        canon_key = generate_canonical_key(league, date_val, home_code, away_code)
+        canon_key = generate_canonical_key(league=league, date_str=date_val, home_code=home_code, away_code=away_code)
 
         # Pick & Line
         raw_pick = str(row.get("PICK", "")).strip()
@@ -739,7 +739,7 @@ def parse_theover_public_betting_text(raw_text: str, pick_type_hint: str = "UNKN
 
             away_code = team_code_for_league(current_league, current_away)
             home_code = team_code_for_league(current_league, current_home)
-            canon_key = generate_canonical_key(current_league, current_date, home_code, away_code)
+            canon_key = generate_canonical_key(league=current_league, date_str=current_date, home_code=home_code, away_code=away_code)
 
             rows.append({
                 "theover_key": canon_key,
