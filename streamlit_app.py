@@ -9690,7 +9690,7 @@ with tab_master:
                 df = pd.DataFrame(deduped_list)
                 if "Unnamed: 0" in df.columns:
                     df = df.drop(columns=["Unnamed: 0"])
-        
+            
                 # 5. UI PERSISTENCE
                 # We persist the DEDUPED df as "master_df" because that's what the UI expects for the "Master Analysis" tab table.
                 # The shotgun data is stored separately.
@@ -9715,61 +9715,6 @@ with tab_master:
                 # ---------------------------
 
                 st.session_state["master_df"] = df
-
-                # Bulk convert ensuring existence
-                valid_numeric = [c for c in numeric_cols if c in df_shotgun.columns]
-                if valid_numeric:
-                    df_shotgun[valid_numeric] = df_shotgun[valid_numeric].apply(pd.to_numeric, errors='coerce').fillna(0.0)
-
-                # Filter: Remove rows with invalid probabilities (Fail-safe)
-                # Ensure we don't process "broken" rows with 0/null AI probs
-                if 'AI_Prob' in df_shotgun.columns:
-                    df_shotgun = df_shotgun[df_shotgun['AI_Prob'] > 0.0]
-                if 'final_probability' in df_shotgun.columns:
-                    df_shotgun = df_shotgun[df_shotgun['final_probability'] > 0.0]
-
-                # Ensure all ROI metrics are calculated
-                df_shotgun = add_spread_total_confidence(df_shotgun)
-                df_shotgun = df_shotgun.copy()
-                df_shotgun = enrich_picks_with_roi_metrics(df_shotgun)
-                df_shotgun = df_shotgun.copy()
-
-                # Calculate active_edge = final_probability - Implied_Prob
-                active_edge_series = (
-                    df_shotgun["final_probability"].fillna(0.0) - pd.to_numeric(df_shotgun.get("Implied_Prob"), errors='coerce').fillna(0.0)
-                )
-
-                # Create a small DataFrame for the new column to concat
-                new_metrics = pd.DataFrame({'active_edge': active_edge_series}, index=df_shotgun.index)
-                df_shotgun = pd.concat([df_shotgun, new_metrics], axis=1)
-                df_shotgun = df_shotgun.loc[:, ~df_shotgun.columns.duplicated()].copy()
-
-                # Filter logic
-                # 1. Tight Markets
-                # Ensure active_edge and spread_width are float
-                df_shotgun["active_edge"] = pd.to_numeric(df_shotgun["active_edge"], errors='coerce').fillna(0.0)
-                df_shotgun["spread_width"] = pd.to_numeric(df_shotgun["spread_width"], errors='coerce').fillna(99.0)
-
-                tight_mask = (df_shotgun["active_edge"] > 0.01) & (df_shotgun["spread_width"] <= 0.5)
-                candidates = df_shotgun[tight_mask].copy()
-
-                filter_mode = "Tight (Width <= 0.5)"
-
-                if len(candidates) < 2:
-                    # Fallback
-                    normal_mask = (df_shotgun["active_edge"] > 0.01) & (df_shotgun["spread_width"] <= 1.5)
-                    candidates = df_shotgun[normal_mask].copy()
-                    filter_mode = "Normal (Width <= 1.5)"
-
-                st.write(f"Filter Mode: **{filter_mode}** | Candidates found: {len(candidates)}")
-            except Exception as e:
-                st.warning("Data mismatch in Shotgun results. Defaulting to neutral values.")
-                logger.error(f"Shotgun logic error: {e}", exc_info=True)
-                candidates = pd.DataFrame()
-
-            if not candidates.empty:
-                # Tiered Display
-                col1, col2, col3 = st.columns(3)
 
                 with col1:
                     st.subheader("🎯 Snipers (Prob > 60%)")
