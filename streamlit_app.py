@@ -8962,7 +8962,8 @@ with tab_master:
 
                 # --- 5. FALLBACK: "NONE" MARKET ROW ---
                 # Ensure a row is created for the game even if specific market data is missing
-                if not (ml_row_created or spread_row_created or total_row_created):
+                # Jules: Modified to not gate on ML row creation, ensuring fallback if spread/total missing
+                if not (spread_row_created or total_row_created):
                     warnings = list(dict.fromkeys(warnings + ["no_markets"]))
                     fallback_row = {
                         "league": league_name,
@@ -9376,11 +9377,11 @@ with tab_master:
                 # --- MARKET TRACKER HOOK ---
                 try:
                     snapshot_manager.save_noon_baseline(df)
-                    # Force preservation of all analyzed games even if movement data is missing
-                    df_with_movement = market_tracker.load_and_compare(df)
-                    if df_with_movement is not None and not df_with_movement.empty:
-                        df = df_with_movement
-                    # Else: df remains the full analyzed slate
+                    # Force preservation of all analyzed games even if comparison data is missing
+                    df_temp = market_tracker.load_and_compare(df)
+                    if df_temp is not None and not df_temp.empty:
+                        df = df_temp
+                    # Else: df remains the full analyzed slate of 68 games
 
                     if 'theover_stats' in locals():
                         st.session_state["theover_debug_log"] = theover_stats.get("full_debug_log", [])
