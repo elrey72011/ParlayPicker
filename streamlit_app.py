@@ -23,20 +23,51 @@ from app_core.kalshi_integrator import (
     team_code_for_league,
     parse_event_ticker_codes,
 )
+from app_core.kalshi_integrator import (
+    KalshiIntegrator,
+    LEAGUE_SERIES_MAP,
+    league_game_prefix,
+    league_series_ticker,
+    team_code_for_league,
+    parse_event_ticker_codes,
+)
+
 from app_core.llm_assistant import generate_confidence_explanation
 from app_core.reddit_sentiment import fetch_reddit_sentiment_map
-from app_core.sentiment_pipeline import MAX_SENTIMENT_CALLS, fetch_team_news, league_label, team_sentiment_from_articles
-from app_core.theover_ingest import process_theover_inputs, parse_theover_public_betting_text, generate_canonical_key, TEAM_ALIAS_MAP
+from app_core.sentiment_pipeline import (
+    MAX_SENTIMENT_CALLS,
+    fetch_team_news,
+    league_label,
+    team_sentiment_from_articles,
+)
+from app_core.theover_ingest import (
+    process_theover_inputs,
+    parse_theover_public_betting_text,
+    generate_canonical_key,
+    TEAM_ALIAS_MAP,
+)
 from app_core.team_name_matcher import TeamNameMatcher
-from app_core.prediction_engine import VERTEX_FEATURE_COLUMNS, PredictionEngine, get_prediction_prob, match_team_name
+from app_core.prediction_engine import (
+    VERTEX_FEATURE_COLUMNS,
+    PredictionEngine,
+    get_prediction_prob,
+    match_team_name,
+)
 from app_core.apisports import (
     APISportsBasketballClient,
     APISportsFootballClient,
     APISportsHockeyClient,
     get_key as get_apisports_key,
 )
-from app_core.new_summary_logic import build_game_summary_v2, reorder_for_spread_total_focus_v2
-from app_core.feature_processing import enrich_with_model_features, build_model_feature_row_from_record, robust_normalize_team
+from app_core.new_summary_logic import (
+    build_game_summary_v2,
+    reorder_for_spread_total_focus_v2,
+)
+from app_core.feature_processing import (
+    enrich_with_model_features,
+    build_model_feature_row_from_record,
+    robust_normalize_team,
+)
 from app_core.sportsdata import (
     SportsDataNBAClient,
     SportsDataNFLClient,
@@ -52,7 +83,7 @@ from app_core.weights_config import (
     MARKET_WEIGHT,
     ML_MODEL_WEIGHT,
     THEOVER_WEIGHT,
-    SENTIMENT_WEIGHT
+    SENTIMENT_WEIGHT,
 )
 from app_core.consensus_ingest import enrich_with_consensus
 
