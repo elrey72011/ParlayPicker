@@ -9377,11 +9377,10 @@ with tab_master:
                 # --- MARKET TRACKER HOOK ---
                 try:
                     snapshot_manager.save_noon_baseline(df)
-                    # Force preservation of all analyzed games even if comparison data is missing
-                    df_temp = market_tracker.load_and_compare(df)
-                    # Check if we got a valid result AND we didn't lose rows (allow for small diffs? No, usually should be exact or strictly enriched)
-                    if df_temp is not None and not df_temp.empty and len(df_temp) >= len(df):
-                        df = df_temp
+                    # Force preservation of all analyzed games even if movement data is missing
+                    df_with_movement = market_tracker.load_and_compare(df)
+                    if df_with_movement is not None and not df_with_movement.empty:
+                        df = df_with_movement
                     # Else: df remains the full analyzed slate of 68 games
 
                     if 'theover_stats' in locals():
