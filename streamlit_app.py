@@ -9500,42 +9500,42 @@ with tab_master:
             # Must be done before sentiment integration or model features if model uses it
             with st.spinner("📊 Ingesting Public Consensus Data..."):
                 master_df = enrich_with_consensus(master_df)
-
+    
                 # 3. CRITICAL: Enrich the whole batch to fill 'feature_diff' columns
                 # This fixes the 'Missing feature column' warnings in the logs
                 with st.spinner("🚀 Running Batch Feature Enrichment..."):
                     # FIX: Pass ALL api_clients so stats for all leagues are fetched, not just the last loop variable
                     master_df = enrich_with_model_features(master_df, api_sports_clients)
-
+    
             # Task 4: Update Sentiment Score using Sharpness Delta
             # Integration: 60% Sharpness Delta, 40% Social Sentiment
             # We need to update 'Sentiment_Diff' or create a new combined score.
             # Currently 'Sentiment_Diff' is used in compute_final_probability via sentiment_score.
-
+    
             def _update_sentiment_score(row):
                 social_diff = row.get("Sentiment_Diff")
                 if social_diff is None: social_diff = 0.0
-
+    
                 sharpness = row.get("sharpness_delta")
                 if sharpness is None: sharpness = 0.0
-
+    
                 # Hybrid Formula
                 # Normalize sharpness (e.g. 0.15 delta -> 1.0 score equiv? or keep raw?)
                 # Sentiment Diff is typically -1 to 1.
                 # Sharpness Delta is typically -0.3 to +0.3.
                 # Let's scale sharpness by 3.33 to map 0.3 to 1.0 roughly.
                 sharpness_scaled = sharpness * 3.33
-
+    
                 # Weighted Combo
                 hybrid_score = (0.6 * sharpness_scaled) + (0.4 * social_diff)
                 return hybrid_score
-
+    
             if 'Sentiment_Diff' in master_df.columns and 'sharpness_delta' in master_df.columns:
                 master_df['Sentiment_Diff'] = master_df.apply(_update_sentiment_score, axis=1)
-
+    
                 # Ensure use_model_numeric_probs is synchronized from session state
                 use_model_numeric_probs = st.session_state.get("use_model_numeric_probs", True)
-
+    
                 # 4. BATCH PREDICTION: Local Inference
                 master_df = clean_df(master_df)
                 # Local inference is always "configured" (or falls back)
@@ -9547,9 +9547,9 @@ with tab_master:
                         if missing_cols:
                             zeros_df = pd.DataFrame(0.0, index=master_df.index, columns=missing_cols)
                             master_df = pd.concat([master_df, zeros_df], axis=1)
-
+    
                         inference_df = master_df[VERTEX_FEATURE_COLUMNS].copy()
-
+    
                         # 3. Sanitize feature batch
                         for col in VERTEX_FEATURE_COLUMNS:
                             col_data = inference_df[col]
@@ -9557,11 +9557,11 @@ with tab_master:
                                 col_data = col_data.iloc[:, 0]
                             default_val = 0.5 if "prob" in col else 0.0
                             inference_df[col] = pd.to_numeric(col_data, errors='coerce').fillna(default_val).astype(float)
-
+    
                         # 6. Accumulate Debug Data (Base Dict + Feature Vector)
                         if "debug_log_history" not in st.session_state:
                             st.session_state["debug_log_history"] = []
-
+    
                         try:
                             # Capture base metadata
                             debug_base = master_df[['Home', 'Away', 'league', 'Commence (UTC)']].copy()
@@ -9571,7 +9571,7 @@ with tab_master:
                             st.session_state["debug_log_history"].extend(debug_combined.to_dict('records'))
                         except Exception as e:
                             logger.warning(f"Failed to accumulate debug data: {e}")
-
+    
                         # 7. Call local prediction
                         if not inference_df.empty:
                             engine = get_prediction_engine()
@@ -9581,7 +9581,7 @@ with tab_master:
                                 logger.error(f"Prediction batch failed: {e}")
                                 st.warning(f"AI Data Unavailable (using defaults): {e}")
                                 probs = [0.5] * len(inference_df)
-
+    
                             # FIX: Stop Using Indexing for AI Results (Safe Map Approach) - Logic Update: Pad with 0.5 instead of fail
                             if probs:
                                 # Handle length mismatch by padding or truncating
@@ -9591,11 +9591,11 @@ with tab_master:
                                 elif len(probs) > len(inference_df):
                                     logger.warning(f"Prediction length mismatch (long): got {len(probs)}, expected {len(inference_df)}. Truncating.")
                                     probs = list(probs)[:len(inference_df)]
-
+    
                                 # Wrap in Series to match index explicitly (convert to list to drop any upstream index)
                                 # This aligns by index explicitly as requested to prevent mismatch
                                 predictions_series = pd.Series(list(probs), index=inference_df.index)
-
+    
                                 # Assign using loc to ensure alignment
                                 master_df.loc[inference_df.index, 'AI_Prob'] = predictions_series
                                 master_df.loc[inference_df.index, 'ai_prob_base'] = predictions_series # Persist base if needed
@@ -9605,11 +9605,11 @@ with tab_master:
                                 master_df.loc[inference_df.index, 'ai_prob_base'] = 0.5
                         else:
                             logger.info("Skipping prediction: inference_df is empty.")
-
+    
                         # Safe Edge Calculation
                         implied_probs = pd.to_numeric(master_df.get("Implied_Prob"), errors='coerce').fillna(0.5)
                         master_df["AI_Edge"] = master_df["AI_Prob"] - implied_probs
-
+    
                 # 4. SHOTGUN ACTIVATION: Use ParlayOptimizer to tier the results
                 if ParlayOptimizer:
                     # FIX: Use absolute path for robustness
@@ -9617,19 +9617,19 @@ with tab_master:
                     optimizer = ParlayOptimizer(model_dir=model_dir_abs)
                     shotgun_picks = optimizer.get_shotgun_picks(master_df)
                     st.session_state["shotgun_data"] = shotgun_picks
-
+    
                 # Collapse to one row per game (prefer the first generated row, typically moneyline) for Master View
                 # NOTE: master_df now has ALL rows (ML/Spread/Total). We duplicate logic for deduping for the UI view if needed,
                 # but the prompt implies we persist the FULL master_df to session state for tabs to use.
-
+    
                 # We need to preserve the sentiment metadata enrichment logic
                 sentiment_meta_for_export = sentiment_pack_meta or init_sentiment_meta()
                 # Vectorized or simple loop to fill sentiment meta if missing
                 # (Assuming enrich_with_model_features preserves existing cols, which it does)
-
+    
                 # Deduping logic for "Master View" (one row per game)
                 # We'll create a view for display, but keep master_df full for shotgun/optimizer.
-
+    
                 # But wait, the previous code replaced `df` with `deduped_list`.
                 # If we overwrite `st.session_state["master_df"]` with the full `master_df`,
                 # downstream code expecting 1 row per game might break.
@@ -9639,7 +9639,7 @@ with tab_master:
                 # We should probably assign `df` to the deduped version for the immediate display logic below,
                 # but maybe store `master_df_full` or similar?
                 # Actually, let's follow the pattern but adapt for the existing `df` variable usage.
-
+    
                 # Apply sentiment meta to master_df
                 # (Simulating what the loop did)
                 if not master_df.empty:
@@ -9656,7 +9656,7 @@ with tab_master:
                     # Create DataFrame for new columns and concat
                     meta_df = pd.DataFrame(meta_updates, index=master_df.index)
                     master_df = pd.concat([master_df, meta_df], axis=1)
-
+    
                     # Fill remaining fields using bulk fillna
                     # Fix: Ensure no 'None' values are passed to fillna
                     fill_map = {
@@ -9671,7 +9671,7 @@ with tab_master:
                     # Fill visual cols with empty string
                     visual_cols = ["spread_sentiment_arrow", "total_sentiment_arrow", "spread_sentiment_note", "total_sentiment_note"]
                     master_df[visual_cols] = master_df[visual_cols].fillna("")
-
+    
                 # Re-implement deduping for the `df` variable used by the UI below
                 rows_for_dedupe = master_df.to_dict("records")
                 deduped_rows: Dict[Tuple[Any, Any, Any, Any], Dict[str, Any]] = {}
@@ -9683,28 +9683,28 @@ with tab_master:
                     ):
                         deduped_rows[key] = row
                 deduped_list = list(deduped_rows.values())
-
+    
                 if st.session_state.get("kalshi_match_only"):
                     deduped_list = [r for r in deduped_list if r.get("kalshi_matched")]
-
+    
                 df = pd.DataFrame(deduped_list)
                 if "Unnamed: 0" in df.columns:
                     df = df.drop(columns=["Unnamed: 0"])
-        
+            
                 # 5. UI PERSISTENCE
                 # We persist the DEDUPED df as "master_df" because that's what the UI expects for the "Master Analysis" tab table.
                 # The shotgun data is stored separately.
                 # 1. Deduplicate Master DF (Fix Duplicate Column Crash)
                 df = df.loc[:, ~df.columns.duplicated()].copy()
-
+    
                 # --- MARKET TRACKER HOOK (Snapshot System) ---
                 try:
                     # 1. Save Noon Baseline (Task 2: Use Snapshot Manager)
                     snapshot_manager.save_noon_baseline(df)
-
+    
                     # 2. Compare against Noon Baseline (if Evening/Late)
                     df = market_tracker.load_and_compare(df)
-
+    
                     # Persist TheOver debug stats for sidebar export
                     if 'theover_stats' in locals():
                         st.session_state["theover_debug_log"] = theover_stats.get("full_debug_log", [])
@@ -9713,170 +9713,8 @@ with tab_master:
                 except Exception as e:
                     logger.error(f"Market Tracker Error: {e}")
                 # ---------------------------
-
+    
                 st.session_state["master_df"] = df
-
-                if valid_parlays:
-                    st.write(f"Top 10 generated parlays (out of {len(valid_parlays)})")
-                    parlay_df = pd.DataFrame(valid_parlays).head(10)
-                    # Format
-                    parlay_df['Combined Edge'] = parlay_df['Combined Edge'].map('{:.1%}'.format)
-                    parlay_df['Combined Prob'] = parlay_df['Combined Prob'].map('{:.1%}'.format)
-                    parlay_df['Leg 1 Edge'] = parlay_df['Leg 1 Edge'].map('{:.1%}'.format)
-                    parlay_df['Leg 2 Edge'] = parlay_df['Leg 2 Edge'].map('{:.1%}'.format)
-
-                    # Final "Shotgun" Cleanup: Sanitization
-                    if not parlay_df.empty:
-                        # Convert to numeric where possible, fill NaN
-                        parlay_df = parlay_df.apply(lambda x: pd.to_numeric(x, errors='coerce')).fillna(0.0)
-
-                    try:
-                        st.dataframe(
-                            parlay_df,
-                            column_config={
-                                "Combined Edge": st.column_config.TextColumn("Combined Edge"),
-                                "Combined Prob": st.column_config.TextColumn("Combined Prob"),
-                            },
-                            width="stretch"
-                        )
-                    except Exception as e:
-                        st.error(f"Display Error (Shotgun Parlays): {e}")
-                else:
-                    st.warning("No valid parlay combinations found (check independence constraints).")
-
-            else:
-                st.warning("No candidates found matching the filters.")
-
-    else:
-        st.info("Run Master Analysis first to unlock Shotgun Mode.")
-
-
-with tab_kalshi:
-    st.header("Kalshi Health")
-    kalshi_status = kalshi_health_check(league)
-    st.json(kalshi_status)
-    if not kalshi_status.get("configured"):
-        st.error("Kalshi is required but not configured.")
-    elif not kalshi_status.get("ok"):
-        st.error("Kalshi is required but unavailable. Fix keys/API and retry.")
-    else:
-        if (kalshi_status.get("market_count") or 0) > 0:
-            st.success("Kalshi credentials detected and markets available.")
-        else:
-            expected_prefix = league_game_prefix(league)
-            st.warning(
-                kalshi_status.get("warning")
-                or f"Kalshi reachable, but no {league} {expected_prefix} markets returned (futures-only or slate not listed)."
-            )
-    games_for_debug = st.session_state.get("games") or []
-    if games_for_debug:
-        with st.expander("Search first game markets", expanded=False):
-            fg = games_for_debug[0]
-            # Safe access for team codes
-            hc_cands = team_code_candidates(fg.get("league"), fg.get("home_team")) or []
-            home_code_dbg = hc_cands[0] if hc_cands else None
-
-            ac_cands = team_code_candidates(fg.get("league"), fg.get("away_team")) or []
-            away_code_dbg = ac_cands[0] if ac_cands else None
-            search_results = debug_search_markets_for_game(
-                st.session_state.get("kalshi_all_markets") or [],
-                fg.get("home_team"),
-                fg.get("away_team"),
-                home_code_dbg,
-                away_code_dbg,
-                league=fg.get("league"),
-                limit=25,
-            )
-            st.json(
-                {
-                    "game": {"home": fg.get("home_team"), "away": fg.get("away_team"), "league": fg.get("league")},
-                    "expected_codes": {"home": home_code_dbg, "away": away_code_dbg},
-                    "search_results": search_results,
-                }
-            )
-
-with tab_sentiment:
-    st.header("Sentiment")
-    sentiment_enabled = st.session_state.get("enable_sentiment", True)
-    sent_map = st.session_state.get("sentiment_map") or {}
-    sent_debug = st.session_state.get("sentiment_debug") or {}
-    sent_meta = st.session_state.get("sentiment_meta") or {}
-    st.caption(f"Sentiment enabled: {sentiment_enabled}")
-    articles_total = sent_meta.get("articles_total") or sent_debug.get("articles_total") or 0
-    error_count = sent_meta.get("error_count") or sent_debug.get("error_count") or 0
-    if sentiment_enabled and news_api_key and (articles_total == 0):
-        st.warning(
-            "Sentiment enabled but NewsAPI returned 0 articles. Check NEWS_API_KEY, request limits, or query format."
-        )
-    if st.button("🧹 Clear Sentiment Cache", key="clear_sent_cache"):
-        try:
-            st.cache_data.clear()
-        except Exception:
-            st.warning("Unable to clear cache.")
-        for k in ["sentiment_map", "sentiment_meta_map", "sentiment_meta", "sentiment_debug", "sentiment_slate_key", "sentiment_source", "reddit_used"]:
-            st.session_state.pop(k, None)
-        for k in list(st.session_state.keys()):
-            if str(k).startswith("sentiment_"):
-                st.session_state.pop(k, None)
-        st.success("Cleared sentiment cache/state. Run analysis again.")
-    if sent_map:
-        scores_df = pd.DataFrame(
-            sorted(sent_map.items(), key=lambda kv: kv[0]),
-            columns=["Team", "Sentiment"],
-        )
-        st.dataframe(scores_df)
-    else:
-        st.info("No sentiment scores available yet (missing NewsAPI key or disabled).")
-    with st.expander("Sentiment Debug", expanded=True):
-        sent_debug = st.session_state.get("sentiment_debug", {})
-        meta_map_view = st.session_state.get("sentiment_meta_map", {})
-        source_counts: Dict[str, int] = {}
-        for mv in meta_map_view.values():
-            src_val = str(mv.get("sentiment_source") or "none")
-            source_counts[src_val] = source_counts.get(src_val, 0) + 1
-        st.json(
-            {
-                "requests_attempted": sent_debug.get("requests_attempted"),
-                "requests_skipped_due_to_cache": sent_debug.get("requests_skipped_due_to_cache"),
-                "requests_skipped_due_to_cooldown": sent_debug.get("requests_skipped_due_to_cooldown"),
-                "rate_limit_hit": sent_debug.get("rate_limit_hit"),
-                "cooldown_until": sent_debug.get("cooldown_until"),
-                "rate_limited": sent_debug.get("rate_limited"),
-                "reddit_posts_used": sent_debug.get("reddit_posts_used"),
-                "reddit_comments_used": sent_debug.get("reddit_comments_used"),
-                "teams_by_source": source_counts,
-            }
-        )
-        st.json(sent_debug or {})
-        st.json({"meta": sent_meta, "error_count": error_count})
-        st.write("Teams with sentiment:", list((st.session_state.get("sentiment_map") or {}).keys())[:20])
-
-
-with tab_movement:
-    st.header("📉 Closing Line / Market Movement Tracker")
-    st.info("Tracks line movements and probability shifts between the Noon Baseline and Evening Update.")
-
-    if "master_df" in st.session_state and not st.session_state["master_df"].empty:
-        move_df = st.session_state["master_df"].copy()
-
-        # Check if movement columns exist
-        has_movement = 'delta_implied_prob' in move_df.columns
-
-        if not has_movement:
-            st.warning("No baseline comparison data available yet. Comparison runs after 5:30 PM ET if a Noon Baseline was saved.")
-            # Check if baseline file exists for today to give better hint
-            try:
-                now_et = market_tracker.get_et_now()
-                fname = market_tracker.get_baseline_filename(now_et.date().isoformat())
-                if os.path.exists(fname):
-                    st.info(f"Baseline found for today ({now_et.date()}). Run analysis after 5:30 PM ET to see deltas.")
-                else:
-                    st.info(f"No baseline saved for today ({now_et.date()}). Run analysis between 9:00 AM and 1:00 PM ET to save a baseline.")
-            except Exception:
-                pass
-        else:
-            # Filter for significant movement
-            # "Only display games where the final_probability or implied_prob moved by >3% since the noon baseline."
 
             # Ensure numeric
             move_df['delta_implied_prob'] = pd.to_numeric(move_df.get('delta_implied_prob'), errors='coerce').fillna(0.0)
@@ -10155,8 +9993,18 @@ with tab_debug:
     if "model_last_error" in st.session_state:
         st.error(f"Prediction Error: {st.session_state['model_last_error']}")
 
-    # Debug Export Button (Sidebar)
-    if "debug_log_history" in st.session_state and st.session_state["debug_log_history"]:
+        st.subheader("Top Picks / Best Bets")
+        include_low_in_top = st.checkbox("Include LOW confidence in Top Picks", value=False, key="include_low_top_picks")
+        df = clean_df(df)
+        top_df = df.copy()
+        if "Unnamed: 0" in top_df.columns:
+            top_df = top_df.drop(columns=["Unnamed: 0"])
+        # Optimization: Bulk add missing columns
+        missing_top = [c for c in required_display_cols if c not in top_df.columns]
+        if missing_top:
+            top_df = pd.concat([top_df, pd.DataFrame(columns=missing_top)], axis=1)
+        if not include_low_in_top:
+            top_df = top_df[top_df["Pick_Confidence"].isin(["HIGH", "MEDIUM"])]
         try:
             debug_json = json.dumps(st.session_state["debug_log_history"], default=str, indent=2)
             st.sidebar.download_button(
@@ -10731,13 +10579,19 @@ if st.session_state.get("master_results_df") is not None:
             if not show_moneyline_rows:
                 df_master_view = df_master_view[df_master_view["Market"].isin(["Spread", "Total"])]
 
-        # Task 1: Explicitly Purge Moneyline from Recommendations (Recommendations Table)
-        # We enforce this on the "top_df" (Best Bets) which uses "Market" column.
-        # But here we are in df_master_view which is the big table.
-        # The user said "In the final step of the run_master_analysis function, filter the dataframe to ensure the Market column never contains 'Moneyline.'".
-        # This implies standard view unless specifically requested?
-        # Actually, "Recommendations" usually implies the Top Picks list.
-        # But let's add a robust filter for the Top Picks section specifically.
+        if master_stats["games_in"] > 0 and master_stats["rows_out"] == 0:
+            st.error("Master analysis produced 0 rows; see debug stats below.")
+            st.json(master_stats)
+        elif not games:
+            st.warning("No games loaded. Use the sidebar to load games first.")
+        else:
+            st.success(f"Produced {len(st.session_state['master_results_df'])} rows from {len(games)} games")
+            # Explicitly format key columns
+            # Ensure numeric typing before display to avoid Arrow errors
+            cols_to_force_numeric = ["AI_Prob", "model_prob_home", "final_probability", "Implied_Prob", "spread_edge", "total_edge"]
+            valid_force_cols = [c for c in cols_to_force_numeric if c in df_master_view_display.columns]
+            if valid_force_cols:
+                df_master_view_display[valid_force_cols] = df_master_view_display[valid_force_cols].apply(pd.to_numeric, errors='coerce').fillna(0.0)
 
         try:
             df_master_view["st_conf_rank"] = df_master_view["st_conf_rank"].fillna(0)
