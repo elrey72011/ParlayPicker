@@ -9376,10 +9376,19 @@ with tab_master:
                 # --- MARKET TRACKER HOOK ---
                 try:
                     snapshot_manager.save_noon_baseline(df)
-                    # Preserve original data in case the tracker returns a truncated/empty set
-                    df_with_movement = market_tracker.load_and_compare(df)
-                    if df_with_movement is not None and not df_with_movement.empty:
-                        df = df_with_movement
+                    # PRESERVE ORIGINAL DATA: Stop the inner-join from purging games missing baseline data
+                    df_temp = market_tracker.load_and_compare(df)
+                    if df_temp is not None and not df_temp.empty:
+                        # Safety check: Only use tracker result if it doesn't massively truncate the data
+                        # Prevent purging games that lack baseline comparison data
+                        original_count = len(df)
+                        tracker_count = len(df_temp)
+                        # Allow up to 10% loss, but reject if we lose more than that (indicates purge bug)
+                        if tracker_count >= (original_count * 0.9):
+                            df = df_temp
+                            logger.info(f"✅ Market Tracker: Preserved {tracker_count}/{original_count} rows")
+                        else:
+                            logger.warning(f"⚠️  Market Tracker: REJECTED truncation ({tracker_count}/{original_count} rows). Keeping original data.")
                     if 'theover_stats' in locals():
                         st.session_state["theover_debug_log"] = theover_stats.get("full_debug_log", [])
                         st.session_state["theover_raw_df"] = theover_stats.get("raw_df", pd.DataFrame())
