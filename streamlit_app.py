@@ -6123,7 +6123,7 @@ with tab_master:
                 filtered_counts: List[int] = []
                 per_game_kalshi_debug: List[Dict[str, Any]] = []
                 first_game_full_search = full_search_first_game
-                accumulated_rows: List[Dict[str, Any]] = []
+                rows_out: List[Dict[str, Any]] = [] # Renamed from accumulated_rows per User Request 2
                 master_stats = {
                     "games_in": len(games),
                     "rows_out": 0,
@@ -8308,7 +8308,7 @@ with tab_master:
                                 ml_row["Market"] = "Total"
                                 ml_row["Pick"] = ml_row.get("Total & Pick")
 
-                        accumulated_rows.append(ml_row)
+                        rows_out.append(ml_row)
                         ml_row_created = True
                         master_stats["h2h_found"] += 1
                         master_stats["market_rows_out"] += 1
@@ -8592,7 +8592,7 @@ with tab_master:
                     )
                     spread_row["Eligible_Top_Picks"] = eligible
                     spread_row = apply_sentiment_defaults(spread_row, sentiment_defaults_base)
-                    accumulated_rows.append(spread_row)
+                    rows_out.append(spread_row)
                     spread_row_created = True
                     master_stats["market_rows_out"] += 1
 
@@ -8864,7 +8864,7 @@ with tab_master:
                     )
                     total_row["Eligible_Top_Picks"] = eligible
                     total_row = apply_sentiment_defaults(total_row, sentiment_defaults_base)
-                    accumulated_rows.append(total_row)
+                    rows_out.append(total_row)
                     total_row_created = True
                     master_stats["market_rows_out"] += 1
 
@@ -9048,7 +9048,7 @@ with tab_master:
                     fallback_row["Pick_Reason_Short"] = reason_short
                     fallback_row["Eligible_Top_Picks"] = eligible
                     fallback_row = apply_sentiment_defaults(fallback_row, sentiment_defaults_base)
-                    accumulated_rows.append(fallback_row)
+                    rows_out.append(fallback_row)
                     master_stats["market_rows_out"] += 1
 
                 # --- 6. POST-LOOP PROCESSING (Task 1: Fix Result Accumulator) ---
@@ -9056,7 +9056,7 @@ with tab_master:
                 # This prevents overwriting and ensures all games are processed correctly.
 
                 # Task 1: Create DataFrame
-                master_df = pd.DataFrame.from_records(accumulated_rows)
+                master_df = pd.DataFrame.from_records(rows_out)
 
                 # FIX: Deduplicate columns immediately to prevent "Duplicate labels" error
                 master_df = master_df.loc[:, ~master_df.columns.duplicated()].copy()
@@ -9205,24 +9205,34 @@ with tab_master:
                     master_df[visual_cols] = master_df[visual_cols].fillna("")
 
                 # Deduplication Setup
+                # Ensure we have a list of records
                 rows_for_dedupe = master_df.to_dict("records") if not master_df.empty else []
                 deduped_rows: Dict[str, Dict[str, Any]] = {}
+
                 for row in rows_for_dedupe:
-                    # FIX: Market-specific deduplication key
-                    # Key must be unique per game AND per market type to allow all rows to pass
-                    # Change the key from league+home+away to include the MARKET
+                    # FIX: Deduplication Logic (User Request 1)
+                    # Use a key that includes the Market Type to preserve Spread and Total for the same game.
                     league = row.get('league')
                     home = row.get('Home')
                     away = row.get('Away')
                     commence = row.get('Commence (UTC)')
                     market_type = row.get('Market')
+
+                    # Construct unique key
                     unique_key = f"{league}_{home}_{away}_{commence}_{market_type}"
 
+                    # Store in map (overwriting duplicates, which is intended per game/market)
+                    # Prioritize rows with Kalshi match if available
                     existing = deduped_rows.get(unique_key)
-                    if (existing is None) or (
-                        not existing.get("kalshi_matched") and row.get("kalshi_matched")
-                    ):
+
+                    if existing is None:
                         deduped_rows[unique_key] = row
+                    else:
+                        # If existing doesn't have Kalshi but new one does, upgrade.
+                        if not existing.get("kalshi_matched") and row.get("kalshi_matched"):
+                            deduped_rows[unique_key] = row
+                        # Otherwise keep existing (first seen)
+
                 deduped_list = list(deduped_rows.values())
 
                 df = pd.DataFrame(deduped_list)
