@@ -4729,6 +4729,14 @@ def filter_kalshi_game_markets(
             allowed_date_tokens.append(date_token)
 
         matched: List[Dict[str, Any]] = []
+
+        # DIAGNOSTIC: Log filtering params for debugging
+        first_market_ticker = ticker_upper(markets[0]) if markets else "NO_MARKETS"
+        if league_upper == "NHL":
+            logger.info(f"🔍 KALSHI FILTER: League={league_upper}, Prefixes={allowed_prefixes}, DateTokens={allowed_date_tokens}")
+            logger.info(f"🔍 KALSHI FILTER: Home codes={home_codes}, Away codes={away_codes}")
+            logger.info(f"🔍 KALSHI FILTER: Sample market ticker: {first_market_ticker}")
+
         for m in markets or []:
             t = ticker_upper(m)
             if "GAME" not in t:
@@ -4744,7 +4752,7 @@ def filter_kalshi_game_markets(
                 continue
             if date_token and not any(tok in t for tok in allowed_date_tokens):
                 # Check if we have strong team code matches as fallback
-                if not (home_codes and any(code in t for code in home_codes) and 
+                if not (home_codes and any(code in t for code in home_codes) and
                         away_codes and any(code in t for code in away_codes)):
                     continue
             if home_codes and not any(code in t for code in home_codes):
@@ -8628,6 +8636,11 @@ with tab_master:
                     rows_out.append(spread_row)
                     spread_row_created = True
                     master_stats["market_rows_out"] += 1
+                else:
+                    # DIAGNOSTIC: Log why spread row was not created
+                    if idx < 5:  # Only log first 5 games to avoid spam
+                        spread_point = g.get("home_spread_point")
+                        logger.warning(f"⚠️  DIAGNOSTIC: Game {idx+1} ({home} vs {away}) - NO SPREAD ROW: home_spread_point={spread_point}, spread_pick={spread_pick}")
 
                 # TOTAL ROW
                 if g.get("total_point") is not None and total_pick is not None:
@@ -8900,6 +8913,11 @@ with tab_master:
                     rows_out.append(total_row)
                     total_row_created = True
                     master_stats["market_rows_out"] += 1
+                else:
+                    # DIAGNOSTIC: Log why total row was not created
+                    if idx < 5:  # Only log first 5 games to avoid spam
+                        total_point = g.get("total_point")
+                        logger.warning(f"⚠️  DIAGNOSTIC: Game {idx+1} ({home} vs {away}) - NO TOTAL ROW: total_point={total_point}, total_pick={total_pick}")
 
                 # --- 5. FALLBACK: "NONE" MARKET ROW ---
                 # Ensure a row is created for the game even if specific market data is missing
