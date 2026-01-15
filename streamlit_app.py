@@ -9064,6 +9064,7 @@ with tab_master:
 
                 # Task 2: Force "No Moneyline" Pivot immediately after creation
                 # Ensure the dataframe only contains "Spread" and "Total" markets.
+                # Requirement: If Market == "Moneyline", it must pivot to the Spread or Total version of that game.
                 master_df = master_df.apply(pivot_market, axis=1)
 
                 # Task 4: Enrich with Consensus (Sharpness Delta)
@@ -9209,7 +9210,14 @@ with tab_master:
                 for row in rows_for_dedupe:
                     # FIX: Market-specific deduplication key
                     # Key must be unique per game AND per market type to allow all rows to pass
-                    unique_key = f"{row.get('league')}_{row.get('Home')}_{row.get('Away')}_{row.get('Commence (UTC)')}_{row.get('Market')}"
+                    # Change the key from league+home+away to include the MARKET
+                    league = row.get('league')
+                    home = row.get('Home')
+                    away = row.get('Away')
+                    commence = row.get('Commence (UTC)')
+                    market_type = row.get('Market')
+                    unique_key = f"{league}_{home}_{away}_{commence}_{market_type}"
+
                     existing = deduped_rows.get(unique_key)
                     if (existing is None) or (
                         not existing.get("kalshi_matched") and row.get("kalshi_matched")
@@ -10366,13 +10374,14 @@ if False:
             index=0,
             key="confidence_filter_mode",
         )
-        st.session_state.setdefault("show_low_confidence", False)
+        # Action: Set hide_low_confidence to False as the hardcoded default
+        st.session_state.setdefault("hide_low_confidence", False)
         hide_low = st.checkbox(
             "Hide low-confidence picks",
-            value=st.session_state.get("show_low_confidence", False),
+            value=st.session_state.get("hide_low_confidence", False),
             key="hide_low_confidence",
         )
-        st.session_state["show_low_confidence"] = hide_low
+        # st.session_state["show_low_confidence"] = hide_low # Deprecated
         df_master_view, confidence_stats = apply_confidence_filter(df, confidence_mode, not hide_low)
 
         # Task 2: Force Spread/Total Pivot (Applied immediately after df_master_view creation)
@@ -11291,8 +11300,8 @@ if False:
         elif not games:
             st.warning("No games loaded. Use the sidebar to load games first.")
         else:
-            success_msg = f"Produced {stats.get('rows_out')} rows from {stats.get('games_in')} games"
-            st.success(success_msg)
+            # Correct the Success Message
+            st.success(f"Produced {len(st.session_state['master_results_df'])} rows from {len(games)} games")
             # Explicitly format key columns
             # Ensure numeric typing before display to avoid Arrow errors
             cols_to_force_numeric = ["AI_Prob", "model_prob_home", "final_probability", "Implied_Prob", "spread_edge", "total_edge"]
