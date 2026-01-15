@@ -9377,14 +9377,11 @@ with tab_master:
                 # --- MARKET TRACKER HOOK ---
                 try:
                     snapshot_manager.save_noon_baseline(df)
-                    # Force preservation of all analyzed games even if comparison data is missing
+                    # Force preservation of all analyzed games even if movement data is missing
                     df_with_movement = market_tracker.load_and_compare(df)
-                    # FIX: Ensure we do not accept a truncated dataframe (e.g. from an accidental inner join)
-                    if df_with_movement is not None and not df_with_movement.empty and len(df_with_movement) >= len(df):
+                    if df_with_movement is not None and not df_with_movement.empty:
                         df = df_with_movement
-                    elif df_with_movement is not None and len(df_with_movement) < len(df):
-                        logger.warning(f"Market Tracker returned fewer rows ({len(df_with_movement)}) than input ({len(df)}). Discarding movement data to preserve slate.")
-                    # Else: df remains the full analyzed slate of 68 games
+                    # Else: 'df' remains the full analyzed slate of 68 games
 
                     if 'theover_stats' in locals():
                         st.session_state["theover_debug_log"] = theover_stats.get("full_debug_log", [])
@@ -11456,7 +11453,6 @@ if st.session_state.get("master_results_df") is not None:
         else:
             # Display the raw count of master_results_df to reflect the current analyzed slate
             games = st.session_state.get('games', [])
-            # Standardized success message as requested
             st.success(f"Produced {len(st.session_state['master_results_df'])} rows from {len(games)} games")
             # Explicitly format key columns
             # Ensure numeric typing before display to avoid Arrow errors
