@@ -10939,7 +10939,7 @@ if st.session_state.get("master_results_df") is not None:
             st.info("No Moneyline picks available.")
 
         st.subheader("Top Picks / Best Bets")
-        include_low_in_top = st.checkbox("Include LOW confidence in Top Picks", value=False, key="include_low_top_picks")
+        include_low_in_top = st.checkbox("Include LOW confidence in Top Picks", value=True, key="include_low_top_picks")
         df = clean_df(df)
         top_df = df.copy()
         if "Unnamed: 0" in top_df.columns:
@@ -10948,9 +10948,9 @@ if st.session_state.get("master_results_df") is not None:
         missing_top = [c for c in required_display_cols if c not in top_df.columns]
         if missing_top:
             top_df = pd.concat([top_df, pd.DataFrame(columns=missing_top)], axis=1)
-        # Filter removed to show all games during debugging
-        if not include_low_in_top:
-            top_df = top_df[top_df["Pick_Confidence"].isin(["HIGH", "MEDIUM"])]
+        # FORCE DISPLAY: Show all 139 rows regardless of confidence (filter disabled)
+        # if not include_low_in_top:
+        #     top_df = top_df[top_df["Pick_Confidence"].isin(["HIGH", "MEDIUM"])]
         try:
             top_df["st_conf_rank"] = top_df["st_conf_rank"].fillna(0)
             top_df["decisiveness"] = top_df["decisiveness"].fillna(0.0)
@@ -11109,14 +11109,14 @@ if st.session_state.get("master_results_df") is not None:
             'Pick', 'AI_Prob', 'Implied_Prob', 'Home_Sentiment', 'Away_Sentiment', 'Sentiment_Diff', 'sentiment_status', 'status', 'best_pick_prob', 'best_pick_edge',
             'theover_pick', 'theover_prob_used', 'theover_delta_final_prob', 'final_prob_without_theover',
             'theover_weight', 'theover_matched',
-            'Sharp Money', 'sharpness_delta', 'delta_implied_prob'
+            'Sharp Money', 'sharpness_delta', 'delta_implied_prob', 'decisiveness', 'st_conf_rank', 'Pick_Confidence'
         ]
         safe_cols = [c for c in ui_whitelist if c in top_df_display.columns]
         top_df_ui = top_df_display[safe_cols].copy()
 
         # Force Numeric and String consistency
         for col in top_df_ui.columns:
-            if col in ['AI_Prob', 'Implied_Prob', 'spread_edge', 'total_edge', 'Sentiment_Diff', 'final_prob', 'edge', 'Overall Prob', 'Spread Prob', 'Total Prob', 'ML Prob', 'sharpness_delta']:
+            if col in ['AI_Prob', 'Implied_Prob', 'spread_edge', 'total_edge', 'Sentiment_Diff', 'final_prob', 'edge', 'Overall Prob', 'Spread Prob', 'Total Prob', 'ML Prob', 'sharpness_delta', 'decisiveness', 'st_conf_rank']:
                 top_df_ui[col] = pd.to_numeric(top_df_ui[col], errors='coerce').fillna(0.0)
             else:
                 top_df_ui[col] = top_df_ui[col].astype(str).replace('None', 'N/A')
@@ -11392,34 +11392,36 @@ if st.session_state.get("master_results_df") is not None:
                 # Filter removed to show all games during debugging
 
                 # Also apply confidence filter from session state if needed, or just dump what's there.
-                # The prompt says: "The main “Download CSV” button (st.download_button) so the downloaded CSV matches what is shown on screen."
-                # top_df_ui filters out LOW confidence by default unless unchecked.
-                if not include_low_in_top and "Pick_Confidence" in final_picks_df.columns:
-                    final_picks_df = final_picks_df[final_picks_df["Pick_Confidence"].isin(["HIGH", "MEDIUM"])]
+                # The prompt says: "The main "Download CSV" button (st.download_button) so the downloaded CSV matches what is shown on screen."
+                # FORCE DISPLAY: Show all rows in export to match the forced display (filter disabled)
+                # if not include_low_in_top and "Pick_Confidence" in final_picks_df.columns:
+                #     final_picks_df = final_picks_df[final_picks_df["Pick_Confidence"].isin(["HIGH", "MEDIUM"])]
 
             st.caption(f"Export contains {len(final_picks_df)} picks (All Games).")
 
             # Persist to session state
             st.session_state["final_picks_df"] = final_picks_df.copy()
 
-            picks_csv = final_picks_df.to_csv(index=False).encode("utf-8")
-            st.download_button(
-                "Download Picks Sheet CSV (Default)",
-                data=picks_csv,
-                file_name="picks_sheet.csv",
-                mime="text/csv",
-                key="picks_sheet_csv",
-            )
+            # Ensure session state is preserved before download
+            if st.session_state.get('master_results_df') is not None:
+                picks_csv = final_picks_df.to_csv(index=False).encode("utf-8")
+                st.download_button(
+                    "Download Picks Sheet CSV (Default)",
+                    data=picks_csv,
+                    file_name="picks_sheet.csv",
+                    mime="text/csv",
+                    key="picks_sheet_csv",
+                )
 
-            # --- FULL DEBUG EXPORT ---
-            debug_csv = export_df.to_csv(index=False).encode("utf-8")
-            st.download_button(
-                "Download Full Debug CSV",
-                data=debug_csv,
-                file_name="full_debug_dump.csv",
-                mime="text/csv",
-                key="full_debug_csv_btn",
-            )
+                # --- FULL DEBUG EXPORT ---
+                debug_csv = export_df.to_csv(index=False).encode("utf-8")
+                st.download_button(
+                    "Download Full Debug CSV",
+                    data=debug_csv,
+                    file_name="full_debug_dump.csv",
+                    mime="text/csv",
+                    key="full_debug_csv_btn",
+                )
 
         with st.expander("TheOver Matching Debug", expanded=False):
             if 'theover_stats' in locals():
