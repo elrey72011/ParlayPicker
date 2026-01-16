@@ -9996,7 +9996,63 @@ with tab_master:
                     logger.error(f"Market Tracker Error: {e}")
                 # ---------------------------
 
+                # CRITICAL: Apply moneyline pivot logic before saving to session state
+                logger.info(f"Applying moneyline pivot logic to {len(df)} rows...")
+
+                def _force_pivot(row):
+                    if row.get('Market') == 'Moneyline':
+                        # Check availability of data
+                        s_pick = row.get('Spread & Pick')
+                        t_pick = row.get('Total & Pick')
+
+                        # Validate if picks are actually present
+                        has_spread = s_pick is not None and str(s_pick).strip() != '' and str(s_pick).lower() != 'none'
+                        has_total = t_pick is not None and str(t_pick).strip() != '' and str(t_pick).lower() != 'none'
+
+                        s_edge = float(row.get('spread_edge', 0) or 0)
+                        t_edge = float(row.get('total_edge', 0) or 0)
+
+                        # Logic to determine target market
+                        target = None
+
+                        if has_spread and has_total:
+                            if s_edge >= t_edge:
+                                target = 'Spread'
+                            else:
+                                target = 'Total'
+                        elif has_spread:
+                            target = 'Spread'
+                        elif has_total:
+                            target = 'Total'
+                        else:
+                            target = 'Keep_ML'
+
+                        if target == 'Spread':
+                            row['Market'] = 'Spread'
+                            row['Pick'] = s_pick
+                            row['best_pick_type'] = 'SPREAD'
+                            row['edge'] = s_edge
+                        elif target == 'Total':
+                            row['Market'] = 'Total'
+                            row['Pick'] = t_pick
+                            row['best_pick_type'] = 'TOTAL'
+                            row['edge'] = t_edge
+                        elif target == 'Keep_ML':
+                            row['Market'] = 'ML (No Spread/Total Avail)'
+
+                    return row
+
+                df = df.apply(_force_pivot, axis=1)
+                logger.info(f"Pivot logic applied successfully")
+
+                # CRITICAL: Save to BOTH session state variables so UI can display the data
+                logger.info(f"Saving df ({len(df)} rows) to session state...")
                 st.session_state["master_df"] = df
+                st.session_state["master_results_df"] = df
+
+                logger.info(f"✅ Saved {len(df)} rows to session state")
+                logger.info(f"   - st.session_state['master_df']: {len(st.session_state['master_df'])} rows")
+                logger.info(f"   - st.session_state['master_results_df']: {len(st.session_state['master_results_df'])} rows")
 
     if "model_last_error" in st.session_state:
         st.error(f"Prediction Error: {st.session_state['model_last_error']}")
