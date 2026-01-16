@@ -187,7 +187,10 @@ def league_game_prefix(league: str) -> str:
 
 def clean_team_name(name: str) -> str:
     """Robust cleaning preserving spaces for map lookup."""
-    return re.sub(r"[^A-Z0-9 ]", " ", str(name or "").upper()).strip()
+    # Convert to uppercase, replace non-alphanumeric with space, collapse multiple spaces
+    cleaned = re.sub(r"[^A-Z0-9 ]", " ", str(name or "").upper())
+    # Collapse multiple spaces into one and strip
+    return re.sub(r"\s+", " ", cleaned).strip()
 
 
 def normalize_name(name: str) -> str:

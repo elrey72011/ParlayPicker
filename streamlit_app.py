@@ -2489,7 +2489,15 @@ def pipeline_progress_snapshot() -> Dict[str, Any]:
     games_loaded = len(st.session_state.get("games") or [])
     _matches_raw = st.session_state.get("kalshi_match_results") or {}
     matches = _matches_raw.values() if isinstance(_matches_raw, dict) else (_matches_raw or [])
-    matched_games = len([m for m in matches if (m.get("matches") or {}).get("winner", {}).get("kalshi_matched")])
+    # Count games where ANY market (winner, spread, or total) has a Kalshi match
+    matched_games = len([
+        m for m in matches
+        if any([
+            (m.get("matches") or {}).get("winner", {}).get("kalshi_matched"),
+            (m.get("matches") or {}).get("spread", {}).get("kalshi_matched"),
+            (m.get("matches") or {}).get("total", {}).get("kalshi_matched")
+        ])
+    ])
     sentiment_meta = st.session_state.get("sentiment_meta") or {}
     sentiment_ready = bool(
         sentiment_meta.get("sentiment_available_count")
