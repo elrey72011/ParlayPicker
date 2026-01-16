@@ -110,10 +110,10 @@ LEAGUE_SERIES_MAP: Dict[str, Any] = {
 
 def parse_event_ticker_codes(event_ticker: str) -> Dict[str, str]:
     """
-    Extracts away/home codes from Kalshi’s event_ticker.
+    Extracts away/home codes from Kalshi's event_ticker using team code map matching.
     Examples:
       KXNBAGAME-26JAN09NYKPHX -> away=NYK, home=PHX
-      KXNCAAMBGAME-26JAN10NCSTFSU -> away/home are the trailing 6–8 chars after date token.
+      KXNCAAMBGAME-26JAN15MERVMI -> away=MER, home=VMI (variable length)
     """
     if not event_ticker:
         return {}
@@ -122,9 +122,10 @@ def parse_event_ticker_codes(event_ticker: str) -> Dict[str, str]:
     if len(parts) < 2:
         return {}
 
-    # parts[0] is like KXNBAGAME
-    # parts[1] is like 26JAN09NYKPHX
+    # parts[0] is like KXNBAGAME or KXNCAAMBGAME
+    # parts[1] is like 26JAN09NYKPHX or 26JAN15MERVMI
 
+    prefix = parts[0].upper()
     suffix = parts[-1]
 
     # Regex to find date token at start of suffix
@@ -136,42 +137,113 @@ def parse_event_ticker_codes(event_ticker: str) -> Dict[str, str]:
     date_token = match.group(1)
     team_block = match.group(2)
 
-    length = len(team_block)
+    # Determine league from prefix to get the right team code map
+    league = None
+    if "NBA" in prefix:
+        league = "NBA"
+    elif "NFL" in prefix:
+        league = "NFL"
+    elif "NHL" in prefix:
+        league = "NHL"
+    elif "MLB" in prefix:
+        league = "MLB"
+    elif "NCAAF" in prefix:
+        league = "NCAAF"
+    elif "NCAAB" in prefix or "NCAA" in prefix:
+        league = "NCAAB"
+
     away = ""
     home = ""
 
-    if length == 6:
-        # 3+3 (e.g., MERVMI)
-        away = team_block[:3]
-        home = team_block[3:]
-    elif length == 7:
-        # 7 characters: Try 4+3 or 3+4
-        # Default to 4+3 (most common), but could be 3+4
-        away = team_block[:4]
-        home = team_block[4:]
-    elif length == 8:
-        # 4+4
-        away = team_block[:4]
-        home = team_block[4:]
-    elif length % 2 == 0 and length >= 4:
-        # Variable length handling (split in half if even)
-        mid = length // 2
-        away = team_block[:mid]
-        home = team_block[mid:]
+    # For NCAAB and other college sports, use map-based matching to handle variable-length codes
+    if league in ["NCAAB", "NCAAF"]:
+        # Get the appropriate team code map
+        code_map = NCAAB_TEAM_CODE_MAP if league == "NCAAB" else NCAAF_TEAM_CODE_MAP
+        all_codes = list(code_map.values())
+
+        # Try to find a valid split by matching against known codes
+        best_split = None
+        best_score = 0
+
+        # Try all possible split points
+        for i in range(2, len(team_block) - 1):  # Need at least 2 chars for each team
+            potential_away = team_block[:i]
+            potential_home = team_block[i:]
+
+            # Check if both codes exist in our map (with alias resolution)
+            away_resolved = resolve_team_code(potential_away, league)
+            home_resolved = resolve_team_code(potential_home, league)
+
+            away_match = away_resolved in all_codes or potential_away in all_codes
+            home_match = home_resolved in all_codes or potential_home in all_codes
+
+            if away_match and home_match:
+                # Perfect match - both codes are known
+                away = potential_away
+                home = potential_home
+                break
+            elif away_match or home_match:
+                # Partial match - score it
+                score = (1 if away_match else 0) + (1 if home_match else 0)
+                if score > best_score:
+                    best_score = score
+                    best_split = (potential_away, potential_home)
+
+        # If we didn't find a perfect match, use best partial match or fallback
+        if not away and not home:
+            if best_split:
+                away, home = best_split
+            else:
+                # Fallback: try common lengths (3+3, 3+4, 4+3)
+                length = len(team_block)
+                if length == 6:
+                    away = team_block[:3]
+                    home = team_block[3:]
+                elif length == 7:
+                    # Try 3+4 first for college (e.g., MER + VMIT might be truncated)
+                    away = team_block[:3]
+                    home = team_block[3:]
+                elif length >= 4:
+                    # Default to split in half
+                    mid = length // 2
+                    away = team_block[:mid]
+                    home = team_block[mid:]
     else:
-        # Fallback for odd lengths: try to split smartly
-        # Prefer taking last 3 as home if length >= 6
-        if length >= 6:
-            home = team_block[-3:]
-            away = team_block[:-3]
-        elif length >= 4:
-            # For shorter odd lengths, try 2+3 or 3+2
-            home = team_block[-3:]
-            away = team_block[:-3]
+        # For pro leagues (NBA, NFL, NHL, MLB), use fixed-length logic
+        length = len(team_block)
+
+        if length == 6:
+            # 3+3 (most common for pro leagues)
+            away = team_block[:3]
+            home = team_block[3:]
+        elif length == 7:
+            # 7 characters: Try 4+3 or 3+4
+            # Default to 4+3 for NFL (most common)
+            away = team_block[:4]
+            home = team_block[4:]
+        elif length == 8:
+            # 4+4
+            away = team_block[:4]
+            home = team_block[4:]
+        elif length % 2 == 0 and length >= 4:
+            # Variable length handling (split in half if even)
+            mid = length // 2
+            away = team_block[:mid]
+            home = team_block[mid:]
         else:
-            # Very short, just split
-            home = team_block[-min(3, length):]
-            away = team_block[:-min(3, length)]
+            # Fallback for odd lengths: try to split smartly
+            # Prefer taking last 3 as home if length >= 6
+            if length >= 6:
+                home = team_block[-3:]
+                away = team_block[:-3]
+            elif length >= 4:
+                # For shorter odd lengths, try 2+3 or 3+2
+                home = team_block[-3:]
+                away = team_block[:-3]
+            else:
+                # Very short, just split
+                home = team_block[-min(3, length):]
+                away = team_block[:-min(3, length)]
 
     return {"away": away, "home": home, "date_token": date_token}
 
