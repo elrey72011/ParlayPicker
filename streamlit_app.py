@@ -6396,6 +6396,9 @@ with tab_master:
                 game_away = g.get("away_team", "Unknown")
                 logger.info(f"🎮 Processing game {idx+1}/{len(games_to_process)}: {game_away} @ {game_home}")
 
+                # Track rows count before processing this game
+                rows_count_before = len(rows_out)
+
                 # Initialize warnings list from game data
                 warnings = list(g.get("warnings") or [])
 
