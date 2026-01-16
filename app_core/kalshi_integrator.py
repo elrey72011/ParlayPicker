@@ -148,6 +148,11 @@ def parse_event_ticker_codes(event_ticker: str) -> Dict[str, str]:
         # 4+4
         away = team_block[:4]
         home = team_block[4:]
+    elif length % 2 == 0 and length >= 4:
+        # Variable length handling (split in half if even)
+        mid = length // 2
+        away = team_block[:mid]
+        home = team_block[mid:]
     else:
         # Fallback: 3/3 from end as requested
         if length >= 3:
@@ -405,6 +410,8 @@ NCAAB_TEAM_CODE_MAP: Dict[str, str] = {
     "ST BONAVENTURE BONNIES": "SBU",
     "MIAMI HURRICANES": "MIA",
     "GEORGIA TECH YELLOW JACKETS": "GAT",
+    "MERCER BEARS": "MER", # Added per user request
+    "MERCER": "MER",
 }
 
 # Alias Maps: Kalshi Variant -> Canonical Internal Code
