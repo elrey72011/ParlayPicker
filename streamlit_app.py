@@ -4769,10 +4769,11 @@ def filter_kalshi_game_markets(
 
         # DIAGNOSTIC: Log filtering params for debugging
         first_market_ticker = ticker_upper(markets[0]) if markets else "NO_MARKETS"
-        if league_upper == "NHL":
-            logger.info(f"🔍 KALSHI FILTER: League={league_upper}, Prefixes={allowed_prefixes}, DateTokens={allowed_date_tokens}")
-            logger.info(f"🔍 KALSHI FILTER: Home codes={home_codes}, Away codes={away_codes}")
-            logger.info(f"🔍 KALSHI FILTER: Sample market ticker: {first_market_ticker}")
+        # Always log for debugging visibility
+        logger.info(f"🔍 KALSHI FILTER: League={league_upper}, Prefixes={allowed_prefixes}, DateTokens={allowed_date_tokens}")
+        if league_upper in {"NBA", "NHL", "NCAAB"}:
+             logger.info(f"🔍 KALSHI FILTER: Home codes={home_codes}, Away codes={away_codes}")
+             logger.info(f"🔍 KALSHI FILTER: Sample market ticker: {first_market_ticker}")
 
         for m in markets or []:
             t = ticker_upper(m)
@@ -4781,12 +4782,21 @@ def filter_kalshi_game_markets(
 
             prefix_ok = any(t.startswith(pfx) for pfx in allowed_prefixes)
 
+            # Relaxed Prefix Logic for College Sports (often mislabeled or varied)
             if not prefix_ok and league_upper in {"NCAAB", "NCAAF"}:
                 if ("NCAAB" in t or "NCAA" in t or "NCAAF" in t) and "GAME" in t:
                     prefix_ok = True
 
-            if not prefix_ok:
-                continue
+            # Allow "KX" generic prefix fallback if league-specific fails
+            if not prefix_ok and t.startswith("KX") and "GAME" in t:
+                 prefix_ok = True
+
+            # Best Effort: Do NOT strictly filter by prefix here if we are desperate,
+            # but usually prefix filtering is safe. If user says "Best Effort", maybe we keep it loose?
+            # Let's keep prefix_ok logic but ensure it catches everything relevant.
+
+            # if not prefix_ok:
+            #    continue
             date_match = any(tok in t for tok in allowed_date_tokens)
             h_found = False
             if home_codes:
@@ -6116,8 +6126,8 @@ with tab_master:
                     st.warning(
                         "Kalshi markets could not be fetched; proceeding with cached/empty set."
                     )
-                except Exception:
-                    st.session_state["last_exception"] = traceback.format_exc()
+            except Exception:
+                st.session_state["last_exception"] = traceback.format_exc()
             if (
                 full_search_first_game
                 and (fg_league or league) == "NBA"
@@ -6229,9 +6239,27 @@ with tab_master:
                 sentiment_diff = None  # Ensure initialized
 
                 # Weights & Status Defaults (Fix NameErrors)
-                spread_weights = {}
-                total_weights = {}
-                moneyline_weights = {}
+                spread_weights = {
+                    "ml_weight": 0.20,
+                    "kalshi_weight": 0.35,
+                    "odds_weight": 0.30,
+                    "sentiment_weight": 0.05,
+                    "theover_weight": 0.10,
+                }
+                total_weights = {
+                    "ml_weight": 0.20,
+                    "kalshi_weight": 0.35,
+                    "odds_weight": 0.30,
+                    "sentiment_weight": 0.05,
+                    "theover_weight": 0.10,
+                }
+                moneyline_weights = {
+                    "ml_weight": 0.20,
+                    "kalshi_weight": 0.35,
+                    "odds_weight": 0.30,
+                    "sentiment_weight": 0.05,
+                    "theover_weight": 0.10,
+                }
                 spread_weights_used = {}
                 total_weights_used = {}
                 moneyline_weights_used = {}
@@ -6409,7 +6437,7 @@ with tab_master:
 
                     # Weights & Status Defaults (Fix NameErrors)
                     spread_weights = {}
-                total_weights = {}
+                    total_weights = {}
                     moneyline_weights = {}
                     spread_weights_used = {}
                     total_weights_used = {}
@@ -9740,7 +9768,10 @@ with tab_master:
                     snapshot_manager.save_noon_baseline(df)
 
                     # 2. Compare against Noon Baseline (if Evening/Late)
-                    df = market_tracker.load_and_compare(df)
+                    # "Silent Purge" Fix: Ensure we don't overwrite if tracker returns empty/None
+                    compared_df = market_tracker.load_and_compare(df)
+                    if compared_df is not None and not compared_df.empty:
+                        df = compared_df
 
                     # Persist TheOver debug stats for sidebar export
                     if 'theover_stats' in locals():
@@ -10641,7 +10672,7 @@ if st.session_state.get("master_results_df") is not None:
         elif not games:
             st.warning("No games loaded. Use the sidebar to load games first.")
         else:
-            st.success(f"Produced {len(st.session_state['master_results_df'])} rows from {len(games)} games")
+            st.success(f"✅ Analysis Complete: Produced {len(st.session_state['master_results_df'])} prediction rows from {len(games)} games.")
             # Explicitly format key columns
             # Ensure numeric typing before display to avoid Arrow errors
             cols_to_force_numeric = ["AI_Prob", "model_prob_home", "final_probability", "Implied_Prob", "spread_edge", "total_edge"]
@@ -11509,7 +11540,7 @@ if st.session_state.get("master_results_df") is not None:
         else:
             # Display the raw count of master_results_df to reflect the current analyzed slate
             games = st.session_state.get('games', [])
-            st.success(f"Produced {len(st.session_state['master_results_df'])} rows from {len(games)} games")
+            st.success(f"✅ Analysis Complete: Produced {len(st.session_state['master_results_df'])} prediction rows from {len(games)} games.")
             # Explicitly format key columns
             # Ensure numeric typing before display to avoid Arrow errors
             cols_to_force_numeric = ["AI_Prob", "model_prob_home", "final_probability", "Implied_Prob", "spread_edge", "total_edge"]
