@@ -9068,68 +9068,68 @@ with tab_master:
                 rows_created_this_game = rows_count_after - rows_count_before
 
                 if rows_created_this_game == 0:
-                logger.warning(f"⚠️  NO ROWS CREATED FOR THIS GAME!")
-                logger.warning(f"Market data present:")
-                logger.warning(f"  - home_ml_price: {g.get('home_ml_price')}")
-                logger.warning(f"  - home_spread_point: {g.get('home_spread_point')}")
-                logger.warning(f"  - total_point: {g.get('total_point')}")
+                    logger.warning(f"⚠️  NO ROWS CREATED FOR THIS GAME!")
+                    logger.warning(f"Market data present:")
+                    logger.warning(f"  - home_ml_price: {g.get('home_ml_price')}")
+                    logger.warning(f"  - home_spread_point: {g.get('home_spread_point')}")
+                    logger.warning(f"  - total_point: {g.get('total_point')}")
 
-                # Check if variables were set
-                if 'spread_pick' in locals():
-                    logger.warning(f"  - spread_pick was: {spread_pick}")
+                    # Check if variables were set
+                    if 'spread_pick' in locals():
+                        logger.warning(f"  - spread_pick was: {spread_pick}")
+                    else:
+                        logger.warning(f"  - spread_pick was NEVER DEFINED")
+
+                    if 'total_pick' in locals():
+                        logger.warning(f"  - total_pick was: {total_pick}")
+                    else:
+                        logger.warning(f"  - total_pick was NEVER DEFINED")
+
+                    if 'h2h_data_valid' in locals():
+                        logger.warning(f"  - h2h_data_valid was: {h2h_data_valid}")
+                    else:
+                        logger.warning(f"  - h2h_data_valid was NEVER DEFINED")
+
+                    # ============================================
+                    # PHASE 2: GUARANTEED FALLBACK ROW CREATION
+                    # ============================================
+                    logger.warning(f"Creating FALLBACK SAFETY NET row for {g.get('home_team')} vs {g.get('away_team')}")
+
+                    safety_fallback_row = {
+                        "league": g.get("league"),
+                        "Home": g.get("home_team"),
+                        "Away": g.get("away_team"),
+                        "Commence (UTC)": g.get("commence_time_iso_utc") or g.get("commence_time") or g.get("commence_time_iso"),
+                        "Commence (Local)": None,
+                        "Market": "NO_DATA",
+                        "Pick": "INSUFFICIENT_DATA",
+                        "Implied_Prob": None,
+                        "AI_Prob": None,
+                        "final_prob": None,
+                        "final_probability": None,
+                        "Line": None,
+                        "Pick_Confidence": "LOW",
+                        "Pick_Reason_Short": "No market data or picks available",
+                        "Eligible_Top_Picks": False,
+                        "kalshi_matched": False,
+                        "kalshi_prob": None,
+                        "sentiment_diff": 0.0,
+                        "Sentiment_Diff": 0.0,
+                        "theover_pick": None,
+                        "best_pick": "NO DATA",
+                        "best_pick_type": "NONE",
+                        # Add other essential fields with None or defaults
+                        "home_ml_price": g.get("home_ml_price"),
+                        "away_ml_price": g.get("away_ml_price"),
+                        "home_spread_point": g.get("home_spread_point"),
+                        "total_point": g.get("total_point"),
+                    }
+
+                    rows_out.append(safety_fallback_row)
+                    logger.info(f"FALLBACK SAFETY NET row added (rows_out now has {len(rows_out)} rows)")
+                    # ============================================
                 else:
-                    logger.warning(f"  - spread_pick was NEVER DEFINED")
-
-                if 'total_pick' in locals():
-                    logger.warning(f"  - total_pick was: {total_pick}")
-                else:
-                    logger.warning(f"  - total_pick was NEVER DEFINED")
-
-                if 'h2h_data_valid' in locals():
-                    logger.warning(f"  - h2h_data_valid was: {h2h_data_valid}")
-                else:
-                    logger.warning(f"  - h2h_data_valid was NEVER DEFINED")
-
-                # ============================================
-                # PHASE 2: GUARANTEED FALLBACK ROW CREATION
-                # ============================================
-                logger.warning(f"Creating FALLBACK SAFETY NET row for {g.get('home_team')} vs {g.get('away_team')}")
-
-                safety_fallback_row = {
-                    "league": g.get("league"),
-                    "Home": g.get("home_team"),
-                    "Away": g.get("away_team"),
-                    "Commence (UTC)": g.get("commence_time_iso_utc") or g.get("commence_time") or g.get("commence_time_iso"),
-                    "Commence (Local)": None,
-                    "Market": "NO_DATA",
-                    "Pick": "INSUFFICIENT_DATA",
-                    "Implied_Prob": None,
-                    "AI_Prob": None,
-                    "final_prob": None,
-                    "final_probability": None,
-                    "Line": None,
-                    "Pick_Confidence": "LOW",
-                    "Pick_Reason_Short": "No market data or picks available",
-                    "Eligible_Top_Picks": False,
-                    "kalshi_matched": False,
-                    "kalshi_prob": None,
-                    "sentiment_diff": 0.0,
-                    "Sentiment_Diff": 0.0,
-                    "theover_pick": None,
-                    "best_pick": "NO DATA",
-                    "best_pick_type": "NONE",
-                    # Add other essential fields with None or defaults
-                    "home_ml_price": g.get("home_ml_price"),
-                    "away_ml_price": g.get("away_ml_price"),
-                    "home_spread_point": g.get("home_spread_point"),
-                    "total_point": g.get("total_point"),
-                }
-
-                rows_out.append(safety_fallback_row)
-                logger.info(f"FALLBACK SAFETY NET row added (rows_out now has {len(rows_out)} rows)")
-                # ============================================
-                else:
-                logger.info(f"✅ Created {rows_created_this_game} row(s) for this game")
+                    logger.info(f"✅ Created {rows_created_this_game} row(s) for this game")
                 # ============================================
 
             # ============================================
@@ -9147,6 +9147,9 @@ with tab_master:
                 logger.info(f"SUCCESS: Created {len(rows_out)} total rows from {len(games_to_process)} games")
                 logger.info(f"Average rows per game: {len(rows_out) / len(games_to_process):.2f}")
             # ============================================
+
+            # Update master_stats with final row count
+            master_stats["rows_out"] = len(rows_out)
 
             # 1. Create the base Master DataFrame from your processed rows
             # User Action: Use from_records and copy to prevent fragmentation
