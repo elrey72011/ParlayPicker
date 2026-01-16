@@ -10145,7 +10145,7 @@ with tab_master:
 # --- Forced UI Persistence Block ---
 # The complex display logic is deprecated in favor of the persistent block at the bottom.
 # We wrap the old code in a False block to prevent IndentationError and execution.
-if st.session_state.get("master_results_df") is not None:
+if False:
     with tab_master:
         df = st.session_state["master_results_df"]
         pass
