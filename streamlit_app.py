@@ -11396,6 +11396,7 @@ if st.session_state.get("master_results_df") is not None:
                 # FORCE DISPLAY: Show all rows in export to match the forced display (filter disabled)
                 # if not include_low_in_top and "Pick_Confidence" in final_picks_df.columns:
                 #     final_picks_df = final_picks_df[final_picks_df["Pick_Confidence"].isin(["HIGH", "MEDIUM"])]
+                pass
 
             st.caption(f"Export contains {len(final_picks_df)} picks (All Games).")
 
