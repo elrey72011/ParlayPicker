@@ -159,14 +159,17 @@ def parse_event_ticker_codes(event_ticker: str) -> Dict[str, str]:
     if league in ["NCAAB", "NCAAF"]:
         # Get the appropriate team code map
         code_map = NCAAB_TEAM_CODE_MAP if league == "NCAAB" else NCAAF_TEAM_CODE_MAP
-        all_codes = list(code_map.values())
+        # Convert to set for faster lookups
+        all_codes = set(code_map.values())
 
         # Try to find a valid split by matching against known codes
         best_split = None
         best_score = 0
 
-        # Try all possible split points
-        for i in range(2, len(team_block) - 1):  # Need at least 2 chars for each team
+        # Try all possible split points (need at least 2 chars for each team)
+        # Extended range to handle very short codes (2 chars) or longer codes
+        min_len = max(2, len(team_block) - 5)  # Allow up to 5-char codes
+        for i in range(min_len, len(team_block) - 1):
             potential_away = team_block[:i]
             potential_home = team_block[i:]
 
@@ -174,13 +177,16 @@ def parse_event_ticker_codes(event_ticker: str) -> Dict[str, str]:
             away_resolved = resolve_team_code(potential_away, league)
             home_resolved = resolve_team_code(potential_home, league)
 
+            # Check both the original and resolved codes
             away_match = away_resolved in all_codes or potential_away in all_codes
             home_match = home_resolved in all_codes or potential_home in all_codes
 
             if away_match and home_match:
                 # Perfect match - both codes are known
-                away = potential_away
-                home = potential_home
+                # Prefer the resolved codes if they match, otherwise use originals
+                away = away_resolved if away_resolved in all_codes else potential_away
+                home = home_resolved if home_resolved in all_codes else potential_home
+                logger.debug(f"NCAAB ticker parse: {event_ticker} -> away={away}, home={home} (perfect match at split {i})")
                 break
             elif away_match or home_match:
                 # Partial match - score it

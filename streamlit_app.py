@@ -9825,7 +9825,8 @@ with tab_master:
         st.error(f"Prediction Error: {st.session_state['model_last_error']}")
 
         st.subheader("Top Picks / Best Bets")
-        include_low_in_top = st.checkbox("Include LOW confidence in Top Picks", value=True, key="include_low_top_picks")
+        # FORCE DISPLAY: Always include LOW confidence picks (checkbox disabled)
+        include_low_in_top = st.checkbox("Include LOW confidence in Top Picks (FORCED ON)", value=True, key="include_low_top_picks", disabled=True)
         df = clean_df(df)
         top_df = df.copy()
         if "Unnamed: 0" in top_df.columns:
@@ -10129,7 +10130,8 @@ if st.session_state.get("master_results_df") is not None:
             st.info("No Moneyline picks available.")
 
         st.subheader("Top Picks / Best Bets")
-        include_low_in_top = st.checkbox("Include LOW confidence in Top Picks", value=True, key="include_low_top_picks")
+        # FORCE DISPLAY: Always include LOW confidence picks (checkbox disabled)
+        include_low_in_top = st.checkbox("Include LOW confidence in Top Picks (FORCED ON)", value=True, key="include_low_top_picks", disabled=True)
         df = clean_df(df)
         top_df = df.copy()
         if "Unnamed: 0" in top_df.columns:
@@ -10635,21 +10637,25 @@ if st.session_state.get("master_results_df") is not None:
             key="market_stability_filter"
         )
 
+        # FORCE DISPLAY: Disable confidence filter UI elements - they are ignored
+        # These are kept for backward compatibility but have no effect on display
         confidence_mode = st.selectbox(
-            "Confidence filter",
+            "Confidence filter (DISABLED - showing all rows)",
             ["All", "High+Medium (recommended)", "High only"],
             index=0,
             key="confidence_filter_mode",
+            disabled=True,
         )
         # Action: Set hide_low_confidence to False as the hardcoded default
         st.session_state.setdefault("hide_low_confidence", False)
         hide_low = st.checkbox(
-            "Hide low-confidence picks",
-            value=st.session_state.get("hide_low_confidence", False),
+            "Hide low-confidence picks (DISABLED - showing all rows)",
+            value=False,
             key="hide_low_confidence",
+            disabled=True,
         )
-        # st.session_state["show_low_confidence"] = hide_low # Deprecated
-        # FORCE DISPLAY: Override confidence_mode to "All" to display all 139 rows
+        # FORCE DISPLAY: Always use "All" mode and show_low=True to display all 139 rows
+        # This bypasses any UI filter settings to ensure full visibility
         df_master_view, confidence_stats = apply_confidence_filter(df, "All", True)
 
         # Task 2: Force Spread/Total Pivot (Applied immediately after df_master_view creation)
@@ -10970,7 +10976,8 @@ if st.session_state.get("master_results_df") is not None:
             st.info("No Moneyline picks available.")
 
         st.subheader("Top Picks / Best Bets")
-        include_low_in_top = st.checkbox("Include LOW confidence in Top Picks", value=True, key="include_low_top_picks")
+        # FORCE DISPLAY: Always include LOW confidence picks (checkbox disabled)
+        include_low_in_top = st.checkbox("Include LOW confidence in Top Picks (FORCED ON)", value=True, key="include_low_top_picks", disabled=True)
         df = clean_df(df)
         top_df = df.copy()
         if "Unnamed: 0" in top_df.columns:
@@ -11151,6 +11158,16 @@ if st.session_state.get("master_results_df") is not None:
                 top_df_ui[col] = pd.to_numeric(top_df_ui[col], errors='coerce').fillna(0.0)
             else:
                 top_df_ui[col] = top_df_ui[col].astype(str).replace('None', 'N/A')
+
+        # Display Kalshi matches count from final displayed dataframe
+        kalshi_match_count = 0
+        if 'kalshi_matched' in top_df_display.columns:
+            kalshi_match_count = int((top_df_display['kalshi_matched'].fillna(False) == True).sum())
+
+        # Show metrics row
+        metric_cols = st.columns([1, 1, 2])
+        metric_cols[0].metric("Total Rows", len(top_df_ui))
+        metric_cols[1].metric("Kalshi Matches", kalshi_match_count)
 
         st.dataframe(top_df_ui, width="stretch", hide_index=True)
 
