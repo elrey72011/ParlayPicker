@@ -10413,10 +10413,10 @@ if st.session_state.get("analysis_complete") or (st.session_state.get("master_re
         if stats.get("games_in", 0) > 0 and stats.get("rows_out", 0) == 0:
             st.error("Master analysis produced 0 rows; see debug stats below.")
             st.json(stats)
-        elif not games:
+        elif not st.session_state.get("games", []):
             st.warning("No games loaded. Use the sidebar to load games first.")
         else:
-            st.success(f"Produced {len(st.session_state['master_results_df'])} rows from {len(games)} games")
+            st.success(f"Produced {len(st.session_state['master_results_df'])} rows from {len(st.session_state.get('games', []))} games")
             # Explicitly format key columns
             # Ensure numeric typing before display to avoid Arrow errors
             cols_to_force_numeric = ["AI_Prob", "model_prob_home", "final_probability", "Implied_Prob", "spread_edge", "total_edge"]
