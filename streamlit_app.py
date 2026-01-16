@@ -6379,46 +6379,27 @@ with tab_master:
             theover_matched_count_totals = 0
 
             for idx, g in enumerate(games_to_process):
-                # ============================================
-                # PHASE 1: DIAGNOSTIC - Per-Game Tracking Start
-                # ============================================
-                logger.info(f"\n{'='*60}")
-                logger.info(f"Processing Game {idx + 1}/{len(games_to_process)}")
-                logger.info(f"{'='*60}")
-                logger.info(f"Home: {g.get('home_team')} | Away: {g.get('away_team')} | League: {g.get('league')}")
-
-                # Track rows before processing this game
-                rows_count_before = len(rows_out)
-                # ============================================
-
+                # DIAGNOSTIC: Log start of processing
+                if idx < 5 or idx % 10 == 0:
+                    logger.info(f"Processing game {idx+1}/{len(games_to_process)}: {g.get('home_team')} vs {g.get('away_team')}")
                 g = g.copy()
                 # Initialize loop-local variables to prevent NameError
                 model_prob_home = None
                 model_warn = None
                 sentiment_diff = None  # Ensure initialized
 
+                # DIAGNOSTIC: Track row creation for each game
+                ml_row_created = False
+                spread_row_created = False
+                total_row_created = False
+                game_home = g.get("home_team", "Unknown")
+                game_away = g.get("away_team", "Unknown")
+                logger.info(f"🎮 Processing game {idx+1}/{len(games_to_process)}: {game_away} @ {game_home}")
+
                 # Weights & Status Defaults (Fix NameErrors)
-                spread_weights = {
-                    "ml_weight": 0.20,
-                    "kalshi_weight": 0.35,
-                    "odds_weight": 0.30,
-                    "sentiment_weight": 0.05,
-                    "theover_weight": 0.10,
-                }
-                total_weights = {
-                    "ml_weight": 0.20,
-                    "kalshi_weight": 0.35,
-                    "odds_weight": 0.30,
-                    "sentiment_weight": 0.05,
-                    "theover_weight": 0.10,
-                }
-                moneyline_weights = {
-                    "ml_weight": 0.20,
-                    "kalshi_weight": 0.35,
-                    "odds_weight": 0.30,
-                    "sentiment_weight": 0.05,
-                    "theover_weight": 0.10,
-                }
+                spread_weights = {}
+                total_weights = {}
+                moneyline_weights = {}
                 spread_weights_used = {}
                 total_weights_used = {}
                 moneyline_weights_used = {}
@@ -6447,17 +6428,44 @@ with tab_master:
                     local_dt = commence_utc.astimezone(ZoneInfo("America/New_York"))
                     local_date_str = local_dt.strftime("%Y-%m-%d")
 
+                # Task 2: Apply TEAM_ALIAS_MAP normalization before matching
+                # Normalize team names using the alias map before generating codes
+                # Robust normalization: Find if any short name is part of the raw name
+                home_norm = home_team
+                for short_name, long_name in TEAM_ALIAS_MAP.items():
+                    if short_name.lower() in home_team.lower():
+                        home_norm = long_name
+                        break
+                away_norm = away_team
+                for short_name, long_name in TEAM_ALIAS_MAP.items():
+                    if short_name.lower() in away_team.lower():
+                        away_norm = long_name
+                        break
+
                 # 1. Resolve Team Codes (Prefer Kalshi, then System)
                 # Note: kalshi match happens later in the loop usually, but we need codes now.
                 # Ideally we check st.session_state['kalshi_match_results'] if already run?
                 # Or just use the system fallback which is robust enough for ingestion matching.
-                home_code = team_code_for_league(league_name, home_team)
-                away_code = team_code_for_league(league_name, away_team)
+                home_code = team_code_for_league(league_name, home_norm)
+                away_code = team_code_for_league(league_name, away_norm)
 
                 # 2. Generate Master Key
-                # Task 2: Verified parameter order (league, date, home, away)
-                master_key_exact = generate_canonical_key(league=league_name, date_str=local_date_str, home_code=home_code, away_code=away_code)
-                master_key_teams = f"{league_name}|{away_code}|{home_code}"
+                # Normalize league to match ingestion (NBA, NFL, etc.)
+                norm_league_key = str(league_name).strip().upper()
+                if "NBA" in norm_league_key: norm_league_key = "NBA"
+                elif "NFL" in norm_league_key: norm_league_key = "NFL"
+                elif "NHL" in norm_league_key: norm_league_key = "NHL"
+                elif "MLB" in norm_league_key: norm_league_key = "MLB"
+                elif "NCAAB" in norm_league_key or "COLLEGE BASKETBALL" in norm_league_key: norm_league_key = "NCAAB"
+                elif "NCAAF" in norm_league_key or "COLLEGE FOOTBALL" in norm_league_key: norm_league_key = "NCAAF"
+
+                # Regenerate codes with normalized league and aliased team names
+                home_code_norm = team_code_for_league(norm_league_key, home_norm)
+                away_code_norm = team_code_for_league(norm_league_key, away_norm)
+
+                # Task 2: Ensure canon_key uses these mapped codes
+                master_key_exact = generate_canonical_key(norm_league_key, local_date_str, home_code_norm, away_code_norm)
+                master_key_teams = f"{norm_league_key}|{away_code_norm}|{home_code_norm}"
 
                 # 3. Match TheOver Data
                 matched_total_row = None
@@ -6517,265 +6525,59 @@ with tab_master:
                 # Updated weights with TheOver integration (Default 0.10 if matched)
                 # If TheOver is not matched, its weight is effectively zeroed and others renormalized dynamically
                 spread_weights = {
-                    "ml_weight": 0.25,
+                    "ml_weight": 0.20,
                     "kalshi_weight": 0.35,
                     "odds_weight": 0.30,
-                    "sentiment_weight": 0.00, # Sentiment disabled for now per instruction
+                    "sentiment_weight": 0.05,
                     "theover_weight": 0.10,
                 }
                 # Totals (TheOver carries slightly more weight)
                 total_weights = {
-                    "ml_weight": 0.25,
+                    "ml_weight": 0.20,
                     "kalshi_weight": 0.35,
                     "odds_weight": 0.30,
-                    "sentiment_weight": 0.00,
+                    "sentiment_weight": 0.05,
                     "theover_weight": 0.10,
                 }
-                data_source_stats = {
-                    "api_sports_games": 0,
-                    "sportsdata_games": 0,
-                    "injury_pulls": 0,
-                    "weather_pulls": 0,
-                    "errors": [],
+                moneyline_weights = {
+                    "ml_weight": 0.20,
+                    "kalshi_weight": 0.35,
+                    "odds_weight": 0.30,
+                    "sentiment_weight": 0.05,
+                    "theover_weight": 0.10,
                 }
-                # Dictionary mapping for robust access (User Request: "Switch to Dictionary Mapping")
-                kalshi_match_results: Dict[str, Dict[str, Any]] = {}
-                # --- CLEANED MASTER ANALYSIS LOOP ---
+                # Debug log
+                logger.info(f"Weight sets active: spread={spread_weights}, total={total_weights}, ml={moneyline_weights}")
 
-                # --- SET GAMES TO PROCESS (NO PRE-LOOP ENRICHMENT) ---
-                # Task 1: Stop pre-loop game deletion by skipping enrich_with_model_features
-                # Set games_to_process directly without DataFrame merges or enrichment
-                games_to_process = games
+                # THEOVER VARIABLES
+                theover_prob_spread = None
+                theover_prob_total = None
+                theover_matched_side = None # dict or row
+                theover_matched_total = None # dict or row
 
-                # --- FIX: Define variables at the start of the loop ---
-                # Ensure use_model_numeric_probs is available in local scope
-                use_model_numeric_probs = st.session_state.get("use_model_numeric_probs", True)
-                # Ensure model_mode is available
-                model_mode = st.session_state.get("model_mode", "Local XGBoost")
+                # --- TheOver.ai Matching Logic ---
+                # 1. Generate Canonical Key
+                g_league = g.get("league", "UNKNOWN").upper()
+                # Normalize league for key (NBA, NFL, NHL, NCAAB, NCAAF)
+                # Map specific variants
+                if "COLLEGE BASKETBALL" in g_league: g_league = "NCAAB"
+                elif "COLLEGE FOOTBALL" in g_league: g_league = "NCAAF"
+                elif "ICE HOCKEY" in g_league: g_league = "NHL"
 
-                # TheOver Match Counters
-                theover_matched_count_sides = 0
-                theover_matched_count_totals = 0
+                g_home_norm = robust_normalize_team(g.get("home_team"), g_league)
+                g_away_norm = robust_normalize_team(g.get("away_team"), g_league)
 
-                # FIX: Initialize loop variables to prevent NameError if loop is skipped or variables accessed outside
-                winner_refetch_attempted = False
-                first_game_full_search = None
-
-                # DIAGNOSTIC: Log data quality for all games
-                logger.info(f"📊 DATA QUALITY CHECK: Loaded {len(games_to_process)} games")
-                games_with_ml = sum(1 for g in games_to_process if g.get('home_ml_price') is not None)
-                games_with_spread = sum(1 for g in games_to_process if g.get('home_spread_point') is not None)
-                games_with_total = sum(1 for g in games_to_process if g.get('total_point') is not None)
-                games_with_any_market = sum(1 for g in games_to_process if any([
-                    g.get('home_ml_price') is not None,
-                    g.get('home_spread_point') is not None,
-                    g.get('total_point') is not None
-                ]))
-                logger.info(f"  - Games with ML data: {games_with_ml} ({games_with_ml/len(games_to_process)*100:.1f}%)")
-                logger.info(f"  - Games with Spread data: {games_with_spread} ({games_with_spread/len(games_to_process)*100:.1f}%)")
-                logger.info(f"  - Games with Total data: {games_with_total} ({games_with_total/len(games_to_process)*100:.1f}%)")
-                logger.info(f"  - Games with ANY market data: {games_with_any_market} ({games_with_any_market/len(games_to_process)*100:.1f}%)")
-
-                for idx, g in enumerate(games_to_process):
-                    # DIAGNOSTIC: Log start of processing
-                    if idx < 5 or idx % 10 == 0:
-                        logger.info(f"Processing game {idx+1}/{len(games_to_process)}: {g.get('home_team')} vs {g.get('away_team')}")
-                    g = g.copy()
-                    # Initialize loop-local variables to prevent NameError
-                    model_prob_home = None
-                    model_warn = None
-                    sentiment_diff = None  # Ensure initialized
-
-                    # DIAGNOSTIC: Track row creation for each game
-                    ml_row_created = False
-                    spread_row_created = False
-                    total_row_created = False
-                    game_home = g.get("home_team", "Unknown")
-                    game_away = g.get("away_team", "Unknown")
-                    logger.info(f"🎮 Processing game {idx+1}/{len(games_to_process)}: {game_away} @ {game_home}")
-
-                    # Weights & Status Defaults (Fix NameErrors)
-                    spread_weights = {}
-                    total_weights = {}
-                    moneyline_weights = {}
-                    spread_weights_used = {}
-                    total_weights_used = {}
-                    moneyline_weights_used = {}
-
-                    theover_prob_final_spread = None
-                    theover_prob_final_total = None
-                    theover_delta_spread = None
-                    theover_delta_total = None
-
-                    spread_prob_final = None
-                    total_prob_final = None
-
-                    # Default empty containers for decision traces
-                    spread_trace_json = "{}"
-                    total_trace_json = "{}"
-
-                    # --- THEOVER MATCHING START ---
-                    league_name = str(g.get("league") or "UNKNOWN").upper()
-                    home_team = str(g.get("home_team") or "")
-                    away_team = str(g.get("away_team") or "")
-                    commence_utc = parse_commence_to_utc(g.get("commence_time"))
-
-                    # Local Date for Matching (US/Eastern)
-                    local_date_str = datetime.now(ZoneInfo("America/New_York")).strftime("%Y-%m-%d") # Default
-                    if commence_utc:
-                        local_dt = commence_utc.astimezone(ZoneInfo("America/New_York"))
-                        local_date_str = local_dt.strftime("%Y-%m-%d")
-
-                    # Task 2: Apply TEAM_ALIAS_MAP normalization before matching
-                    # Normalize team names using the alias map before generating codes
-                    # Robust normalization: Find if any short name is part of the raw name
-                    home_norm = home_team
-                    for short_name, long_name in TEAM_ALIAS_MAP.items():
-                        if short_name.lower() in home_team.lower():
-                            home_norm = long_name
-                            break
-                    away_norm = away_team
-                    for short_name, long_name in TEAM_ALIAS_MAP.items():
-                        if short_name.lower() in away_team.lower():
-                            away_norm = long_name
-                            break
-
-                    # 1. Resolve Team Codes (Prefer Kalshi, then System)
-                    # Note: kalshi match happens later in the loop usually, but we need codes now.
-                    # Ideally we check st.session_state['kalshi_match_results'] if already run?
-                    # Or just use the system fallback which is robust enough for ingestion matching.
-                    home_code = team_code_for_league(league_name, home_norm)
-                    away_code = team_code_for_league(league_name, away_norm)
-
-                    # 2. Generate Master Key
-                    # Normalize league to match ingestion (NBA, NFL, etc.)
-                    norm_league_key = str(league_name).strip().upper()
-                    if "NBA" in norm_league_key: norm_league_key = "NBA"
-                    elif "NFL" in norm_league_key: norm_league_key = "NFL"
-                    elif "NHL" in norm_league_key: norm_league_key = "NHL"
-                    elif "MLB" in norm_league_key: norm_league_key = "MLB"
-                    elif "NCAAB" in norm_league_key or "COLLEGE BASKETBALL" in norm_league_key: norm_league_key = "NCAAB"
-                    elif "NCAAF" in norm_league_key or "COLLEGE FOOTBALL" in norm_league_key: norm_league_key = "NCAAF"
-
-                    # Regenerate codes with normalized league and aliased team names
-                    home_code_norm = team_code_for_league(norm_league_key, home_norm)
-                    away_code_norm = team_code_for_league(norm_league_key, away_norm)
-
-                    # Task 2: Ensure canon_key uses these mapped codes
-                    master_key_exact = generate_canonical_key(norm_league_key, local_date_str, home_code_norm, away_code_norm)
-                    master_key_teams = f"{norm_league_key}|{away_code_norm}|{home_code_norm}"
-
-                    # 3. Match TheOver Data
-                    matched_total_row = None
-                    matched_side_row = None
-                    theover_match_reason = None
-                    theover_matched = False
-
-                    # Helper to find best match in list
-                    def find_best_date_match(candidates, target_date_str):
-                        # Prefer exact date match
-                        for c in candidates:
-                            if c.get("date_local") == target_date_str:
-                                return c
-                        # Fallback to first if available (fuzzy date)
-                        return candidates[0] if candidates else None
-
-                    # Look for TOTAL match (Exact then Team)
-                    if master_key_exact in theover_lookup_exact:
-                        # Check for TOTAL type
-                        cands = [r for r in theover_lookup_exact[master_key_exact] if r["theover_market_type"] == "TOTAL"]
-                        if cands: matched_total_row = cands[0]
-
-                    if not matched_total_row and master_key_teams in theover_lookup_teams:
-                        cands = [c for c in theover_lookup_teams[master_key_teams] if c["theover_market_type"] == "TOTAL"]
-                        matched_total_row = find_best_date_match(cands, local_date_str)
-
-                    # Look for SIDE match (Exact then Team)
-                    if master_key_exact in theover_lookup_exact:
-                        cands = [r for r in theover_lookup_exact[master_key_exact] if r["theover_market_type"] == "SIDE"]
-                        if cands: matched_side_row = cands[0]
-
-                    if not matched_side_row and master_key_teams in theover_lookup_teams:
-                        cands = [c for c in theover_lookup_teams[master_key_teams] if c["theover_market_type"] == "SIDE"]
-                        matched_side_row = find_best_date_match(cands, local_date_str)
-
-                    # If matched, update counters
-                    if matched_total_row: theover_matched_count_totals += 1
-                    if matched_side_row: theover_matched_count_sides += 1
-
-                    # Extract Signals for Downstream
-                    theover_matched_total = matched_total_row
-                    theover_matched_side = matched_side_row
-
-                    # Probabilities (defaults to None if not matched)
-                    theover_prob_total = None
-                    if matched_total_row:
-                        hit_rate = safe_float(matched_total_row.get("theover_hit_rate"))
-                        theover_prob_total = hit_rate if (hit_rate and hit_rate > 0) else 0.55
-
-                    theover_prob_spread = None
-                    if matched_side_row:
-                        hit_rate = safe_float(matched_side_row.get("theover_hit_rate"))
-                        theover_prob_spread = hit_rate if (hit_rate and hit_rate > 0) else 0.55
-                    # --- THEOVER MATCHING END ---
-
-                    # 1) Define Weights (Fix NameError)
-                    # Updated weights with TheOver integration (Default 0.10 if matched)
-                    # If TheOver is not matched, its weight is effectively zeroed and others renormalized dynamically
-                    spread_weights = {
-                        "ml_weight": 0.20,
-                        "kalshi_weight": 0.35,
-                        "odds_weight": 0.30,
-                        "sentiment_weight": 0.05,
-                        "theover_weight": 0.10,
-                    }
-                    # Totals (TheOver carries slightly more weight)
-                    total_weights = {
-                        "ml_weight": 0.20,
-                        "kalshi_weight": 0.35,
-                        "odds_weight": 0.30,
-                        "sentiment_weight": 0.05,
-                        "theover_weight": 0.10,
-                    }
-                    moneyline_weights = {
-                        "ml_weight": 0.20,
-                        "kalshi_weight": 0.35,
-                        "odds_weight": 0.30,
-                        "sentiment_weight": 0.05,
-                        "theover_weight": 0.10,
-                    }
-                    # Debug log
-                    logger.info(f"Weight sets active: spread={spread_weights}, total={total_weights}, ml={moneyline_weights}")
-
-                    # THEOVER VARIABLES
-                    theover_prob_spread = None
-                    theover_prob_total = None
-                    theover_matched_side = None # dict or row
-                    theover_matched_total = None # dict or row
-
-                    # --- TheOver.ai Matching Logic ---
-                    # 1. Generate Canonical Key
-                    g_league = g.get("league", "UNKNOWN").upper()
-                    # Normalize league for key (NBA, NFL, NHL, NCAAB, NCAAF)
-                    # Map specific variants
-                    if "COLLEGE BASKETBALL" in g_league: g_league = "NCAAB"
-                    elif "COLLEGE FOOTBALL" in g_league: g_league = "NCAAF"
-                    elif "ICE HOCKEY" in g_league: g_league = "NHL"
-
-                    g_home_norm = robust_normalize_team(g.get("home_team"), g_league)
-                    g_away_norm = robust_normalize_team(g.get("away_team"), g_league)
-
-                    # Date: Try local date first, else parse UTC
-                    g_date_local = g.get("commence_date_local")
-                    if not g_date_local:
-                        try:
-                            dt = parse_commence_to_utc(g.get("commence_time_iso_utc") or g.get("commence_time"))
-                            if dt:
-                                # Convert to EST for alignment with TheOver typically? Or just use UTC date?
-                                # TheOver ingestion uses local date string.
-                                # Let's try to match the ingestion format (YYYY-MM-DD)
-                                g_date_local = dt.strftime("%Y-%m-%d") # UTC date as fallback
-                        except:
+                # Date: Try local date first, else parse UTC
+                g_date_local = g.get("commence_date_local")
+                if not g_date_local:
+                    try:
+                        dt = parse_commence_to_utc(g.get("commence_time_iso_utc") or g.get("commence_time"))
+                        if dt:
+                            # Convert to EST for alignment with TheOver typically? Or just use UTC date?
+                            # TheOver ingestion uses local date string.
+                            # Let's try to match the ingestion format (YYYY-MM-DD)
+                            g_date_local = dt.strftime("%Y-%m-%d") # UTC date as fallback
+                    except:
                             pass
 
                     # Task 2: Synchronize Master Key (Use Codes, Home then Away)
@@ -11055,9 +10857,10 @@ if st.session_state.get("analysis_complete") or (st.session_state.get("master_re
             if not show_moneyline_rows:
                 df_master_view = df_master_view[df_master_view["Market"].isin(["Spread", "Total"])]
 
-        if master_stats["games_in"] > 0 and master_stats["rows_out"] == 0:
+        stats = st.session_state.get("master_stats_persistent", {})
+        if stats.get("games_in", 0) > 0 and stats.get("rows_out", 0) == 0:
             st.error("Master analysis produced 0 rows; see debug stats below.")
-            st.json(master_stats)
+            st.json(stats)
         elif not games:
             st.warning("No games loaded. Use the sidebar to load games first.")
         else:
@@ -11078,958 +10881,3 @@ if st.session_state.get("analysis_complete") or (st.session_state.get("master_re
             )
         except Exception:
             pass
-
-        # User Action: Enforce specific column order: Home, Away, Implied_Prob, AI_Prob
-        df_master_view = reorder_for_spread_total_focus(df_master_view)
-
-        # Task 2: Absolute Moneyline (ML) Pivot (Redundant here but ensuring UI view consistency)
-        # We already applied pivot_market to the main dataframe before saving.
-        # But since df_master_view is derived and calculated freshly, we apply it again to be safe.
-        df_master_view = df_master_view.apply(pivot_market, axis=1)
-
-        # Explicit column ordering override
-        # Jules: Map derived alias columns for display
-        df_master_view["Pick"] = df_master_view["best_pick"]
-
-        # Ensure Market column matches best_pick_type
-        # "Constraint: Ensure that the final Pick and Market columns only display Spread or Total (Over/Under)."
-        df_master_view["Market"] = df_master_view["best_pick_type"].str.title() # "Spread" or "Total"
-
-        # Map AI_Prob to best_pick_prob (final_prob alias)
-        df_master_view["AI_Prob"] = df_master_view["final_prob"]
-
-        # Jules: Conditionally select Implied Prob based on Best Pick Type
-        df_master_view["Implied_Prob"] = np.where(
-            df_master_view["best_pick_type"] == "TOTAL",
-            df_master_view["total_implied_prob"],
-            df_master_view["spread_implied_prob"]
-        )
-
-        df_master_view["status"] = df_master_view["Bet_Confidence"]
-
-        # Format Spread & Pick and Total & Pick with Odds
-        # "{Team} {Line} ({Odds})"
-        if "spread_pick_odds" in df_master_view.columns:
-            # Need to rebuild this string carefully for display
-            # We assume "Spread & Pick" already has "{Team} {Line}" from upstream
-            # We append odds if available.
-
-            def _format_pick_with_odds(row, col_base, col_odds):
-                base = str(row.get(col_base) or "").strip()
-                odds = row.get(col_odds)
-                if not base or base.lower() == "none" or base.lower() == "nan":
-                    return None
-                if odds is None or pd.isna(odds):
-                    return base
-                return f"{base} ({odds})"
-
-            df_master_view["Spread & Pick"] = df_master_view.apply(
-                lambda r: _format_pick_with_odds(r, "Spread & Pick", "spread_pick_odds"), axis=1
-            )
-            df_master_view["Total & Pick"] = df_master_view.apply(
-                lambda r: _format_pick_with_odds(r, "Total & Pick", "total_pick_odds"), axis=1
-            )
-
-        forced_cols = ["league", "Home", "Away", "Implied_Prob", "AI_Prob", "Pick", "status"]
-        cols_present = [c for c in forced_cols if c in df_master_view.columns]
-        other_cols = [c for c in df_master_view.columns if c not in cols_present]
-        df_master_view = df_master_view[cols_present + other_cols]
-
-        df_master_view_display = df_master_view.copy()
-        df_master_view_full = df_master_view.copy()
-
-        # Apply Kalshi match filter ONLY to display dataframe (does NOT affect exports)
-        if st.session_state.get("kalshi_match_only", False):
-            kalshi_matched_count_before = len(df_master_view_display)
-            df_master_view_display = df_master_view_display[
-                df_master_view_display.get("kalshi_matched", pd.Series([False] * len(df_master_view_display))).fillna(False) == True
-            ]
-            kalshi_matched_count_after = len(df_master_view_display)
-            if kalshi_matched_count_after < kalshi_matched_count_before:
-                st.info(f"🔍 Kalshi Filter Active: Showing {kalshi_matched_count_after} of {kalshi_matched_count_before} games with Kalshi matches (exports will include all games)")
-
-        trace_cols = [
-            "spread_engine_used",
-            "spread_pick_label",
-            "spread_alt_label",
-            "spread_prob_pick_final",
-            "spread_prob_alt_final",
-            "spread_prob_margin",
-            "spread_prob_pick_market",
-            "spread_prob_alt_market",
-            "spread_prob_pick_kalshi",
-            "spread_prob_alt_kalshi",
-            "spread_decision_metric_used",
-            "spread_decision_score_pick",
-            "spread_decision_score_alt",
-            "spread_decision_score_margin",
-            "spread_trace_json",
-            "decision_trace",
-            "total_engine_used",
-            "total_pick_label",
-            "total_alt_label",
-            "total_prob_pick_final",
-            "total_prob_alt_final",
-            "total_prob_margin",
-            "total_prob_pick_market",
-            "total_prob_alt_market",
-            "total_prob_pick_kalshi",
-            "total_prob_alt_kalshi",
-            "total_decision_metric_used",
-            "total_decision_score_pick",
-            "total_decision_score_alt",
-            "total_decision_score_margin",
-            "total_trace_json",
-            "decision_trace_version",
-            "overall_engine_used",
-            "decision_trace_notes",
-            "decision_trace_short",
-            "decision_trace_json",
-            "final_probability",
-            "decision_driver",
-            "kalshi_weight",
-            "odds_weight",
-            "ml_weight",
-            "sentiment_weight",
-            "sentiment_score",
-            "kalshi_prob_for_pick",
-            "kalshi_yes_side",
-            "sentiment_direction",
-            "sentiment_impact_applied",
-            "confidence_reason",
-            "kalshi_status",
-            "llm_disagreement_flag",
-            "consensus_weight_ai",
-            "consensus_weight_market",
-            "consensus_weight_kalshi",
-            "consensus_weight_sentiment",
-            "consensus_weight_total",
-            "consensus_guardrails",
-            "gemini_error",
-        ]
-        df_master_view_display = df_master_view.drop(columns=[c for c in TRACE_COLS if c in df_master_view.columns], errors="ignore")
-        show_moneyline_details = st.checkbox("Show Moneyline details", value=False, key="show_moneyline_details")
-        if not show_moneyline_details:
-            ml_detail_cols = [
-                "Pick",
-                "Book",
-                "Home_ML",
-                "Away_ML",
-                "Implied_Prob",
-                "AI_Prob",
-                "ai_prob_adj",
-                "consensus_prob",
-                "consensus_prob_adj",
-                "kalshi_prob",
-                "kalshi_prob_used",
-                "kalshi_event_ticker",
-                "kalshi_event_ticker_used",
-                "edge_vs_odds",
-                "model_minus_market",
-            ]
-            df_master_view_display = df_master_view_display.drop(columns=[c for c in ml_detail_cols if c in df_master_view_display.columns], errors="ignore")
-        st.caption(f"Column order (first 8): {', '.join(list(df_master_view_display.columns[:8]))} ...")
-        df_master_view_display["Spread_Range"] = df_master_view_display.apply(
-            lambda r: f"{r['spread_min']} to {r['spread_max']} (med {r['spread_med']})"
-            if pd.notnull(r.get("spread_min")) and pd.notnull(r.get("spread_max"))
-            else "N/A",
-            axis=1,
-        )
-        df_master_view_display = df_master_view_display.copy()
-        df_master_view_display["Total_Range"] = df_master_view_display.apply(
-            lambda r: f"{r['total_min']} to {r['total_max']} (med {r['total_med']})"
-            if pd.notnull(r.get("total_min")) and pd.notnull(r.get("total_max"))
-            else "N/A",
-            axis=1,
-        )
-        df_master_view_display = df_master_view_display.copy()
-
-        def _market_badge(r):
-            badges_local = []
-            if (pd.notnull(r.get("spread_min")) and pd.notnull(r.get("spread_max")) and abs((r.get("spread_max") or 0) - (r.get("spread_min") or 0)) >= 2):
-                badges_local.append("WIDE MARKET")
-            if (pd.notnull(r.get("total_min")) and pd.notnull(r.get("total_max")) and abs((r.get("total_max") or 0) - (r.get("total_min") or 0)) >= 3):
-                badges_local.append("WIDE MARKET")
-            if (r.get("spread_books_count") == 1) or (r.get("total_books_count") == 1):
-                badges_local.append("THIN MARKET")
-            return ";".join(sorted(set(badges_local))) if badges_local else None
-        df_master_view_display["Market_Badge"] = df_master_view_display.apply(_market_badge, axis=1)
-        df_master_view_display = df_master_view_display.copy()
-        placeholder_count = int((df_master_view_display.get("odds_placeholder_detected") == True).sum()) if "odds_placeholder_detected" in df_master_view_display.columns else 0
-        implied_null_count = int(df_master_view_display["Implied_Prob"].isna().sum()) if "Implied_Prob" in df_master_view_display.columns else 0
-        st.caption(f"Debug: placeholder odds rows={placeholder_count}; Implied_Prob null rows={implied_null_count}")
-
-        # --- NEW: GAME SUMMARY VIEW ---
-        st.subheader("Game Summary View")
-        game_summary_df = build_game_summary(st.session_state["master_df"])
-
-        if not game_summary_df.empty:
-            # Reorder columns as requested
-            summary_cols = [
-                "League", "Home", "Away", "Commence UTC", "Commence (Local)",
-                "Best Overall Pick", "Best Overall Prob",
-                "Spread Pick", "Spread Prob",
-                "Total Pick", "Total Prob",
-                "ML Pick", "ML Prob"
-            ]
-            # Ensure columns exist
-            summary_cols = [c for c in summary_cols if c in game_summary_df.columns]
-
-            # Formatting
-            format_cols = {
-                "Best Overall Prob": st.column_config.NumberColumn(format="%.1f%%"),
-                "Spread Prob": st.column_config.NumberColumn(format="%.1f%%"),
-                "Total Prob": st.column_config.NumberColumn(format="%.1f%%"),
-                "ML Prob": st.column_config.NumberColumn(format="%.1f%%")
-            }
-
-            st.dataframe(
-                game_summary_df[summary_cols],
-                column_config=format_cols,
-                width="stretch",
-                hide_index=True
-            )
-        else:
-            st.info("No game summary data available.")
-
-        # --- NEW: BEST OVERALL PICKS (ML Focused) ---
-        st.subheader("Best Overall Picks (Moneyline)")
-        best_ml_df = get_best_ml_picks(st.session_state["master_df"])
-        if not best_ml_df.empty:
-            # Sort by Best Overall Prob descending
-            best_ml_df = best_ml_df.sort_values(by="Best Overall Prob", ascending=False)
-
-            ml_cols = [
-                "league", "Home", "Away", "Commence (Local)",
-                "Best Overall Pick", "Best Overall Prob", "Best Overall Confidence",
-                "Implied Prob", "AI Prob"
-            ]
-
-            st.dataframe(
-                best_ml_df[ml_cols],
-                column_config={
-                    "Best Overall Prob": st.column_config.NumberColumn(format="%.1f%%"),
-                    "Implied Prob": st.column_config.NumberColumn(format="%.1f%%"),
-                    "AI Prob": st.column_config.NumberColumn(format="%.1f%%"),
-                },
-                width="stretch",
-                hide_index=True
-            )
-        else:
-            st.info("No Moneyline picks available.")
-
-        st.subheader("Top Picks / Best Bets")
-        # FORCE DISPLAY: Always include LOW confidence picks (checkbox disabled)
-        include_low_in_top = st.checkbox("Include LOW confidence in Top Picks (FORCED ON)", value=True, key="include_low_top_picks", disabled=True)
-        df = clean_df(df)
-        top_df = df.copy()
-        if "Unnamed: 0" in top_df.columns:
-            top_df = top_df.drop(columns=["Unnamed: 0"])
-        # Optimization: Bulk add missing columns
-        missing_top = [c for c in required_display_cols if c not in top_df.columns]
-        if missing_top:
-            top_df = pd.concat([top_df, pd.DataFrame(columns=missing_top)], axis=1)
-        # FORCE DISPLAY: Show all 139 rows regardless of confidence (filter disabled)
-        # if not include_low_in_top:
-        #     top_df = top_df[top_df["Pick_Confidence"].isin(["HIGH", "MEDIUM"])]
-        try:
-            top_df["st_conf_rank"] = top_df["st_conf_rank"].fillna(0)
-            top_df["decisiveness"] = top_df["decisiveness"].fillna(0.0)
-            top_df = top_df.sort_values(
-                by=["spread_edge", "st_conf_rank", "decisiveness"],
-                ascending=[False, False, False],
-            )
-        except Exception:
-            pass
-        top_df = reorder_for_spread_total_focus(top_df)
-        top_df_display = top_df.drop(columns=[c for c in trace_cols if c in top_df.columns], errors="ignore")
-
-        # Format spread_edge as percentage
-        if "spread_edge" in top_df_display.columns:
-            top_df_display["spread_edge"] = top_df_display["spread_edge"].apply(lambda x: f"{x:+.1%}" if pd.notnull(x) else "")
-            top_df_display = top_df_display.copy()
-
-        # --- Part F: TheOver Impact String ---
-        # Generate "TheOver Impact" column for display
-        # Format: "TheOver: +0.012 (agree)" or "TheOver: n/a"
-        if "theover_delta_final_prob" in top_df_display.columns:
-            def _fmt_theover_impact(row):
-                if not row.get("theover_matched"):
-                    return "TheOver: n/a"
-
-                delta = row.get("theover_delta_final_prob")
-                if delta is None:
-                    return "TheOver: n/a"
-
-                # Check agreement direction
-                # Compare final_prob vs final_prob_without_theover?
-                # Actually, simpler: if delta > 0, it boosted confidence.
-                # But 'agreement' usually means 'TheOver Pick matches Our Pick'.
-                # Let's use the 'theover_changed_pick' or inferred agreement.
-                # If delta is positive and substantial, it likely agreed/boosted.
-
-                # We can also check pick alignment if we have "theover_pick" and "Pick"
-                # But let's stick to the delta for now as requested: "TheOver: +0.012 (agree)"
-
-                # Heuristic:
-                # If delta > 0: "boost" or "agree" (if we picked it)
-                # If delta < 0: "drag" or "disagree"
-
-                # Refined: "agree" if sign(delta) matches sign(edge)?
-                # Let's just output the delta sign and value.
-
-                direction = "neutral"
-                if delta > 0.005: direction = "boost"
-                elif delta < -0.005: direction = "drag"
-
-                return f"TheOver: {delta:+.3f} ({direction})"
-
-            top_df_display["TheOver_Impact"] = top_df_display.apply(_fmt_theover_impact, axis=1)
-            # Add to reason short
-            top_df_display["Pick_Reason_Short"] = top_df_display["Pick_Reason_Short"] + " | " + top_df_display["TheOver_Impact"]
-
-        # --- Task 4: Visual Icon Injection (💰 & 🔥) ---
-        # Append icons to Pick_Reason_Short and At_a_Glance_Reason
-        def _append_icons(row, col_name):
-            reason = str(row.get(col_name) or "")
-            icons = []
-
-            # 💰 Money Bag: sharpness_delta > 0.10
-            # Indicates sharp money is on this side (Money % > Ticket %)
-            try:
-                sd = float(row.get("sharpness_delta") or 0.0)
-                if sd > 0.10:
-                    icons.append("💰")
-            except Exception:
-                pass
-
-            # 🔥 Fire: Market Steam > 0.03
-            # Indicates the market moved significantly in favor of this pick
-            try:
-                # delta_implied_prob alias "Market Steam"
-                steam = float(row.get("delta_implied_prob") or 0.0)
-                if steam > 0.03:
-                    icons.append("🔥")
-            except Exception:
-                pass
-
-            if icons:
-                icon_str = " ".join(icons)
-                # Ensure we don't double-append
-                if icon_str not in reason:
-                     return f"{reason} {icon_str}"
-            return reason
-
-        # Apply to Display DF (top_df_display) which is used for UI and Exports
-        if "Pick_Reason_Short" in top_df_display.columns:
-            top_df_display["Pick_Reason_Short"] = top_df_display.apply(lambda r: _append_icons(r, "Pick_Reason_Short"), axis=1)
-
-        if "At_a_Glance_Reason" in top_df_display.columns:
-            top_df_display["At_a_Glance_Reason"] = top_df_display.apply(lambda r: _append_icons(r, "At_a_Glance_Reason"), axis=1)
-
-        # Apply to Main Master View as well (for big table)
-        if "Pick_Reason_Short" in df_master_view_display.columns:
-            df_master_view_display["Pick_Reason_Short"] = df_master_view_display.apply(lambda r: _append_icons(r, "Pick_Reason_Short"), axis=1)
-        if not show_moneyline_details:
-            ml_detail_cols = [
-                "Pick",
-                "Book",
-                "Home_ML",
-                "Away_ML",
-                "Implied_Prob",
-                "AI_Prob",
-                "ai_prob_adj",
-                "consensus_prob",
-                "consensus_prob_adj",
-                "kalshi_prob",
-                "kalshi_prob_used",
-                "kalshi_event_ticker",
-                "kalshi_event_ticker_used",
-                "edge_vs_odds",
-                "model_minus_market",
-            ]
-            top_df_display = top_df_display.drop(columns=[c for c in ml_detail_cols if c in top_df_display.columns], errors="ignore")
-
-        # --- FINAL WHITELIST FIX (Enhanced with Picks Sheet Columns) ---
-        # --- SHARPNESS DELTA UI ---
-        # Add "Sharp Money" column with Sharpness Delta + Market Steam logic
-        # Logic: sharpness_delta > 0.10 => 💰, Market Steam > 0.03 => 🔥
-        if "sharpness_delta" in top_df_display.columns:
-            # Pre-calculate delta_implied_prob alias "Market_Steam" if missing in display df
-            # delta_implied_prob comes from market_tracker comparison (persisted in master_df)
-
-            def _fmt_sharp_money(row):
-                icons = []
-                try:
-                    # Task 4: Sharp Money Icon (Money% > Ticket% by 10%)
-                    sd = float(row.get("sharpness_delta") or 0.0)
-                    if sd > 0.10:
-                        icons.append("💰")
-                except Exception:
-                    pass
-
-                try:
-                    # Check for Market Steam (delta_implied_prob > 3%)
-                    steam = float(row.get("delta_implied_prob") or 0.0)
-                    if steam > 0.03:
-                         icons.append("🔥")
-                except Exception:
-                    pass
-
-                return " ".join(icons)
-
-            top_df_display["Sharp Money"] = top_df_display.apply(_fmt_sharp_money, axis=1)
-
-        ui_whitelist = [
-            'league', 'Home', 'Away', 'Commence (UTC)', 'Commence (Local)', 'Local Date',
-            'Overall Pick', 'Overall Prob', 'Spread', 'Spread Prob', 'Total', 'Total Prob', 'ML', 'ML Prob',
-            'best_pick', 'final_prob', 'edge', 'best_pick_type',
-            'Bet_Confidence', 'Bet_Lean',
-            'Spread & Pick', 'Total & Pick',
-            'spread_edge', 'total_edge',
-            'Pick', 'AI_Prob', 'Implied_Prob', 'Home_Sentiment', 'Away_Sentiment', 'Sentiment_Diff', 'sentiment_status', 'status', 'best_pick_prob', 'best_pick_edge',
-            'theover_pick', 'theover_prob_used', 'theover_delta_final_prob', 'final_prob_without_theover',
-            'theover_weight', 'theover_matched',
-            'Sharp Money', 'sharpness_delta', 'delta_implied_prob', 'decisiveness', 'st_conf_rank', 'Pick_Confidence'
-        ]
-        safe_cols = [c for c in ui_whitelist if c in top_df_display.columns]
-        top_df_ui = top_df_display[safe_cols].copy()
-
-        # Force Numeric and String consistency
-        for col in top_df_ui.columns:
-            if col in ['AI_Prob', 'Implied_Prob', 'spread_edge', 'total_edge', 'Sentiment_Diff', 'final_prob', 'edge', 'Overall Prob', 'Spread Prob', 'Total Prob', 'ML Prob', 'sharpness_delta', 'decisiveness', 'st_conf_rank']:
-                top_df_ui[col] = pd.to_numeric(top_df_ui[col], errors='coerce').fillna(0.0)
-            else:
-                top_df_ui[col] = top_df_ui[col].astype(str).replace('None', 'N/A')
-
-        # Display Kalshi matches count from final displayed dataframe
-        kalshi_match_count = 0
-        if 'kalshi_matched' in top_df_display.columns:
-            kalshi_match_count = int((top_df_display['kalshi_matched'].fillna(False) == True).sum())
-
-        # Show metrics row
-        metric_cols = st.columns([1, 1, 2])
-        metric_cols[0].metric("Total Rows", len(top_df_ui))
-        metric_cols[1].metric("Kalshi Matches", kalshi_match_count)
-
-        st.dataframe(top_df_ui, width="stretch", hide_index=True)
-
-        export_cols = [
-            "AI_Prob",
-            "Implied_Prob",
-            "ai_prob_adj",
-            "consensus_prob",
-            "consensus_prob_adj",
-            "final_probability",
-            "decision_driver",
-            "kalshi_weight",
-            "odds_weight",
-            "ml_weight",
-            "sentiment_weight",
-            "sentiment_score",
-            "Home_Sentiment",
-            "Away_Sentiment",
-            "sentiment_status",
-            "sentiment_direction",
-            "sentiment_impact_applied",
-            "confidence_reason",
-            "spread_engine_used",
-            "spread_pick_label",
-            "spread_alt_label",
-            "spread_prob_pick_final",
-            "spread_prob_alt_final",
-            "spread_prob_margin",
-            "spread_prob_pick_market",
-            "spread_prob_alt_market",
-            "spread_prob_pick_kalshi",
-            "spread_prob_alt_kalshi",
-            "spread_decision_metric_used",
-            "spread_decision_score_pick",
-            "spread_decision_score_alt",
-            "spread_decision_score_margin",
-            "spread_trace_json",
-            "total_engine_used",
-            "total_pick_label",
-            "total_alt_label",
-            "total_prob_pick_final",
-            "total_prob_alt_final",
-            "total_prob_margin",
-            "total_prob_pick_market",
-            "total_prob_alt_market",
-            "total_prob_pick_kalshi",
-            "total_prob_alt_kalshi",
-            "total_decision_metric_used",
-            "total_decision_score_pick",
-            "total_decision_score_alt",
-            "total_decision_score_margin",
-            "total_trace_json",
-            "decision_trace_version",
-            "overall_engine_used",
-            "decision_trace_notes",
-            "decision_trace_short",
-            "decision_trace_json",
-            "kalshi_matched",
-            "kalshi_prob_used",
-            "kalshi_prob_for_pick",
-            "kalshi_yes_side",
-            "kalshi_event_ticker_used",
-            "kalshi_candidate_count",
-            "kalshi_best_score",
-            "kalshi_match_reason",
-            "kalshi_game_prefix_used",
-            "kalshi_wanted_tokens",
-            "sentiment_source",
-            "reddit_used",
-            "sentiment_valid",
-            "sentiment_adj",
-            "sentiment_level",
-            "sentiment_strength",
-            "sentiment_badge",
-            "sentiment_articles_used",
-            "sentiment_query_used",
-            "sentiment_status",
-            "sentiment_confidence",
-            "spread_sentiment_adj",
-            "spread_prob_adj",
-            "spread_prob_display",
-            "total_sentiment_adj",
-            "total_prob_adj",
-            "total_prob_display",
-            "spread_sentiment_arrow",
-            "total_sentiment_arrow",
-            "spread_sentiment_note",
-            "total_sentiment_note",
-            "Spread_Glance_Clean",
-            "Total_Glance_Clean",
-            "st_conf_rank",
-            "decisiveness",
-            "sentiment_error_count",
-            "sentiment_errors_sample",
-            "sentiment_articles_total",
-            "sentiment_status_counts",
-            "sentiment_sample_query",
-            "sentiment_sample_status",
-            "sentiment_sample_totalResults",
-            "sentiment_auth_error",
-            "sentiment_rate_limited",
-            "sentiment_cooldown_until",
-            "sentiment_cached_teams_count",
-            "sentiment_available_count",
-            "sentiment_used_cached",
-            "sentiment_disabled_reason",
-            "sentiment_score",
-            "Pick_Confidence",
-            "Pick_Reason_Short",
-            "Eligible_Top_Picks",
-            "Kalshi_Required",
-            "overall_confidence",
-            "spread_confidence_gemini",
-            "total_confidence_gemini",
-            "spread_confidence_base",
-            "total_confidence_base",
-            "gemini_alignment",
-            "gemini_rationale",
-            "gemini_risk_flags",
-            "gemini_flags_short",
-            "gemini_mode",
-            "gemini_error",
-            "decision_trace",
-            "prob_engine",
-            "model_mode",
-            "model_spread_prob",
-            "model_total_prob",
-            "kalshi_prob_spread",
-            "kalshi_prob_total",
-            "spread_prob_market",
-            "total_prob_market",
-            "api_sports_used",
-            "sportsdata_used",
-            "api_sports_status",
-            "sportsdata_status",
-            "injuries_home_count",
-            "injuries_away_count",
-            "injuries_home",
-            "injuries_away",
-            "weather_summary",
-            "key_injuries_home",
-            "key_injuries_away",
-            "sentiment_adj_value",
-            "sentiment_adj_reason",
-            "prob_reason",
-            "odds_valid",
-            "odds_placeholder_detected",
-            "implied_prob_reason",
-            "spread_pick_team",
-            "spread_pick_line",
-            "spread_pick_odds",
-            "spread_implied_prob",
-            "spread_prob",
-            "spread_prob_market_based",
-            "spread_prob_reason",
-            "spread_confidence",
-            "spread_confidence_reason",
-            "spread_odds_valid",
-            "total_pick_side",
-            "total_pick_line",
-            "total_pick_odds",
-            "total_implied_prob",
-            "total_prob",
-            "total_prob_market_based",
-            "total_prob_reason",
-            "total_confidence",
-            "total_confidence_reason",
-            "total_odds_valid",
-            "spread_min",
-            "spread_med",
-            "spread_max",
-            "total_min",
-            "total_med",
-            "total_max",
-            "spread_books_count",
-            "total_books_count",
-            "spread_width",
-            "total_width",
-            "At_a_Glance_Confidence",
-            "At_a_Glance_Score",
-            "At_a_Glance_Reason",
-            "best_spread_book",
-            "best_spread_last_update",
-            "best_spread_price_score",
-            "best_spread_median_point",
-            "best_spread_mode_point",
-            "best_total_book",
-            "best_total_last_update",
-            "best_total_price_score",
-            "best_total_median_point",
-            "best_total_mode_point",
-            "enrichment_errors_sample",
-            "ml_home_implied",
-            "ml_away_implied",
-            "spread_pick_side",
-            "theover_pick",
-            "theover_pick_type",
-            "theover_hit_rate",
-            "theover_source_model",
-            "theover_prob_used",
-            "theover_matched",
-            "theover_delta_final_prob",
-            "final_prob_without_theover",
-            "theover_available",
-            "theover_line",
-            "theover_status",
-            "theover_total_available",
-            "theover_total_pick",
-            "theover_total_line",
-            "theover_total_winprob",
-            "theover_side_available",
-            "theover_side_pick_team",
-            "theover_side_line",
-            "theover_side_winprob",
-            "theover_match_reason",
-            "theover_changed_pick",
-            "theover_used_in_pick",
-            "theover_total_prob",
-            "theover_spread_prob",
-            "theover_weight",
-            "theover_matched",
-            "kalshi_event_ticker",
-            "kalshi_series",
-            "normalization_source",
-            "delta_implied_prob",
-            "sharpness_delta",
-            "Sharp Money",
-            "delta_sentiment",
-            "movement_alerts",
-            "clv_spread_edge_diff",
-            "clv_total_edge_diff"
-        ]
-        export_df = df_master_view_full.copy()
-        if "Unnamed: 0" in export_df.columns:
-            export_df = export_df.drop(columns=["Unnamed: 0"])
-        export_df = reorder_for_spread_total_focus(export_df)
-
-        # Optimization: Bulk add missing columns
-        missing_export = [c for c in export_cols if c not in export_df.columns]
-        if missing_export:
-            export_df = pd.concat([export_df, pd.DataFrame(columns=missing_export)], axis=1)
-
-        # Ensure sentiment_status is string to avoid Arrow serialization failures
-        if "sentiment_status" in export_df.columns:
-            export_df["sentiment_status"] = export_df["sentiment_status"].astype(str)
-
-        # Ensure numeric probabilities are float
-        for col in ["AI_Prob", "Implied_Prob", "final_probability", "model_prob_home"]:
-            if col in export_df.columns:
-                export_df[col] = pd.to_numeric(export_df[col], errors='coerce').fillna(0.0)
-
-        # --- PICKS SHEET EXPORT (DEFAULT) ---
-        if not export_df.empty:
-            # Use the reordered full export dataframe directly to ensure all columns are preserved
-            final_picks_df = export_df.copy()
-
-            # Task 1: "Missing Games" Fix
-            # Remove all filters for the picks_sheet export. It must contain every analyzed row.
-            # We use final_picks_df which is a copy of export_df (the full dataset).
-
-            # Ensure export matches grid rows if not filtered specifically
-            if filter_export:
-                if "Bet_Confidence" in final_picks_df.columns:
-                    final_picks_df = final_picks_df[final_picks_df["Bet_Confidence"] == "HIGH"]
-            else:
-                # Filter to Eligible (HIGH+MEDIUM) to match Top Picks Grid, but keep low confidence if they are in the view?
-                # The user asked to keep all columns, but implies rows should match the grid.
-                # "whichever dataframe drives the grid should also drive the download"
-                # The grid uses top_df which filters by Eligible_Top_Picks.
-                # Filter removed to show all games during debugging
-
-                # Also apply confidence filter from session state if needed, or just dump what's there.
-                # The prompt says: "The main "Download CSV" button (st.download_button) so the downloaded CSV matches what is shown on screen."
-                # FORCE DISPLAY: Show all rows in export to match the forced display (filter disabled)
-                # if not include_low_in_top and "Pick_Confidence" in final_picks_df.columns:
-                #     final_picks_df = final_picks_df[final_picks_df["Pick_Confidence"].isin(["HIGH", "MEDIUM"])]
-                pass
-
-            st.caption(f"Export contains {len(final_picks_df)} picks (All Games).")
-
-            # Persist to session state
-            st.session_state["final_picks_df"] = final_picks_df.copy()
-
-            # Ensure session state is preserved before download
-            if st.session_state.get('master_results_df') is not None:
-                picks_csv = final_picks_df.to_csv(index=False).encode("utf-8")
-                st.download_button(
-                    "Download Picks Sheet CSV (Default)",
-                    data=picks_csv,
-                    file_name="picks_sheet.csv",
-                    mime="text/csv",
-                    key="picks_sheet_csv",
-                )
-
-                # --- FULL DEBUG EXPORT ---
-                debug_csv = export_df.to_csv(index=False).encode("utf-8")
-                st.download_button(
-                    "Download Full Debug CSV",
-                    data=debug_csv,
-                    file_name="full_debug_dump.csv",
-                    mime="text/csv",
-                    key="full_debug_csv_btn",
-                )
-
-        with st.expander("TheOver Matching Debug", expanded=False):
-            if 'theover_stats' in locals():
-                st.write(f"Total Rows Parsed: {theover_stats.get('total_rows', 0)}")
-                st.write(f"Matched Games (Fuzzy): {theover_stats.get('matched_rows', 0)}")
-                st.write(f"Unmatched Games (Fuzzy): {theover_stats.get('unmatched_rows', 0)}")
-
-                unmatched = theover_stats.get("unmatched_examples", [])
-                if unmatched:
-                    st.caption("Sample Unmatched Games (Ingestion):")
-                    st.table(pd.DataFrame(unmatched))
-            else:
-                st.info("No TheOver statistics available.")
-
-        with st.expander("Sentiment Debug", expanded=False):
-            meta_view = st.session_state.get("sentiment_meta", {})
-            meta_map_view = st.session_state.get("sentiment_meta_map", {})
-            source_counts: Dict[str, int] = {}
-            for mv in meta_map_view.values():
-                src_val = str(mv.get("sentiment_source") or "none")
-                source_counts[src_val] = source_counts.get(src_val, 0) + 1
-            st.write("Sentiment source:", meta_view.get("sentiment_source"))
-            st.write("Status counts:", meta_view.get("sentiment_status_counts"))
-            st.write("Teams by source:", source_counts)
-            st.write(
-                "Reddit posts/comments used:",
-                meta_view.get("reddit_posts_used", 0),
-                meta_view.get("reddit_comments_used", 0),
-            )
-            st.json(meta_view)
-            st.json(st.session_state.get("sentiment_debug", {}))
-
-        # Market range visualizer
-        with st.expander("Market Range Visuals (Spread/Total)", expanded=False):
-            if df_master_view.empty:
-                st.info("Run Master Analysis to view market ranges.")
-            else:
-                game_options = [
-                    f"{row.get('league')} | {row.get('Home')} vs {row.get('Away')} | {row.get('Commence (UTC)')}"
-                    for _, row in df_master_view.iterrows()
-                ]
-                selected = st.selectbox("Select game", options=game_options, index=0)
-                selected_row = df_master_view.iloc[game_options.index(selected)] if game_options else None
-                if selected_row is not None:
-                    def render_range(kind: str, lo: Any, mid: Any, hi: Any, pick_line: Any, warnings_text: str):
-                        if pd.isna(lo) or pd.isna(hi):
-                            st.warning(f"No {kind.lower()} market found.")
-                            if warnings_text:
-                                st.error(warnings_text)
-                            return
-                        if alt:
-                            data = pd.DataFrame(
-                                [
-                                    {"kind": kind, "low": lo, "mid": mid, "high": hi, "pick": pick_line},
-                                ]
-                            )
-                            rule = alt.Chart(data).mark_rule(color="gray").encode(
-                                x="low:Q",
-                                x2="high:Q",
-                            )
-                            pts = alt.Chart(data).mark_point(color="black", size=60).encode(x="mid:Q")
-                            pick_pt = alt.Chart(data).mark_point(color="orange", size=80).encode(x="pick:Q")
-                            st.altair_chart((rule + pts + pick_pt).properties(width=400, height=80))
-                        else:
-                            rng_text = f"{kind} range: {lo} .. {hi} (median {mid}) | pick: {pick_line}"
-                            st.text(rng_text)
-                        if warnings_text:
-                            st.error(warnings_text)
-
-                    proxy_badge = None
-                    warnings_text = selected_row.get("Warnings") or ""
-                    if "model_proxy_for_spread_total" in str(warnings_text):
-                        proxy_badge = "Proxy (low confidence)"
-                    render_range(
-                        "Spread",
-                        selected_row.get("spread_min"),
-                        selected_row.get("spread_med"),
-                        selected_row.get("spread_max"),
-                        selected_row.get("Line") if selected_row.get("Market") == "Spread" else selected_row.get("Spread & Pick"),
-                        proxy_badge or "",
-                    )
-                    render_range(
-                        "Total",
-                        selected_row.get("total_min"),
-                        selected_row.get("total_med"),
-                        selected_row.get("total_max"),
-                        selected_row.get("Line") if selected_row.get("Market") == "Total" else selected_row.get("Total & Pick"),
-                        proxy_badge or "",
-                    )
-
-        # Line movement scaffold
-        with st.expander("Line Movement (optional)", expanded=False):
-            history_path = os.path.join("data", "line_history.csv")
-            if os.path.exists(history_path):
-                try:
-                    hist_df = pd.read_csv(history_path)
-                    st.caption("Showing line history (sample).")
-                    st.dataframe(hist_df.head(50))
-                except Exception as exc:
-                    st.warning(f"Failed to load line history: {exc}")
-            else:
-                st.info("Enable line movement by saving periodic snapshots to data/line_history.csv")
-
-        # Stats saving block moved to Processing Block
-        pass
-        # FIX: Load from persistent session state to avoid NameError on reruns (Debug Export)
-        # Use session state to retrieve stats safely
-        stats = st.session_state.get("master_stats_persistent", {"rows_out": 0, "games_in": 0})
-        rows_out_val = stats.get('rows_out', 0)
-        games_in_val = stats.get('games_in', 0)
-
-        # Update the summary line to use safe variables
-        debug_info = f"rows_out/games_in = {rows_out_val} / {games_in_val}"
-
-        matches = stats.get("kalshi_matches", 0)
-        total_games = stats.get("kalshi_total", 0) or 1
-        st.caption(
-            f"Kalshi matches: {matches}/{total_games} ({matches/total_games:.1%}) | "
-            f"TheOver matches: {stats.get('theover_matched_sides', 0)} sides, {stats.get('theover_matched_totals', 0)} totals"
-        )
-
-        if stats.get("games_in", 0) > 0 and stats.get("rows_out", 0) == 0:
-            st.error("Master analysis produced 0 rows; see debug stats below.")
-            st.json(stats)
-        elif stats.get("games_in", 0) == 0:
-            st.warning("No games loaded. Use the sidebar to load games first.")
-        else:
-            # Display the raw count of master_results_df to reflect the current analyzed slate
-            games = st.session_state.get('games', [])
-            st.success(f"Produced {len(st.session_state['master_results_df'])} rows from {len(games)} games")
-            # Explicitly format key columns
-            # Ensure numeric typing before display to avoid Arrow errors
-            cols_to_force_numeric = ["AI_Prob", "model_prob_home", "final_probability", "Implied_Prob", "spread_edge", "total_edge"]
-            valid_force_cols = [c for c in cols_to_force_numeric if c in df_master_view_display.columns]
-            if valid_force_cols:
-                df_master_view_display[valid_force_cols] = df_master_view_display[valid_force_cols].apply(pd.to_numeric, errors='coerce').fillna(0.0)
-
-            try:
-                # Mandatory type-guard for Arrow serialization (Main Table)
-                numeric_cols_main = ['AI_Prob', 'model_prob_home', 'final_probability', 'Implied_Prob', 'spread_edge', 'ai_prob_base', 'sentiment_diff']
-                for col in numeric_cols_main:
-                    if col in df_master_view_display.columns:
-                        df_master_view_display[col] = pd.to_numeric(df_master_view_display[col], errors='coerce').fillna(0.0)
-
-                # Drop the internal token column to prevent PyArrow crash
-                if 'kalshi_wanted_tokens' in df_master_view_display.columns:
-                    df_master_view_display = df_master_view_display.drop(columns=['kalshi_wanted_tokens'])
-
-                # --- FINAL WHITELIST FIX ---
-                ui_whitelist = [
-                    'league', 'Home', 'Away', 'Pick', 'AI_Prob', 'Implied_Prob', 'Home_Sentiment',
-                    'Away_Sentiment', 'Sentiment_Diff', 'sentiment_status', 'spread_edge', 'status',
-                    'theover_pick', 'theover_delta_final_prob', 'final_prob_without_theover',
-                    'theover_total_pick', 'theover_side_pick_team', 'theover_matched'
-                ]
-                safe_cols = [c for c in ui_whitelist if c in df_master_view_display.columns] # or df_master_view_display at line 8946
-                top_df_ui = df_master_view_display[safe_cols].copy()
-
-                # Force Numeric and String consistency
-                for col in top_df_ui.columns:
-                    if col in ['AI_Prob', 'Implied_Prob', 'spread_edge', 'Sentiment_Diff']:
-                        top_df_ui[col] = pd.to_numeric(top_df_ui[col], errors='coerce').fillna(0.0)
-                    else:
-                        top_df_ui[col] = top_df_ui[col].astype(str).replace('None', 'N/A')
-
-                st.dataframe(top_df_ui, width="stretch", hide_index=True)
-            except Exception as e:
-                 st.error(f"Display Error (Master Table): {e}")
-
-            st.caption(debug_info)
-            with st.expander("Decision Trace (Samples)", expanded=False):
-                st.caption("One sample per league (NFL / NBA / NCAAB) showing how the final pick & probability were derived.")
-                samples = st.session_state.get("DECISION_TRACE_SAMPLES", {}) or {}
-                if not samples:
-                    st.info("No decision traces available.")
-                else:
-                    for lg in sorted(samples.keys()):
-                        sample = samples.get(lg, {})
-                        if not sample:
-                            continue
-                        home_team = sample.get("home") or "Home"
-                        away_team = sample.get("away") or "Away"
-                        market = sample.get("market") or "moneyline"
-                        pick_val = sample.get("pick") or "N/A"
-                        final_prob = sample.get("final_probability")
-                        st.markdown(f"**{lg}** — {home_team} vs {away_team} ({market})")
-                        st.write(f"Pick: {pick_val} | Final Probability: {final_prob}")
-                        trace_payload = sample.get("decision_trace_json")
-                        if isinstance(trace_payload, str):
-                            try:
-                                trace_payload = json.loads(trace_payload)
-                            except Exception:
-                                trace_payload = {"trace": trace_payload}
-                        st.json(trace_payload or {})
-    # This elif block is unreachable due to the if False wrap above,
-    # but removing it clean up the syntax error context.
-    pass
-
-
-
-if __name__ == "__main__" and os.environ.get("KALSHI_SELF_TEST"):
-    fake_game = {
-        "home_team": "Chicago Bulls",
-        "away_team": "Cleveland Cavaliers",
-        "commence_time": "2025-12-18T01:10:00Z",
-        "commence_time_utc": parse_kalshi_datetime("2025-12-18T01:10:00Z"),
-    }
-    fake_markets = [
-        {
-            "event_ticker": "KXNBAGAME-25DEC17CLECHI",
-            "title": "Cleveland vs Chicago Winner?",
-            "last_price": 55,
-            "liquidity": 1000,
-        }
-    ]
-    winner_match, winner_debug = match_kalshi_market(fake_game, fake_markets)
-    print("Self-test winner matched:", winner_match.get("winner", {}).get("kalshi_matched"))
-    print("Self-test prob:", winner_match.get("winner", {}).get("kalshi_prob"))
-    print("Self-test debug:", winner_debug.get("winner_meta"))
