@@ -119,6 +119,16 @@ logger = logging.getLogger("parlaypicker")
 if not logger.handlers:
     logging.basicConfig(level=logging.INFO)
 
+# Preserve session state across reruns
+if "master_results_df" not in st.session_state:
+    st.session_state["master_results_df"] = pd.DataFrame()
+
+if "master_df" not in st.session_state:
+    st.session_state["master_df"] = pd.DataFrame()
+
+if "analysis_complete" not in st.session_state:
+    st.session_state["analysis_complete"] = False
+
 # Initialize status variables at the top level to ensure global scope availability
 if 'sportsdata_status_run' not in st.session_state:
     st.session_state['sportsdata_status_run'] = "pending"
@@ -10050,9 +10060,14 @@ with tab_master:
                 st.session_state["master_df"] = df
                 st.session_state["master_results_df"] = df
 
+                # Set flag to indicate data is ready for display
+                st.session_state["analysis_complete"] = True
+                st.session_state["data_ready"] = True
+
                 logger.info(f"✅ Saved {len(df)} rows to session state")
                 logger.info(f"   - st.session_state['master_df']: {len(st.session_state['master_df'])} rows")
                 logger.info(f"   - st.session_state['master_results_df']: {len(st.session_state['master_results_df'])} rows")
+                logger.info(f"✅ Data ready flags set")
 
     if "model_last_error" in st.session_state:
         st.error(f"Prediction Error: {st.session_state['model_last_error']}")
@@ -10143,12 +10158,41 @@ with tab_master:
 
 
 # --- Forced UI Persistence Block ---
-# The complex display logic is deprecated in favor of the persistent block at the bottom.
-# We wrap the old code in a False block to prevent IndentationError and execution.
-if False:
+# This block renders the results grid outside the button handler so it persists across reruns.
+
+# Add this logging BEFORE the UI rendering section
+logger.info(f"\n{'='*80}")
+logger.info(f"UI RENDERING SECTION")
+logger.info(f"{'='*80}")
+
+# Check if data exists in session state
+if "master_results_df" in st.session_state:
+    logger.info(f"✅ master_results_df exists in session state")
+    try:
+        logger.info(f"   Rows: {len(st.session_state['master_results_df'])}")
+        logger.info(f"   Columns: {len(st.session_state['master_results_df'].columns)}")
+    except Exception as e:
+        logger.error(f"Error checking master_results_df: {e}")
+else:
+    logger.error(f"❌ master_results_df NOT FOUND in session state!")
+    logger.error(f"   Available keys: {list(st.session_state.keys())}")
+
+if "master_df" in st.session_state:
+    logger.info(f"✅ master_df exists in session state")
+    try:
+        logger.info(f"   Rows: {len(st.session_state['master_df'])}")
+    except Exception as e:
+        logger.error(f"Error checking master_df: {e}")
+else:
+    logger.error(f"❌ master_df NOT FOUND in session state!")
+
+logger.info(f"{'='*80}")
+
+if st.session_state.get("analysis_complete") or (st.session_state.get("master_results_df") is not None and not st.session_state["master_results_df"].empty):
     with tab_master:
         df = st.session_state["master_results_df"]
-        pass
+        if not df.empty:
+            st.success(f"✅ Loaded {len(df)} rows for analysis (Master Analysis Tab)")
 
         # NOTE: Do NOT apply Kalshi match filter here - it must only affect UI display, not exports
         # The filter is applied later to df_master_view_display only (see line ~10613+)
