@@ -9801,7 +9801,9 @@ with tab_master:
                             master_df[col] = master_df[col].fillna(val)
                     # Fill visual cols with empty string
                     visual_cols = ["spread_sentiment_arrow", "total_sentiment_arrow", "spread_sentiment_note", "total_sentiment_note"]
-                    master_df[visual_cols] = master_df[visual_cols].fillna("")
+                    for col in visual_cols:
+                        if col in master_df.columns:
+                            master_df[col] = master_df[col].fillna("")
 
                 # Re-implement deduping for the `df` variable used by the UI below
 
