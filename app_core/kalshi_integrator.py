@@ -141,9 +141,14 @@ def parse_event_ticker_codes(event_ticker: str) -> Dict[str, str]:
     home = ""
 
     if length == 6:
-        # 3+3
+        # 3+3 (e.g., MERVMI)
         away = team_block[:3]
         home = team_block[3:]
+    elif length == 7:
+        # 7 characters: Try 4+3 or 3+4
+        # Default to 4+3 (most common), but could be 3+4
+        away = team_block[:4]
+        home = team_block[4:]
     elif length == 8:
         # 4+4
         away = team_block[:4]
@@ -154,10 +159,19 @@ def parse_event_ticker_codes(event_ticker: str) -> Dict[str, str]:
         away = team_block[:mid]
         home = team_block[mid:]
     else:
-        # Fallback: 3/3 from end as requested
-        if length >= 3:
+        # Fallback for odd lengths: try to split smartly
+        # Prefer taking last 3 as home if length >= 6
+        if length >= 6:
             home = team_block[-3:]
             away = team_block[:-3]
+        elif length >= 4:
+            # For shorter odd lengths, try 2+3 or 3+2
+            home = team_block[-3:]
+            away = team_block[:-3]
+        else:
+            # Very short, just split
+            home = team_block[-min(3, length):]
+            away = team_block[:-min(3, length)]
 
     return {"away": away, "home": home, "date_token": date_token}
 
@@ -415,6 +429,9 @@ NCAAB_TEAM_CODE_MAP: Dict[str, str] = {
     "GEORGIA TECH YELLOW JACKETS": "GAT",
     "MERCER BEARS": "MER", # Added per user request
     "MERCER": "MER",
+    "VMI": "VMI",  # Virginia Military Institute - 3-letter code
+    "VIRGINIA MILITARY INSTITUTE": "VMI",
+    "VIRGINIA MILITARY": "VMI",
 }
 
 # Alias Maps: Kalshi Variant -> Canonical Internal Code

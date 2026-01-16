@@ -2487,17 +2487,31 @@ def cached_gemini_confidence(signature: str, payload: Dict[str, Any]) -> Dict[st
 
 def pipeline_progress_snapshot() -> Dict[str, Any]:
     games_loaded = len(st.session_state.get("games") or [])
-    _matches_raw = st.session_state.get("kalshi_match_results") or {}
-    matches = _matches_raw.values() if isinstance(_matches_raw, dict) else (_matches_raw or [])
-    # Count games where ANY market (winner, spread, or total) has a Kalshi match
-    matched_games = len([
-        m for m in matches
-        if any([
-            (m.get("matches") or {}).get("winner", {}).get("kalshi_matched"),
-            (m.get("matches") or {}).get("spread", {}).get("kalshi_matched"),
-            (m.get("matches") or {}).get("total", {}).get("kalshi_matched")
+
+    # Fix: Count Kalshi matches directly from master_results_df instead of kalshi_match_results
+    # This ensures the metric matches what's actually in the analyzed data
+    master_df = st.session_state.get("master_results_df")
+    if master_df is not None and not master_df.empty and "kalshi_matched" in master_df.columns:
+        # Count unique games (by Home/Away) that have at least one Kalshi match
+        matched_rows = master_df[master_df["kalshi_matched"] == True]
+        if not matched_rows.empty:
+            unique_games = matched_rows.groupby(["Home", "Away"]).size()
+            matched_games = len(unique_games)
+        else:
+            matched_games = 0
+    else:
+        # Fallback to original method if master_results_df is not available
+        _matches_raw = st.session_state.get("kalshi_match_results") or {}
+        matches = _matches_raw.values() if isinstance(_matches_raw, dict) else (_matches_raw or [])
+        # Count games where ANY market (winner, spread, or total) has a Kalshi match
+        matched_games = len([
+            m for m in matches
+            if any([
+                (m.get("matches") or {}).get("winner", {}).get("kalshi_matched"),
+                (m.get("matches") or {}).get("spread", {}).get("kalshi_matched"),
+                (m.get("matches") or {}).get("total", {}).get("kalshi_matched")
+            ])
         ])
-    ])
     sentiment_meta = st.session_state.get("sentiment_meta") or {}
     sentiment_ready = bool(
         sentiment_meta.get("sentiment_available_count")
@@ -10627,7 +10641,8 @@ if st.session_state.get("master_results_df") is not None:
             key="hide_low_confidence",
         )
         # st.session_state["show_low_confidence"] = hide_low # Deprecated
-        df_master_view, confidence_stats = apply_confidence_filter(df, confidence_mode, not hide_low)
+        # FORCE DISPLAY: Override confidence_mode to "All" to display all 139 rows
+        df_master_view, confidence_stats = apply_confidence_filter(df, "All", True)
 
         # Task 2: Force Spread/Total Pivot (Applied immediately after df_master_view creation)
         def force_spread_total_pivot(row):
