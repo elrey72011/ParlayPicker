@@ -2493,11 +2493,17 @@ def pipeline_progress_snapshot() -> Dict[str, Any]:
     master_df = st.session_state.get("master_results_df")
     if master_df is not None and not master_df.empty and "kalshi_matched" in master_df.columns:
         # Count unique games (by Home/Away) that have at least one Kalshi match
-        matched_rows = master_df[master_df["kalshi_matched"] == True]
-        if not matched_rows.empty:
-            unique_games = matched_rows.groupby(["Home", "Away"]).size()
-            matched_games = len(unique_games)
-        else:
+        # Use .fillna(False) to handle any None/NaN values, and convert to bool for robust comparison
+        try:
+            matched_mask = master_df["kalshi_matched"].fillna(False).astype(bool)
+            matched_rows = master_df[matched_mask]
+            if not matched_rows.empty:
+                unique_games = matched_rows.groupby(["Home", "Away"]).size()
+                matched_games = len(unique_games)
+            else:
+                matched_games = 0
+        except Exception as e:
+            logger.warning(f"Error counting Kalshi matches from master_df: {e}")
             matched_games = 0
     else:
         # Fallback to original method if master_results_df is not available
@@ -9819,7 +9825,7 @@ with tab_master:
         st.error(f"Prediction Error: {st.session_state['model_last_error']}")
 
         st.subheader("Top Picks / Best Bets")
-        include_low_in_top = st.checkbox("Include LOW confidence in Top Picks", value=False, key="include_low_top_picks")
+        include_low_in_top = st.checkbox("Include LOW confidence in Top Picks", value=True, key="include_low_top_picks")
         df = clean_df(df)
         top_df = df.copy()
         if "Unnamed: 0" in top_df.columns:
@@ -9828,8 +9834,9 @@ with tab_master:
         missing_top = [c for c in required_display_cols if c not in top_df.columns]
         if missing_top:
             top_df = pd.concat([top_df, pd.DataFrame(columns=missing_top)], axis=1)
-        if not include_low_in_top:
-            top_df = top_df[top_df["Pick_Confidence"].isin(["HIGH", "MEDIUM"])]
+        # FORCE DISPLAY: Show all 139 rows regardless of confidence (filter disabled)
+        # if not include_low_in_top:
+        #     top_df = top_df[top_df["Pick_Confidence"].isin(["HIGH", "MEDIUM"])]
         try:
             debug_json = json.dumps(st.session_state["debug_log_history"], default=str, indent=2)
             st.sidebar.download_button(
@@ -10122,7 +10129,7 @@ if st.session_state.get("master_results_df") is not None:
             st.info("No Moneyline picks available.")
 
         st.subheader("Top Picks / Best Bets")
-        include_low_in_top = st.checkbox("Include LOW confidence in Top Picks", value=False, key="include_low_top_picks")
+        include_low_in_top = st.checkbox("Include LOW confidence in Top Picks", value=True, key="include_low_top_picks")
         df = clean_df(df)
         top_df = df.copy()
         if "Unnamed: 0" in top_df.columns:
@@ -10131,8 +10138,9 @@ if st.session_state.get("master_results_df") is not None:
         missing_top = [c for c in required_display_cols if c not in top_df.columns]
         if missing_top:
             top_df = pd.concat([top_df, pd.DataFrame(columns=missing_top)], axis=1)
-        if not include_low_in_top:
-            top_df = top_df[top_df["Pick_Confidence"].isin(["HIGH", "MEDIUM"])]
+        # FORCE DISPLAY: Show all 139 rows regardless of confidence (filter disabled)
+        # if not include_low_in_top:
+        #     top_df = top_df[top_df["Pick_Confidence"].isin(["HIGH", "MEDIUM"])]
         try:
             top_df["st_conf_rank"] = top_df["st_conf_rank"].fillna(0)
             top_df["decisiveness"] = top_df["decisiveness"].fillna(0.0)
