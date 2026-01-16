@@ -5953,6 +5953,44 @@ with tab_master:
         help="If checked, the 'AI_Prob' column will use the local XGBoost model output."
     )
     games = st.session_state.get("games", [])
+
+    # ============================================
+    # PHASE 1: DIAGNOSTIC - Games Loading Summary
+    # ============================================
+    logger.info("="*80)
+    logger.info(f"DIAGNOSTIC: Loaded {len(games)} games from TheOddsAPI")
+    logger.info("="*80)
+
+    if games:
+        # Check market data availability
+        games_with_ml = sum(1 for g in games if g.get('home_ml_price') is not None)
+        games_with_spread = sum(1 for g in games if g.get('home_spread_point') is not None)
+        games_with_total = sum(1 for g in games if g.get('total_point') is not None)
+        games_with_no_data = sum(1 for g in games if not (g.get('home_ml_price') or g.get('home_spread_point') or g.get('total_point')))
+
+        logger.info(f"Market Data Summary:")
+        logger.info(f"  - Games with Moneyline: {games_with_ml}/{len(games)}")
+        logger.info(f"  - Games with Spread: {games_with_spread}/{len(games)}")
+        logger.info(f"  - Games with Total: {games_with_total}/{len(games)}")
+        logger.info(f"  - Games with NO market data: {games_with_no_data}/{len(games)}")
+
+        # Log first 3 games as samples
+        logger.info(f"\nSample Game Data (first 3):")
+        for idx, g in enumerate(games[:3]):
+            logger.info(f"  Game {idx+1}: {g.get('home_team')} vs {g.get('away_team')}")
+            logger.info(f"    League: {g.get('league')}")
+            logger.info(f"    ML Price: {g.get('home_ml_price')} / {g.get('away_ml_price')}")
+            logger.info(f"    Spread: {g.get('home_spread_point')}")
+            logger.info(f"    Total: {g.get('total_point')}")
+
+        if games_with_ml == 0 and games_with_spread == 0 and games_with_total == 0:
+            logger.error("CRITICAL: ALL games are missing market data!")
+    else:
+        logger.error("CRITICAL: games list is empty!")
+
+    logger.info("="*80)
+    # ============================================
+
     # if run_master and (not kalshi_status.get("configured")):
     #    st.error("Kalshi is required but unavailable. Fix Kalshi first.")
     #    st.stop()
@@ -6269,6 +6307,18 @@ with tab_master:
             theover_matched_count_totals = 0
 
             for idx, g in enumerate(games_to_process):
+                # ============================================
+                # PHASE 1: DIAGNOSTIC - Per-Game Tracking Start
+                # ============================================
+                logger.info(f"\n{'='*60}")
+                logger.info(f"Processing Game {idx + 1}/{len(games_to_process)}")
+                logger.info(f"{'='*60}")
+                logger.info(f"Home: {g.get('home_team')} | Away: {g.get('away_team')} | League: {g.get('league')}")
+
+                # Track rows before processing this game
+                rows_count_before = len(rows_out)
+                # ============================================
+
                 g = g.copy()
                 # Initialize loop-local variables to prevent NameError
                 model_prob_home = None
@@ -9590,9 +9640,108 @@ with tab_master:
                     rows_out.append(fallback_row)
                     master_stats["market_rows_out"] += 1
 
+                # ============================================
+                # PHASE 1 & 2: DIAGNOSTIC + SAFETY NET
+                # Per-Game Tracking End + Guaranteed Fallback
+                # ============================================
+                rows_count_after = len(rows_out)
+                rows_created_this_game = rows_count_after - rows_count_before
+
+                if rows_created_this_game == 0:
+                    logger.warning(f"⚠️  NO ROWS CREATED FOR THIS GAME!")
+                    logger.warning(f"Market data present:")
+                    logger.warning(f"  - home_ml_price: {g.get('home_ml_price')}")
+                    logger.warning(f"  - home_spread_point: {g.get('home_spread_point')}")
+                    logger.warning(f"  - total_point: {g.get('total_point')}")
+
+                    # Check if variables were set
+                    if 'spread_pick' in locals():
+                        logger.warning(f"  - spread_pick was: {spread_pick}")
+                    else:
+                        logger.warning(f"  - spread_pick was NEVER DEFINED")
+
+                    if 'total_pick' in locals():
+                        logger.warning(f"  - total_pick was: {total_pick}")
+                    else:
+                        logger.warning(f"  - total_pick was NEVER DEFINED")
+
+                    if 'h2h_data_valid' in locals():
+                        logger.warning(f"  - h2h_data_valid was: {h2h_data_valid}")
+                    else:
+                        logger.warning(f"  - h2h_data_valid was NEVER DEFINED")
+
+                    # ============================================
+                    # PHASE 2: GUARANTEED FALLBACK ROW CREATION
+                    # ============================================
+                    logger.warning(f"Creating FALLBACK SAFETY NET row for {g.get('home_team')} vs {g.get('away_team')}")
+
+                    safety_fallback_row = {
+                        "league": g.get("league"),
+                        "Home": g.get("home_team"),
+                        "Away": g.get("away_team"),
+                        "Commence (UTC)": g.get("commence_time_iso_utc") or g.get("commence_time") or g.get("commence_time_iso"),
+                        "Commence (Local)": None,
+                        "Market": "NO_DATA",
+                        "Pick": "INSUFFICIENT_DATA",
+                        "Implied_Prob": None,
+                        "AI_Prob": None,
+                        "final_prob": None,
+                        "final_probability": None,
+                        "Line": None,
+                        "Pick_Confidence": "LOW",
+                        "Pick_Reason_Short": "No market data or picks available",
+                        "Eligible_Top_Picks": False,
+                        "kalshi_matched": False,
+                        "kalshi_prob": None,
+                        "sentiment_diff": 0.0,
+                        "Sentiment_Diff": 0.0,
+                        "theover_pick": None,
+                        "best_pick": "NO DATA",
+                        "best_pick_type": "NONE",
+                        # Add other essential fields with None or defaults
+                        "home_ml_price": g.get("home_ml_price"),
+                        "away_ml_price": g.get("away_ml_price"),
+                        "home_spread_point": g.get("home_spread_point"),
+                        "total_point": g.get("total_point"),
+                    }
+
+                    rows_out.append(safety_fallback_row)
+                    logger.info(f"FALLBACK SAFETY NET row added (rows_out now has {len(rows_out)} rows)")
+                    # ============================================
+                else:
+                    logger.info(f"✅ Created {rows_created_this_game} row(s) for this game")
+                # ============================================
+
+            # ============================================
+            # PHASE 1: DIAGNOSTIC - Game Loop Complete
+            # ============================================
+            logger.info(f"\n{'='*80}")
+            logger.info(f"GAME LOOP COMPLETE")
+            logger.info(f"{'='*80}")
+            logger.info(f"Total rows created: {len(rows_out)}")
+
+            if len(rows_out) == 0:
+                logger.error("CRITICAL: rows_out is empty! No games created any rows!")
+                logger.error("This means ALL row creation conditions failed for ALL games")
+            else:
+                logger.info(f"SUCCESS: Created {len(rows_out)} total rows from {len(games_to_process)} games")
+                logger.info(f"Average rows per game: {len(rows_out) / len(games_to_process):.2f}")
+            # ============================================
+
             # 1. Create the base Master DataFrame from your processed rows
             # User Action: Use from_records and copy to prevent fragmentation
+
+            # ============================================
+            # PHASE 1: DIAGNOSTIC - DataFrame Creation
+            # ============================================
+            logger.info(f"Creating master_df from {len(rows_out)} rows...")
+
             master_df = pd.DataFrame.from_records(rows_out)
+
+            logger.info(f"master_df created: {len(master_df)} rows, {len(master_df.columns)} columns")
+            if master_df.empty:
+                logger.error("CRITICAL: master_df is EMPTY!")
+            # ============================================
 
             # FIX: Deduplicate columns immediately to prevent "Duplicate labels" error
             master_df = master_df.loc[:, ~master_df.columns.duplicated()].copy()
@@ -9775,21 +9924,49 @@ with tab_master:
                     master_df[visual_cols] = master_df[visual_cols].fillna("")
 
                 # Re-implement deduping for the `df` variable used by the UI below
-                rows_for_dedupe = master_df.to_dict("records")
-                deduped_rows: Dict[Tuple[Any, Any, Any, Any], Dict[str, Any]] = {}
-                for row in rows_for_dedupe:
-                    key = (row.get("league"), row.get("Home"), row.get("Away"), row.get("Commence (UTC)"))
-                    existing = deduped_rows.get(key)
-                    if (existing is None) or (
-                        not existing.get("kalshi_matched") and row.get("kalshi_matched")
-                    ):
-                        deduped_rows[key] = row
-                deduped_list = list(deduped_rows.values())
 
-                if st.session_state.get("kalshi_match_only"):
-                    deduped_list = [r for r in deduped_list if r.get("kalshi_matched")]
+                # ============================================
+                # PHASE 1: DIAGNOSTIC - Deduplication Stage
+                # ============================================
+                logger.info(f"\n{'='*80}")
+                logger.info(f"DEDUPLICATION STAGE")
+                logger.info(f"{'='*80}")
+                logger.info(f"BEFORE deduplication: master_df has {len(master_df)} rows")
 
-                df = pd.DataFrame(deduped_list)
+                # ============================================
+                # PHASE 3: TEMPORARY DIAGNOSTIC - BYPASS DEDUPLICATION
+                # ============================================
+                logger.info("DIAGNOSTIC MODE: Bypassing deduplication")
+                df = master_df.copy()
+
+                # Original deduplication code (commented out for diagnosis)
+                # rows_for_dedupe = master_df.to_dict("records") if not master_df.empty else []
+                # logger.info(f"rows_for_dedupe has {len(rows_for_dedupe)} items")
+
+                # deduped_rows: Dict[Tuple[Any, Any, Any, Any], Dict[str, Any]] = {}
+                # for row in rows_for_dedupe:
+                #     key = (row.get("league"), row.get("Home"), row.get("Away"), row.get("Commence (UTC)"))
+                #     existing = deduped_rows.get(key)
+                #     if (existing is None) or (
+                #         not existing.get("kalshi_matched") and row.get("kalshi_matched")
+                #     ):
+                #         deduped_rows[key] = row
+                # deduped_list = list(deduped_rows.values())
+
+                # logger.info(f"AFTER deduplication: {len(deduped_list)} items remain")
+
+                # if len(rows_for_dedupe) > 0 and len(deduped_list) == 0:
+                #     logger.error("CRITICAL: Deduplication eliminated ALL rows!")
+
+                # if st.session_state.get("kalshi_match_only"):
+                #     deduped_list = [r for r in deduped_list if r.get("kalshi_matched")]
+
+                # df = pd.DataFrame(deduped_list)
+
+                logger.info(f"Bypassed deduplication - df has {len(df)} rows")
+                logger.info(f"{'='*80}")
+                # ============================================
+
                 if "Unnamed: 0" in df.columns:
                     df = df.drop(columns=["Unnamed: 0"])
         
