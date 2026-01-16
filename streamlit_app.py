@@ -1042,7 +1042,12 @@ def enrich_picks_with_roi_metrics(df: pd.DataFrame) -> pd.DataFrame:
     """
     if df is None or df.empty:
         return df
-    
+
+    # Ensure required columns exist to prevent KeyError
+    for col in ['spread_implied_prob', 'total_implied_prob', 'spread_width', 'total_width']:
+        if col not in df.columns:
+            df[col] = 0.0
+
     # 1. Calculate Edge (Math vs Market Gap)
     # Ensure columns are numeric to avoid errors
     df['spread_implied_prob'] = pd.to_numeric(df['spread_implied_prob'], errors='coerce').fillna(0.0)
