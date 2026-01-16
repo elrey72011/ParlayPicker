@@ -115,6 +115,69 @@ try:
 except Exception:  # pragma: no cover - optional import
     alt = None
 
+# -----------------
+# Trace Columns Constant (Refactored)
+# -----------------
+TRACE_COLS = [
+    "spread_engine_used",
+    "spread_pick_label",
+    "spread_alt_label",
+    "spread_prob_pick_final",
+    "spread_prob_alt_final",
+    "spread_prob_margin",
+    "spread_prob_pick_market",
+    "spread_prob_alt_market",
+    "spread_prob_pick_kalshi",
+    "spread_prob_alt_kalshi",
+    "spread_decision_metric_used",
+    "spread_decision_score_pick",
+    "spread_decision_score_alt",
+    "spread_decision_score_margin",
+    "spread_trace_json",
+    "decision_trace",
+    "total_engine_used",
+    "total_pick_label",
+    "total_alt_label",
+    "total_prob_pick_final",
+    "total_prob_alt_final",
+    "total_prob_margin",
+    "total_prob_pick_market",
+    "total_prob_alt_market",
+    "total_prob_pick_kalshi",
+    "total_prob_alt_kalshi",
+    "total_decision_metric_used",
+    "total_decision_score_pick",
+    "total_decision_score_alt",
+    "total_decision_score_margin",
+    "total_trace_json",
+    "decision_trace_version",
+    "overall_engine_used",
+    "decision_trace_notes",
+    "decision_trace_short",
+    "decision_trace_json",
+    "final_probability",
+    "decision_driver",
+    "kalshi_weight",
+    "odds_weight",
+    "ml_weight",
+    "sentiment_weight",
+    "sentiment_score",
+    "kalshi_prob_for_pick",
+    "kalshi_yes_side",
+    "sentiment_direction",
+    "sentiment_impact_applied",
+    "confidence_reason",
+    "kalshi_status",
+    "llm_disagreement_flag",
+    "consensus_weight_ai",
+    "consensus_weight_market",
+    "consensus_weight_kalshi",
+    "consensus_weight_sentiment",
+    "consensus_weight_total",
+    "consensus_guardrails",
+    "gemini_error",
+]
+
 logger = logging.getLogger("parlaypicker")
 if not logger.handlers:
     logging.basicConfig(level=logging.INFO)
@@ -4815,8 +4878,7 @@ def filter_kalshi_game_markets(
 
         for m in markets or []:
             t = ticker_upper(m)
-            if "GAME" not in t:
-                continue
+            # if "GAME" not in t: continue  <-- REMOVED per instruction to allow SPREAD/TOTAL tickers
 
             prefix_ok = any(t.startswith(pfx) for pfx in allowed_prefixes)
 
@@ -4865,8 +4927,8 @@ def filter_kalshi_game_markets(
             fallback_no_date: List[Tuple[float, Dict[str, Any]]] = []
             for m in markets or []:
                 t = ticker_upper(m)
-                if "GAME" not in t:
-                    continue
+                # if "GAME" not in t: continue  <-- REMOVED per instruction
+
                 if not (
                     any(t.startswith(pfx) for pfx in allowed_prefixes)
                     or ("NCAAB" in t or "NCAA" in t or "NCAAF" in t)
@@ -10059,6 +10121,7 @@ with tab_master:
                 logger.info(f"Saving df ({len(df)} rows) to session state...")
                 st.session_state["master_df"] = df
                 st.session_state["master_results_df"] = df
+                st.session_state["master_stats_persistent"] = master_stats
 
                 # Set flag to indicate data is ready for display
                 st.session_state["analysis_complete"] = True
@@ -10194,6 +10257,9 @@ if st.session_state.get("analysis_complete") or (st.session_state.get("master_re
         if not df.empty:
             st.success(f"✅ Loaded {len(df)} rows for analysis (Master Analysis Tab)")
 
+        # Initialize view frame immediately to avoid NameError
+        df_master_view = df.copy()
+
         # NOTE: Do NOT apply Kalshi match filter here - it must only affect UI display, not exports
         # The filter is applied later to df_master_view_display only (see line ~10613+)
 
@@ -10295,7 +10361,7 @@ if st.session_state.get("analysis_complete") or (st.session_state.get("master_re
             "consensus_guardrails",
             "gemini_error",
         ]
-        df_master_view_display = df_master_view.drop(columns=[c for c in trace_cols if c in df_master_view.columns], errors="ignore")
+        df_master_view_display = df_master_view.drop(columns=[c for c in TRACE_COLS if c in df_master_view.columns], errors="ignore")
         show_moneyline_details = st.checkbox("Show Moneyline details", value=False, key="show_moneyline_details")
         if not show_moneyline_details:
             ml_detail_cols = [
@@ -10430,7 +10496,7 @@ if st.session_state.get("analysis_complete") or (st.session_state.get("master_re
         except Exception:
             pass
         top_df = reorder_for_spread_total_focus(top_df)
-        top_df_display = top_df.drop(columns=[c for c in trace_cols if c in top_df.columns], errors="ignore")
+        top_df_display = top_df.drop(columns=[c for c in TRACE_COLS if c in top_df.columns], errors="ignore")
 
         # Format spread_edge as percentage
         if "spread_edge" in top_df_display.columns:
@@ -10995,7 +11061,7 @@ if st.session_state.get("analysis_complete") or (st.session_state.get("master_re
         elif not games:
             st.warning("No games loaded. Use the sidebar to load games first.")
         else:
-            st.success(f"✅ Analysis Complete: Produced {len(st.session_state['master_results_df'])} prediction rows from {len(games)} games.")
+            st.success(f"Produced {len(st.session_state['master_results_df'])} rows from {len(games)} games")
             # Explicitly format key columns
             # Ensure numeric typing before display to avoid Arrow errors
             cols_to_force_numeric = ["AI_Prob", "model_prob_home", "final_probability", "Implied_Prob", "spread_edge", "total_edge"]
@@ -11141,7 +11207,7 @@ if st.session_state.get("analysis_complete") or (st.session_state.get("master_re
             "consensus_guardrails",
             "gemini_error",
         ]
-        df_master_view_display = df_master_view.drop(columns=[c for c in trace_cols if c in df_master_view.columns], errors="ignore")
+        df_master_view_display = df_master_view.drop(columns=[c for c in TRACE_COLS if c in df_master_view.columns], errors="ignore")
         show_moneyline_details = st.checkbox("Show Moneyline details", value=False, key="show_moneyline_details")
         if not show_moneyline_details:
             ml_detail_cols = [
@@ -11877,7 +11943,7 @@ if st.session_state.get("analysis_complete") or (st.session_state.get("master_re
         else:
             # Display the raw count of master_results_df to reflect the current analyzed slate
             games = st.session_state.get('games', [])
-            st.success(f"✅ Analysis Complete: Produced {len(st.session_state['master_results_df'])} prediction rows from {len(games)} games.")
+            st.success(f"Produced {len(st.session_state['master_results_df'])} rows from {len(games)} games")
             # Explicitly format key columns
             # Ensure numeric typing before display to avoid Arrow errors
             cols_to_force_numeric = ["AI_Prob", "model_prob_home", "final_probability", "Implied_Prob", "spread_edge", "total_edge"]
