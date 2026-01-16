@@ -5770,6 +5770,7 @@ enable_sentiment = st.sidebar.checkbox(
 )
 st.session_state["enable_sentiment"] = enable_sentiment
 if st.sidebar.button("Load Games", width="stretch"):
+    st.cache_data.clear()  # Force a fresh API call
     # Invalidate master_df when loading new games
     if "master_df" in st.session_state:
         del st.session_state["master_df"]
