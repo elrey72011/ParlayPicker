@@ -6128,8 +6128,17 @@ with tab_master:
                     )
             except Exception:
                 st.session_state["last_exception"] = traceback.format_exc()
+
+            # Initialize loop state variables
+            # "Fix the NameError": Define immediately before usage/loop.
+            full_search_first_game = {"init": True}
+            rows_out = []
+            fg_league = None
+
+            # Loop Blockage / First Game Search
             if (
                 full_search_first_game
+                and isinstance(full_search_first_game, dict)
                 and (fg_league or league) == "NBA"
                 and not full_search_first_game.get("found_any_winner_market_for_game")
                 and (
@@ -9769,9 +9778,9 @@ with tab_master:
 
                     # 2. Compare against Noon Baseline (if Evening/Late)
                     # "Silent Purge" Fix: Ensure we don't overwrite if tracker returns empty/None
-                    compared_df = market_tracker.load_and_compare(df)
-                    if compared_df is not None and not compared_df.empty:
-                        df = compared_df
+                    df_compare = market_tracker.load_and_compare(df)
+                    if df_compare is not None and not df_compare.empty:
+                        df = df_compare
 
                     # Persist TheOver debug stats for sidebar export
                     if 'theover_stats' in locals():
