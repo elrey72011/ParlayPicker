@@ -2984,6 +2984,31 @@ def pipeline_progress_snapshot() -> Dict[str, Any]:
                 (m.get("matches") or {}).get("total", {}).get("kalshi_matched")
             ])
         ])
+
+    # ============================================
+    # KALSHI MARKETS COUNT
+    # ============================================
+    # Count games with valid Kalshi markets (HasKalshiMarket=True)
+    # This is the count of games that have both:
+    # 1. kalshi_matched == True
+    # 2. At least one of kalshi_prob_spread or kalshi_prob_total is non-null
+    #
+    # This count is INDEPENDENT of spreadmarketpairscount/totalmarketpairscount
+    # which count sportsbook markets, not Kalshi markets.
+    # ============================================
+    kalshi_markets_count = 0
+    if master_df is not None and not master_df.empty and "HasKalshiMarket" in master_df.columns:
+        try:
+            # Filter out placeholder/invalid rows if they exist
+            valid_df = master_df.copy()
+            if "odds_placeholder_detected" in valid_df.columns:
+                valid_df = valid_df[valid_df["odds_placeholder_detected"] != True]
+
+            # Count games with HasKalshiMarket=True
+            kalshi_markets_count = int(valid_df["HasKalshiMarket"].sum())
+        except Exception as e:
+            logger.warning(f"Error counting Kalshi markets from master_df: {e}")
+            kalshi_markets_count = 0
     sentiment_meta = st.session_state.get("sentiment_meta") or {}
     sentiment_ready = bool(
         sentiment_meta.get("sentiment_available_count")
@@ -3013,11 +3038,13 @@ def pipeline_progress_snapshot() -> Dict[str, Any]:
     return {
         "games_loaded": games_loaded,
         "kalshi_matched": matched_games,
+        "kalshi_markets": kalshi_markets_count,  # NEW: Count of games with valid Kalshi markets
         "sentiment_ready": sentiment_ready,
         "sentiment_flags": sentiment_flags,
         "model_ready": model_ready,
         "rows_out": rows_out,
-        "market_rows_out": master_stats.get("market_rows_out", 0),
+        "market_rows_out": master_stats.get("market_rows_out", 0),  # Book market rows (kept for reference)
+        "books_market_rows": master_stats.get("market_rows_out", 0),  # Renamed for clarity
     }
 
 
@@ -3038,10 +3065,21 @@ def render_pipeline_banner() -> None:
             "Ready" if progress["sentiment_ready"] else "Unavailable",
             delta=sentiment_delta or None,
         )
+        # ============================================
+        # MARKETS BADGE: Shows count of games with valid Kalshi markets
+        # ============================================
+        # This counts games where HasKalshiMarket=True, meaning:
+        # 1. kalshi_matched == True (successful match)
+        # 2. At least one of kalshi_prob_spread or kalshi_prob_total is non-null
+        #
+        # This is INDEPENDENT of spreadmarketpairscount/totalmarketpairscount
+        # which count sportsbook market pairs, not Kalshi markets.
+        # ============================================
         cols[3].metric(
             "Master Rows",
             progress["rows_out"],
-            delta=f"Markets: {progress['market_rows_out']}",
+            delta=f"Markets: {progress['kalshi_markets']}",
+            help="Master Rows: Total output rows | Markets: Games with valid Kalshi markets"
         )
         readiness = []
         if os.path.exists(os.path.join(os.path.dirname(__file__), "models", "model.json")):
@@ -10216,6 +10254,42 @@ with tab_master:
                 df = df.apply(_force_pivot, axis=1)
                 logger.info(f"Pivot logic applied successfully")
 
+                # ============================================
+                # ADD HASKALSHIMARKET FLAG
+                # ============================================
+                # Define a robust criterion for "game has a Kalshi market" based on Kalshi fields only.
+                # A game counts as having a Kalshi market if and only if:
+                # 1. kalshi_matched == True (indicating a successful match was found)
+                # 2. AND at least one of kalshi_prob_spread or kalshi_prob_total is non-null
+                #    (indicating an actual market with probabilities exists)
+                #
+                # This criterion is independent of spreadmarketpairscount/totalmarketpairscount
+                # which count sportsbook markets, not Kalshi markets.
+                # ============================================
+
+                def _has_kalshi_market(row):
+                    """
+                    Determine if a game has a valid Kalshi market.
+                    Returns True if Kalshi matched and has spread or total probabilities.
+                    """
+                    kalshi_matched = row.get("kalshi_matched")
+                    if not kalshi_matched:
+                        return False
+
+                    # Check if at least one Kalshi probability is available
+                    kalshi_prob_spread = row.get("kalshi_prob_spread")
+                    kalshi_prob_total = row.get("kalshi_prob_total")
+
+                    has_spread = pd.notnull(kalshi_prob_spread) and kalshi_prob_spread != 0
+                    has_total = pd.notnull(kalshi_prob_total) and kalshi_prob_total != 0
+
+                    return has_spread or has_total
+
+                df["HasKalshiMarket"] = df.apply(_has_kalshi_market, axis=1)
+
+                kalshi_markets_count = df["HasKalshiMarket"].sum()
+                logger.info(f"✅ HasKalshiMarket flag added: {kalshi_markets_count} games have valid Kalshi markets")
+
                 # CRITICAL: Save to BOTH session state variables so UI can display the data
                 logger.info(f"Saving df ({len(df)} rows) to session state...")
                 st.session_state["master_df"] = df
@@ -10530,22 +10604,24 @@ if should_display:
             logger.info(f"📊 Game Summary: {len(game_summary_df)} games")
 
             if not game_summary_df.empty:
-                # Reorder columns as requested
+                # Reorder columns as requested, including new Kalshi columns
                 summary_cols = [
                     "League", "Home", "Away", "Commence UTC", "Commence (Local)",
                     "Best Overall Pick", "Best Overall Prob",
-                    "Spread Pick", "Spread Prob",
-                    "Total Pick", "Total Prob",
+                    "Spread Pick", "Spread Prob", "Kalshi Spread Prob", "Kalshi Spread Δ",
+                    "Total Pick", "Total Prob", "Kalshi Total Prob", "Kalshi Total Δ",
                     "ML Pick", "ML Prob"
                 ]
                 # Ensure columns exist
                 summary_cols = [c for c in summary_cols if c in game_summary_df.columns]
 
-                # Formatting
+                # Formatting with Kalshi probability columns
                 format_cols = {
                     "Best Overall Prob": st.column_config.NumberColumn(format="%.1f%%"),
                     "Spread Prob": st.column_config.NumberColumn(format="%.1f%%"),
+                    "Kalshi Spread Prob": st.column_config.NumberColumn(format="%.1f%%"),
                     "Total Prob": st.column_config.NumberColumn(format="%.1f%%"),
+                    "Kalshi Total Prob": st.column_config.NumberColumn(format="%.1f%%"),
                     "ML Prob": st.column_config.NumberColumn(format="%.1f%%")
                 }
 
