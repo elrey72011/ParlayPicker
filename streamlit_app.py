@@ -283,6 +283,222 @@ def compute_sentiment_adj(sentiment_diff: Optional[float]) -> Optional[float]:
     except Exception:
         return None
 
+
+def format_consensus_breakdown(
+    market_prob: Optional[float],
+    kalshi_prob: Optional[float],
+    model_prob: Optional[float],
+    sentiment_score: Optional[float],
+    final_prob: Optional[float],
+    pick_side: Optional[str] = None
+) -> str:
+    """
+    Format consensus breakdown showing individual engine contributions.
+
+    Args:
+        market_prob: Market implied probability
+        kalshi_prob: Kalshi probability
+        model_prob: AI model probability
+        sentiment_score: Sentiment score (-1 to 1)
+        final_prob: Final blended probability
+        pick_side: Pick side for sentiment conversion (Home/Away/Over/Under)
+
+    Returns:
+        Formatted consensus breakdown string
+    """
+    parts = []
+
+    # Market
+    if market_prob is not None:
+        parts.append(f"M:{market_prob*100:.1f}%")
+    else:
+        parts.append("M:N/A")
+
+    # Kalshi
+    if kalshi_prob is not None:
+        # Add indicator if Kalshi agrees (>55%) or disagrees
+        if kalshi_prob >= 0.55:
+            parts.append(f"K:{kalshi_prob*100:.1f}%✓")
+        elif kalshi_prob < 0.45:
+            parts.append(f"K:{kalshi_prob*100:.1f}%⚠")
+        else:
+            parts.append(f"K:{kalshi_prob*100:.1f}%")
+    else:
+        parts.append("K:N/A")
+
+    # AI Model
+    if model_prob is not None:
+        parts.append(f"AI:{model_prob*100:.1f}%")
+    else:
+        parts.append("AI:N/A")
+
+    # Sentiment (convert score to probability display)
+    if sentiment_score is not None:
+        # Convert sentiment score to probability-like display
+        # Sentiment score is -1 to 1, maps to impact of ±0.15
+        impact = max(-0.15, min(0.15, sentiment_score * 0.15))
+        sent_prob = 0.50 + impact
+
+        # Adjust for pick side if provided
+        if pick_side:
+            p_side = str(pick_side).lower()
+            if p_side in {"away", "under"}:
+                sent_prob = 1.0 - sent_prob
+
+        parts.append(f"S:{sent_prob*100:.1f}%")
+    else:
+        parts.append("S:N/A")
+
+    # Final
+    if final_prob is not None:
+        parts.append(f"→{final_prob*100:.1f}%")
+    else:
+        parts.append("→N/A")
+
+    return " | ".join(parts)
+
+
+def calculate_consensus_agreement(
+    market_prob: Optional[float],
+    kalshi_prob: Optional[float],
+    model_prob: Optional[float],
+    sentiment_score: Optional[float],
+    pick_side: Optional[str] = None
+) -> Tuple[float, int, str]:
+    """
+    Calculate consensus agreement metrics.
+
+    Returns:
+        (spread, valid_count, quality_label)
+        - spread: Difference between max and min probabilities
+        - valid_count: Number of valid (non-null) engines
+        - quality_label: "STRONG", "MODERATE", "WEAK", or "INSUFFICIENT"
+    """
+    probs = []
+
+    if market_prob is not None:
+        probs.append(market_prob)
+    if kalshi_prob is not None:
+        probs.append(kalshi_prob)
+    if model_prob is not None:
+        probs.append(model_prob)
+
+    # Convert sentiment to probability if available
+    if sentiment_score is not None:
+        impact = max(-0.15, min(0.15, sentiment_score * 0.15))
+        sent_prob = 0.50 + impact
+        if pick_side:
+            p_side = str(pick_side).lower()
+            if p_side in {"away", "under"}:
+                sent_prob = 1.0 - sent_prob
+        probs.append(sent_prob)
+
+    valid_count = len(probs)
+
+    if valid_count < 2:
+        return 1.0, valid_count, "INSUFFICIENT"
+
+    spread = max(probs) - min(probs)
+
+    # Quality assessment
+    if spread < 0.05 and valid_count >= 3:
+        quality_label = "STRONG"
+    elif spread < 0.10 and valid_count >= 3:
+        quality_label = "MODERATE"
+    elif spread < 0.15:
+        quality_label = "WEAK"
+    else:
+        quality_label = "WEAK"
+
+    return spread, valid_count, quality_label
+
+
+def calculate_pick_quality_metrics(row: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Calculate comprehensive quality metrics for pick tightening filters.
+
+    Returns dict with:
+        - meets_probability_threshold: bool (>56%)
+        - meets_decisiveness_threshold: bool (>0.20)
+        - consensus_quality: str (STRONG/MODERATE/WEAK/INSUFFICIENT)
+        - consensus_spread: float
+        - kalshi_validates: bool (Kalshi agrees with pick)
+        - quality_score: float (0-5, for sorting)
+        - quality_tier: str (HIGH/MEDIUM/LOW)
+    """
+    # Extract probabilities
+    final_prob = safe_float(row.get("final_probability") or row.get("spread_prob_pick_final") or row.get("total_prob_pick_final"))
+    market_prob = safe_float(row.get("spread_prob_pick_market") or row.get("total_prob_pick_market") or row.get("Implied_Prob"))
+    kalshi_prob = safe_float(row.get("spread_prob_pick_kalshi") or row.get("total_prob_pick_kalshi") or row.get("kalshi_prob_for_pick"))
+    model_prob = safe_float(row.get("model_spread_prob") or row.get("model_total_prob") or row.get("AI_Prob"))
+    sentiment_score = safe_float(row.get("sentiment_score"))
+    pick_side = row.get("Pick") or row.get("spread_pick_team") or row.get("total_pick_side")
+
+    # 1. Probability Threshold (>56%)
+    meets_probability_threshold = final_prob is not None and final_prob > 0.56
+
+    # 2. Decisiveness Threshold (>0.20)
+    decisiveness = abs(final_prob - 0.5) if final_prob is not None else 0.0
+    meets_decisiveness_threshold = decisiveness > 0.20
+
+    # 3. Consensus Agreement
+    spread, valid_count, consensus_quality = calculate_consensus_agreement(
+        market_prob, kalshi_prob, model_prob, sentiment_score, pick_side
+    )
+
+    # 4. Kalshi Validation
+    kalshi_validates = False
+    if kalshi_prob is not None:
+        kalshi_validates = kalshi_prob > 0.55  # Strong Kalshi agreement
+
+    # 5. Quality Score (0-5)
+    quality_score = 0.0
+
+    # +1.5 for probability threshold
+    if meets_probability_threshold:
+        quality_score += 1.5
+    elif final_prob is not None and final_prob > 0.52:
+        quality_score += 0.5
+
+    # +1.5 for decisiveness
+    if meets_decisiveness_threshold:
+        quality_score += 1.5
+    elif decisiveness > 0.10:
+        quality_score += 0.75
+
+    # +1.0 for consensus quality
+    if consensus_quality == "STRONG":
+        quality_score += 1.0
+    elif consensus_quality == "MODERATE":
+        quality_score += 0.5
+
+    # +1.0 for Kalshi validation
+    if kalshi_validates:
+        quality_score += 1.0
+    elif kalshi_prob is not None and kalshi_prob > 0.50:
+        quality_score += 0.5
+
+    # 6. Quality Tier
+    if quality_score >= 4.0:
+        quality_tier = "HIGH"
+    elif quality_score >= 2.5:
+        quality_tier = "MEDIUM"
+    else:
+        quality_tier = "LOW"
+
+    return {
+        "meets_probability_threshold": meets_probability_threshold,
+        "meets_decisiveness_threshold": meets_decisiveness_threshold,
+        "consensus_quality": consensus_quality,
+        "consensus_spread": spread,
+        "consensus_valid_count": valid_count,
+        "kalshi_validates": kalshi_validates,
+        "quality_score": quality_score,
+        "quality_tier": quality_tier,
+        "decisiveness": decisiveness,
+        "final_prob": final_prob,
+    }
+
 SENTIMENT_CACHE: Dict[Tuple[str, str, str], Dict[str, Any]] = {}
 SENTIMENT_LAST_TS: float = 0.0
 SENTIMENT_CACHE_TTL = timedelta(hours=12)
@@ -10339,6 +10555,29 @@ if should_display:
         st.subheader("Top Picks / Best Bets")
         # FORCE DISPLAY: Always include LOW confidence picks (checkbox disabled)
         include_low_in_top = st.checkbox("Include LOW confidence in Top Picks (FORCED ON)", value=True, key="include_low_top_picks", disabled=True)
+
+        # --- QUALITY FILTER CONTROLS ---
+        st.caption("🎯 **Pick Quality Filters** - Tighten picks based on probability, decisiveness, and consensus")
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            quality_filter_mode = st.selectbox(
+                "Quality Tier Filter",
+                options=["All Quality Levels", "High Quality Only", "High + Medium Quality", "Show Quality Distribution"],
+                index=0,
+                key="quality_filter_mode",
+                help="Filter picks by quality score (>56% prob, >0.20 decisiveness, Kalshi validation, consensus agreement)"
+            )
+
+        with col2:
+            sort_by_quality = st.checkbox(
+                "Sort by Quality Score",
+                value=False,
+                key="sort_by_quality",
+                help="Sort picks by quality score (0-5 stars) instead of spread edge"
+            )
+
         df = clean_df(df)
         top_df = df.copy()
         if "Unnamed: 0" in top_df.columns:
@@ -10366,6 +10605,133 @@ if should_display:
         if "spread_edge" in top_df_display.columns:
             top_df_display["spread_edge"] = top_df_display["spread_edge"].apply(lambda x: f"{x:+.1%}" if pd.notnull(x) else "")
             top_df_display = top_df_display.copy()
+
+        # --- CONSENSUS BREAKDOWN COLUMNS ---
+        # Add consensus breakdown showing individual engine contributions for Spread and Total picks
+        logger.info("Adding consensus breakdown columns to Top Picks...")
+
+        def _add_consensus_breakdown(row):
+            """Add consensus breakdown for both Spread and Total picks."""
+            # Get spread consensus breakdown
+            spread_consensus = format_consensus_breakdown(
+                market_prob=safe_float(row.get("spread_prob_pick_market")),
+                kalshi_prob=safe_float(row.get("spread_prob_pick_kalshi") or row.get("kalshi_prob_spread")),
+                model_prob=safe_float(row.get("model_spread_prob")),
+                sentiment_score=safe_float(row.get("sentiment_score")),
+                final_prob=safe_float(row.get("spread_prob_pick_final")),
+                pick_side=row.get("spread_pick_team")
+            )
+
+            # Get total consensus breakdown
+            total_consensus = format_consensus_breakdown(
+                market_prob=safe_float(row.get("total_prob_pick_market")),
+                kalshi_prob=safe_float(row.get("total_prob_pick_kalshi") or row.get("kalshi_prob_total")),
+                model_prob=safe_float(row.get("model_total_prob")),
+                sentiment_score=safe_float(row.get("sentiment_score")),
+                final_prob=safe_float(row.get("total_prob_pick_final")),
+                pick_side=row.get("total_pick_side")
+            )
+
+            return pd.Series({
+                "Spread_Consensus": spread_consensus,
+                "Total_Consensus": total_consensus
+            })
+
+        # Add consensus breakdown columns
+        try:
+            consensus_cols = top_df_display.apply(_add_consensus_breakdown, axis=1)
+            top_df_display["Spread_Consensus"] = consensus_cols["Spread_Consensus"]
+            top_df_display["Total_Consensus"] = consensus_cols["Total_Consensus"]
+            logger.info(f"✅ Added consensus breakdown columns")
+        except Exception as consensus_error:
+            logger.warning(f"Failed to add consensus breakdown columns: {consensus_error}")
+            top_df_display["Spread_Consensus"] = "N/A"
+            top_df_display["Total_Consensus"] = "N/A"
+
+        # --- PICK QUALITY METRICS ---
+        # Add quality metrics for pick tightening filters
+        logger.info("Calculating pick quality metrics...")
+
+        def _add_quality_metrics(row):
+            """Calculate comprehensive quality metrics for filtering."""
+            # Calculate for spread pick
+            spread_metrics = calculate_pick_quality_metrics({
+                "final_probability": row.get("spread_prob_pick_final"),
+                "spread_prob_pick_market": row.get("spread_prob_pick_market"),
+                "spread_prob_pick_kalshi": row.get("spread_prob_pick_kalshi") or row.get("kalshi_prob_spread"),
+                "model_spread_prob": row.get("model_spread_prob"),
+                "sentiment_score": row.get("sentiment_score"),
+                "Pick": row.get("spread_pick_team"),
+            })
+
+            # Calculate for total pick
+            total_metrics = calculate_pick_quality_metrics({
+                "final_probability": row.get("total_prob_pick_final"),
+                "total_prob_pick_market": row.get("total_prob_pick_market"),
+                "total_prob_pick_kalshi": row.get("total_prob_pick_kalshi") or row.get("kalshi_prob_total"),
+                "model_total_prob": row.get("model_total_prob"),
+                "sentiment_score": row.get("sentiment_score"),
+                "Pick": row.get("total_pick_side"),
+            })
+
+            # Use the better of spread or total for overall quality
+            if spread_metrics["quality_score"] >= total_metrics["quality_score"]:
+                best_metrics = spread_metrics
+                pick_type = "Spread"
+            else:
+                best_metrics = total_metrics
+                pick_type = "Total"
+
+            # Format quality badge
+            quality_badge = f"{best_metrics['quality_tier']} ({best_metrics['quality_score']:.1f}⭐)"
+
+            # Add details
+            details = []
+            if best_metrics["meets_probability_threshold"]:
+                details.append("✓>56%")
+            if best_metrics["meets_decisiveness_threshold"]:
+                details.append("✓Decisive")
+            if best_metrics["kalshi_validates"]:
+                details.append("✓Kalshi")
+            if best_metrics["consensus_quality"] == "STRONG":
+                details.append("✓Consensus")
+
+            quality_details = " ".join(details) if details else "Low Quality"
+
+            return pd.Series({
+                "Quality_Score": best_metrics["quality_score"],
+                "Quality_Tier": best_metrics["quality_tier"],
+                "Quality_Badge": quality_badge,
+                "Quality_Details": quality_details,
+                "Decisiveness": best_metrics["decisiveness"],
+                "Consensus_Quality": best_metrics["consensus_quality"],
+                "Spread_Quality_Score": spread_metrics["quality_score"],
+                "Total_Quality_Score": total_metrics["quality_score"],
+            })
+
+        # Add quality metric columns
+        try:
+            quality_cols = top_df_display.apply(_add_quality_metrics, axis=1)
+            top_df_display["Quality_Score"] = quality_cols["Quality_Score"]
+            top_df_display["Quality_Tier"] = quality_cols["Quality_Tier"]
+            top_df_display["Quality_Badge"] = quality_cols["Quality_Badge"]
+            top_df_display["Quality_Details"] = quality_cols["Quality_Details"]
+            top_df_display["Decisiveness"] = quality_cols["Decisiveness"]
+            top_df_display["Consensus_Quality"] = quality_cols["Consensus_Quality"]
+            top_df_display["Spread_Quality_Score"] = quality_cols["Spread_Quality_Score"]
+            top_df_display["Total_Quality_Score"] = quality_cols["Total_Quality_Score"]
+            logger.info(f"✅ Added quality metric columns")
+
+            # Log quality distribution
+            if "Quality_Tier" in top_df_display.columns:
+                quality_dist = top_df_display["Quality_Tier"].value_counts().to_dict()
+                logger.info(f"📊 Quality Distribution: {quality_dist}")
+        except Exception as quality_error:
+            logger.warning(f"Failed to add quality metrics: {quality_error}")
+            top_df_display["Quality_Score"] = 0.0
+            top_df_display["Quality_Tier"] = "UNKNOWN"
+            top_df_display["Quality_Badge"] = "N/A"
+            top_df_display["Quality_Details"] = "N/A"
 
         # --- Part F: TheOver Impact String ---
         # Generate "TheOver Impact" column for display
@@ -10468,14 +10834,57 @@ if should_display:
             'Overall Pick', 'Overall Prob', 'Spread', 'Spread Prob', 'Total', 'Total Prob', 'ML', 'ML Prob',
             'best_pick', 'final_prob', 'edge', 'best_pick_type',
             'Bet_Confidence', 'Bet_Lean',
-            'Spread & Pick', 'Spread Win %',
-            'Total & Pick', 'Total Win %',
+            'Quality_Badge', 'Quality_Details',
+            'Spread & Pick', 'Spread Win %', 'Spread_Consensus',
+            'Total & Pick', 'Total Win %', 'Total_Consensus',
             'spread_edge', 'total_edge',
+            'Decisiveness', 'Consensus_Quality',
             'Pick', 'AI_Prob', 'Implied_Prob', 'Home_Sentiment', 'Away_Sentiment', 'Sentiment_Diff', 'sentiment_status', 'status', 'best_pick_prob', 'best_pick_edge',
-            'theover_pick', 'theover_prob_used', 'theover_delta_final_prob', 'final_prob_without_theover'
+            'theover_pick', 'theover_prob_used', 'theover_delta_final_prob', 'final_prob_without_theover',
+            'Quality_Score', 'Quality_Tier', 'Spread_Quality_Score', 'Total_Quality_Score'
         ]
         safe_cols = [c for c in ui_whitelist if c in top_df_display.columns]
         top_df_ui = top_df_display[safe_cols].copy()
+
+        # --- APPLY QUALITY FILTERS ---
+        if "quality_filter_mode" in st.session_state:
+            filter_mode = st.session_state.quality_filter_mode
+            original_count = len(top_df_ui)
+
+            if filter_mode == "High Quality Only":
+                if "Quality_Tier" in top_df_ui.columns:
+                    top_df_ui = top_df_ui[top_df_ui["Quality_Tier"] == "HIGH"]
+                    logger.info(f"🔍 Quality Filter: HIGH only - {len(top_df_ui)}/{original_count} picks")
+                    st.info(f"🎯 Showing {len(top_df_ui)} HIGH quality picks (filtered from {original_count})")
+
+            elif filter_mode == "High + Medium Quality":
+                if "Quality_Tier" in top_df_ui.columns:
+                    top_df_ui = top_df_ui[top_df_ui["Quality_Tier"].isin(["HIGH", "MEDIUM"])]
+                    logger.info(f"🔍 Quality Filter: HIGH + MEDIUM - {len(top_df_ui)}/{original_count} picks")
+                    st.info(f"🎯 Showing {len(top_df_ui)} HIGH/MEDIUM quality picks (filtered from {original_count})")
+
+            elif filter_mode == "Show Quality Distribution":
+                if "Quality_Tier" in top_df_display.columns:
+                    quality_dist = top_df_display["Quality_Tier"].value_counts().to_dict()
+                    st.markdown("### 📊 Quality Distribution")
+                    for tier, count in sorted(quality_dist.items(), reverse=True):
+                        pct = (count / len(top_df_display)) * 100
+                        st.write(f"- **{tier}**: {count} picks ({pct:.1f}%)")
+
+                    # Also show average quality score
+                    if "Quality_Score" in top_df_display.columns:
+                        avg_quality = top_df_display["Quality_Score"].mean()
+                        high_quality_count = (top_df_display["Quality_Tier"] == "HIGH").sum()
+                        st.write(f"- **Average Quality Score**: {avg_quality:.2f} / 5.0")
+                        st.write(f"- **High Quality Picks**: {high_quality_count} ({high_quality_count/len(top_df_display)*100:.1f}%)")
+
+        # --- APPLY QUALITY SORTING ---
+        if "sort_by_quality" in st.session_state and st.session_state.sort_by_quality:
+            if "Quality_Score" in top_df_ui.columns:
+                # Sort by Quality Score descending
+                top_df_ui = top_df_ui.sort_values(by="Quality_Score", ascending=False)
+                logger.info(f"📊 Sorted Top Picks by Quality Score (descending)")
+                st.caption("✅ Sorted by Quality Score (highest first)")
 
         # Custom formatting for specific columns
         # Note: 'Spread Win %' and 'Total Win %' are already formatted strings by _calc_win_pct
