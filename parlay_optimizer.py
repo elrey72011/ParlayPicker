@@ -767,31 +767,48 @@ class ParlayOptimizer:
         best_overall["expected_return"] = best_overall["stake"] * (1 + best_overall["ev"])
         used_games.update(best_overall["games_used"])
 
-        # 2. Medium Risk ($2): Moderate probability (0.15-0.30), good EV, prefer diversity
+        # 2. Medium Risk ($2): Moderate probability (0.20-0.30), good EV, STRONG diversity preference
+        # First, try to find parlays with ZERO game overlap
         medium_risk_candidates = [
             p for p in parlay_candidates
-            if 0.15 < p["parlay_prob"] < 0.30
+            if 0.20 < p["parlay_prob"] < 0.30
             and p != best_overall  # Don't duplicate
         ]
 
         if medium_risk_candidates:
-            # Score by EV adjusted for diversity penalty
-            def medium_risk_score(p):
-                base_ev = p["ev"]
-                diversity_penalty = diversity_score(p, used_games)
-                # Penalize by up to 50% of EV for complete overlap
-                adjusted_ev = base_ev * (1 - 0.5 * diversity_penalty)
-                return adjusted_ev
+            # PRIORITIZE: Parlays with zero overlap
+            zero_overlap_candidates = [p for p in medium_risk_candidates if len(p["games_used"] & used_games) == 0]
 
-            medium_risk = max(medium_risk_candidates,
-                            key=lambda x: score_with_consensus(x, medium_risk_score))
+            if zero_overlap_candidates:
+                # Choose best EV among completely different games
+                medium_risk = max(zero_overlap_candidates,
+                                key=lambda x: score_with_consensus(x, lambda p: p["ev"]))
+                logger.info(f"Medium Risk: Selected parlay with ZERO game overlap")
+            else:
+                # Score by EV adjusted for STRONG diversity penalty (95% penalty for overlap)
+                def medium_risk_score(p):
+                    base_ev = p["ev"]
+                    diversity_penalty = diversity_score(p, used_games)
+                    # Penalize by up to 95% of EV for complete overlap (much stronger than before)
+                    adjusted_ev = base_ev * (1 - 0.95 * diversity_penalty)
+                    return adjusted_ev
+
+                medium_risk = max(medium_risk_candidates,
+                                key=lambda x: score_with_consensus(x, medium_risk_score))
+                logger.info(f"Medium Risk: Selected with diversity penalty (no zero-overlap options found)")
         else:
-            # Fallback: second best EV overall with diversity preference
+            # Fallback: second best EV overall with STRONG diversity preference
             remaining = [p for p in parlay_candidates if p != best_overall]
             if remaining:
-                medium_risk = max(remaining,
-                                key=lambda x: score_with_consensus(x,
-                                    lambda p: p["ev"] * (1 - 0.5 * diversity_score(p, used_games))))
+                # Try zero overlap first
+                zero_overlap_remaining = [p for p in remaining if len(p["games_used"] & used_games) == 0]
+                if zero_overlap_remaining:
+                    medium_risk = max(zero_overlap_remaining,
+                                    key=lambda x: score_with_consensus(x, lambda p: p["ev"]))
+                else:
+                    medium_risk = max(remaining,
+                                    key=lambda x: score_with_consensus(x,
+                                        lambda p: p["ev"] * (1 - 0.95 * diversity_score(p, used_games))))
             else:
                 medium_risk = None
 
@@ -800,39 +817,60 @@ class ParlayOptimizer:
             medium_risk["expected_return"] = medium_risk["stake"] * (1 + medium_risk["ev"])
             used_games.update(medium_risk["games_used"])
 
-        # 3. High Risk ($1): Lower probability (<0.20), highest payout potential, prefer diversity
+        # 3. High Risk ($1): Lower probability (0.10-0.20), highest payout potential, STRONG diversity preference
         high_risk_candidates = [
             p for p in parlay_candidates
-            if p["parlay_prob"] < 0.20
+            if 0.10 < p["parlay_prob"] < 0.20
             and p != best_overall
             and (medium_risk is None or p != medium_risk)
         ]
 
         if high_risk_candidates:
-            # Choose by highest payout odds with diversity preference
-            positive_ev_longshots = [p for p in high_risk_candidates if p["ev"] > -0.3]
+            # PRIORITIZE: Parlays with zero overlap
+            zero_overlap_candidates = [p for p in high_risk_candidates if len(p["games_used"] & used_games) == 0]
 
-            def high_risk_score(p):
-                base_odds = p["parlay_decimal_odds"]
-                diversity_penalty = diversity_score(p, used_games)
-                # Penalize by up to 30% of odds for complete overlap
-                adjusted_odds = base_odds * (1 - 0.3 * diversity_penalty)
-                return adjusted_odds
-
-            if positive_ev_longshots:
-                high_risk = max(positive_ev_longshots,
-                              key=lambda x: score_with_consensus(x, high_risk_score))
+            if zero_overlap_candidates:
+                # Choose by highest payout odds among completely different games
+                positive_ev_longshots = [p for p in zero_overlap_candidates if p["ev"] > -0.3]
+                if positive_ev_longshots:
+                    high_risk = max(positive_ev_longshots,
+                                  key=lambda x: score_with_consensus(x, lambda p: p["parlay_decimal_odds"]))
+                else:
+                    high_risk = max(zero_overlap_candidates,
+                                  key=lambda x: score_with_consensus(x, lambda p: p["parlay_decimal_odds"]))
+                logger.info(f"High Risk: Selected parlay with ZERO game overlap")
             else:
-                high_risk = max(high_risk_candidates,
-                              key=lambda x: score_with_consensus(x, high_risk_score))
+                # Choose by highest payout odds with STRONG diversity preference (90% penalty)
+                positive_ev_longshots = [p for p in high_risk_candidates if p["ev"] > -0.3]
+
+                def high_risk_score(p):
+                    base_odds = p["parlay_decimal_odds"]
+                    diversity_penalty = diversity_score(p, used_games)
+                    # Penalize by up to 90% of odds for complete overlap (much stronger than 30%)
+                    adjusted_odds = base_odds * (1 - 0.90 * diversity_penalty)
+                    return adjusted_odds
+
+                if positive_ev_longshots:
+                    high_risk = max(positive_ev_longshots,
+                                  key=lambda x: score_with_consensus(x, high_risk_score))
+                else:
+                    high_risk = max(high_risk_candidates,
+                                  key=lambda x: score_with_consensus(x, high_risk_score))
+                logger.info(f"High Risk: Selected with diversity penalty (no zero-overlap options found)")
         else:
-            # Fallback: third best by payout odds with diversity preference
+            # Fallback: third best by payout odds with STRONG diversity preference
             remaining = [p for p in parlay_candidates
                         if p != best_overall and (medium_risk is None or p != medium_risk)]
             if remaining:
-                high_risk = max(remaining,
-                              key=lambda x: score_with_consensus(x,
-                                  lambda p: p["parlay_decimal_odds"] * (1 - 0.3 * diversity_score(p, used_games))))
+                # Try zero overlap first
+                zero_overlap_remaining = [p for p in remaining if len(p["games_used"] & used_games) == 0]
+                if zero_overlap_remaining:
+                    high_risk = max(zero_overlap_remaining,
+                                  key=lambda x: score_with_consensus(x, lambda p: p["parlay_decimal_odds"]))
+                else:
+                    high_risk = max(remaining,
+                                  key=lambda x: score_with_consensus(x,
+                                      lambda p: p["parlay_decimal_odds"] * (1 - 0.90 * diversity_score(p, used_games))))
             else:
                 high_risk = None
 

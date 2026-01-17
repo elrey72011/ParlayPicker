@@ -9917,8 +9917,51 @@ with tab_master:
                         consensus_votes, consensus_total, vote_details = optimizer.calculate_consensus_votes(master_df.loc[idx])
                         master_df.at[idx, "consensus_votes"] = consensus_votes
                         master_df.at[idx, "consensus_total"] = consensus_total
-                        consensus_str = f"{consensus_votes}/{consensus_total}" if consensus_total > 0 else "N/A"
-                        master_df.at[idx, "consensus"] = consensus_str
+
+                        # Format detailed consensus breakdown for each market type
+                        row = master_df.loc[idx]
+                        market = row.get("Market", "").lower()
+
+                        # Get probabilities based on market type
+                        if market == "spread":
+                            market_prob = safe_float(row.get("spread_prob_pick_market"))
+                            kalshi_prob = safe_float(row.get("spread_prob_pick_kalshi") or row.get("kalshi_prob_spread"))
+                            model_prob = safe_float(row.get("model_spread_prob"))
+                            final_prob = safe_float(row.get("spread_prob_pick_final"))
+                            pick_side = row.get("spread_pick_team")
+                        elif market == "total":
+                            market_prob = safe_float(row.get("total_prob_pick_market"))
+                            kalshi_prob = safe_float(row.get("total_prob_pick_kalshi") or row.get("kalshi_prob_total"))
+                            model_prob = safe_float(row.get("model_total_prob"))
+                            final_prob = safe_float(row.get("total_prob_pick_final"))
+                            pick_side = row.get("total_pick_side")
+                        elif market == "moneyline":
+                            market_prob = safe_float(row.get("ml_prob_pick_market"))
+                            kalshi_prob = safe_float(row.get("kalshi_prob_for_pick"))
+                            model_prob = safe_float(row.get("model_prob") or row.get("AI_Prob"))
+                            final_prob = safe_float(row.get("final_probability") or row.get("AI_Prob"))
+                            pick_side = row.get("Pick")
+                        else:
+                            # Fallback to generic fields
+                            market_prob = safe_float(row.get("Implied_Prob"))
+                            kalshi_prob = safe_float(row.get("kalshi_prob_for_pick"))
+                            model_prob = safe_float(row.get("model_prob") or row.get("AI_Prob"))
+                            final_prob = safe_float(row.get("final_probability") or row.get("AI_Prob"))
+                            pick_side = row.get("Pick")
+
+                        sentiment_score = safe_float(row.get("sentiment_score"))
+
+                        # Format consensus breakdown showing each source
+                        consensus_breakdown = format_consensus_breakdown(
+                            market_prob=market_prob,
+                            kalshi_prob=kalshi_prob,
+                            model_prob=model_prob,
+                            sentiment_score=sentiment_score,
+                            final_prob=final_prob,
+                            pick_side=pick_side
+                        )
+
+                        master_df.at[idx, "consensus"] = consensus_breakdown
 
                     logger.info(f"Consensus enrichment complete for {len(master_df)} picks")
 
@@ -11534,6 +11577,16 @@ with tab_shotgun:
                 st.metric("Parlay Win Probability", f"{best['parlay_prob']*100:.1f}%")
                 st.metric("Parlay Odds", f"{best['parlay_american_odds']:+.0f}")
                 st.metric("Expected Return", f"${best['expected_return']:.2f}")
+
+                # Probability Breakdown
+                st.markdown("**📊 Probability Breakdown:**")
+                leg1_prob = best['leg1']['prob']
+                leg2_prob = best['leg2']['prob']
+                combined_prob = leg1_prob * leg2_prob
+                st.caption(f"Leg 1: {leg1_prob*100:.1f}%")
+                st.caption(f"Leg 2: {leg2_prob*100:.1f}%")
+                st.caption(f"Combined: {leg1_prob*100:.1f}% × {leg2_prob*100:.1f}% = **{combined_prob*100:.1f}%**")
+
                 st.markdown("**Legs:**")
                 consensus1 = f"{best['leg1'].get('consensus_votes', 0)}/{best['leg1'].get('consensus_total', 0)}"
                 st.markdown(f"1. {best['leg1']['pick']}")
@@ -11553,6 +11606,16 @@ with tab_shotgun:
                 st.metric("Parlay Win Probability", f"{medium['parlay_prob']*100:.1f}%")
                 st.metric("Parlay Odds", f"{medium['parlay_american_odds']:+.0f}")
                 st.metric("Expected Return", f"${medium['expected_return']:.2f}")
+
+                # Probability Breakdown
+                st.markdown("**📊 Probability Breakdown:**")
+                leg1_prob = medium['leg1']['prob']
+                leg2_prob = medium['leg2']['prob']
+                combined_prob = leg1_prob * leg2_prob
+                st.caption(f"Leg 1: {leg1_prob*100:.1f}%")
+                st.caption(f"Leg 2: {leg2_prob*100:.1f}%")
+                st.caption(f"Combined: {leg1_prob*100:.1f}% × {leg2_prob*100:.1f}% = **{combined_prob*100:.1f}%**")
+
                 st.markdown("**Legs:**")
                 consensus1 = f"{medium['leg1'].get('consensus_votes', 0)}/{medium['leg1'].get('consensus_total', 0)}"
                 st.markdown(f"1. {medium['leg1']['pick']}")
@@ -11572,6 +11635,16 @@ with tab_shotgun:
                 st.metric("Parlay Win Probability", f"{high['parlay_prob']*100:.1f}%")
                 st.metric("Parlay Odds", f"{high['parlay_american_odds']:+.0f}")
                 st.metric("Expected Return", f"${high['expected_return']:.2f}")
+
+                # Probability Breakdown
+                st.markdown("**📊 Probability Breakdown:**")
+                leg1_prob = high['leg1']['prob']
+                leg2_prob = high['leg2']['prob']
+                combined_prob = leg1_prob * leg2_prob
+                st.caption(f"Leg 1: {leg1_prob*100:.1f}%")
+                st.caption(f"Leg 2: {leg2_prob*100:.1f}%")
+                st.caption(f"Combined: {leg1_prob*100:.1f}% × {leg2_prob*100:.1f}% = **{combined_prob*100:.1f}%**")
+
                 st.markdown("**Legs:**")
                 consensus1 = f"{high['leg1'].get('consensus_votes', 0)}/{high['leg1'].get('consensus_total', 0)}"
                 st.markdown(f"1. {high['leg1']['pick']}")
