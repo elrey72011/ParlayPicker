@@ -1990,7 +1990,8 @@ def sentiment_payload_to_meta(payload: Dict[str, Any]) -> Dict[str, Any]:
         logger.warning(f"Sentiment SKIPPED/INVALID: error={error}, auth_error={auth_error}, rate_limited={rate_limited}, sources={sources}")
 
     # FIX: Ensure sentiment_status is "ok" if sentiment is valid, even if it was "NA" in payload
-    final_status = fetch_info.get("status") or fetch_info.get("status_code") or merged_payload.get("status") or "ok"
+    # BUG FIX: Use payload parameter instead of undefined variables (fetch_info, merged_payload)
+    final_status = payload.get("status") or "ok"
     if sentiment_valid and final_status in [None, "NA", "disabled", "DISABLED"]:
         final_status = "ok"
 
@@ -7932,6 +7933,9 @@ with tab_master:
                     league_name
                 )
 
+                # DEBUG: Log spread probability calculation inputs
+                logger.info(f"SPREAD PROB CALC for {home} vs {away}: spread_pick_side={spread_pick_side_key}, spread_market={spread_prob_market:.4f}, spread_implied={spread_implied}, kalshi={kalshi_prob_spread}")
+
                 spread_prob_final, spread_base_prob, spread_weights_used, spread_decision_driver, spread_warnings_new, spread_kalshi_prob_for_pick = compute_final_probability(
                     spread_pick_side_key,
                     spread_prob_market,
@@ -7978,6 +7982,10 @@ with tab_master:
                     spread_base_prob = spread_prob_final
                     spread_weights_used = {"w_implied": 1.0 if spread_prob_final is not None else 0.0, "w_kalshi": 0.0, "w_model": 0.0, "w_sentiment": 0.0}
                 spread_prob = spread_prob_final
+
+                # DEBUG: Log final spread probability
+                logger.info(f"SPREAD FINAL for {home} vs {away}: {spread_prob_final:.4f} ({spread_prob_final*100:.1f}%)")
+
                 # Inject TheOver prob if available
                 theover_prob_final_total = None
                 if theover_prob_total is not None:
@@ -8019,6 +8027,9 @@ with tab_master:
                     _total_kalshi_matched,
                     league_name
                 )
+
+                # DEBUG: Log total probability calculation inputs
+                logger.info(f"TOTAL PROB CALC for {home} vs {away}: total_pick_side={total_pick_side_key}, total_market={total_prob_market:.4f}, total_implied={total_implied}, kalshi={kalshi_prob_total}")
 
                 total_prob_final, total_base_prob, total_weights_used, total_decision_driver, total_warnings_new, total_kalshi_prob_for_pick = compute_final_probability(
                     total_pick_side_key,
@@ -8066,6 +8077,13 @@ with tab_master:
                     total_base_prob = total_prob_final
                     total_weights_used = {"w_implied": 1.0 if total_prob_final is not None else 0.0, "w_kalshi": 0.0, "w_model": 0.0, "w_sentiment": 0.0}
                 total_prob = total_prob_final
+
+                # DEBUG: Log final total probability and comparison
+                logger.info(f"TOTAL FINAL for {home} vs {away}: {total_prob_final:.4f} ({total_prob_final*100:.1f}%)")
+                logger.info(f"PROBABILITY COMPARISON for {home} vs {away}: Spread={spread_prob_final:.4f} vs Total={total_prob_final:.4f}, Diff={abs(spread_prob_final-total_prob_final):.4f}")
+                if abs(spread_prob_final - total_prob_final) < 0.001:
+                    logger.warning(f"⚠️ IDENTICAL PROBABILITIES DETECTED for {home} vs {away}! Spread={spread_prob_final:.4f}, Total={total_prob_final:.4f}")
+
                 if spread_warnings_new:
                     warnings = list(dict.fromkeys(warnings + spread_warnings_new))
                 if total_warnings_new:
