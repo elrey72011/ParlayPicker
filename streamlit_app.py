@@ -2367,8 +2367,24 @@ def compute_team_sentiment_map(news_api_key: Optional[str], games: List[Dict[str
         meta["sentiment_level"] = meta.get("sentiment_level") or ("team" if meta.get("sentiment_valid") else "none")
         meta["sentiment_strength"] = meta.get("sentiment_strength") or sentiment_strength_from_articles(meta["sentiment_level"], meta.get("sentiment_articles_used") or 0)
         meta["sentiment_badge"] = meta.get("sentiment_badge") or sentiment_badge_for(meta["sentiment_level"], meta["sentiment_strength"])
-        meta["status"] = merged_payload.get("status")
-        meta["sentiment_status"] = fetch_info.get("status") or fetch_info.get("status_code") or merged_payload.get("status") or "ok"
+
+        # FIX: Normalize status to string representation
+        raw_status = merged_payload.get("status")
+        if raw_status == 200:
+            status_str = "ok"
+        elif raw_status == 429:
+            status_str = "rate_limited"
+        elif raw_status in {401, 403}:
+            status_str = "auth_error"
+        elif raw_status is None:
+            status_str = "na"
+        elif isinstance(raw_status, int):
+            status_str = f"http_{raw_status}"
+        else:
+            status_str = str(raw_status) if raw_status else "na"
+
+        meta["status"] = status_str
+        meta["sentiment_status"] = status_str
         meta["sentiment_rate_limited"] = bool(merged_payload.get("rate_limited") or merged_payload.get("status") == 429)
         meta["sentiment_used_cached"] = bool(news_payload.get("cached")) or bool(reddit_payload.get("cached")) if isinstance(reddit_payload, dict) else False
         meta["sentiment_label"] = meta.get("label")
@@ -2399,15 +2415,24 @@ def compute_team_sentiment_map(news_api_key: Optional[str], games: List[Dict[str
         # sentiment_payload_to_meta() can set score=0.0 for valid neutral cases,
         # but this change is in meta, not merged_payload
         meta_score = meta.get("score")
+
+        # Debug logging for sentiment response
+        logger.debug(
+            f"Sentiment response for {team}:\n"
+            f"  Score: {meta_score}, Valid: {meta['sentiment_valid']}, Status: {meta.get('sentiment_status')}\n"
+            f"  Sources: {meta.get('sentiment_articles_used', 0)}, Confidence: {meta.get('sentiment_confidence', 0):.2f}\n"
+            f"  Source type: {meta.get('sentiment_source', 'unknown')}, Error: {meta.get('error', 'none')}"
+        )
+
         if meta["sentiment_valid"] and meta_score is not None:
             sentiment_map[team] = meta_score
             # Log successful sentiment inclusion
-            logger.debug(f"Sentiment INCLUDED for {team}: score={meta_score:.3f}, valid={meta['sentiment_valid']}, source={meta.get('sentiment_source', 'unknown')}")
+            logger.info(f"Sentiment INCLUDED for {team}: score={meta_score:.3f}, valid={meta['sentiment_valid']}, source={meta.get('sentiment_source', 'unknown')}, status={meta.get('sentiment_status')}")
         else:
             sentiment_map[team] = None
             debug["missing_teams"].append(team)
             # Log why sentiment was excluded
-            logger.debug(f"Sentiment EXCLUDED for {team}: valid={meta['sentiment_valid']}, score={meta_score}, error={meta.get('error', 'none')}")
+            logger.warning(f"Sentiment EXCLUDED for {team}: valid={meta['sentiment_valid']}, score={meta_score}, error={meta.get('error', 'none')}, status={meta.get('sentiment_status')}, sources={meta.get('sentiment_articles_used', 0)}")
 
     if sentiment_map:
         present_scores = [(t, s) for t, s in sentiment_map.items() if s is not None]
@@ -7353,11 +7378,13 @@ with tab_master:
                     away_query = away_meta.get("sentiment_query_used", "N/A")
                     home_score_label = home_meta.get("sentiment_label", "unknown")
                     away_score_label = away_meta.get("sentiment_label", "unknown")
+                    home_status = home_meta.get("sentiment_status", "N/A")
+                    away_status = away_meta.get("sentiment_status", "N/A")
 
                     logger.info(
                         f"SENTIMENT ACTIVE for game {g.get('id')}: {home} vs {away}\n"
-                        f"  Home: score={home_sent:.3f}, label={home_score_label}, valid={home_valid}, sources={home_sources}, type={home_source_type}, query='{home_query}'\n"
-                        f"  Away: score={away_sent:.3f}, label={away_score_label}, valid={away_valid}, sources={away_sources}, type={away_source_type}, query='{away_query}'\n"
+                        f"  Home: score={home_sent:.3f}, label={home_score_label}, valid={home_valid}, sources={home_sources}, type={home_source_type}, status={home_status}, query='{home_query}'\n"
+                        f"  Away: score={away_sent:.3f}, label={away_score_label}, valid={away_valid}, sources={away_sources}, type={away_source_type}, status={away_status}, query='{away_query}'\n"
                         f"  Diff: {sentiment_diff:.3f} (home - away, will contribute to probability blend with weight)"
                     )
                 else:
@@ -7365,20 +7392,28 @@ with tab_master:
                     if home_sent is None and away_sent is None:
                         home_error = home_meta.get("error", "unknown")
                         away_error = away_meta.get("error", "unknown")
-                        home_status = home_meta.get("status", "N/A")
-                        away_status = away_meta.get("status", "N/A")
+                        home_status = home_meta.get("sentiment_status", home_meta.get("status", "N/A"))
+                        away_status = away_meta.get("sentiment_status", away_meta.get("status", "N/A"))
+                        home_sources = home_meta.get("sentiment_articles_used", 0)
+                        away_sources = away_meta.get("sentiment_articles_used", 0)
+                        home_valid = home_meta.get("sentiment_valid", False)
+                        away_valid = away_meta.get("sentiment_valid", False)
                         logger.warning(
                             f"SENTIMENT UNAVAILABLE for game {g.get('id')}: {home} vs {away}\n"
-                            f"  Home: score=None, error={home_error}, status={home_status}\n"
-                            f"  Away: score=None, error={away_error}, status={away_status}\n"
+                            f"  Home: score=None, valid={home_valid}, error={home_error}, status={home_status}, sources={home_sources}\n"
+                            f"  Away: score=None, valid={away_valid}, error={away_error}, status={away_status}, sources={away_sources}\n"
                             f"  Result: sentiment_diff=None (sentiment will NOT contribute to probability)"
                         )
                     elif home_sent is None:
                         away_valid = away_meta.get("sentiment_valid", False)
-                        logger.warning(f"SENTIMENT PARTIAL for game {g.get('id')}: {home} (missing) vs {away} (score={away_sent:.3f}, valid={away_valid}) - skipping sentiment")
+                        home_status = home_meta.get("sentiment_status", home_meta.get("status", "N/A"))
+                        home_sources = home_meta.get("sentiment_articles_used", 0)
+                        logger.warning(f"SENTIMENT PARTIAL for game {g.get('id')}: {home} (missing, status={home_status}, sources={home_sources}) vs {away} (score={away_sent:.3f}, valid={away_valid}) - skipping sentiment")
                     elif away_sent is None:
                         home_valid = home_meta.get("sentiment_valid", False)
-                        logger.warning(f"SENTIMENT PARTIAL for game {g.get('id')}: {home} (score={home_sent:.3f}, valid={home_valid}) vs {away} (missing) - skipping sentiment")
+                        away_status = away_meta.get("sentiment_status", away_meta.get("status", "N/A"))
+                        away_sources = away_meta.get("sentiment_articles_used", 0)
+                        logger.warning(f"SENTIMENT PARTIAL for game {g.get('id')}: {home} (score={home_sent:.3f}, valid={home_valid}) vs {away} (missing, status={away_status}, sources={away_sources}) - skipping sentiment")
 
                 rate_limited_flag = bool(
                     sentiment_meta_global.get("sentiment_rate_limited")
@@ -7509,7 +7544,9 @@ with tab_master:
                     sentiment_sample_status = 429
                 sentiment_status_value = sentiment_meta_global.get("sentiment_status") or sentiment_sample_status
 
-                sentiment_score_value = safe_float(sentiment_meta_global.get("sentiment_score", 0.0))
+                # FIX: Use game-specific sentiment_score_field instead of global sentiment_score
+                # sentiment_score_field is computed from the actual home/away sentiment difference
+                sentiment_score_value = sentiment_score_field if sentiment_score_field is not None else safe_float(sentiment_meta_global.get("sentiment_score"))
 
                 # FIX: Force "ok" if we actually have a score, overriding global disabled status if individual team data exists
                 if sentiment_score_value is not None:
@@ -7521,14 +7558,8 @@ with tab_master:
                      sentiment_status_value = "disabled"
                 sentiment_confidence_value = max(sentiment_confidence_local, safe_float(sentiment_meta_global.get("sentiment_confidence")) or 0.0)
 
-                # Fix: preserve None if missing (Part C)
-                # sentiment_meta_global should have 'score': None if invalid/missing
-                sentiment_score_value = safe_float(sentiment_meta_global.get("sentiment_score"))
-                if sentiment_score_value is None:
-                    # Double check raw value in case safe_float was too strict or meta structure differs
-                    # But meta construction (compute_team_sentiment_map) explicitly sets None if invalid.
-                    # Just ensure we don't default to 0.0 here.
-                    pass
+                # Log the final sentiment values used for this game
+                logger.debug(f"Game {g.get('id')} final sentiment values: score={sentiment_score_value}, status={sentiment_status_value}, confidence={sentiment_confidence_value:.2f}")
 
                 sentiment_disabled_reason = sentiment_meta_global.get("sentiment_disabled_reason") or ""
                 sentiment_error_count = int(sentiment_error_count or 0)
@@ -10404,7 +10435,12 @@ if should_display:
             return f"{p * 100:.1f}%"
 
         if "spread_pick_odds" in top_df_display.columns:
+            # Log sample odds values to verify calculation
+            sample_odds = top_df_display["spread_pick_odds"].head(5).tolist()
+            logger.debug(f"Sample spread_pick_odds values: {sample_odds}")
             top_df_display["Spread Win %"] = top_df_display["spread_pick_odds"].apply(_calc_win_pct)
+            sample_win_pct = top_df_display["Spread Win %"].head(5).tolist()
+            logger.debug(f"Sample Spread Win % values: {sample_win_pct}")
         elif "spread_pick_odds" not in top_df_display.columns and "Spread Win Prob" in top_df_display.columns:
             # Fallback if odds missing but old column exists
              top_df_display["Spread Win %"] = top_df_display["Spread Win Prob"]
