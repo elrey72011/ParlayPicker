@@ -766,7 +766,8 @@ def compute_final_probability(
     has_market = implied_prob is not None
     has_model = model_prob is not None
     has_theover = theover_prob is not None
-    has_sentiment = sentiment_score is not None  # None means unavailable, 0.0 means valid neutral
+    # FIX: Treat 0.0 as valid (neutral) sentiment, only None is missing
+    has_sentiment = sentiment_score is not None
 
     # 3. Handle sentiment unavailability: re-normalize weights if sentiment is missing
     if not has_sentiment:
@@ -1988,6 +1989,11 @@ def sentiment_payload_to_meta(payload: Dict[str, Any]) -> Dict[str, Any]:
         # User requested: Log when sentiment skipped and why
         logger.warning(f"Sentiment SKIPPED/INVALID: error={error}, auth_error={auth_error}, rate_limited={rate_limited}, sources={sources}")
 
+    # FIX: Ensure sentiment_status is "ok" if sentiment is valid, even if it was "NA" in payload
+    final_status = fetch_info.get("status") or fetch_info.get("status_code") or merged_payload.get("status") or "ok"
+    if sentiment_valid and final_status in [None, "NA", "disabled", "DISABLED"]:
+        final_status = "ok"
+
     return {
         "score": score if sentiment_valid else None,
         "label": label if sentiment_valid else None,
@@ -2005,6 +2011,7 @@ def sentiment_payload_to_meta(payload: Dict[str, Any]) -> Dict[str, Any]:
         "reddit_posts_used": int(payload.get("reddit_posts_used") or 0),
         "reddit_comments_used": int(payload.get("reddit_comments_used") or 0),
         "sentiment_confidence": confidence or 0.0,
+        "sentiment_status": final_status, # Use the fixed status
     }
 
 def compute_team_sentiment_map(news_api_key: Optional[str], games: List[Dict[str, Any]], league: str) -> Tuple[Dict[str, Optional[float]], Dict[str, Dict[str, Any]], Dict[str, Any]]:
@@ -7500,9 +7507,13 @@ with tab_master:
                 if not sentiment_sample_status and sentiment_rate_limited:
                     sentiment_sample_status = 429
                 sentiment_status_value = sentiment_meta_global.get("sentiment_status") or sentiment_sample_status
-                # Override status if sentiment weight is zero
+                # FIX: Force "ok" if we actually have a score, overriding global disabled status if individual team data exists
+                if sentiment_score_value is not None:
+                    sentiment_status_value = "ok"
+
+                # Override status if sentiment weight is zero (but only if we didn't just find a valid score)
                 effective_sent_weight = float(st.session_state.get("sentiment_weight") or 0.0)
-                if effective_sent_weight <= 0.0:
+                if effective_sent_weight <= 0.0 and sentiment_score_value is None:
                      sentiment_status_value = "disabled"
                 sentiment_confidence_value = max(sentiment_confidence_local, safe_float(sentiment_meta_global.get("sentiment_confidence")) or 0.0)
 
@@ -10365,18 +10376,30 @@ if should_display:
 
         # --- FINAL WHITELIST FIX (Enhanced with Picks Sheet Columns) ---
         # User Request: Add Win Probability columns next to spread/total picks
-        if "spread_prob_final" in top_df_display.columns:
-            top_df_display["Spread Win Prob"] = top_df_display["spread_prob_final"]
-        if "total_prob_final" in top_df_display.columns:
-            top_df_display["Total Win Prob"] = top_df_display["total_prob_final"]
+        # FIX: Calculate implied probability from odds (American) instead of using final model probability
+        def _calc_win_pct(odds):
+            p = american_to_implied_prob(odds)
+            if p is None: return "N/A"
+            return f"{p * 100:.1f}%"
+
+        if "spread_pick_odds" in top_df_display.columns:
+            top_df_display["Spread Win %"] = top_df_display["spread_pick_odds"].apply(_calc_win_pct)
+        elif "spread_pick_odds" not in top_df_display.columns and "Spread Win Prob" in top_df_display.columns:
+            # Fallback if odds missing but old column exists
+             top_df_display["Spread Win %"] = top_df_display["Spread Win Prob"]
+
+        if "total_pick_odds" in top_df_display.columns:
+            top_df_display["Total Win %"] = top_df_display["total_pick_odds"].apply(_calc_win_pct)
+        elif "total_pick_odds" not in top_df_display.columns and "Total Win Prob" in top_df_display.columns:
+             top_df_display["Total Win %"] = top_df_display["Total Win Prob"]
 
         ui_whitelist = [
             'league', 'Home', 'Away', 'Commence (UTC)', 'Commence (Local)', 'Local Date',
             'Overall Pick', 'Overall Prob', 'Spread', 'Spread Prob', 'Total', 'Total Prob', 'ML', 'ML Prob',
             'best_pick', 'final_prob', 'edge', 'best_pick_type',
             'Bet_Confidence', 'Bet_Lean',
-            'Spread & Pick', 'Spread Win Prob',
-            'Total & Pick', 'Total Win Prob',
+            'Spread & Pick', 'Spread Win %',
+            'Total & Pick', 'Total Win %',
             'spread_edge', 'total_edge',
             'Pick', 'AI_Prob', 'Implied_Prob', 'Home_Sentiment', 'Away_Sentiment', 'Sentiment_Diff', 'sentiment_status', 'status', 'best_pick_prob', 'best_pick_edge',
             'theover_pick', 'theover_prob_used', 'theover_delta_final_prob', 'final_prob_without_theover'
@@ -10385,7 +10408,8 @@ if should_display:
         top_df_ui = top_df_display[safe_cols].copy()
 
         # Custom formatting for specific columns
-        format_cols_pct = ['Spread Win Prob', 'Total Win Prob']
+        # Note: 'Spread Win %' and 'Total Win %' are already formatted strings by _calc_win_pct
+        format_cols_pct = []
         for col in format_cols_pct:
             if col in top_df_ui.columns:
                  # Format as percentage with 1 decimal
