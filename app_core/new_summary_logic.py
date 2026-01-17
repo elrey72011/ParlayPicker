@@ -47,6 +47,34 @@ def build_game_summary_v2(df: pd.DataFrame) -> pd.DataFrame:
             "Local Date": local_date,
         }
 
+        # ============================================
+        # HasKalshiMarket Flag
+        # ============================================
+        # A game has a Kalshi market if ANY row in the group satisfies:
+        # 1. kalshi_matched == True
+        # 2. At least one of kalshi_prob_spread or kalshi_prob_total is non-null and != 0
+        #
+        # This flag is critical for the "Markets" badge in the UI, which counts
+        # games with usable Kalshi markets (independent of sportsbook market counts).
+        # ============================================
+        has_kalshi_market = False
+        for idx, row in group.iterrows():
+            kalshi_matched = row.get("kalshi_matched")
+            if kalshi_matched == True or str(kalshi_matched).lower() == "true":
+                # Check if at least one Kalshi probability is available
+                kalshi_prob_spread = row.get("kalshi_prob_spread")
+                kalshi_prob_total = row.get("kalshi_prob_total")
+
+                # Check for valid non-zero probabilities
+                has_spread = pd.notnull(kalshi_prob_spread) and kalshi_prob_spread != 0
+                has_total = pd.notnull(kalshi_prob_total) and kalshi_prob_total != 0
+
+                if has_spread or has_total:
+                    has_kalshi_market = True
+                    break
+
+        summary["HasKalshiMarket"] = has_kalshi_market
+
         # --- Moneyline (ML) ---
         ml_rows = group[group["Market"] == "Moneyline"]
         ml_pick = None

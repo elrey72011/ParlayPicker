@@ -2997,15 +2997,48 @@ def pipeline_progress_snapshot() -> Dict[str, Any]:
     # which count sportsbook markets, not Kalshi markets.
     # ============================================
     kalshi_markets_count = 0
-    if master_df is not None and not master_df.empty and "HasKalshiMarket" in master_df.columns:
+    if master_df is not None and not master_df.empty:
         try:
-            # Filter out placeholder/invalid rows if they exist
-            valid_df = master_df.copy()
-            if "odds_placeholder_detected" in valid_df.columns:
-                valid_df = valid_df[valid_df["odds_placeholder_detected"] != True]
+            # Check if HasKalshiMarket column already exists (from Master Analysis tab)
+            if "HasKalshiMarket" in master_df.columns:
+                # Use pre-computed flag
+                valid_df = master_df.copy()
+                if "odds_placeholder_detected" in valid_df.columns:
+                    valid_df = valid_df[valid_df["odds_placeholder_detected"] != True]
+                kalshi_markets_count = int(valid_df["HasKalshiMarket"].sum())
+            else:
+                # Compute on-the-fly before HasKalshiMarket flag is added
+                # This ensures the badge works even when called before Master Analysis tab runs
+                required_cols = ["kalshi_matched", "kalshi_prob_spread", "kalshi_prob_total", "Home", "Away"]
+                if all(col in master_df.columns for col in required_cols):
+                    # Compute HasKalshiMarket for each row
+                    def _has_kalshi_market_inline(row):
+                        kalshi_matched = row.get("kalshi_matched")
+                        if not kalshi_matched:
+                            return False
+                        kalshi_prob_spread = row.get("kalshi_prob_spread")
+                        kalshi_prob_total = row.get("kalshi_prob_total")
+                        has_spread = pd.notnull(kalshi_prob_spread) and kalshi_prob_spread != 0
+                        has_total = pd.notnull(kalshi_prob_total) and kalshi_prob_total != 0
+                        return has_spread or has_total
 
-            # Count games with HasKalshiMarket=True
-            kalshi_markets_count = int(valid_df["HasKalshiMarket"].sum())
+                    # Apply to filtered dataframe
+                    valid_df = master_df.copy()
+                    if "odds_placeholder_detected" in valid_df.columns:
+                        valid_df = valid_df[valid_df["odds_placeholder_detected"] != True]
+
+                    # Compute flag for each row, then count unique games
+                    valid_df["_temp_has_kalshi"] = valid_df.apply(_has_kalshi_market_inline, axis=1)
+
+                    # Count unique games (not rows) with Kalshi markets
+                    games_with_kalshi = valid_df[valid_df["_temp_has_kalshi"]]
+                    if not games_with_kalshi.empty:
+                        unique_games = games_with_kalshi.groupby(["Home", "Away"]).size()
+                        kalshi_markets_count = len(unique_games)
+                    else:
+                        kalshi_markets_count = 0
+                else:
+                    kalshi_markets_count = 0
         except Exception as e:
             logger.warning(f"Error counting Kalshi markets from master_df: {e}")
             kalshi_markets_count = 0
@@ -10602,6 +10635,26 @@ if should_display:
         try:
             game_summary_df = build_game_summary(st.session_state["master_df"])
             logger.info(f"📊 Game Summary: {len(game_summary_df)} games")
+
+            # ============================================
+            # APPLY KALSHI MATCH FILTER IF ENABLED
+            # ============================================
+            # If "Show only games with a Kalshi match" checkbox is checked,
+            # filter to only show games where HasKalshiMarket == True
+            # ============================================
+            kalshi_match_only = st.session_state.get("kalshi_match_only", False)
+            total_games = len(game_summary_df)
+            games_with_kalshi = 0
+
+            if "HasKalshiMarket" in game_summary_df.columns:
+                games_with_kalshi = int(game_summary_df["HasKalshiMarket"].sum())
+
+            if kalshi_match_only and "HasKalshiMarket" in game_summary_df.columns:
+                game_summary_df = game_summary_df[game_summary_df["HasKalshiMarket"] == True]
+                logger.info(f"🎯 Filtered to Kalshi matches only: {len(game_summary_df)} games with Kalshi markets")
+
+            # Display summary stats
+            st.caption(f"📊 Total games: {total_games} | Games with Kalshi markets: {games_with_kalshi} | Displaying: {len(game_summary_df)}")
 
             if not game_summary_df.empty:
                 # Reorder columns as requested, including new Kalshi columns
