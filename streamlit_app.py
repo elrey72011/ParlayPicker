@@ -6256,7 +6256,7 @@ with tab_master:
         st.session_state["master_results_df"] = None
 
     if st.button("🚀 Run Master Analysis"):
-        with st.spinner("Analyzing Markets..."):
+        with st.spinner("🔄 Analyzing Markets..."):
             try:
                 # Task 1: Pre-process games to ensure commence_date_local is set for TheOver matching
                 # This aligns the dates so the canonical keys match (ingestion vs loop).
@@ -9639,6 +9639,10 @@ with tab_master:
                 logger.info(f"   - st.session_state['master_df']: {len(st.session_state['master_df'])} rows")
                 logger.info(f"   - st.session_state['master_results_df']: {len(st.session_state['master_results_df'])} rows")
                 logger.info(f"✅ Data ready flags set")
+
+                # Show success message and rerun to display results immediately
+                st.success(f"✅ Analysis complete! Generated {len(df)} picks.")
+                st.rerun()
 
     if "model_last_error" in st.session_state:
         st.error(f"Prediction Error: {st.session_state['model_last_error']}")
