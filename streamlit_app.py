@@ -10705,7 +10705,7 @@ if should_display:
                 summary_cols = [
                     "League", "Home", "Away", "Commence UTC", "Commence (Local)",
                     "Best Overall Pick", "Best Overall Prob",
-                    "Spread Pick", "Spread Prob", "Kalshi Spread Prob", "Kalshi Spread Δ",
+                        "Spread Pick", "Spread Prob", "Spread Consensus", "Kalshi Spread Prob", "Kalshi Spread Δ",
                     "Total Pick", "Total Prob", "Kalshi Total Prob", "Kalshi Total Δ",
                     "ML Pick", "ML Prob"
                 ]
@@ -10719,7 +10719,8 @@ if should_display:
                     "Kalshi Spread Prob": st.column_config.NumberColumn(format="%.1f%%"),
                     "Total Prob": st.column_config.NumberColumn(format="%.1f%%"),
                     "Kalshi Total Prob": st.column_config.NumberColumn(format="%.1f%%"),
-                    "ML Prob": st.column_config.NumberColumn(format="%.1f%%")
+                        "ML Prob": st.column_config.NumberColumn(format="%.1f%%"),
+                        "Spread Consensus": st.column_config.TextColumn("S", help="Spread Consensus (Market/Kalshi/AI)")
                 }
 
                 st.dataframe(
