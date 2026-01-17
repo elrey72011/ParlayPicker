@@ -9613,11 +9613,23 @@ with tab_master:
                         implied_probs = pd.to_numeric(master_df.get("Implied_Prob"), errors='coerce').fillna(0.5)
                         master_df["AI_Edge"] = master_df["AI_Prob"] - implied_probs
 
-                # 4. SHOTGUN ACTIVATION: Use ParlayOptimizer to tier the results and generate 2-leg parlays
+                # 4. CONSENSUS ENRICHMENT: Add consensus votes to master_df
                 if ParlayOptimizer:
-                    # FIX: Use absolute path for robustness
                     model_dir_abs = os.path.join(os.path.dirname(__file__), "models")
                     optimizer = ParlayOptimizer(model_dir=model_dir_abs)
+
+                    # Calculate consensus for all picks in master_df
+                    logger.info("Calculating consensus votes for all picks")
+                    for idx in master_df.index:
+                        consensus_votes, consensus_total, vote_details = optimizer.calculate_consensus_votes(master_df.loc[idx])
+                        master_df.at[idx, "consensus_votes"] = consensus_votes
+                        master_df.at[idx, "consensus_total"] = consensus_total
+                        consensus_str = f"{consensus_votes}/{consensus_total}" if consensus_total > 0 else "N/A"
+                        master_df.at[idx, "consensus"] = consensus_str
+
+                    logger.info(f"Consensus enrichment complete for {len(master_df)} picks")
+
+                    # 5. SHOTGUN ACTIVATION: Use ParlayOptimizer to tier the results and generate 2-leg parlays
                     shotgun_picks = optimizer.get_shotgun_picks(master_df)
                     shotgun_parlays = optimizer.generate_shotgun_parlays(master_df)
                     st.session_state["shotgun_data"] = shotgun_picks
@@ -10923,10 +10935,12 @@ with tab_shotgun:
                 st.metric("Parlay Odds", f"{best['parlay_american_odds']:+.0f}")
                 st.metric("Expected Return", f"${best['expected_return']:.2f}")
                 st.markdown("**Legs:**")
+                consensus1 = f"{best['leg1'].get('consensus_votes', 0)}/{best['leg1'].get('consensus_total', 0)}"
                 st.markdown(f"1. {best['leg1']['pick']}")
-                st.caption(f"   Prob: {best['leg1']['prob']*100:.1f}%, Odds: {best['leg1']['odds']:+.0f}")
+                st.caption(f"   Prob: {best['leg1']['prob']*100:.1f}%, Odds: {best['leg1']['odds']:+.0f}, Consensus: {consensus1}")
+                consensus2 = f"{best['leg2'].get('consensus_votes', 0)}/{best['leg2'].get('consensus_total', 0)}"
                 st.markdown(f"2. {best['leg2']['pick']}")
-                st.caption(f"   Prob: {best['leg2']['prob']*100:.1f}%, Odds: {best['leg2']['odds']:+.0f}")
+                st.caption(f"   Prob: {best['leg2']['prob']*100:.1f}%, Odds: {best['leg2']['odds']:+.0f}, Consensus: {consensus2}")
             else:
                 st.warning("No best overall parlay available")
 
@@ -10940,10 +10954,12 @@ with tab_shotgun:
                 st.metric("Parlay Odds", f"{medium['parlay_american_odds']:+.0f}")
                 st.metric("Expected Return", f"${medium['expected_return']:.2f}")
                 st.markdown("**Legs:**")
+                consensus1 = f"{medium['leg1'].get('consensus_votes', 0)}/{medium['leg1'].get('consensus_total', 0)}"
                 st.markdown(f"1. {medium['leg1']['pick']}")
-                st.caption(f"   Prob: {medium['leg1']['prob']*100:.1f}%, Odds: {medium['leg1']['odds']:+.0f}")
+                st.caption(f"   Prob: {medium['leg1']['prob']*100:.1f}%, Odds: {medium['leg1']['odds']:+.0f}, Consensus: {consensus1}")
+                consensus2 = f"{medium['leg2'].get('consensus_votes', 0)}/{medium['leg2'].get('consensus_total', 0)}"
                 st.markdown(f"2. {medium['leg2']['pick']}")
-                st.caption(f"   Prob: {medium['leg2']['prob']*100:.1f}%, Odds: {medium['leg2']['odds']:+.0f}")
+                st.caption(f"   Prob: {medium['leg2']['prob']*100:.1f}%, Odds: {medium['leg2']['odds']:+.0f}, Consensus: {consensus2}")
             else:
                 st.warning("No medium risk parlay available")
 
@@ -10957,10 +10973,12 @@ with tab_shotgun:
                 st.metric("Parlay Odds", f"{high['parlay_american_odds']:+.0f}")
                 st.metric("Expected Return", f"${high['expected_return']:.2f}")
                 st.markdown("**Legs:**")
+                consensus1 = f"{high['leg1'].get('consensus_votes', 0)}/{high['leg1'].get('consensus_total', 0)}"
                 st.markdown(f"1. {high['leg1']['pick']}")
-                st.caption(f"   Prob: {high['leg1']['prob']*100:.1f}%, Odds: {high['leg1']['odds']:+.0f}")
+                st.caption(f"   Prob: {high['leg1']['prob']*100:.1f}%, Odds: {high['leg1']['odds']:+.0f}, Consensus: {consensus1}")
+                consensus2 = f"{high['leg2'].get('consensus_votes', 0)}/{high['leg2'].get('consensus_total', 0)}"
                 st.markdown(f"2. {high['leg2']['pick']}")
-                st.caption(f"   Prob: {high['leg2']['prob']*100:.1f}%, Odds: {high['leg2']['odds']:+.0f}")
+                st.caption(f"   Prob: {high['leg2']['prob']*100:.1f}%, Odds: {high['leg2']['odds']:+.0f}, Consensus: {consensus2}")
             else:
                 st.warning("No high risk parlay available")
 
@@ -10974,10 +10992,11 @@ with tab_shotgun:
             st.markdown("#### 🎯 $3 'Snipers' (High Prob)")
             snipers = shotgun_data.get("snipers", pd.DataFrame())
             if not snipers.empty:
-                display_cols = ['Pick', 'AI_Prob', 'AI_Edge']
+                display_cols = ['Pick', 'AI_Prob', 'AI_Edge', 'consensus']
                 display_cols = [c for c in display_cols if c in snipers.columns]
                 if 'Pick' not in snipers.columns and 'Spread & Pick' in snipers.columns:
-                    display_cols = ['Spread & Pick', 'AI_Prob', 'AI_Edge']
+                    display_cols = ['Spread & Pick', 'AI_Prob', 'AI_Edge', 'consensus']
+                    display_cols = [c for c in display_cols if c in snipers.columns]
                 st.dataframe(snipers[display_cols], hide_index=True, use_container_width=True)
             else:
                 st.info("No snipers available")
@@ -10986,10 +11005,11 @@ with tab_shotgun:
             st.markdown("#### 📈 $2 'Strategy' (High EV)")
             strategy = shotgun_data.get("strategy", pd.DataFrame())
             if not strategy.empty:
-                display_cols = ['Pick', 'AI_Prob', 'AI_Edge']
+                display_cols = ['Pick', 'AI_Prob', 'AI_Edge', 'consensus']
                 display_cols = [c for c in display_cols if c in strategy.columns]
                 if 'Pick' not in strategy.columns and 'Spread & Pick' in strategy.columns:
-                    display_cols = ['Spread & Pick', 'AI_Prob', 'AI_Edge']
+                    display_cols = ['Spread & Pick', 'AI_Prob', 'AI_Edge', 'consensus']
+                    display_cols = [c for c in display_cols if c in strategy.columns]
                 st.dataframe(strategy[display_cols], hide_index=True, use_container_width=True)
             else:
                 st.info("No strategy picks available")
@@ -10998,10 +11018,11 @@ with tab_shotgun:
             st.markdown("#### 🎲 $1 'Longshots' (Lottos)")
             longshots = shotgun_data.get("longshots", pd.DataFrame())
             if not longshots.empty:
-                display_cols = ['Pick', 'AI_Prob', 'AI_Edge']
+                display_cols = ['Pick', 'AI_Prob', 'AI_Edge', 'consensus']
                 display_cols = [c for c in display_cols if c in longshots.columns]
                 if 'Pick' not in longshots.columns and 'Spread & Pick' in longshots.columns:
-                    display_cols = ['Spread & Pick', 'AI_Prob', 'AI_Edge']
+                    display_cols = ['Spread & Pick', 'AI_Prob', 'AI_Edge', 'consensus']
+                    display_cols = [c for c in display_cols if c in longshots.columns]
                 st.dataframe(longshots[display_cols], hide_index=True, use_container_width=True)
             else:
                 st.info("No longshots available")
