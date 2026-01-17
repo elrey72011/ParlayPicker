@@ -160,12 +160,13 @@ TRACE_COLS = [
     "kalshi_weight",
     "odds_weight",
     "ml_weight",
-    "sentiment_weight",
-    "sentiment_score",
+    # NOTE: Removed sentiment columns from TRACE_COLS so they display in UI
+    # "sentiment_weight",  # REMOVED - needed for display
+    # "sentiment_score",  # REMOVED - needed for display
+    # "sentiment_direction",  # REMOVED - needed for display
+    # "sentiment_impact_applied",  # REMOVED - needed for display
     "kalshi_prob_for_pick",
     "kalshi_yes_side",
-    "sentiment_direction",
-    "sentiment_impact_applied",
     "confidence_reason",
     "kalshi_status",
     "llm_disagreement_flag",
@@ -242,6 +243,39 @@ def clamp(x: Optional[float], lo: float = 0.0, hi: float = 1.0) -> Optional[floa
 
 
 def compute_sentiment_adj(sentiment_diff: Optional[float]) -> Optional[float]:
+    """
+    Compute sentiment adjustment for probability calculations.
+
+    SENTIMENT IMPLEMENTATION OVERVIEW:
+    -----------------------------------
+    Input Text: NewsAPI articles (3-day lookback) or Reddit posts/comments (fallback)
+    Computation: Keyword-based lexicon scoring via RealSentimentAnalyzer
+    Output Columns:
+      - Home_Sentiment, Away_Sentiment: Per-team sentiment scores (-1 to 1)
+      - Sentiment_Diff: home_sent - away_sent
+      - sentiment_score: Per-pick sentiment value
+      - sentiment_weight: Weight used in probability blend (0.05 default)
+      - sentiment_direction: bullish/bearish/neutral
+      - sentiment_impact_applied: Whether sentiment affected final prob
+
+    Usage in Scoring:
+      - Sentiment is blended into final probability via compute_final_probability()
+      - Weight: 5% (w_sentiment = 0.05) of total probability calculation
+      - Impact range: ±0.15 probability adjustment
+      - Sentiment score converts to probability: p_sentiment = 0.5 + (score * 0.15)
+
+    Logging:
+      - Coverage summary: logged at end of sentiment_map computation
+      - Per-game sentiment: logged when sentiment_diff is computed
+      - Scoring impact: logged when sentiment affects probability calculation
+      - Final summary: logged when analysis completes
+
+    Args:
+        sentiment_diff: Difference between home and away sentiment (-1 to 1)
+
+    Returns:
+        Adjustment value clamped to ±0.03, or None if input is None
+    """
     if sentiment_diff is None:
         return None
     try:
@@ -764,6 +798,7 @@ def compute_final_probability(
             elif p_side in {"away", "under"}:
                 p_sentiment = 1.0 - home_prob
             p_sentiment = clamp(p_sentiment)
+            logger.debug(f"Sentiment scoring: raw_score={raw_score:.3f}, impact={impact:.3f}, p_sentiment={p_sentiment:.3f}, pick_side={pick_side}")
         except Exception as e:
             logger.warning(f"Sentiment Prob Calculation Error: {e}")
             p_sentiment = 0.5
@@ -2299,6 +2334,19 @@ def compute_team_sentiment_map(news_api_key: Optional[str], games: List[Dict[str
         debug["top_5"] = []
     if debug.get("rate_limited") and 429 not in debug.get("status_counts", {}):
         debug["status_counts"][429] = debug["status_counts"].get(429, 0) + 1
+
+    # Log sentiment coverage summary
+    teams_with_sentiment = len([1 for s in sentiment_map.values() if s is not None])
+    total_teams = len(teams)
+    logger.info(f"Sentiment coverage: {teams_with_sentiment}/{total_teams} teams have valid sentiment.")
+    if teams_with_sentiment > 0:
+        sentiment_available_news = len([1 for p in news_payloads.values() if _payload_valid(p)])
+        logger.info(f"Sentiment source breakdown: NewsAPI={sentiment_available_news}, Reddit={debug.get('teams_from_reddit', 0)}, Blended={debug.get('teams_blended', 0)}")
+        logger.info(f"Sentiment cache stats: hits={debug.get('cache_hits', 0)}, misses={debug.get('cache_misses', 0)}")
+    if debug.get("rate_limited"):
+        logger.warning("Sentiment: NewsAPI rate limit hit, some teams may be missing sentiment data")
+    if debug.get("auth_error"):
+        logger.warning("Sentiment: NewsAPI authentication error, using fallback sentiment source")
 
     return sentiment_map, sentiment_meta, {
         "article_counts": debug.get("article_counts"),
@@ -5918,17 +5966,24 @@ if "master_results_df" in st.session_state:
     master_df = st.session_state["master_results_df"]
     if master_df is not None and not master_df.empty:
         try:
+            from datetime import datetime
+            timestamp_str = datetime.now().strftime("%Y%m%d_%H%M")
             master_csv = master_df.to_csv(index=False).encode("utf-8")
+            logger.info(f"Exporting {len(master_df)} rows from master_results_df to CSV for user download.")
             st.sidebar.download_button(
-                label="📊 Download Analysis Results (CSV)",
+                label="📥 Download All Picks (CSV)",
                 data=master_csv,
-                file_name="parlay_analysis_results.csv",
+                file_name=f"parlaypicker_all_picks_{timestamp_str}.csv",
                 mime="text/csv",
                 key="master_results_sidebar_export_btn",
-                help="Full analysis results with all picks and probabilities"
+                help="Download all picks with sentiment analysis, probabilities, and rankings",
+                type="primary"
             )
         except Exception as e:
             logger.error(f"Error preparing analysis export: {e}")
+else:
+    # Show helpful message when no data is available
+    st.sidebar.caption("⏳ Run Master Analysis to generate picks, then you can download all picks here.")
 
 # Master df export (raw master dataframe)
 if "master_df" in st.session_state:
@@ -7200,8 +7255,12 @@ with tab_master:
                 # JULES-FIX: Compute Sentiment_Diff ONLY if both valid (else None)
                 if home_sent is not None and away_sent is not None:
                     sentiment_diff = home_sent - away_sent
+                    # Log sentiment debug for this game
+                    logger.info(f"Sentiment debug: game_id={g.get('id')}, {home} vs {away}, home_sent={home_sent:.3f}, away_sent={away_sent:.3f}, diff={sentiment_diff:.3f}")
                 else:
                     sentiment_diff = None
+                    if home_sent is None and away_sent is None:
+                        logger.debug(f"Sentiment: no input text available for game {home} vs {away}, skipping.")
 
                 rate_limited_flag = bool(
                     sentiment_meta_global.get("sentiment_rate_limited")
@@ -9714,6 +9773,21 @@ with tab_master:
                 logger.info(f"   - st.session_state['master_df']: {len(st.session_state['master_df'])} rows")
                 logger.info(f"   - st.session_state['master_results_df']: {len(st.session_state['master_results_df'])} rows")
                 logger.info(f"✅ Data ready flags set")
+
+                # Log final sentiment analysis summary
+                if not df.empty:
+                    sentiment_cols_present = [col for col in ["Home_Sentiment", "Away_Sentiment", "Sentiment_Diff", "sentiment_score", "sentiment_weight"] if col in df.columns]
+                    logger.info(f"Sentiment columns present in final results: {sentiment_cols_present}")
+                    if "Sentiment_Diff" in df.columns:
+                        games_with_sentiment = df["Sentiment_Diff"].notna().sum()
+                        total_games = len(df)
+                        logger.info(f"Final sentiment coverage: {games_with_sentiment}/{total_games} picks have sentiment data")
+                        if games_with_sentiment > 0:
+                            avg_sentiment = df["Sentiment_Diff"].mean()
+                            logger.info(f"Average sentiment differential: {avg_sentiment:.3f}")
+                    if "sentiment_weight" in df.columns:
+                        avg_weight = df["sentiment_weight"].mean()
+                        logger.info(f"Average sentiment weight in final probabilities: {avg_weight:.3f}")
 
                 # Show success message and rerun to display results immediately
                 st.success(f"✅ Analysis complete! Generated {len(df)} picks.")
