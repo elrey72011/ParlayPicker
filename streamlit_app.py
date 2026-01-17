@@ -307,32 +307,38 @@ def format_consensus_breakdown(
         Formatted consensus breakdown string
     """
     parts = []
+    engine_count = 0
 
-    # Market
+    # Market (31.58% weight)
     if market_prob is not None:
         parts.append(f"M:{market_prob*100:.1f}%")
+        engine_count += 1
     else:
         parts.append("M:N/A")
 
-    # Kalshi
+    # Kalshi (36.84% weight) - MOST IMPORTANT
     if kalshi_prob is not None:
         # Add indicator if Kalshi agrees (>55%) or disagrees
         if kalshi_prob >= 0.55:
-            parts.append(f"K:{kalshi_prob*100:.1f}%✓")
+            parts.append(f"K:{kalshi_prob*100:.1f}%✓")  # Strong agreement
+            engine_count += 1
         elif kalshi_prob < 0.45:
-            parts.append(f"K:{kalshi_prob*100:.1f}%⚠")
+            parts.append(f"K:{kalshi_prob*100:.1f}%⚠")  # Disagreement warning
+            engine_count += 1
         else:
             parts.append(f"K:{kalshi_prob*100:.1f}%")
+            engine_count += 1
     else:
         parts.append("K:N/A")
 
-    # AI Model
+    # AI Model (21.05% weight)
     if model_prob is not None:
         parts.append(f"AI:{model_prob*100:.1f}%")
+        engine_count += 1
     else:
         parts.append("AI:N/A")
 
-    # Sentiment (convert score to probability display)
+    # Sentiment (0% weight currently - DISABLED)
     if sentiment_score is not None:
         # Convert sentiment score to probability-like display
         # Sentiment score is -1 to 1, maps to impact of ±0.15
@@ -346,16 +352,21 @@ def format_consensus_breakdown(
                 sent_prob = 1.0 - sent_prob
 
         parts.append(f"S:{sent_prob*100:.1f}%")
+        engine_count += 1
     else:
-        parts.append("S:N/A")
+        parts.append("S:Disabled")
 
-    # Final
+    # Final consensus (weighted average)
     if final_prob is not None:
         parts.append(f"→{final_prob*100:.1f}%")
     else:
         parts.append("→N/A")
 
-    return " | ".join(parts)
+    # Add engine count indicator
+    consensus_str = " | ".join(parts)
+    consensus_str += f" ({engine_count}/4)"
+
+    return consensus_str
 
 
 def calculate_consensus_agreement(
@@ -10553,18 +10564,53 @@ if should_display:
                 st.code(str(ml_error))
 
         st.subheader("Top Picks / Best Bets")
+
+        # --- CONSENSUS SYSTEM EXPLANATION ---
+        with st.expander("ℹ️ Understanding Consensus & Quality Scoring", expanded=False):
+            st.markdown("""
+            ### 🎯 How Consensus Works
+            Each pick combines predictions from **4 probability engines**:
+
+            - **M (Market)** - Implied probability from betting odds (31.58% weight)
+            - **K (Kalshi)** - Prediction market probability (36.84% weight) ✓ = Strong agreement (>55%)
+            - **AI (Model)** - XGBoost ML model probability (21.05% weight)
+            - **S (Sentiment)** - Reddit/News sentiment analysis (Currently Disabled)
+            - **→ (Final)** - Weighted consensus probability
+
+            **Example**: `M:52.3% | K:59.5%✓ | AI:51.2% | S:Disabled | →56.2% (3/4)`
+
+            ### ⭐ Quality Score (0-5 Stars)
+            Picks earn points for meeting criteria:
+            - **+1.5 pts** - Probability >56% (above coin flip threshold)
+            - **+1.5 pts** - Decisiveness >0.20 (strong directional edge)
+            - **+1.0 pt** - Kalshi validates (>55% agreement)
+            - **+1.0 pt** - Strong consensus (engines agree within 5%)
+
+            **Quality Tiers**:
+            - **HIGH** (≥4.0 stars) - Best picks, meets all/most criteria, ~42-45% expected hit rate
+            - **MEDIUM** (≥2.5 stars) - Decent picks, meets some criteria, ~35-38% expected hit rate
+            - **LOW** (<2.5 stars) - Weak picks, barely above 50%, ~27% expected hit rate (NOT RECOMMENDED)
+
+            ### 💡 Why Tighten Picks?
+            - Picks at 50.8% are barely better than coin flips
+            - 2-leg parlay at 50.8% each = 25.8% win probability (negative EV)
+            - 2-leg parlay at 56% each = 31.4% win probability (positive EV)
+            - **Focus on HIGH quality picks for best results!**
+            """)
+
         # FORCE DISPLAY: Always include LOW confidence picks (checkbox disabled)
         include_low_in_top = st.checkbox("Include LOW confidence in Top Picks (FORCED ON)", value=True, key="include_low_top_picks", disabled=True)
 
         # --- QUALITY FILTER CONTROLS ---
         st.caption("🎯 **Pick Quality Filters** - Tighten picks based on probability, decisiveness, and consensus")
+        st.info("🎲 **DEFAULT: High Quality Only** - Showing picks with >56% probability, >0.20 decisiveness, Kalshi validation, and strong consensus. Change filter below to see all picks.")
 
         col1, col2 = st.columns(2)
 
         with col1:
             quality_filter_mode = st.selectbox(
                 "Quality Tier Filter",
-                options=["All Quality Levels", "High Quality Only", "High + Medium Quality", "Show Quality Distribution"],
+                options=["High Quality Only", "High + Medium Quality", "All Quality Levels", "Show Quality Distribution"],
                 index=0,
                 key="quality_filter_mode",
                 help="Filter picks by quality score (>56% prob, >0.20 decisiveness, Kalshi validation, consensus agreement)"
@@ -10573,7 +10619,7 @@ if should_display:
         with col2:
             sort_by_quality = st.checkbox(
                 "Sort by Quality Score",
-                value=False,
+                value=True,
                 key="sort_by_quality",
                 help="Sort picks by quality score (0-5 stars) instead of spread edge"
             )
@@ -10853,15 +10899,31 @@ if should_display:
 
             if filter_mode == "High Quality Only":
                 if "Quality_Tier" in top_df_ui.columns:
-                    top_df_ui = top_df_ui[top_df_ui["Quality_Tier"] == "HIGH"]
-                    logger.info(f"🔍 Quality Filter: HIGH only - {len(top_df_ui)}/{original_count} picks")
-                    st.info(f"🎯 Showing {len(top_df_ui)} HIGH quality picks (filtered from {original_count})")
+                    # Count criteria met before filtering
+                    high_quality_picks = top_df_ui[top_df_ui["Quality_Tier"] == "HIGH"]
+
+                    if len(high_quality_picks) > 0:
+                        # Calculate average metrics for high quality picks
+                        avg_quality = high_quality_picks["Quality_Score"].mean() if "Quality_Score" in high_quality_picks.columns else 0
+
+                        top_df_ui = high_quality_picks
+                        logger.info(f"🔍 Quality Filter: HIGH only - {len(top_df_ui)}/{original_count} picks")
+
+                        st.success(f"✅ **{len(top_df_ui)} HIGH quality picks** selected from {original_count} total picks ({len(top_df_ui)/original_count*100:.1f}%)")
+                        st.caption(f"📊 Average Quality Score: {avg_quality:.2f}/5.0 ⭐ | These picks meet ALL criteria: >56% prob, >0.20 decisiveness, Kalshi validation, strong consensus")
+                    else:
+                        st.warning(f"⚠️ No HIGH quality picks found in {original_count} total picks. Showing all picks instead.")
 
             elif filter_mode == "High + Medium Quality":
                 if "Quality_Tier" in top_df_ui.columns:
-                    top_df_ui = top_df_ui[top_df_ui["Quality_Tier"].isin(["HIGH", "MEDIUM"])]
+                    quality_picks = top_df_ui[top_df_ui["Quality_Tier"].isin(["HIGH", "MEDIUM"])]
+                    high_count = (quality_picks["Quality_Tier"] == "HIGH").sum()
+                    medium_count = (quality_picks["Quality_Tier"] == "MEDIUM").sum()
+
+                    top_df_ui = quality_picks
                     logger.info(f"🔍 Quality Filter: HIGH + MEDIUM - {len(top_df_ui)}/{original_count} picks")
-                    st.info(f"🎯 Showing {len(top_df_ui)} HIGH/MEDIUM quality picks (filtered from {original_count})")
+
+                    st.success(f"✅ **{len(top_df_ui)} quality picks** ({high_count} HIGH, {medium_count} MEDIUM) from {original_count} total")
 
             elif filter_mode == "Show Quality Distribution":
                 if "Quality_Tier" in top_df_display.columns:
@@ -10875,8 +10937,13 @@ if should_display:
                     if "Quality_Score" in top_df_display.columns:
                         avg_quality = top_df_display["Quality_Score"].mean()
                         high_quality_count = (top_df_display["Quality_Tier"] == "HIGH").sum()
+                        medium_quality_count = (top_df_display["Quality_Tier"] == "MEDIUM").sum()
+                        low_quality_count = (top_df_display["Quality_Tier"] == "LOW").sum()
+
                         st.write(f"- **Average Quality Score**: {avg_quality:.2f} / 5.0")
                         st.write(f"- **High Quality Picks**: {high_quality_count} ({high_quality_count/len(top_df_display)*100:.1f}%)")
+                        st.markdown("---")
+                        st.markdown("**💡 Recommendation**: Use 'High Quality Only' filter for best results. Expected hit rate ~42-45% vs ~27% for all picks.")
 
         # --- APPLY QUALITY SORTING ---
         if "sort_by_quality" in st.session_state and st.session_state.sort_by_quality:
