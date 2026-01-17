@@ -1,6 +1,7 @@
 """Lightweight sentiment pipeline using NewsAPI with keyword lexicon scoring."""
 from __future__ import annotations
 
+import logging
 import re
 from datetime import datetime, timedelta, timezone
 import time
@@ -9,6 +10,10 @@ from typing import Any, Dict, List, Optional, Tuple
 import requests
 import streamlit as st
 from app_core.reddit_sentiment import fetch_reddit_sentiment_map
+
+# Configure logger for sentiment pipeline
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 # ... existing imports and constants ...
 
@@ -239,6 +244,7 @@ def fetch_team_news(news_api_key: str, team: str, league: str, league_query: Opt
             pass
 
     if not news_api_key:
+        logger.warning(f"Sentiment disabled for {team}: missing NEWS_API_KEY")
         return [], {
             "error": "missing_key",
             "status": None,
@@ -323,6 +329,10 @@ def fetch_team_news(news_api_key: str, team: str, league: str, league_query: Opt
                 retry_after_hdr = resp.headers.get("Retry-After")
             except Exception:
                 retry_after_hdr = None
+
+            # Log the fetch result
+            logger.info(f"Sentiment fetch for {team} ({league}): query='{q}', status={status}, articles={len(articles)}, totalResults={total_results}")
+
             if status != 200:
                 error_key = "rate_limited" if rate_limited else ("bad_key" if auth_error else "http_error")
                 if rate_limited and attempts <= max_retries and not articles:
@@ -443,7 +453,9 @@ def team_sentiment_from_articles(articles: List[Dict[str, Any]]) -> float:
     if not scores:
         return 0.0
     avg = sum(scores) / len(scores)
-    return _clamp(avg)
+    clamped = _clamp(avg)
+    logger.debug(f"Sentiment score from {len(articles)} articles: raw_avg={avg:.3f}, clamped={clamped:.3f}")
+    return clamped
 
 
 MAX_SENTIMENT_CALLS = 6
@@ -647,11 +659,20 @@ def build_team_sentiment_map(
 
             sources = int(result_payload.get("articles_count") or 0)
             score_val = result_payload.get("sentiment")
+            sentiment_valid = bool(sources > 0 and score_val is not None)
+
+            # Log sentiment validity determination
+            if sentiment_valid:
+                logger.info(f"Sentiment VALID for {team}: score={score_val:.3f}, sources={sources}, confidence=0.6")
+            else:
+                error_reason = (fetch_info or {}).get("error") or "no_articles"
+                logger.warning(f"Sentiment INVALID for {team}: sources={sources}, score={score_val}, error={error_reason}, status={status_int}")
+
             meta = {
                 "score": score_val if sources > 0 else None,
                 "confidence": 0.6 if sources > 0 else 0.0,
                 "sources": sources,
-                "sentiment_valid": bool(sources > 0 and score_val is not None),
+                "sentiment_valid": sentiment_valid,
                 "sentiment_source": "newsapi" if sources > 0 else "none",
                 "sentiment_level": "team" if sources > 0 else "none",
                 "sentiment_articles_used": sources,
@@ -724,6 +745,7 @@ def build_team_sentiment_map(
     # User Request 4: Ensure auth_error also triggers need_reddit
     need_reddit = debug.get("rate_limited") or debug.get("auth_error") or news_valid_count == 0 or bool(missing_teams)
     if need_reddit and missing_teams:
+        logger.info(f"Triggering Reddit fallback for {len(missing_teams)} teams: rate_limited={debug.get('rate_limited')}, auth_error={debug.get('auth_error')}, missing={missing_teams}")
         reddit_results = fetch_reddit_sentiment_map(missing_teams, league)
         for team in missing_teams:
             payload = reddit_results.get(team) or {}
@@ -739,6 +761,7 @@ def build_team_sentiment_map(
             posts_used = int(payload.get("posts_used") or 0)
             comments_used = int(payload.get("comments_used") or 0)
             if score_val is None or sources_val <= 0:
+                logger.debug(f"Skipping Reddit sentiment for {team}: score={score_val}, sources={sources_val}")
                 continue
             existing_meta = meta_map.get(team) or {}
             existing_conf = existing_meta.get("confidence") or 0.0
@@ -747,8 +770,12 @@ def build_team_sentiment_map(
             if existing_meta.get("sentiment_valid") and confidence_val and confidence_val > existing_conf:
                 blended_score = 0.7 * float(existing_meta.get("score") or 0.0) + 0.3 * float(score_val)
                 source_label = "blended"
+                logger.info(f"Blending sentiment for {team}: newsapi={existing_meta.get('score'):.3f} (conf={existing_conf:.2f}) + reddit={score_val:.3f} (conf={confidence_val:.2f}) = {blended_score:.3f}")
             elif existing_meta.get("sentiment_valid"):
+                logger.debug(f"Keeping existing sentiment for {team} (higher confidence)")
                 continue
+            else:
+                logger.info(f"Using Reddit sentiment for {team}: score={score_val:.3f}, posts={posts_used}, comments={comments_used}, confidence={confidence_val:.2f}")
             sentiment_map[team] = blended_score
             sentiment_strength = sentiment_strength_from_articles("team", sources_val)
             sentiment_badge = sentiment_badge_for("team", sentiment_strength)

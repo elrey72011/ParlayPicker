@@ -749,43 +749,64 @@ def compute_final_probability(
 
     # Task 1: Hardcoded Global Weights (No Dynamic Shifting)
     # Values: Kalshi 0.35, Market 0.30, ML 0.20, TheOver 0.10, Sentiment 0.05
-    # Logic: Missing sources are imputed with 0.5 (neutral) to maintain probability scale
-    # while keeping weight denominators static (Sum=1.0).
+    # Logic:
+    # - When sentiment is available (even if neutral/0), use it with weight 0.05
+    # - When sentiment is unavailable (None), set weight to 0 and re-normalize others
+    # - Other missing sources are imputed with 0.5 (neutral)
 
     # 1. Define Static Weights (Hardcoded per User Request)
-    w_kalshi = 0.35
-    w_market = 0.30
-    w_model = 0.20
-    w_theover = 0.10
-    w_sentiment = 0.05
+    w_kalshi_base = 0.35
+    w_market_base = 0.30
+    w_model_base = 0.20
+    w_theover_base = 0.10
+    w_sentiment_base = 0.05
 
     # 2. Check Availability
     has_kalshi = kalshi_prob_for_pick is not None
     has_market = implied_prob is not None
     has_model = model_prob is not None
     has_theover = theover_prob is not None
-    has_sentiment = sentiment_score is not None
+    has_sentiment = sentiment_score is not None  # None means unavailable, 0.0 means valid neutral
 
-    # 3. Build Sources (Always include all 5)
+    # 3. Handle sentiment unavailability: re-normalize weights if sentiment is missing
+    if not has_sentiment:
+        # Sentiment is unavailable (API error, rate limit, etc.)
+        # Re-normalize other weights to sum to 1.0
+        total_without_sentiment = w_kalshi_base + w_market_base + w_model_base + w_theover_base
+        normalization_factor = 1.0 / total_without_sentiment
+        w_kalshi = w_kalshi_base * normalization_factor
+        w_market = w_market_base * normalization_factor
+        w_model = w_model_base * normalization_factor
+        w_theover = w_theover_base * normalization_factor
+        w_sentiment = 0.0
+        logger.info(f"Sentiment unavailable - re-normalizing weights: kalshi={w_kalshi:.3f}, market={w_market:.3f}, model={w_model:.3f}, theover={w_theover:.3f}, sentiment={w_sentiment:.3f}")
+    else:
+        # Sentiment is available (use base weights)
+        w_kalshi = w_kalshi_base
+        w_market = w_market_base
+        w_model = w_model_base
+        w_theover = w_theover_base
+        w_sentiment = w_sentiment_base
 
-    # Market (0.30)
+    # 4. Build Sources
+
+    # Market (0.30 or re-normalized)
     p_market = clamp(implied_prob) if has_market else 0.5
     sources.append(("implied", p_market, w_market))
 
-    # Kalshi (0.35)
+    # Kalshi (0.35 or re-normalized)
     p_kalshi = clamp(kalshi_prob_for_pick) if has_kalshi else 0.5
     sources.append(("kalshi", p_kalshi, w_kalshi))
 
-    # ML Model (0.20)
+    # ML Model (0.20 or re-normalized)
     p_model = clamp(model_prob) if has_model else 0.5
     sources.append(("model", p_model, w_model))
 
-    # TheOver (0.10)
+    # TheOver (0.10 or re-normalized)
     p_theover = clamp(theover_prob) if has_theover else 0.5
     sources.append(("theover", p_theover, w_theover))
 
-    # Sentiment (0.05) - Logic for converting score to prob
-    p_sentiment = 0.5
+    # Sentiment (0.05 or 0 if unavailable)
     if has_sentiment:
         try:
             raw_score = float(sentiment_score)
@@ -797,21 +818,24 @@ def compute_final_probability(
                 p_sentiment = home_prob
             elif p_side in {"away", "under"}:
                 p_sentiment = 1.0 - home_prob
+            else:
+                p_sentiment = 0.5
             p_sentiment = clamp(p_sentiment)
-            logger.debug(f"Sentiment scoring: raw_score={raw_score:.3f}, impact={impact:.3f}, p_sentiment={p_sentiment:.3f}, pick_side={pick_side}")
+            logger.info(f"Sentiment probability for pick {pick_side}: raw_score={raw_score:.3f}, impact={impact:.3f}, p_sentiment={p_sentiment:.3f}")
+            sources.append(("sentiment", p_sentiment, w_sentiment))
         except Exception as e:
-            logger.warning(f"Sentiment Prob Calculation Error: {e}")
-            p_sentiment = 0.5
-
-    sources.append(("sentiment", p_sentiment, w_sentiment))
+            logger.warning(f"Sentiment prob calculation error: {e} - excluding sentiment")
+            has_sentiment = False
+            w_sentiment = 0.0
+    # Note: if sentiment is unavailable, we don't add it to sources at all
 
     if sentiment_adj is None:
         sentiment_adj = 0.0
 
-    # 5. Calculate Weighted Sum (Denominator is always 1.0)
-    # "Disable all dynamic weight normalization"
+    # 5. Calculate Weighted Sum
+    # Weights should sum to 1.0 (either base weights or re-normalized if sentiment unavailable)
 
-    # Update weights_used for display (static values)
+    # Update weights_used for display
     weights_used["w_implied"] = w_market
     weights_used["w_kalshi"] = w_kalshi
     weights_used["w_model"] = w_model
@@ -819,8 +843,12 @@ def compute_final_probability(
     weights_used["w_sentiment"] = w_sentiment
 
     # Calculate Base Prob
-    # Sum(P * W) / Sum(W) -> Sum(W) is 1.0
+    # Sum(P * W) where weights sum to 1.0
     base_prob = sum((p if p is not None else 0.5) * w for _, p, w in sources)
+
+    # Log the probability calculation
+    sources_str = ", ".join([f"{name}={p:.3f}*{w:.3f}" for name, p, w in sources])
+    logger.debug(f"Probability blend: {sources_str} = {base_prob:.3f}")
 
     # Reconstruct weights_norm list for downstream compatibility (though normalization is effectively 1.0)
     weights_norm: List[Tuple[str, float, float]] = []
@@ -1896,6 +1924,14 @@ def market_based_prob(
 
 
 def sentiment_payload_to_meta(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Convert sentiment payload to metadata dict.
+
+    IMPORTANT: We distinguish between:
+    1. Valid sentiment data (sources > 0, score available)
+    2. Valid neutral (no articles found, but API call succeeded - this is a deliberate neutral signal)
+    3. Invalid (API error, rate limited, auth error - sentiment unavailable)
+    """
     score = safe_float(payload.get("score"))
     confidence = safe_float(payload.get("confidence"))
     try:
@@ -1904,9 +1940,29 @@ def sentiment_payload_to_meta(payload: Dict[str, Any]) -> Dict[str, Any]:
         sources = 0
     method = str(payload.get("method") or payload.get("source") or "").lower()
     sentiment_source_override = str(payload.get("sentiment_source") or "").lower()
-    sentiment_valid = bool(sources >= 1 and (confidence or 0) > 0.25)
-    sentiment_source = sentiment_source_override or ("newsapi" if sentiment_valid else "none")
-    level = payload.get("sentiment_level") or ("team" if sentiment_valid else "none")
+
+    # Check for genuine errors (API failures, not just "no news")
+    error = payload.get("error")
+    auth_error = payload.get("auth_error") or error in {"bad_key", "auth_error", "auth_error_fallback"}
+    rate_limited = payload.get("rate_limited") or payload.get("status") == 429 or error == "rate_limited"
+    api_unavailable = bool(error in {"missing_key", "http_error", "exception"}) or rate_limited or auth_error
+
+    # Sentiment is valid if:
+    # 1. We have articles (sources >= 1) with decent confidence, OR
+    # 2. API call succeeded (no genuine errors) even if no articles found (valid neutral)
+    has_data = bool(sources >= 1 and (confidence or 0) > 0.25)
+    is_neutral_valid = bool(sources == 0 and not api_unavailable and error in {None, "no_articles", "newsapi_empty"})
+    sentiment_valid = has_data or is_neutral_valid
+
+    # If valid but no data, use neutral score
+    if sentiment_valid and not has_data:
+        score = 0.0
+        confidence = 0.5  # Moderate confidence in neutral
+        label = "Neutral"
+    else:
+        sentiment_source = sentiment_source_override or ("newsapi" if has_data else "none")
+
+    level = payload.get("sentiment_level") or ("team" if has_data else "none")
     strength = sentiment_strength_from_articles(level, sources)
     label = None
     raw_label = payload.get("label")
@@ -1919,20 +1975,30 @@ def sentiment_payload_to_meta(payload: Dict[str, Any]) -> Dict[str, Any]:
             label = "Neutral"
     else:
         label = raw_label if raw_label else None
+
+    # Log sentiment validation decision
+    if sentiment_valid:
+        if has_data:
+            logger.info(f"Sentiment valid with data: score={score:.3f}, sources={sources}, confidence={confidence:.2f}")
+        else:
+            logger.info(f"Sentiment valid (neutral): no articles found, but API call succeeded (error={error})")
+    else:
+        logger.warning(f"Sentiment INVALID: error={error}, auth_error={auth_error}, rate_limited={rate_limited}, sources={sources}")
+
     return {
         "score": score if sentiment_valid else None,
         "label": label if sentiment_valid else None,
         "confidence": confidence,
         "sources": sources,
         "sentiment_valid": sentiment_valid,
-        "sentiment_source": sentiment_source,
+        "sentiment_source": sentiment_source if 'sentiment_source' in locals() else sentiment_source_override or ("newsapi" if has_data else "none"),
         "sentiment_level": level,
         "sentiment_strength": strength,
         "sentiment_badge": sentiment_badge_for(level, strength),
         "sentiment_articles_used": sources,
         "sentiment_source_count": sources,
         "method": method or None,
-        "reddit_used": bool(payload.get("reddit_used") or sentiment_source in {"reddit", "blended"}),
+        "reddit_used": bool(payload.get("reddit_used") or sentiment_source_override in {"reddit", "blended"}),
         "reddit_posts_used": int(payload.get("reddit_posts_used") or 0),
         "reddit_comments_used": int(payload.get("reddit_comments_used") or 0),
         "sentiment_confidence": confidence or 0.0,
@@ -7255,12 +7321,41 @@ with tab_master:
                 # JULES-FIX: Compute Sentiment_Diff ONLY if both valid (else None)
                 if home_sent is not None and away_sent is not None:
                     sentiment_diff = home_sent - away_sent
-                    # Log sentiment debug for this game
-                    logger.info(f"Sentiment debug: game_id={g.get('id')}, {home} vs {away}, home_sent={home_sent:.3f}, away_sent={away_sent:.3f}, diff={sentiment_diff:.3f}")
+                    # Log comprehensive sentiment debug for this game
+                    home_valid = home_meta.get("sentiment_valid", False)
+                    away_valid = away_meta.get("sentiment_valid", False)
+                    home_sources = home_meta.get("sentiment_articles_used", 0)
+                    away_sources = away_meta.get("sentiment_articles_used", 0)
+                    home_source_type = home_meta.get("sentiment_source", "none")
+                    away_source_type = away_meta.get("sentiment_source", "none")
+                    home_query = home_meta.get("sentiment_query_used", "N/A")
+                    away_query = away_meta.get("sentiment_query_used", "N/A")
+
+                    logger.info(
+                        f"SENTIMENT ACTIVE for game {g.get('id')}: {home} vs {away}\n"
+                        f"  Home: score={home_sent:.3f}, valid={home_valid}, sources={home_sources}, type={home_source_type}, query='{home_query}'\n"
+                        f"  Away: score={away_sent:.3f}, valid={away_valid}, sources={away_sources}, type={away_source_type}, query='{away_query}'\n"
+                        f"  Diff: {sentiment_diff:.3f} (will contribute to probability blend)"
+                    )
                 else:
                     sentiment_diff = None
                     if home_sent is None and away_sent is None:
-                        logger.debug(f"Sentiment: no input text available for game {home} vs {away}, skipping.")
+                        home_error = home_meta.get("error", "unknown")
+                        away_error = away_meta.get("error", "unknown")
+                        home_status = home_meta.get("status", "N/A")
+                        away_status = away_meta.get("status", "N/A")
+                        logger.warning(
+                            f"SENTIMENT UNAVAILABLE for game {g.get('id')}: {home} vs {away}\n"
+                            f"  Home: score=None, error={home_error}, status={home_status}\n"
+                            f"  Away: score=None, error={away_error}, status={away_status}\n"
+                            f"  Result: sentiment_diff=None (sentiment will NOT contribute to probability)"
+                        )
+                    elif home_sent is None:
+                        away_valid = away_meta.get("sentiment_valid", False)
+                        logger.warning(f"SENTIMENT PARTIAL for game {g.get('id')}: {home} (missing) vs {away} (score={away_sent:.3f}, valid={away_valid}) - skipping sentiment")
+                    elif away_sent is None:
+                        home_valid = home_meta.get("sentiment_valid", False)
+                        logger.warning(f"SENTIMENT PARTIAL for game {g.get('id')}: {home} (score={home_sent:.3f}, valid={home_valid}) vs {away} (missing) - skipping sentiment")
 
                 rate_limited_flag = bool(
                     sentiment_meta_global.get("sentiment_rate_limited")
