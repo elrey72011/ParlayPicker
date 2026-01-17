@@ -10428,27 +10428,40 @@ if should_display:
 
         # --- FINAL WHITELIST FIX (Enhanced with Picks Sheet Columns) ---
         # User Request: Add Win Probability columns next to spread/total picks
-        # FIX: Calculate implied probability from odds (American) instead of using final model probability
-        def _calc_win_pct(odds):
-            p = american_to_implied_prob(odds)
-            if p is None: return "N/A"
-            return f"{p * 100:.1f}%"
+        # FIX: Extract probability percentage directly from pick strings (e.g., "Boston Celtics -3.5 (51.2)" -> "51.2%")
+        def _extract_win_pct_from_pick(pick_string):
+            """Extract percentage from pick string like 'Team Name Line (51.2)'"""
+            if not pick_string or not isinstance(pick_string, str):
+                return "N/A"
 
-        if "spread_pick_odds" in top_df_display.columns:
-            # Log sample odds values to verify calculation
-            sample_odds = top_df_display["spread_pick_odds"].head(5).tolist()
-            logger.debug(f"Sample spread_pick_odds values: {sample_odds}")
-            top_df_display["Spread Win %"] = top_df_display["spread_pick_odds"].apply(_calc_win_pct)
-            sample_win_pct = top_df_display["Spread Win %"].head(5).tolist()
-            logger.debug(f"Sample Spread Win % values: {sample_win_pct}")
-        elif "spread_pick_odds" not in top_df_display.columns and "Spread Win Prob" in top_df_display.columns:
-            # Fallback if odds missing but old column exists
-             top_df_display["Spread Win %"] = top_df_display["Spread Win Prob"]
+            # Match pattern: (number) or (number%)
+            match = re.search(r'\((\d+\.?\d*)\s*%?\)', str(pick_string))
+            if match:
+                pct_value = float(match.group(1))
+                return f"{pct_value:.1f}%"
+            return "N/A"
 
-        if "total_pick_odds" in top_df_display.columns:
-            top_df_display["Total Win %"] = top_df_display["total_pick_odds"].apply(_calc_win_pct)
-        elif "total_pick_odds" not in top_df_display.columns and "Total Win Prob" in top_df_display.columns:
-             top_df_display["Total Win %"] = top_df_display["Total Win Prob"]
+        # Extract Win % from Spread & Pick column
+        if "Spread & Pick" in top_df_display.columns:
+            top_df_display["Spread Win %"] = top_df_display["Spread & Pick"].apply(_extract_win_pct_from_pick)
+            sample_spread_picks = top_df_display["Spread & Pick"].head(5).tolist()
+            sample_spread_win_pct = top_df_display["Spread Win %"].head(5).tolist()
+            logger.debug(f"Sample Spread & Pick values: {sample_spread_picks}")
+            logger.debug(f"Extracted Spread Win % values: {sample_spread_win_pct}")
+        elif "Spread Win Prob" in top_df_display.columns:
+            # Fallback if pick column missing but old column exists
+            top_df_display["Spread Win %"] = top_df_display["Spread Win Prob"]
+
+        # Extract Win % from Total & Pick column
+        if "Total & Pick" in top_df_display.columns:
+            top_df_display["Total Win %"] = top_df_display["Total & Pick"].apply(_extract_win_pct_from_pick)
+            sample_total_picks = top_df_display["Total & Pick"].head(5).tolist()
+            sample_total_win_pct = top_df_display["Total Win %"].head(5).tolist()
+            logger.debug(f"Sample Total & Pick values: {sample_total_picks}")
+            logger.debug(f"Extracted Total Win % values: {sample_total_win_pct}")
+        elif "Total Win Prob" in top_df_display.columns:
+            # Fallback if pick column missing but old column exists
+            top_df_display["Total Win %"] = top_df_display["Total Win Prob"]
 
         ui_whitelist = [
             'league', 'Home', 'Away', 'Commence (UTC)', 'Commence (Local)', 'Local Date',
