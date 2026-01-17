@@ -516,6 +516,173 @@ class ParlayOptimizer:
             "longshots_1": result["longshots"]
         }
 
+    def generate_shotgun_parlays(self, master_df: pd.DataFrame) -> Dict[str, Optional[Dict]]:
+        """
+        Generate three 2-leg parlays for Shotgun Mode with fixed stakes.
+
+        Args:
+            master_df: DataFrame with picks including columns:
+                - Pick, Spread & Pick, Total & Pick (pick label)
+                - AI_Prob or final_probability (model probability)
+                - Implied_Prob (market probability)
+                - odds (american odds)
+                - AI_Edge (edge)
+                - Market (bet type: Moneyline, Spread, Total)
+                - Game (game identifier)
+
+        Returns:
+            Dictionary with three parlay recommendations:
+            {
+                "best_overall": {...},  # $3 stake
+                "medium_risk": {...},   # $2 stake
+                "high_risk": {...}      # $1 stake
+            }
+        """
+        logger.info("Generating 2-leg parlays for Shotgun Mode")
+
+        # Required columns
+        required_cols = ["AI_Prob", "AI_Edge"]
+        if not all(col in master_df.columns for col in required_cols):
+            logger.warning("Missing required columns for parlay generation")
+            return {"best_overall": None, "medium_risk": None, "high_risk": None}
+
+        # Filter to playable picks (positive edge, reasonable probability)
+        playable = master_df[
+            (master_df["AI_Edge"] > 0.00) &  # Must have positive edge
+            (master_df["AI_Prob"] > 0.35) &  # Not too low probability
+            (master_df["AI_Prob"] < 0.85)    # Not too high probability (poor odds)
+        ].copy()
+
+        if len(playable) < 2:
+            logger.warning(f"Not enough playable picks ({len(playable)}) for 2-leg parlays")
+            return {"best_overall": None, "medium_risk": None, "high_risk": None}
+
+        # Generate all 2-leg combinations
+        parlay_candidates = []
+        for i, row1 in playable.iterrows():
+            for j, row2 in playable.iterrows():
+                if i >= j:  # Avoid duplicates and self-pairing
+                    continue
+
+                # Avoid same-game parlays (correlated)
+                game1 = row1.get("Game") or row1.get("game_id") or row1.get("id") or ""
+                game2 = row2.get("Game") or row2.get("game_id") or row2.get("id") or ""
+                if game1 and game2 and str(game1) == str(game2):
+                    continue
+
+                # Calculate parlay metrics
+                prob1 = row1["AI_Prob"]
+                prob2 = row2["AI_Prob"]
+                parlay_prob = prob1 * prob2  # Assume independence
+
+                # Get odds
+                odds1 = row1.get("odds") or row1.get("spread_pick_odds") or row1.get("total_pick_odds") or -110
+                odds2 = row2.get("odds") or row2.get("spread_pick_odds") or row2.get("total_pick_odds") or -110
+
+                # Convert to decimal odds
+                decimal_odds1 = self.american_to_decimal(odds1)
+                decimal_odds2 = self.american_to_decimal(odds2)
+                parlay_decimal_odds = decimal_odds1 * decimal_odds2
+                parlay_american_odds = self.decimal_to_american(parlay_decimal_odds)
+
+                # Calculate EV (expected value per dollar staked)
+                # EV = (win_prob * payout) - (loss_prob * stake)
+                # Since payout for $1 stake = (decimal_odds - 1) * 1 = decimal_odds - 1
+                # EV = parlay_prob * (parlay_decimal_odds - 1) - (1 - parlay_prob) * 1
+                ev = (parlay_prob * (parlay_decimal_odds - 1)) - (1 - parlay_prob)
+
+                # Get pick labels
+                pick1 = row1.get("Pick") or row1.get("Spread & Pick") or row1.get("Total & Pick") or "Unknown"
+                pick2 = row2.get("Pick") or row2.get("Spread & Pick") or row2.get("Total & Pick") or "Unknown"
+
+                parlay_candidates.append({
+                    "leg1": {
+                        "pick": pick1,
+                        "prob": prob1,
+                        "odds": odds1,
+                        "market": row1.get("Market", "Unknown"),
+                        "game": game1
+                    },
+                    "leg2": {
+                        "pick": pick2,
+                        "prob": prob2,
+                        "odds": odds2,
+                        "market": row2.get("Market", "Unknown"),
+                        "game": game2
+                    },
+                    "parlay_prob": parlay_prob,
+                    "parlay_decimal_odds": parlay_decimal_odds,
+                    "parlay_american_odds": parlay_american_odds,
+                    "ev": ev,
+                    "combined_edge": row1["AI_Edge"] + row2["AI_Edge"]
+                })
+
+        if not parlay_candidates:
+            logger.warning("No valid 2-leg parlays generated")
+            return {"best_overall": None, "medium_risk": None, "high_risk": None}
+
+        logger.info(f"Generated {len(parlay_candidates)} candidate 2-leg parlays")
+
+        # Select three parlays for different risk profiles
+
+        # 1. Best Overall ($3): Highest EV with reasonable probability
+        # Prefer parlays with win_prob > 0.20 and highest EV
+        best_overall_candidates = [p for p in parlay_candidates if p["parlay_prob"] > 0.20]
+        if best_overall_candidates:
+            best_overall = max(best_overall_candidates, key=lambda x: x["ev"])
+        else:
+            best_overall = max(parlay_candidates, key=lambda x: x["ev"])
+        best_overall["stake"] = 3
+        best_overall["expected_return"] = best_overall["stake"] * (1 + best_overall["ev"])
+
+        # 2. Medium Risk ($2): Moderate probability (0.15-0.30), good EV
+        medium_risk_candidates = [
+            p for p in parlay_candidates
+            if 0.15 < p["parlay_prob"] < 0.30
+            and p != best_overall  # Don't duplicate
+        ]
+        if medium_risk_candidates:
+            medium_risk = max(medium_risk_candidates, key=lambda x: x["ev"])
+        else:
+            # Fallback: second best EV overall
+            remaining = [p for p in parlay_candidates if p != best_overall]
+            medium_risk = max(remaining, key=lambda x: x["ev"]) if remaining else None
+
+        if medium_risk:
+            medium_risk["stake"] = 2
+            medium_risk["expected_return"] = medium_risk["stake"] * (1 + medium_risk["ev"])
+
+        # 3. High Risk ($1): Lower probability (<0.20), but highest payout potential
+        high_risk_candidates = [
+            p for p in parlay_candidates
+            if p["parlay_prob"] < 0.20
+            and p != best_overall
+            and (medium_risk is None or p != medium_risk)
+        ]
+        if high_risk_candidates:
+            # Choose by highest payout odds among positive EV parlays
+            positive_ev_longshots = [p for p in high_risk_candidates if p["ev"] > -0.3]  # Allow slight negative EV for longshots
+            if positive_ev_longshots:
+                high_risk = max(positive_ev_longshots, key=lambda x: x["parlay_decimal_odds"])
+            else:
+                high_risk = max(high_risk_candidates, key=lambda x: x["parlay_decimal_odds"])
+        else:
+            # Fallback: third best by payout odds
+            remaining = [p for p in parlay_candidates if p != best_overall and (medium_risk is None or p != medium_risk)]
+            high_risk = max(remaining, key=lambda x: x["parlay_decimal_odds"]) if remaining else None
+
+        if high_risk:
+            high_risk["stake"] = 1
+            high_risk["expected_return"] = high_risk["stake"] * (1 + high_risk["ev"])
+
+        logger.info(f"Selected parlays: Best Overall (EV={best_overall['ev']:.2%}), Medium Risk (EV={medium_risk['ev']:.2%} if medium_risk else 'N/A'), High Risk (Odds={high_risk['parlay_american_odds']:+.0f} if high_risk else 'N/A')")
+
+        return {
+            "best_overall": best_overall,
+            "medium_risk": medium_risk,
+            "high_risk": high_risk
+        }
+
 
 def main():
     """Example usage"""
