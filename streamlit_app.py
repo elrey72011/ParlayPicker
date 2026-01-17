@@ -7507,6 +7507,9 @@ with tab_master:
                 if not sentiment_sample_status and sentiment_rate_limited:
                     sentiment_sample_status = 429
                 sentiment_status_value = sentiment_meta_global.get("sentiment_status") or sentiment_sample_status
+
+                sentiment_score_value = safe_float(sentiment_meta_global.get("sentiment_score", 0.0))
+
                 # FIX: Force "ok" if we actually have a score, overriding global disabled status if individual team data exists
                 if sentiment_score_value is not None:
                     sentiment_status_value = "ok"
