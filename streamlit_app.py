@@ -821,7 +821,7 @@ def compute_final_probability(
             else:
                 p_sentiment = 0.5
             p_sentiment = clamp(p_sentiment)
-            logger.info(f"Sentiment probability for pick {pick_side}: raw_score={raw_score:.3f}, impact={impact:.3f}, p_sentiment={p_sentiment:.3f}")
+            logger.info(f"Sentiment probability for pick {pick_side}: raw_score={raw_score:.3f}, impact={impact:.3f}, p_sentiment={p_sentiment:.3f}, weight={w_sentiment:.3f} (contributing to final prob)")
             sources.append(("sentiment", p_sentiment, w_sentiment))
         except Exception as e:
             logger.warning(f"Sentiment prob calculation error: {e} - excluding sentiment")
@@ -1959,6 +1959,8 @@ def sentiment_payload_to_meta(payload: Dict[str, Any]) -> Dict[str, Any]:
         score = 0.0
         confidence = 0.5  # Moderate confidence in neutral
         label = "Neutral"
+        logger.debug(f"Sentiment valid neutral: no articles, but API succeeded (sources={sources}, error={error}, api_unavailable={api_unavailable})")
+        sentiment_source = "neutral"
     else:
         sentiment_source = sentiment_source_override or ("newsapi" if has_data else "none")
 
@@ -2384,11 +2386,19 @@ def compute_team_sentiment_map(news_api_key: Optional[str], games: List[Dict[str
             debug["error_count"] += 1
             if len(debug["errors_sample"]) < 5:
                 debug["errors_sample"].append({"team": team, **fetch_info})
-        if meta["sentiment_valid"] and merged_payload.get("score") is not None:
-            sentiment_map[team] = merged_payload.get("score")
+        # FIX: Use meta.get("score") instead of merged_payload.get("score")
+        # sentiment_payload_to_meta() can set score=0.0 for valid neutral cases,
+        # but this change is in meta, not merged_payload
+        meta_score = meta.get("score")
+        if meta["sentiment_valid"] and meta_score is not None:
+            sentiment_map[team] = meta_score
+            # Log successful sentiment inclusion
+            logger.debug(f"Sentiment INCLUDED for {team}: score={meta_score:.3f}, valid={meta['sentiment_valid']}, source={meta.get('sentiment_source', 'unknown')}")
         else:
             sentiment_map[team] = None
             debug["missing_teams"].append(team)
+            # Log why sentiment was excluded
+            logger.debug(f"Sentiment EXCLUDED for {team}: valid={meta['sentiment_valid']}, score={meta_score}, error={meta.get('error', 'none')}")
 
     if sentiment_map:
         present_scores = [(t, s) for t, s in sentiment_map.items() if s is not None]
@@ -7330,12 +7340,14 @@ with tab_master:
                     away_source_type = away_meta.get("sentiment_source", "none")
                     home_query = home_meta.get("sentiment_query_used", "N/A")
                     away_query = away_meta.get("sentiment_query_used", "N/A")
+                    home_score_label = home_meta.get("sentiment_label", "unknown")
+                    away_score_label = away_meta.get("sentiment_label", "unknown")
 
                     logger.info(
                         f"SENTIMENT ACTIVE for game {g.get('id')}: {home} vs {away}\n"
-                        f"  Home: score={home_sent:.3f}, valid={home_valid}, sources={home_sources}, type={home_source_type}, query='{home_query}'\n"
-                        f"  Away: score={away_sent:.3f}, valid={away_valid}, sources={away_sources}, type={away_source_type}, query='{away_query}'\n"
-                        f"  Diff: {sentiment_diff:.3f} (will contribute to probability blend)"
+                        f"  Home: score={home_sent:.3f}, label={home_score_label}, valid={home_valid}, sources={home_sources}, type={home_source_type}, query='{home_query}'\n"
+                        f"  Away: score={away_sent:.3f}, label={away_score_label}, valid={away_valid}, sources={away_sources}, type={away_source_type}, query='{away_query}'\n"
+                        f"  Diff: {sentiment_diff:.3f} (home - away, will contribute to probability blend with weight)"
                     )
                 else:
                     sentiment_diff = None
@@ -8506,14 +8518,14 @@ with tab_master:
                             "kalshi_match_reason": kalshi_winner.get("kalshi_reason"),
                             "kalshi_game_prefix_used": (candidate_debug.get("winner_meta") or {}).get("winner_prefix"),
                             "kalshi_wanted_tokens": (candidate_debug.get("winner_meta") or {}).get("allowed_date_tokens"),
-                            "Spread & Pick": f"{spread_pick} {spread_line}" if spread_pick is not None else None,
+                            "Spread & Pick": f"{spread_pick} {spread_line} ({spread_prob_final*100:.1f}%)" if (spread_pick is not None and spread_prob_final is not None) else (f"{spread_pick} {spread_line}" if spread_pick is not None else None),
                             "spread_pick_team": spread_pick_team,
                             "spread_pick_line": spread_pick_line,
                             "spread_pick_odds": spread_pick_odds,
                             "spread_prob": spread_prob,
                             "spread_confidence": None,
                             "spread_confidence_reason": None,
-                            "Total & Pick": f"{total_pick} {total_line}" if total_pick is not None else None,
+                            "Total & Pick": f"{total_pick} {total_line} ({total_prob_final*100:.1f}%)" if (total_pick is not None and total_prob_final is not None) else (f"{total_pick} {total_line}" if total_pick is not None else None),
                             "total_pick_side": total_pick_side,
                             "total_pick_line": total_line,
                             "total_pick_odds": total_pick_odds,
@@ -8815,7 +8827,7 @@ with tab_master:
                         "kalshi_game_prefix_used": (candidate_debug.get("winner_meta") or {}).get("winner_prefix"),
                         "kalshi_wanted_tokens": (candidate_debug.get("winner_meta") or {}).get("allowed_date_tokens"),
                         "Sentiment_Diff": sentiment_diff,
-                        "Spread & Pick": f"{spread_pick} {spread_line}" if spread_pick is not None else None,
+                        "Spread & Pick": f"{spread_pick} {spread_line} ({spread_prob_final*100:.1f}%)" if (spread_pick is not None and spread_prob_final is not None) else (f"{spread_pick} {spread_line}" if spread_pick is not None else None),
                         "spread_pick_team": spread_pick_team,
                         "spread_pick_line": spread_pick_line,
                         "spread_pick_odds": spread_pick_odds,
@@ -8823,7 +8835,7 @@ with tab_master:
                         "spread_prob": spread_prob,
                         "spread_confidence": None,
                         "spread_confidence_reason": None,
-                        "Total & Pick": f"{total_pick} {total_line}" if total_pick is not None else None,
+                        "Total & Pick": f"{total_pick} {total_line} ({total_prob_final*100:.1f}%)" if (total_pick is not None and total_prob_final is not None) else (f"{total_pick} {total_line}" if total_pick is not None else None),
                         "total_pick_side": total_pick_side,
                         "total_pick_line": total_line,
                         "total_pick_odds": total_pick_odds,
@@ -9081,7 +9093,7 @@ with tab_master:
                         "kalshi_game_prefix_used": (candidate_debug.get("winner_meta") or {}).get("winner_prefix"),
                         "kalshi_wanted_tokens": (candidate_debug.get("winner_meta") or {}).get("allowed_date_tokens"),
                         "Sentiment_Diff": sentiment_diff,
-                        "Spread & Pick": f"{spread_pick} {spread_line}" if spread_pick is not None else None,
+                        "Spread & Pick": f"{spread_pick} {spread_line} ({spread_prob_final*100:.1f}%)" if (spread_pick is not None and spread_prob_final is not None) else (f"{spread_pick} {spread_line}" if spread_pick is not None else None),
                         "spread_pick_team": spread_pick_team,
                         "spread_pick_line": spread_pick_line,
                         "spread_pick_odds": spread_pick_odds,
@@ -9089,7 +9101,7 @@ with tab_master:
                         "spread_prob": spread_prob,
                         "spread_confidence": None,
                         "spread_confidence_reason": None,
-                        "Total & Pick": f"{total_pick} {total_line}" if total_pick is not None else None,
+                        "Total & Pick": f"{total_pick} {total_line} ({total_prob_final*100:.1f}%)" if (total_pick is not None and total_prob_final is not None) else (f"{total_pick} {total_line}" if total_pick is not None else None),
                         "total_pick_side": total_pick_side,
                         "total_pick_line": total_line,
                         "total_pick_odds": total_pick_odds,
@@ -9601,13 +9613,15 @@ with tab_master:
                         implied_probs = pd.to_numeric(master_df.get("Implied_Prob"), errors='coerce').fillna(0.5)
                         master_df["AI_Edge"] = master_df["AI_Prob"] - implied_probs
 
-                # 4. SHOTGUN ACTIVATION: Use ParlayOptimizer to tier the results
+                # 4. SHOTGUN ACTIVATION: Use ParlayOptimizer to tier the results and generate 2-leg parlays
                 if ParlayOptimizer:
                     # FIX: Use absolute path for robustness
                     model_dir_abs = os.path.join(os.path.dirname(__file__), "models")
                     optimizer = ParlayOptimizer(model_dir=model_dir_abs)
                     shotgun_picks = optimizer.get_shotgun_picks(master_df)
+                    shotgun_parlays = optimizer.generate_shotgun_parlays(master_df)
                     st.session_state["shotgun_data"] = shotgun_picks
+                    st.session_state["shotgun_parlays"] = shotgun_parlays
 
                 # Collapse to one row per game (prefer the first generated row, typically moneyline) for Master View
                 # NOTE: master_df now has ALL rows (ML/Spread/Total). We duplicate logic for deduping for the UI view if needed,
@@ -10882,3 +10896,112 @@ if should_display:
             )
         except Exception:
             pass
+
+# === SHOTGUN MODE TAB ===
+with tab_shotgun:
+    st.header("🚀 Shotgun Mode - Structured Parlays")
+
+    shotgun_data = st.session_state.get("shotgun_data", {})
+    shotgun_parlays = st.session_state.get("shotgun_parlays", {})
+
+    if not shotgun_data and not shotgun_parlays:
+        st.info("Run Master Analysis first to generate Shotgun Mode recommendations.")
+    else:
+        # Display 2-leg parlays (fixed stakes)
+        st.subheader("💎 Best 2-Leg Parlays")
+        st.markdown("Three parlay recommendations with fixed stakes based on risk profile:")
+
+        parlay_col1, parlay_col2, parlay_col3 = st.columns(3)
+
+        # Best Overall ($3 stake)
+        with parlay_col1:
+            st.markdown("### 🎯 Best Overall - $3")
+            best = shotgun_parlays.get("best_overall")
+            if best:
+                st.success(f"**Expected Value:** {best['ev']:.2%}")
+                st.metric("Parlay Win Probability", f"{best['parlay_prob']*100:.1f}%")
+                st.metric("Parlay Odds", f"{best['parlay_american_odds']:+.0f}")
+                st.metric("Expected Return", f"${best['expected_return']:.2f}")
+                st.markdown("**Legs:**")
+                st.markdown(f"1. {best['leg1']['pick']}")
+                st.caption(f"   Prob: {best['leg1']['prob']*100:.1f}%, Odds: {best['leg1']['odds']:+.0f}")
+                st.markdown(f"2. {best['leg2']['pick']}")
+                st.caption(f"   Prob: {best['leg2']['prob']*100:.1f}%, Odds: {best['leg2']['odds']:+.0f}")
+            else:
+                st.warning("No best overall parlay available")
+
+        # Medium Risk ($2 stake)
+        with parlay_col2:
+            st.markdown("### 📈 Medium Risk - $2")
+            medium = shotgun_parlays.get("medium_risk")
+            if medium:
+                st.info(f"**Expected Value:** {medium['ev']:.2%}")
+                st.metric("Parlay Win Probability", f"{medium['parlay_prob']*100:.1f}%")
+                st.metric("Parlay Odds", f"{medium['parlay_american_odds']:+.0f}")
+                st.metric("Expected Return", f"${medium['expected_return']:.2f}")
+                st.markdown("**Legs:**")
+                st.markdown(f"1. {medium['leg1']['pick']}")
+                st.caption(f"   Prob: {medium['leg1']['prob']*100:.1f}%, Odds: {medium['leg1']['odds']:+.0f}")
+                st.markdown(f"2. {medium['leg2']['pick']}")
+                st.caption(f"   Prob: {medium['leg2']['prob']*100:.1f}%, Odds: {medium['leg2']['odds']:+.0f}")
+            else:
+                st.warning("No medium risk parlay available")
+
+        # High Risk ($1 stake)
+        with parlay_col3:
+            st.markdown("### 🎲 High Risk - $1")
+            high = shotgun_parlays.get("high_risk")
+            if high:
+                st.warning(f"**Expected Value:** {high['ev']:.2%}")
+                st.metric("Parlay Win Probability", f"{high['parlay_prob']*100:.1f}%")
+                st.metric("Parlay Odds", f"{high['parlay_american_odds']:+.0f}")
+                st.metric("Expected Return", f"${high['expected_return']:.2f}")
+                st.markdown("**Legs:**")
+                st.markdown(f"1. {high['leg1']['pick']}")
+                st.caption(f"   Prob: {high['leg1']['prob']*100:.1f}%, Odds: {high['leg1']['odds']:+.0f}")
+                st.markdown(f"2. {high['leg2']['pick']}")
+                st.caption(f"   Prob: {high['leg2']['prob']*100:.1f}%, Odds: {high['leg2']['odds']:+.0f}")
+            else:
+                st.warning("No high risk parlay available")
+
+        st.markdown("---")
+
+        # Display single pick tiers (original Shotgun Mode)
+        st.subheader("⚡ Single Pick Tiers")
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+            st.markdown("#### 🎯 $3 'Snipers' (High Prob)")
+            snipers = shotgun_data.get("snipers", pd.DataFrame())
+            if not snipers.empty:
+                display_cols = ['Pick', 'AI_Prob', 'AI_Edge']
+                display_cols = [c for c in display_cols if c in snipers.columns]
+                if 'Pick' not in snipers.columns and 'Spread & Pick' in snipers.columns:
+                    display_cols = ['Spread & Pick', 'AI_Prob', 'AI_Edge']
+                st.dataframe(snipers[display_cols], hide_index=True, use_container_width=True)
+            else:
+                st.info("No snipers available")
+
+        with col2:
+            st.markdown("#### 📈 $2 'Strategy' (High EV)")
+            strategy = shotgun_data.get("strategy", pd.DataFrame())
+            if not strategy.empty:
+                display_cols = ['Pick', 'AI_Prob', 'AI_Edge']
+                display_cols = [c for c in display_cols if c in strategy.columns]
+                if 'Pick' not in strategy.columns and 'Spread & Pick' in strategy.columns:
+                    display_cols = ['Spread & Pick', 'AI_Prob', 'AI_Edge']
+                st.dataframe(strategy[display_cols], hide_index=True, use_container_width=True)
+            else:
+                st.info("No strategy picks available")
+
+        with col3:
+            st.markdown("#### 🎲 $1 'Longshots' (Lottos)")
+            longshots = shotgun_data.get("longshots", pd.DataFrame())
+            if not longshots.empty:
+                display_cols = ['Pick', 'AI_Prob', 'AI_Edge']
+                display_cols = [c for c in display_cols if c in longshots.columns]
+                if 'Pick' not in longshots.columns and 'Spread & Pick' in longshots.columns:
+                    display_cols = ['Spread & Pick', 'AI_Prob', 'AI_Edge']
+                st.dataframe(longshots[display_cols], hide_index=True, use_container_width=True)
+            else:
+                st.info("No longshots available")
