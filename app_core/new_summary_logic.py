@@ -39,10 +39,10 @@ def build_game_summary_v2(df: pd.DataFrame) -> pd.DataFrame:
         local_date = first_row.get("Local Date")
 
         summary = {
-            "league": league,
+            "League": league,  # Changed from "league" to "League" to match UI
             "Home": home,
             "Away": away,
-            "Commence (UTC)": commence,
+            "Commence UTC": commence,  # Changed from "Commence (UTC)" to "Commence UTC" to match UI
             "Commence (Local)": commence_local,
             "Local Date": local_date,
         }
@@ -58,13 +58,15 @@ def build_game_summary_v2(df: pd.DataFrame) -> pd.DataFrame:
             ml_pick = best_ml.get("Pick")
             ml_prob = best_ml.get("final_probability") or best_ml.get("consensus_prob_adj")
 
-        summary["ML"] = ml_pick
+        summary["ML Pick"] = ml_pick  # Changed from "ML" to "ML Pick" to match UI
         summary["ML Prob"] = ml_prob
 
         # --- Spread ---
         spread_rows = group[group["Market"] == "Spread"]
         spread_pick = None
         spread_prob = None
+        kalshi_spread_prob = None
+        spread_market_prob = None
 
         if not spread_rows.empty:
             # Choose best spread row
@@ -79,13 +81,34 @@ def build_game_summary_v2(df: pd.DataFrame) -> pd.DataFrame:
                            or best_spread.get("spread_prob")
                            or best_spread.get("spread_prob_market_based"))
 
-        summary["Spread"] = spread_pick
+            # Get Kalshi Spread Probability
+            kalshi_spread_prob = (best_spread.get("spread_prob_pick_kalshi")
+                                 or best_spread.get("kalshi_prob_spread"))
+
+            # Get Market Spread Probability for delta calculation
+            spread_market_prob = (best_spread.get("spread_prob_pick_market")
+                                 or best_spread.get("spread_prob_market"))
+
+        summary["Spread Pick"] = spread_pick  # Changed from "Spread" to "Spread Pick" to match UI
         summary["Spread Prob"] = spread_prob
+        summary["Kalshi Spread Prob"] = kalshi_spread_prob
+
+        # Calculate Kalshi vs Market Delta for Spread
+        if kalshi_spread_prob is not None and spread_market_prob is not None:
+            try:
+                delta = float(kalshi_spread_prob) - float(spread_market_prob)
+                summary["Kalshi Spread Δ"] = f"{delta:+.1%}" if abs(delta) > 0.001 else "0.0%"
+            except (ValueError, TypeError):
+                summary["Kalshi Spread Δ"] = None
+        else:
+            summary["Kalshi Spread Δ"] = None
 
         # --- Total ---
         total_rows = group[group["Market"] == "Total"]
         total_pick = None
         total_prob = None
+        kalshi_total_prob = None
+        total_market_prob = None
 
         if not total_rows.empty:
             best_total = total_rows.loc[pd.to_numeric(total_rows["final_probability"], errors='coerce').fillna(-1.0).idxmax()]
@@ -97,8 +120,27 @@ def build_game_summary_v2(df: pd.DataFrame) -> pd.DataFrame:
                           or best_total.get("total_prob")
                           or best_total.get("total_prob_market_based"))
 
-        summary["Total"] = total_pick
+            # Get Kalshi Total Probability
+            kalshi_total_prob = (best_total.get("total_prob_pick_kalshi")
+                                or best_total.get("kalshi_prob_total"))
+
+            # Get Market Total Probability for delta calculation
+            total_market_prob = (best_total.get("total_prob_pick_market")
+                                or best_total.get("total_prob_market"))
+
+        summary["Total Pick"] = total_pick  # Changed from "Total" to "Total Pick" to match UI
         summary["Total Prob"] = total_prob
+        summary["Kalshi Total Prob"] = kalshi_total_prob
+
+        # Calculate Kalshi vs Market Delta for Total
+        if kalshi_total_prob is not None and total_market_prob is not None:
+            try:
+                delta = float(kalshi_total_prob) - float(total_market_prob)
+                summary["Kalshi Total Δ"] = f"{delta:+.1%}" if abs(delta) > 0.001 else "0.0%"
+            except (ValueError, TypeError):
+                summary["Kalshi Total Δ"] = None
+        else:
+            summary["Kalshi Total Δ"] = None
 
         # --- Overall Pick ---
         # "Define overall as the best moneyline pick per game: Overall Pick = same as ML."
@@ -120,8 +162,8 @@ def build_game_summary_v2(df: pd.DataFrame) -> pd.DataFrame:
                     overall_pick = total_pick
                     overall_prob = total_prob
 
-        summary["Overall Pick"] = overall_pick
-        summary["Overall Prob"] = overall_prob
+        summary["Best Overall Pick"] = overall_pick  # Changed from "Overall Pick" to "Best Overall Pick" to match UI
+        summary["Best Overall Prob"] = overall_prob  # Changed from "Overall Prob" to "Best Overall Prob" to match UI
 
         summary_rows.append(summary)
 
@@ -132,15 +174,15 @@ def reorder_for_spread_total_focus_v2(df: pd.DataFrame) -> pd.DataFrame:
         return df
 
     fixed_front = [c for c in [
-        "league", "Home", "Away",
-        "Commence (UTC)", "Commence (Local)", "Local Date",
+        "League", "Home", "Away",
+        "Commence UTC", "Commence (Local)", "Local Date",
     ] if c in df.columns]
 
     summary_block = [c for c in [
-        "Overall Pick", "Overall Prob",
-        "Spread", "Spread Prob",
-        "Total", "Total Prob",
-        "ML", "ML Prob",
+        "Best Overall Pick", "Best Overall Prob",
+        "Spread Pick", "Spread Prob", "Kalshi Spread Prob", "Kalshi Spread Δ",
+        "Total Pick", "Total Prob", "Kalshi Total Prob", "Kalshi Total Δ",
+        "ML Pick", "ML Prob",
     ] if c in df.columns]
 
     used = set(fixed_front + summary_block)
