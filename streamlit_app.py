@@ -3016,11 +3016,27 @@ def pipeline_progress_snapshot() -> Dict[str, Any]:
                         kalshi_matched = row.get("kalshi_matched")
                         if not kalshi_matched:
                             return False
+
+                        def _is_valid_prob(p):
+                            try:
+                                if pd.isna(p): return False
+                                return float(p) != 0
+                            except:
+                                return False
+
                         kalshi_prob_spread = row.get("kalshi_prob_spread")
+                        spread_prob_pick_kalshi = row.get("spread_prob_pick_kalshi")
                         kalshi_prob_total = row.get("kalshi_prob_total")
-                        has_spread = pd.notnull(kalshi_prob_spread) and kalshi_prob_spread != 0
-                        has_total = pd.notnull(kalshi_prob_total) and kalshi_prob_total != 0
-                        return has_spread or has_total
+                        total_prob_pick_kalshi = row.get("total_prob_pick_kalshi")
+
+                        kalshi_prob = row.get("kalshi_prob")
+                        kalshi_prob_used = row.get("kalshi_prob_used")
+
+                        has_spread = _is_valid_prob(kalshi_prob_spread) or _is_valid_prob(spread_prob_pick_kalshi)
+                        has_total = _is_valid_prob(kalshi_prob_total) or _is_valid_prob(total_prob_pick_kalshi)
+                        has_ml = _is_valid_prob(kalshi_prob) or _is_valid_prob(kalshi_prob_used)
+
+                        return has_spread or has_total or has_ml
 
                     # Apply to filtered dataframe
                     valid_df = master_df.copy()
@@ -10309,18 +10325,46 @@ with tab_master:
                     if not kalshi_matched:
                         return False
 
-                    # Check if at least one Kalshi probability is available
+                    # Helper to check for valid non-zero probability
+                    def _is_valid_prob(p):
+                        try:
+                            if pd.isna(p): return False
+                            return float(p) != 0
+                        except:
+                            return False
+
+                    # Check if at least one Kalshi probability is available (raw or pick-mapped)
                     kalshi_prob_spread = row.get("kalshi_prob_spread")
+                    spread_prob_pick_kalshi = row.get("spread_prob_pick_kalshi")
                     kalshi_prob_total = row.get("kalshi_prob_total")
+                    total_prob_pick_kalshi = row.get("total_prob_pick_kalshi")
 
-                    has_spread = pd.notnull(kalshi_prob_spread) and kalshi_prob_spread != 0
-                    has_total = pd.notnull(kalshi_prob_total) and kalshi_prob_total != 0
+                    kalshi_prob = row.get("kalshi_prob")
+                    kalshi_prob_used = row.get("kalshi_prob_used")
 
-                    return has_spread or has_total
+                    has_spread = _is_valid_prob(kalshi_prob_spread) or _is_valid_prob(spread_prob_pick_kalshi)
+                    has_total = _is_valid_prob(kalshi_prob_total) or _is_valid_prob(total_prob_pick_kalshi)
+                    has_ml = _is_valid_prob(kalshi_prob) or _is_valid_prob(kalshi_prob_used)
+
+                    return has_spread or has_total or has_ml
 
                 df["HasKalshiMarket"] = df.apply(_has_kalshi_market, axis=1)
 
                 kalshi_markets_count = df["HasKalshiMarket"].sum()
+
+                # Debug logging requested by user
+                try:
+                    total_games_count = len(df)
+                    kalshi_matched_raw_count = df["kalshi_matched"].fillna(False).astype(bool).sum()
+                    logger.info(
+                        "Kalshi summary: total=%s, with_kalshi=%s, kalshi_matched_raw=%s",
+                        total_games_count,
+                        kalshi_markets_count,
+                        kalshi_matched_raw_count
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to log Kalshi summary stats: {e}")
+
                 logger.info(f"✅ HasKalshiMarket flag added: {kalshi_markets_count} games have valid Kalshi markets")
 
                 # CRITICAL: Save to BOTH session state variables so UI can display the data

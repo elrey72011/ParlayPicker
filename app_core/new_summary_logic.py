@@ -21,6 +21,16 @@ def build_game_summary_v2(df: pd.DataFrame) -> pd.DataFrame:
         except:
             return 0.0
 
+    # Helper to check if a value is a valid non-zero probability
+    def _is_valid_prob(val):
+        try:
+            if pd.isna(val):
+                return False
+            f_val = float(val)
+            return f_val != 0
+        except:
+            return False
+
     # Group by Game Key
     # We use 'league', 'Home', 'Away', 'Commence (UTC)' as the key
     # Ensure these columns exist
@@ -52,24 +62,34 @@ def build_game_summary_v2(df: pd.DataFrame) -> pd.DataFrame:
         # ============================================
         # A game has a Kalshi market if ANY row in the group satisfies:
         # 1. kalshi_matched == True
-        # 2. At least one of kalshi_prob_spread or kalshi_prob_total is non-null and != 0
+        # 2. At least one of:
+        #    - Spread: kalshi_prob_spread, spread_prob_pick_kalshi
+        #    - Total: kalshi_prob_total, total_prob_pick_kalshi
+        #    - Winner/ML: kalshi_prob, kalshi_prob_used
+        #    is non-null and != 0
         #
-        # This flag is critical for the "Markets" badge in the UI, which counts
-        # games with usable Kalshi markets (independent of sportsbook market counts).
+        # This flag is critical for the "Markets" badge in the UI.
         # ============================================
         has_kalshi_market = False
         for idx, row in group.iterrows():
             kalshi_matched = row.get("kalshi_matched")
             if kalshi_matched == True or str(kalshi_matched).lower() == "true":
                 # Check if at least one Kalshi probability is available
-                kalshi_prob_spread = row.get("kalshi_prob_spread")
-                kalshi_prob_total = row.get("kalshi_prob_total")
+                # We check raw kalshi prob columns and mapped pick columns
 
-                # Check for valid non-zero probabilities
-                has_spread = pd.notnull(kalshi_prob_spread) and kalshi_prob_spread != 0
-                has_total = pd.notnull(kalshi_prob_total) and kalshi_prob_total != 0
+                # Spread
+                has_spread = (_is_valid_prob(row.get("kalshi_prob_spread")) or
+                              _is_valid_prob(row.get("spread_prob_pick_kalshi")))
 
-                if has_spread or has_total:
+                # Total
+                has_total = (_is_valid_prob(row.get("kalshi_prob_total")) or
+                             _is_valid_prob(row.get("total_prob_pick_kalshi")))
+
+                # Winner / Moneyline (Generic)
+                has_ml = (_is_valid_prob(row.get("kalshi_prob")) or
+                          _is_valid_prob(row.get("kalshi_prob_used")))
+
+                if has_spread or has_total or has_ml:
                     has_kalshi_market = True
                     break
 
