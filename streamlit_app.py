@@ -1985,7 +1985,8 @@ def sentiment_payload_to_meta(payload: Dict[str, Any]) -> Dict[str, Any]:
         else:
             logger.info(f"Sentiment valid (neutral): no articles found, but API call succeeded (error={error})")
     else:
-        logger.warning(f"Sentiment INVALID: error={error}, auth_error={auth_error}, rate_limited={rate_limited}, sources={sources}")
+        # User requested: Log when sentiment skipped and why
+        logger.warning(f"Sentiment SKIPPED/INVALID: error={error}, auth_error={auth_error}, rate_limited={rate_limited}, sources={sources}")
 
     return {
         "score": score if sentiment_valid else None,
@@ -3116,6 +3117,7 @@ def ensure_sentiment_loaded(games: List[Dict[str, Any]]) -> None:
         }
 
     enabled = st.session_state.get("enable_sentiment", True)
+    logger.info(f"Sentiment Enabled: {enabled}")  # Defensive Log
     now_utc = datetime.now(timezone.utc)
     cooldown_raw = st.session_state.get("sentiment_cooldown_until")
     cooldown_until: Optional[datetime] = None
@@ -3155,6 +3157,7 @@ def ensure_sentiment_loaded(games: List[Dict[str, Any]]) -> None:
         return
 
     if not games:
+        logger.warning("Sentiment disabled: No games loaded")  # Defensive Log
         meta = init_sentiment_meta()
         meta.update({
             "sentiment_source": "disabled_no_games",
@@ -10361,12 +10364,19 @@ if should_display:
             top_df_display = top_df_display.drop(columns=[c for c in ml_detail_cols if c in top_df_display.columns], errors="ignore")
 
         # --- FINAL WHITELIST FIX (Enhanced with Picks Sheet Columns) ---
+        # User Request: Add Win Probability columns next to spread/total picks
+        if "spread_prob_final" in top_df_display.columns:
+            top_df_display["Spread Win Prob"] = top_df_display["spread_prob_final"]
+        if "total_prob_final" in top_df_display.columns:
+            top_df_display["Total Win Prob"] = top_df_display["total_prob_final"]
+
         ui_whitelist = [
             'league', 'Home', 'Away', 'Commence (UTC)', 'Commence (Local)', 'Local Date',
             'Overall Pick', 'Overall Prob', 'Spread', 'Spread Prob', 'Total', 'Total Prob', 'ML', 'ML Prob',
             'best_pick', 'final_prob', 'edge', 'best_pick_type',
             'Bet_Confidence', 'Bet_Lean',
-            'Spread & Pick', 'Total & Pick',
+            'Spread & Pick', 'Spread Win Prob',
+            'Total & Pick', 'Total Win Prob',
             'spread_edge', 'total_edge',
             'Pick', 'AI_Prob', 'Implied_Prob', 'Home_Sentiment', 'Away_Sentiment', 'Sentiment_Diff', 'sentiment_status', 'status', 'best_pick_prob', 'best_pick_edge',
             'theover_pick', 'theover_prob_used', 'theover_delta_final_prob', 'final_prob_without_theover'
@@ -10374,9 +10384,29 @@ if should_display:
         safe_cols = [c for c in ui_whitelist if c in top_df_display.columns]
         top_df_ui = top_df_display[safe_cols].copy()
 
+        # Custom formatting for specific columns
+        format_cols_pct = ['Spread Win Prob', 'Total Win Prob']
+        for col in format_cols_pct:
+            if col in top_df_ui.columns:
+                 # Format as percentage with 1 decimal
+                 top_df_ui[col] = pd.to_numeric(top_df_ui[col], errors='coerce').apply(
+                     lambda x: f"{x*100:.1f}%" if pd.notnull(x) else "N/A"
+                 )
+
         # Force Numeric and String consistency
         for col in top_df_ui.columns:
-            if col in ['AI_Prob', 'Implied_Prob', 'spread_edge', 'total_edge', 'Sentiment_Diff', 'final_prob', 'edge', 'Overall Prob', 'Spread Prob', 'Total Prob', 'ML Prob']:
+            if col in format_cols_pct:
+                continue # Skip already formatted columns
+
+            # Special Handling for Sentiment Columns (Task 1)
+            if col in ['Home_Sentiment', 'Away_Sentiment', 'Sentiment_Diff']:
+                 # Format as 2 decimal string or N/A
+                 top_df_ui[col] = pd.to_numeric(top_df_ui[col], errors='coerce').apply(
+                     lambda x: f"{x:.2f}" if pd.notnull(x) else "N/A"
+                 )
+                 continue
+
+            if col in ['AI_Prob', 'Implied_Prob', 'spread_edge', 'total_edge', 'final_prob', 'edge', 'Overall Prob', 'Spread Prob', 'Total Prob', 'ML Prob']:
                 top_df_ui[col] = pd.to_numeric(top_df_ui[col], errors='coerce').fillna(0.0)
             else:
                 top_df_ui[col] = top_df_ui[col].astype(str).replace('None', 'N/A')
