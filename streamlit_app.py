@@ -4117,7 +4117,9 @@ api_sports_clients, sportsdata_clients = init_data_clients()
 @st.cache_data(ttl=60)
 def fetch_odds_games(sport_key: str) -> List[Dict[str, Any]]:
     if not odds_api_key or not sport_key:
+        logger.error(f"Missing API key or sport_key. Key={bool(odds_api_key)}, Sport={sport_key}")
         return []
+
     url = f"https://api.the-odds-api.com/v4/sports/{sport_key}/odds/"
     params = {
         "apiKey": odds_api_key,
@@ -4126,9 +4128,58 @@ def fetch_odds_games(sport_key: str) -> List[Dict[str, Any]]:
         "oddsFormat": "american",
         "dateFormat": "iso",
     }
-    resp = requests.get(url, params=params, timeout=15)
-    resp.raise_for_status()
-    return resp.json()
+
+    try:
+        logger.info(f"🔍 Fetching odds from TheOddsAPI for sport: {sport_key}")
+        resp = requests.get(url, params=params, timeout=15)
+        resp.raise_for_status()
+
+        # DIAGNOSTIC: Log raw response structure
+        data = resp.json()
+        logger.info(f"📊 TheOddsAPI raw response type: {type(data)}")
+
+        # Handle both direct list and dict with nested keys
+        if isinstance(data, dict):
+            logger.info(f"📋 TheOddsAPI response keys: {list(data.keys())}")
+            # Try common response wrapper keys
+            games = data.get("games", data.get("data", data.get("events", [])))
+            logger.info(f"✅ Extracted {len(games)} games from dict response")
+        elif isinstance(data, list):
+            games = data
+            logger.info(f"✅ Got {len(games)} games from list response")
+        else:
+            logger.error(f"❌ Unexpected response type: {type(data)}")
+            return []
+
+        # DIAGNOSTIC: Log first game sample if available
+        if games and len(games) > 0:
+            first_game = games[0]
+            logger.info(f"🎮 First game sample keys: {list(first_game.keys())}")
+            logger.info(f"🏀 First game: {first_game.get('home_team')} vs {first_game.get('away_team')}")
+            logger.info(f"⏰ Commence time: {first_game.get('commence_time')}")
+        else:
+            logger.warning(f"⚠️ TheOddsAPI returned empty games list for sport: {sport_key}")
+            logger.warning(f"   This could mean:")
+            logger.warning(f"   - No games scheduled for this sport today")
+            logger.warning(f"   - Sport key is invalid")
+            logger.warning(f"   - API rate limit exceeded")
+            logger.warning(f"   - API key has insufficient permissions")
+
+        return games
+
+    except requests.exceptions.RequestException as e:
+        logger.error(f"❌ TheOddsAPI request failed: {e}")
+        if hasattr(e, 'response') and e.response is not None:
+            logger.error(f"   Response status: {e.response.status_code}")
+            logger.error(f"   Response text: {e.response.text[:500]}")
+        return []
+    except json.JSONDecodeError as e:
+        logger.error(f"❌ Failed to parse TheOddsAPI JSON: {e}")
+        return []
+    except Exception as e:
+        logger.error(f"❌ Unexpected error in fetch_odds_games: {e}")
+        logger.exception(e)
+        return []
 
 @st.cache_data(ttl=300)
 def fetch_news() -> List[Dict[str, Any]]:
@@ -5784,17 +5835,120 @@ if st.sidebar.button("Clear Debug Log"):
     st.session_state["debug_accumulator"] = []
     st.success("Debug log cleared.")
 
+# ═══════════════════════════════════════════════════════════════════════
+# DEBUG EXPORTS SECTION - Always accessible regardless of analysis state
+# ═══════════════════════════════════════════════════════════════════════
+st.sidebar.subheader("📥 Debug Exports")
+
+# Debug accumulator (always available if exists)
 if "debug_accumulator" in st.session_state and st.session_state["debug_accumulator"]:
     try:
         debug_json = json.dumps(st.session_state["debug_accumulator"], default=str, indent=2)
         st.sidebar.download_button(
-            "Download Debug Log",
+            label="📊 Download Debug Log (Main)",
             data=debug_json,
             file_name="parlay_debug_export.json",
-            mime="application/json"
+            mime="application/json",
+            key="debug_accumulator_export_btn",
+            help="Main debug accumulator log"
         )
     except Exception as e:
         st.sidebar.error(f"Error preparing download: {e}")
+
+# Debug log history (alternate debug log)
+if "debug_log_history" in st.session_state and st.session_state["debug_log_history"]:
+    try:
+        debug_history_json = json.dumps(st.session_state["debug_log_history"], default=str, indent=2)
+        st.sidebar.download_button(
+            label="📊 Download Debug Log (History)",
+            data=debug_history_json,
+            file_name="parlay_debug_history.json",
+            mime="application/json",
+            key="debug_history_export_btn",
+            help="Debug log history"
+        )
+    except Exception:
+        pass
+
+# TheOver raw data export (always available if data exists)
+if "theover_raw_df" in st.session_state:
+    theover_raw_df = st.session_state["theover_raw_df"]
+    if theover_raw_df is not None and not theover_raw_df.empty:
+        try:
+            theover_raw_csv = theover_raw_df.to_csv(index=False).encode("utf-8")
+            st.sidebar.download_button(
+                label="📋 Download TheOver Debug (Raw)",
+                data=theover_raw_csv,
+                file_name="theover_raw_debug.csv",
+                mime="text/csv",
+                key="theover_raw_sidebar_export_btn",
+                help="Exports the RAW TheOver dataframe before transformation"
+            )
+        except Exception as e:
+            logger.error(f"Error preparing TheOver raw export: {e}")
+
+# TheOver logs export (always available if logs exist)
+if "theover_debug_log" in st.session_state and st.session_state["theover_debug_log"]:
+    try:
+        theover_logs = st.session_state["theover_debug_log"]
+        if isinstance(theover_logs, list) and len(theover_logs) > 0:
+            theover_debug_df = pd.DataFrame(theover_logs)
+            theover_csv = theover_debug_df.to_csv(index=False).encode("utf-8")
+            st.sidebar.download_button(
+                label="📋 Download TheOver Debug (Logs)",
+                data=theover_csv,
+                file_name="theover_log_dump.csv",
+                mime="text/csv",
+                key="theover_log_sidebar_export_btn",
+                help="Exports fuzzy match logs from TheOver integration"
+            )
+    except Exception as e:
+        logger.error(f"Error preparing TheOver log export: {e}")
+
+# Master results export (available after analysis)
+if "master_results_df" in st.session_state:
+    master_df = st.session_state["master_results_df"]
+    if master_df is not None and not master_df.empty:
+        try:
+            master_csv = master_df.to_csv(index=False).encode("utf-8")
+            st.sidebar.download_button(
+                label="📊 Download Analysis Results (CSV)",
+                data=master_csv,
+                file_name="parlay_analysis_results.csv",
+                mime="text/csv",
+                key="master_results_sidebar_export_btn",
+                help="Full analysis results with all picks and probabilities"
+            )
+        except Exception as e:
+            logger.error(f"Error preparing analysis export: {e}")
+
+# Master df export (raw master dataframe)
+if "master_df" in st.session_state:
+    master_df_raw = st.session_state["master_df"]
+    if master_df_raw is not None and not master_df_raw.empty:
+        try:
+            master_df_csv = master_df_raw.to_csv(index=False).encode("utf-8")
+            st.sidebar.download_button(
+                label="📊 Download Master DF (Raw)",
+                data=master_df_csv,
+                file_name="master_df_raw.csv",
+                mime="text/csv",
+                key="master_df_sidebar_export_btn",
+                help="Raw master dataframe before UI filtering"
+            )
+        except Exception as e:
+            logger.error(f"Error preparing master_df export: {e}")
+
+# Show message if no exports available
+if not any([
+    st.session_state.get("debug_accumulator"),
+    st.session_state.get("debug_log_history"),
+    st.session_state.get("theover_raw_df") is not None,
+    st.session_state.get("theover_debug_log"),
+    st.session_state.get("master_results_df") is not None,
+    st.session_state.get("master_df") is not None,
+]):
+    st.sidebar.info("⏳ Run analysis to generate exports")
 
 api_sports_present = (
     get_secret_any("APISPORTS_API_KEY", "API_SPORTS_KEY", "API_SPORTS_API_KEY") is not None
@@ -9503,53 +9657,9 @@ with tab_master:
         # FORCE DISPLAY: Show all 139 rows regardless of confidence (filter disabled)
         # if not include_low_in_top:
         #     top_df = top_df[top_df["Pick_Confidence"].isin(["HIGH", "MEDIUM"])]
-        try:
-            debug_json = json.dumps(st.session_state["debug_log_history"], default=str, indent=2)
-            st.sidebar.download_button(
-                "Download Debug Log",
-                data=debug_json,
-                file_name="parlay_debug_export.json",
-                mime="application/json",
-                key="debug_log_export_btn"
-            )
-        except Exception:
-            pass
 
-    # TheOver.ai Debug Export (Task 2/3)
-    # Task 3: Force the "TheOver.ai Debug" Button for Raw Data
-    if "theover_raw_df" in st.session_state and not st.session_state["theover_raw_df"].empty:
-        try:
-            theover_raw_df = st.session_state["theover_raw_df"]
-            theover_raw_csv = theover_raw_df.to_csv(index=False).encode("utf-8")
-            st.sidebar.download_button(
-                "Download TheOver Debug", # Exact text requested
-                data=theover_raw_csv,
-                file_name="theover_raw_debug.csv",
-                mime="text/csv",
-                key="theover_raw_export_btn",
-                help="Exports the RAW TheOver dataframe before transformation."
-            )
-        except Exception as e:
-            logger.error(f"Failed to render TheOver raw debug button: {e}")
-
-    if "theover_debug_log" in st.session_state and st.session_state["theover_debug_log"]:
-        try:
-            theover_logs = st.session_state["theover_debug_log"]
-            # Convert list of dicts to CSV string
-            if isinstance(theover_logs, list) and len(theover_logs) > 0:
-                theover_debug_df = pd.DataFrame(theover_logs)
-                theover_csv = theover_debug_df.to_csv(index=False).encode("utf-8")
-
-                st.sidebar.download_button(
-                    "Export TheOver.ai Log", # Renamed to distinguish
-                    data=theover_csv,
-                    file_name="theover_log_dump.csv",
-                    mime="text/csv",
-                    key="theover_log_export_btn",
-                    help="Exports fuzzy match logs."
-                )
-        except Exception as e:
-            logger.error(f"Failed to render TheOver log button: {e}")
+    # NOTE: Download buttons have been moved to the consolidated "Debug Exports"
+    # section in the sidebar (see lines 5838-5951) for better accessibility
 
     # Task 2: Snapshot Status UI
     # UI: Add a status text in the sidebar: "✅ Noon Baseline Cached" or "⚠️ Noon Baseline Missing".
@@ -9605,11 +9715,46 @@ else:
 
 logger.info(f"{'='*80}")
 
-if st.session_state.get("analysis_complete") or (st.session_state.get("master_results_df") is not None and not st.session_state["master_results_df"].empty):
+# FIXED: Improved condition logic to properly check for analysis results
+# Check if we have analysis results to display
+has_results = False
+if "master_results_df" in st.session_state:
+    df_results = st.session_state["master_results_df"]
+    has_results = df_results is not None and not df_results.empty
+
+# Display section if we have results OR analysis just completed
+should_display = st.session_state.get("analysis_complete", False) or has_results
+
+logger.info(f"🎯 Master Analysis Tab Display Logic:")
+logger.info(f"   - analysis_complete: {st.session_state.get('analysis_complete', False)}")
+logger.info(f"   - has_results: {has_results}")
+logger.info(f"   - should_display: {should_display}")
+
+if should_display:
     with tab_master:
+        if not has_results:
+            # Analysis completed but no results generated
+            st.warning("📊 Analysis complete but no picks generated")
+
+            # Show diagnostic info
+            with st.expander("🔍 Diagnostic Information"):
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.write("**Session State Check:**")
+                    st.write(f"- master_results_df exists: {'master_results_df' in st.session_state}")
+                    st.write(f"- analysis_complete: {st.session_state.get('analysis_complete', False)}")
+                    st.write(f"- games loaded: {len(st.session_state.get('games', []))}")
+                with col2:
+                    st.write("**Data Pipeline Status:**")
+                    st.write(f"- master_df rows: {len(st.session_state.get('master_df', pd.DataFrame()))}")
+                    st.write(f"- master_results_df rows: {len(st.session_state.get('master_results_df', pd.DataFrame()))}")
+
+            st.info("💡 Check the sidebar for debug logs and error information")
+            st.stop()
+
+        # We have results - proceed with display
         df = st.session_state["master_results_df"]
-        if not df.empty:
-            st.success(f"✅ Loaded {len(df)} rows for analysis (Master Analysis Tab)")
+        st.success(f"✅ Loaded {len(df)} rows for analysis (Master Analysis Tab)")
 
         # Initialize view frame immediately to avoid NameError
         df_master_view = df.copy()
@@ -9769,62 +9914,87 @@ if st.session_state.get("analysis_complete") or (st.session_state.get("master_re
 
         # --- NEW: GAME SUMMARY VIEW ---
         st.subheader("Game Summary View")
-        game_summary_df = build_game_summary(st.session_state["master_df"])
 
-        if not game_summary_df.empty:
-            # Reorder columns as requested
-            summary_cols = [
-                "League", "Home", "Away", "Commence UTC", "Commence (Local)",
-                "Best Overall Pick", "Best Overall Prob",
-                "Spread Pick", "Spread Prob",
-                "Total Pick", "Total Prob",
-                "ML Pick", "ML Prob"
-            ]
-            # Ensure columns exist
-            summary_cols = [c for c in summary_cols if c in game_summary_df.columns]
+        try:
+            game_summary_df = build_game_summary(st.session_state["master_df"])
+            logger.info(f"📊 Game Summary: {len(game_summary_df)} games")
 
-            # Formatting
-            format_cols = {
-                "Best Overall Prob": st.column_config.NumberColumn(format="%.1f%%"),
-                "Spread Prob": st.column_config.NumberColumn(format="%.1f%%"),
-                "Total Prob": st.column_config.NumberColumn(format="%.1f%%"),
-                "ML Prob": st.column_config.NumberColumn(format="%.1f%%")
-            }
+            if not game_summary_df.empty:
+                # Reorder columns as requested
+                summary_cols = [
+                    "League", "Home", "Away", "Commence UTC", "Commence (Local)",
+                    "Best Overall Pick", "Best Overall Prob",
+                    "Spread Pick", "Spread Prob",
+                    "Total Pick", "Total Prob",
+                    "ML Pick", "ML Prob"
+                ]
+                # Ensure columns exist
+                summary_cols = [c for c in summary_cols if c in game_summary_df.columns]
 
-            st.dataframe(
-                game_summary_df[summary_cols],
-                column_config=format_cols,
-                width="stretch",
-                hide_index=True
-            )
-        else:
-            st.info("No game summary data available.")
+                # Formatting
+                format_cols = {
+                    "Best Overall Prob": st.column_config.NumberColumn(format="%.1f%%"),
+                    "Spread Prob": st.column_config.NumberColumn(format="%.1f%%"),
+                    "Total Prob": st.column_config.NumberColumn(format="%.1f%%"),
+                    "ML Prob": st.column_config.NumberColumn(format="%.1f%%")
+                }
+
+                st.dataframe(
+                    game_summary_df[summary_cols],
+                    column_config=format_cols,
+                    width="stretch",
+                    hide_index=True
+                )
+                logger.info(f"✅ Successfully rendered Game Summary grid")
+            else:
+                st.info("No game summary data available.")
+                logger.warning("⚠️ Game summary dataframe is empty")
+
+        except Exception as summary_error:
+            logger.error(f"❌ Failed to render Game Summary: {summary_error}")
+            logger.exception(summary_error)
+            st.error(f"Failed to render game summary: {summary_error}")
+            with st.expander("🔍 Error Details"):
+                st.code(str(summary_error))
 
         # --- NEW: BEST OVERALL PICKS (ML Focused) ---
         st.subheader("Best Overall Picks (Moneyline)")
-        best_ml_df = get_best_ml_picks(st.session_state["master_df"])
-        if not best_ml_df.empty:
-            # Sort by Best Overall Prob descending
-            best_ml_df = best_ml_df.sort_values(by="Best Overall Prob", ascending=False)
 
-            ml_cols = [
-                "league", "Home", "Away", "Commence (Local)",
-                "Best Overall Pick", "Best Overall Prob", "Best Overall Confidence",
-                "Implied Prob", "AI Prob"
-            ]
+        try:
+            best_ml_df = get_best_ml_picks(st.session_state["master_df"])
+            logger.info(f"🎯 Best ML Picks: {len(best_ml_df)} picks")
 
-            st.dataframe(
-                best_ml_df[ml_cols],
-                column_config={
-                    "Best Overall Prob": st.column_config.NumberColumn(format="%.1f%%"),
-                    "Implied Prob": st.column_config.NumberColumn(format="%.1f%%"),
-                    "AI Prob": st.column_config.NumberColumn(format="%.1f%%"),
-                },
-                width="stretch",
-                hide_index=True
-            )
-        else:
-            st.info("No Moneyline picks available.")
+            if not best_ml_df.empty:
+                # Sort by Best Overall Prob descending
+                best_ml_df = best_ml_df.sort_values(by="Best Overall Prob", ascending=False)
+
+                ml_cols = [
+                    "league", "Home", "Away", "Commence (Local)",
+                    "Best Overall Pick", "Best Overall Prob", "Best Overall Confidence",
+                    "Implied Prob", "AI Prob"
+                ]
+
+                st.dataframe(
+                    best_ml_df[ml_cols],
+                    column_config={
+                        "Best Overall Prob": st.column_config.NumberColumn(format="%.1f%%"),
+                        "Implied Prob": st.column_config.NumberColumn(format="%.1f%%"),
+                        "AI Prob": st.column_config.NumberColumn(format="%.1f%%"),
+                    },
+                    width="stretch",
+                    hide_index=True
+                )
+                logger.info(f"✅ Successfully rendered Best ML Picks grid")
+            else:
+                st.info("No Moneyline picks available.")
+                logger.warning("⚠️ Best ML picks dataframe is empty")
+
+        except Exception as ml_error:
+            logger.error(f"❌ Failed to render Best ML Picks: {ml_error}")
+            logger.exception(ml_error)
+            st.error(f"Failed to render moneyline picks: {ml_error}")
+            with st.expander("🔍 Error Details"):
+                st.code(str(ml_error))
 
         st.subheader("Top Picks / Best Bets")
         # FORCE DISPLAY: Always include LOW confidence picks (checkbox disabled)
@@ -9937,7 +10107,38 @@ if st.session_state.get("analysis_complete") or (st.session_state.get("master_re
             else:
                 top_df_ui[col] = top_df_ui[col].astype(str).replace('None', 'N/A')
 
-        st.dataframe(top_df_ui, width="stretch", hide_index=True)
+        # GRID RENDERING WITH ENHANCED ERROR HANDLING
+        logger.info(f"🎯 Rendering Top Picks grid with {len(top_df_ui)} rows, {len(top_df_ui.columns)} columns")
+
+        try:
+            if top_df_ui.empty:
+                st.warning("⚠️ Top picks dataframe is empty after filtering")
+                with st.expander("🔍 Debug Info"):
+                    st.write(f"- Original df rows: {len(df)}")
+                    st.write(f"- After filtering: {len(top_df_ui)}")
+                    st.write(f"- Columns available: {list(top_df_ui.columns[:10])}...")
+            else:
+                # Render the grid
+                st.dataframe(top_df_ui, width="stretch", hide_index=True)
+                logger.info(f"✅ Successfully rendered Top Picks grid")
+
+        except Exception as grid_error:
+            logger.error(f"❌ Failed to render Top Picks grid: {grid_error}")
+            logger.exception(grid_error)
+            st.error(f"Failed to render picks grid: {grid_error}")
+
+            # Show diagnostic info
+            with st.expander("🔍 Grid Rendering Error Details"):
+                st.write("**Error:**")
+                st.code(str(grid_error))
+                st.write("**Dataframe Info:**")
+                st.write(f"- Shape: {top_df_ui.shape}")
+                st.write(f"- Columns: {list(top_df_ui.columns)}")
+                st.write(f"- First row sample:")
+                try:
+                    st.write(top_df_ui.iloc[0].to_dict() if len(top_df_ui) > 0 else "No rows")
+                except Exception:
+                    st.write("Could not display row sample")
 
         export_cols = [
             "AI_Prob",
