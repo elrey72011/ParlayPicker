@@ -2615,7 +2615,15 @@ def pipeline_progress_snapshot() -> Dict[str, Any]:
     engine = get_prediction_engine()
     model_ready = engine.model is not None
 
-    rows_out = st.session_state.get("last_rows_out", 0)
+    # UPDATED: Read rows_out from live master_results_df, not cached metrics
+    master_results_df = st.session_state.get("master_results_df")
+    if master_results_df is not None and not master_results_df.empty:
+        rows_out = len(master_results_df)
+    else:
+        # Fallback to old metric if dataframe not yet built
+        master_stats = st.session_state.get("master_stats") or {}
+        rows_out = master_stats.get("rows_out", 0)
+
     master_stats = st.session_state.get("master_stats") or {}
     return {
         "games_loaded": games_loaded,
@@ -9505,47 +9513,114 @@ with tab_master:
 
                 # Re-implement deduping for the `df` variable used by the UI below
 
+                # ============================================================================
+                # DEDUPLICATION HELPERS
+                # ============================================================================
+
+                def add_game_key(df: pd.DataFrame) -> pd.DataFrame:
+                    """
+                    Add a stable 'game_key' column to group identical games.
+                    Groups on: league | Home | Away | Commence Local (time).
+                    """
+                    if df.empty:
+                        return df
+
+                    df = df.copy()
+                    parts = []
+
+                    # Build canonical game identifier
+                    for col in ["league", "Home", "Away", "Commence Local"]:
+                        if col in df.columns:
+                            parts.append(
+                                df[col]
+                                .astype(str)
+                                .str.strip()
+                                .str.upper()
+                            )
+
+                    if parts:
+                        df["game_key"] = parts[0]
+                        for part in parts[1:]:
+                            df["game_key"] = df["game_key"].str.cat(part, sep="|")
+                    else:
+                        # Fallback: use index
+                        df["game_key"] = df.index.astype(str)
+
+                    logger.info(f"Created game_key for {len(df)} rows. Unique games: {df['game_key'].nunique()}")
+                    return df
+
+
+                def rank_row_for_best_pick(row: pd.Series) -> float:
+                    """
+                    Rank a row for "best overall pick" per game.
+
+                    Scoring:
+                    - Primary: Distance of finalprobability from 0.5 (edge)
+                    - Bonus: +0.02 if spread pick defined, +0.02 if total pick defined
+                    - Result: Higher score = stronger signal
+
+                    Example: finalprobability=0.58 with both spread+total → 0.08 + 0.04 = 0.12
+                    """
+                    try:
+                        final_prob = float(row.get("finalprobability") or 0.5)
+                    except (ValueError, TypeError):
+                        final_prob = 0.5
+
+                    # Distance from 50/50 (higher = stronger signal)
+                    edge = abs(final_prob - 0.5)
+
+                    # Bonus for having both spread AND total picks
+                    try:
+                        has_spread = (
+                            pd.notna(row.get("spreadpicklabel"))
+                            and str(row.get("spreadpicklabel", "")).strip() != ""
+                        )
+                        has_total = (
+                            pd.notna(row.get("totalpicklabel"))
+                            and str(row.get("totalpicklabel", "")).strip() != ""
+                        )
+                        bonus = 0.02 * (int(has_spread) + int(has_total))
+                    except Exception:
+                        bonus = 0.0
+
+                    return edge + bonus
+
+
+                # ============================================================================
+                # END DEDUPLICATION HELPERS
+                # ============================================================================
+
                 # ============================================
                 # PHASE 1: DIAGNOSTIC - Deduplication Stage
                 # ============================================
-                logger.info(f"\n{'='*80}")
-                logger.info(f"DEDUPLICATION STAGE")
-                logger.info(f"{'='*80}")
-                logger.info(f"BEFORE deduplication: master_df has {len(master_df)} rows")
+                logger.info("=" * 80)
+                logger.info("DEDUPLICATION STAGE - Per-Game Best Pick Selection")
+                logger.info("=" * 80)
 
-                # ============================================
-                # PHASE 3: TEMPORARY DIAGNOSTIC - BYPASS DEDUPLICATION
-                # ============================================
-                logger.info("DIAGNOSTIC MODE: Bypassing deduplication")
-                df = master_df.copy()
+                rows_before = len(master_df)
+                logger.info(f"BEFORE deduplication: {rows_before} rows (multiple entries per game expected)")
 
-                # Original deduplication code (commented out for diagnosis)
-                # rows_for_dedupe = master_df.to_dict("records") if not master_df.empty else []
-                # logger.info(f"rows_for_dedupe has {len(rows_for_dedupe)} items")
+                # Add game key for grouping
+                master_df = add_game_key(master_df)
 
-                # deduped_rows: Dict[Tuple[Any, Any, Any, Any], Dict[str, Any]] = {}
-                # for row in rows_for_dedupe:
-                #     key = (row.get("league"), row.get("Home"), row.get("Away"), row.get("Commence (UTC)"))
-                #     existing = deduped_rows.get(key)
-                #     if (existing is None) or (
-                #         not existing.get("kalshi_matched") and row.get("kalshi_matched")
-                #     ):
-                #         deduped_rows[key] = row
-                # deduped_list = list(deduped_rows.values())
+                # Compute ranking score for each row
+                master_df["_best_pick_rank"] = master_df.apply(rank_row_for_best_pick, axis=1)
 
-                # logger.info(f"AFTER deduplication: {len(deduped_list)} items remain")
+                # For each unique game, keep only the row with highest rank
+                idx_best = master_df.groupby("game_key")["_best_pick_rank"].idxmax()
+                df = master_df.loc[idx_best].copy()
 
-                # if len(rows_for_dedupe) > 0 and len(deduped_list) == 0:
-                #     logger.error("CRITICAL: Deduplication eliminated ALL rows!")
+                # Clean up helper columns
+                df = df.drop(columns=["_best_pick_rank"], errors="ignore")
+                # Optionally keep game_key for reference; remove if not needed:
+                # df = df.drop(columns=["game_key"], errors="ignore")
 
-                # if st.session_state.get("kalshi_match_only"):
-                #     deduped_list = [r for r in deduped_list if r.get("kalshi_matched")]
+                rows_after = len(df)
+                unique_games = df["game_key"].nunique()
 
-                # df = pd.DataFrame(deduped_list)
-
-                logger.info(f"Bypassed deduplication - df has {len(df)} rows")
-                logger.info(f"{'='*80}")
-                # ============================================
+                logger.info(f"AFTER deduplication: {rows_after} rows ({unique_games} unique games)")
+                logger.info(f"Removed {rows_before - rows_after} duplicate book/market rows")
+                logger.info("=" * 80)
 
                 if "Unnamed: 0" in df.columns:
                     df = df.drop(columns=["Unnamed: 0"])
