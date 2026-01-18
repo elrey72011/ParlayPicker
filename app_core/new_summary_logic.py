@@ -1,5 +1,88 @@
 import pandas as pd
 import numpy as np
+import logging
+
+logger = logging.getLogger("parlaypicker")
+
+def calculate_spread_consensus(row: pd.Series) -> tuple[float, str]:
+    """
+    Calculates Spread Consensus using weighted blend of Market, Kalshi, and AI.
+    Weights: Market (31.58), Kalshi (36.84), AI (21.05).
+
+    Returns:
+        (consensus_prob, breakdown_string)
+        - consensus_prob: float 0-1
+        - breakdown_string: e.g. "56% (M55 / K59 / AI52)"
+    """
+    # Helper to safely get float
+    def _get_f(key):
+        val = row.get(key)
+        try:
+            return float(val) if pd.notnull(val) and val != "" else None
+        except:
+            return None
+
+    # 1. Get Probabilities
+    # Market
+    p_market = _get_f("spread_prob_pick_market")
+    if p_market is None: p_market = _get_f("spread_prob_market_based")
+    if p_market is None: p_market = _get_f("spread_prob_market")
+
+    # Kalshi
+    p_kalshi = _get_f("spread_prob_pick_kalshi")
+    # Fallback to generic Kalshi prob if pick-specific is missing, but only if we can trust it matches the pick
+    # For now, rely on pick specific or if we can infer.
+    # Actually, spread_prob_pick_kalshi is populated by enrich_with_consensus or similar logic.
+    if p_kalshi is None:
+        # Check if kalshi_prob_spread exists and if it aligns?
+        # Risky without side check. Let's stick to explicit pick prob if possible.
+        pass
+
+    # AI
+    p_model = _get_f("model_spread_prob")
+    if p_model is None: p_model = _get_f("AI_Prob")
+
+    # 2. Weights (from prompt)
+    W_M = 31.58
+    W_K = 36.84
+    W_AI = 21.05
+
+    sources = []
+    if p_market is not None: sources.append(("M", p_market, W_M))
+    if p_kalshi is not None: sources.append(("K", p_kalshi, W_K))
+    if p_model is not None: sources.append(("AI", p_model, W_AI))
+
+    # 3. Calculate
+    if not sources:
+        # Fallback to final prob if available
+        p_final = _get_f("spread_prob_pick_final") or _get_f("final_probability")
+        if p_final is not None:
+             # Just show final
+             return p_final, f"{int(p_final*100)}% (Final)"
+
+        # Log missing data
+        logger.debug(f"Missing spread consensus data for {row.get('Home')} vs {row.get('Away')}")
+        return 0.5, "N/A"
+
+    total_w = sum(s[2] for s in sources)
+    weighted_sum = sum(s[1] * s[2] for s in sources)
+
+    if total_w == 0:
+        return 0.5, "N/A"
+
+    consensus = weighted_sum / total_w
+    consensus = max(0.01, min(0.99, consensus))
+
+    # 4. Format
+    # "56% (M55 / K59 / AI52)"
+    parts = [f"{s[0]}{int(s[1]*100)}" for s in sources]
+    breakdown = " / ".join(parts)
+
+    formatted_str = f"{int(consensus*100)}% ({breakdown})"
+
+    # Log if we are falling back to 50% despite having data (should be caught by if not sources)
+
+    return consensus, formatted_str
 
 def build_game_summary_v2(df: pd.DataFrame) -> pd.DataFrame:
     """
@@ -115,6 +198,8 @@ def build_game_summary_v2(df: pd.DataFrame) -> pd.DataFrame:
         spread_prob = None
         kalshi_spread_prob = None
         spread_market_prob = None
+        spread_consensus_prob = None
+        spread_consensus_str = None
 
         if not spread_rows.empty:
             # Choose best spread row
@@ -137,9 +222,15 @@ def build_game_summary_v2(df: pd.DataFrame) -> pd.DataFrame:
             spread_market_prob = (best_spread.get("spread_prob_pick_market")
                                  or best_spread.get("spread_prob_market"))
 
+            # --- CALCULATE SPREAD CONSENSUS ---
+            spread_consensus_prob, spread_consensus_str = calculate_spread_consensus(best_spread)
+
+
         summary["Spread Pick"] = spread_pick  # Changed from "Spread" to "Spread Pick" to match UI
         summary["Spread Prob"] = spread_prob
         summary["Kalshi Spread Prob"] = kalshi_spread_prob
+        summary["SpreadConsensusProb"] = spread_consensus_prob
+        summary["SpreadConsensus"] = spread_consensus_str
 
         # Calculate Kalshi vs Market Delta for Spread
         if kalshi_spread_prob is not None and spread_market_prob is not None:
@@ -228,7 +319,7 @@ def reorder_for_spread_total_focus_v2(df: pd.DataFrame) -> pd.DataFrame:
 
     summary_block = [c for c in [
         "Best Overall Pick", "Best Overall Prob",
-        "Spread Pick", "Spread Prob", "Kalshi Spread Prob", "Kalshi Spread Δ",
+        "Spread Pick", "Spread Prob", "Spread Consensus", "Kalshi Spread Prob", "Kalshi Spread Δ",
         "Total Pick", "Total Prob", "Kalshi Total Prob", "Kalshi Total Δ",
         "ML Pick", "ML Prob",
     ] if c in df.columns]
