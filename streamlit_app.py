@@ -3083,6 +3083,10 @@ def score_pick_confidence(row: Dict[str, Any]) -> Tuple[str, str, bool]:
     """
     Returns (confidence, reason_short, eligible_for_top_picks).
     confidence in {"HIGH", "MEDIUM", "LOW"}.
+
+    Decisiveness thresholds based on raw distance from 0.5:
+    - HIGH: >= 0.08 (prob >= 0.58 or <= 0.42)
+    - MEDIUM: >= 0.02 (prob >= 0.52 or <= 0.48)
     """
     market = (row.get("Market") or "").lower()
     final_prob = safe_float(row.get("final_probability") or row.get("consensus_prob_adj") or row.get("AI_Prob"))
@@ -3090,9 +3094,10 @@ def score_pick_confidence(row: Dict[str, Any]) -> Tuple[str, str, bool]:
         return "UNKNOWN", "UNKNOWN: missing final probability", False
 
     decisiveness = abs(final_prob - 0.5) * 2
-    if decisiveness >= 0.16:  # 0.08 * 2 - allows picks with 42-58% probability
+    # Thresholds: HIGH >= 0.16 (0.08 * 2), MEDIUM >= 0.04 (0.02 * 2)
+    if decisiveness >= 0.16:
         tier = "HIGH"
-    elif decisiveness >= 0.04:  # 0.02 * 2 - allows picks with 48-52% probability
+    elif decisiveness >= 0.04:
         tier = "MEDIUM"
     else:
         tier = "LOW"
@@ -3943,12 +3948,26 @@ def american_to_implied(odds: Any) -> Optional[float]:
         return None
 
 def american_to_implied_prob(odds: Any) -> Optional[float]:
+    """
+    Convert American odds to implied probability with defensive caps for extreme values.
+
+    Extreme odds (|odds| > 900) are capped to prevent unrealistic probabilities (>0.90 or <0.10).
+    This helps NHL and other leagues with heavy favorites avoid probability collisions.
+    """
     if odds is None:
         return None
     try:
         o = float(odds)
     except Exception:
         return None
+
+    # Cap extreme odds to prevent unrealistic probabilities
+    # -900 converts to ~0.90, which is more reasonable than -990 -> 0.99
+    if o < -900:
+        o = -900
+    elif o > 900:
+        o = 900
+
     if o > 0:
         return 100.0 / (o + 100.0)
     if o < 0:
@@ -7613,7 +7632,7 @@ with tab_master:
                         f"SENTIMENT ACTIVE for game {g.get('id')}: {home} vs {away}\n"
                         f"  Home: score={home_sent:.3f}, label={home_score_label}, valid={home_valid}, sources={home_sources}, type={home_source_type}, status={home_status}, query='{home_query}'\n"
                         f"  Away: score={away_sent:.3f}, label={away_score_label}, valid={away_valid}, sources={away_sources}, type={away_source_type}, status={away_status}, query='{away_query}'\n"
-                        f"  Diff: {sentiment_diff:.3f} (home - away, will contribute to probability blend with weight)"
+                        f"  Diff: {sentiment_diff:.3f} (home - away) [UI annotation only - not used in probability blend]"
                     )
                 else:
                     sentiment_diff = None
@@ -8355,7 +8374,7 @@ with tab_master:
                 logger.info(f"TOTAL FINAL for {home} vs {away}: {total_prob_final:.4f} ({total_prob_final*100:.1f}%)")
                 logger.info(f"PROBABILITY COMPARISON for {home} vs {away}: Spread={spread_prob_final:.4f} vs Total={total_prob_final:.4f}, Diff={abs(spread_prob_final-total_prob_final):.4f}")
                 if abs(spread_prob_final - total_prob_final) < 0.001:
-                    logger.warning(f"⚠️ IDENTICAL PROBABILITIES DETECTED for {home} vs {away}! Spread={spread_prob_final:.4f}, Total={total_prob_final:.4f}")
+                    logger.debug(f"Note: Very similar probabilities for {home} vs {away} - Spread={spread_prob_final:.4f}, Total={total_prob_final:.4f}. Will use consensus/edge to select best pick.")
 
                 if spread_warnings_new:
                     warnings = list(dict.fromkeys(warnings + spread_warnings_new))
@@ -9248,10 +9267,15 @@ with tab_master:
                     spread_row["prob_reason"] = spread_prob_reason
                     conf, reason_short, eligible = score_pick_confidence(spread_row)
                     width_spread = (spread_max - spread_min) if (spread_max is not None and spread_min is not None) else 0.0
-                    if conf == "HIGH":
-                        conf = "MEDIUM"
-                    if (width_spread and width_spread >= 2.0) or len(spread_books_map) <= 1:
-                        conf = "LOW"
+                    # Downgrade based on market quality (not blanket downgrade)
+                    if (width_spread and width_spread >= 2.5) and conf == "HIGH":
+                        conf = "MEDIUM"  # Wide market reduces confidence
+                    if len(spread_books_map) <= 1:
+                        # Thin market: cap at MEDIUM, or LOW if already low
+                        if conf == "HIGH":
+                            conf = "MEDIUM"
+                        elif conf == "MEDIUM":
+                            conf = "LOW"
                         eligible = False
                     spread_row["Pick_Confidence"] = conf
                     spread_row["Pick_Reason_Short"] = reason_short
@@ -9465,10 +9489,15 @@ with tab_master:
                 total_row["prob_reason"] = total_prob_reason
                 conf, reason_short, eligible = score_pick_confidence(total_row)
                 width_total = (total_max - total_min) if (total_max is not None and total_min is not None) else 0.0
-                if conf == "HIGH":
-                    conf = "MEDIUM"
-                if (width_total and width_total >= 4.0) or len(total_books_map) <= 1:
-                    conf = "LOW"
+                # Downgrade based on market quality (not blanket downgrade)
+                if (width_total and width_total >= 4.5) and conf == "HIGH":
+                    conf = "MEDIUM"  # Wide market reduces confidence
+                if len(total_books_map) <= 1:
+                    # Thin market: cap at MEDIUM, or LOW if already low
+                    if conf == "HIGH":
+                        conf = "MEDIUM"
+                    elif conf == "MEDIUM":
+                        conf = "LOW"
                     eligible = False
                 total_row["Pick_Confidence"] = conf
                 total_row["Pick_Reason_Short"] = reason_short
