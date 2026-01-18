@@ -141,16 +141,25 @@ class PredictionEngine:
         Jules: Replacing Vertex AI request with local XGBoost inference.
         Zero latency, zero cost.
         """
-        if self.use_fallback:
-            # Enhanced statistical fallback using team features
-            # Instead of flat 0.52, use win%, ppg, and implied prob
-            prob = self._calculate_statistical_prob(features)
-            return {"prob": prob, "note": "Statistical Fallback (Feature-Based)"}
+        try:
+            if self.use_fallback:
+                # Enhanced statistical fallback using team features
+                # Instead of flat 0.52, use win%, ppg, and implied prob
+                prob = self._calculate_statistical_prob(features)
+                return {"prob": prob, "note": "Statistical Fallback (Feature-Based)"}
 
-        # Ensure input is 2D (batch of 1)
-        dmatrix = xgb.DMatrix(pd.DataFrame([features]))
-        prob = self.model.predict(dmatrix)[0]
-        return {"prob": float(prob), "note": "Local XGBoost Inference"}
+            # Ensure input is 2D (batch of 1)
+            # Create DataFrame safely
+            df_in = pd.DataFrame([features])
+            # Ensure columns match training schema (safety)
+            # DMatrix handles sparse/missing, but consistency helps
+            dmatrix = xgb.DMatrix(df_in)
+            prob = self.model.predict(dmatrix)[0]
+            return {"prob": float(prob), "note": "Local XGBoost Inference"}
+        except Exception as e:
+            logger.error(f"Prediction error: {e}. Using fallback.")
+            prob = self._calculate_statistical_prob(features)
+            return {"prob": prob, "note": f"Error Fallback: {str(e)[:20]}"}
 
     def _calculate_statistical_prob(self, features: Dict[str, float]) -> float:
         """
@@ -220,16 +229,17 @@ class PredictionEngine:
         if df is None or df.empty:
             return []
 
-        if self.use_fallback:
-            # Enhanced statistical fallback using team features
-            probs = []
-            for idx, row in df.iterrows():
-                features = build_model_feature_row_from_record(row.to_dict())
-                prob = self._calculate_statistical_prob(features)
-                probs.append(prob)
-            return probs
-
         try:
+            # Always fallback if model not loaded
+            if self.use_fallback:
+                # Enhanced statistical fallback using team features
+                probs = []
+                for idx, row in df.iterrows():
+                    features = build_model_feature_row_from_record(row.to_dict())
+                    prob = self._calculate_statistical_prob(features)
+                    probs.append(prob)
+                return probs
+
             # Ensure input has the correct columns
             missing_cols = [col for col in VERTEX_FEATURE_COLUMNS if col not in df.columns]
             if missing_cols:
@@ -244,10 +254,24 @@ class PredictionEngine:
             inference_data = inference_data.apply(pd.to_numeric, errors='coerce').fillna(0.0).astype(float)
             dmatrix = xgb.DMatrix(inference_data)
             probs = self.model.predict(dmatrix)
-            return [float(p) for p in probs]
+
+            # Handle potential single-value return or array
+            if hasattr(probs, "__iter__"):
+                return [float(p) for p in probs]
+            else:
+                return [float(probs)]
         except Exception as e:
             logger.error(f"Batch prediction failed: {e}", exc_info=True)
-            return [0.52] * len(df)
+            # Fallback to statistical calculation for batch on error
+            try:
+                probs = []
+                for idx, row in df.iterrows():
+                    features = build_model_feature_row_from_record(row.to_dict())
+                    prob = self._calculate_statistical_prob(features)
+                    probs.append(prob)
+                return probs
+            except:
+                return [0.52] * len(df)
 
 # Global singleton or helper for single-row prediction
 def get_prediction_prob(game_row: Dict[str, Any], sentiment_diff: float = 0.0) -> Tuple[Optional[float], Optional[str]]:

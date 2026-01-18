@@ -4784,7 +4784,14 @@ def _build_model_feature_row(game: Dict[str, Any], sentiment_diff: Optional[floa
     base["League"] = game.get("sport_title", "Unknown")
 
     # 2. Add Override / Calculated fields that might not be in 'game' yet
-    implied_home = american_to_implied_prob(game.get("home_ml_price")) or game.get("implied_prob_home")
+    # Fix for Issue #5: NaN Odds handling
+    raw_ml = game.get("home_ml_price")
+    implied_home = american_to_implied_prob(raw_ml)
+    if implied_home is None:
+        implied_home = game.get("implied_prob_home")
+    if implied_home is None and (game.get("home_spread_point") or game.get("total_point")):
+        implied_home = 0.5
+
     base["implied_home_prob"] = safe_float(implied_home)
     base["sentiment_diff"] = safe_float(sentiment_diff)
 
@@ -9928,7 +9935,13 @@ with tab_master:
                 rows_count_after = len(rows_out)
                 rows_created_this_game = rows_count_after - rows_count_before
 
-                if rows_created_this_game == 0:
+                # Fix for Issue #6: Fallback Safety Net Row Creation
+                # Only create fallback if NO rows were created (Spread, Total, or ML)
+                # AND we have at least some basic market data (ML, Spread, or Total) to work with.
+                # Do NOT trigger if rows were already created (rows_created_this_game > 0).
+                has_any_market_data = bool(g.get("home_ml_price") or g.get("home_spread_point") or g.get("total_point"))
+
+                if rows_created_this_game == 0 and has_any_market_data:
                     logger.warning(f"⚠️  NO ROWS CREATED FOR THIS GAME!")
                     logger.warning(f"Market data present:")
                     logger.warning(f"  - home_ml_price: {g.get('home_ml_price')}")
@@ -9945,11 +9958,6 @@ with tab_master:
                         logger.warning(f"  - total_pick was: {total_pick}")
                     else:
                         logger.warning(f"  - total_pick was NEVER DEFINED")
-
-                    if 'h2h_data_valid' in locals():
-                        logger.warning(f"  - h2h_data_valid was: {h2h_data_valid}")
-                    else:
-                        logger.warning(f"  - h2h_data_valid was NEVER DEFINED")
 
                     # ============================================
                     # PHASE 2: GUARANTEED FALLBACK ROW CREATION
@@ -10169,14 +10177,26 @@ with tab_master:
 
                     # Calculate consensus for all picks in master_df
                     logger.info("Calculating consensus votes for all picks")
-                    for idx in master_df.index:
-                        consensus_votes, consensus_total, vote_details = optimizer.calculate_consensus_votes(master_df.loc[idx])
-                        master_df.at[idx, "consensus_votes"] = consensus_votes
-                        master_df.at[idx, "consensus_total"] = consensus_total
+
+                    # Fix for Issue #9: Populate consensus votes correctly
+                    # And Issue #7: Avoid fragmentation by using vectorized/list ops
+                    consensus_vote_cols = []
+                    consensus_total_cols = []
+                    consensus_breakdown_cols = []
+
+                    # We need to collect details to update rows, but bulk assignment is better
+                    # Since vote_details keys can vary, we might need a list of dicts to construct a DF
+                    vote_details_list = []
+
+                    for idx, row in master_df.iterrows():
+                        consensus_votes, consensus_total, vote_details = optimizer.calculate_consensus_votes(row)
+
+                        consensus_vote_cols.append(consensus_votes)
+                        consensus_total_cols.append(consensus_total)
+                        vote_details_list.append(vote_details if vote_details else {})
 
                         # Format detailed consensus breakdown for each market type
-                        row = master_df.loc[idx]
-                        market = row.get("Market", "").lower()
+                        market = str(row.get("Market") or "").lower()
 
                         # Get probabilities based on market type
                         if market == "spread":
@@ -10216,8 +10236,19 @@ with tab_master:
                             final_prob=final_prob,
                             pick_side=pick_side
                         )
+                        consensus_breakdown_cols.append(consensus_breakdown)
 
-                        master_df.at[idx, "consensus"] = consensus_breakdown
+                    # Bulk assign to avoid fragmentation
+                    master_df["consensus_votes"] = consensus_vote_cols
+                    master_df["consensus_total"] = consensus_total_cols
+                    master_df["consensus"] = consensus_breakdown_cols
+
+                    # Merge vote details
+                    if vote_details_list:
+                        vote_details_df = pd.DataFrame(vote_details_list, index=master_df.index)
+                        # Remove duplicate columns if any overlap
+                        vote_details_df = vote_details_df.drop(columns=[c for c in vote_details_df.columns if c in master_df.columns], errors="ignore")
+                        master_df = pd.concat([master_df, vote_details_df], axis=1)
 
                     logger.info(f"Consensus enrichment complete for {len(master_df)} picks")
 
@@ -10995,7 +11026,7 @@ if should_display:
                 st.dataframe(
                     game_summary_df[summary_cols],
                     column_config=format_cols,
-                    use_container_width=True,
+                    use_container_width=True, width="stretch",
                     hide_index=True
                 )
                 logger.info(f"✅ Successfully rendered Game Summary grid")
@@ -11034,7 +11065,7 @@ if should_display:
                         "Implied Prob": st.column_config.NumberColumn(format="%.1f%%"),
                         "AI Prob": st.column_config.NumberColumn(format="%.1f%%"),
                     },
-                    use_container_width=True,
+                    use_container_width=True, width="stretch",
                     hide_index=True
                 )
                 logger.info(f"✅ Successfully rendered Best ML Picks grid")
@@ -11502,7 +11533,7 @@ if should_display:
                     st.write(f"- Columns available: {list(top_df_ui.columns[:10])}...")
             else:
                 # Render the grid
-                st.dataframe(top_df_ui, use_container_width=True, hide_index=True)
+                st.dataframe(top_df_ui, use_container_width=True, width="stretch", hide_index=True)
                 logger.info(f"✅ Successfully rendered Top Picks grid")
 
         except Exception as grid_error:
@@ -12143,7 +12174,7 @@ with tab_shotgun:
                 if 'Pick' not in snipers.columns and 'Spread & Pick' in snipers.columns:
                     display_cols = ['Spread & Pick', 'AI_Prob', 'AI_Edge', 'consensus']
                     display_cols = [c for c in display_cols if c in snipers.columns]
-                st.dataframe(snipers[display_cols], hide_index=True, use_container_width=True)
+                st.dataframe(snipers[display_cols], hide_index=True, use_container_width=True, width="stretch")
             else:
                 st.info("No snipers available")
 
@@ -12156,7 +12187,7 @@ with tab_shotgun:
                 if 'Pick' not in strategy.columns and 'Spread & Pick' in strategy.columns:
                     display_cols = ['Spread & Pick', 'AI_Prob', 'AI_Edge', 'consensus']
                     display_cols = [c for c in display_cols if c in strategy.columns]
-                st.dataframe(strategy[display_cols], hide_index=True, use_container_width=True)
+                st.dataframe(strategy[display_cols], hide_index=True, use_container_width=True, width="stretch")
             else:
                 st.info("No strategy picks available")
 
@@ -12169,6 +12200,6 @@ with tab_shotgun:
                 if 'Pick' not in longshots.columns and 'Spread & Pick' in longshots.columns:
                     display_cols = ['Spread & Pick', 'AI_Prob', 'AI_Edge', 'consensus']
                     display_cols = [c for c in display_cols if c in longshots.columns]
-                st.dataframe(longshots[display_cols], hide_index=True, use_container_width=True)
+                st.dataframe(longshots[display_cols], hide_index=True, use_container_width=True, width="stretch")
             else:
                 st.info("No longshots available")
