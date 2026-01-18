@@ -318,24 +318,73 @@ def build_game_summary_v2(df: pd.DataFrame) -> pd.DataFrame:
             summary["Kalshi Total Δ"] = None
 
         # --- Overall Pick ---
-        # "Define overall as the best moneyline pick per game: Overall Pick = same as ML."
-        # "If no moneyline row exists, fallback to whichever of Spread or Total has the highest probability for that game."
+        # Updated logic: Best Overall should only consider real spread/total picks with:
+        # 1. Valid lines (not None/NaN)
+        # 2. Sane probabilities (50-65% range)
+        # 3. No "no_valid_spread_or_total" warning
+        # 4. Confidence bucket is MEDIUM or HIGH (not LOW)
 
-        overall_pick = ml_pick
-        overall_prob = ml_prob
+        # Helper to check if probability is in valid range (50-65%)
+        def _is_valid_prob_range(p):
+            if p is None:
+                return False
+            try:
+                p_float = float(p)
+                return 0.50 <= p_float <= 0.65
+            except:
+                return False
 
-        if overall_pick is None:
-            # Fallback
+        # Helper to check if row has warnings about invalid lines
+        def _has_invalid_line_warnings(game_rows):
+            for _, r in game_rows.iterrows():
+                warnings = str(r.get("Warnings") or "")
+                if "no_valid_spread_or_total" in warnings:
+                    return True
+            return False
+
+        # Helper to get confidence bucket for a pick
+        def _get_confidence(game_rows, market_type):
+            for _, r in game_rows.iterrows():
+                if str(r.get("Market") or "").upper() == market_type.upper():
+                    return str(r.get("Pick_Confidence") or "LOW").upper()
+            return "LOW"
+
+        overall_pick = None
+        overall_prob = None
+
+        # Build eligible picks list
+        eligible = []
+
+        # Check if this game has invalid lines warning
+        has_invalid_lines = _has_invalid_line_warnings(game_rows)
+
+        if not has_invalid_lines:
+            # Get spread probability and confidence
             s_p = _get_prob(summary, "Spread Prob")
-            t_p = _get_prob(summary, "Total Prob")
+            spread_conf = _get_confidence(game_rows, "Spread")
 
-            if s_p > 0 or t_p > 0:
-                if s_p >= t_p:
-                    overall_pick = spread_pick
-                    overall_prob = spread_prob
-                else:
-                    overall_pick = total_pick
-                    overall_prob = total_prob
+            # Get total probability and confidence
+            t_p = _get_prob(summary, "Total Prob")
+            total_conf = _get_confidence(game_rows, "Total")
+
+            # Add spread to eligible if valid
+            if (spread_pick and s_p is not None and
+                _is_valid_prob_range(s_p) and
+                spread_conf in ["MEDIUM", "HIGH"]):
+                eligible.append(("SPREAD", spread_pick, s_p))
+
+            # Add total to eligible if valid
+            if (total_pick and t_p is not None and
+                _is_valid_prob_range(t_p) and
+                total_conf in ["MEDIUM", "HIGH"]):
+                eligible.append(("TOTAL", total_pick, t_p))
+
+        # Select best pick from eligible list
+        if eligible:
+            # Pick the one with highest probability
+            best = max(eligible, key=lambda x: x[2])
+            overall_pick = best[1]
+            overall_prob = best[2]
 
         summary["Best Overall Pick"] = overall_pick  # Changed from "Overall Pick" to "Best Overall Pick" to match UI
         summary["Best Overall Prob"] = overall_prob  # Changed from "Overall Prob" to "Best Overall Prob" to match UI
