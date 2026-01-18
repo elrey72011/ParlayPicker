@@ -9932,7 +9932,7 @@ with tab_master:
                 # PHASE 1 & 2: DIAGNOSTIC + SAFETY NET
                 # Per-Game Tracking End + Guaranteed Fallback
                 # ============================================
-                rows_count_after = len(rows_out)
+                rows_count_after = len(accumulated_rows)
                 rows_created_this_game = rows_count_after - rows_count_before
 
                 # Fix for Issue #6: Fallback Safety Net Row Creation

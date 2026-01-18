@@ -283,6 +283,7 @@ MANUAL_TEAM_OVERRIDES = {
     "GARDNER WEBB": "GARDNER WEBB",
     "ST THOMAS MN": "ST THOMAS (MN)",
     "ST THOMAS (MN)": "ST THOMAS (MN)",
+    "STATE THOMAS MN": "ST THOMAS (MN)",
     "OMAHA": "NEBRASKA OMAHA",
     "NEBRASKA OMAHA": "NEBRASKA OMAHA",
     "QUEENS NC": "QUEENS (NC)",
@@ -651,11 +652,14 @@ def fetch_ncaaf_stats(season_year: int) -> List[Dict[str, Any]]:
         return []
 
     # Improved: Explicitly check st.secrets if _get_secret fails or for robustness
-    raw_key = _get_secret("CFBD_API_KEY")
+    raw_key = _get_secret("CFBD_API_KEY") or _get_secret("CFBDAPIKEY")
     if not raw_key and st is not None:
         try:
-            if hasattr(st, "secrets") and "CFBD_API_KEY" in st.secrets:
-                raw_key = st.secrets["CFBD_API_KEY"]
+            if hasattr(st, "secrets"):
+                if "CFBD_API_KEY" in st.secrets:
+                    raw_key = st.secrets["CFBD_API_KEY"]
+                elif "CFBDAPIKEY" in st.secrets:
+                    raw_key = st.secrets["CFBDAPIKEY"]
         except Exception:
             pass
 
@@ -1412,17 +1416,6 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
     
     # 6. Map Remaining Features (Existing) using safe_numeric_fill
     
-    # --- NEW: Robust ml_to_prob ---
-    def ml_to_prob(ml):
-        try:
-            if ml is None: return np.nan # Return NaN instead of 0.5 to signify missing
-            m = float(ml)
-            if m != m or m == 0: return np.nan
-            if m > 0: return 100/(m+100)
-            return abs(m)/(abs(m)+100)
-        except:
-            return np.nan
-
     # Identify implied probability column
     imp_col = next((c for c in df.columns if str(c).lower() in ['implied_prob', 'implied_home_prob', 'implied_prob_home']), None)
 
@@ -1551,6 +1544,30 @@ def run_roi_pipeline_validation(df: pd.DataFrame):
         logger.info(f"{label}: {status}")
         
     return validation_results
+
+def ml_to_prob(ml):
+    """
+    Robust conversion of American odds to implied probability.
+    Handles extreme values by returning NaN.
+    """
+    try:
+        # Check for invalid values like None, NaN, or string 'None'
+        if ml is None: return np.nan
+        if pd.isna(ml): return np.nan
+        if str(ml).strip().lower() == "none": return np.nan
+
+        m = float(ml)
+        if m != m or m == 0: return np.nan
+
+        # Check for extreme/unrealistic odds (e.g. +/- 100000)
+        if abs(m) > 50000:
+            logger.warning(f"Extreme odds detected: {m}. Treating as missing.")
+            return np.nan
+
+        if m > 0: return 100/(m+100)
+        return abs(m)/(abs(m)+100)
+    except:
+        return np.nan
 
 def safefloat(val: Any) -> float:
     """Safely convert to float, defaulting to 0.0 on error/None."""
