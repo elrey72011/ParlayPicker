@@ -11935,6 +11935,21 @@ if should_display:
         if gemini_full_run:
             gemini_allowed_idx = set(df.index)
 
+        def _is_missing_value(v):
+            """
+            Helper to safely check if a value is missing, handling Series/array cases.
+            Returns True if the value is None, NaN, or if a Series/array with all NaN values.
+            """
+            if v is None:
+                return True
+            # If somehow a Series/array lands here, require ALL missing
+            if hasattr(v, "__iter__") and not isinstance(v, (str, bytes)) and not np.isscalar(v):
+                try:
+                    return pd.isna(v).all()
+                except Exception:
+                    return False
+            return bool(pd.isna(v))
+
         def _apply_gemini(row: pd.Series) -> pd.Series:
             row = row.copy()
             for col, default in [
@@ -11945,7 +11960,8 @@ if should_display:
                 ("gemini_risk_flags", json.dumps([])),
                 ("llm_disagreement_flag", False),
             ]:
-                if col not in row or pd.isna(row.get(col)):
+                val = row.get(col, None)
+                if (col not in row.index) or _is_missing_value(val):
                     row[col] = default
             base_overall = row.get("At_a_Glance_Confidence") or row.get("Pick_Confidence")
             base_spread_conf = row.get("spread_confidence")
@@ -12041,24 +12057,47 @@ if should_display:
                 else:
                     row["gemini_flags_short"] = "gemini_error"
             return row
+
         # User Request 3: Optimized Column Insertion (Gemini)
         # Avoid apply() which constructs a new DataFrame for every row.
         # Instead, iterate, collect new metrics, and concat once.
-        gemini_results = []
-        for idx, row in df.iterrows():
-            new_row = _apply_gemini(row)
-            # We only want the new columns to avoid duplication issues
-            # Identify columns that were added or modified
-            # Since _apply_gemini returns a full row, we can just use the result directly
-            # IF we rebuild the dataframe from the list.
-            gemini_results.append(new_row)
 
-        if gemini_results:
-            # Rebuild dataframe preserving original index
-            df = pd.DataFrame(gemini_results, index=df.index)
-            # Ensure index alignment if needed, though from_records/list usually resets index
-            # or preserves if passed correctly. Iterrows returns index.
-            # But the simplest is to rebuild df from the full row objects returned by _apply_gemini.
+        # Hard-gate: Skip Gemini loop entirely if disabled or unconfigured
+        gemini_disabled_reason = st.session_state.get("gemini_disabled_reason")
+        if gemini_disabled_reason or not use_gemini_explanations:
+            if logger:
+                logger.info(f"⚠️ Skipping Gemini enrichment loop. Reason: {gemini_disabled_reason or 'User disabled Gemini explanations'}")
+            # Set default Gemini values for all rows without iterating
+            for col, default in [
+                ("gemini_mode", "disabled"),
+                ("gemini_alignment", "NEUTRAL"),
+                ("gemini_rationale", "Gemini disabled."),
+                ("gemini_flags_short", ""),
+                ("gemini_risk_flags", json.dumps([])),
+                ("llm_disagreement_flag", False),
+            ]:
+                if col not in df.columns:
+                    df[col] = default
+                df[col] = df[col].fillna(default)
+        else:
+            # Defensively dedupe columns before Gemini pass to prevent row.get(col) from returning Series
+            df = df.loc[:, ~df.columns.duplicated()].copy()
+
+            gemini_results = []
+            for idx, row in df.iterrows():
+                new_row = _apply_gemini(row)
+                # We only want the new columns to avoid duplication issues
+                # Identify columns that were added or modified
+                # Since _apply_gemini returns a full row, we can just use the result directly
+                # IF we rebuild the dataframe from the list.
+                gemini_results.append(new_row)
+
+            if gemini_results:
+                # Rebuild dataframe preserving original index
+                df = pd.DataFrame(gemini_results, index=df.index)
+                # Ensure index alignment if needed, though from_records/list usually resets index
+                # or preserves if passed correctly. Iterrows returns index.
+                # But the simplest is to rebuild df from the full row objects returned by _apply_gemini.
 
         if "_gemini_rank_metric" in df.columns:
             df = df.drop(columns=["_gemini_rank_metric"])
