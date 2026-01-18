@@ -218,13 +218,56 @@ MANUAL_TEAM_OVERRIDES = {
     "TEXAS AM": "TEXAS AM",
     "TEXAS A&M": "TEXAS AM",
 
-    # Task: Fix Missing NCAAB Stats
+    # Task: Fix Missing NCAAB Stats - Extended Mappings
     "MORGAN ST": "MORGAN STATE",
     "NORFOLK ST": "NORFOLK STATE",
     "HOWARD": "HOWARD",
     "MD EASTERN SHORE": "MARYLAND EASTERN SHORE",
     "PRAIRIE VIEW AM": "PRAIRIE VIEW",
     "AR PINE BLUFF": "ARKANSAS PINE BLUFF",
+    "ARKANSAS PINE BLUFF GOLDEN LIONS": "ARKANSAS PINE BLUFF",
+    "FLORIDA AM": "FLORIDA AM",
+    "FLORIDA A&M": "FLORIDA AM",
+    "TEXAS AM": "TEXAS A&M",
+    "ALABAMA AM": "ALABAMA A&M",
+    "NC AT": "NORTH CAROLINA AT",
+    "NC CENTRAL": "NORTH CAROLINA CENTRAL",
+    "NC STATE": "NC STATE",
+    "NC WILMINGTON": "UNC WILMINGTON",
+    "NC GREENSBORO": "UNC GREENSBORO",
+    "NC ASHEVILLE": "UNC ASHEVILLE",
+    "DELAWARE ST": "DELAWARE STATE",
+    "COPPIN ST": "COPPIN STATE",
+    "JACKSON ST": "JACKSON STATE",
+    "JACKSONVILLE ST": "JACKSONVILLE STATE",
+    "SAM HOUSTON ST": "SAM HOUSTON STATE",
+    "STEPHEN F AUSTIN": "STEPHEN F AUSTIN",
+    "SFA": "STEPHEN F AUSTIN",
+    "MIDDLE TENNESSEE": "MIDDLE TENNESSEE",
+    "MIDDLE TN": "MIDDLE TENNESSEE",
+    "MTSU": "MIDDLE TENNESSEE",
+    "WESTERN KENTUCKY": "WESTERN KENTUCKY",
+    "WKU": "WESTERN KENTUCKY",
+    "EASTERN KENTUCKY": "EASTERN KENTUCKY",
+    "EKU": "EASTERN KENTUCKY",
+    "UT ARLINGTON": "UT ARLINGTON",
+    "UTA": "UT ARLINGTON",
+    "UT MARTIN": "UT MARTIN",
+    "UTM": "UT MARTIN",
+    "UT RIO GRANDE VALLEY": "UT RIO GRANDE VALLEY",
+    "UTRGV": "UT RIO GRANDE VALLEY",
+    "SOUTHEAST MISSOURI": "SOUTHEAST MISSOURI STATE",
+    "SEMO": "SOUTHEAST MISSOURI STATE",
+    "SIU EDWARDSVILLE": "SIU EDWARDSVILLE",
+    "SIUE": "SIU EDWARDSVILLE",
+    "SOUTHERN ILLINOIS": "SOUTHERN ILLINOIS",
+    "SIU": "SOUTHERN ILLINOIS",
+    "LONG BEACH ST": "LONG BEACH STATE",
+    "LONG BEACH STATE": "LONG BEACH STATE",
+    "CSU NORTHRIDGE": "CSU NORTHRIDGE",
+    "CSUN": "CSU NORTHRIDGE",
+    "CSU FULLERTON": "CSU FULLERTON",
+    "CSU BAKERSFIELD": "CSU BAKERSFIELD",
 
     # NHL accent + city-only fixes
     "MONTRÉAL CANADIENS": "MONTREAL CANADIENS",
@@ -1124,15 +1167,17 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
                         stats_log["override"] += 1
                         continue
 
-                # 4. Fuzzy Match (Normalized Space)
-                match_norm = fuzzy_match_team_robust(t_norm, stats_index_norm_keys, threshold=70.0)
+                # 4. Fuzzy Match (Normalized Space) - Lower threshold for better recall
+                match_norm = fuzzy_match_team_robust(t_norm, stats_index_norm_keys, threshold=65.0)
                 if match_norm:
                     # Map back to raw key
                     home_map_local[t_norm] = stats_index_norm_map[match_norm]
                     stats_log["fuzzy"] += 1
+                    if lg_key in ["NBA", "NCAAB"]:  # Log successful fuzzy matches for review
+                        logger.debug(f"Fuzzy match: '{t_norm}' -> '{match_norm}' ({lg_key})")
                 else:
                     if lg_key != "default":
-                        logger.error(f"TEAM MATCH FAILURE ({lg_key}): '{t_norm}' not found in {lg_key} dictionary.")
+                        logger.warning(f"TEAM MATCH FAILURE ({lg_key}): '{t_norm}' not found. Candidates: {stats_index_norm_keys[:5]}")
                     home_map_local[t_norm] = None
                     stats_log["miss"] += 1
 
@@ -1174,15 +1219,17 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
                         stats_log["override"] += 1
                         continue
 
-                # 4. Fuzzy Match (Normalized Space)
-                match_norm = fuzzy_match_team_robust(t_norm, stats_index_norm_keys, threshold=70.0)
+                # 4. Fuzzy Match (Normalized Space) - Lower threshold for better recall
+                match_norm = fuzzy_match_team_robust(t_norm, stats_index_norm_keys, threshold=65.0)
                 if match_norm:
                     # Map back to raw key
                     away_map_local[t_norm] = stats_index_norm_map[match_norm]
                     stats_log["fuzzy"] += 1
+                    if lg_key in ["NBA", "NCAAB"]:  # Log successful fuzzy matches for review
+                        logger.debug(f"Fuzzy match: '{t_norm}' -> '{match_norm}' ({lg_key})")
                 else:
                     if lg_key != "default":
-                        logger.error(f"TEAM MATCH FAILURE ({lg_key}): '{t_norm}' not found in {lg_key} dictionary.")
+                        logger.warning(f"TEAM MATCH FAILURE ({lg_key}): '{t_norm}' not found. Candidates: {stats_index_norm_keys[:5]}")
                     away_map_local[t_norm] = None
                     stats_log["miss"] += 1
 

@@ -26,58 +26,98 @@ except ImportError:
 
 logger = logging.getLogger("app_core.theover_ingest")
 
-TEAM_ALIAS_MAP = {
-    # NHL
-    "Seattle": "Seattle Kraken", "New Jersey": "New Jersey Devils",
-    "Buffalo": "Buffalo Sabres", "Philadelphia": "Philadelphia Flyers",
-    "Ottawa": "Ottawa Senators", "Winnipeg": "Winnipeg Jets",
-    "Toronto": "Toronto Maple Leafs", "Florida": "Florida Panthers",
-    "Vancouver": "Vancouver Canucks", "Montreal": "Montreal Canadiens",
-    "NY Rangers": "New York Rangers", "NY Islanders": "New York Islanders",
-    # "LA": "Los Angeles Kings",  <-- REMOVED (Handled conditionally)
-    "SJ": "San Jose Sharks",
-    "St Louis": "St Louis Blues", "Tampa Bay": "Tampa Bay Lightning",
-    "Vegas": "Vegas Golden Knights", "Washington": "Washington Capitals",
-    "Arizona": "Arizona Coyotes", "Anaheim": "Anaheim Ducks",
-    "Boston": "Boston Bruins", "Calgary": "Calgary Flames",
-    "Carolina": "Carolina Hurricanes", "Chicago": "Chicago Blackhawks",
-    "Colorado": "Colorado Avalanche", "Columbus": "Columbus Blue Jackets",
-    "Dallas": "Dallas Stars", "Detroit": "Detroit Red Wings",
-    "Edmonton": "Edmonton Oilers", "Minnesota": "Minnesota Wild",
-    "Nashville": "Nashville Predators", "Pittsburgh": "Pittsburgh Penguins",
-    # NBA
-    "New York": "New York Knicks", "Sacramento": "Sacramento Kings",
-    # "LA": "Los Angeles Lakers", <-- REMOVED (Handled conditionally)
-    "PHI": "Philadelphia 76ers",
-    "GSW": "Golden State Warriors", "LAL": "Los Angeles Lakers",
-    "LAC": "Los Angeles Clippers", "BKN": "Brooklyn Nets",
-    "OKC": "Oklahoma City Thunder", "NOP": "New Orleans Pelicans",
-    "SAS": "San Antonio Spurs", "UTA": "Utah Jazz",
-    "WAS": "Washington Wizards", "CHA": "Charlotte Hornets",
-    # NCAAB (Major Naming Delta)
-    "South Carolina": "South Carolina Gamecocks", "Arkansas": "Arkansas Razorbacks",
-    "Pittsburgh": "Pittsburgh Panthers", "Georgia Tech": "Georgia Tech Yellow Jackets",
-    "Missouri": "Missouri Tigers", "Ole Miss": "Ole Miss Rebels",
-    "Mississippi St": "Mississippi State Bulldogs", "Vanderbilt": "Vanderbilt Commodores",
-    "LSU": "LSU Tigers", "Kansas": "Kansas Jayhawks", "Kansas St": "Kansas State Wildcats",
-    "Illinois": "Illinois Fighting Illini", "Ohio St": "Ohio State Buckeyes",
-    "Boston Univ": "Boston Univ. Terriers", "Western Carolina": "Western Carolina Catamounts",
-    "Chattanooga": "Chattanooga Mocs", "NC State": "NC State Wolfpack",
-    "Iowa": "Iowa Hawkeyes", "Iowa St": "Iowa State Cyclones",
-    "Michigan": "Michigan Wolverines", "Michigan St": "Michigan State Spartans",
-    "Penn St": "Penn State Nittany Lions", "Texas A&M": "Texas A&M Aggies",
-    "Virginia": "Virginia Cavaliers", "Virginia Tech": "Virginia Tech Hokies",
-    "West Virginia": "West Virginia Mountaineers", "Florida St": "Florida State Seminoles",
-    "Miami (FL)": "Miami Hurricanes", "Miami": "Miami Hurricanes",
-    "Kentucky": "Kentucky Wildcats", "Tennessee": "Tennessee Volunteers",
-    "Auburn": "Auburn Tigers", "Alabama": "Alabama Crimson Tide",
-    "Arizona St": "Arizona State Sun Devils", "Oregon": "Oregon Ducks",
-    "Oregon St": "Oregon State Beavers", "UCLA": "UCLA Bruins",
-    "USC": "USC Trojans", "Washington St": "Washington State Cougars",
-    "Colorado St": "Colorado State Rams", "San Diego St": "San Diego State Aztecs",
-    "Boise St": "Boise State Broncos", "Nevada": "Nevada Wolf Pack",
-    "UNLV": "UNLV Rebels", "Utah St": "Utah State Aggies"
+# League-specific team alias mappings to prevent cross-league contamination
+TEAM_ALIAS_MAP_BY_LEAGUE = {
+    "NHL": {
+        "Seattle": "Seattle Kraken", "New Jersey": "New Jersey Devils",
+        "Buffalo": "Buffalo Sabres", "Philadelphia": "Philadelphia Flyers",
+        "Ottawa": "Ottawa Senators", "Winnipeg": "Winnipeg Jets",
+        "Toronto": "Toronto Maple Leafs", "Florida": "Florida Panthers",
+        "Vancouver": "Vancouver Canucks", "Montreal": "Montreal Canadiens",
+        "NY Rangers": "New York Rangers", "NY Islanders": "New York Islanders",
+        "SJ": "San Jose Sharks", "LA": "Los Angeles Kings",
+        "St Louis": "St Louis Blues", "Tampa Bay": "Tampa Bay Lightning",
+        "Vegas": "Vegas Golden Knights", "Washington": "Washington Capitals",
+        "Arizona": "Arizona Coyotes", "Anaheim": "Anaheim Ducks",
+        "Boston": "Boston Bruins", "Calgary": "Calgary Flames",
+        "Carolina": "Carolina Hurricanes", "Chicago": "Chicago Blackhawks",
+        "Colorado": "Colorado Avalanche", "Columbus": "Columbus Blue Jackets",
+        "Dallas": "Dallas Stars", "Detroit": "Detroit Red Wings",
+        "Edmonton": "Edmonton Oilers", "Minnesota": "Minnesota Wild",
+        "Nashville": "Nashville Predators", "Pittsburgh": "Pittsburgh Penguins",
+    },
+    "NBA": {
+        "New York": "New York Knicks", "Sacramento": "Sacramento Kings",
+        "LA": "Los Angeles Lakers", "PHI": "Philadelphia 76ers",
+        "GSW": "Golden State Warriors", "LAL": "Los Angeles Lakers",
+        "LAC": "Los Angeles Clippers", "BKN": "Brooklyn Nets",
+        "OKC": "Oklahoma City Thunder", "NOP": "New Orleans Pelicans",
+        "SAS": "San Antonio Spurs", "UTA": "Utah Jazz",
+        "WAS": "Washington Wizards", "CHA": "Charlotte Hornets",
+        "PHX": "Phoenix Suns", "MIL": "Milwaukee Bucks",
+        "MEM": "Memphis Grizzlies", "IND": "Indiana Pacers",
+        "DET": "Detroit Pistons", "ATL": "Atlanta Hawks",
+        "BOS": "Boston Celtics", "CHI": "Chicago Bulls",
+        "CLE": "Cleveland Cavaliers", "MIA": "Miami Heat",
+        "ORL": "Orlando Magic", "TOR": "Toronto Raptors",
+    },
+    "NFL": {
+        "Arizona": "Arizona Cardinals", "Atlanta": "Atlanta Falcons",
+        "Baltimore": "Baltimore Ravens", "Buffalo": "Buffalo Bills",
+        "Carolina": "Carolina Panthers", "Chicago": "Chicago Bears",
+        "Cincinnati": "Cincinnati Bengals", "Cleveland": "Cleveland Browns",
+        "Dallas": "Dallas Cowboys", "Denver": "Denver Broncos",
+        "Detroit": "Detroit Lions", "Green Bay": "Green Bay Packers",
+        "Houston": "Houston Texans", "Indianapolis": "Indianapolis Colts",
+        "Jacksonville": "Jacksonville Jaguars", "Kansas City": "Kansas City Chiefs",
+        "Las Vegas": "Las Vegas Raiders", "LA": "Los Angeles Rams",
+        "Miami": "Miami Dolphins", "Minnesota": "Minnesota Vikings",
+        "New England": "New England Patriots", "New Orleans": "New Orleans Saints",
+        "NY Giants": "New York Giants", "NY Jets": "New York Jets",
+        "Philadelphia": "Philadelphia Eagles", "Pittsburgh": "Pittsburgh Steelers",
+        "San Francisco": "San Francisco 49ers", "Seattle": "Seattle Seahawks",
+        "Tampa Bay": "Tampa Bay Buccaneers", "Tennessee": "Tennessee Titans",
+        "Washington": "Washington Commanders",
+    },
+    "NCAAB": {
+        "South Carolina": "South Carolina Gamecocks", "Arkansas": "Arkansas Razorbacks",
+        "Pittsburgh": "Pittsburgh Panthers", "Georgia Tech": "Georgia Tech Yellow Jackets",
+        "Missouri": "Missouri Tigers", "Ole Miss": "Ole Miss Rebels",
+        "Mississippi St": "Mississippi State Bulldogs", "Vanderbilt": "Vanderbilt Commodores",
+        "LSU": "LSU Tigers", "Kansas": "Kansas Jayhawks", "Kansas St": "Kansas State Wildcats",
+        "Illinois": "Illinois Fighting Illini", "Ohio St": "Ohio State Buckeyes",
+        "Boston Univ": "Boston Univ. Terriers", "Western Carolina": "Western Carolina Catamounts",
+        "Chattanooga": "Chattanooga Mocs", "NC State": "NC State Wolfpack",
+        "Iowa": "Iowa Hawkeyes", "Iowa St": "Iowa State Cyclones",
+        "Michigan": "Michigan Wolverines", "Michigan St": "Michigan State Spartans",
+        "Penn St": "Penn State Nittany Lions", "Texas A&M": "Texas A&M Aggies",
+        "Virginia": "Virginia Cavaliers", "Virginia Tech": "Virginia Tech Hokies",
+        "West Virginia": "West Virginia Mountaineers", "Florida St": "Florida State Seminoles",
+        "Miami (FL)": "Miami Hurricanes", "Miami": "Miami Hurricanes",
+        "Kentucky": "Kentucky Wildcats", "Tennessee": "Tennessee Volunteers",
+        "Auburn": "Auburn Tigers", "Alabama": "Alabama Crimson Tide",
+        "Arizona St": "Arizona State Sun Devils", "Oregon": "Oregon Ducks",
+        "Oregon St": "Oregon State Beavers", "UCLA": "UCLA Bruins",
+        "USC": "USC Trojans", "Washington St": "Washington State Cougars",
+        "Colorado St": "Colorado State Rams", "San Diego St": "San Diego State Aztecs",
+        "Boise St": "Boise State Broncos", "Nevada": "Nevada Wolf Pack",
+        "UNLV": "UNLV Rebels", "Utah St": "Utah State Aggies",
+        "Duke": "Duke Blue Devils", "North Carolina": "North Carolina Tar Heels",
+        "Gonzaga": "Gonzaga Bulldogs", "Villanova": "Villanova Wildcats",
+    },
+    "NCAAF": {
+        # Add NCAAF specific mappings if needed
+        "Alabama": "Alabama Crimson Tide", "Georgia": "Georgia Bulldogs",
+        "Ohio St": "Ohio State Buckeyes", "Michigan": "Michigan Wolverines",
+        "USC": "USC Trojans", "Texas": "Texas Longhorns",
+        "Oklahoma": "Oklahoma Sooners", "Florida": "Florida Gators",
+    }
 }
+
+# Backward compatibility: flatten all into single map for non-league-aware lookups
+TEAM_ALIAS_MAP = {}
+for league_aliases in TEAM_ALIAS_MAP_BY_LEAGUE.values():
+    TEAM_ALIAS_MAP.update(league_aliases)
 
 def generate_canonical_key(league: str, date_str: str, home_code: str, away_code: str) -> str:
     """
@@ -249,28 +289,36 @@ def _normalize_league_str(raw_league: str) -> str:
 def _resolve_team_alias(name: str, league: str) -> str:
     """
     Resolve team alias with league-specific context.
+    Uses league-specific mappings to prevent cross-sport contamination.
     """
     name = name.strip()
 
-    # 1. Global Map Lookup (Explicit Aliases)
+    # Normalize league string
+    league_norm = _normalize_league_str(league)
+
+    # 1. League-Specific Lookup (PRIORITY)
+    if league_norm in TEAM_ALIAS_MAP_BY_LEAGUE:
+        league_map = TEAM_ALIAS_MAP_BY_LEAGUE[league_norm]
+
+        # Exact match (case-sensitive)
+        if name in league_map:
+            return league_map[name]
+
+        # Case-insensitive match
+        for k, v in league_map.items():
+            if k.lower() == name.lower():
+                return v
+
+    # 2. Fallback to Global Map (if league-specific fails)
     if name in TEAM_ALIAS_MAP:
         return TEAM_ALIAS_MAP[name]
 
-    # 1b. Case-Insensitive Lookup (Robustness)
-    # Task 4: Ensure "South Carolina" matches "SOUTH CAROLINA"
+    # 3. Case-insensitive global lookup
     for k, v in TEAM_ALIAS_MAP.items():
         if k.lower() == name.lower():
             return v
 
-    # 2. Context-Aware Resolution (Resolving Collisions)
-    if name == "LA":
-        if league == "NBA":
-            return "Los Angeles Lakers"
-        elif league == "NHL":
-            return "Los Angeles Kings"
-        # Default or fallback?
-        return "Los Angeles"
-
+    # 4. Return original if no match
     return name
 
 def _transform_theover_df(df: pd.DataFrame, pick_type_default: str, games: List[Dict[str, Any]], stats_collector: List[Dict]) -> pd.DataFrame:
