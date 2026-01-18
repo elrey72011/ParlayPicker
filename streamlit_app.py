@@ -3090,9 +3090,9 @@ def score_pick_confidence(row: Dict[str, Any]) -> Tuple[str, str, bool]:
         return "UNKNOWN", "UNKNOWN: missing final probability", False
 
     decisiveness = abs(final_prob - 0.5) * 2
-    if decisiveness >= 0.40:
+    if decisiveness >= 0.16:  # 0.08 * 2 - allows picks with 42-58% probability
         tier = "HIGH"
-    elif decisiveness >= 0.25:
+    elif decisiveness >= 0.04:  # 0.02 * 2 - allows picks with 48-52% probability
         tier = "MEDIUM"
     else:
         tier = "LOW"
@@ -7618,30 +7618,12 @@ with tab_master:
                 else:
                     sentiment_diff = None
                     if home_sent is None and away_sent is None:
-                        home_error = home_meta.get("error", "unknown")
-                        away_error = away_meta.get("error", "unknown")
-                        home_status = home_meta.get("sentiment_status", home_meta.get("status", "N/A"))
-                        away_status = away_meta.get("sentiment_status", away_meta.get("status", "N/A"))
-                        home_sources = home_meta.get("sentiment_articles_used", 0)
-                        away_sources = away_meta.get("sentiment_articles_used", 0)
-                        home_valid = home_meta.get("sentiment_valid", False)
-                        away_valid = away_meta.get("sentiment_valid", False)
-                        logger.warning(
-                            f"SENTIMENT UNAVAILABLE for game {g.get('id')}: {home} vs {away}\n"
-                            f"  Home: score=None, valid={home_valid}, error={home_error}, status={home_status}, sources={home_sources}\n"
-                            f"  Away: score=None, valid={away_valid}, error={away_error}, status={away_status}, sources={away_sources}\n"
-                            f"  Result: sentiment_diff=None (sentiment will NOT contribute to probability)"
-                        )
+                        # Sentiment intentionally not used (weight=0.0) - reduce log verbosity
+                        logger.debug(f"Sentiment unavailable for {home} vs {away} (sentiment weight=0.0, not used in probability)")
                     elif home_sent is None:
-                        away_valid = away_meta.get("sentiment_valid", False)
-                        home_status = home_meta.get("sentiment_status", home_meta.get("status", "N/A"))
-                        home_sources = home_meta.get("sentiment_articles_used", 0)
-                        logger.warning(f"SENTIMENT PARTIAL for game {g.get('id')}: {home} (missing, status={home_status}, sources={home_sources}) vs {away} (score={away_sent:.3f}, valid={away_valid}) - skipping sentiment")
+                        logger.debug(f"Sentiment partial for {home} vs {away}: home missing (not used in probability)")
                     elif away_sent is None:
-                        home_valid = home_meta.get("sentiment_valid", False)
-                        away_status = away_meta.get("sentiment_status", away_meta.get("status", "N/A"))
-                        away_sources = away_meta.get("sentiment_articles_used", 0)
-                        logger.warning(f"SENTIMENT PARTIAL for game {g.get('id')}: {home} (score={home_sent:.3f}, valid={home_valid}) vs {away} (missing, status={away_status}, sources={away_sources}) - skipping sentiment")
+                        logger.debug(f"Sentiment partial for {home} vs {away}: away missing (not used in probability)")
 
                 rate_limited_flag = bool(
                     sentiment_meta_global.get("sentiment_rate_limited")
