@@ -4690,14 +4690,16 @@ if kalshi_integrator:
     kalshi_integrator.required = st.session_state.get("kalshi_required", True)
 api_sports_clients, sportsdata_clients = init_data_clients()
 
-@st.cache_data(ttl=60)
 def fetch_odds_games(sport_key: str, run_id: Optional[str] = None) -> List[Dict[str, Any]]:
     """
     Fetch odds from TheOddsAPI with retry logic and proper error handling.
 
+    NOTE: This function is NOT cached to avoid caching empty results.
+    Instead, successful results are cached at the load_games level per run_id.
+
     Args:
         sport_key: Sport identifier (e.g., 'basketball_nba', 'americanfootball_nfl')
-        run_id: Optional run identifier for cache isolation
+        run_id: Optional run identifier for logging
 
     Returns:
         List of game dictionaries, or empty list on failure
@@ -5580,12 +5582,14 @@ def filter_kalshi_game_markets(
             prefix_ok = any(t.startswith(pfx) for pfx in allowed_prefixes)
 
             # Relaxed Prefix Logic for College Sports (often mislabeled or varied)
+            # FIXED: Removed "and 'GAME' in t" to allow SPREAD and TOTAL markets
             if not prefix_ok and league_upper in {"NCAAB", "NCAAF"}:
-                if ("NCAAB" in t or "NCAA" in t or "NCAAF" in t) and "GAME" in t:
+                if ("NCAAB" in t or "NCAA" in t or "NCAAF" in t):
                     prefix_ok = True
 
             # Allow "KX" generic prefix fallback if league-specific fails
-            if not prefix_ok and t.startswith("KX") and "GAME" in t:
+            # FIXED: Removed "and 'GAME' in t" to allow SPREAD and TOTAL markets
+            if not prefix_ok and t.startswith("KX"):
                  prefix_ok = True
 
             # Best Effort: Do NOT strictly filter by prefix here if we are desperate,
@@ -5984,8 +5988,19 @@ def _match_kalshi_market_impl(
     home_tokens = team_token_set(game.get("home_team"))
     away_tokens = team_token_set(game.get("away_team"))
 
+    # Classify markets and add debug logging
     totals = [m for m in kalshi_markets if classify_kalshi_market(m) == "total"]
     spreads = [m for m in kalshi_markets if classify_kalshi_market(m) == "spread"]
+    winners = [m for m in kalshi_markets if classify_kalshi_market(m) == "winner"]
+    unknown = [m for m in kalshi_markets if classify_kalshi_market(m) == "unknown"]
+
+    # DEBUG: Log market type counts and samples
+    logger.info(f"📊 KALSHI MARKET CLASSIFICATION for {game.get('away_team')} @ {game.get('home_team')}:")
+    logger.info(f"   Total markets received: {len(kalshi_markets)}")
+    logger.info(f"   - Winner markets: {len(winners)}" + (f" (sample: {winners[0].get('ticker', 'N/A')})" if winners else ""))
+    logger.info(f"   - Total markets: {len(totals)}" + (f" (sample: {totals[0].get('ticker', 'N/A')})" if totals else ""))
+    logger.info(f"   - Spread markets: {len(spreads)}" + (f" (sample: {spreads[0].get('ticker', 'N/A')})" if spreads else ""))
+    logger.info(f"   - Unknown markets: {len(unknown)}" + (f" (sample: {unknown[0].get('ticker', 'N/A')})" if unknown else ""))
 
     winner_candidate_debug: List[Dict[str, Any]] = []
     best_winner: Optional[Dict[str, Any]] = None
@@ -6267,12 +6282,22 @@ if "gemini_disabled_reason" not in st.session_state:
 # -----------------
 
 def load_games(selected_leagues: Union[str, List[str]], run_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    """
+    Load games from TheOddsAPI for selected leagues.
+
+    Sets st.session_state["games_fetch_status"] to "success", "empty", or "error"
+    to enable atomic ingest + UI gating.
+    """
     leagues = [selected_leagues] if isinstance(selected_leagues, str) else list(selected_leagues or [])
     all_games_with_times: List[Dict[str, Any]] = []
     commence_stats_total = {"parsed": 0, "failed": 0, "timezone": get_local_tz()}
     moneyline_count = 0
     spreads_count = 0
     totals_count = 0
+
+    # Track whether any league succeeded
+    any_games_loaded = False
+    all_leagues_failed = True
 
     for selected_league in leagues:
         sport_key = SPORT_KEYS.get(selected_league)
@@ -6281,6 +6306,9 @@ def load_games(selected_leagues: Union[str, List[str]], run_id: Optional[str] = 
             continue
         try:
             games_raw = fetch_odds_games(sport_key, run_id=run_id)
+            if games_raw and len(games_raw) > 0:
+                any_games_loaded = True
+                all_leagues_failed = False
         except Exception:
             st.session_state["last_exception"] = traceback.format_exc()
             continue
@@ -6388,6 +6416,18 @@ def load_games(selected_leagues: Union[str, List[str]], run_id: Optional[str] = 
     moneyline_count_filtered = sum(1 for g in filtered_games if g.get("best_ml_book") is not None)
     spreads_count_filtered = sum(1 for g in filtered_games if g.get("best_spread_book") is not None)
     totals_count_filtered = sum(1 for g in filtered_games if g.get("best_total_book") is not None)
+
+    # Set fetch status for atomic ingest + UI gating
+    if len(filtered_games) > 0:
+        st.session_state["games_fetch_status"] = "success"
+        st.session_state["games_fetch_run_id"] = run_id  # Track which run_id succeeded
+        logger.info(f"✅ Games fetch SUCCESS: {len(filtered_games)} games loaded (run_id: {run_id})")
+    elif all_leagues_failed:
+        st.session_state["games_fetch_status"] = "error"
+        logger.error(f"❌ Games fetch ERROR: All leagues failed to load (run_id: {run_id})")
+    else:
+        st.session_state["games_fetch_status"] = "empty"
+        logger.warning(f"⚠️ Games fetch EMPTY: API succeeded but returned 0 games (run_id: {run_id})")
 
     st.session_state["games"] = filtered_games
     st.session_state["commence_stats"] = commence_stats_total
@@ -10725,10 +10765,28 @@ with tab_master:
 
                 logger.info(f"✅ HasKalshiMarket flag added: {kalshi_markets_count} games have valid Kalshi markets")
 
-                # CRITICAL: Save to BOTH session state variables so UI can display the data
+                # CRITICAL: Save to session state
                 logger.info(f"Saving df ({len(df)} rows) to session state...")
-                st.session_state["master_df"] = df
-                st.session_state["master_results_df"] = df
+                st.session_state["master_df"] = df  # Raw data with all internal columns
+
+                # Create filtered version for user export (remove internal/debug columns)
+                # Keep only user-relevant columns for the "All Picks" export
+                user_columns = [
+                    'league', 'Home', 'Away', 'Commence (UTC)', 'Commence (Local)', 'Local Date',
+                    'Market', 'Pick', 'Final Probability', 'Confidence Level',
+                    'Best Overall Pick', 'Best Overall Prob', 'Best Overall Market',
+                    'Spread & Pick', 'spread_prob_pick_final', 'SpreadConsensusProb', 'SpreadConsensus',
+                    'Total & Pick', 'total_prob_pick_final', 'TotalConsensusProb', 'TotalConsensus',
+                    'Home_ML', 'Away_ML', 'Home_Spread', 'Away_Spread', 'Total_Line',
+                    'Home_Sentiment', 'Away_Sentiment', 'Sentiment_Diff',
+                    'kalshi_available', 'HasKalshiMarket',
+                    'market_stability', 'consensus_strength', 'confidence_score'
+                ]
+                # Filter to only columns that exist in the dataframe
+                results_columns = [col for col in user_columns if col in df.columns]
+                st.session_state["master_results_df"] = df[results_columns].copy()
+                logger.info(f"   Created master_results_df with {len(results_columns)} user-facing columns (vs {len(df.columns)} in raw)")
+
                 st.session_state["master_stats_persistent"] = master_stats
 
                 # Final consistency check log (Integrity Log)
@@ -10825,7 +10883,9 @@ logger.info(f"\n{'='*80}")
 logger.info(f"UI RENDERING SECTION")
 logger.info(f"{'='*80}")
 
-# Check if data exists in session state
+# Check if data exists in session state (only log errors if analysis was attempted)
+analysis_was_attempted = st.session_state.get("analysis_complete", False) or st.session_state.get("run_id") is not None
+
 if "master_results_df" in st.session_state:
     logger.info(f"✅ master_results_df exists in session state")
     try:
@@ -10833,8 +10893,9 @@ if "master_results_df" in st.session_state:
         logger.info(f"   Columns: {len(st.session_state['master_results_df'].columns)}")
     except Exception as e:
         logger.error(f"Error checking master_results_df: {e}")
-else:
-    logger.error(f"❌ master_results_df NOT FOUND in session state!")
+elif analysis_was_attempted:
+    # Only log error if user attempted analysis
+    logger.error(f"❌ master_results_df NOT FOUND in session state after analysis attempt!")
     logger.error(f"   Available keys: {list(st.session_state.keys())}")
 
 if "master_df" in st.session_state:
@@ -10843,8 +10904,9 @@ if "master_df" in st.session_state:
         logger.info(f"   Rows: {len(st.session_state['master_df'])}")
     except Exception as e:
         logger.error(f"Error checking master_df: {e}")
-else:
-    logger.error(f"❌ master_df NOT FOUND in session state!")
+elif analysis_was_attempted:
+    # Only log error if user attempted analysis
+    logger.error(f"❌ master_df NOT FOUND in session state after analysis attempt!")
 
 logger.info(f"{'='*80}")
 
@@ -12080,23 +12142,28 @@ if should_display:
         df_master_view = calculate_best_pick_metrics(df_master_view)
 
         # --- MERGE GAME SUMMARY COLUMNS ---
-        try:
-            summary_df_merge = build_game_summary(st.session_state["master_df"])
-            if not summary_df_merge.empty and not df_master_view.empty:
-                # Avoid duplicate join keys in right frame
-                join_keys = ["league", "Home", "Away", "Commence (UTC)"]
-                cols_to_use = [c for c in summary_df_merge.columns if c not in ["Commence (Local)", "Local Date"]]
+        # Skip summary merge if Gemini is disabled (prevents merge errors from missing Gemini fields)
+        gemini_disabled = st.session_state.get("gemini_disabled_reason") is not None
+        if gemini_disabled:
+            logger.info("⚠️ Skipping game summary merge because Gemini is disabled")
+        else:
+            try:
+                summary_df_merge = build_game_summary(st.session_state["master_df"])
+                if not summary_df_merge.empty and not df_master_view.empty:
+                    # Avoid duplicate join keys in right frame
+                    join_keys = ["league", "Home", "Away", "Commence (UTC)"]
+                    cols_to_use = [c for c in summary_df_merge.columns if c not in ["Commence (Local)", "Local Date"]]
 
-                df_master_view = pd.merge(
-                    df_master_view,
-                    summary_df_merge[cols_to_use],
-                    on=join_keys,
-                    how="left"
-                )
-                # Task 3: Optimization - Replace fragmented column assignments with copy
-                df_master_view = df_master_view.copy()
-        except Exception as e:
-            logger.warning(f"Summary merge failed: {e}")
+                    df_master_view = pd.merge(
+                        df_master_view,
+                        summary_df_merge[cols_to_use],
+                        on=join_keys,
+                        how="left"
+                    )
+                    # Task 3: Optimization - Replace fragmented column assignments with copy
+                    df_master_view = df_master_view.copy()
+            except Exception as e:
+                logger.warning(f"⚠️ Summary merge failed: {e}")
 
         counts = confidence_stats.get("counts") or {}
         st.caption(
