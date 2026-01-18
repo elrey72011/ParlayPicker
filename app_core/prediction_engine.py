@@ -91,6 +91,10 @@ class PredictionEngine:
         # Robust path resolution relative to this file
         if model_path is None:
             # app_core/prediction_engine.py -> parents[1] = root -> models/model.json
+            # Correct path resolution:
+            # __file__ is /app/app_core/prediction_engine.py
+            # parents[0] is /app/app_core
+            # parents[1] is /app
             root_dir = Path(__file__).resolve().parents[1]
             model_path = str(root_dir / "models" / "model.json")
 
