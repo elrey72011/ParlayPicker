@@ -243,6 +243,43 @@ def clamp(x: Optional[float], lo: float = 0.0, hi: float = 1.0) -> Optional[floa
         return None
 
 
+def has_valid_line(line: Any) -> bool:
+    """
+    Check if a betting line is valid (not None and not NaN).
+
+    Args:
+        line: The betting line value to check
+
+    Returns:
+        True if line is valid, False otherwise
+    """
+    return line is not None and not pd.isna(line)
+
+
+def clamp_prob(p: Any, lo: float = 0.05, hi: float = 0.95) -> Optional[float]:
+    """
+    Hard cap on probabilities to prevent extreme values.
+    Clamps probability between lo and hi (default 5-95%).
+
+    Args:
+        p: Probability value to clamp
+        lo: Lower bound (default 0.05)
+        hi: Upper bound (default 0.95)
+
+    Returns:
+        Clamped probability or None if input is None/NaN
+    """
+    if p is None or pd.isna(p):
+        return None
+    try:
+        p_float = float(p)
+        if pd.isna(p_float):
+            return None
+        return max(lo, min(hi, p_float))
+    except (ValueError, TypeError):
+        return None
+
+
 def compute_sentiment_adj(sentiment_diff: Optional[float]) -> Optional[float]:
     """
     Compute sentiment adjustment for probability calculations.
@@ -972,17 +1009,21 @@ def compute_final_probability(
     w_theover = w_theover_base
 
     # 4. Build Sources (Only working sources: Market, Kalshi, TheOver)
+    # Apply probability clamping to prevent extreme values (5-95% range)
 
-    # Market (0.40 weight)
-    p_market = clamp(implied_prob) if has_market else 0.5
+    # Market (0.40 weight) - clamp to prevent extreme probabilities
+    implied_prob_clamped = clamp_prob(implied_prob, lo=0.05, hi=0.95) if has_market else None
+    p_market = clamp(implied_prob_clamped) if implied_prob_clamped is not None else 0.5
     sources.append(("implied", p_market, w_market))
 
-    # Kalshi (0.45 weight)
-    p_kalshi = clamp(kalshi_prob_for_pick) if has_kalshi else 0.5
+    # Kalshi (0.45 weight) - clamp to prevent extreme probabilities
+    kalshi_prob_clamped = clamp_prob(kalshi_prob_for_pick, lo=0.05, hi=0.95) if has_kalshi else None
+    p_kalshi = clamp(kalshi_prob_clamped) if kalshi_prob_clamped is not None else 0.5
     sources.append(("kalshi", p_kalshi, w_kalshi))
 
-    # TheOver (0.15 weight)
-    p_theover = clamp(theover_prob) if has_theover else 0.5
+    # TheOver (0.15 weight) - clamp to prevent extreme probabilities
+    theover_prob_clamped = clamp_prob(theover_prob, lo=0.05, hi=0.95) if has_theover else None
+    p_theover = clamp(theover_prob_clamped) if theover_prob_clamped is not None else 0.5
     sources.append(("theover", p_theover, w_theover))
 
     # REMOVED: ML Model (file missing at /mount/src/parlaypicker/models/model.json)
@@ -3096,40 +3137,51 @@ def score_pick_confidence(row: Dict[str, Any]) -> Tuple[str, str, bool]:
     Returns (confidence, reason_short, eligible_for_top_picks).
     confidence in {"HIGH", "MEDIUM", "LOW"}.
 
-    Decisiveness thresholds based on raw distance from 0.5:
-    - HIGH: >= 0.08 (prob >= 0.58 or <= 0.42)
-    - MEDIUM: >= 0.02 (prob >= 0.52 or <= 0.48)
-    - LOW: < 0.02
+    Rule-based confidence using edge and data quality:
+    - If no valid spread or total: LOW
+    - If edge >= 0.08 AND Kalshi available AND decision_driver is Kalshi: HIGH
+    - If edge >= 0.03: MEDIUM
+    - Otherwise: LOW
+
+    Best Overall picks can only come from MEDIUM/HIGH confidence rows, never LOW.
     """
     market = (row.get("Market") or "").lower()
     final_prob = safe_float(row.get("final_probability") or row.get("consensus_prob_adj") or row.get("AI_Prob"))
+    warnings_text = str(row.get("Warnings") or "")
+
     if final_prob is None:
         return "UNKNOWN", "UNKNOWN: missing final probability", False
 
-    # Raw decisiveness (no scaling)
-    decisiveness = abs(final_prob - 0.5)
+    # Calculate edge (distance from 0.5, signed)
+    edge = abs(final_prob - 0.5)
 
-    # Apply thresholds: HIGH >= 0.08, MEDIUM >= 0.02
-    if decisiveness >= 0.08:
-        tier = "HIGH"
-    elif decisiveness >= 0.02:
-        tier = "MEDIUM"
-    else:
+    # Check if there are no valid spread or total lines
+    if "no_valid_spread_or_total" in warnings_text:
         tier = "LOW"
+        reason = "no_valid_spread_or_total"
+    else:
+        # Get decision driver and Kalshi availability
+        decision_driver = str(row.get("decision_driver") or "").lower()
+        kalshi_weight = safe_float(row.get("kalshi_weight"))
+        kalshi_available = kalshi_weight is not None and kalshi_weight > 0
 
-    # Downgrade tier if Kalshi required but unavailable
-    kalshi_required = bool(row.get("Kalshi_Required"))
-    kalshi_status = str(row.get("kalshi_status") or "").upper()
-    if kalshi_required and kalshi_status == "NO_MARKET":
-        if tier == "HIGH":
+        # Apply edge-based rules
+        if edge >= 0.08 and kalshi_available and decision_driver == "kalshi":
+            tier = "HIGH"
+            reason = f"edge={edge:.3f} (≥0.08), kalshi_driven"
+        elif edge >= 0.03:
             tier = "MEDIUM"
-        elif tier == "MEDIUM":
+            reason = f"edge={edge:.3f} (≥0.03)"
+        else:
             tier = "LOW"
+            reason = f"edge={edge:.3f} (<0.03)"
 
-    decision_driver = row.get("decision_driver") or ("market_only" if market else "unknown")
     sentiment_dir = row.get("sentiment_direction") or "neutral"
-    confidence_reason = f"{tier}: driver={decision_driver} | decisiveness={decisiveness:.3f} | sentiment={sentiment_dir}"
+    confidence_reason = f"{tier}: {reason} | driver={row.get('decision_driver') or 'unknown'} | sentiment={sentiment_dir}"
+
+    # Only MEDIUM and HIGH confidence rows are eligible for top picks
     eligible = tier != "LOW"
+
     return tier, confidence_reason, eligible
 
 
@@ -9049,14 +9101,40 @@ with tab_master:
                 elif extreme_ml:
                     warnings = list(dict.fromkeys(warnings + ["moneyline_extreme_skipped"]))
 
+                # PRE-VALIDATION: Check line validity before creating spread/total rows
+                spread_valid = (has_valid_line(spread_line) and
+                                spread_odds_valid and
+                                spread_pick is not None and
+                                spread_prob_market is not None and
+                                spread_prob_market < 0.95)  # Filter out placeholder probabilities
+
+                total_valid_check = (has_valid_line(total_line) and
+                                     total_odds_valid and
+                                     total_pick is not None and
+                                     total_prob_market is not None and
+                                     total_prob_market < 0.95)  # Filter out placeholder probabilities
+
+                # If both spread and total are invalid, add warning
+                if not spread_valid and not total_valid_check:
+                    warnings.append("no_valid_spread_or_total")
+
+                # NHL Special Handling: If league is NHL and only moneyline is available (no spread/total)
+                # Mark as informational only - do not create picks
+                if league_name == "NHL" and not spread_valid and not total_valid_check:
+                    # Moneyline-only NHL game - informational only
+                    warnings.append("nhl_moneyline_only_no_spread_or_total")
+                    # The moneyline row (if created) will be marked as LOW confidence automatically
+                    # due to the "no_valid_spread_or_total" warning
+
                 # SPREAD ROW
-                # FIX: Only create spread row if spread odds are valid
+                # FIX: Only create spread row if spread odds are valid AND line is valid (not None/NaN)
                 # This prevents synthetic "None/69.6/NaN" rows for NHL games with missing spread markets
-                if (g.get("home_spread_point") is not None and
-                    spread_odds_valid and
-                    spread_pick is not None and
-                    spread_prob_market is not None and
-                    spread_prob_market < 0.95):  # Filter out placeholder probabilities
+
+                # Add warning if spread line is invalid
+                if not has_valid_line(spread_line) and g.get("home_spread_point") is not None:
+                    warnings.append("no_valid_spread")
+
+                if spread_valid:
                     ai_prob_base = None
                     ai_prob_row = None
                     model_spread_prob = None
@@ -9350,13 +9428,14 @@ with tab_master:
                         logger.warning(f"⚠️  DIAGNOSTIC: Game {idx+1} ({home} vs {away}) - NO SPREAD ROW: home_spread_point={spread_point}, spread_pick={spread_pick}")
 
                 # TOTAL ROW
-                # FIX: Only create total row if total odds are valid
+                # FIX: Only create total row if total odds are valid AND line is valid (not None/NaN)
                 # This prevents synthetic "None/69.6/NaN" rows for NHL games with missing total markets
-                if (g.get("total_point") is not None and
-                    total_odds_valid and
-                    total_pick is not None and
-                    total_prob_market is not None and
-                    total_prob_market < 0.95):  # Filter out placeholder probabilities
+
+                # Add warning if total line is invalid
+                if not has_valid_line(total_line) and g.get("total_point") is not None:
+                    warnings.append("no_valid_total")
+
+                if total_valid_check:
                     ai_prob_base = None
                     ai_prob_row = None
                     warnings.append("market_based_total_prob")
