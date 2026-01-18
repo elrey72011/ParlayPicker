@@ -356,16 +356,16 @@ def build_game_summary_v2(df: pd.DataFrame) -> pd.DataFrame:
         eligible = []
 
         # Check if this game has invalid lines warning
-        has_invalid_lines = _has_invalid_line_warnings(game_rows)
+        has_invalid_lines = _has_invalid_line_warnings(group)
 
         if not has_invalid_lines:
             # Get spread probability and confidence
             s_p = _get_prob(summary, "Spread Prob")
-            spread_conf = _get_confidence(game_rows, "Spread")
+            spread_conf = _get_confidence(group, "Spread")
 
             # Get total probability and confidence
             t_p = _get_prob(summary, "Total Prob")
-            total_conf = _get_confidence(game_rows, "Total")
+            total_conf = _get_confidence(group, "Total")
 
             # Add spread to eligible if valid
             if (spread_pick and s_p is not None and
