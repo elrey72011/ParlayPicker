@@ -5503,6 +5503,18 @@ def filter_kalshi_game_markets(
             away_codes.append(str(away_code).upper())
         away_codes.extend(team_code_candidates(league, away_team))
 
+        # Initialize allowed_prefixes from LEAGUE_SERIES_MAP
+        allowed_prefixes = []
+        series_list = LEAGUE_SERIES_MAP.get(league_upper, [])
+        if isinstance(series_list, list):
+            allowed_prefixes = [str(s).upper() for s in series_list if s]
+        elif series_list:
+            allowed_prefixes = [str(series_list).upper()]
+
+        # Fallback to generic KX prefix if no specific prefixes found
+        if not allowed_prefixes:
+            allowed_prefixes = [f"KX{league_upper}"]
+
         def ticker_upper(market: Dict[str, Any]) -> str:
             return str(market.get("event_ticker") or market.get("ticker") or "").upper()
         if date_token and not allowed_date_tokens:
@@ -10314,6 +10326,9 @@ with tab_master:
                         if col in master_df.columns:
                             master_df[col] = master_df[col].fillna("")
 
+                    # Defragment DataFrame after multiple concat operations
+                    master_df = master_df.copy()
+
                 # Re-implement deduping for the `df` variable used by the UI below
 
                 # ============================================================================
@@ -11026,7 +11041,7 @@ if should_display:
                 st.dataframe(
                     game_summary_df[summary_cols],
                     column_config=format_cols,
-                    use_container_width=True, width="stretch",
+                    width="stretch",
                     hide_index=True
                 )
                 logger.info(f"✅ Successfully rendered Game Summary grid")
@@ -11065,7 +11080,7 @@ if should_display:
                         "Implied Prob": st.column_config.NumberColumn(format="%.1f%%"),
                         "AI Prob": st.column_config.NumberColumn(format="%.1f%%"),
                     },
-                    use_container_width=True, width="stretch",
+                    width="stretch",
                     hide_index=True
                 )
                 logger.info(f"✅ Successfully rendered Best ML Picks grid")
@@ -11533,7 +11548,7 @@ if should_display:
                     st.write(f"- Columns available: {list(top_df_ui.columns[:10])}...")
             else:
                 # Render the grid
-                st.dataframe(top_df_ui, use_container_width=True, width="stretch", hide_index=True)
+                st.dataframe(top_df_ui, width="stretch", hide_index=True)
                 logger.info(f"✅ Successfully rendered Top Picks grid")
 
         except Exception as grid_error:
@@ -12174,7 +12189,7 @@ with tab_shotgun:
                 if 'Pick' not in snipers.columns and 'Spread & Pick' in snipers.columns:
                     display_cols = ['Spread & Pick', 'AI_Prob', 'AI_Edge', 'consensus']
                     display_cols = [c for c in display_cols if c in snipers.columns]
-                st.dataframe(snipers[display_cols], hide_index=True, use_container_width=True, width="stretch")
+                st.dataframe(snipers[display_cols], hide_index=True, width="stretch")
             else:
                 st.info("No snipers available")
 
@@ -12187,7 +12202,7 @@ with tab_shotgun:
                 if 'Pick' not in strategy.columns and 'Spread & Pick' in strategy.columns:
                     display_cols = ['Spread & Pick', 'AI_Prob', 'AI_Edge', 'consensus']
                     display_cols = [c for c in display_cols if c in strategy.columns]
-                st.dataframe(strategy[display_cols], hide_index=True, use_container_width=True, width="stretch")
+                st.dataframe(strategy[display_cols], hide_index=True, width="stretch")
             else:
                 st.info("No strategy picks available")
 
@@ -12200,6 +12215,6 @@ with tab_shotgun:
                 if 'Pick' not in longshots.columns and 'Spread & Pick' in longshots.columns:
                     display_cols = ['Spread & Pick', 'AI_Prob', 'AI_Edge', 'consensus']
                     display_cols = [c for c in display_cols if c in longshots.columns]
-                st.dataframe(longshots[display_cols], hide_index=True, use_container_width=True, width="stretch")
+                st.dataframe(longshots[display_cols], hide_index=True, width="stretch")
             else:
                 st.info("No longshots available")
