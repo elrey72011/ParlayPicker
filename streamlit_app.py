@@ -10487,19 +10487,19 @@ with tab_master:
                 st.session_state["master_results_df"] = df
                 st.session_state["master_stats_persistent"] = master_stats
 
-                # Final consistency check log
+                # Final consistency check log (Integrity Log)
                 try:
                     logger.info(
-                        "Final metrics: rows=%s, spread_picks=%s, spread_consensus=%s, total_picks=%s, total_consensus=%s, best_overall=%s",
+                        "Integrity: rows=%s, spread_picks=%s, spread_consensus=%s, total_picks=%s, total_consensus=%s, best_overall=%s",
                         len(df),
                         int(df['Spread & Pick'].notna().sum()) if 'Spread & Pick' in df.columns else 0,
-                        int(df['SpreadConsensusProb'].notna().sum()) if 'SpreadConsensusProb' in df.columns else 0,
+                        int(df.get('SpreadConsensusProb', pd.Series(dtype=float)).notna().sum()),
                         int(df['Total & Pick'].notna().sum()) if 'Total & Pick' in df.columns else 0,
-                        int(df['TotalConsensusProb'].notna().sum()) if 'TotalConsensusProb' in df.columns else 0,
+                        int(df.get('TotalConsensusProb', pd.Series(dtype=float)).notna().sum()),
                         int(df['Best Overall Pick'].notna().sum()) if 'Best Overall Pick' in df.columns else 0,
                     )
                 except Exception as e:
-                    logger.warning(f"Failed to log final metrics: {e}")
+                    logger.warning(f"Failed to log integrity metrics: {e}")
 
                 # Set flag to indicate data is ready for display
                 st.session_state["analysis_complete"] = True
