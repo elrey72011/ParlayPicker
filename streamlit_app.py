@@ -8290,13 +8290,29 @@ with tab_master:
                     kalshi_prob_spread if kalshi_spread.get("kalshi_matched") else None,
                     kalshi_spread.get("kalshi_yes_side") or "home",
                     model_spread_prob if model_used_for_spread else None,
-                    theover_prob_final_spread, # Should be ignored by weight=0
+                    theover_prob_final_spread,
                     spread_sentiment_adj,
                     spread_weights,
                     sentiment_score=sentiment_diff,
                 )
 
-                theover_delta_spread = (spread_prob_final or 0.0) - (spread_prob_no_to or 0.0)
+                # Calculate TheOver Impact (Invariant: delta = final - without)
+                if theover_prob_final_spread is not None:
+                    spread_prob_no_to, _, _, _, _, _ = compute_final_probability(
+                        spread_pick_side_key,
+                        spread_prob_market,
+                        kalshi_prob_spread if kalshi_spread.get("kalshi_matched") else None,
+                        kalshi_spread.get("kalshi_yes_side") or "home",
+                        model_spread_prob if model_used_for_spread else None,
+                        None, # Exclude TheOver
+                        spread_sentiment_adj,
+                        spread_weights,
+                        sentiment_score=sentiment_diff,
+                    )
+                    theover_delta_spread = (spread_prob_final or 0.0) - (spread_prob_no_to or 0.0)
+                else:
+                    spread_prob_no_to = spread_prob_final
+                    theover_delta_spread = 0.0
 
                 # Apply TheOver Decision Engine Adjustment (Spread) - Nudge Logic
                 if theover_prob_final_spread is not None and spread_prob_final is not None:
@@ -8385,13 +8401,29 @@ with tab_master:
                     kalshi_prob_total if kalshi_total.get("kalshi_matched") else None,
                     kalshi_total.get("kalshi_yes_side") or "over",
                     model_total_prob if model_used_for_total else None,
-                    theover_prob_final_total, # Ignored by weight=0
+                    theover_prob_final_total,
                     total_sentiment_adj,
                     total_weights,
                     sentiment_score=sentiment_diff,
                 )
 
-                theover_delta_total = (total_prob_final or 0.0) - (total_prob_no_to or 0.0)
+                # Calculate TheOver Impact (Invariant: delta = final - without)
+                if theover_prob_final_total is not None:
+                    total_prob_no_to, _, _, _, _, _ = compute_final_probability(
+                        total_pick_side_key,
+                        total_prob_market,
+                        kalshi_prob_total if kalshi_total.get("kalshi_matched") else None,
+                        kalshi_total.get("kalshi_yes_side") or "over",
+                        model_total_prob if model_used_for_total else None,
+                        None, # Exclude TheOver
+                        total_sentiment_adj,
+                        total_weights,
+                        sentiment_score=sentiment_diff,
+                    )
+                    theover_delta_total = (total_prob_final or 0.0) - (total_prob_no_to or 0.0)
+                else:
+                    total_prob_no_to = total_prob_final
+                    theover_delta_total = 0.0
 
                 # Apply TheOver Decision Engine Adjustment (Total) - Nudge Logic
                 if theover_prob_final_total is not None and total_prob_final is not None:
@@ -10454,6 +10486,20 @@ with tab_master:
                 st.session_state["master_df"] = df
                 st.session_state["master_results_df"] = df
                 st.session_state["master_stats_persistent"] = master_stats
+
+                # Final consistency check log
+                try:
+                    logger.info(
+                        "Final metrics: rows=%s, spread_picks=%s, spread_consensus=%s, total_picks=%s, total_consensus=%s, best_overall=%s",
+                        len(df),
+                        int(df['Spread & Pick'].notna().sum()) if 'Spread & Pick' in df.columns else 0,
+                        int(df['SpreadConsensusProb'].notna().sum()) if 'SpreadConsensusProb' in df.columns else 0,
+                        int(df['Total & Pick'].notna().sum()) if 'Total & Pick' in df.columns else 0,
+                        int(df['TotalConsensusProb'].notna().sum()) if 'TotalConsensusProb' in df.columns else 0,
+                        int(df['Best Overall Pick'].notna().sum()) if 'Best Overall Pick' in df.columns else 0,
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to log final metrics: {e}")
 
                 # Set flag to indicate data is ready for display
                 st.session_state["analysis_complete"] = True
