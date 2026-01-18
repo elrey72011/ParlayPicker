@@ -1304,44 +1304,56 @@ def enrich_picks_with_roi_metrics(df: pd.DataFrame) -> pd.DataFrame:
 
 def get_best_ml_picks(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Return a DataFrame with one row per game representing the Best Overall Pick (Moneyline focused).
+    Return a DataFrame with ML picks from the deduped master results.
+    Now filters by best_pick_type == "ML" instead of Market == "Moneyline".
     """
     if df is None or df.empty:
         return pd.DataFrame()
 
-    # Filter to Moneyline rows only
-    df_ml = df[df["Market"] == "Moneyline"].copy()
+    # Filter to rows where best_pick_type is ML (from deduped master results)
+    # Try both column names for compatibility
+    if "best_pick_type" in df.columns:
+        df_ml = df[df["best_pick_type"].str.upper().str.contains("ML", na=False)].copy()
+    elif "bestpicktype" in df.columns:
+        df_ml = df[df["bestpicktype"].str.upper().str.contains("ML", na=False)].copy()
+    else:
+        # Fallback to Market column if best_pick_type not available
+        logger.warning("best_pick_type column not found, falling back to Market == 'Moneyline'")
+        df_ml = df[df["Market"] == "Moneyline"].copy()
+
     if df_ml.empty:
+        logger.info("No ML picks found after filtering")
         return pd.DataFrame()
 
+    # Filter by confidence if needed (HIGH and MEDIUM only)
+    # Check if Pick_Confidence column exists
+    if "Pick_Confidence" in df_ml.columns:
+        df_ml = df_ml[df_ml["Pick_Confidence"].isin(["HIGH", "MEDIUM"])].copy()
+        logger.info(f"Filtered ML picks to HIGH/MEDIUM confidence: {len(df_ml)} picks")
+
+    if df_ml.empty:
+        logger.info("No HIGH/MEDIUM confidence ML picks found")
+        return pd.DataFrame()
+
+    # Since df is already deduped (one row per game), we can just select relevant columns
     summary_rows = []
-    # Group by Game Key
-    grouped = df_ml.groupby(["league", "Home", "Away", "Commence (UTC)"])
 
-    for name, group in grouped:
-        if group.empty:
-            continue
-
-        # Pick the row with highest final_probability
-        # Ensure final_probability is numeric
-        group["final_probability"] = pd.to_numeric(group["final_probability"], errors='coerce').fillna(-1.0)
-        best_row = group.loc[group["final_probability"].idxmax()]
-
-        # Construct summary row
+    for idx, row in df_ml.iterrows():
         summary = {
-            "league": best_row.get("league"),
-            "Home": best_row.get("Home"),
-            "Away": best_row.get("Away"),
-            "Commence (UTC)": best_row.get("Commence (UTC)"),
-            "Commence (Local)": best_row.get("Commence (Local)"),
-            "Best Overall Pick": best_row.get("Pick"),
-            "Best Overall Prob": best_row.get("final_probability"),
-            "Best Overall Confidence": best_row.get("Pick_Confidence"),
-            "Implied Prob": best_row.get("Implied_Prob"),
-            "AI Prob": best_row.get("AI_Prob"),
+            "league": row.get("league"),
+            "Home": row.get("Home"),
+            "Away": row.get("Away"),
+            "Commence (UTC)": row.get("Commence (UTC)"),
+            "Commence (Local)": row.get("Commence (Local)"),
+            "Best Overall Pick": row.get("Best Overall Pick") or row.get("Pick"),
+            "Best Overall Prob": row.get("Best Overall Prob") or row.get("final_probability"),
+            "Best Overall Confidence": row.get("Pick_Confidence"),
+            "Implied Prob": row.get("Implied_Prob"),
+            "AI Prob": row.get("AI_Prob"),
         }
         summary_rows.append(summary)
 
+    logger.info(f"Returning {len(summary_rows)} ML picks")
     return pd.DataFrame(summary_rows)
 
 def build_game_summary(df: pd.DataFrame) -> pd.DataFrame:
@@ -9038,9 +9050,13 @@ with tab_master:
                     warnings = list(dict.fromkeys(warnings + ["moneyline_extreme_skipped"]))
 
                 # SPREAD ROW
-                # FIX: Create spread row if spread data exists, even if spread_pick is None
-                # This ensures all games with spread data create output rows
-                if g.get("home_spread_point") is not None:
+                # FIX: Only create spread row if spread odds are valid
+                # This prevents synthetic "None/69.6/NaN" rows for NHL games with missing spread markets
+                if (g.get("home_spread_point") is not None and
+                    spread_odds_valid and
+                    spread_pick is not None and
+                    spread_prob_market is not None and
+                    spread_prob_market < 0.95):  # Filter out placeholder probabilities
                     ai_prob_base = None
                     ai_prob_row = None
                     model_spread_prob = None
@@ -9334,9 +9350,13 @@ with tab_master:
                         logger.warning(f"⚠️  DIAGNOSTIC: Game {idx+1} ({home} vs {away}) - NO SPREAD ROW: home_spread_point={spread_point}, spread_pick={spread_pick}")
 
                 # TOTAL ROW
-                # FIX: Create total row if total data exists, even if total_pick is None
-                # This ensures all games with total data create output rows
-                if g.get("total_point") is not None:
+                # FIX: Only create total row if total odds are valid
+                # This prevents synthetic "None/69.6/NaN" rows for NHL games with missing total markets
+                if (g.get("total_point") is not None and
+                    total_odds_valid and
+                    total_pick is not None and
+                    total_prob_market is not None and
+                    total_prob_market < 0.95):  # Filter out placeholder probabilities
                     ai_prob_base = None
                     ai_prob_row = None
                     warnings.append("market_based_total_prob")
@@ -10980,60 +11000,80 @@ if should_display:
         logger.info("Calculating pick quality metrics...")
 
         def _add_quality_metrics(row):
-            """Calculate comprehensive quality metrics for filtering."""
-            # Calculate for spread pick
-            spread_metrics = calculate_pick_quality_metrics({
-                "final_probability": row.get("spread_prob_pick_final"),
-                "spread_prob_pick_market": row.get("spread_prob_pick_market"),
-                "spread_prob_pick_kalshi": row.get("spread_prob_pick_kalshi") or row.get("kalshi_prob_spread"),
-                "model_spread_prob": row.get("model_spread_prob"),
-                "sentiment_score": row.get("sentiment_score"),
-                "Pick": row.get("spread_pick_team"),
-            })
+            """
+            Use Pick_Confidence from master dataframe (decisiveness-based buckets).
+            This column already contains the correct HIGH/MEDIUM/LOW classification.
+            """
+            # Get the pre-computed confidence bucket (from master analysis)
+            pick_confidence = row.get("Pick_Confidence", "LOW")
 
-            # Calculate for total pick
-            total_metrics = calculate_pick_quality_metrics({
-                "final_probability": row.get("total_prob_pick_final"),
-                "total_prob_pick_market": row.get("total_prob_pick_market"),
-                "total_prob_pick_kalshi": row.get("total_prob_pick_kalshi") or row.get("kalshi_prob_total"),
-                "model_total_prob": row.get("model_total_prob"),
-                "sentiment_score": row.get("sentiment_score"),
-                "Pick": row.get("total_pick_side"),
-            })
+            # Map confidence to quality tier (they are the same)
+            quality_tier = str(pick_confidence).upper() if pick_confidence else "LOW"
+            if quality_tier not in ["HIGH", "MEDIUM", "LOW"]:
+                quality_tier = "LOW"
 
-            # Use the better of spread or total for overall quality
-            if spread_metrics["quality_score"] >= total_metrics["quality_score"]:
-                best_metrics = spread_metrics
-                pick_type = "Spread"
-            else:
-                best_metrics = total_metrics
-                pick_type = "Total"
+            # Get decisiveness from the master dataframe
+            decisiveness = safe_float(row.get("decisiveness"))
+            if decisiveness is None:
+                final_prob = safe_float(row.get("final_probability") or row.get("Best Overall Prob"))
+                decisiveness = abs(final_prob - 0.5) if final_prob is not None else 0.0
+
+            # Map tier to quality score (0-5 scale)
+            tier_to_score = {"HIGH": 4.5, "MEDIUM": 3.0, "LOW": 1.5, "UNKNOWN": 0.5}
+            quality_score = tier_to_score.get(quality_tier, 1.5)
+
+            # Adjust score based on decisiveness
+            if decisiveness >= 0.12:
+                quality_score = min(5.0, quality_score + 0.5)
+            elif decisiveness >= 0.08:
+                quality_score = min(5.0, quality_score + 0.2)
 
             # Format quality badge
-            quality_badge = f"{best_metrics['quality_tier']} ({best_metrics['quality_score']:.1f}⭐)"
+            quality_badge = f"{quality_tier} ({quality_score:.1f}⭐)"
 
-            # Add details
+            # Build quality details based on decisiveness and Kalshi
             details = []
-            if best_metrics["meets_probability_threshold"]:
+            final_prob = safe_float(row.get("final_probability") or row.get("Best Overall Prob"))
+            if final_prob and final_prob > 0.56:
                 details.append("✓>56%")
-            if best_metrics["meets_decisiveness_threshold"]:
+            if decisiveness and decisiveness > 0.08:
                 details.append("✓Decisive")
-            if best_metrics["kalshi_validates"]:
+            if row.get("kalshi_matched"):
                 details.append("✓Kalshi")
-            if best_metrics["consensus_quality"] == "STRONG":
-                details.append("✓Consensus")
 
             quality_details = " ".join(details) if details else "Low Quality"
 
+            # For backward compatibility, also calculate spread/total scores
+            spread_prob = safe_float(row.get("spread_prob_pick_final"))
+            total_prob = safe_float(row.get("total_prob_pick_final"))
+
+            spread_score = 0.0
+            total_score = 0.0
+
+            if spread_prob:
+                spread_decisiveness = abs(spread_prob - 0.5)
+                spread_score = 2.0 + (spread_decisiveness * 20)  # 0.5 to 5.0 range
+
+            if total_prob:
+                total_decisiveness = abs(total_prob - 0.5)
+                total_score = 2.0 + (total_decisiveness * 20)  # 0.5 to 5.0 range
+
+            # Consensus quality (simplified)
+            consensus_quality = "MODERATE"
+            if quality_tier == "HIGH":
+                consensus_quality = "STRONG"
+            elif quality_tier == "LOW":
+                consensus_quality = "WEAK"
+
             return pd.Series({
-                "Quality_Score": best_metrics["quality_score"],
-                "Quality_Tier": best_metrics["quality_tier"],
+                "Quality_Score": quality_score,
+                "Quality_Tier": quality_tier,
                 "Quality_Badge": quality_badge,
                 "Quality_Details": quality_details,
-                "Decisiveness": best_metrics["decisiveness"],
-                "Consensus_Quality": best_metrics["consensus_quality"],
-                "Spread_Quality_Score": spread_metrics["quality_score"],
-                "Total_Quality_Score": total_metrics["quality_score"],
+                "Decisiveness": decisiveness,
+                "Consensus_Quality": consensus_quality,
+                "Spread_Quality_Score": spread_score,
+                "Total_Quality_Score": total_score,
             })
 
         # Add quality metric columns
