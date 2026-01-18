@@ -742,6 +742,17 @@ def fetch_nfl_stats(season_year: int) -> List[Dict[str, Any]]:
 
 @st.cache_data(ttl=21600)
 def fetch_ncaaf_stats(season_year: int) -> List[Dict[str, Any]]:
+    """
+    Fetch NCAAF stats from CFBD API.
+
+    Returns empty list if CFBD is unavailable, unauthorized, or disabled for this session.
+    """
+    # Check if CFBD was disabled earlier in this session (e.g., due to 401)
+    if st is not None and hasattr(st, "session_state"):
+        if st.session_state.get("cfbd_disabled_reason"):
+            # Already disabled - skip silently to avoid repeated warnings
+            return []
+
     def _normalize_cfbd_token(raw: Any) -> str:
         if raw is None:
             return ""
@@ -803,9 +814,12 @@ def fetch_ncaaf_stats(season_year: int) -> List[Dict[str, Any]]:
                 return api_instance.get_team_stats(year=yr)
             except Exception as e:
                 if _is_unauthorized(e):
+                    # Set session flag to disable CFBD for remainder of session
+                    if st is not None and hasattr(st, "session_state"):
+                        st.session_state["cfbd_disabled_reason"] = "UNAUTHORIZED_401"
                     logger.warning(
-                        f"CFBD unauthorized (401) when fetching NCAAF stats. "
-                        "Check CFBD_API_KEY value in Streamlit secrets."
+                        f"⚠️ CFBD unauthorized (401) when fetching NCAAF stats. "
+                        "Disabling CFBD for this session. Check CFBD_API_KEY value in Streamlit secrets."
                     )
                     return [] # Don't retry auth errors
                 else:
@@ -824,9 +838,12 @@ def fetch_ncaaf_stats(season_year: int) -> List[Dict[str, Any]]:
                 return games_api.get_games(year=yr)
             except Exception as e:
                 if _is_unauthorized(e):
+                    # Set session flag to disable CFBD for remainder of session
+                    if st is not None and hasattr(st, "session_state"):
+                        st.session_state["cfbd_disabled_reason"] = "UNAUTHORIZED_401"
                     logger.warning(
-                        f"CFBD unauthorized (401) when fetching NCAAF games. "
-                        "Check CFBD_API_KEY value in Streamlit secrets."
+                        f"⚠️ CFBD unauthorized (401) when fetching NCAAF games. "
+                        "Disabling CFBD for this session. Check CFBD_API_KEY value in Streamlit secrets."
                     )
                     return [] # Don't retry auth errors
                 else:
