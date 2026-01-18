@@ -2573,8 +2573,8 @@ def compute_team_sentiment_map(news_api_key: Optional[str], games: List[Dict[str
 
         if meta["sentiment_valid"] and meta_score is not None:
             sentiment_map[team] = meta_score
-            # Log successful sentiment inclusion
-            logger.info(f"Sentiment INCLUDED for {team}: score={meta_score:.3f}, valid={meta['sentiment_valid']}, source={meta.get('sentiment_source', 'unknown')}, status={meta.get('sentiment_status')}")
+            # Log successful sentiment collection (UI display only, NOT used in probability blend per Mode A)
+            logger.info(f"Sentiment COLLECTED for {team}: score={meta_score:.3f} (UI display only - not used in probability blend), valid={meta['sentiment_valid']}, source={meta.get('sentiment_source', 'unknown')}, status={meta.get('sentiment_status')}")
         else:
             sentiment_map[team] = None
             debug["missing_teams"].append(team)
@@ -3087,21 +3087,25 @@ def score_pick_confidence(row: Dict[str, Any]) -> Tuple[str, str, bool]:
     Decisiveness thresholds based on raw distance from 0.5:
     - HIGH: >= 0.08 (prob >= 0.58 or <= 0.42)
     - MEDIUM: >= 0.02 (prob >= 0.52 or <= 0.48)
+    - LOW: < 0.02
     """
     market = (row.get("Market") or "").lower()
     final_prob = safe_float(row.get("final_probability") or row.get("consensus_prob_adj") or row.get("AI_Prob"))
     if final_prob is None:
         return "UNKNOWN", "UNKNOWN: missing final probability", False
 
-    decisiveness = abs(final_prob - 0.5) * 2
-    # Thresholds: HIGH >= 0.16 (0.08 * 2), MEDIUM >= 0.04 (0.02 * 2)
-    if decisiveness >= 0.16:
+    # Raw decisiveness (no scaling)
+    decisiveness = abs(final_prob - 0.5)
+
+    # Apply thresholds: HIGH >= 0.08, MEDIUM >= 0.02
+    if decisiveness >= 0.08:
         tier = "HIGH"
-    elif decisiveness >= 0.04:
+    elif decisiveness >= 0.02:
         tier = "MEDIUM"
     else:
         tier = "LOW"
 
+    # Downgrade tier if Kalshi required but unavailable
     kalshi_required = bool(row.get("Kalshi_Required"))
     kalshi_status = str(row.get("kalshi_status") or "").upper()
     if kalshi_required and kalshi_status == "NO_MARKET":
@@ -3109,9 +3113,10 @@ def score_pick_confidence(row: Dict[str, Any]) -> Tuple[str, str, bool]:
             tier = "MEDIUM"
         elif tier == "MEDIUM":
             tier = "LOW"
+
     decision_driver = row.get("decision_driver") or ("market_only" if market else "unknown")
     sentiment_dir = row.get("sentiment_direction") or "neutral"
-    confidence_reason = f"{tier}: driver={decision_driver} | decisiveness={decisiveness:.2f} | sentiment={sentiment_dir}"
+    confidence_reason = f"{tier}: driver={decision_driver} | decisiveness={decisiveness:.3f} | sentiment={sentiment_dir}"
     eligible = tier != "LOW"
     return tier, confidence_reason, eligible
 
@@ -8161,8 +8166,8 @@ with tab_master:
                     if spread_weights.get("ml_weight", 0) > 0.15:
                         spread_weights["ml_weight"] -= 0.05
 
-                # Update sentiment weight dynamically
-                spread_weights["sentiment_weight"] = abs(spread_sentiment_adj or 0.0)
+                # Sentiment weight always 0.0 (disabled per Mode A)
+                spread_weights["sentiment_weight"] = 0.0
 
                 # Calculate SPREAD probability WITHOUT TheOver
                 _weights_no_to = spread_weights.copy()
@@ -8667,7 +8672,8 @@ with tab_master:
                             # Standard Dynamic Weighting
                             ml_odds_weight = 0.30
                             current_ml_weights["odds_weight"] = ml_odds_weight
-                            current_ml_weights["sentiment_weight"] = abs(sentiment_adj or 0.0)
+                            # Sentiment weight always 0.0 (disabled per Mode A)
+                            current_ml_weights["sentiment_weight"] = 0.0
 
                             _ml_kalshi_matched = bool(kalshi_winner.get("kalshi_matched"))
                             _ml_k_prob = map_kalshi_prob_for_pick(
@@ -10445,7 +10451,7 @@ with tab_master:
                             logger.info(f"Average sentiment differential: {avg_sentiment:.3f}")
                     if "sentiment_weight" in df.columns:
                         avg_weight = df["sentiment_weight"].mean()
-                        logger.info(f"Average sentiment weight in final probabilities: {avg_weight:.3f}")
+                        logger.info(f"Average sentiment weight in final probabilities: {avg_weight:.3f} (Mode A: should be 0.0, sentiment used for UI display only)")
 
                 # Show success message and rerun to display results immediately
                 st.success(f"✅ Analysis complete! Generated {len(df)} picks.")
