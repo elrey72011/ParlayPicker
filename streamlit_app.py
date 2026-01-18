@@ -62,6 +62,7 @@ from app_core.apisports import (
 from app_core.new_summary_logic import (
     build_game_summary_v2,
     reorder_for_spread_total_focus_v2,
+    calculate_consensus_for_row,
 )
 
 from app_core.feature_processing import (
@@ -1470,13 +1471,15 @@ def calculate_best_pick_metrics(df: pd.DataFrame) -> pd.DataFrame:
         # 2. Extract Data
         # Spread
         s_pick = _safe_str("Spread & Pick")
-        s_prob = _safe("spread_prob_adj")
+        s_prob = _safe("SpreadConsensusProb")
+        if s_prob is None: s_prob = _safe("spread_prob_adj")
         if s_prob is None: s_prob = _safe("spread_prob")
         s_edge = _safe("spread_edge") or 0.0
 
         # Total
         t_pick = _safe_str("Total & Pick")
-        t_prob = _safe("total_prob_adj")
+        t_prob = _safe("TotalConsensusProb")
+        if t_prob is None: t_prob = _safe("total_prob_adj")
         if t_prob is None: t_prob = _safe("total_prob")
         t_edge = _safe("total_edge") or 0.0
 
@@ -10234,6 +10237,85 @@ with tab_master:
                 # 1. Deduplicate Master DF (Fix Duplicate Column Crash)
                 df = df.loc[:, ~df.columns.duplicated()].copy()
 
+                # ============================================
+                # ADD CONSENSUS & BEST PICK LOGIC (Task 3)
+                # ============================================
+                logger.info("Enforcing Consensus & Best Pick Logic on Master DF...")
+
+                # Invariant: If Spread/Total Pick exists and final probability > 0.5,
+                # a corresponding consensus probability must be computed and exposed in both UI and exports.
+                def _enforce_consensus_and_best_pick(row):
+                    # 1. Spread Consensus
+                    s_consensus_prob, s_consensus_str = calculate_consensus_for_row(row, "Spread")
+                    row["SpreadConsensusProb"] = s_consensus_prob
+                    row["SpreadConsensus"] = s_consensus_str
+
+                    # 2. Total Consensus
+                    t_consensus_prob, t_consensus_str = calculate_consensus_for_row(row, "Total")
+                    row["TotalConsensusProb"] = t_consensus_prob
+                    row["TotalConsensus"] = t_consensus_str
+
+                    # 3. Best Overall Pick Logic
+                    # Re-evaluate Best Pick using Consensus Probabilities
+                    # Rules:
+                    # - Prefer Spread/Total over ML (unless forced)
+                    # - Compare Spread Consensus Prob vs Total Consensus Prob (distance from 0.5)
+
+                    s_pick = row.get("Spread & Pick")
+                    t_pick = row.get("Total & Pick")
+
+                    s_valid = s_pick is not None and s_consensus_prob > 0.5
+                    t_valid = t_pick is not None and t_consensus_prob > 0.5
+
+                    # Calculate Edge/Decisiveness
+                    s_edge = abs(s_consensus_prob - 0.5)
+                    t_edge = abs(t_consensus_prob - 0.5)
+
+                    new_best_type = "NONE"
+                    new_best_pick = None
+                    new_best_prob = 0.0
+
+                    if s_valid and t_valid:
+                        if s_edge >= t_edge:
+                            new_best_type = "SPREAD"
+                            new_best_pick = s_pick
+                            new_best_prob = s_consensus_prob
+                        else:
+                            new_best_type = "TOTAL"
+                            new_best_pick = t_pick
+                            new_best_prob = t_consensus_prob
+                    elif s_valid:
+                        new_best_type = "SPREAD"
+                        new_best_pick = s_pick
+                        new_best_prob = s_consensus_prob
+                    elif t_valid:
+                        new_best_type = "TOTAL"
+                        new_best_pick = t_pick
+                        new_best_prob = t_consensus_prob
+                    else:
+                        # Fallback to existing or ML
+                        new_best_pick = row.get("Best Overall Pick") or row.get("Pick")
+                        new_best_prob = row.get("Best Overall Prob") or row.get("final_probability")
+                        new_best_type = row.get("best_pick_type") or "ML"
+
+                    row["Best Overall Pick"] = new_best_pick
+                    row["Best Overall Prob"] = new_best_prob
+                    row["best_pick_type"] = new_best_type
+
+                    return row
+
+                df = df.apply(_enforce_consensus_and_best_pick, axis=1)
+
+                # Diagnostic Log
+                logger.info(
+                    "Consensus summary: rows=%s, with_spread_pick=%s, with_spread_consensus=%s, with_total_pick=%s, with_total_consensus=%s",
+                    len(df),
+                    int(df['Spread & Pick'].notna().sum()) if 'Spread & Pick' in df.columns else 0,
+                    int(df['SpreadConsensusProb'].notna().sum()) if 'SpreadConsensusProb' in df.columns else 0,
+                    int(df['Total & Pick'].notna().sum()) if 'Total & Pick' in df.columns else 0,
+                    int(df['TotalConsensusProb'].notna().sum()) if 'TotalConsensusProb' in df.columns else 0,
+                )
+
                 # --- MARKET TRACKER HOOK (Snapshot System) ---
                 try:
                     # 1. Save Noon Baseline (Task 2: Use Snapshot Manager)
@@ -10548,6 +10630,13 @@ if should_display:
             "consensus_prob",
             "final_probability",
             "decision_driver",
+            "SpreadConsensusProb",
+            "SpreadConsensus",
+            "TotalConsensusProb",
+            "TotalConsensus",
+            "Best Overall Pick",
+            "Best Overall Prob",
+            "best_pick_type",
             "kalshi_weight",
             "odds_weight",
             "ml_weight",
@@ -11095,6 +11184,8 @@ if should_display:
         ui_whitelist = [
             'league', 'Home', 'Away', 'Commence (UTC)', 'Commence (Local)', 'Local Date',
             'Overall Pick', 'Overall Prob', 'Spread', 'Spread Prob', 'Total', 'Total Prob', 'ML', 'ML Prob',
+            'SpreadConsensusProb', 'SpreadConsensus', 'TotalConsensusProb', 'TotalConsensus',
+            'Best Overall Pick', 'Best Overall Prob',
             'best_pick', 'final_prob', 'edge', 'best_pick_type',
             'Bet_Confidence', 'Bet_Lean',
             'Quality_Badge', 'Quality_Details',
@@ -11239,6 +11330,13 @@ if should_display:
             "consensus_prob_adj",
             "final_probability",
             "decision_driver",
+            "SpreadConsensusProb",
+            "SpreadConsensus",
+            "TotalConsensusProb",
+            "TotalConsensus",
+            "Best Overall Pick",
+            "Best Overall Prob",
+            "best_pick_type",
             "kalshi_weight",
             "odds_weight",
             "ml_weight",
