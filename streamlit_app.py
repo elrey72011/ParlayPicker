@@ -3281,7 +3281,7 @@ def apply_confidence_filter(df: pd.DataFrame, confidence_mode: str, show_low: bo
     confidence_missing_warning = False
     if "Pick_Confidence" not in filtered.columns:
         # Try common alternates used elsewhere in the code
-        for alt in ["confidence_bucket", "confidencebucket", "Confidence", "pick_confidence"]:
+        for alt in ["confidence_bucket", "confidencebucket", "Confidence", "pick_confidence", "Confidence Level"]:
             if alt in filtered.columns:
                 filtered["Pick_Confidence"] = filtered[alt]
                 break
@@ -3291,25 +3291,26 @@ def apply_confidence_filter(df: pd.DataFrame, confidence_mode: str, show_low: bo
         filtered["Pick_Confidence"] = "LOW"
         confidence_missing_warning = True
 
-    # Make the counting logic safe using .get()
-    conf = filtered.get("Pick_Confidence", pd.Series([], dtype="object"))
+    # Make the counting logic safe - column is guaranteed to exist after above checks
+    conf = filtered["Pick_Confidence"].astype(str).fillna("LOW")
     base_low = int((conf == "LOW").sum())
+    base_med = int((conf == "MEDIUM").sum())
+    base_high = int((conf == "HIGH").sum())
 
     mode_norm = (confidence_mode or "").lower()
 
-    # Ensure filter logic doesn't assume the column exists
-    if "Pick_Confidence" in filtered.columns:
-        if mode_norm.startswith("high only"):
-            filtered = filtered[filtered["Pick_Confidence"] == "HIGH"]
-        elif mode_norm.startswith("high+medium"):
-            filtered = filtered[filtered["Pick_Confidence"].isin(["HIGH", "MEDIUM"])]
-        # "All" or anything else -> no filter on confidence tier
+    # Apply confidence tier filter - column is guaranteed to exist after above checks
+    if mode_norm.startswith("high only"):
+        filtered = filtered[filtered["Pick_Confidence"] == "HIGH"]
+    elif mode_norm.startswith("high+medium"):
+        filtered = filtered[filtered["Pick_Confidence"].isin(["HIGH", "MEDIUM"])]
+    # "All" or anything else -> no filter on confidence tier
 
-        if not show_low:
-            filtered = filtered[filtered["Pick_Confidence"] != "LOW"]
+    if not show_low:
+        filtered = filtered[filtered["Pick_Confidence"] != "LOW"]
 
     # Recalculate confidence stats after filtering
-    conf_after = filtered.get("Pick_Confidence", pd.Series([], dtype="object"))
+    conf_after = filtered["Pick_Confidence"].astype(str).fillna("LOW")
     low_after = int((conf_after == "LOW").sum())
     counts = conf_after.value_counts(dropna=False).to_dict() if len(conf_after) > 0 else {}
 
@@ -10812,7 +10813,8 @@ with tab_master:
                     'Home_ML', 'Away_ML', 'Home_Spread', 'Away_Spread', 'Total_Line',
                     'Home_Sentiment', 'Away_Sentiment', 'Sentiment_Diff',
                     'kalshi_available', 'HasKalshiMarket',
-                    'market_stability', 'consensus_strength', 'confidence_score'
+                    'market_stability', 'consensus_strength', 'confidence_score',
+                    'Pick_Confidence', 'confidence_reason'
                 ]
                 # Filter to only columns that exist in the dataframe
                 results_columns = [col for col in user_columns if col in df.columns]
@@ -12187,6 +12189,9 @@ if should_display:
         )
         # FORCE DISPLAY: Always use "All" mode and show_low=True to display all 139 rows
         # This bypasses any UI filter settings to ensure full visibility
+        if logger:
+            logger.info(f"apply_confidence_filter input: {len(df)} rows, columns={list(df.columns)[:20]}...")
+            logger.info(f"   Has Pick_Confidence: {'Pick_Confidence' in df.columns}")
         df_master_view, confidence_stats = apply_confidence_filter(df, "All", True)
 
         # Display warning if Pick_Confidence column was missing
