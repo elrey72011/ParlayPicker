@@ -2985,7 +2985,7 @@ Return JSON only with this exact schema:
 Context (read-only, do not invent new probabilities):
 {context_json}
 """
-    raw = generate_confidence_explanation(prompt)
+    raw = generate_confidence_explanation(prompt, session_state=st.session_state)
     if not isinstance(raw, dict):
         return base
     result = {**base, **{k: raw.get(k) for k in base.keys()}}
@@ -4691,7 +4691,17 @@ if kalshi_integrator:
 api_sports_clients, sportsdata_clients = init_data_clients()
 
 @st.cache_data(ttl=60)
-def fetch_odds_games(sport_key: str) -> List[Dict[str, Any]]:
+def fetch_odds_games(sport_key: str, run_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    """
+    Fetch odds from TheOddsAPI with retry logic and proper error handling.
+
+    Args:
+        sport_key: Sport identifier (e.g., 'basketball_nba', 'americanfootball_nfl')
+        run_id: Optional run identifier for cache isolation
+
+    Returns:
+        List of game dictionaries, or empty list on failure
+    """
     if not odds_api_key or not sport_key:
         logger.error(f"Missing API key or sport_key. Key={bool(odds_api_key)}, Sport={sport_key}")
         return []
@@ -4705,57 +4715,90 @@ def fetch_odds_games(sport_key: str) -> List[Dict[str, Any]]:
         "dateFormat": "iso",
     }
 
-    try:
-        logger.info(f"🔍 Fetching odds from TheOddsAPI for sport: {sport_key}")
-        resp = requests.get(url, params=params, timeout=15)
-        resp.raise_for_status()
+    # Retry configuration: exponential backoff
+    max_retries = 3
+    retry_delays = [2, 4, 8]  # seconds
 
-        # DIAGNOSTIC: Log raw response structure
-        data = resp.json()
-        logger.info(f"📊 TheOddsAPI raw response type: {type(data)}")
+    for attempt in range(max_retries + 1):
+        try:
+            if attempt > 0:
+                logger.info(f"🔄 Retry attempt {attempt}/{max_retries} for sport: {sport_key}")
+                time.sleep(retry_delays[attempt - 1])
+            else:
+                logger.info(f"🔍 Fetching odds from TheOddsAPI for sport: {sport_key} (run_id: {run_id or 'N/A'})")
 
-        # Handle both direct list and dict with nested keys
-        if isinstance(data, dict):
-            logger.info(f"📋 TheOddsAPI response keys: {list(data.keys())}")
-            # Try common response wrapper keys
-            games = data.get("games", data.get("data", data.get("events", [])))
-            logger.info(f"✅ Extracted {len(games)} games from dict response")
-        elif isinstance(data, list):
-            games = data
-            logger.info(f"✅ Got {len(games)} games from list response")
-        else:
-            logger.error(f"❌ Unexpected response type: {type(data)}")
+            resp = requests.get(url, params=params, timeout=15)
+
+            # Log response metadata for debugging empty responses
+            logger.info(f"📡 TheOddsAPI response: status={resp.status_code}, "
+                       f"content-length={len(resp.content)}, "
+                       f"headers={dict(resp.headers)}")
+
+            resp.raise_for_status()
+
+            # DIAGNOSTIC: Log raw response structure
+            data = resp.json()
+            logger.info(f"📊 TheOddsAPI raw response type: {type(data)}")
+
+            # Handle both direct list and dict with nested keys
+            if isinstance(data, dict):
+                logger.info(f"📋 TheOddsAPI response keys: {list(data.keys())}")
+                # Try common response wrapper keys
+                games = data.get("games", data.get("data", data.get("events", [])))
+                logger.info(f"✅ Extracted {len(games)} games from dict response")
+            elif isinstance(data, list):
+                games = data
+                logger.info(f"✅ Got {len(games)} games from list response")
+            else:
+                logger.error(f"❌ Unexpected response type: {type(data)}")
+                if attempt < max_retries:
+                    continue
+                return []
+
+            # DIAGNOSTIC: Log first game sample if available
+            if games and len(games) > 0:
+                first_game = games[0]
+                logger.info(f"🎮 First game sample keys: {list(first_game.keys())}")
+                logger.info(f"🏀 First game: {first_game.get('home_team')} vs {first_game.get('away_team')}")
+                logger.info(f"⏰ Commence time: {first_game.get('commence_time')}")
+                # Success - return immediately
+                return games
+            else:
+                # Empty response - retry unless this was last attempt
+                if attempt < max_retries:
+                    logger.warning(f"⚠️ TheOddsAPI returned 0 games for {sport_key} on attempt {attempt + 1}. Retrying...")
+                    continue
+                else:
+                    logger.warning(f"⚠️ TheOddsAPI returned empty games list for sport: {sport_key} after {max_retries + 1} attempts")
+                    logger.warning(f"   This could mean:")
+                    logger.warning(f"   - No games scheduled for this sport today")
+                    logger.warning(f"   - Sport key is invalid")
+                    logger.warning(f"   - API rate limit exceeded")
+                    logger.warning(f"   - API key has insufficient permissions")
+                    return []
+
+        except requests.exceptions.RequestException as e:
+            logger.error(f"❌ TheOddsAPI request failed on attempt {attempt + 1}: {e}")
+            if hasattr(e, 'response') and e.response is not None:
+                logger.error(f"   Response status: {e.response.status_code}")
+                logger.error(f"   Response text: {e.response.text[:500]}")
+            if attempt < max_retries:
+                continue
+            return []
+        except json.JSONDecodeError as e:
+            logger.error(f"❌ Failed to parse TheOddsAPI JSON on attempt {attempt + 1}: {e}")
+            if attempt < max_retries:
+                continue
+            return []
+        except Exception as e:
+            logger.error(f"❌ Unexpected error in fetch_odds_games on attempt {attempt + 1}: {e}")
+            logger.exception(e)
+            if attempt < max_retries:
+                continue
             return []
 
-        # DIAGNOSTIC: Log first game sample if available
-        if games and len(games) > 0:
-            first_game = games[0]
-            logger.info(f"🎮 First game sample keys: {list(first_game.keys())}")
-            logger.info(f"🏀 First game: {first_game.get('home_team')} vs {first_game.get('away_team')}")
-            logger.info(f"⏰ Commence time: {first_game.get('commence_time')}")
-        else:
-            logger.warning(f"⚠️ TheOddsAPI returned empty games list for sport: {sport_key}")
-            logger.warning(f"   This could mean:")
-            logger.warning(f"   - No games scheduled for this sport today")
-            logger.warning(f"   - Sport key is invalid")
-            logger.warning(f"   - API rate limit exceeded")
-            logger.warning(f"   - API key has insufficient permissions")
-
-        return games
-
-    except requests.exceptions.RequestException as e:
-        logger.error(f"❌ TheOddsAPI request failed: {e}")
-        if hasattr(e, 'response') and e.response is not None:
-            logger.error(f"   Response status: {e.response.status_code}")
-            logger.error(f"   Response text: {e.response.text[:500]}")
-        return []
-    except json.JSONDecodeError as e:
-        logger.error(f"❌ Failed to parse TheOddsAPI JSON: {e}")
-        return []
-    except Exception as e:
-        logger.error(f"❌ Unexpected error in fetch_odds_games: {e}")
-        logger.exception(e)
-        return []
+    # Should not reach here, but return empty list as fallback
+    return []
 
 @st.cache_data(ttl=300)
 def fetch_news() -> List[Dict[str, Any]]:
@@ -6213,13 +6256,17 @@ if "market_counts" not in st.session_state:
         "spreads_available_count": 0,
         "totals_available_count": 0,
     }
+if "run_id" not in st.session_state:
+    st.session_state["run_id"] = None
+if "gemini_disabled_reason" not in st.session_state:
+    st.session_state["gemini_disabled_reason"] = None
 
 
 # -----------------
 # Data loading helpers
 # -----------------
 
-def load_games(selected_leagues: Union[str, List[str]]) -> List[Dict[str, Any]]:
+def load_games(selected_leagues: Union[str, List[str]], run_id: Optional[str] = None) -> List[Dict[str, Any]]:
     leagues = [selected_leagues] if isinstance(selected_leagues, str) else list(selected_leagues or [])
     all_games_with_times: List[Dict[str, Any]] = []
     commence_stats_total = {"parsed": 0, "failed": 0, "timezone": get_local_tz()}
@@ -6233,7 +6280,7 @@ def load_games(selected_leagues: Union[str, List[str]]) -> List[Dict[str, Any]]:
             st.session_state["last_exception"] = f"Unknown league: {selected_league}"
             continue
         try:
-            games_raw = fetch_odds_games(sport_key)
+            games_raw = fetch_odds_games(sport_key, run_id=run_id)
         except Exception:
             st.session_state["last_exception"] = traceback.format_exc()
             continue
@@ -6420,7 +6467,12 @@ if st.sidebar.button("Load Games", width="stretch"):
     # Invalidate master_df when loading new games
     if "master_df" in st.session_state:
         del st.session_state["master_df"]
-    load_games(selected_sports or [league])
+    # Generate new run_id for this load
+    import uuid
+    new_run_id = str(uuid.uuid4())[:8]
+    st.session_state["run_id"] = new_run_id
+    logger.info(f"🆕 Generated new run_id: {new_run_id}")
+    load_games(selected_sports or [league], run_id=new_run_id)
 
 # --- SYSTEM TOOLS (Debug Export) ---
 st.sidebar.markdown("---")
@@ -6858,6 +6910,18 @@ with tab_master:
         st.session_state["master_results_df"] = None
 
     if st.button("🚀 Run Master Analysis"):
+        # Generate new run_id for this analysis run
+        import uuid
+        analysis_run_id = str(uuid.uuid4())[:8]
+        st.session_state["run_id"] = analysis_run_id
+        logger.info(f"🆕 Starting Master Analysis with run_id: {analysis_run_id}")
+
+        # Validate games list before proceeding
+        if not games or len(games) == 0:
+            st.error("❌ No games available to analyze. Please load games first by clicking 'Load Games' in the sidebar.")
+            logger.error(f"CRITICAL: Cannot run Master Analysis - games list is empty (run_id: {analysis_run_id})")
+            st.stop()
+
         with st.spinner("🔄 Analyzing Markets..."):
             try:
                 # Task 1: Pre-process games to ensure commence_date_local is set for TheOver matching

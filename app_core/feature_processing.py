@@ -262,6 +262,115 @@ MANUAL_TEAM_OVERRIDES = {
     "SOUTHEAST MISSOURI": "SOUTHEAST MISSOURI STATE",
     "SEMO": "SOUTHEAST MISSOURI STATE",
     "SIU EDWARDSVILLE": "SIU EDWARDSVILLE",
+
+    # Additional NCAAB mascot stripping (common variations that appear in logs)
+    "DUKE BLUE DEVILS": "DUKE",
+    "NORTH CAROLINA TAR HEELS": "NORTH CAROLINA",
+    "KANSAS JAYHAWKS": "KANSAS",
+    "KENTUCKY WILDCATS": "KENTUCKY",
+    "GONZAGA BULLDOGS": "GONZAGA",
+    "BAYLOR BEARS": "BAYLOR",
+    "ARIZONA WILDCATS": "ARIZONA",
+    "UCLA BRUINS": "UCLA",
+    "HOUSTON COUGARS": "HOUSTON",
+    "PURDUE BOILERMAKERS": "PURDUE",
+    "CONNECTICUT HUSKIES": "CONNECTICUT",
+    "VILLANOVA WILDCATS": "VILLANOVA",
+    "MICHIGAN STATE SPARTANS": "MICHIGAN STATE",
+    "TENNESSEE VOLUNTEERS": "TENNESSEE",
+    "ALABAMA CRIMSON TIDE": "ALABAMA",
+    "AUBURN TIGERS": "AUBURN",
+    "TEXAS LONGHORNS": "TEXAS",
+    "VIRGINIA CAVALIERS": "VIRGINIA",
+    "ILLINOIS FIGHTING ILLINI": "ILLINOIS",
+    "ARKANSAS RAZORBACKS": "ARKANSAS",
+    "INDIANA HOOSIERS": "INDIANA",
+    "MICHIGAN WOLVERINES": "MICHIGAN",
+    "OHIO STATE BUCKEYES": "OHIO STATE",
+    "FLORIDA GATORS": "FLORIDA",
+    "TEXAS TECH RED RAIDERS": "TEXAS TECH",
+    "WISCONSIN BADGERS": "WISCONSIN",
+    "MARYLAND TERRAPINS": "MARYLAND",
+    "IOWA HAWKEYES": "IOWA",
+    "XAVIER MUSKETEERS": "XAVIER",
+    "CREIGHTON BLUEJAYS": "CREIGHTON",
+    "MARQUETTE GOLDEN EAGLES": "MARQUETTE",
+    "PROVIDENCE FRIARS": "PROVIDENCE",
+    "SETON HALL PIRATES": "SETON HALL",
+    "ST JOHNS RED STORM": "ST JOHNS",
+    "ST JOHN'S RED STORM": "ST JOHNS",
+    "GEORGETOWN HOYAS": "GEORGETOWN",
+    "BUTLER BULLDOGS": "BUTLER",
+    "DEPAUL BLUE DEMONS": "DEPAUL",
+    "MEMPHIS TIGERS": "MEMPHIS",
+    "CINCINNATI BEARCATS": "CINCINNATI",
+    "WICHITA STATE SHOCKERS": "WICHITA STATE",
+    "TEMPLE OWLS": "TEMPLE",
+    "TULANE GREEN WAVE": "TULANE",
+    "DAYTON FLYERS": "DAYTON",
+    "VCU RAMS": "VCU",
+    "SAINT LOUIS BILLIKENS": "SAINT LOUIS",
+    "ST BONAVENTURE BONNIES": "ST BONAVENTURE",
+    "RICHMOND SPIDERS": "RICHMOND",
+    "DAVIDSON WILDCATS": "DAVIDSON",
+    "SAN DIEGO STATE AZTECS": "SAN DIEGO STATE",
+    "NEVADA WOLF PACK": "NEVADA",
+    "UTAH STATE AGGIES": "UTAH STATE",
+    "BOISE STATE BRONCOS": "BOISE STATE",
+    "NEW MEXICO LOBOS": "NEW MEXICO",
+    "COLORADO STATE RAMS": "COLORADO STATE",
+    "SAINT MARY'S GAELS": "SAINT MARY'S",
+    "ST MARYS GAELS": "ST MARYS",
+    "SAN FRANCISCO DONS": "SAN FRANCISCO",
+    "BYU COUGARS": "BYU",
+    "PEPPERDINE WAVES": "PEPPERDINE",
+    "TCU HORNED FROGS": "TCU",
+    "IOWA STATE CYCLONES": "IOWA STATE",
+    "KANSAS STATE WILDCATS": "KANSAS STATE",
+    "OKLAHOMA SOONERS": "OKLAHOMA",
+    "OKLAHOMA STATE COWBOYS": "OKLAHOMA STATE",
+    "WEST VIRGINIA MOUNTAINEERS": "WEST VIRGINIA",
+    "LOUISVILLE CARDINALS": "LOUISVILLE",
+    "SYRACUSE ORANGE": "SYRACUSE",
+    "NOTRE DAME FIGHTING IRISH": "NOTRE DAME",
+    "CLEMSON TIGERS": "CLEMSON",
+    "WAKE FOREST DEMON DEACONS": "WAKE FOREST",
+    "PITTSBURGH PANTHERS": "PITTSBURGH",
+    "BOSTON COLLEGE EAGLES": "BOSTON COLLEGE",
+    "LSU TIGERS": "LSU",
+    "MISSISSIPPI STATE BULLDOGS": "MISSISSIPPI STATE",
+    "MISSOURI TIGERS": "MISSOURI",
+    "SOUTH CAROLINA GAMECOCKS": "SOUTH CAROLINA",
+    "GEORGIA BULLDOGS": "GEORGIA",
+    "VANDERBILT COMMODORES": "VANDERBILT",
+    "OREGON DUCKS": "OREGON",
+    "OREGON STATE BEAVERS": "OREGON STATE",
+    "WASHINGTON HUSKIES": "WASHINGTON",
+    "WASHINGTON STATE COUGARS": "WASHINGTON STATE",
+    "COLORADO BUFFALOES": "COLORADO",
+    "UTAH UTES": "UTAH",
+    "ARIZONA STATE SUN DEVILS": "ARIZONA STATE",
+    "CALIFORNIA GOLDEN BEARS": "CALIFORNIA",
+    "STANFORD CARDINAL": "STANFORD",
+    "RUTGERS SCARLET KNIGHTS": "RUTGERS",
+    "PENN STATE NITTANY LIONS": "PENN STATE",
+    "MINNESOTA GOLDEN GOPHERS": "MINNESOTA",
+    "NORTHWESTERN WILDCATS": "NORTHWESTERN",
+    "NEBRASKA CORNHUSKERS": "NEBRASKA",
+
+    # Additional mascot variations with "STATE" already normalized
+    "NORTH CAROLINA STATE WOLFPACK": "NC STATE",
+    "MICHIGAN STATE SPARTANS": "MICHIGAN STATE",
+    "FLORIDA STATE SEMINOLES": "FLORIDA STATE",
+    "GEORGIA STATE PANTHERS": "GEORGIA STATE",
+    "MISSISSIPPI STATE BULLDOGS": "MISSISSIPPI STATE",
+    "WASHINGTON STATE COUGARS": "WASHINGTON STATE",
+    "KANSAS STATE WILDCATS": "KANSAS STATE",
+    "IOWA STATE CYCLONES": "IOWA STATE",
+    "OHIO STATE BUCKEYES": "OHIO STATE",
+    "OKLAHOMA STATE COWBOYS": "OKLAHOMA STATE",
+    "OREGON STATE BEAVERS": "OREGON STATE",
+    "ARIZONA STATE SUN DEVILS": "ARIZONA STATE",
     "SIUE": "SIU EDWARDSVILLE",
     "SOUTHERN ILLINOIS": "SOUTHERN ILLINOIS",
     "SIU": "SOUTHERN ILLINOIS",
@@ -1487,14 +1596,27 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
                     features_df.loc[zeros_mask, 'feature_stats_fallback'] = True
 
     # --- SCHEMA ENFORCEMENT ---
+    # PERFORMANCE FIX: Build missing columns as dict first, then add in one operation
+    # This prevents DataFrame fragmentation from repeated column additions
+    missing_cols = {}
     for col in VERTEX_FEATURE_COLUMNS:
         if col not in features_df.columns:
             # Determine default: 0.5 for probs, 0.0 for others
             default_val = 0.5 if "prob" in col else 0.0
-            features_df[col] = default_val
+            missing_cols[col] = default_val
 
-        # Force float type for Vertex AI (fixes [0.6, 0, ...] issue)
-        features_df[col] = pd.to_numeric(features_df[col], errors='coerce').astype(float)
+    # Add all missing columns at once to avoid fragmentation
+    if missing_cols:
+        missing_df = pd.DataFrame(missing_cols, index=features_df.index)
+        features_df = pd.concat([features_df, missing_df], axis=1)
+
+    # Force float type for all Vertex columns (fixes [0.6, 0, ...] issue)
+    for col in VERTEX_FEATURE_COLUMNS:
+        if col in features_df.columns:
+            features_df[col] = pd.to_numeric(features_df[col], errors='coerce').astype(float)
+
+    # Consolidate memory layout to prevent fragmentation warnings
+    features_df = features_df.copy()
 
     result = pd.concat([df, features_df], axis=1)
     return result

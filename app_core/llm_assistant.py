@@ -71,14 +71,28 @@ def _safe_json_extract(text: str) -> Dict[str, Any]:
             return {}
     return {}
 
-def analyze_kalshi_context_with_llm(context_markdown: str) -> List[Dict[str, Any]]:
+def analyze_kalshi_context_with_llm(context_markdown: str, session_state: Optional[Any] = None) -> List[Dict[str, Any]]:
     """
     Returns a list of contract dicts, or [] on any error.
+
+    Args:
+        context_markdown: Context about the game/market
+        session_state: Optional Streamlit session_state to check/set gemini_disabled_reason
+
+    Returns:
+        List of contract recommendations, or empty list on error
     """
     if not _GEMINI_AVAILABLE or GenerativeModel is None:
         return []
     if not context_markdown or not context_markdown.strip():
         return []
+
+    # Check session-level disable flag
+    if session_state is not None:
+        disabled_reason = getattr(session_state, "gemini_disabled_reason", None) or session_state.get("gemini_disabled_reason")
+        if disabled_reason:
+            # Already disabled - skip silently
+            return []
 
     initialize_gemini()
 
@@ -129,9 +143,23 @@ CONTEXT:
                 text = getattr(resp, "text", "") or ""
                 break
             except Exception as e:
+                exc_str = str(e)
+
+                # Check for APIKEYINVALID error
+                if "API_KEY_INVALID" in exc_str or "API key not valid" in exc_str or "INVALID_ARGUMENT" in exc_str:
+                    # Disable Gemini for the rest of this session
+                    if session_state is not None:
+                        if hasattr(session_state, "gemini_disabled_reason"):
+                            session_state.gemini_disabled_reason = "APIKEYINVALID"
+                        else:
+                            session_state["gemini_disabled_reason"] = "APIKEYINVALID"
+                    # Log ONE warning and return
+                    logger.warning(f"⚠️ Gemini API key invalid. Disabling Gemini for this session. Error: {exc_str}")
+                    return []
+
                 logger.warning(f"Kalshi LLM analysis failed with {model_name}: {e}")
                 continue
-        
+
         if not text:
             return []
 
@@ -160,18 +188,33 @@ CONTEXT:
         logger.warning(f"LLM assistant call failed: {e}")
         return []
 
-def generate_confidence_explanation(prompt: str) -> Dict[str, Any]:
+def generate_confidence_explanation(prompt: str, session_state: Optional[Any] = None) -> Dict[str, Any]:
     """
     Lightweight Gemini call for qualitative confidence/explanation metadata.
     Returns an empty dict if Gemini is unavailable or any error occurs.
+
+    Args:
+        prompt: The prompt to send to Gemini
+        session_state: Optional Streamlit session_state to check/set gemini_disabled_reason
+
+    Returns:
+        Dictionary with confidence explanation, or empty dict on error
     """
+    # Check if Gemini is globally unavailable
     if not _GEMINI_AVAILABLE or GenerativeModel is None:
         return {}
     if not prompt:
         return {}
-    
+
+    # Check session-level disable flag (prevents repeated API calls with invalid key)
+    if session_state is not None:
+        disabled_reason = getattr(session_state, "gemini_disabled_reason", None) or session_state.get("gemini_disabled_reason")
+        if disabled_reason:
+            # Already disabled - skip silently (no repeated warnings)
+            return {}
+
     initialize_gemini()
-    
+
     # Try models in order
     errors = []
     for model_name in MODEL_FALLBACKS:
@@ -183,8 +226,23 @@ def generate_confidence_explanation(prompt: str) -> Dict[str, Any]:
             text = getattr(resp, "text", "") or ""
             return _safe_json_extract(text)
         except Exception as exc:
-            errors.append(f"{model_name}: {exc}")
+            exc_str = str(exc)
+            errors.append(f"{model_name}: {exc_str}")
+
+            # Check for APIKEYINVALID error (Google API returns 400 with this message)
+            if "API_KEY_INVALID" in exc_str or "API key not valid" in exc_str or "INVALID_ARGUMENT" in exc_str:
+                # Disable Gemini for the rest of this session
+                if session_state is not None:
+                    if hasattr(session_state, "gemini_disabled_reason"):
+                        session_state.gemini_disabled_reason = "APIKEYINVALID"
+                    else:
+                        session_state["gemini_disabled_reason"] = "APIKEYINVALID"
+                # Log ONE warning and return
+                logger.warning(f"⚠️ Gemini API key invalid. Disabling Gemini for this session. Error: {exc_str}")
+                return {}
+
             continue
-            
+
+    # All models failed (but not due to invalid key)
     logger.warning(f"Gemini confidence call failed on all fallbacks: {'; '.join(errors)}")
     return {}
