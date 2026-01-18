@@ -886,14 +886,55 @@ def _match_via_events(
         if not markets:
             return None
 
-        # Find the main game market (Winner)
-        target_market = None
-        for m in markets:
-            t = (m.get("title") or "").lower()
-            if "winner" in t:
-                target_market = m
-                break
+        # ENHANCED: Classify all markets as winner/spread/total
+        winner_market = None
+        spread_markets = []
+        total_markets = []
 
+        logger.debug(f"🔍 KALSHI DEBUG [{league}]: Found {len(markets)} markets for event {best_event.get('ticker')}")
+
+        for idx, m in enumerate(markets):
+            ticker = m.get("ticker", "")
+            title = (m.get("title") or "").lower()
+            subtitle = (m.get("subtitle") or "").lower()
+
+            # Classify market type
+            market_type = _extract_market_type(title, ticker)
+
+            # Debug: Log market classification
+            logger.debug(f"   Market {idx+1}: ticker={ticker[:40]}, type={market_type}, title={title[:60]}")
+
+            # Extract line information for spread/total
+            floor_str = m.get("floor_strike") or m.get("floor")
+            cap_str = m.get("cap_strike") or m.get("cap")
+            strike_str = m.get("strike")
+
+            if floor_str or cap_str or strike_str:
+                logger.debug(f"      Line info: floor={floor_str}, cap={cap_str}, strike={strike_str}")
+
+            if "winner" in title or market_type == "moneyline":
+                winner_market = m
+                logger.debug(f"      ✓ Classified as WINNER")
+            elif market_type == "spread" or "spread" in title or "points" in title:
+                spread_markets.append(m)
+                logger.debug(f"      ✓ Classified as SPREAD")
+            elif market_type == "total" or "total" in title or "over" in title or "under" in title:
+                total_markets.append(m)
+                logger.debug(f"      ✓ Classified as TOTAL")
+
+        # Log summary of classifications
+        logger.info(f"🎯 KALSHI MATCH [{league}]: Event {best_event.get('ticker')} - "
+                   f"Winner: {'✓' if winner_market else '✗'}, "
+                   f"Spread: {len(spread_markets)}, "
+                   f"Total: {len(total_markets)}")
+
+        if spread_markets:
+            logger.info(f"   📊 Spread markets found: {[m.get('ticker')[:40] for m in spread_markets[:3]]}")
+        if total_markets:
+            logger.info(f"   📊 Total markets found: {[m.get('ticker')[:40] for m in total_markets[:3]]}")
+
+        # Find the main game market (Winner) - prioritize for primary return
+        target_market = winner_market
         if not target_market and markets:
             target_market = markets[0] # Fallback
 
@@ -907,6 +948,18 @@ def _match_via_events(
             elif target_market.get("last_price"):
                  prob = target_market.get("last_price") / 100.0
 
+            # Enhanced debug info
+            debug_info = {
+                "score": best_score,
+                "event": best_event.get("ticker"),
+                "total_markets": len(markets),
+                "winner_found": bool(winner_market),
+                "spread_count": len(spread_markets),
+                "total_count": len(total_markets),
+                "spread_tickers": [m.get("ticker") for m in spread_markets[:2]],
+                "total_tickers": [m.get("ticker") for m in total_markets[:2]],
+            }
+
             return KalshiMatchResult(
                 matched=True,
                 kalshi_available=True,
@@ -917,7 +970,7 @@ def _match_via_events(
                 reason="matched_via_events_api",
                 market_type="winner",
                 game_date=game_dt_utc,
-                debug={"score": best_score, "event": best_event.get("ticker")}
+                debug=debug_info
             )
 
     return None
