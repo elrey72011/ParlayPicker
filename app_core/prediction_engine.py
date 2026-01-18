@@ -117,7 +117,7 @@ class PredictionEngine:
                 else:
                     global _LOGGED_MODEL_MISSING
                     if not _LOGGED_MODEL_MISSING:
-                        logger.info(f"Jules: Model file at {model_path} is placeholder/invalid. Using statistical fallback mode.")
+                        logger.info(f"Jules: Model file at {model_path} is placeholder/invalid. Using enhanced statistical fallback (feature-based).")
                         _LOGGED_MODEL_MISSING = True
 
             except Exception as e:
@@ -138,13 +138,76 @@ class PredictionEngine:
         Zero latency, zero cost.
         """
         if self.use_fallback:
-            # Basic statistical fallback (e.g., win rate average)
-            return {"prob": 0.52, "note": "Statistical Fallback (No Model Found)"}
+            # Enhanced statistical fallback using team features
+            # Instead of flat 0.52, use win%, ppg, and implied prob
+            prob = self._calculate_statistical_prob(features)
+            return {"prob": prob, "note": "Statistical Fallback (Feature-Based)"}
 
         # Ensure input is 2D (batch of 1)
         dmatrix = xgb.DMatrix(pd.DataFrame([features]))
         prob = self.model.predict(dmatrix)[0]
         return {"prob": float(prob), "note": "Local XGBoost Inference"}
+
+    def _calculate_statistical_prob(self, features: Dict[str, float]) -> float:
+        """
+        Calculate probability using team features when model is unavailable.
+        Uses weighted combination of:
+        - Implied probability from odds (40%)
+        - Win % differential (30%)
+        - PPG differential (20%)
+        - Kalshi probability if available (10%)
+        """
+        # Get feature values safely
+        implied_prob = features.get('implied_home_prob', 0.5)
+        home_win_pct = features.get('feature_home_win_pct', 0.5)
+        away_win_pct = features.get('feature_away_win_pct', 0.5)
+        home_ppg = features.get('feature_home_ppg', 110.0)
+        away_ppg = features.get('feature_away_ppg', 110.0)
+        home_oppg = features.get('feature_home_oppg', 110.0)
+        away_oppg = features.get('feature_away_oppg', 110.0)
+        kalshi_prob = features.get('kalshi_prob', 0.5)
+        sentiment_diff = features.get('sentiment_diff', 0.0)
+
+        # Component 1: Implied Probability (Market odds baseline)
+        implied_component = implied_prob
+
+        # Component 2: Win % Differential
+        # Convert win% diff to probability (normalized)
+        win_diff = home_win_pct - away_win_pct
+        # Scale: -0.5 to +0.5 diff maps to 0.35-0.65 prob
+        win_component = 0.5 + (win_diff * 0.3)
+        win_component = max(0.35, min(0.65, win_component))
+
+        # Component 3: PPG Differential (Offensive/Defensive Balance)
+        # Home net rating vs Away net rating
+        home_net = home_ppg - home_oppg
+        away_net = away_ppg - away_oppg
+        net_diff = home_net - away_net
+        # Scale: -20 to +20 maps to 0.40-0.60 prob
+        ppg_component = 0.5 + (net_diff / 100.0)
+        ppg_component = max(0.40, min(0.60, ppg_component))
+
+        # Component 4: Kalshi probability (if available and not default)
+        kalshi_component = kalshi_prob if abs(kalshi_prob - 0.5) > 0.01 else implied_prob
+
+        # Component 5: Sentiment adjustment (small nudge)
+        sentiment_adj = sentiment_diff * 0.02  # ±2% max
+
+        # Weighted combination
+        base_prob = (
+            implied_component * 0.40 +
+            win_component * 0.30 +
+            ppg_component * 0.20 +
+            kalshi_component * 0.10
+        )
+
+        # Apply sentiment adjustment
+        final_prob = base_prob + sentiment_adj
+
+        # Clamp to reasonable range [0.35, 0.65] to avoid extreme predictions without model
+        final_prob = max(0.35, min(0.65, final_prob))
+
+        return float(final_prob)
 
     def predict_batch(self, df: pd.DataFrame) -> List[float]:
         """
@@ -154,8 +217,13 @@ class PredictionEngine:
             return []
 
         if self.use_fallback:
-            # Basic statistical fallback
-            return [0.52] * len(df)
+            # Enhanced statistical fallback using team features
+            probs = []
+            for idx, row in df.iterrows():
+                features = build_model_feature_row_from_record(row.to_dict())
+                prob = self._calculate_statistical_prob(features)
+                probs.append(prob)
+            return probs
 
         try:
             # Ensure input has the correct columns
