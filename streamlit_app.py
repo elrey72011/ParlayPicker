@@ -3274,19 +3274,51 @@ def score_pick_confidence(row: Dict[str, Any]) -> Tuple[str, str, bool]:
 def apply_confidence_filter(df: pd.DataFrame, confidence_mode: str, show_low: bool) -> Tuple[pd.DataFrame, Dict[str, Any]]:
     if df is None or df.empty:
         return pd.DataFrame(), {"counts": {}, "low_removed": 0}
+
     filtered = df.copy()
-    base_low = int((filtered["Pick_Confidence"] == "LOW").sum())
+
+    # Canonicalize confidence column name
+    confidence_missing_warning = False
+    if "Pick_Confidence" not in filtered.columns:
+        # Try common alternates used elsewhere in the code
+        for alt in ["confidence_bucket", "confidencebucket", "Confidence", "pick_confidence"]:
+            if alt in filtered.columns:
+                filtered["Pick_Confidence"] = filtered[alt]
+                break
+
+    # If still missing, create a safe default and do not crash
+    if "Pick_Confidence" not in filtered.columns:
+        filtered["Pick_Confidence"] = "LOW"
+        confidence_missing_warning = True
+
+    # Make the counting logic safe using .get()
+    conf = filtered.get("Pick_Confidence", pd.Series([], dtype="object"))
+    base_low = int((conf == "LOW").sum())
+
     mode_norm = (confidence_mode or "").lower()
-    if mode_norm.startswith("high only"):
-        filtered = filtered[filtered["Pick_Confidence"] == "HIGH"]
-    elif mode_norm.startswith("high+medium"):
-        filtered = filtered[filtered["Pick_Confidence"].isin(["HIGH", "MEDIUM"])]
-    # "All" or anything else -> no filter on confidence tier
-    if not show_low:
-        filtered = filtered[filtered["Pick_Confidence"] != "LOW"]
-    low_after = int((filtered["Pick_Confidence"] == "LOW").sum())
-    counts = filtered["Pick_Confidence"].value_counts(dropna=False).to_dict()
-    return filtered, {"counts": counts, "low_removed": max(base_low - low_after, 0)}
+
+    # Ensure filter logic doesn't assume the column exists
+    if "Pick_Confidence" in filtered.columns:
+        if mode_norm.startswith("high only"):
+            filtered = filtered[filtered["Pick_Confidence"] == "HIGH"]
+        elif mode_norm.startswith("high+medium"):
+            filtered = filtered[filtered["Pick_Confidence"].isin(["HIGH", "MEDIUM"])]
+        # "All" or anything else -> no filter on confidence tier
+
+        if not show_low:
+            filtered = filtered[filtered["Pick_Confidence"] != "LOW"]
+
+    # Recalculate confidence stats after filtering
+    conf_after = filtered.get("Pick_Confidence", pd.Series([], dtype="object"))
+    low_after = int((conf_after == "LOW").sum())
+    counts = conf_after.value_counts(dropna=False).to_dict() if len(conf_after) > 0 else {}
+
+    # Add warning to counts dict if confidence was missing
+    result = {"counts": counts, "low_removed": max(base_low - low_after, 0)}
+    if confidence_missing_warning:
+        result["warning"] = "Pick_Confidence column missing; defaulted to LOW"
+
+    return filtered, result
 
 
 @st.cache_data(ttl=900)
@@ -12156,6 +12188,10 @@ if should_display:
         # FORCE DISPLAY: Always use "All" mode and show_low=True to display all 139 rows
         # This bypasses any UI filter settings to ensure full visibility
         df_master_view, confidence_stats = apply_confidence_filter(df, "All", True)
+
+        # Display warning if Pick_Confidence column was missing
+        if confidence_stats.get("warning"):
+            st.warning(confidence_stats["warning"])
 
         # Task 2: Force Spread/Total Pivot (Applied immediately after df_master_view creation)
         def force_spread_total_pivot(row):
