@@ -81,20 +81,18 @@ def calculate_consensus_for_row(row: pd.Series, market_type: str = "Spread") -> 
         p_theover = _get_f("theover_prob") or _get_f("theover_prob_used")
 
     # 2. Weights (from prompt)
-    # Base weights: Kalshi 35, Market 30, Model 20, TheOver 10. (Sum=95, normalized to 100 below)
-    # If TheOver is present, we include it.
-    # Existing weights (31.58, 36.84, 21.05) are basically 30/95, 35/95, 20/95.
-    # We will use the same ratios.
+    # ONLY THREE SOURCES: Kalshi (45%), Market (40%), TheOver (15%)
+    # Model removed (file missing), Sentiment removed (not used in probability blend)
+    # These weights match compute_final_probability() in streamlit_app.py
 
-    W_M = 31.58
-    W_K = 36.84
-    W_AI = 21.05
-    W_TO = 10.53  # ~10/95 * 100
+    W_M = 40.0   # Market/Odds
+    W_K = 45.0   # Kalshi
+    W_TO = 15.0  # TheOver
 
     sources = []
     if p_market is not None: sources.append(("M", p_market, W_M))
     if p_kalshi is not None: sources.append(("K", p_kalshi, W_K))
-    if p_model is not None: sources.append(("AI", p_model, W_AI))
+    # Model intentionally excluded - not available
     if p_theover is not None: sources.append(("TO", p_theover, W_TO))
 
     # 3. Calculate
