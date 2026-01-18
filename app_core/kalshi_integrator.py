@@ -967,7 +967,7 @@ def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time:
     best_score = 0.0
 
     # Constants for fuzzy logic
-    DATE_TOLERANCE_DAYS = 1
+    DATE_TOLERANCE_DAYS = 2
     # If using rapidfuzz (0-100 scale), threshold needs to be high.
     # We sum two scores (Home + Away), so max is 200.
     # Accept if sum > 130 (avg 65 per team) to be safe but permissive.
