@@ -100,36 +100,35 @@ class PredictionEngine:
 
         self.use_fallback = True # Default to fallback
 
-        if os.path.exists(model_path):
-            try:
-                # Check if file is valid JSON and not empty
-                is_valid = False
-                if os.path.getsize(model_path) > 0:
-                    with open(model_path, 'r') as f:
-                        try:
-                            content = json.load(f)
-                            # If content is empty dict {}, treating as dummy model -> fallback
-                            if content:
-                                is_valid = True
-                        except json.JSONDecodeError:
-                            pass # Invalid JSON, use fallback
+        # Explicitly check for model file existence
+        model_exists = os.path.exists(model_path) and os.path.getsize(model_path) > 0
 
-                if is_valid:
+        if model_exists:
+            try:
+                # Check if file is valid JSON (basic check)
+                is_valid_json = False
+                with open(model_path, 'r') as f:
+                    try:
+                        content = json.load(f)
+                        if content:
+                            is_valid_json = True
+                    except json.JSONDecodeError:
+                        pass # Invalid JSON, use fallback
+
+                if is_valid_json:
                     self.model.load_model(model_path)
                     self.use_fallback = False
                     logger.info(f"Jules: Loaded local model from {model_path}")
                 else:
-                    global _LOGGED_MODEL_MISSING
-                    if not _LOGGED_MODEL_MISSING:
-                        logger.info(f"Jules: Model file at {model_path} is placeholder/invalid. Using enhanced statistical fallback (feature-based).")
-                        _LOGGED_MODEL_MISSING = True
+                    logger.warning(f"Jules: Model file at {model_path} is invalid/empty JSON. Using statistical fallback.")
+                    self.use_fallback = True
 
             except Exception as e:
                 self.use_fallback = True
                 logger.error(f"Jules: Failed to load model from {model_path}: {e}. Using statistical fallback.")
         else:
             self.use_fallback = True
-            # Only log once if missing
+            global _LOGGED_MODEL_MISSING
             if not _LOGGED_MODEL_MISSING:
                 logger.warning(
                     f"Jules: Model file missing at {model_path}. Using statistical fallback."

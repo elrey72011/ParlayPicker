@@ -510,6 +510,21 @@ NCAAB_TEAM_CODE_MAP: Dict[str, str] = {
     "VMI": "VMI",  # Virginia Military Institute - 3-letter code
     "VIRGINIA MILITARY INSTITUTE": "VMI",
     "VIRGINIA MILITARY": "VMI",
+    # Fix for Issue #2: Missing NCAAB Aliases
+    "FORT WAYNE": "PFW",
+    "PURDUE FORT WAYNE": "PFW",
+    "IPFW": "PFW",
+    "MILWAUKEE": "MIL",
+    "GREEN BAY": "GB",
+    "IUPUI": "IUP",
+    "UIC": "UIC",
+    "NORTHERN KENTUCKY": "NKU",
+    "WRIGHT STATE": "WRI",
+    "YOUNGSTOWN STATE": "YSU",
+    "ROBERT MORRIS": "RMU",
+    "DETROIT MERCY": "DET",
+    "OAKLAND": "OAK",
+    "CLEVELAND STATE": "CSU",
 }
 
 # Alias Maps: Kalshi Variant -> Canonical Internal Code
@@ -1834,6 +1849,21 @@ class KalshiIntegrator:
             "other": other,
         }
 
+    def _date_to_kalshi_token(self, dt: datetime) -> str:
+        """
+        Convert datetime to Kalshi date token format (YYMONDD).
+        e.g. 2025-01-26 -> 25JAN26
+        """
+        # Ensure UTC
+        if dt.tzinfo is None:
+            dt = pytz.utc.localize(dt)
+        else:
+            dt = dt.astimezone(pytz.UTC)
+
+        # Format: %y%b%d, but Month needs to be UPPERCASE
+        token = dt.strftime("%y%b%d").upper()
+        return token
+
     def get_sports_markets(
         self, league: Optional[str] = None, commence_times: Optional[List[str]] = None
     ) -> List[Dict[str, Any]]:
@@ -1854,20 +1884,47 @@ class KalshiIntegrator:
                         commence_dt.append(dt)
                     except Exception:
                         continue
-            date_key = None
+
+            # --- FIXED: Use per-game date tokens for batch fetching ---
+            # Instead of one "min" date key, we iterate all unique date tokens
+            # and fetch/combine markets. If no times provided, fall back to league fetch.
+
+            # 1. Identify unique date tokens involved in the batch
+            unique_tokens = set()
             if commence_dt:
-                earliest = min(commence_dt)
-                date_key = earliest.astimezone(pytz.UTC).strftime("%Y%m%d")
-            cache_key = None
-            if league_key and date_key:
-                cache_key = (league_key, date_key)
-                cached = self._markets_cache_by_key.get(cache_key)
-                if cached and (time.time() - cached.get("ts", 0)) < self._markets_cache_ttl_seconds:
-                    return cached.get("markets", [])
+                for dt in commence_dt:
+                    token = self._date_to_kalshi_token(dt)
+                    unique_tokens.add(token)
 
-            markets = self.get_league_markets(league_key, status=None)
-            filtered = markets
+            # 2. Fetch markets
+            all_filtered_markets = []
 
+            if unique_tokens:
+                # Optimized Fetch: For each date token, get specific markets
+                # This fixes the "batch date key" bug where it only fetched the first date
+                for token in unique_tokens:
+                    # Uses internal caching inside get_markets_for_date_token
+                    # This method handles "YYMONDD" tokens correctly
+                    result = self.get_markets_for_date_token(league_key, token)
+                    markets = result.get("bucket", [])
+                    # Also include broadened results if bucket empty?
+                    # get_markets_for_date_token does fallback internally.
+                    all_filtered_markets.extend(markets)
+
+                # De-duplicate results across tokens (just in case)
+                deduped = {str(m.get("ticker")): m for m in all_filtered_markets}
+                all_filtered_markets = list(deduped.values())
+
+            else:
+                # Fallback: Fetch entire league if no specific times provided
+                # (Existing logic, but simplified)
+                markets = self.get_league_markets(league_key, status=None)
+                all_filtered_markets = markets
+
+            # 3. Final Filtering by Time Window (only if times were provided)
+            # This ensures even if we fetched extra markets for a token, we narrow down
+            # to the specific games requested (±72h window)
+            filtered = all_filtered_markets
             if commence_dt:
                 window = timedelta(hours=72)
                 time_filtered: List[Dict[str, Any]] = []
@@ -1881,11 +1938,12 @@ class KalshiIntegrator:
                 if time_filtered:
                     filtered = time_filtered
 
-            if cache_key:
-                self._markets_cache_by_key[cache_key] = {
-                    "ts": time.time(),
-                    "markets": filtered,
-                }
+            # Cache the result?
+            # If we used unique_tokens logic, caching is handled per token inside get_markets_for_date_token.
+            # We don't necessarily need to cache the *batch* result unless it's frequent.
+            # The original code cached by (league, min_date). We can keep that for backward compat
+            # or just rely on the granular token cache.
+            # Given the prompt's focus on "per-game datekey", relying on token cache is better.
 
             return filtered
         except Exception:
