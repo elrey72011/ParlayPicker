@@ -71,15 +71,31 @@ def calculate_consensus_for_row(row: pd.Series, market_type: str = "Spread") -> 
     if p_model is None: p_model = _get_f("AI_Prob")
     if p_final is None: p_final = _get_f("final_probability")
 
+    # TheOver
+    p_theover = None
+    if market_type == "Spread":
+        p_theover = _get_f("theover_spread_prob")
+    elif market_type == "Total":
+        p_theover = _get_f("theover_total_prob")
+    else:
+        p_theover = _get_f("theover_prob") or _get_f("theover_prob_used")
+
     # 2. Weights (from prompt)
+    # Base weights: Kalshi 35, Market 30, Model 20, TheOver 10. (Sum=95, normalized to 100 below)
+    # If TheOver is present, we include it.
+    # Existing weights (31.58, 36.84, 21.05) are basically 30/95, 35/95, 20/95.
+    # We will use the same ratios.
+
     W_M = 31.58
     W_K = 36.84
     W_AI = 21.05
+    W_TO = 10.53  # ~10/95 * 100
 
     sources = []
     if p_market is not None: sources.append(("M", p_market, W_M))
     if p_kalshi is not None: sources.append(("K", p_kalshi, W_K))
     if p_model is not None: sources.append(("AI", p_model, W_AI))
+    if p_theover is not None: sources.append(("TO", p_theover, W_TO))
 
     # 3. Calculate
     if not sources:
@@ -99,7 +115,7 @@ def calculate_consensus_for_row(row: pd.Series, market_type: str = "Spread") -> 
     consensus = max(0.01, min(0.99, consensus))
 
     # 4. Format
-    # "56% (M55 / K59 / AI52)"
+    # "56% (M55 / K59 / AI52 / TO55)"
     parts = [f"{s[0]}{int(s[1]*100)}" for s in sources]
     breakdown = " / ".join(parts)
 
