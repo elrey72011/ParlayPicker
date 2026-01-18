@@ -8,6 +8,7 @@ import os
 import threading
 import concurrent.futures
 import re
+import time
 
 # -------------------------------------------------------------------------
 # Library Imports with Fail-Safe Wrappers
@@ -170,7 +171,9 @@ TEAM_NAME_MAPPING = {
     "houston texans": "HOU",
     "pittsburgh steelers": "PIT",
     "la lakers": "LAL",
-    "los angeles clippers": "LAC", # Explicitly requested
+    "los angeles lakers": "LAL",  # Explicitly requested
+    "los angeles rams": "LAR",    # Explicitly requested
+    "la rams": "LAR",             # Explicitly requested
 
     # NHL: Mapping St. Louis correctly
     "st louis": "ST LOUIS BLUES",
@@ -657,32 +660,46 @@ def fetch_ncaaf_stats(season_year: int) -> List[Dict[str, Any]]:
         return status == 401 or "401" in msg or "Unauthorized" in msg
 
     def _fetch_stats_for_year(yr: int) -> List[Any]:
-        try:
-            api_instance = cfbd.StatsApi(api_client)
-            return api_instance.get_team_stats(year=yr)
-        except Exception as e:
-            if _is_unauthorized(e):
-                logger.warning(
-                    f"CFBD unauthorized (401) when fetching NCAAF stats. "
-                    "Check CFBD_API_KEY value in Streamlit secrets."
-                )
-            else:
-                logger.warning(f"NCAAF Stats fetch failed for {yr}: {e}")
-            return []
+        # Retry logic: Try up to 3 times
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                api_instance = cfbd.StatsApi(api_client)
+                return api_instance.get_team_stats(year=yr)
+            except Exception as e:
+                if _is_unauthorized(e):
+                    logger.warning(
+                        f"CFBD unauthorized (401) when fetching NCAAF stats. "
+                        "Check CFBD_API_KEY value in Streamlit secrets."
+                    )
+                    return [] # Don't retry auth errors
+                else:
+                    if attempt < max_retries - 1:
+                        time.sleep(1) # Wait 1s before retry
+                        continue
+                    logger.warning(f"NCAAF Stats fetch failed for {yr}: {e}")
+        return []
 
     def _fetch_games_for_year(yr: int) -> List[Any]:
-        try:
-            games_api = cfbd.GamesApi(api_client)
-            return games_api.get_games(year=yr)
-        except Exception as e:
-            if _is_unauthorized(e):
-                logger.warning(
-                    f"CFBD unauthorized (401) when fetching NCAAF games. "
-                    "Check CFBD_API_KEY value in Streamlit secrets."
-                )
-            else:
-                logger.warning(f"NCAAF Games API Unavailable for {yr}: {e}")
-            return []
+        # Retry logic: Try up to 3 times
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                games_api = cfbd.GamesApi(api_client)
+                return games_api.get_games(year=yr)
+            except Exception as e:
+                if _is_unauthorized(e):
+                    logger.warning(
+                        f"CFBD unauthorized (401) when fetching NCAAF games. "
+                        "Check CFBD_API_KEY value in Streamlit secrets."
+                    )
+                    return [] # Don't retry auth errors
+                else:
+                    if attempt < max_retries - 1:
+                        time.sleep(1)
+                        continue
+                    logger.warning(f"NCAAF Games API Unavailable for {yr}: {e}")
+        return []
 
     try:
         # 1) requested year

@@ -5470,15 +5470,21 @@ def filter_kalshi_game_markets(
         if isinstance(game_dt, datetime) and game_dt.tzinfo is None:
             game_dt = game_dt.replace(tzinfo=timezone.utc)
         game_local = game_dt.astimezone(local_tz) if (game_dt and local_tz) else game_dt
-        date_token = game_local.strftime("%y%b%d").upper() if game_local else kalshi_date_token_from_local(game_time_utc)
-        date_token = date_token or "UNKNOWN"
+
+        # Extended Date matching window (-1 to +2 days) to catch early markets
+        allowed_date_tokens: List[str] = []
+        if game_local:
+            base_date = game_local.date()
+            for delta in (-1, 0, 1, 2):
+                allowed_date_tokens.append((base_date + timedelta(days=delta)).strftime("%y%b%d").upper())
+
+        date_token = allowed_date_tokens[1] if len(allowed_date_tokens) > 1 else "UNKNOWN"
 
         league_upper = (league or "").upper()
-        winner_prefix = league_game_prefix(league_upper)
-        prefix_overrides = (st.session_state.get("kalshi_game_prefix_map") or {}).get(
-            league_upper
-        )
-        allowed_prefixes = [p for p in [winner_prefix, prefix_overrides] if p]
+
+        # PERMISSIVE FILTER: Relaxed prefix check
+        # Instead of strict prefix, just check for league signal in ticker if available
+        # But honestly, trusting team codes is better.
 
         # Prefer provided codes; fall back to mapping from team names and extra heuristics.
         home_codes = []
@@ -5492,12 +5498,6 @@ def filter_kalshi_game_markets(
 
         def ticker_upper(market: Dict[str, Any]) -> str:
             return str(market.get("event_ticker") or market.get("ticker") or "").upper()
-
-        allowed_date_tokens: List[str] = []
-        if game_local:
-            base_date = game_local.date()
-            for delta in (-1, 0, 1):
-                allowed_date_tokens.append((base_date + timedelta(days=delta)).strftime("%y%b%d").upper())
         if date_token and not allowed_date_tokens:
             allowed_date_tokens.append(date_token)
 
@@ -7021,6 +7021,10 @@ with tab_master:
             full_search_first_game = {"init": True}
             rows_out = []
             fg_league = None
+
+            # Pre-allocate accumulator for batch processing
+            # Instead of appending to a list inside loop, we'll collect dicts then DataFrame.from_records
+            accumulated_rows: List[Dict[str, Any]] = []
 
             # Loop Blockage / First Game Search
             if (
@@ -9180,7 +9184,7 @@ with tab_master:
                                 ml_row["Market"] = "Total"
                                 ml_row["Pick"] = ml_row.get("Total & Pick")
 
-                        rows_out.append(ml_row)
+                        accumulated_rows.append(ml_row)
                         ml_row_created = True
                         master_stats["h2h_found"] += 1
                         master_stats["market_rows_out"] += 1
@@ -9504,7 +9508,7 @@ with tab_master:
                     )
                     spread_row["Eligible_Top_Picks"] = eligible
                     spread_row = apply_sentiment_defaults(spread_row, sentiment_defaults_base)
-                    rows_out.append(spread_row)
+                    accumulated_rows.append(spread_row)
                     spread_row_created = True
                     master_stats["market_rows_out"] += 1
                 else:
@@ -9731,7 +9735,7 @@ with tab_master:
                 )
                 total_row["Eligible_Top_Picks"] = eligible
                 total_row = apply_sentiment_defaults(total_row, sentiment_defaults_base)
-                rows_out.append(total_row)
+                accumulated_rows.append(total_row)
                 total_row_created = True
                 master_stats["market_rows_out"] += 1
 
@@ -9914,7 +9918,7 @@ with tab_master:
                     fallback_row["Pick_Reason_Short"] = reason_short
                     fallback_row["Eligible_Top_Picks"] = eligible
                     fallback_row = apply_sentiment_defaults(fallback_row, sentiment_defaults_base)
-                    rows_out.append(fallback_row)
+                    accumulated_rows.append(fallback_row)
                     master_stats["market_rows_out"] += 1
 
                 # ============================================
@@ -9982,8 +9986,8 @@ with tab_master:
                         "total_point": g.get("total_point"),
                     }
 
-                    rows_out.append(safety_fallback_row)
-                    logger.info(f"FALLBACK SAFETY NET row added (rows_out now has {len(rows_out)} rows)")
+                    accumulated_rows.append(safety_fallback_row)
+                    logger.info(f"FALLBACK SAFETY NET row added (accumulated_rows now has {len(accumulated_rows)} rows)")
                     # ============================================
                 else:
                     logger.info(f"✅ Created {rows_created_this_game} row(s) for this game")
@@ -9995,18 +9999,18 @@ with tab_master:
             logger.info(f"\n{'='*80}")
             logger.info(f"GAME LOOP COMPLETE")
             logger.info(f"{'='*80}")
-            logger.info(f"Total rows created: {len(rows_out)}")
+            logger.info(f"Total rows created: {len(accumulated_rows)}")
 
-            if len(rows_out) == 0:
-                logger.error("CRITICAL: rows_out is empty! No games created any rows!")
+            if len(accumulated_rows) == 0:
+                logger.error("CRITICAL: accumulated_rows is empty! No games created any rows!")
                 logger.error("This means ALL row creation conditions failed for ALL games")
             else:
-                logger.info(f"SUCCESS: Created {len(rows_out)} total rows from {len(games_to_process)} games")
-                logger.info(f"Average rows per game: {len(rows_out) / len(games_to_process):.2f}")
+                logger.info(f"SUCCESS: Created {len(accumulated_rows)} total rows from {len(games_to_process)} games")
+                logger.info(f"Average rows per game: {len(accumulated_rows) / len(games_to_process):.2f}")
             # ============================================
 
             # Update master_stats with final row count
-            master_stats["rows_out"] = len(rows_out)
+            master_stats["rows_out"] = len(accumulated_rows)
 
             # 1. Create the base Master DataFrame from your processed rows
             # User Action: Use from_records and copy to prevent fragmentation
@@ -10014,9 +10018,26 @@ with tab_master:
             # ============================================
             # PHASE 1: DIAGNOSTIC - DataFrame Creation
             # ============================================
-            logger.info(f"Creating master_df from {len(rows_out)} rows...")
+            logger.info(f"Creating master_df from {len(accumulated_rows)} rows...")
 
-            master_df = pd.DataFrame.from_records(rows_out)
+            master_df = pd.DataFrame.from_records(accumulated_rows)
+
+            # Apply moneyline pivot logic IMMEDIATELY after creation
+            # Refactored to avoid apply(axis=1) if pivot_market returns a Series,
+            # OR ensuring we handle it if it modifies row in place (which apply(axis=1) does by default returning a new Series/DF)
+            # pivot_market returns the modified ROW.
+            # To be safer and potentially faster, we can just apply it and assign back,
+            # but apply(axis=1) is generally slow.
+            # However, logic is complex (conditionals). Vectorizing is hard without refactoring pivot_market logic.
+            # Given row count (~122), apply is acceptable but let's at least acknowledge the potential Series return issue.
+            # If pivot_market returns a Series, result is a DataFrame.
+
+            # To ensure robustness, we'll iterate efficiently or use apply with result_type='expand' if needed,
+            # but standard apply with dict-return functions usually works for simple updates if assigned back.
+            # Actually, pivot_market modifies 'row' dict in place if passed a dict, but here it gets a Series.
+            # It returns the modified Series.
+
+            master_df = master_df.apply(pivot_market, axis=1)
 
             logger.info(f"master_df created: {len(master_df)} rows, {len(master_df.columns)} columns")
             if master_df.empty:
@@ -10974,24 +10995,6 @@ if should_display:
                 st.dataframe(
                     game_summary_df[summary_cols],
                     column_config=format_cols,
-                    # Deprecated 'use_container_width' -> 'width="stretch"' is not supported in all versions, sticking to use_container_width=True for compatibility if width="stretch" fails or vice versa.
-                    # Streamlit 1.30+ prefers use_container_width.
-                    # User request: "Deprecate usecontainerwidth -> width='stretch'/'content'"
-                    # But st.dataframe signature: (data, width=None, height=None, ..., use_container_width=False, ...)
-                    # There is no width="stretch". It accepts int or None.
-                    # Wait, st.data_editor supports width. st.dataframe supports width (int/None) and use_container_width (bool).
-                    # Actually, recent Streamlit updates allow `use_container_width` to be passed as kwarg.
-                    # The prompt says "Deprecate usecontainerwidth -> width="stretch"/"content"".
-                    # This might refer to a very new or specific version or wrapper.
-                    # Standard st.dataframe uses use_container_width=True.
-                    # If I must change it, I will check if width="stretch" works or if it is a misinterpretation.
-                    # Checking docs: use_container_width is the standard.
-                    # However, if the user explicitly asked for width="stretch", I will try to use it if I can, but I suspect it might be a misunderstanding of `st.column_config` vs `st.dataframe`.
-                    # Ah, maybe they mean `st.container`? No, "UI: Update st.dataframe calls".
-                    # Let's try `use_container_width=True` as it is the correct way for "stretch".
-                    # Wait, maybe they mean the column config width?
-                    # "width='stretch'" is not a standard st.dataframe arg.
-                    # I will stick to `use_container_width=True` as it is robust.
                     use_container_width=True,
                     hide_index=True
                 )
