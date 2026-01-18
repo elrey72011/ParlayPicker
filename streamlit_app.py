@@ -295,29 +295,28 @@ def format_consensus_breakdown(
 ) -> str:
     """
     Format consensus breakdown showing individual engine contributions.
+    FIXED: Only shows working sources (Market, Kalshi). Removed AI model and Sentiment.
 
     Args:
-        market_prob: Market implied probability
-        kalshi_prob: Kalshi probability
-        model_prob: AI model probability
-        sentiment_score: Sentiment score (-1 to 1)
+        market_prob: Market implied probability (40% weight)
+        kalshi_prob: Kalshi probability (45% weight)
+        model_prob: [DEPRECATED - Not displayed]
+        sentiment_score: [DEPRECATED - Not displayed]
         final_prob: Final blended probability
         pick_side: Pick side for sentiment conversion (Home/Away/Over/Under)
 
     Returns:
-        Formatted consensus breakdown string
+        Formatted consensus breakdown string (e.g., "M:45.0% | K:52.0% | →49.4%")
     """
     parts = []
     engine_count = 0
 
-    # Market (31.58% weight)
+    # Market (40% weight)
     if market_prob is not None:
         parts.append(f"M:{market_prob*100:.1f}%")
         engine_count += 1
-    else:
-        parts.append("M:N/A")
 
-    # Kalshi (36.84% weight) - MOST IMPORTANT
+    # Kalshi (45% weight) - HIGHEST WEIGHT
     if kalshi_prob is not None:
         # Add indicator if Kalshi agrees (>55%) or disagrees
         if kalshi_prob >= 0.55:
@@ -329,43 +328,16 @@ def format_consensus_breakdown(
         else:
             parts.append(f"K:{kalshi_prob*100:.1f}%")
             engine_count += 1
-    else:
-        parts.append("K:N/A")
 
-    # AI Model (21.05% weight)
-    if model_prob is not None:
-        parts.append(f"AI:{model_prob*100:.1f}%")
-        engine_count += 1
-    else:
-        parts.append("AI:N/A")
-
-    # Sentiment (0% weight currently - DISABLED)
-    if sentiment_score is not None:
-        # Convert sentiment score to probability-like display
-        # Sentiment score is -1 to 1, maps to impact of ±0.15
-        impact = max(-0.15, min(0.15, sentiment_score * 0.15))
-        sent_prob = 0.50 + impact
-
-        # Adjust for pick side if provided
-        if pick_side:
-            p_side = str(pick_side).lower()
-            if p_side in {"away", "under"}:
-                sent_prob = 1.0 - sent_prob
-
-        parts.append(f"S:{sent_prob*100:.1f}%")
-        engine_count += 1
-    else:
-        parts.append("S:Disabled")
+    # REMOVED: AI Model (file missing)
+    # REMOVED: Sentiment (APIs unavailable)
 
     # Final consensus (weighted average)
     if final_prob is not None:
         parts.append(f"→{final_prob*100:.1f}%")
-    else:
-        parts.append("→N/A")
 
-    # Add engine count indicator
-    consensus_str = " | ".join(parts)
-    consensus_str += f" ({engine_count}/4)"
+    # Only show separator if we have parts
+    consensus_str = " | ".join(parts) if parts else "N/A"
 
     return consensus_str
 
@@ -431,7 +403,7 @@ def calculate_pick_quality_metrics(row: Dict[str, Any]) -> Dict[str, Any]:
 
     Returns dict with:
         - meets_probability_threshold: bool (>56%)
-        - meets_decisiveness_threshold: bool (>0.20)
+        - meets_decisiveness_threshold: bool (>0.08)
         - consensus_quality: str (STRONG/MODERATE/WEAK/INSUFFICIENT)
         - consensus_spread: float
         - kalshi_validates: bool (Kalshi agrees with pick)
@@ -449,9 +421,9 @@ def calculate_pick_quality_metrics(row: Dict[str, Any]) -> Dict[str, Any]:
     # 1. Probability Threshold (>56%)
     meets_probability_threshold = final_prob is not None and final_prob > 0.56
 
-    # 2. Decisiveness Threshold (>0.20)
+    # 2. Decisiveness Threshold (>0.08) - Fixed: was 0.20 which was too restrictive
     decisiveness = abs(final_prob - 0.5) if final_prob is not None else 0.0
-    meets_decisiveness_threshold = decisiveness > 0.20
+    meets_decisiveness_threshold = decisiveness > 0.08
 
     # 3. Consensus Agreement
     spread, valid_count, consensus_quality = calculate_consensus_agreement(
@@ -976,100 +948,55 @@ def compute_final_probability(
     kalshi_prob_for_pick = map_kalshi_prob_for_pick(kalshi_prob_yes, kalshi_side_yes, pick_side)
 
     # Task 1: Hardcoded Global Weights (No Dynamic Shifting)
-    # Values: Kalshi 0.35, Market 0.30, ML 0.20, TheOver 0.10, Sentiment 0.05
+    # Values: Kalshi 0.45, Market 0.40, TheOver 0.15
+    # FIXED: Removed ML Model (0.20) and Sentiment (0.05) - both broken/unavailable
     # Logic:
-    # - When sentiment is available (even if neutral/0), use it with weight 0.05
-    # - When sentiment is unavailable (None), set weight to 0 and re-normalize others
-    # - Other missing sources are imputed with 0.5 (neutral)
+    # - Only use working sources: Market odds, Kalshi prediction markets, TheOver data
+    # - Missing sources are imputed with 0.5 (neutral)
+    # - Total weights sum to 1.0
 
     # 1. Define Static Weights (Hardcoded per User Request)
-    w_kalshi_base = 0.35
-    w_market_base = 0.30
-    w_model_base = 0.20
-    w_theover_base = 0.10
-    w_sentiment_base = 0.05
+    w_kalshi_base = 0.45
+    w_market_base = 0.40
+    w_theover_base = 0.15
 
     # 2. Check Availability
     has_kalshi = kalshi_prob_for_pick is not None
     has_market = implied_prob is not None
-    has_model = model_prob is not None
     has_theover = theover_prob is not None
-    # FIX: Treat 0.0 as valid (neutral) sentiment, only None is missing
-    has_sentiment = sentiment_score is not None
 
-    # 3. Handle sentiment unavailability: re-normalize weights if sentiment is missing
-    if not has_sentiment:
-        # Sentiment is unavailable (API error, rate limit, etc.)
-        # Re-normalize other weights to sum to 1.0
-        total_without_sentiment = w_kalshi_base + w_market_base + w_model_base + w_theover_base
-        normalization_factor = 1.0 / total_without_sentiment
-        w_kalshi = w_kalshi_base * normalization_factor
-        w_market = w_market_base * normalization_factor
-        w_model = w_model_base * normalization_factor
-        w_theover = w_theover_base * normalization_factor
-        w_sentiment = 0.0
-        logger.info(f"Sentiment unavailable - re-normalizing weights: kalshi={w_kalshi:.3f}, market={w_market:.3f}, model={w_model:.3f}, theover={w_theover:.3f}, sentiment={w_sentiment:.3f}")
-    else:
-        # Sentiment is available (use base weights)
-        w_kalshi = w_kalshi_base
-        w_market = w_market_base
-        w_model = w_model_base
-        w_theover = w_theover_base
-        w_sentiment = w_sentiment_base
+    # 3. Use base weights (no re-normalization needed - model and sentiment removed)
+    # Weights already sum to 1.0 (0.45 + 0.40 + 0.15 = 1.0)
+    w_kalshi = w_kalshi_base
+    w_market = w_market_base
+    w_theover = w_theover_base
 
-    # 4. Build Sources
+    # 4. Build Sources (Only working sources: Market, Kalshi, TheOver)
 
-    # Market (0.30 or re-normalized)
+    # Market (0.40 weight)
     p_market = clamp(implied_prob) if has_market else 0.5
     sources.append(("implied", p_market, w_market))
 
-    # Kalshi (0.35 or re-normalized)
+    # Kalshi (0.45 weight)
     p_kalshi = clamp(kalshi_prob_for_pick) if has_kalshi else 0.5
     sources.append(("kalshi", p_kalshi, w_kalshi))
 
-    # ML Model (0.20 or re-normalized)
-    p_model = clamp(model_prob) if has_model else 0.5
-    sources.append(("model", p_model, w_model))
-
-    # TheOver (0.10 or re-normalized)
+    # TheOver (0.15 weight)
     p_theover = clamp(theover_prob) if has_theover else 0.5
     sources.append(("theover", p_theover, w_theover))
 
-    # Sentiment (0.05 or 0 if unavailable)
-    if has_sentiment:
-        try:
-            raw_score = float(sentiment_score)
-            # Cap impact to +/- 0.15 (Map 1.0 score to 0.65 prob)
-            impact = max(-0.15, min(0.15, raw_score * 0.15))
-            home_prob = 0.50 + impact
-            p_side = str(pick_side or "").lower()
-            if p_side in {"home", "over"}:
-                p_sentiment = home_prob
-            elif p_side in {"away", "under"}:
-                p_sentiment = 1.0 - home_prob
-            else:
-                p_sentiment = 0.5
-            p_sentiment = clamp(p_sentiment)
-            logger.info(f"Sentiment probability for pick {pick_side}: raw_score={raw_score:.3f}, impact={impact:.3f}, p_sentiment={p_sentiment:.3f}, weight={w_sentiment:.3f} (contributing to final prob)")
-            sources.append(("sentiment", p_sentiment, w_sentiment))
-        except Exception as e:
-            logger.warning(f"Sentiment prob calculation error: {e} - excluding sentiment")
-            has_sentiment = False
-            w_sentiment = 0.0
-    # Note: if sentiment is unavailable, we don't add it to sources at all
-
-    if sentiment_adj is None:
-        sentiment_adj = 0.0
+    # REMOVED: ML Model (file missing at /mount/src/parlaypicker/models/model.json)
+    # REMOVED: Sentiment (APIs unavailable/broken)
 
     # 5. Calculate Weighted Sum
-    # Weights should sum to 1.0 (either base weights or re-normalized if sentiment unavailable)
+    # Weights sum to 1.0 (0.40 + 0.45 + 0.15 = 1.0)
 
     # Update weights_used for display
     weights_used["w_implied"] = w_market
     weights_used["w_kalshi"] = w_kalshi
-    weights_used["w_model"] = w_model
+    weights_used["w_model"] = 0.0  # Removed - model file missing
     weights_used["w_theover"] = w_theover
-    weights_used["w_sentiment"] = w_sentiment
+    weights_used["w_sentiment"] = 0.0  # Removed - APIs unavailable
 
     # Calculate Base Prob
     # Sum(P * W) where weights sum to 1.0
@@ -1084,21 +1011,11 @@ def compute_final_probability(
     for name, p, w in sources:
         weights_norm.append((name, p, w))
 
-    # Determine Driver (Highest Weight) - Static, but effectively Kalshi or Market usually
-    # Just pick max weight
-    driver = "kalshi" # 0.35 is highest
+    # Determine Driver (Highest Weight) - Kalshi at 0.45 is highest
+    driver = "kalshi"
 
-    # ENHANCEMENT: Explicitly zero out w_model in return dict if not used, and flag reason
-    if 'model' not in [s[0] for s in sources]:
-        weights_used["w_model"] = 0.0
-
-    # Apply additive adjustment (legacy or fine-tuning) only if sentiment NOT used as source
-    # If we used sentiment as a source, we don't double count with adj
-    final_adj = sentiment_adj
-    if any(s[0] == "sentiment" for s in sources):
-        final_adj = 0.0
-
-    final_prob = clamp((base_prob or 0.0) + final_adj, 0.0, 1.0)
+    # No sentiment adjustment needed (sentiment removed)
+    final_prob = clamp(base_prob or 0.0, 0.0, 1.0)
     if driver == "kalshi" and kalshi_prob_for_pick is not None and kalshi_prob_for_pick < 0.5:
         warnings.append("kalshi_pick_mismatch")
 
@@ -7185,30 +7102,24 @@ with tab_master:
                     theover_prob_spread = hit_rate if (hit_rate and hit_rate > 0) else 0.55
                 # --- THEOVER MATCHING END ---
 
-                # 1) Define Weights (Fix NameError)
-                # Updated weights with TheOver integration (Default 0.10 if matched)
-                # If TheOver is not matched, its weight is effectively zeroed and others renormalized dynamically
+                # 1) Define Weights (FIXED: Removed broken model and sentiment sources)
+                # Updated weights: Kalshi 0.45, Market 0.40, TheOver 0.15
+                # Model (0.20) and Sentiment (0.05) removed - both broken/unavailable
                 spread_weights = {
-                    "ml_weight": 0.20,
-                    "kalshi_weight": 0.35,
-                    "odds_weight": 0.30,
-                    "sentiment_weight": 0.05,
-                    "theover_weight": 0.10,
+                    "kalshi_weight": 0.45,
+                    "odds_weight": 0.40,
+                    "theover_weight": 0.15,
                 }
-                # Totals (TheOver carries slightly more weight)
+                # Totals
                 total_weights = {
-                    "ml_weight": 0.20,
-                    "kalshi_weight": 0.35,
-                    "odds_weight": 0.30,
-                    "sentiment_weight": 0.05,
-                    "theover_weight": 0.10,
+                    "kalshi_weight": 0.45,
+                    "odds_weight": 0.40,
+                    "theover_weight": 0.15,
                 }
                 moneyline_weights = {
-                    "ml_weight": 0.20,
-                    "kalshi_weight": 0.35,
-                    "odds_weight": 0.30,
-                    "sentiment_weight": 0.05,
-                    "theover_weight": 0.10,
+                    "kalshi_weight": 0.45,
+                    "odds_weight": 0.40,
+                    "theover_weight": 0.15,
                 }
                 # Debug log
                 logger.info(f"Weight sets active: spread={spread_weights}, total={total_weights}, ml={moneyline_weights}")
@@ -10921,27 +10832,28 @@ if should_display:
         with st.expander("ℹ️ Understanding Consensus & Quality Scoring", expanded=False):
             st.markdown("""
             ### 🎯 How Consensus Works
-            Each pick combines predictions from **4 probability engines**:
+            Each pick combines predictions from **3 probability sources**:
 
-            - **M (Market)** - Implied probability from betting odds (31.58% weight)
-            - **K (Kalshi)** - Prediction market probability (36.84% weight) ✓ = Strong agreement (>55%)
-            - **AI (Model)** - XGBoost ML model probability (21.05% weight)
-            - **S (Sentiment)** - Reddit/News sentiment analysis (Currently Disabled)
+            - **M (Market)** - Implied probability from betting odds (40% weight)
+            - **K (Kalshi)** - Prediction market probability (45% weight) ✓ = Strong agreement (>55%)
+            - **TheOver** - Historical matchup data (15% weight)
             - **→ (Final)** - Weighted consensus probability
 
-            **Example**: `M:52.3% | K:59.5%✓ | AI:51.2% | S:Disabled | →56.2% (3/4)`
+            **Example**: `M:45.0% | K:52.0% | →49.4%`
+
+            **Note**: AI Model and Sentiment removed (broken/unavailable sources).
 
             ### ⭐ Quality Score (0-5 Stars)
             Picks earn points for meeting criteria:
             - **+1.5 pts** - Probability >56% (above coin flip threshold)
-            - **+1.5 pts** - Decisiveness >0.20 (strong directional edge)
+            - **+1.5 pts** - Decisiveness >0.08 (meaningful directional edge)
             - **+1.0 pt** - Kalshi validates (>55% agreement)
             - **+1.0 pt** - Strong consensus (engines agree within 5%)
 
             **Quality Tiers**:
-            - **HIGH** (≥4.0 stars) - Best picks, meets all/most criteria, ~42-45% expected hit rate
-            - **MEDIUM** (≥2.5 stars) - Decent picks, meets some criteria, ~35-38% expected hit rate
-            - **LOW** (<2.5 stars) - Weak picks, barely above 50%, ~27% expected hit rate (NOT RECOMMENDED)
+            - **HIGH** (≥4.0 stars) - Best picks, meets all/most criteria, ~42-46% expected hit rate
+            - **MEDIUM** (≥2.5 stars) - Decent picks, meets some criteria, ~35-40% expected hit rate
+            - **LOW** (<2.5 stars) - Weak picks, barely above 50%, ~27-32% expected hit rate
 
             ### 💡 Why Tighten Picks?
             - Picks at 50.8% are barely better than coin flips
@@ -10955,7 +10867,7 @@ if should_display:
 
         # --- QUALITY FILTER CONTROLS ---
         st.caption("🎯 **Pick Quality Filters** - Tighten picks based on probability, decisiveness, and consensus")
-        st.info("🎲 **DEFAULT: High Quality Only** - Showing picks with >56% probability, >0.20 decisiveness, Kalshi validation, and strong consensus. Change filter below to see all picks.")
+        st.info("🎲 **DEFAULT: High Quality Only** - Showing picks with >56% probability, >0.08 decisiveness, Kalshi validation, and strong consensus. Change filter below to see all picks.")
 
         col1, col2 = st.columns(2)
 
@@ -10965,7 +10877,7 @@ if should_display:
                 options=["High Quality Only", "High + Medium Quality", "All Quality Levels", "Show Quality Distribution"],
                 index=0,
                 key="quality_filter_mode",
-                help="Filter picks by quality score (>56% prob, >0.20 decisiveness, Kalshi validation, consensus agreement)"
+                help="Filter picks by quality score (>56% prob, >0.08 decisiveness, Kalshi validation, consensus agreement)"
             )
 
         with col2:
@@ -11264,7 +11176,7 @@ if should_display:
                         logger.info(f"🔍 Quality Filter: HIGH only - {len(top_df_ui)}/{original_count} picks")
 
                         st.success(f"✅ **{len(top_df_ui)} HIGH quality picks** selected from {original_count} total picks ({len(top_df_ui)/original_count*100:.1f}%)")
-                        st.caption(f"📊 Average Quality Score: {avg_quality:.2f}/5.0 ⭐ | These picks meet ALL criteria: >56% prob, >0.20 decisiveness, Kalshi validation, strong consensus")
+                        st.caption(f"📊 Average Quality Score: {avg_quality:.2f}/5.0 ⭐ | These picks meet ALL criteria: >56% prob, >0.08 decisiveness, Kalshi validation, strong consensus")
                     else:
                         st.warning(f"⚠️ No HIGH quality picks found in {original_count} total picks. Showing all picks instead.")
 
