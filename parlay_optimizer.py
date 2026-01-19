@@ -342,6 +342,31 @@ class ParlayOptimizer:
         # This is simplified - you'd want sport-specific logic
         return 'none'
     
+    def determine_parlay_type(self, parlay_legs: List[Dict]) -> str:
+        """
+        Calculate the parlay type based on leg composition.
+
+        Args:
+            parlay_legs: List of leg dictionaries
+
+        Returns:
+            Type string (e.g., "3-leg spread", "mixed (2S/1T/0ML)")
+        """
+        spread_count = sum(1 for leg in parlay_legs if 'spread' in str(leg.get('BetType', '')).lower())
+        total_count = sum(1 for leg in parlay_legs if 'total' in str(leg.get('BetType', '')).lower())
+        ml_count = sum(1 for leg in parlay_legs if 'moneyline' in str(leg.get('BetType', '')).lower() or 'ml' in str(leg.get('BetType', '')).lower())
+
+        total_legs = len(parlay_legs)
+
+        if spread_count == total_legs:
+            return f"{total_legs}-leg spread"
+        elif total_count == total_legs:
+            return f"{total_legs}-leg total"
+        elif ml_count == total_legs:
+            return f"{total_legs}-leg ML"
+        else:
+            return f"mixed ({spread_count}S/{total_count}T/{ml_count}ML)"
+
     def generate_parlays(
         self,
         bets_df: pd.DataFrame,
@@ -406,7 +431,8 @@ class ParlayOptimizer:
                     'decimal_odds': parlay_odds,
                     'american_odds': self.decimal_to_american(parlay_odds),
                     'expected_value': ev,
-                    'kelly_fraction': self.calculate_kelly(parlay_prob, parlay_odds)
+                    'kelly_fraction': self.calculate_kelly(parlay_prob, parlay_odds),
+                    'type': self.determine_parlay_type(legs)
                 })
         
         # Sort by expected value
@@ -471,6 +497,7 @@ class ParlayOptimizer:
             
             parlay_rows.append({
                 'Parlay': f"Parlay {i}",
+                'Type': parlay.get('type', 'unknown'),
                 'Legs': ' | '.join(leg_descriptions),
                 'Probability': f"{parlay['win_probability']:.2%}",
                 'Odds': f"{parlay['american_odds']:+.0f}",

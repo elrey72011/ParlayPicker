@@ -550,6 +550,21 @@ MANUAL_TEAM_OVERRIDES = {
     "CHICAGO STATE": "CHICAGO STATE",
     "CSU": "CHICAGO STATE", # Conflict with Charleston Southern / Cleveland State - check context if possible or assume major one
 
+    # State abbreviation mappings
+    "ARIZONA ST": "ARIZONA STATE",
+    "WASHINGTON ST": "WASHINGTON STATE",
+    "MONTANA ST": "MONTANA STATE",
+    "N COLORADO": "NORTHERN COLORADO",
+    "SE LOUISIANA": "SOUTHEASTERN LOUISIANA",
+    "MT ST MARYS": "MOUNT ST MARY'S",
+    "SAINT PETERS": "ST PETER'S",
+    "GW": "GEORGE WASHINGTON",
+    "VCU": "VIRGINIA COMMONWEALTH",
+    "UTSA": "UT SAN ANTONIO",
+    "TEXAS AM-CC": "TEXAS A&M-CORPUS CHRISTI",
+    "ALABAMA AM": "ALABAMA A&M",
+    "EAST TEXAS AM": "TEXAS A&M-COMMERCE",
+
     # NHL accent + city-only fixes
     "MONTRÉAL CANADIENS": "MONTREAL CANADIENS",
     "ST LOUIS": "ST LOUIS BLUES",
@@ -752,18 +767,39 @@ def debug_team_mapping_health():
             results[lg][t] = norm
     return results
 
+def normalize_team_name_simple(name):
+    """Simple normalization for fuzzy matching Option B"""
+    if not name: return ""
+    name = name.lower().replace('.', '').replace("'", '').replace('-', ' ')
+    name = ' '.join(name.split())
+    return name
+
 def fuzzy_match_team_robust(target: str, choices: List[str], threshold: float = 80.0) -> Optional[str]:
     """
     Uses rapidfuzz to find the best match for 'target' in 'choices'.
     Returns the matched string from 'choices' if score > threshold, else None.
+    Updated to use fuzz.ratio on normalized strings per user request (Option B).
     """
     if not target or not choices:
         return None
 
     if rapidfuzz:
-        # extraction returns list of (match, score, index)
-        # process.extractOne finds the single best match
-        # Use token_sort_ratio to handle word order differences and partials better
+        # Option B Implementation: Normalize and use fuzz.ratio
+        normalized_target = normalize_team_name_simple(target)
+        best_match = None
+        best_score = 0
+
+        for choice in choices:
+            normalized_choice = normalize_team_name_simple(choice)
+            score = fuzz.ratio(normalized_target, normalized_choice)
+            if score > best_score:
+                best_score = score
+                best_match = choice
+
+        if best_score >= threshold:
+            return best_match
+
+        # Fallback to token_sort_ratio if direct ratio fails (handles word reordering)
         result = process.extractOne(target, choices, scorer=fuzz.token_sort_ratio)
         if result:
             match, score, _ = result
@@ -1456,6 +1492,9 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
 
         unique_leagues_in_games = league_keys.unique()
 
+        # LOGGING REQUIREMENT: Track NCAAB match stats
+        ncaab_match_stats = {"total": 0, "matched": 0, "fallback": 0, "unmatched_teams": []}
+
         for lg_key in unique_leagues_in_games:
             if lg_key not in stats_by_league:
                 continue
@@ -1603,6 +1642,8 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
                 missing = list(set(missing_home + missing_away))
                 if missing:
                     logger.warning(f"STATS MISSING TEAMS [{lg_key}] (Top 20): {missing[:20]}")
+                    if lg_key == "NCAAB":
+                        ncaab_match_stats["unmatched_teams"].extend(missing)
 
             # Explicit match rate log as requested
             total_matches = stats_log.get('direct', 0) + stats_log.get('override', 0) + stats_log.get('fuzzy', 0)
@@ -1610,6 +1651,25 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
             if total_attempts > 0:
                 match_pct = (total_matches / total_attempts) * 100
                 logger.info(f"{lg_key} Stats Match Rate: {total_matches}/{total_attempts} ({match_pct:.1f}%)")
+
+            if lg_key == "NCAAB":
+                ncaab_match_stats["total"] = total_attempts // 2 # Approximate games from teams
+                ncaab_match_stats["matched"] = total_matches // 2
+                ncaab_match_stats["fallback"] = stats_log.get('miss', 0) // 2
+
+        # Log NCAAB Stats Matching Summary (Issue #2 requirement)
+        if ncaab_match_stats["total"] > 0:
+            match_pct = (ncaab_match_stats["matched"] / ncaab_match_stats["total"]) * 100 if ncaab_match_stats["total"] else 0
+            fallback_pct = (ncaab_match_stats["fallback"] / ncaab_match_stats["total"]) * 100 if ncaab_match_stats["total"] else 0
+            logger.info("NCAAB STATS MATCHING SUMMARY:")
+            logger.info(f"- Total NCAAB games (approx): {ncaab_match_stats['total']}")
+            logger.info(f"- Successfully matched: {ncaab_match_stats['matched']} ({match_pct:.1f}%)")
+            logger.info(f"- Fallback used: {ncaab_match_stats['fallback']} ({fallback_pct:.1f}%)")
+            if ncaab_match_stats["unmatched_teams"]:
+                logger.info("- Top unmatched teams:")
+                for i, t in enumerate(ncaab_match_stats["unmatched_teams"][:10]):
+                    logger.info(f"  {i+1}. \"{t}\"")
+
     else:
         if not FREE_TIER_MODE:
             logger.warning("No stats fetched. Filling with defaults.")

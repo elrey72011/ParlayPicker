@@ -51,6 +51,9 @@ __all__ = [
 # We need consistent handling.
 NBA_TZ = pytz.timezone("US/Eastern")
 
+# Global counter for debug logging limit
+_DEBUG_GAME_LOG_COUNT = 0
+
 class KalshiAPIError(Exception):
     """Base error for Kalshi API issues."""
     pass
@@ -680,6 +683,15 @@ def _extract_market_type(title: str, ticker: str, subtitle: str = "", market: Di
     if "SPREAD" in t or "POINT SPREAD" in t or "POINTS" in t: return "spread"
     if "SPREAD" in sub or "POINT SPREAD" in sub or "WINNING MARGIN" in sub: return "spread"
 
+    # Fix Issue #1: Aggressive suffix check for spread
+    # Check if ticker ends with -TeamCode-Number (e.g. -PHX-6.5)
+    # or contains negative/positive number
+    # Regex for spread-like suffix: -[A-Z]{2,4}-?[\d\.]+
+    if re.search(r'-[A-Z]{2,4}-?[\d\.]+$', tick):
+         # If subtitle has "winner", it's a winner market. If it has numbers, likely spread.
+         if "WINNER" not in sub and "TOTAL" not in sub:
+             return "spread"
+
     # Check if subtitle implies spread (e.g. "Chicago -3.5")
     # This is a heuristic for when "Spread" isn't explicitly in the text
     if "-" in sub and any(c.isdigit() for c in sub) and "TOTAL" not in sub and "OVER" not in sub:
@@ -691,9 +703,19 @@ def _extract_market_type(title: str, ticker: str, subtitle: str = "", market: Di
     if "TOTAL" in t or "OVER/UNDER" in t or "O/U" in t or "TOTAL POINTS" in t: return "total"
     if "TOTAL" in sub or "TOTAL POINTS" in sub or "OVER/UNDER" in sub: return "total"
 
+    # Fix Issue #1: Aggressive suffix check for total (e.g. -OVER220, -UNDER220)
+    if "OVER" in tick or "UNDER" in tick:
+        return "total"
+
     # 3. Moneyline/Winner detection
     if "MONEYLINE" in t or "ML" in t or "WINNER" in t: return "moneyline"
     if "WINNER" in sub: return "moneyline"
+
+    # Check ticker for Game Winner pattern (usually just ends with team code)
+    # e.g. KXNBAGAME-26JAN19MIAGSW-MIA
+    # If we haven't matched spread/total yet, and it looks like a winner ticker...
+    if "GAME" in tick and not ("SPREAD" in tick or "TOTAL" in tick):
+        return "moneyline"
 
     # 4. Fallback based on strikes if generic ticker
     if has_strikes:
@@ -926,7 +948,15 @@ def _match_via_events(
         spread_markets = []
         total_markets = []
 
+        # Fix Issue #1: Log FULL market list for debug analysis
+        # Only log full list for the first few events to avoid spam.
+        global _DEBUG_GAME_LOG_COUNT
+        should_log_debug = _DEBUG_GAME_LOG_COUNT < 3
+
         logger.debug(f"🔍 KALSHI DEBUG [{league}]: Found {len(markets)} markets for event {best_event.get('ticker')}")
+        if should_log_debug:
+             logger.info(f"DEBUG: Full market list for {best_event.get('ticker')}:")
+             _DEBUG_GAME_LOG_COUNT += 1
 
         for idx, m in enumerate(markets):
             ticker = m.get("ticker", "")
@@ -943,7 +973,8 @@ def _match_via_events(
 
             # VERBOSE LOGGING (Requested by user)
             # Log the EXACT raw ticker and key fields for debugging
-            if idx < 10: # Limit log spam
+            # Show ALL markets in logs for debugging if within limit
+            if should_log_debug:
                 logger.info(f"   RAW MARKET [{idx+1}]: ticker='{ticker}' | type='{market_type}' | title='{title}' | sub='{subtitle}' | strike='{strike_str}'")
 
             if floor_str or cap_str or strike_str:
@@ -953,13 +984,10 @@ def _match_via_events(
             # Prioritize explicit classification from _extract_market_type
             if market_type == "moneyline":
                 winner_market = m
-                logger.debug(f"      ✓ Classified as WINNER (type='{market_type}')")
             elif market_type == "spread":
                 spread_markets.append(m)
-                logger.debug(f"      ✓ Classified as SPREAD (type='{market_type}')")
             elif market_type == "total":
                 total_markets.append(m)
-                logger.debug(f"      ✓ Classified as TOTAL (type='{market_type}')")
             else:
                 # Fallback keywords if "generic"
                 if "winner" in title or "winner" in subtitle:
@@ -1005,6 +1033,9 @@ def _match_via_events(
                 "total_count": len(total_markets),
                 "spread_tickers": [m.get("ticker") for m in spread_markets[:2]],
                 "total_tickers": [m.get("ticker") for m in total_markets[:2]],
+                # Store full market objects for spread/total to be processed later
+                "spread_markets": spread_markets,
+                "total_markets": total_markets
             }
 
             return KalshiMatchResult(
