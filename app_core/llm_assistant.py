@@ -40,38 +40,66 @@ def initialize_gemini():
     if _GEMINI_CLIENT is not None:
         return _GEMINI_CLIENT, None
 
-    try:
-        # Get API key from Streamlit secrets
-        api_key = st.secrets.get("GEMINI_API_KEY") or st.secrets.get("GOOGLE_API_KEY")
+    # Gather candidate keys from secrets and environment
+    candidates = []
 
-        # Also check env vars as fallback
-        if not api_key:
-            api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+    # Check secrets (prioritize GOOGLE_API_KEY if user migrated)
+    if hasattr(st, "secrets"):
+        if "GOOGLE_API_KEY" in st.secrets: candidates.append(st.secrets["GOOGLE_API_KEY"])
+        if "GEMINI_API_KEY" in st.secrets: candidates.append(st.secrets["GEMINI_API_KEY"])
 
-        if not api_key:
-            raise ValueError("GEMINI_API_KEY not found in secrets or environment")
+    # Check env vars
+    if "GOOGLE_API_KEY" in os.environ: candidates.append(os.environ["GOOGLE_API_KEY"])
+    if "GEMINI_API_KEY" in os.environ: candidates.append(os.environ["GEMINI_API_KEY"])
 
-        # Configure with API key
-        client = genai.Client(api_key=api_key)
+    # Filter valid keys (non-empty, non-dummy)
+    valid_candidates = []
+    seen = set()
+    for k in candidates:
+        k_str = str(k).strip()
+        # Filter out known dummy keys or empty strings
+        if k_str and k_str not in seen and not k_str.startswith("AIzaSyBIDJgxLuUouiBQrslV") and not k_str == "None":
+             valid_candidates.append(k_str)
+             seen.add(k_str)
 
-        # Test with simple call to verify key and model validity
-        # Using a very small token limit to keep it fast
-        client.models.generate_content(
-            model=ACTIVE_MODEL,
-            contents="test",
-            config=genai.types.GenerateContentConfig(max_output_tokens=5)
-        )
+    if not valid_candidates:
+         error_msg = "Gemini initialization failed: No valid API keys found in secrets or environment."
+         logger.warning(error_msg)
+         if hasattr(st, "session_state"):
+            st.session_state["gemini_disabled_reason"] = "NO_VALID_KEYS"
+         return None, error_msg
 
-        _GEMINI_CLIENT = client
-        logger.info("✓ Gemini 2.5 Flash initialized successfully")
-        return client, None
+    last_err = None
+    # Try each key until one works
+    for i, api_key in enumerate(valid_candidates):
+        try:
+            # Configure with API key
+            client = genai.Client(api_key=api_key)
 
-    except Exception as e:
-        error_msg = f"Gemini initialization failed: {str(e)}"
-        logger.error(error_msg)
-        if hasattr(st, "session_state"):
-            st.session_state["gemini_disabled_reason"] = f"INIT_FAILED: {str(e)}"
-        return None, error_msg
+            # Test with simple call to verify key and model validity
+            # Using a very small token limit to keep it fast
+            client.models.generate_content(
+                model=ACTIVE_MODEL,
+                contents="test",
+                config=genai.types.GenerateContentConfig(max_output_tokens=5)
+            )
+
+            _GEMINI_CLIENT = client
+            logger.info(f"✓ Gemini 2.5 Flash initialized successfully (Key index {i})")
+            return client, None
+
+        except Exception as e:
+            last_err = e
+            masked_key = f"...{str(api_key)[-4:]}" if len(str(api_key)) > 4 else "INVALID"
+            logger.warning(f"Gemini key attempt {i+1} failed ({masked_key}): {str(e)}")
+            continue
+
+    # If we get here, all keys failed
+    error_msg = f"Gemini initialization failed: All {len(valid_candidates)} keys failed. Last error: {str(last_err)}"
+    logger.error(error_msg)
+    if hasattr(st, "session_state"):
+        st.session_state["gemini_disabled_reason"] = f"ALL_KEYS_FAILED: {str(last_err)}"
+    return None, error_msg
 
 def _safe_json_extract(text: str) -> Dict[str, Any]:
     text = (text or "").strip()
