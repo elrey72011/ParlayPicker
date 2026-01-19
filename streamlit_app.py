@@ -2918,7 +2918,44 @@ def get_slate_sentiment(enable_sentiment: bool, teams: List[str], league: str, n
         meta["sentiment_label"] = meta.get("sentiment_label") or None
         meta["sentiment_source_count"] = meta.get("sentiment_source_count") or meta.get("sentiment_articles_total") or 0
         return {"map": sentiment_map, "meta_map": sentiment_meta_map, "meta": meta, "debug": debug}
+    except requests.exceptions.Timeout as exc:
+        logger.error(f"🚨 SENTIMENT TIMEOUT")
+        logger.error(f"Type: {type(exc).__name__}")
+        logger.error(f"Message: {str(exc)[:500]}")
+        logger.error(f"Likely cause: API endpoint slow or unresponsive")
+        meta["sentiment_source"] = "error_timeout"
+        meta["sentiment_sample_status"] = "TIMEOUT"
+        meta["sentiment_disabled_reason"] = "timeout_in_sentiment"
+        meta["sentiment_errors_sample"] = str(exc)
+        meta["sentiment_status_counts"] = {"TIMEOUT": 1}
+        return {"map": {}, "meta_map": {}, "meta": meta, "debug": {"error": str(exc)}}
+    except requests.exceptions.RequestException as exc:
+        logger.error(f"🚨 SENTIMENT API ERROR")
+        logger.error(f"Type: {type(exc).__name__}")
+        logger.error(f"Message: {str(exc)[:500]}")
+        logger.error(f"Likely cause: Invalid API key, rate limited, or service down")
+        meta["sentiment_source"] = "error_api"
+        meta["sentiment_sample_status"] = "API_ERROR"
+        meta["sentiment_disabled_reason"] = "api_error_in_sentiment"
+        meta["sentiment_errors_sample"] = str(exc)
+        meta["sentiment_status_counts"] = {"API_ERROR": 1}
+        return {"map": {}, "meta_map": {}, "meta": meta, "debug": {"error": str(exc)}}
+    except ValueError as exc:
+        logger.error(f"🚨 SENTIMENT DATA ERROR")
+        logger.error(f"Type: {type(exc).__name__}")
+        logger.error(f"Message: {str(exc)[:500]}")
+        logger.error(f"Likely cause: Response format changed or data corrupt")
+        meta["sentiment_source"] = "error_data"
+        meta["sentiment_sample_status"] = "DATA_ERROR"
+        meta["sentiment_disabled_reason"] = "data_error_in_sentiment"
+        meta["sentiment_errors_sample"] = str(exc)
+        meta["sentiment_status_counts"] = {"DATA_ERROR": 1}
+        return {"map": {}, "meta_map": {}, "meta": meta, "debug": {"error": str(exc)}}
     except Exception as exc:  # pragma: no cover - defensive
+        logger.error(f"🚨 UNKNOWN SENTIMENT ERROR: {type(exc).__name__}")
+        logger.error(f"Full error: {str(exc)[:500]}")
+        logger.error(f"Traceback:")
+        logger.error(traceback.format_exc())
         meta["sentiment_source"] = "error_exception"
         meta["sentiment_sample_status"] = "EXCEPTION"
         meta["sentiment_disabled_reason"] = "exception_in_sentiment"
@@ -11062,6 +11099,23 @@ with tab_master:
         logger.info(f"Saving df ({len(df)} rows) to session state...")
         st.session_state["master_df"] = df  # Raw data with all internal columns
 
+        # Issue 1: Alias internal columns to user-requested names for export
+        alias_map = {
+            "Pick_Confidence": "PickConfidence",
+            "Pick_Reason_Short": "PickReason",
+            "overall_confidence": "geminitotalconfidence",
+            "gemini_rationale": "geminirationalize",
+            "gemini_error": "geminierrorflag",
+            "Home_Sentiment": "HomeSentiment",
+            "Away_Sentiment": "AwaySentiment",
+            "Sentiment_Diff": "SentimentDiff",
+            "sentiment_score": "sentimentscore",
+            "sentiment_status": "sentimentstatus"
+        }
+        for internal, external in alias_map.items():
+            if internal in df.columns and external not in df.columns:
+                df[external] = df[internal]
+
         # Create filtered version for user export (remove internal/debug columns)
         # Keep only user-relevant columns for the "All Picks" export
         user_columns = [
@@ -11078,6 +11132,9 @@ with tab_master:
             'Pick_Confidence', 'confidence_reason', 'stats_quality',
             'sentiment_available',
             'Pick_Reason_Short', 'TheOver_Impact',
+            # Issue #1: Add Gemini & Sentiment columns (User Request)
+            'PickConfidence', 'PickReason', 'geminitotalconfidence', 'geminirationalize', 'geminierrorflag',
+            'HomeSentiment', 'AwaySentiment', 'SentimentDiff', 'sentimentscore', 'sentimentstatus',
             # Issue #1: Add missing TheOver integration columns
             'theover_pick', 'theover_hit_rate', 'theover_source_model', 'theover_prob_used',
             'theover_matched', 'theover_delta_final_prob', 'final_prob_without_theover'
@@ -11085,6 +11142,15 @@ with tab_master:
         # Filter to only columns that exist in the dataframe
         results_columns = [col for col in user_columns if col in df.columns]
         st.session_state["master_results_df"] = df[results_columns].copy()
+
+        # Safety check for missing columns (User Request)
+        missing_cols = [col for col in user_columns if col not in df.columns]
+        if missing_cols and logger:
+            logger.warning(f"Missing columns excluded from export: {missing_cols}")
+
+        if logger:
+            logger.info(f"✅ PickConfidence included: {'PickConfidence' in st.session_state['master_results_df'].columns}")
+            logger.info(f"✅ PickReason included: {'PickReason' in st.session_state['master_results_df'].columns}")
 
         # Validation: Ensure TheOver columns are present (Issue #1 Fix)
         # This prevents concatenation errors in downstream logic if columns are missing
