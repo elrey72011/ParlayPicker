@@ -65,6 +65,24 @@ TEAM_ALIAS_MAP_BY_LEAGUE = {
         "Denver": "Denver Nuggets",
         "Chicago": "Chicago Bulls",
         "Houston": "Houston Rockets",
+        # Issue #1: Fix Contamination
+        "Atlanta": "Atlanta Hawks",
+        "Dallas": "Dallas Mavericks",
+        "Detroit": "Detroit Pistons",
+        "Washington": "Washington Wizards",
+        "Miami": "Miami Heat",
+        "Minnesota": "Minnesota Timberwolves",
+        "Phoenix": "Phoenix Suns",
+        "Charlotte": "Charlotte Hornets",
+        "Cleveland": "Cleveland Cavaliers",
+        "Indiana": "Indiana Pacers",
+        "Milwaukee": "Milwaukee Bucks",
+        "Brooklyn": "Brooklyn Nets",
+        "Orlando": "Orlando Magic",
+        "Philadelphia": "Philadelphia 76ers",
+        "Portland": "Portland Trail Blazers",
+        "San Antonio": "San Antonio Spurs",
+        "Utah": "Utah Jazz",
     },
     "NFL": {
         "Arizona": "Arizona Cardinals", "Atlanta": "Atlanta Falcons",
@@ -114,6 +132,12 @@ TEAM_ALIAS_MAP_BY_LEAGUE = {
         "UNLV": "UNLV Rebels", "Utah St": "Utah State Aggies",
         "Duke": "Duke Blue Devils", "North Carolina": "North Carolina Tar Heels",
         "Gonzaga": "Gonzaga Bulldogs", "Villanova": "Villanova Wildcats",
+        # Issue #2 & #3 Fixes
+        "UMBC": "UMBC Retrievers",
+        "UUMC": "UMBC Retrievers",
+        "BINGHAMTON": "Binghamton Bearcats",
+        "Saint Joseph's": "Saint Joseph's Hawks",
+        "LIU": "LIU Sharks",
     },
     "NCAAF": {
         # Add NCAAF specific mappings if needed
@@ -301,7 +325,11 @@ def _resolve_team_alias(name: str, league: str) -> str:
     Resolve team alias with league-specific context.
     Uses league-specific mappings to prevent cross-sport contamination.
     """
-    name = name.strip()
+    if not isinstance(name, str):
+        return str(name)
+
+    # Fix: Strip quotes and whitespace
+    name = name.strip().strip('"').strip("'").strip()
 
     # Normalize league string
     league_norm = _normalize_league_str(league)
@@ -330,6 +358,25 @@ def _resolve_team_alias(name: str, league: str) -> str:
 
     # 4. Return original if no match
     return name
+
+def _validate_team_for_league(team_name: str, league: str) -> bool:
+    """
+    Simple validation to catch obvious cross-sport contamination.
+    Returns True if valid (or unknown), False if clearly invalid.
+    """
+    league = _normalize_league_str(league)
+    team_upper = team_name.upper()
+
+    # NBA Validation
+    if league == "NBA":
+        invalid_tokens = ["FALCONS", "COWBOYS", "BRUINS", "LIONS", "HURRICANES", "COMMANDERS", "EAGLES", "GIANTS"]
+        for token in invalid_tokens:
+            # Check if token is present as a whole word (simple check)
+            if token in team_upper:
+                # Exception: "GIANTS" is invalid for NBA, but might be valid if team moved? No.
+                return False
+
+    return True
 
 def _transform_theover_df(df: pd.DataFrame, pick_type_default: str, games: List[Dict[str, Any]], stats_collector: List[Dict]) -> pd.DataFrame:
     """
@@ -408,6 +455,14 @@ def _transform_theover_df(df: pd.DataFrame, pick_type_default: str, games: List[
         # Apply Context-Aware Alias Resolution
         csv_home = _resolve_team_alias(csv_home, league)
         csv_away = _resolve_team_alias(csv_away, league)
+
+        # Issue 1: Validate Team Names against League
+        if not _validate_team_for_league(csv_home, league):
+            logger.warning(f"Contamination detected: {csv_home} in {league}. Skipping.")
+            continue
+        if not _validate_team_for_league(csv_away, league):
+            logger.warning(f"Contamination detected: {csv_away} in {league}. Skipping.")
+            continue
 
         # Extract Date (if available) for Time Window Filtering
         input_date_str = str(row.get("COMMENCE", "")).strip()
@@ -656,6 +711,30 @@ def _transform_theover_df(df: pd.DataFrame, pick_type_default: str, games: List[
             date_val = matched_game_obj.get("commence_date_local") or slate_date
             home_code = team_code_for_league(league, matched_game_obj.get("home_team"))
             away_code = team_code_for_league(league, matched_game_obj.get("away_team"))
+
+            # Issue 5: Detect Home/Away Swap
+            # Check if csv_home matches matched_game_obj["away_team"] better than home_team
+            # We assume matched_game_obj["home_team"] maps to home_code
+            # If csv_home is actually the Away team, we should swap home_team_raw/away_team_raw
+            # in the output record so they align with codes.
+
+            # Normalize for comparison
+            matched_home_norm = TeamNameMatcher.normalize(matched_game_obj.get("home_team")).upper()
+            matched_away_norm = TeamNameMatcher.normalize(matched_game_obj.get("away_team")).upper()
+            csv_home_norm = TeamNameMatcher.normalize(csv_home).upper()
+
+            # Simple check: if csv_home matches matched_away more than matched_home
+            if fuzz:
+                score_home = fuzz.token_set_ratio(csv_home_norm, matched_home_norm)
+                score_away = fuzz.token_set_ratio(csv_home_norm, matched_away_norm)
+
+                if score_away > score_home + 10: # Significant difference
+                    # Swap logic
+                    temp = csv_home
+                    csv_home = csv_away
+                    csv_away = temp
+                    logger.info(f"Detected Home/Away Swap for {csv_away} @ {csv_home}. Swapped raw names to align with schedule.")
+
         else:
             date_val = slate_date
             home_code = team_code_for_league(league, csv_home)
@@ -674,17 +753,17 @@ def _transform_theover_df(df: pd.DataFrame, pick_type_default: str, games: List[
         except (ValueError, TypeError):
             pass
 
-        # Hit Rate
-        hit_rate = 0.0
+        # Hit Rate (Issue 4: NaN Handling)
+        hit_rate = None
         try:
             wp = row.get("WINPROBABILITY")
-            if wp is not None and pd.notnull(wp):
+            if wp is not None and pd.notnull(wp) and str(wp).strip() != "":
                 s_wp = str(wp).replace("%", "").strip()
                 if s_wp:
                     hit_rate = float(s_wp)
                     if hit_rate > 1.0: hit_rate /= 100.0
         except (ValueError, TypeError):
-            pass
+            hit_rate = None
 
         # Market Type
         market_raw = str(row.get("MARKET", pick_type_default)).upper()
